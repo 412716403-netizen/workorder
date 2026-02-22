@@ -1,0 +1,2212 @@
+
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { 
+  CalendarRange, 
+  Plus, 
+  X, 
+  User, 
+  Layers,
+  CheckCircle2,
+  Clock,
+  ArrowRightCircle,
+  AlertCircle,
+  ArrowLeft,
+  Save,
+  FileText,
+  CalendarDays,
+  Search,
+  ChevronDown,
+  Tag,
+  Hash,
+  Eye,
+  Info,
+  Users,
+  Cpu,
+  Check,
+  Wrench,
+  UserPlus,
+  Box,
+  MapPin,
+  ClipboardCheck,
+  Edit3,
+  ChevronRight,
+  Package,
+  ArrowRight,
+  Printer,
+  ShoppingCart,
+  ArrowDownToLine,
+  Trash2,
+  Send,
+  Building2,
+  FileSpreadsheet,
+  ListOrdered,
+  Split,
+  Sliders
+} from 'lucide-react';
+import { PlanOrder, Product, PlanStatus, ProductCategory, AppDictionaries, ProductVariant, PlanItem, Worker, Equipment, NodeAssignment, GlobalNodeTemplate, BOM, PrintSettings, PlanFormSettings, Partner, PartnerCategory, ProcessPricingMode, PLAN_PRINT_FIELDS, PrintLayoutElement } from '../types';
+
+interface PlanOrderListViewProps {
+  plans: PlanOrder[];
+  products: Product[];
+  categories: ProductCategory[];
+  dictionaries: AppDictionaries;
+  workers: Worker[];
+  equipment: Equipment[];
+  globalNodes: GlobalNodeTemplate[];
+  boms: BOM[];
+  partners: Partner[];
+  partnerCategories: PartnerCategory[];
+  printSettings: PrintSettings;
+  planFormSettings: PlanFormSettings;
+  onUpdatePlanFormSettings: (settings: PlanFormSettings) => void;
+  onCreatePlan: (plan: PlanOrder) => void;
+  onSplitPlan: (planId: string, newPlans: PlanOrder[]) => void;
+  onConvertToOrder: (planId: string) => void;
+  onUpdateProduct: (product: Product) => void;
+  onUpdatePlan?: (planId: string, updates: Partial<PlanOrder>) => void;
+  onAddPSIRecord?: (record: any) => void; 
+}
+
+interface ProposedOrder {
+  orderNumber: string;
+  partnerId: string;
+  partnerName: string;
+  items: {
+    id: string;
+    productId: string;
+    materialName: string;
+    materialSku: string;
+    quantity: number;
+    suggestedQty: number;
+    nodeName: string;
+  }[];
+}
+
+const SearchableMultiSelect = ({ 
+  options, 
+  selectedIds, 
+  onChange, 
+  placeholder,
+  icon: Icon,
+  variant = "default"
+}: { 
+  options: { id: string; name: string; sub?: string }[]; 
+  selectedIds: string[]; 
+  onChange: (ids: string[]) => void; 
+  placeholder: string;
+  icon: any;
+  variant?: "default" | "compact";
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const filtered = useMemo(() => 
+    options.filter(o => o.name.toLowerCase().includes(search.toLowerCase()) || o.sub?.toLowerCase().includes(search.toLowerCase()))
+  , [options, search]);
+
+  const toggle = (id: string) => {
+    const newIds = selectedIds.includes(id) ? selectedIds.filter(i => i !== id) : [...selectedIds, id];
+    onChange(newIds);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative w-full" ref={containerRef}>
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        className={`w-full bg-white border border-slate-200 rounded-xl flex flex-wrap gap-1.5 cursor-pointer hover:border-indigo-400 hover:ring-2 hover:ring-indigo-50 transition-all min-h-[46px] ${variant === 'compact' ? 'p-2' : 'p-3'}`}
+      >
+        {selectedIds.length === 0 ? (
+          <span className="text-slate-300 text-[11px] font-bold flex items-center gap-1.5 py-1">
+            <Icon className="w-3.5 h-3.5" /> {placeholder}
+          </span>
+        ) : (
+          selectedIds.map(id => {
+            const opt = options.find(o => o.id === id);
+            return (
+              <span key={id} className="bg-indigo-600 text-white px-2 py-0.5 rounded-lg text-[10px] font-black flex items-center gap-1 shadow-sm">
+                {opt?.name}
+                <X className="w-3 h-3 hover:text-rose-200" onClick={(e) => { e.stopPropagation(); toggle(id); }} />
+              </span>
+            );
+          })
+        )}
+      </div>
+
+      {isOpen && (
+        <div className="absolute top-full mt-2 left-0 right-0 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[200] p-3 animate-in fade-in zoom-in-95">
+          <div className="relative mb-2">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <input
+              autoFocus
+              type="text"
+              className="w-full bg-slate-50 border-none rounded-lg py-1.5 pl-8 pr-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="搜索..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="max-h-40 overflow-y-auto custom-scrollbar space-y-0.5">
+            {filtered.map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => toggle(opt.id)}
+                className={`w-full text-left p-2 rounded-lg transition-all flex items-center justify-between group ${
+                  selectedIds.includes(opt.id) ? 'bg-indigo-600 text-white' : 'hover:bg-slate-50 text-slate-700'
+                }`}
+              >
+                <div>
+                   <p className="text-[11px] font-bold">{opt.name}</p>
+                   {opt.sub && <p className={`text-[9px] font-medium ${selectedIds.includes(opt.id) ? 'text-indigo-200' : 'text-slate-400'}`}>{opt.sub}</p>}
+                </div>
+                {selectedIds.includes(opt.id) && <Check className="w-3.5 h-3.5" />}
+              </button>
+            ))}
+            {filtered.length === 0 && <p className="text-center py-4 text-[10px] text-slate-400 italic">未找到匹配项</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// 工序派工用：搜索框下带工序分类标签，默认当前工序
+const SearchableMultiSelectWithProcessTabs = ({
+  options,
+  processNodes,
+  currentNodeId,
+  selectedIds,
+  onChange,
+  placeholder,
+  icon: Icon,
+  variant = 'default'
+}: {
+  options: { id: string; name: string; sub?: string; assignedMilestoneIds?: string[] }[];
+  processNodes: GlobalNodeTemplate[];
+  currentNodeId: string;
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  placeholder: string;
+  icon: any;
+  variant?: 'default' | 'compact';
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState<string>(currentNodeId);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const visibleProcessNodes = useMemo(
+    () => processNodes.filter(n => options.some(o => o.assignedMilestoneIds?.includes(n.id))),
+    [processNodes, options]
+  );
+
+  const filteredByTab = useMemo(() => {
+    if (activeTab === 'all') return options;
+    return options.filter(o => o.assignedMilestoneIds?.includes(activeTab));
+  }, [options, activeTab]);
+
+  const filtered = useMemo(() =>
+    filteredByTab.filter(o => o.name.toLowerCase().includes(search.toLowerCase()) || o.sub?.toLowerCase().includes(search.toLowerCase()))
+  , [filteredByTab, search]);
+
+  const toggle = (id: string) => {
+    const newIds = selectedIds.includes(id) ? selectedIds.filter(i => i !== id) : [...selectedIds, id];
+    onChange(newIds);
+  };
+
+  useEffect(() => {
+    setActiveTab(currentNodeId);
+  }, [currentNodeId]);
+
+  useEffect(() => {
+    if (activeTab !== 'all' && !visibleProcessNodes.some(n => n.id === activeTab)) {
+      setActiveTab(currentNodeId);
+    }
+  }, [activeTab, visibleProcessNodes, currentNodeId]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative w-full" ref={containerRef}>
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className={`w-full bg-white border border-slate-200 rounded-xl flex flex-wrap gap-1.5 cursor-pointer hover:border-indigo-400 hover:ring-2 hover:ring-indigo-50 transition-all min-h-[46px] ${variant === 'compact' ? 'p-2' : 'p-3'}`}
+      >
+        {selectedIds.length === 0 ? (
+          <span className="text-slate-300 text-[11px] font-bold flex items-center gap-1.5 py-1">
+            <Icon className="w-3.5 h-3.5" /> {placeholder}
+          </span>
+        ) : (
+          selectedIds.map(id => {
+            const opt = options.find(o => o.id === id);
+            return (
+              <span key={id} className="bg-indigo-600 text-white px-2 py-0.5 rounded-lg text-[10px] font-black flex items-center gap-1 shadow-sm">
+                {opt?.name}
+                <X className="w-3 h-3 hover:text-rose-200" onClick={(e) => { e.stopPropagation(); toggle(id); }} />
+              </span>
+            );
+          })
+        )}
+      </div>
+
+      {isOpen && (
+        <div className="absolute top-full mt-2 left-0 right-0 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[200] p-3 animate-in fade-in zoom-in-95">
+          <div className="relative mb-2">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <input
+              autoFocus
+              type="text"
+              className="w-full bg-slate-50 border-none rounded-lg py-1.5 pl-8 pr-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="搜索..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-1.5 mb-2 overflow-x-auto no-scrollbar pb-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab('all')}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeTab === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+            >
+              全部
+            </button>
+            {visibleProcessNodes.map(n => (
+              <button
+                key={n.id}
+                type="button"
+                onClick={() => setActiveTab(n.id)}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeTab === n.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+              >
+                {n.name} ({options.filter(o => o.assignedMilestoneIds?.includes(n.id)).length})
+              </button>
+            ))}
+          </div>
+          <div className="max-h-40 overflow-y-auto custom-scrollbar space-y-0.5">
+            {filtered.map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => toggle(opt.id)}
+                className={`w-full text-left p-2 rounded-lg transition-all flex items-center justify-between group ${
+                  selectedIds.includes(opt.id) ? 'bg-indigo-600 text-white' : 'hover:bg-slate-50 text-slate-700'
+                }`}
+              >
+                <div>
+                  <p className="text-[11px] font-bold">{opt.name}</p>
+                  {opt.sub && <p className={`text-[9px] font-medium ${selectedIds.includes(opt.id) ? 'text-indigo-200' : 'text-slate-400'}`}>{opt.sub}</p>}
+                </div>
+                {selectedIds.includes(opt.id) && <Check className="w-3.5 h-3.5" />}
+              </button>
+            ))}
+            {filtered.length === 0 && <p className="text-center py-4 text-[10px] text-slate-400 italic">未找到匹配项</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// 增强型搜索选择器：包含分类标签
+const EnhancedProductSelector = ({ 
+  options = [], 
+  categories = [],
+  value, 
+  onChange, 
+  disabled, 
+  placeholder 
+}: { 
+  options: Product[]; 
+  categories: ProductCategory[];
+  value: string; 
+  onChange: (productId: string, categoryId: string) => void; 
+  disabled?: boolean; 
+  placeholder?: string;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState<string>('all');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const selectedProduct = options.find(p => p.id === value);
+  
+  const filteredOptions = useMemo(() => {
+    return options.filter(p => {
+      const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase());
+      const matchesCategory = activeTab === 'all' || p.categoryId === activeTab;
+      return matchesSearch && matchesCategory;
+    });
+  }, [options, search, activeTab]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full bg-slate-50 border-none rounded-xl py-3.5 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between disabled:opacity-50 transition-all h-[52px]"
+      >
+        <div className="flex items-center gap-2 truncate">
+          <Package className={`w-4 h-4 ${selectedProduct ? 'text-indigo-600' : 'text-slate-300'}`} />
+          <span className={selectedProduct ? 'text-slate-900 truncate' : 'text-slate-400'}>
+            {selectedProduct ? (() => {
+              const cat = categories.find(c => c.id === selectedProduct.categoryId);
+              const customParts = cat?.customFields?.filter(f => f.showInForm !== false)
+                .map(f => { const v = selectedProduct.categoryCustomData?.[f.id]; return v != null && v !== '' ? `${f.label}: ${typeof v === 'boolean' ? (v ? '是' : '否') : String(v)}` : null; })
+                .filter(Boolean) ?? [];
+              const base = `${selectedProduct.name} (${selectedProduct.sku})`;
+              return customParts.length > 0 ? `${base} ${customParts.join(' ')}` : base;
+            })() : placeholder || '搜索并选择产品型号...'}
+          </span>
+        </div>
+        <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : 'text-slate-400'}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-3xl shadow-2xl z-[100] p-4 animate-in fade-in zoom-in-95">
+          <div className="relative mb-4">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              autoFocus
+              type="text"
+              className="w-full bg-slate-50 border-none rounded-xl py-3 pl-11 pr-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="输入名称或 SKU 搜索..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+
+          {/* 分类过滤器小标签 */}
+          <div className="flex items-center gap-1.5 mb-4 overflow-x-auto no-scrollbar pb-1">
+            <button 
+              onClick={() => setActiveTab('all')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeTab === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+            >
+              全部
+            </button>
+            {categories.map(cat => (
+              <button 
+                key={cat.id}
+                onClick={() => setActiveTab(cat.id)}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeTab === cat.id ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+
+          <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1">
+            {filteredOptions.map(p => {
+              const cat = categories.find(c => c.id === p.categoryId);
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    onChange(p.id, p.categoryId || '');
+                    setIsOpen(false);
+                    setSearch('');
+                  }}
+                  className={`w-full text-left p-3 rounded-2xl transition-all border-2 ${
+                    p.id === value ? 'bg-indigo-50 border-indigo-600/20 text-indigo-700' : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  <div className="flex justify-between items-start mb-0.5">
+                    <p className="text-sm font-black truncate">{p.name}</p>
+                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-400 text-[8px] font-black uppercase">{cat?.name}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className={`text-[10px] font-bold uppercase tracking-widest ${p.id === value ? 'text-indigo-400' : 'text-slate-400'}`}>{p.sku}</p>
+                    {cat?.customFields?.filter(f => f.showInForm !== false).map(f => {
+                      const val = p.categoryCustomData?.[f.id];
+                      if (val == null || val === '') return null;
+                      return <span key={f.id} className="text-[8px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">{f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}</span>;
+                    })}
+                  </div>
+                </button>
+              );
+            })}
+            {filteredOptions.length === 0 && (
+              <div className="py-10 text-center">
+                <Box className="w-8 h-8 text-slate-100 mx-auto mb-2" />
+                <p className="text-xs text-slate-400 font-medium">未找到符合条件的产品</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// 计划客户：从合作单位中选择，下拉搜索，下方显示合作单位分类
+const PartnerCustomerSelector = ({
+  value,
+  onChange,
+  partners = [],
+  categories = [],
+  placeholder = '搜索并选择合作单位...'
+}: {
+  value: string;
+  onChange: (customerName: string) => void;
+  partners: Partner[];
+  categories: PartnerCategory[];
+  placeholder?: string;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState<string>('all');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const filteredOptions = useMemo(() => {
+    return partners.filter(p => {
+      const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || (p.contact || '').toLowerCase().includes(search.toLowerCase());
+      const matchesCategory = activeTab === 'all' || p.categoryId === activeTab;
+      return matchesSearch && matchesCategory;
+    });
+  }, [partners, search, activeTab]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedPartner = partners.find(p => p.name === value);
+  const categoryName = selectedPartner?.categoryId ? categories.find(c => c.id === selectedPartner.categoryId)?.name : null;
+
+  return (
+    <div className="relative space-y-1.5" ref={containerRef}>
+      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">计划客户（合作单位）</label>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between transition-all h-[52px]"
+      >
+        <div className="flex items-center gap-2 truncate">
+          <Building2 className={`w-4 h-4 flex-shrink-0 ${value ? 'text-indigo-600' : 'text-slate-300'}`} />
+          <span className={value ? 'text-slate-900 truncate' : 'text-slate-400'}>{value || placeholder}</span>
+        </div>
+        <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : 'text-slate-400'}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-[100] p-4 animate-in fade-in zoom-in-95">
+          <div className="relative mb-3">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              autoFocus
+              type="text"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="搜索单位名称或联系人..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">合作单位分类</p>
+          <div className="flex items-center gap-1.5 mb-3 overflow-x-auto no-scrollbar pb-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab('all')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase whitespace-nowrap ${activeTab === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+            >
+              全部
+            </button>
+            {categories.map(cat => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setActiveTab(cat.id)}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase whitespace-nowrap ${activeTab === cat.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+          <div className="max-h-52 overflow-y-auto custom-scrollbar space-y-1">
+            {filteredOptions.map(p => {
+              const catName = categories.find(c => c.id === p.categoryId)?.name || '未分类';
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    onChange(p.name);
+                    setIsOpen(false);
+                    setSearch('');
+                  }}
+                  className={`w-full text-left p-3 rounded-xl transition-all border-2 ${p.name === value ? 'bg-indigo-50 border-indigo-600/30 text-indigo-700' : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'}`}
+                >
+                  <div className="flex justify-between items-center gap-2">
+                    <p className="text-sm font-bold truncate">{p.name}</p>
+                    <span className="text-[10px] font-bold text-slate-400 shrink-0">{catName}</span>
+                  </div>
+                  {p.contact && <p className="text-[10px] text-slate-400 mt-0.5 truncate">{p.contact}</p>}
+                </button>
+              );
+            })}
+            {filteredOptions.length === 0 && (
+              <div className="py-8 text-center text-slate-400 text-sm">未找到符合条件的合作单位</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {value && (
+        <div className="text-[10px] font-bold text-slate-500 flex items-center gap-1.5">
+          <span className="uppercase tracking-widest text-slate-400">合作单位分类：</span>
+          <span>{categoryName || '未分类'}</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, categories, dictionaries, workers, equipment, globalNodes, boms, partners, partnerCategories = [], printSettings, planFormSettings, onUpdatePlanFormSettings, onCreatePlan, onSplitPlan, onConvertToOrder, onUpdateProduct, onUpdatePlan, onAddPSIRecord }) => {
+  const [showModal, setShowModal] = useState(false);
+  const [viewDetailPlanId, setViewDetailPlanId] = useState<string | null>(null);
+  const [tempAssignments, setTempAssignments] = useState<Record<string, NodeAssignment>>({});
+  const [tempPlanInfo, setTempPlanInfo] = useState<{
+    customer: string;
+    dueDate: string;
+    items: PlanItem[];
+    customData?: Record<string, any>;
+  }>({ customer: '', dueDate: '', items: [] });
+  
+  const [isSaving, setIsSaving] = useState(false);
+  const [tempNodeRates, setTempNodeRates] = useState<Record<string, number>>({});
+  /** 计划单详情中各工序计价方式（仅本单，保存到 plan，不同步到商品） */
+  const [tempNodePricingModes, setTempNodePricingModes] = useState<Record<string, ProcessPricingMode>>({});
+  const [showPlanFormConfigModal, setShowPlanFormConfigModal] = useState(false);
+  const [planFormConfigDraft, setPlanFormConfigDraft] = useState<PlanFormSettings | null>(null);
+  const [splitPlanId, setSplitPlanId] = useState<string | null>(null);
+  const splitNumParts = 2;
+  const [splitQuantities, setSplitQuantities] = useState<number[][]>([]);
+  const [printingPlanId, setPrintingPlanId] = useState<string | null>(null);
+  /** 点击图片查看大图：url 为要放大的图片地址 */
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+
+  // 分组后的采购单状态
+  const [proposedOrders, setProposedOrders] = useState<ProposedOrder[]>([]);
+  const [isProcessingPO, setIsProcessingPO] = useState(false);
+
+  const [form, setForm] = useState<{
+    categoryId: string;
+    productId: string;
+    customer: string;
+    dueDate: string;
+    variantQuantities: Record<string, number>;
+    singleQuantity: number;
+    customData: Record<string, any>;
+  }>({
+    categoryId: '',
+    productId: '',
+    customer: '',
+    dueDate: new Date().toISOString().split('T')[0],
+    variantQuantities: {},
+    singleQuantity: 0,
+    customData: {}
+  });
+
+  const selectedProduct = products.find(p => p.id === form.productId);
+  const activeCategory = categories.find(c => c.id === form.categoryId);
+  const viewPlan = plans.find(p => p.id === viewDetailPlanId);
+  const viewProduct = products.find(p => p.id === viewPlan?.productId);
+  const planPrintConfig = printSettings.PLAN;
+
+  useEffect(() => {
+    if (viewProduct) {
+      setTempNodeRates(viewProduct.nodeRates ? { ...viewProduct.nodeRates } : {});
+    } else {
+      setTempNodeRates({});
+    }
+  }, [viewProduct?.id]);
+
+  const handlePrint = (plan: PlanOrder) => {
+    setPrintingPlanId(plan.id);
+  };
+
+  const printingPlan = printingPlanId ? plans.find(p => p.id === printingPlanId) : null;
+  const printingProduct = printingPlan ? products.find(p => p.id === printingPlan.productId) : null;
+
+  useEffect(() => {
+    if (!printingPlanId) return;
+    const onAfterPrint = () => setPrintingPlanId(null);
+    window.addEventListener('afterprint', onAfterPrint);
+    const t = setTimeout(() => {
+      window.print();
+    }, 100);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('afterprint', onAfterPrint);
+    };
+  }, [printingPlanId]);
+
+  // 用料清单汇总逻辑
+  const materialRequirements = useMemo(() => {
+    if (!viewPlan || !viewProduct || !tempPlanInfo.items) return [];
+    const reqMap: Record<string, { materialId: string; nodeId: string; quantity: number }> = {};
+    
+    tempPlanInfo.items.forEach((item: PlanItem) => {
+      const variant = viewProduct.variants.find(v => v.id === item.variantId);
+      const planQty = item.quantity;
+      if (planQty <= 0) return;
+      if (variant && variant.nodeBOMs) {
+        Object.entries(variant.nodeBOMs).forEach(([nodeId, bomId]) => {
+          const bom = boms.find(b => b.id === bomId);
+          if (bom) {
+            bom.items.forEach(bomItem => {
+              const key = `${bomItem.productId}-${nodeId}`;
+              if (!reqMap[key]) {
+                reqMap[key] = { materialId: bomItem.productId, nodeId, quantity: 0 };
+              }
+              reqMap[key].quantity += bomItem.quantity * planQty;
+            });
+          }
+        });
+      }
+    });
+
+    return Object.values(reqMap).map(req => {
+      const material = products.find(p => p.id === req.materialId);
+      const node = globalNodes.find(n => n.id === req.nodeId);
+      const mockStock = Math.floor(Math.random() * 40); 
+      return {
+        materialId: req.materialId,
+        materialName: material?.name || '未知物料',
+        materialSku: material?.sku || '-',
+        nodeName: node?.name || '未知工序',
+        totalNeeded: req.quantity,
+        stock: mockStock,
+        shortage: Math.max(0, req.quantity - mockStock)
+      };
+    });
+  }, [viewPlan, viewProduct, tempPlanInfo.items, boms, products, globalNodes]);
+
+  // --- 采购单生成逻辑 ---
+  const handleGenerateProposedOrders = () => {
+    const shortages = materialRequirements.filter(m => m.shortage > 0);
+    if (shortages.length === 0) {
+      alert("当前库存充裕，无需生成额外采购单。");
+      return;
+    }
+
+    if (partners.length === 0) {
+      alert("未找到系统定义的单位，请先在基本信息中创建供应商。");
+      return;
+    }
+
+    const groupedMap: Record<string, ProposedOrder> = {};
+    const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+
+    shortages.forEach((item, index) => {
+      const supplier = partners[index % partners.length];
+      
+      if (!groupedMap[supplier.id]) {
+        const orderIndex = Object.keys(groupedMap).length + 1;
+        groupedMap[supplier.id] = {
+          orderNumber: `PO-${todayStr}-${String(orderIndex).padStart(3, '0')}`,
+          partnerId: supplier.id,
+          partnerName: supplier.name,
+          items: []
+        };
+      }
+
+      groupedMap[supplier.id].items.push({
+        id: `item-${Date.now()}-${item.materialId}-${index}`,
+        productId: item.materialId,
+        materialName: item.materialName,
+        materialSku: item.materialSku,
+        quantity: item.shortage,
+        suggestedQty: item.shortage,
+        nodeName: item.nodeName
+      });
+    });
+
+    setProposedOrders(Object.values(groupedMap));
+  };
+
+  const handleConfirmAndSaveOrders = () => {
+    if (!onAddPSIRecord) return;
+    setIsProcessingPO(true);
+
+    try {
+        proposedOrders.forEach(order => {
+            order.items.forEach(item => {
+                const newRec = {
+                    id: `psi-po-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                    docNumber: order.orderNumber, 
+                    type: 'PURCHASE_ORDER',
+                    productId: item.productId,
+                    quantity: item.quantity,
+                    partner: order.partnerName,
+                    warehouseId: 'wh-1',
+                    note: `计划单[${viewPlan?.planNumber}]补货需求 | 针对工序:${item.nodeName}`,
+                    timestamp: new Date().toLocaleString(),
+                    operator: '张主管(系统生成)'
+                };
+                onAddPSIRecord(newRec);
+            });
+        });
+
+        setTimeout(() => {
+            setIsProcessingPO(false);
+            setProposedOrders([]); 
+            alert(`已成功保存 ${proposedOrders.length} 张采购订单，可在进销存模块查看详情。`);
+        }, 500);
+    } catch (err) {
+        setIsProcessingPO(false);
+        console.error(err);
+    }
+  };
+
+  const updateProposedItemQty = (orderNum: string, itemId: string, val: string) => {
+    const qty = parseInt(val) || 0;
+    setProposedOrders(prev => prev.map(order => {
+        if (order.orderNumber !== orderNum) return order;
+        return {
+            ...order,
+            items: order.items.map(item => item.id === itemId ? { ...item, quantity: qty } : item)
+        };
+    }));
+  };
+
+  const removeProposedOrder = (orderNum: string) => {
+    setProposedOrders(prev => prev.filter(o => o.orderNumber !== orderNum));
+  };
+
+  useEffect(() => {
+    if (viewPlan) {
+      setTempAssignments(viewPlan.assignments || {});
+      setTempPlanInfo({
+        customer: viewPlan.customer,
+        dueDate: viewPlan.dueDate,
+        items: JSON.parse(JSON.stringify(viewPlan.items || [])),
+        customData: viewPlan.customData ? { ...viewPlan.customData } : {}
+      });
+      setTempNodePricingModes(viewPlan.nodePricingModes ? { ...viewPlan.nodePricingModes } : {});
+      setProposedOrders([]); 
+    }
+  }, [viewPlan]);
+
+  const groupedVariants = useMemo((): Record<string, ProductVariant[]> => {
+    const prod = viewProduct || selectedProduct;
+    if (!prod || !prod.variants) return {};
+    const groups: Record<string, ProductVariant[]> = {};
+    prod.variants.forEach(v => {
+      if (!groups[v.colorId]) groups[v.colorId] = [];
+      groups[v.colorId].push(v);
+    });
+    return groups;
+  }, [selectedProduct, viewProduct]);
+
+  const productNodes = useMemo(() => {
+    const prod = viewProduct || selectedProduct;
+    if (!prod || !prod.milestoneNodeIds) return [];
+    return prod.milestoneNodeIds
+      .map(id => globalNodes.find(gn => gn.id === id))
+      .filter((n): n is GlobalNodeTemplate => Boolean(n));
+  }, [viewProduct, selectedProduct, globalNodes]);
+
+  const assignableNodes = useMemo(
+    () => productNodes.filter(n => n.enableAssignment !== false),
+    [productNodes]
+  );
+
+  /** 按新建顺序生成下一个计划单号：PLN1, PLN2, PLN3...（兼容旧格式 PLN-数字、PLN数字-1 等） */
+  const getNextPlanNumber = (): string => {
+    const nums = plans
+      .map(p => {
+        const m = p.planNumber.match(/^PLN-?(\d+)/);
+        return m ? parseInt(m[1], 10) : 0;
+      })
+      .filter(n => n > 0);
+    const next = nums.length > 0 ? Math.max(...nums) + 1 : 1;
+    return `PLN${next}`;
+  };
+
+  const handleCreate = () => {
+    if (!selectedProduct) return;
+    const items: PlanItem[] = [];
+    if (activeCategory?.hasColorSize && selectedProduct.variants && selectedProduct.variants.length > 0) {
+      (Object.entries(form.variantQuantities) as [string, number][]).forEach(([vId, qty]) => {
+        if (qty > 0) items.push({ variantId: vId, quantity: qty });
+      });
+    } else {
+      if ((form.singleQuantity as number) > 0) items.push({ quantity: form.singleQuantity as number });
+    }
+    if (items.length === 0) return;
+
+    const newPlan: PlanOrder = {
+      id: `plan-${Date.now()}`,
+      planNumber: getNextPlanNumber(),
+      productId: form.productId,
+      items,
+      startDate: new Date().toISOString().split('T')[0],
+      dueDate: form.dueDate,
+      status: PlanStatus.APPROVED,
+      customer: form.customer,
+      priority: 'Medium',
+      assignments: {},
+      customData: Object.keys(form.customData || {}).length ? form.customData : undefined,
+      createdAt: new Date().toISOString().split('T')[0]
+    };
+    
+    onCreatePlan(newPlan);
+    setShowModal(false);
+    setForm({ categoryId: '', productId: '', customer: '', dueDate: new Date().toISOString().split('T')[0], variantQuantities: {}, singleQuantity: 0, customData: {} });
+  };
+
+  const handleUpdateDetail = () => {
+    if (viewDetailPlanId) {
+      setIsSaving(true);
+      onUpdatePlan?.(viewDetailPlanId, { 
+        assignments: tempAssignments,
+        customer: tempPlanInfo.customer,
+        dueDate: tempPlanInfo.dueDate,
+        items: tempPlanInfo.items,
+        customData: tempPlanInfo.customData,
+        nodePricingModes: Object.keys(tempNodePricingModes).length > 0 ? tempNodePricingModes : undefined
+      });
+      if (viewProduct) {
+        const mergedRates: Record<string, number> = { ...(viewProduct.nodeRates || {}) };
+        Object.entries(tempNodeRates).forEach(([nodeId, rate]) => {
+          const numericRate = typeof rate === 'number' ? rate : parseFloat(String(rate));
+          mergedRates[nodeId] = isNaN(numericRate) ? 0 : numericRate;
+        });
+        onUpdateProduct({ ...viewProduct, nodeRates: mergedRates });
+      }
+      setTimeout(() => {
+        setIsSaving(false);
+        setViewDetailPlanId(null);
+      }, 300);
+    }
+  };
+
+  const updateTempAssignment = (nodeId: string, updates: Partial<NodeAssignment>) => {
+    setTempAssignments(prev => ({
+      ...prev,
+      [nodeId]: {
+        workerIds: prev[nodeId]?.workerIds || [],
+        equipmentIds: prev[nodeId]?.equipmentIds || [],
+        ...updates
+      }
+    }));
+  };
+
+  const updateDetailItemQty = (variantId: string | undefined, val: string) => {
+    const qty = parseInt(val) || 0;
+    setTempPlanInfo(prev => {
+      const newItems = prev.items.map(item => {
+        if (item.variantId === variantId) return { ...item, quantity: qty };
+        return item;
+      });
+      if (variantId === undefined && newItems.length === 1) {
+          newItems[0].quantity = qty;
+      }
+      return { ...prev, items: newItems };
+    });
+  };
+
+  const updateVariantQty = (vId: string, val: string) => {
+    const qty = parseInt(val) || 0;
+    setForm(prev => ({
+      ...prev,
+      variantQuantities: { ...prev.variantQuantities, [vId]: qty }
+    }));
+  };
+
+  const canSave = useMemo(() => {
+    if (!form.productId) return false;
+    if (activeCategory?.hasColorSize) return (Object.values(form.variantQuantities) as number[]).some(q => (q as number) > 0);
+    return (form.singleQuantity as number) > 0;
+  }, [form, activeCategory]);
+
+  const splitPlan = splitPlanId ? plans.find(p => p.id === splitPlanId) : null;
+  const openSplit = (plan: PlanOrder) => {
+    setSplitPlanId(plan.id);
+    setSplitQuantities(plan.items.map(item => [0, item.quantity]));
+  };
+  const setSplitQty = (itemIndex: number, partIndex: number, value: number) => {
+    if (splitPlan && splitNumParts === 2) {
+      const original = splitPlan.items[itemIndex]?.quantity ?? 0;
+      const clamped = Math.max(0, Math.min(original, value));
+      const otherPartIndex = 1 - partIndex;
+      const otherValue = original - clamped;
+      setSplitQuantities(prev => prev.map((row, i) => {
+        if (i !== itemIndex) return row;
+        return row.map((v, j) => j === partIndex ? clamped : j === otherPartIndex ? otherValue : v);
+      }));
+      return;
+    }
+    setSplitQuantities(prev => prev.map((row, i) => i === itemIndex ? row.map((v, j) => j === partIndex ? value : v) : row));
+  };
+  /** 从计划单号解析拆分组：仅当单号形如「原单-1」「原单-2」…「原单-99」时视为拆分单（本系统拆分生成），避免把 PLN-327611 等普通编号误判为拆分组 */
+  const getSplitGroupKey = (planNumber: string): string | null => {
+    const m = planNumber.match(/^(.+)-([1-9]\d?)$/);
+    return m ? m[1] : null;
+  };
+  /** 拆分组 → 该组下所有计划单（仅包含至少有 2 条的同组） */
+  const splitGroupToPlans = useMemo(() => {
+    const map = new Map<string, PlanOrder[]>();
+    plans.forEach(p => {
+      const key = getSplitGroupKey(p.planNumber);
+      if (key) {
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(p);
+      }
+    });
+    const multi = new Map<string, PlanOrder[]>();
+    map.forEach((arr, key) => { if (arr.length >= 2) multi.set(key, arr); });
+    return multi;
+  }, [plans]);
+  /** 列表排序：最新添加的单据排在前面（按 id 内时间戳倒序），不受拆单分组影响 */
+  const sortedPlansForList = useMemo(() => {
+    const ts = (p: PlanOrder) => parseInt(p.id.match(/^plan-(\d+)/)?.[1] ?? '0', 10) || 0;
+    return [...plans].sort((a, b) => ts(b) - ts(a));
+  }, [plans]);
+
+  /** 列表展示块：单条 或 同一原单的拆分组（用底框包在一起） */
+  type ListBlock = { type: 'single'; plan: PlanOrder } | { type: 'group'; groupKey: string; plans: PlanOrder[] };
+  const listBlocks = useMemo((): ListBlock[] => {
+    const blocks: ListBlock[] = [];
+    const used = new Set<string>();
+    for (const plan of sortedPlansForList) {
+      if (used.has(plan.id)) continue;
+      const key = getSplitGroupKey(plan.planNumber);
+      if (key && splitGroupToPlans.has(key)) {
+        const groupPlans = splitGroupToPlans.get(key)!;
+        groupPlans.forEach(p => used.add(p.id));
+        blocks.push({ type: 'group', groupKey: key, plans: [...groupPlans].sort((a, b) => (a.planNumber || '').localeCompare(b.planNumber || '')) });
+      } else {
+        used.add(plan.id);
+        blocks.push({ type: 'single', plan });
+      }
+    }
+    return blocks;
+  }, [sortedPlansForList, splitGroupToPlans]);
+
+  const splitRowSums = useMemo(() => splitPlan ? splitQuantities.map((row, i) => ({ sum: row.reduce((a, b) => a + b, 0), original: splitPlan.items[i]?.quantity ?? 0 })) : [], [splitPlan, splitQuantities]);
+  const splitValid = splitRowSums.length === 0 || splitRowSums.every(({ sum, original }) => sum === original);
+  const confirmSplit = () => {
+    if (!splitPlanId || !splitPlan || !splitValid) return;
+    const newPlans: PlanOrder[] = [];
+    for (let j = 0; j < splitNumParts; j++) {
+      const partItems = splitPlan.items.map((item, i) => ({ variantId: item.variantId, quantity: splitQuantities[i]?.[j] ?? 0 }));
+      if (partItems.every(it => it.quantity === 0)) continue;
+      newPlans.push({
+        ...splitPlan,
+        id: `plan-${Date.now()}-${j}`,
+        planNumber: `${splitPlan.planNumber}-${j + 1}`,
+        items: partItems,
+        assignments: {},
+        createdAt: new Date().toISOString().split('T')[0]
+      });
+    }
+    if (newPlans.length < 2) {
+      alert('请拆成至少两份且每份数量大于 0。');
+      return;
+    }
+    onSplitPlan(splitPlanId, newPlans);
+    setSplitPlanId(null);
+  };
+
+  const cfg = planPrintConfig;
+  const isLandscape = cfg.orientation === 'landscape';
+  const paperW = cfg.paperSize === 'A4' ? 210 : cfg.paperSize === 'A5' ? 148 : cfg.paperSize === 'B5' ? 176 : (cfg.paperWidthMm ?? 210);
+  const paperH = cfg.paperSize === 'A4' ? 297 : cfg.paperSize === 'A5' ? 210 : cfg.paperSize === 'B5' ? 250 : (cfg.paperHeightMm ?? 297);
+  const printPaper = {
+    size: isLandscape ? `${paperH}mm ${paperW}mm` : `${paperW}mm ${paperH}mm`,
+    margin: `${cfg.marginTopMm ?? 15}mm ${cfg.marginRightMm ?? 15}mm ${cfg.marginBottomMm ?? 15}mm ${cfg.marginLeftMm ?? 15}mm`,
+  };
+
+  return (
+    <>
+      {printingPlanId && cfg && (
+        <style>{`
+          @media print {
+            @page { size: ${printPaper.size}; margin: ${printPaper.margin}; }
+            #root * { visibility: hidden; }
+            .plan-print-root, .plan-print-root * { visibility: visible; }
+            .plan-print-root { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; min-height: 100vh !important; background: #fff !important; }
+          }
+        `}</style>
+      )}
+      {printingPlan && printingProduct && (() => {
+        const marginT = cfg.marginTopMm ?? 15, marginR = cfg.marginRightMm ?? 15, marginB = cfg.marginBottomMm ?? 15, marginL = cfg.marginLeftMm ?? 15;
+        const contentH = isLandscape ? paperW - marginT - marginB - 70 : paperH - marginT - marginB - 70;
+        const rootWidthMm = isLandscape ? paperH : paperW;
+        const rootHeightMm = isLandscape ? paperW : paperH;
+        const renderBlockContent = (id: string) => {
+          switch (id) {
+            case 'planNumber': return <><span className="font-bold text-slate-500">计划单号 </span>{printingPlan.planNumber}</>;
+            case 'customer': return <><span className="font-bold text-slate-500">客户 </span>{printingPlan.customer}</>;
+            case 'dueDate': return <><span className="font-bold text-slate-500">交期 </span>{printingPlan.dueDate}</>;
+            case 'product': return <><span className="font-bold text-slate-500">产品 </span>{printingProduct.name} {printingProduct.sku ? `(${printingProduct.sku})` : ''}</>;
+            case 'status': return <><span className="font-bold text-slate-500">状态 </span>{printingPlan.status === PlanStatus.CONVERTED ? '已转工单' : printingPlan.status === PlanStatus.APPROVED ? '已审核' : '草稿'}</>;
+            case 'priority': return <><span className="font-bold text-slate-500">优先级 </span>{printingPlan.priority}</>;
+            case 'itemsTable':
+              return (
+                <div>
+                  <div className="font-bold text-slate-600 mb-1">计划明细</div>
+                  <table className="w-full border border-slate-200 border-collapse text-slate-800">
+                    <thead><tr className="bg-slate-50"><th className="border border-slate-200 px-2 py-1 text-left font-bold text-slate-700 text-xs">规格</th><th className="border border-slate-200 px-2 py-1 text-right font-bold text-slate-700 text-xs">数量</th></tr></thead>
+                    <tbody>
+                      {printingPlan.items.map((item, idx) => {
+                        const v = printingProduct.variants.find(x => x.id === item.variantId);
+                        const color = dictionaries.colors.find(c => c.id === v?.colorId);
+                        const size = dictionaries.sizes.find(s => s.id === v?.sizeId);
+                        const spec = v ? `${color?.name ?? ''}-${size?.name ?? ''}`.replace(/^-|-$/g, '') || `规格${idx + 1}` : '默认';
+                        return <tr key={idx}><td className="border border-slate-200 px-2 py-1">{spec}</td><td className="border border-slate-200 px-2 py-1 text-right">{item.quantity}</td></tr>;
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            case 'assignmentsTable':
+              if (!printingPlan.assignments || Object.keys(printingPlan.assignments).length === 0) return null;
+              return (
+                <div>
+                  <div className="font-bold text-slate-600 mb-1">工序派工</div>
+                  <table className="w-full border border-slate-200 border-collapse text-slate-800">
+                    <thead><tr className="bg-slate-50"><th className="border border-slate-200 px-2 py-1 text-left font-bold text-slate-700 text-xs">工序</th><th className="border border-slate-200 px-2 py-1 text-left font-bold text-slate-700 text-xs">负责人/设备</th></tr></thead>
+                    <tbody>
+                      {Object.entries(printingPlan.assignments).map(([nodeId, a]) => {
+                        const node = globalNodes.find(n => n.id === nodeId);
+                        const as = a as NodeAssignment;
+                        const names = (as.workerIds || []).map(wid => workers.find(w => w.id === wid)?.name).filter(Boolean).join('、') || '-';
+                        const eqNames = (as.equipmentIds || []).map(eid => equipment.find(e => e.id === eid)?.name).filter(Boolean).join('、') || '-';
+                        return <tr key={nodeId}><td className="border border-slate-200 px-2 py-1">{node?.name ?? nodeId}</td><td className="border border-slate-200 px-2 py-1">{names} {eqNames !== '-' ? ` / ${eqNames}` : ''}</td></tr>;
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            default: return null;
+          }
+        };
+
+        const renderLayoutTable = (el: PrintLayoutElement) => {
+          const cols = el.columns ?? [];
+          if (el.tableDataSource === 'planItems') {
+            return (
+              <table className="w-full border border-slate-200 border-collapse text-slate-800">
+                <thead><tr className="bg-slate-50">{cols.map(c => <th key={c.id} className="border border-slate-200 px-2 py-1 text-left font-bold text-slate-700 text-xs">{c.header}</th>)}</tr></thead>
+                <tbody>
+                  {printingPlan.items.map((item, idx) => {
+                    const v = printingProduct.variants.find(x => x.id === item.variantId);
+                    const color = dictionaries.colors.find(c => c.id === v?.colorId);
+                    const size = dictionaries.sizes.find(s => s.id === v?.sizeId);
+                    const spec = v ? `${color?.name ?? ''}-${size?.name ?? ''}`.replace(/^-|-$/g, '') || `规格${idx + 1}` : '默认';
+                    return (
+                      <tr key={idx}>
+                        {cols.map(c => {
+                          const val = c.fieldKey === 'spec' ? spec : c.fieldKey === 'quantity' ? item.quantity : '—';
+                          return <td key={c.id} className="border border-slate-200 px-2 py-1">{val}</td>;
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            );
+          }
+          if (el.tableDataSource === 'planAssignments' && printingPlan.assignments && Object.keys(printingPlan.assignments).length > 0) {
+            return (
+              <table className="w-full border border-slate-200 border-collapse text-slate-800">
+                <thead><tr className="bg-slate-50">{cols.map(c => <th key={c.id} className="border border-slate-200 px-2 py-1 text-left font-bold text-slate-700 text-xs">{c.header}</th>)}</tr></thead>
+                <tbody>
+                  {Object.entries(printingPlan.assignments).map(([nodeId, a]) => {
+                    const node = globalNodes.find(n => n.id === nodeId);
+                    const as = a as NodeAssignment;
+                    const names = (as.workerIds || []).map(wid => workers.find(w => w.id === wid)?.name).filter(Boolean).join('、') || '—';
+                    const eqNames = (as.equipmentIds || []).map(eid => equipment.find(e => e.id === eid)?.name).filter(Boolean).join('、') || '—';
+                    return (
+                      <tr key={nodeId}>
+                        {cols.map(c => {
+                          const val = c.fieldKey === 'nodeName' ? (node?.name ?? nodeId) : c.fieldKey === 'workers' ? names : c.fieldKey === 'equipment' ? eqNames : '—';
+                          return <td key={c.id} className="border border-slate-200 px-2 py-1">{val}</td>;
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            );
+          }
+          return <table className="w-full border border-slate-200 border-collapse text-slate-800"><thead><tr className="bg-slate-50">{cols.map(c => <th key={c.id} className="border border-slate-200 px-2 py-1 text-left font-bold text-slate-700 text-xs">{c.header}</th>)}</tr></thead><tbody><tr>{cols.map(c => <td key={c.id} className="border border-slate-200 px-2 py-1">—</td>)}</tr></tbody></table>;
+        };
+
+        const useCanvasLayout = (cfg.layoutElements?.length ?? 0) > 0;
+        const layoutElements: PrintLayoutElement[] = useCanvasLayout ? (cfg.layoutElements ?? []) : [];
+
+        const orderedEnabled = (cfg.fields && cfg.fields.length > 0 ? cfg.fields : PLAN_PRINT_FIELDS.map(f => ({ id: f.id, label: f.label, enabled: true }))).filter(f => f.enabled);
+        const blockWithPosition = orderedEnabled.map((f, idx) => ({
+          ...f,
+          leftMm: f.leftMm ?? 0,
+          topMm: f.topMm ?? (15 + idx * 14),
+          widthMm: f.widthMm,
+          heightMm: f.heightMm,
+        }));
+
+        const renderPlaneContent = () => {
+          if (useCanvasLayout) {
+            return layoutElements.map((el) => {
+              const style: React.CSSProperties = {
+                position: 'absolute',
+                left: `${el.leftMm}mm`,
+                top: `${el.topMm}mm`,
+                ...(el.widthMm != null ? { width: `${el.widthMm}mm` } : {}),
+                ...(el.heightMm != null ? { height: `${el.heightMm}mm`, overflow: 'hidden' as const } : {}),
+              };
+              if (el.type === 'field') {
+                const content = renderBlockContent(el.fieldId!);
+                if (content == null) return null;
+                return <div key={el.id} style={style} className="text-slate-800">{content}</div>;
+              }
+              return <div key={el.id} style={style} className="text-slate-800">{renderLayoutTable(el)}</div>;
+            });
+          }
+          return blockWithPosition.map((f) => {
+            const content = renderBlockContent(f.id);
+            if (content == null) return null;
+            const style: React.CSSProperties = {
+              position: 'absolute',
+              left: `${f.leftMm}mm`,
+              top: `${f.topMm}mm`,
+              ...(f.widthMm != null ? { width: `${f.widthMm}mm` } : {}),
+              ...(f.heightMm != null ? { height: `${f.heightMm}mm`, overflow: 'hidden' as const } : {}),
+            };
+            return <div key={f.id} style={style} className="text-slate-800">{content}</div>;
+          });
+        };
+
+        return (
+          <div
+            className="plan-print-root"
+            style={{ position: 'fixed', left: '-9999px', top: 0, width: `${rootWidthMm}mm`, minHeight: `${rootHeightMm}mm`, background: '#fff', padding: `${marginT}mm ${marginR}mm ${marginB}mm ${marginL}mm`, boxSizing: 'border-box' }}
+            aria-hidden="true"
+          >
+            <div className={cfg.fontSize === 'sm' ? 'text-sm' : cfg.fontSize === 'lg' ? 'text-lg' : 'text-base'}>
+              {cfg.headerText && <div className="mb-1 text-slate-600 border-b border-slate-200 pb-1 text-xs">{cfg.headerText}</div>}
+              <h1 className="text-lg font-black text-slate-900 mb-2">{cfg.title}</h1>
+              <div
+                className="plan-print-plane"
+                style={{ position: 'relative', width: '100%', minHeight: `${Math.max(contentH, 120)}mm` }}
+              >
+                {renderPlaneContent()}
+              </div>
+              {cfg.footerText && <div className="mt-2 pt-1 border-t border-slate-200 text-slate-500 text-xs">{cfg.footerText}</div>}
+              {(cfg.showLogo || cfg.showQRCode) && (
+                <div className="mt-2 flex gap-3 items-center">
+                  {cfg.showLogo && <div className="w-12 h-12 border border-slate-200 rounded flex items-center justify-center text-slate-400 text-[10px]">Logo</div>}
+                  {cfg.showQRCode && <div className="w-12 h-12 border border-slate-200 rounded flex items-center justify-center text-slate-400 text-[9px] text-center">二维码</div>}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">生产计划单</h1>
+          <p className="text-slate-500 mt-1 italic text-sm">从需求预测到生产指令的初步规划</p>
+        </div>
+        {!showModal && (
+          <div className="flex items-center gap-3">
+            <button onClick={() => { setPlanFormConfigDraft(JSON.parse(JSON.stringify(planFormSettings))); setShowPlanFormConfigModal(true); }} className="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition-all border border-slate-200">
+              <Sliders className="w-4 h-4" /> 表单配置
+            </button>
+            <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-bold transition-all shadow-lg shadow-indigo-100">
+              <Plus className="w-4 h-4" /> 创建生产计划
+            </button>
+          </div>
+        )}
+      </div>
+
+      {!showModal ? (
+        <div className="grid grid-cols-1 gap-4">
+          {plans.length === 0 ? (
+            <div className="bg-white border-2 border-dashed border-slate-100 rounded-[32px] p-20 text-center">
+              <CalendarRange className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+              <p className="text-slate-400 font-medium">暂无生产计划数据</p>
+            </div>
+          ) : (
+            listBlocks.map((block, blockIdx) => {
+              if (block.type === 'single') {
+                const plan = block.plan;
+                const product = products.find(p => p.id === plan.productId);
+                const totalQty = plan.items ? plan.items.reduce((sum, item) => sum + item.quantity, 0) : 0;
+                const assignedCount = plan.assignments ? Object.values(plan.assignments).filter(a => (a as NodeAssignment).workerIds && (a as NodeAssignment).workerIds.length > 0).length : 0;
+                const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
+                const customListFields = planFormSettings.customFields.filter(f => f.showInList);
+                const createdDate = plan.createdAt || (() => { const m = plan.id.match(/^plan-(\d+)/); return m ? new Date(parseInt(m[1], 10)).toISOString().split('T')[0] : ''; })();
+                return (
+                  <div key={plan.id} className="bg-white p-6 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group flex items-center justify-between">
+                    <div className="flex items-center gap-6">
+                      {product?.imageUrl ? (
+                        <button type="button" onClick={() => setImagePreviewUrl(product.imageUrl)} className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
+                          <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover block" />
+                        </button>
+                      ) : (
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 ${plan.status === PlanStatus.CONVERTED ? 'bg-emerald-50 text-emerald-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                          {plan.status === PlanStatus.CONVERTED ? <CheckCircle2 className="w-7 h-7" /> : <Clock className="w-7 h-7" />}
+                        </div>
+                      )}
+                      <div>
+                        <div className="flex items-center gap-3 mb-1 flex-wrap">
+                          {showInList('planNumber') && <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-widest">{plan.planNumber}</span>}
+                          {showInList('product') && <h3 className="text-lg font-bold text-slate-800">{product?.name || '未知产品'}</h3>}
+                          {product && categories.find(c => c.id === product.categoryId)?.customFields?.filter(f => f.showInForm !== false).map(f => {
+                            const val = product.categoryCustomData?.[f.id];
+                            if (val == null || val === '') return null;
+                            return <span key={f.id} className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">{f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}</span>;
+                          })}
+                          {showInList('assignedCount') && assignedCount > 0 && <span className="text-[9px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">已派发 {assignedCount} 工序</span>}
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
+                          {showInList('customer') && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
+                          {showInList('totalQty') && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 计划总量: {totalQty}</span>}
+                          {showInList('dueDate') && <span className="flex items-center gap-1 text-rose-500 font-bold"><Clock className="w-3 h-3" /> 交期: {plan.dueDate}</span>}
+                          {showInList('createdAt') && createdDate && <span className="flex items-center gap-1 text-slate-500"><CalendarDays className="w-3 h-3" /> 添加: {createdDate}</span>}
+                          {customListFields.map(cf => (plan.customData?.[cf.id] != null && plan.customData?.[cf.id] !== '') && <span key={cf.id} className="flex items-center gap-1">{cf.label}: {String(plan.customData[cf.id])}</span>)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {planPrintConfig.enabled && (
+                         <button onClick={() => handlePrint(plan)} className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all border border-slate-100 bg-white" title="打印单据">
+                           <Printer className="w-5 h-5" />
+                         </button>
+                      )}
+                      <button onClick={() => setViewDetailPlanId(plan.id)} className="flex items-center gap-2 px-5 py-2.5 bg-slate-50 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl text-xs font-bold transition-all border border-slate-100">
+                        <Edit3 className="w-4 h-4" /> 详情
+                      </button>
+                      {plan.status !== PlanStatus.CONVERTED ? (
+                        <>
+<button onClick={() => openSplit(plan)} className="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-bold transition-all border border-slate-200">
+                          <Split className="w-4 h-4" /> 拆分
+                        </button>
+                          <button onClick={() => onConvertToOrder(plan.id)} className="bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-black transition-all flex items-center gap-2">
+                            <ArrowRightCircle className="w-4 h-4" /> 下达工单
+                          </button>
+                        </>
+                      ) : (
+                        <div className="px-5 py-2.5 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold border border-emerald-200">已转正式工单</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+              // block.type === 'group'：同一原单的拆分单用底框包在一起
+              const { groupKey, plans: groupPlans } = block;
+              return (
+                <div key={`group-${groupKey}-${blockIdx}`} className="rounded-[32px] border-2 border-slate-300 bg-slate-50/50 overflow-hidden">
+                  {(() => {
+                    const groupTotalQty = groupPlans.reduce((sum, p) => sum + (p.items?.reduce((s, item) => s + item.quantity, 0) ?? 0), 0);
+                    return (
+                      <div className="px-5 py-3 border-b border-slate-200 bg-slate-100/80 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-2">
+                          <Split className="w-4 h-4 text-slate-600" />
+                          <span className="text-sm font-bold text-slate-800">原单 {groupKey} 拆分（共 {groupPlans.length} 条）</span>
+                        </div>
+                        <span className="text-sm font-bold text-slate-600 whitespace-nowrap">计划总数：{groupTotalQty}</span>
+                      </div>
+                    );
+                  })()}
+                  <div className="p-4 space-y-3">
+                    {groupPlans.map(plan => {
+                      const product = products.find(p => p.id === plan.productId);
+                      const totalQty = plan.items ? plan.items.reduce((sum, item) => sum + item.quantity, 0) : 0;
+                      const assignedCount = plan.assignments ? Object.values(plan.assignments).filter(a => (a as NodeAssignment).workerIds && (a as NodeAssignment).workerIds.length > 0).length : 0;
+                      const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
+                      const customListFields = planFormSettings.customFields.filter(f => f.showInList);
+                      const createdDate = plan.createdAt || (() => { const m = plan.id.match(/^plan-(\d+)/); return m ? new Date(parseInt(m[1], 10)).toISOString().split('T')[0] : ''; })();
+                      return (
+                        <div key={plan.id} className="bg-white p-5 rounded-2xl border border-slate-200 hover:shadow-lg hover:border-slate-300 transition-all flex items-center justify-between">
+                          <div className="flex items-center gap-5">
+                            {product?.imageUrl ? (
+                              <button type="button" onClick={() => setImagePreviewUrl(product.imageUrl)} className="w-12 h-12 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
+                                <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover block" />
+                              </button>
+                            ) : (
+                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${plan.status === PlanStatus.CONVERTED ? 'bg-emerald-50 text-emerald-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                                {plan.status === PlanStatus.CONVERTED ? <CheckCircle2 className="w-6 h-6" /> : <Clock className="w-6 h-6" />}
+                              </div>
+                            )}
+                            <div>
+                              <div className="flex items-center gap-3 mb-1 flex-wrap">
+                                {showInList('planNumber') && <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-widest">{plan.planNumber}</span>}
+                                {showInList('product') && <h3 className="text-base font-bold text-slate-800">{product?.name || '未知产品'}</h3>}
+                                {product && categories.find(c => c.id === product.categoryId)?.customFields?.filter(f => f.showInForm !== false).map(f => {
+                                  const val = product.categoryCustomData?.[f.id];
+                                  if (val == null || val === '') return null;
+                                  return <span key={f.id} className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">{f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}</span>;
+                                })}
+                                {showInList('assignedCount') && assignedCount > 0 && <span className="text-[9px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">已派发 {assignedCount} 工序</span>}
+                              </div>
+                              <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
+                                {showInList('customer') && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
+                                {showInList('totalQty') && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 计划总量: {totalQty}</span>}
+                                {showInList('dueDate') && <span className="flex items-center gap-1 text-rose-500 font-bold"><Clock className="w-3 h-3" /> 交期: {plan.dueDate}</span>}
+                                {showInList('createdAt') && createdDate && <span className="flex items-center gap-1 text-slate-500"><CalendarDays className="w-3 h-3" /> 添加: {createdDate}</span>}
+                                {customListFields.map(cf => (plan.customData?.[cf.id] != null && plan.customData?.[cf.id] !== '') && <span key={cf.id} className="flex items-center gap-1">{cf.label}: {String(plan.customData[cf.id])}</span>)}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {planPrintConfig.enabled && (
+                              <button onClick={() => handlePrint(plan)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg border border-slate-100 bg-white" title="打印单据">
+                                <Printer className="w-4 h-4" />
+                              </button>
+                            )}
+                            <button onClick={() => setViewDetailPlanId(plan.id)} className="flex items-center gap-1.5 px-4 py-2 bg-slate-50 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl text-xs font-bold border border-slate-100">
+                              <Edit3 className="w-3.5 h-3.5" /> 详情
+                            </button>
+                            {plan.status !== PlanStatus.CONVERTED ? (
+                              <>
+                                <button onClick={() => openSplit(plan)} className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-bold border border-slate-200">
+                                  <Split className="w-3.5 h-3.5" /> 拆分
+                                </button>
+                                <button onClick={() => onConvertToOrder(plan.id)} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-black flex items-center gap-1.5">
+                                  <ArrowRightCircle className="w-3.5 h-3.5" /> 下达工单
+                                </button>
+                              </>
+                            ) : (
+                              <div className="px-4 py-2 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold border border-emerald-200">已转工单</div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      ) : (
+        <div className="max-w-5xl mx-auto space-y-6 animate-in slide-in-from-bottom-4 pb-32">
+          <div className="flex items-center justify-between sticky top-0 z-40 py-4 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200">
+            <button onClick={() => setShowModal(false)} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
+              <ArrowLeft className="w-4 h-4" /> 返回列表
+            </button>
+            <button onClick={handleCreate} disabled={!canSave} className="bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50">
+              <Save className="w-4 h-4" /> 确认保存计划单
+            </button>
+          </div>
+
+          <div className="bg-white rounded-[40px] p-8 border border-slate-200 shadow-sm space-y-10">
+            <div className="space-y-8">
+              <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
+                <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600"><FileText className="w-5 h-5" /></div>
+                <h3 className="text-lg font-bold text-slate-800">1. 计划基础信息</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="md:col-span-2 space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">目标生产品项 (支持搜索与分类筛选)</label>
+                  <div className="flex items-stretch gap-4">
+                    {selectedProduct && (
+                      <div className="shrink-0">
+                        {selectedProduct.imageUrl ? (
+                          <button type="button" onClick={() => setImagePreviewUrl(selectedProduct.imageUrl!)} className="rounded-xl overflow-hidden border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none block">
+                            <img src={selectedProduct.imageUrl} alt={selectedProduct.name} className="w-16 h-16 object-cover block" />
+                          </button>
+                        ) : (
+                          <div className="w-16 h-16 rounded-xl bg-slate-200 flex items-center justify-center border border-slate-100"><Package className="w-8 h-8 text-slate-400" /></div>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <EnhancedProductSelector 
+                        options={products} 
+                        categories={categories}
+                        value={form.productId} 
+                        onChange={(pId, cId) => setForm({ ...form, productId: pId, categoryId: cId, variantQuantities: {}, singleQuantity: 0 })} 
+                      />
+                    </div>
+                  </div>
+                </div>
+                {planFormSettings.standardFields.find(f => f.id === 'customer')?.showInCreate !== false && (
+                  <PartnerCustomerSelector
+                    value={form.customer}
+                    onChange={customerName => setForm({ ...form, customer: customerName })}
+                    partners={partners}
+                    categories={partnerCategories}
+                    placeholder="搜索并选择合作单位..."
+                  />
+                )}
+                {planFormSettings.standardFields.find(f => f.id === 'dueDate')?.showInCreate !== false && (
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">期望交期截止</label>
+                    <input type="date" value={form.dueDate} onChange={e => setForm({...form, dueDate: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
+                  </div>
+                )}
+                {planFormSettings.customFields.filter(f => f.showInCreate).map(cf => (
+                  <div key={cf.id} className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{cf.label}</label>
+                    {cf.type === 'date' ? (
+                      <input type="date" value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
+                    ) : cf.type === 'number' ? (
+                      <input type="number" value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value === '' ? '' : Number(e.target.value) } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
+                    ) : cf.type === 'select' ? (
+                      <select value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]">
+                        <option value="">请选择</option>
+                        {(cf.options ?? []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                    ) : (
+                      <input type="text" value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" placeholder={`${cf.label}`} />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {selectedProduct && (
+              <div className="pt-10 border-t border-slate-50 space-y-8 animate-in fade-in slide-in-from-top-4">
+                <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
+                  <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600"><Layers className="w-5 h-5" /></div>
+                  <h3 className="text-lg font-bold text-slate-800">2. 生产数量明细录入</h3>
+                </div>
+
+                {activeCategory?.hasColorSize && selectedProduct.variants && selectedProduct.variants.length > 0 ? (
+                  <div className="space-y-6">
+                    {(Object.entries(groupedVariants) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                      const color = dictionaries.colors.find(c => c.id === colorId);
+                      return (
+                        <div key={colorId} className="bg-slate-50/50 p-6 rounded-[32px] border border-slate-100 flex flex-col md:flex-row md:items-center gap-8 group hover:border-indigo-200 transition-all overflow-hidden">
+                          <div className="flex items-center gap-3 w-40 shrink-0">
+                            <div className="w-5 h-5 rounded-full border border-slate-200 shadow-inner" style={{backgroundColor: color?.value}}></div>
+                            <span className="text-sm font-black text-slate-700">{color?.name}</span>
+                          </div>
+                          <div className="flex-1 flex flex-wrap gap-4">
+                            {(colorVariants as ProductVariant[]).map(v => {
+                              const size = dictionaries.sizes.find(s => s.id === v.sizeId);
+                              return (
+                                <div key={v.id} className="flex flex-col gap-1.5 w-24">
+                                  <span className="text-[10px] font-black text-slate-400 text-center uppercase tracking-tighter">{size?.name}</span>
+                                  <input 
+                                    type="number" 
+                                    placeholder="0"
+                                    value={form.variantQuantities[v.id] || ''} 
+                                    onChange={e => updateVariantQty(v.id, e.target.value)}
+                                    className="w-full bg-white border border-slate-200 rounded-xl py-2 px-2 text-sm font-black text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500 text-center shadow-sm" 
+                                  />
+                                </div>
+                              )
+                            })}
+                          </div>
+                          <div className="hidden md:block shrink-0 text-right bg-white/60 px-4 py-2 rounded-2xl border border-slate-100">
+                             <p className="text-[9px] font-black text-slate-300 uppercase">颜色小计</p>
+                             <p className="text-sm font-black text-slate-600">{(colorVariants as ProductVariant[]).reduce((s, v) => s + (form.variantQuantities[v.id] || 0), 0)}</p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                    <div className="flex justify-end p-4 bg-indigo-600 rounded-[24px] text-white shadow-xl shadow-indigo-100">
+                       <div className="flex items-center gap-4">
+                          <p className="text-xs font-bold opacity-80">计划生产汇总总量:</p>
+                          <p className="text-xl font-black">{(Object.values(form.variantQuantities) as number[]).reduce((s, q) => s + q, 0)} <span className="text-xs font-medium">PCS</span></p>
+                       </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="max-w-xs space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">计划生产总量 (PCS)</label>
+                    <input 
+                      type="number" 
+                      value={form.singleQuantity || ''} 
+                      onChange={e => setForm({...form, singleQuantity: parseInt(e.target.value)||0})} 
+                      className="w-full bg-slate-50 border-none rounded-xl py-4 px-6 text-xl font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none shadow-inner" 
+                      placeholder="0"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {viewDetailPlanId && viewPlan && viewProduct && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setViewDetailPlanId(null)}></div>
+          <div className="relative bg-white w-full max-w-6xl rounded-[40px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 max-h-[92vh]">
+            
+            <div className="px-10 py-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-50">
+               <div className="flex items-center gap-5">
+                  {viewProduct.imageUrl ? (
+                    <button type="button" onClick={() => setImagePreviewUrl(viewProduct.imageUrl)} className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-200 shadow-sm flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
+                      <img src={viewProduct.imageUrl} alt={viewProduct.name} className="w-full h-full object-cover block" />
+                    </button>
+                  ) : (
+                    <div className="w-14 h-14 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-100 flex-shrink-0"><Info className="w-7 h-7" /></div>
+                  )}
+                  <div>
+                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">查看生产计划</h2>
+                    <p className="text-sm font-bold text-slate-400 mt-0.5 tracking-tighter uppercase flex flex-wrap items-center gap-2">
+                      {viewPlan.planNumber} — 关联：{viewProduct.name}
+                      {categories.find(c => c.id === viewProduct.categoryId)?.customFields?.filter(f => f.showInForm !== false).map(f => {
+                        const val = viewProduct.categoryCustomData?.[f.id];
+                        if (val == null || val === '') return null;
+                        return <span key={f.id} className="text-[10px] font-bold text-slate-500 px-2 py-0.5 rounded bg-slate-100">{f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}</span>;
+                      })}
+                    </p>
+                  </div>
+               </div>
+               <button onClick={() => setViewDetailPlanId(null)} className="p-3 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50 transition-all"><X className="w-7 h-7" /></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-10 space-y-12 bg-slate-50/30">
+               {/* 1. 计划基础信息 */}
+               <div className="space-y-6">
+                  <div className="flex items-center gap-3 border-b border-slate-100 pb-4 ml-2">
+                    <FileText className="w-5 h-5 text-indigo-600" />
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">1. 计划基础信息</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-white p-8 rounded-[32px] border border-slate-200 shadow-sm">
+                    {planFormSettings.standardFields.find(f => f.id === 'customer')?.showInDetail !== false && (
+                      <div className="space-y-2">
+                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">计划客户名称</label>
+                         <div className="relative">
+                            <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                            <input type="text" value={tempPlanInfo.customer} onChange={e => setTempPlanInfo({...tempPlanInfo, customer: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-11 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                         </div>
+                      </div>
+                    )}
+                    {planFormSettings.standardFields.find(f => f.id === 'dueDate')?.showInDetail !== false && (
+                      <div className="space-y-2">
+                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">交期截止日期</label>
+                         <div className="relative">
+                            <CalendarDays className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                            <input type="date" value={tempPlanInfo.dueDate} onChange={e => setTempPlanInfo({...tempPlanInfo, dueDate: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-11 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                         </div>
+                      </div>
+                    )}
+                    {planFormSettings.standardFields.find(f => f.id === 'createdAt')?.showInDetail !== false && (() => {
+                      const createdDate = viewPlan.createdAt || (() => { const m = viewPlan.id.match(/^plan-(\d+)/); return m ? new Date(parseInt(m[1], 10)).toISOString().split('T')[0] : ''; })();
+                      return createdDate ? (
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">添加日期</label>
+                          <div className="flex items-center gap-2 bg-slate-50 rounded-2xl py-3 px-4 font-bold text-slate-700">
+                            <CalendarDays className="w-4 h-4 text-slate-400" /> {createdDate}
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
+                    {planFormSettings.customFields.filter(f => f.showInDetail).map(cf => (
+                      <div key={cf.id} className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">{cf.label}</label>
+                        {cf.type === 'date' ? (
+                          <input type="date" value={tempPlanInfo.customData?.[cf.id] ?? ''} onChange={e => setTempPlanInfo({ ...tempPlanInfo, customData: { ...tempPlanInfo.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                        ) : cf.type === 'number' ? (
+                          <input type="number" value={tempPlanInfo.customData?.[cf.id] ?? ''} onChange={e => setTempPlanInfo({ ...tempPlanInfo, customData: { ...tempPlanInfo.customData, [cf.id]: e.target.value === '' ? '' : Number(e.target.value) } })} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                        ) : cf.type === 'select' ? (
+                          <select value={tempPlanInfo.customData?.[cf.id] ?? ''} onChange={e => setTempPlanInfo({ ...tempPlanInfo, customData: { ...tempPlanInfo.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none">
+                            <option value="">请选择</option>
+                            {(cf.options ?? []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                          </select>
+                        ) : (
+                          <input type="text" value={tempPlanInfo.customData?.[cf.id] ?? ''} onChange={e => setTempPlanInfo({ ...tempPlanInfo, customData: { ...tempPlanInfo.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+               </div>
+
+               {/* 2. 规格数量矩阵 */}
+               <div className="space-y-6">
+                  <div className="flex items-center gap-3 border-b border-slate-100 pb-4 ml-2">
+                    <Layers className="w-5 h-5 text-indigo-600" />
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">2. 生产数量明细录入 (可编辑)</h3>
+                  </div>
+                  <div className="bg-white p-8 rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+                    {tempPlanInfo.items && tempPlanInfo.items.length > 0 && tempPlanInfo.items[0].variantId ? (
+                        <div className="space-y-4">
+                            {(Object.entries(tempPlanInfo.items.reduce((acc: Record<string, any[]>, item) => {
+                                const v = viewProduct.variants.find(vx => vx.id === item.variantId);
+                                if (v) { if (!acc[v.colorId]) acc[v.colorId] = []; acc[v.colorId].push({ ...item, variant: v }); }
+                                return acc;
+                            }, {})) as [string, any[]][]).map(([colorId, colorItems]) => {
+                                const color = dictionaries.colors.find(c => c.id === colorId);
+                                return (
+                                    <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-6 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                        <div className="flex items-center gap-3 w-40 shrink-0">
+                                            <div className="w-6 h-6 rounded-full border border-slate-200" style={{backgroundColor: color?.value}}></div>
+                                            <span className="text-sm font-black text-slate-700">{color?.name}</span>
+                                        </div>
+                                        <div className="flex-1 flex flex-wrap gap-4">
+                                            {colorItems.map((item, idx) => {
+                                                const size = dictionaries.sizes.find(s => s.id === item.variant.sizeId);
+                                                return (
+                                                    <div key={idx} className="flex flex-col gap-1 w-20">
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase text-center">{size?.name}</span>
+                                                        <input type="number" value={item.quantity} onChange={e => updateDetailItemQty(item.variantId, e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg py-1.5 px-2 text-sm font-black text-indigo-600 text-center focus:ring-2 focus:ring-indigo-500 outline-none" />
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    ) : (
+                        <div className="max-w-xs space-y-2">
+                             <label className="text-[10px] font-black text-slate-400 uppercase">总量 (PCS)</label>
+                             <input type="number" value={tempPlanInfo.items?.[0]?.quantity || 0} onChange={e => updateDetailItemQty(undefined, e.target.value)} className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-2xl font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                        </div>
+                    )}
+                  </div>
+               </div>
+
+               {/* 3. 工序任务 */}
+              <div className="space-y-6">
+                  <div className="flex items-center gap-3 border-b border-slate-100 pb-4 ml-2">
+                    <Users className="w-5 h-5 text-indigo-600" />
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">3. 工序任务</h3>
+                  </div>
+                  <div className="space-y-4">
+                     {productNodes.map((node, idx) => {
+                       const eligibleWorkers = workers.filter(w => w.assignedMilestoneIds?.includes(node.id));
+                       const isAssigned = (tempAssignments[node.id] as NodeAssignment)?.workerIds?.length > 0;
+                       const canAssign = node.enableAssignment !== false;
+                       const nodePricingMode: ProcessPricingMode = tempNodePricingModes[node.id] ?? viewProduct?.nodePricingModes?.[node.id] ?? 'per_piece';
+                       const rateUnit = nodePricingMode === 'per_hour' ? '元/时' : '元/件';
+                       return (
+                         <div key={node.id} className={`flex flex-col md:flex-row md:items-center gap-6 p-6 rounded-[28px] border transition-all ${isAssigned ? 'bg-white border-indigo-200 shadow-md ring-1 ring-indigo-50' : 'bg-white/60 border-slate-200'}`}>
+                            <div className="flex items-center gap-4 md:w-56 shrink-0">
+                               <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-[11px] font-black shadow-inner ${isAssigned ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{idx + 1}</div>
+                               <div>
+                                 <h4 className="text-sm font-black text-slate-800">{node.name}</h4>
+                                 <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">
+                                   {node.hasBOM ? '需配置BOM' : '标准工序'}
+                                   {canAssign ? ' · 参与派工' : ' · 不派工'}
+                                 </p>
+                               </div>
+                            </div>
+                            <div className="flex-1 flex flex-col md:flex-row md:items-center gap-4 justify-between">
+                               <div className="flex items-center gap-4 shrink-0">
+                                 <div className="flex items-center gap-2">
+                                   <span className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">计价方式</span>
+                                   <select value={nodePricingMode} onChange={e => setTempNodePricingModes(prev => ({ ...prev, [node.id]: e.target.value as ProcessPricingMode }))} className="bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-[10px] font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none">
+                                     <option value="per_piece">计件</option>
+                                     <option value="per_hour">计时</option>
+                                   </select>
+                                 </div>
+                                 <div className="flex items-center gap-2 w-[9rem]">
+                                   <span className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap w-6">工价</span>
+                                   <input
+                                     type="number"
+                                     min={0}
+                                     step={0.01}
+                                     placeholder="0"
+                                     value={tempNodeRates[node.id] ?? ''}
+                                     onChange={e => {
+                                       const v = parseFloat(e.target.value);
+                                       setTempNodeRates(prev => ({ ...prev, [node.id]: isNaN(v) ? 0 : v }));
+                                     }}
+                                     className="w-20 bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
+                                   />
+                                   <span className="text-[9px] text-slate-400 whitespace-nowrap">{rateUnit}</span>
+                                 </div>
+                               </div>
+                            </div>
+                         </div>
+                       )
+                     })}
+                  </div>
+               </div>
+
+               {/* 4. 计划生产用料清单 (BOM 汇总) */}
+               <div className="space-y-6 pb-20">
+                  <div className="flex items-center justify-between ml-2">
+                     <div className="flex items-center gap-3">
+                        <Package className="w-5 h-5 text-indigo-600" />
+                        <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">4. 计划生产用料清单 (BOM 汇总)</h3>
+                     </div>
+                     <button 
+                        onClick={handleGenerateProposedOrders}
+                        disabled={proposedOrders.length > 0 || materialRequirements.length === 0}
+                        className="bg-slate-900 text-white px-5 py-2 rounded-xl text-xs font-bold hover:bg-black transition-all flex items-center gap-2 shadow-lg disabled:opacity-50"
+                      >
+                         <ShoppingCart className="w-3.5 h-3.5" />
+                         按供应商智能拆单核算
+                      </button>
+                  </div>
+
+                  <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+                     <table className="w-full text-left border-collapse">
+                        <thead>
+                           <tr className="bg-slate-50/50 border-b border-slate-100">
+                              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">物料名称 / SKU</th>
+                              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">理论总需量</th>
+                              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">系统可用量</th>
+                              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">计算缺料数</th>
+                           </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                           {(materialRequirements as any[]).length === 0 ? (
+                              <tr><td colSpan={4} className="px-8 py-10 text-center text-slate-300 italic text-sm">尚未配置 BOM 详情</td></tr>
+                           ) : (
+                              (materialRequirements as any[]).map((req, idx) => (
+                                 <tr key={idx} className="hover:bg-slate-50/30 transition-colors group">
+                                    <td className="px-8 py-4">
+                                       <div className="flex flex-col">
+                                          <span className="text-sm font-bold text-slate-800">{req.materialName}</span>
+                                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">SKU: {req.materialSku}</span>
+                                       </div>
+                                    </td>
+                                    <td className="px-8 py-4">
+                                       <span className="text-sm font-black text-slate-600">{req.totalNeeded.toLocaleString()} PCS</span>
+                                    </td>
+                                    <td className="px-8 py-4 text-center">
+                                       <span className={`text-sm font-black ${req.stock < req.totalNeeded ? 'text-rose-500' : 'text-emerald-500'}`}>
+                                          {req.stock.toLocaleString()} PCS
+                                       </span>
+                                    </td>
+                                    <td className="px-8 py-4 text-right">
+                                       {req.shortage > 0 ? (
+                                          <div className="flex flex-col items-end">
+                                             <span className="text-sm font-black text-indigo-600 flex items-center gap-1">
+                                                <ArrowDownToLine className="w-3 h-3" />
+                                                {req.shortage.toLocaleString()} PCS
+                                             </span>
+                                             <span className="text-[9px] font-black text-amber-500 uppercase">严重缺料</span>
+                                          </div>
+                                       ) : (
+                                          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">库存充沛</span>
+                                       )}
+                                    </td>
+                                 </tr>
+                              ))
+                           )}
+                        </tbody>
+                     </table>
+                  </div>
+
+                  {proposedOrders.length > 0 && (
+                    <div className="mt-12 space-y-8 animate-in slide-in-from-bottom-6">
+                       <div className="flex items-center justify-between ml-2">
+                          <div className="flex items-center gap-3">
+                             <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 border border-amber-100 shadow-sm"><FileSpreadsheet className="w-5 h-5" /></div>
+                             <div>
+                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">待确认采购订单预览 ({proposedOrders.length} 张单据)</h3>
+                                <p className="text-[10px] text-slate-400 font-bold italic mt-0.5">已按单位归类，点击保存正式同步至采购模块</p>
+                             </div>
+                          </div>
+                          <div className="flex gap-3">
+                             <button onClick={() => setProposedOrders([])} className="px-4 py-2 text-[11px] font-black text-slate-400 hover:text-slate-600 uppercase">清空待办</button>
+                             <button 
+                                onClick={handleConfirmAndSaveOrders}
+                                disabled={isProcessingPO}
+                                className="bg-emerald-600 text-white px-8 py-2.5 rounded-xl text-xs font-black shadow-xl shadow-emerald-100 flex items-center gap-2 hover:bg-emerald-700 active:scale-95 transition-all"
+                             >
+                                {isProcessingPO ? <Clock className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                                确认并批量保存采购单
+                             </button>
+                          </div>
+                       </div>
+
+                       <div className="space-y-6">
+                          {proposedOrders.map(order => (
+                            <div key={order.orderNumber} className="bg-white border-2 border-slate-100 p-8 rounded-[40px] shadow-sm relative group hover:border-indigo-400 transition-all overflow-hidden">
+                               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 border-b border-slate-50 pb-6">
+                                  <div className="flex items-center gap-5">
+                                     <div className="w-14 h-14 bg-slate-900 text-white rounded-2xl flex flex-col items-center justify-center shadow-lg">
+                                        <Building2 className="w-5 h-5 mb-0.5" />
+                                        <span className="text-[8px] font-black uppercase opacity-60">PRT</span>
+                                     </div>
+                                     <div>
+                                        <div className="flex items-center gap-3">
+                                           <h4 className="text-lg font-black text-slate-800">{order.partnerName}</h4>
+                                           <span className="px-2.5 py-0.5 rounded-lg bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-widest border border-indigo-100">
+                                              {order.orderNumber}
+                                           </span>
+                                        </div>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-widest italic flex items-center gap-2">
+                                           <ListOrdered className="w-3 h-3" /> 包含明细：{order.items.length} 项
+                                        </p>
+                                     </div>
+                                  </div>
+                                  <button 
+                                      onClick={() => removeProposedOrder(order.orderNumber)}
+                                      className="flex items-center gap-2 px-4 py-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all text-[11px] font-black uppercase"
+                                   >
+                                      <Trash2 className="w-4 h-4" /> 移除单据
+                                   </button>
+                               </div>
+
+                               <div className="overflow-x-auto">
+                                  <table className="w-full text-left">
+                                     <thead>
+                                        <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                           <th className="pb-4 pl-2">物料档案 / SKU</th>
+                                           <th className="pb-4 text-center">对应生产环节</th>
+                                           <th className="pb-4 text-center">系统缺料数</th>
+                                           <th className="pb-4 pr-2 text-right">拟采购数量 (可编辑)</th>
+                                        </tr>
+                                     </thead>
+                                     <tbody className="divide-y divide-slate-50">
+                                        {order.items.map(item => (
+                                          <tr key={item.id} className="group/item">
+                                             <td className="py-4 pl-2">
+                                                <div className="flex flex-col">
+                                                   <span className="text-sm font-bold text-slate-700">{item.materialName}</span>
+                                                   <span className="text-[9px] font-bold text-slate-300 uppercase">SKU: {item.materialSku}</span>
+                                                </div>
+                                             </td>
+                                             <td className="py-4 text-center">
+                                                <span className="text-[10px] font-black text-indigo-400 uppercase">{item.nodeName}</span>
+                                             </td>
+                                             <td className="py-4 text-center">
+                                                <span className="text-xs font-bold text-slate-400">{item.suggestedQty} PCS</span>
+                                             </td>
+                                             <td className="py-4 pr-2 text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                   <div className="relative w-32">
+                                                      <input 
+                                                         type="number" 
+                                                         value={item.quantity} 
+                                                         onChange={e => updateProposedItemQty(order.orderNumber, item.id, e.target.value)}
+                                                         className="w-full bg-slate-50 border-none rounded-xl py-2.5 px-3 text-right text-sm font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none shadow-inner"
+                                                      />
+                                                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-300 uppercase">Qty</span>
+                                                   </div>
+                                                   <span className="text-[10px] font-bold text-slate-400">PCS</span>
+                                                </div>
+                                             </td>
+                                          </tr>
+                                        ))}
+                                     </tbody>
+                                  </table>
+                               </div>
+
+                               <div className="mt-6 pt-6 border-t border-slate-50 flex items-center justify-between">
+                                  <div className="flex items-center gap-4 text-[10px] font-bold text-amber-500">
+                                     <AlertCircle className="w-3.5 h-3.5" />
+                                     <span>请确认各明细项数量是否满足最小包装量</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                     <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">单据预估总量：</span>
+                                     <span className="text-lg font-black text-slate-900">{order.items.reduce((s, i) => s + i.quantity, 0).toLocaleString()} PCS</span>
+                                  </div>
+                               </div>
+                            </div>
+                          ))}
+                       </div>
+                    </div>
+                  )}
+               </div>
+
+               {/* 5. 工序派工（仅当存在启用派工的工序时显示） */}
+               {assignableNodes.length > 0 && (
+                 <div className="space-y-6 pb-20 mt-10">
+                   <div className="flex items-center gap-3 border-b border-slate-100 pb-4 ml-2">
+                     <Users className="w-5 h-5 text-indigo-600" />
+                     <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">5. 工序派工</h3>
+                   </div>
+                   <div className="space-y-4">
+                     {assignableNodes.map((node, idx) => {
+                       const eligibleWorkers = workers.filter(w => w.assignedMilestoneIds?.includes(node.id));
+                       const eligibleEquipment = equipment.filter(e => e.assignedMilestoneIds?.includes(node.id));
+                       const isAssigned = (tempAssignments[node.id] as NodeAssignment)?.workerIds?.length > 0;
+                       return (
+                         <div
+                           key={node.id}
+                           className={`flex flex-col md:flex-row md:items-center gap-6 p-6 rounded-[28px] border transition-all ${
+                             isAssigned
+                               ? 'bg-white border-indigo-200 shadow-md ring-1 ring-indigo-50'
+                               : 'bg-white/60 border-slate-200'
+                           }`}
+                         >
+                           <div className="flex items-center gap-4 md:w-56 shrink-0">
+                             <div
+                               className={`w-10 h-10 rounded-xl flex items-center justify-center text-[11px] font-black shadow-inner ${
+                                 isAssigned ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'
+                               }`}
+                             >
+                               {idx + 1}
+                             </div>
+                             <div>
+                               <h4 className="text-sm font-black text-slate-800">{node.name}</h4>
+                               <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">
+                                 {node.hasBOM ? '需配置BOM' : '标准工序'} · 参与派工
+                               </p>
+                             </div>
+                           </div>
+                          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
+                             <SearchableMultiSelectWithProcessTabs
+                               variant="compact"
+                               icon={UserPlus}
+                               placeholder="分派负责人..."
+                               processNodes={assignableNodes}
+                               currentNodeId={node.id}
+                               options={eligibleWorkers.map(w => ({ id: w.id, name: w.name, sub: w.group, assignedMilestoneIds: w.assignedMilestoneIds }))}
+                               selectedIds={(tempAssignments[node.id] as NodeAssignment)?.workerIds || []}
+                               onChange={(ids) => updateTempAssignment(node.id, { workerIds: ids })}
+                             />
+                             <SearchableMultiSelectWithProcessTabs
+                               variant="compact"
+                               icon={Wrench}
+                               placeholder="分派设备..."
+                               processNodes={assignableNodes}
+                               currentNodeId={node.id}
+                               options={eligibleEquipment.map(e => ({ id: e.id, name: e.name, sub: e.code, assignedMilestoneIds: e.assignedMilestoneIds }))}
+                               selectedIds={(tempAssignments[node.id] as NodeAssignment)?.equipmentIds || []}
+                               onChange={(ids) => updateTempAssignment(node.id, { equipmentIds: ids })}
+                             />
+                          </div>
+                         </div>
+                       );
+                     })}
+                   </div>
+                 </div>
+               )}
+            </div>
+
+            <div className="px-10 py-6 bg-white/80 backdrop-blur-lg border-t border-slate-100 flex justify-between items-center sticky bottom-0">
+               <div className="flex flex-col">
+                  <p className="text-xs font-bold text-slate-500">当前操作：<span className="text-indigo-600 font-black">计划资料整体更新</span></p>
+                  <p className="text-[10px] text-slate-400 mt-1 italic font-medium">※ 点击保存将同步更新客户、交期、规格数量及派发方案。</p>
+               </div>
+               <div className="flex items-center gap-4">
+                 <button onClick={() => setViewDetailPlanId(null)} className="px-8 py-3 text-sm font-black text-slate-400 hover:text-slate-800 transition-colors uppercase">放弃修改</button>
+                 {viewPlan.status !== PlanStatus.CONVERTED && (
+                   <>
+                     <button onClick={() => { openSplit(viewPlan); setViewDetailPlanId(null); }} className="px-6 py-3 text-sm font-black text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-2xl border border-amber-200 flex items-center gap-2">
+                       <Split className="w-4 h-4" /> 拆分计划
+                     </button>
+                     <button onClick={() => { onConvertToOrder(viewPlan.id); setViewDetailPlanId(null); }} className="px-6 py-3 text-sm font-black text-white bg-slate-900 hover:bg-black rounded-2xl flex items-center gap-2">
+                       <ArrowRightCircle className="w-4 h-4" /> 下达工单
+                     </button>
+                   </>
+                 )}
+                 <button 
+                    onClick={handleUpdateDetail}
+                    disabled={isSaving}
+                    className="bg-indigo-600 text-white px-12 py-3.5 rounded-2xl font-black text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all flex items-center gap-2"
+                 >
+                   {isSaving ? <Clock className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                   保存并更新计划内容
+                 </button>
+               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {splitPlanId && splitPlan && (() => {
+        const splitProduct = products.find(p => p.id === splitPlan.productId);
+        const getItemLabel = (item: PlanItem, index: number) => {
+          if (item.variantId && splitProduct?.variants) {
+            const v = splitProduct.variants.find(x => x.id === item.variantId);
+            if (v) {
+              const color = dictionaries.colors.find(c => c.id === v.colorId);
+              const size = dictionaries.sizes.find(s => s.id === v.sizeId);
+              return `${color?.name ?? ''}-${size?.name ?? ''}`.replace(/^-|-$/g, '') || `规格${index + 1}`;
+            }
+          }
+          return '默认';
+        };
+        return (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setSplitPlanId(null)} />
+            <div className="relative bg-white w-full max-w-4xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
+              <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><Split className="w-5 h-5 text-amber-500" /> 拆分计划单</h3>
+                <button onClick={() => setSplitPlanId(null)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="p-6 space-y-4 overflow-auto">
+                <p className="text-sm text-slate-500">输入计划1数量，计划2自动为剩余</p>
+                <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200">
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">规格/明细</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">原计划数量</th>
+                        {Array.from({ length: splitNumParts }, (_, j) => <th key={j} className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">计划{j + 1}数量</th>)}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {splitPlan.items.map((item, i) => (
+                        <tr key={i} className="hover:bg-slate-50/50">
+                          <td className="px-4 py-3 text-sm font-bold text-slate-700">{getItemLabel(item, i)}</td>
+                          <td className="px-4 py-3 text-sm font-black text-slate-800 text-right">{item.quantity}</td>
+                          {Array.from({ length: splitNumParts }, (_, j) => {
+                            const isAuto = splitNumParts === 2 && j === 1;
+                            return (
+                              <td key={j} className="px-4 py-2 text-right">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  readOnly={isAuto}
+                                  value={splitQuantities[i]?.[j] ?? 0}
+                                  onChange={e => setSplitQty(i, j, Math.max(0, parseInt(e.target.value) || 0))}
+                                  className={`w-20 rounded-lg py-1.5 px-2 text-sm font-bold text-right outline-none ${isAuto ? 'bg-slate-100 border border-slate-100 text-slate-500 cursor-default' : 'bg-slate-50 border border-slate-200 text-indigo-600 focus:ring-2 focus:ring-indigo-500'}`}
+                                />
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {!splitValid && <p className="text-rose-600 text-sm font-bold">请确保每一行的「计划数量」之和等于「原计划数量」。</p>}
+              </div>
+              <div className="px-8 py-6 border-t border-slate-100 flex justify-end gap-3">
+                <button onClick={() => setSplitPlanId(null)} className="px-6 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-800">取消</button>
+                <button onClick={confirmSplit} disabled={!splitValid} className="px-8 py-2.5 rounded-xl text-sm font-bold bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 flex items-center gap-2"><Split className="w-4 h-4" /> 确认拆分</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 计划单表单配置弹窗 */}
+      {showPlanFormConfigModal && planFormConfigDraft && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setShowPlanFormConfigModal(false)} />
+          <div className="relative bg-white w-full max-w-3xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
+            <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><Sliders className="w-5 h-5 text-indigo-500" /> 计划单表单配置</h3>
+                <p className="text-xs text-slate-500 mt-1">配置在列表、新增、详情页中显示的字段，可增加自定义项</p>
+              </div>
+              <button onClick={() => setShowPlanFormConfigModal(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 space-y-6 overflow-auto">
+              <div>
+                <h4 className="text-sm font-black text-slate-600 uppercase tracking-widest mb-3">标准字段显示</h4>
+                <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200">
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">字段</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">列表中</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">新增时</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">详情中</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {planFormConfigDraft.standardFields
+                        .filter(f => !['product', 'totalQty', 'status', 'priority', 'assignedCount'].includes(f.id))
+                        .map(f => (
+                        <tr key={f.id} className="hover:bg-slate-50/50">
+                          <td className="px-4 py-2.5 text-sm font-bold text-slate-800">{f.label}</td>
+                          <td className="px-4 py-2.5 text-center"><input type="checkbox" checked={f.showInList} onChange={e => setPlanFormConfigDraft(d => d ? { ...d, standardFields: d.standardFields.map(sf => sf.id === f.id ? { ...sf, showInList: e.target.checked } : sf) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
+                          <td className="px-4 py-2.5 text-center"><input type="checkbox" checked={f.showInCreate} onChange={e => setPlanFormConfigDraft(d => d ? { ...d, standardFields: d.standardFields.map(sf => sf.id === f.id ? { ...sf, showInCreate: e.target.checked } : sf) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
+                          <td className="px-4 py-2.5 text-center"><input type="checkbox" checked={f.showInDetail} onChange={e => setPlanFormConfigDraft(d => d ? { ...d, standardFields: d.standardFields.map(sf => sf.id === f.id ? { ...sf, showInDetail: e.target.checked } : sf) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-black text-slate-600 uppercase tracking-widest">自定义单据内容</h4>
+                  <button type="button" onClick={() => setPlanFormConfigDraft(d => d ? { ...d, customFields: [...d.customFields, { id: `custom-${Date.now()}`, label: '新自定义项', type: 'text', showInList: true, showInCreate: true, showInDetail: true }] } : d)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700">
+                    <Plus className="w-3.5 h-3.5" /> 增加
+                  </button>
+                </div>
+                {planFormConfigDraft.customFields.length === 0 ? (
+                  <p className="text-sm text-slate-400 italic py-4 border-2 border-dashed border-slate-100 rounded-2xl text-center">暂无自定义项，点击「增加」添加</p>
+                ) : (
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">标签</th>
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">类型</th>
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">选项（下拉时）</th>
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">列表中</th>
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">新增时</th>
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">详情中</th>
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase w-16"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {planFormConfigDraft.customFields.map(cf => (
+                          <tr key={cf.id} className="hover:bg-slate-50/50">
+                            <td className="px-4 py-2"><input type="text" value={cf.label} onChange={e => setPlanFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, label: e.target.value } : c) } : d)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold outline-none" placeholder="标签" /></td>
+                            <td className="px-4 py-2">
+                              <select value={cf.type || 'text'} onChange={e => {
+                                const newType = e.target.value as 'text' | 'number' | 'date' | 'select';
+                                setPlanFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, type: newType, options: newType === 'select' ? (c.options ?? []) : c.options } : c) } : d);
+                              }} className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold outline-none">
+                                <option value="text">文本</option><option value="number">数字</option><option value="date">日期</option><option value="select">下拉</option>
+                              </select>
+                            </td>
+                            <td className="px-4 py-2 align-top">
+                              {cf.type === 'select' ? (
+                                <div className="min-w-[180px] space-y-1.5">
+                                  {(cf.options ?? []).map((opt, idx) => (
+                                    <div key={idx} className="flex items-center gap-1">
+                                      <input type="text" value={opt} onChange={e => setPlanFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, options: (c.options ?? []).map((o, i) => i === idx ? e.target.value : o) } : c) } : d)} className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs font-bold outline-none" placeholder="选项文案" />
+                                      <button type="button" onClick={() => setPlanFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, options: (c.options ?? []).filter((_, i) => i !== idx) } : c) } : d)} className="p-1 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
+                                    </div>
+                                  ))}
+                                  <button type="button" onClick={() => setPlanFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, options: [...(c.options ?? []), '新选项'] } : c) } : d)} className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700">
+                                    <Plus className="w-3.5 h-3.5" /> 添加选项
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-slate-300 text-xs">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2 text-center"><input type="checkbox" checked={cf.showInList} onChange={e => setPlanFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, showInList: e.target.checked } : c) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
+                            <td className="px-4 py-2 text-center"><input type="checkbox" checked={cf.showInCreate} onChange={e => setPlanFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, showInCreate: e.target.checked } : c) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
+                            <td className="px-4 py-2 text-center"><input type="checkbox" checked={cf.showInDetail} onChange={e => setPlanFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, showInDetail: e.target.checked } : c) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
+                            <td className="px-4 py-2"><button type="button" onClick={() => setPlanFormConfigDraft(d => d ? { ...d, customFields: d.customFields.filter(c => c.id !== cf.id) } : d)} className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"><Trash2 className="w-4 h-4" /></button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="px-8 py-6 border-t border-slate-100 flex justify-end gap-3">
+              <button onClick={() => setShowPlanFormConfigModal(false)} className="px-6 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-800">取消</button>
+              <button onClick={() => { onUpdatePlanFormSettings(planFormConfigDraft); setShowPlanFormConfigModal(false); setPlanFormConfigDraft(null); }} className="px-8 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-2">保存配置</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 点击产品图查看大图 */}
+      {imagePreviewUrl && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 animate-in fade-in" onClick={() => setImagePreviewUrl(null)}>
+          <img src={imagePreviewUrl} alt="大图" className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} />
+          <button type="button" onClick={() => setImagePreviewUrl(null)} className="absolute top-4 right-4 p-2 rounded-full bg-white/20 text-white hover:bg-white/30 transition-all"><X className="w-6 h-6" /></button>
+        </div>
+      )}
+    </div>
+    </>
+  );
+};
+
+export default PlanOrderListView;
