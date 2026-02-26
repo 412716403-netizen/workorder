@@ -31,9 +31,20 @@ import {
   GripVertical,
   Building2,
   ImagePlus,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Download
 } from 'lucide-react';
 import { Product, GlobalNodeTemplate, ProductCategory, BOM, BOMItem, AppDictionaries, ProductVariant, DictionaryItem, Partner, ProcessPricingMode } from '../types';
+
+function getFileExtFromDataUrl(dataUrl: string): string {
+  const m = dataUrl.match(/^data:([^;]+);/);
+  if (!m) return 'bin';
+  const map: Record<string, string> = {
+    'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp',
+    'application/pdf': 'pdf',
+  };
+  return map[m[1]] || 'bin';
+}
 
 interface ProductManagementViewProps {
   products: Product[];
@@ -45,6 +56,7 @@ interface ProductManagementViewProps {
   onUpdateProduct: (product: Product) => void;
   onUpdateBOM: (bom: BOM) => void;
   onUpdateDictionaries: (dicts: AppDictionaries) => void;
+  onDetailViewChange?: (inDetail: boolean) => void;
 }
 
 const SpecSelectorModal = ({ 
@@ -145,102 +157,159 @@ const SpecSelectorModal = ({
   );
 };
 
-// 搜索选择组件（下拉使用 Portal 渲染到 body，避免被 overflow 裁剪）
-const SearchableProductSelect = ({ 
-  options, 
-  value, 
-  onChange, 
-  disabled, 
-  placeholder 
-}: { 
-  options: Product[]; 
-  value: string; 
-  onChange: (val: string) => void; 
-  disabled?: boolean; 
+// 与创建生产计划中「搜索并选择产品型号」一致：触发样式、绝对定位下拉、输入框显示自定义内容（含分类自定义字段）
+const SearchableProductSelect = ({
+  options,
+  value,
+  onChange,
+  disabled,
+  placeholder,
+  categories = []
+}: {
+  options: Product[];
+  value: string;
+  onChange: (val: string) => void;
+  disabled?: boolean;
   placeholder?: string;
+  categories?: ProductCategory[];
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const triggerRef = useRef<HTMLDivElement>(null);
-  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+  const [activeTab, setActiveTab] = useState<string>('all');
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const selectedProduct = options.find(p => p.id === value);
-  const filteredOptions = useMemo(() => {
-    return options.filter(p => 
-      p.name.toLowerCase().includes(search.toLowerCase()) || 
-      p.sku.toLowerCase().includes(search.toLowerCase())
-    );
-  }, [options, search]);
 
-  useEffect(() => {
-    if (isOpen && triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      setDropdownStyle({
-        position: 'fixed',
-        top: rect.bottom + 4,
-        left: rect.left,
-        width: rect.width,
-        zIndex: 9999,
-      });
-    }
-  }, [isOpen]);
+  const filteredOptions = useMemo(() => {
+    return options.filter(p => {
+      const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || (p.sku && p.sku.toLowerCase().includes(search.toLowerCase()));
+      const matchesCategory = activeTab === 'all' || p.categoryId === activeTab;
+      return matchesSearch && matchesCategory;
+    });
+  }, [options, search, activeTab]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (triggerRef.current?.contains(target) || (e.target as Element)?.closest?.('[data-searchable-product-dropdown]')) return;
-      setIsOpen(false);
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setIsOpen(false);
     };
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
+    document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
-
-  const dropdownEl = isOpen && typeof document !== 'undefined' ? createPortal(
-    <div data-searchable-product-dropdown className="bg-white border border-slate-200 rounded-xl shadow-2xl p-2 animate-in fade-in zoom-in-95" style={dropdownStyle}>
-      <div className="relative mb-2">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-        <input
-          autoFocus
-          type="text"
-          className="w-full bg-slate-50 border-none rounded-lg py-2 pl-8 pr-4 text-xs font-bold outline-none focus:ring-1 focus:ring-indigo-500"
-          placeholder="搜索物料名或 SKU..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
-      </div>
-      <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-0.5">
-        {filteredOptions.map(p => (
-          <button
-            key={p.id}
-            onClick={() => { onChange(p.id); setIsOpen(false); setSearch(''); }}
-            className={`w-full text-left p-2 rounded-lg text-xs font-bold transition-all ${p.id === value ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-slate-50 text-slate-700'}`}
-          >
-            <p className="truncate">{p.name}</p>
-            <p className="text-[9px] opacity-60 uppercase tracking-tighter">{p.sku}</p>
-          </button>
-        ))}
-        {filteredOptions.length === 0 && <p className="text-center py-4 text-[10px] text-slate-400 italic">未找到匹配物料</p>}
-      </div>
-    </div>,
-    document.body
-  ) : null;
+  }, []);
 
   return (
-    <div className="relative" ref={triggerRef}>
+    <div className="relative w-full" ref={containerRef}>
       <button
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full bg-white border border-slate-100 rounded-xl p-3 text-xs font-bold outline-none flex items-center justify-between disabled:opacity-50"
+        className="w-full bg-slate-50 border-none rounded-xl py-3.5 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between disabled:opacity-50 transition-all min-h-[48px]"
       >
-        <span className={selectedProduct ? 'text-slate-900' : 'text-slate-400'}>
-          {selectedProduct ? `${selectedProduct.name} (${selectedProduct.sku})` : placeholder || '点击搜索选择物料...'}
-        </span>
-        <ChevronRight className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+        <div className="flex items-center gap-2 truncate min-w-0">
+          <Package className={`w-4 h-4 shrink-0 ${selectedProduct ? 'text-indigo-600' : 'text-slate-300'}`} />
+          <span className={`text-xs font-bold truncate ${selectedProduct ? 'text-slate-900' : 'text-slate-400'}`}>
+            {selectedProduct
+              ? (() => {
+                  const cat = categories.find(c => c.id === selectedProduct.categoryId);
+                  const customParts =
+                    cat?.customFields
+                      ?.map(f => {
+                        const v = selectedProduct.categoryCustomData?.[f.id];
+                        if (v == null || v === '') return null;
+                        if (f.type === 'file') return `${f.label}: 已上传`;
+                        return `${f.label}: ${typeof v === 'boolean' ? (v ? '是' : '否') : String(v)}`;
+                      })
+                      .filter(Boolean) ?? [];
+                  const base = `${selectedProduct.name} (${selectedProduct.sku})`;
+                  return customParts.length > 0 ? `${base} ${customParts.join(' ')}` : base;
+                })()
+              : placeholder || '搜索并选择产品型号...'}
+          </span>
+        </div>
+        <ChevronRight className={`w-4 h-4 shrink-0 transition-transform ${isOpen ? 'rotate-90' : 'text-slate-400'}`} />
       </button>
-      {dropdownEl}
+
+      {isOpen && (
+        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[100] p-4 animate-in fade-in zoom-in-95">
+          <div className="relative mb-4">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              autoFocus
+              type="text"
+              className="w-full bg-slate-50 border-none rounded-xl py-3 pl-11 pr-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="输入名称或 SKU 搜索..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 mb-4 overflow-x-auto no-scrollbar pb-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab('all')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeTab === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+            >
+              全部
+            </button>
+            {categories.map(cat => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setActiveTab(cat.id)}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeTab === cat.id ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+
+          <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1">
+            {filteredOptions.map(p => {
+              const cat = categories.find(c => c.id === p.categoryId);
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    onChange(p.id);
+                    setIsOpen(false);
+                    setSearch('');
+                  }}
+                  className={`w-full text-left p-3 rounded-2xl transition-all border-2 ${
+                    p.id === value ? 'bg-indigo-50 border-indigo-600/20 text-indigo-700' : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  <div className="flex justify-between items-start mb-0.5">
+                    <p className="text-sm font-black truncate">{p.name}</p>
+                    {cat && <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-400 text-[8px] font-black uppercase shrink-0">{cat.name}</span>}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className={`text-[10px] font-bold uppercase tracking-widest ${p.id === value ? 'text-indigo-400' : 'text-slate-400'}`}>{p.sku}</p>
+                    {cat?.customFields
+                      ?.map(f => {
+                        const val = p.categoryCustomData?.[f.id];
+                        if (val == null || val === '') return null;
+                        if (f.type === 'file') return (
+                          <span key={f.id} className="text-[8px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">{f.label}: 已上传</span>
+                        );
+                        return (
+                          <span key={f.id} className="text-[8px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">
+                            {f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}
+                          </span>
+                        );
+                      })}
+                  </div>
+                </button>
+              );
+            })}
+            {filteredOptions.length === 0 && (
+              <div className="py-10 text-center">
+                <Package className="w-8 h-8 text-slate-100 mx-auto mb-2 block" />
+                <p className="text-xs text-slate-400 font-medium">未找到符合条件的产品</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -307,7 +376,8 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   partners,
   onUpdateProduct, 
   onUpdateBOM,
-  onUpdateDictionaries
+  onUpdateDictionaries,
+  onDetailViewChange
 }) => {
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>(categories[0]?.id || 'cat-material');
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
@@ -315,6 +385,9 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   
   const [modalType, setModalType] = useState<'color' | 'size' | null>(null);
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
+  const [filePreviewType, setFilePreviewType] = useState<'image' | 'pdf'>('image');
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [activeVariantIdForBOM, setActiveVariantIdForBOM] = useState<string | null>(null);
   const [activeNodeIdForBOM, setActiveNodeIdForBOM] = useState<string | null>(null);
   const [workingBOM, setWorkingBOM] = useState<BOM | null>(null);
@@ -332,6 +405,10 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   useEffect(() => {
     if (!activeVariantIdForBOM || !activeNodeIdForBOM) setCopyBOMDropdownOpen(false);
   }, [activeVariantIdForBOM, activeNodeIdForBOM]);
+
+  useEffect(() => {
+    onDetailViewChange?.(!!(editingProductId && workingProduct));
+  }, [editingProductId, workingProduct, onDetailViewChange]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -414,6 +491,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
       id: newId, sku: '', name: '新产品名称',
       categoryId: activeCategoryFilter, milestoneNodeIds: [],
       categoryCustomData: {}, salesPrice: 0, purchasePrice: 0,
+      unitId: (dictionaries.units ?? [])[0]?.id ?? '',
       colorIds: [], sizeIds: [], variants: [], imageUrl: ''
     });
   };
@@ -484,6 +562,12 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   const saveBOM = () => {
     if (workingBOM && workingProduct && activeVariantIdForBOM && activeNodeIdForBOM) {
       onUpdateBOM(workingBOM);
+      if (activeVariantIdForBOM.startsWith('single-')) {
+        setActiveVariantIdForBOM(null);
+        setActiveNodeIdForBOM(null);
+        setWorkingBOM(null);
+        return;
+      }
       const updatedVariants = workingProduct.variants.map(v => {
         if (v.id === activeVariantIdForBOM) {
           const nodeBOMs = { ...(v.nodeBOMs || {}), [activeNodeIdForBOM]: workingBOM.id };
@@ -508,7 +592,6 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   const updateBOMItem = (idx: number, updates: Partial<BOMItem>) => {
     if (!workingBOM) return;
     const newItems = [...workingBOM.items];
-    if (updates.categoryId && updates.categoryId !== newItems[idx].categoryId) updates.productId = '';
     newItems[idx] = { ...newItems[idx], ...updates };
     setWorkingBOM({ ...workingBOM, items: newItems });
   };
@@ -533,6 +616,10 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     const selectedNodesOrdered = nodeIds.map(id => globalNodes.find(gn => gn.id === id)).filter(Boolean) as GlobalNodeTemplate[];
     const enabledBOMNodes = selectedNodesOrdered.filter(n => n.hasBOM);
 
+    const singleSkuVariantId = `single-${workingProduct.id}`;
+    const singleSkuNodeBOMs: Record<string, string> = Object.fromEntries(
+      boms.filter(b => b.parentProductId === workingProduct.id && b.variantId === singleSkuVariantId && b.nodeId).map(b => [b.nodeId!, b.id])
+    );
     const availableBOMSources = workingProduct.variants.filter(srcV => {
       if (!activeVariantIdForBOM || !activeNodeIdForBOM) return false;
       return srcV.id !== activeVariantIdForBOM && srcV.nodeBOMs && srcV.nodeBOMs[activeNodeIdForBOM];
@@ -582,8 +669,15 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
               <input type="text" value={workingProduct.name} onChange={e => setWorkingProduct({...workingProduct, name: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">主 SKU</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">产品编号</label>
               <input type="text" value={workingProduct.sku} onChange={e => setWorkingProduct({...workingProduct, sku: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">产品单位</label>
+              <select value={workingProduct.unitId ?? ''} onChange={e => setWorkingProduct({...workingProduct, unitId: e.target.value || undefined})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none">
+                <option value="">请选择单位</option>
+                {(dictionaries.units ?? []).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
             </div>
 
             {/* 产品图片 */}
@@ -667,13 +761,13 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
               </div>
             )}
 
-            {activeCategory?.customFields && activeCategory.customFields.filter(f => f.showInForm !== false).length > 0 && (
+            {activeCategory?.customFields && activeCategory.customFields.length > 0 && (
               <div className="md:col-span-2 pt-6 border-t border-slate-50 mt-4 space-y-6">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1 flex items-center gap-2">
                   <Tag className="w-3.5 h-3.5" /> 分类专用扩展属性
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {activeCategory.customFields.filter(f => f.showInForm !== false).map(field => (
+                  {activeCategory.customFields.map(field => (
                     <div key={field.id} className="space-y-1">
                       <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">
                         {field.label} {field.required && <span className="text-rose-500">*</span>}
@@ -724,6 +818,88 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                             <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all duration-200 shadow-sm ${workingProduct.categoryCustomData?.[field.id] ? 'left-5.5' : 'left-0.5'}`}></div>
                           </button>
                           <span className="text-[10px] font-bold text-slate-500">{workingProduct.categoryCustomData?.[field.id] ? '是' : '否'}</span>
+                        </div>
+                      )}
+                      {field.type === 'file' && (
+                        <div className="space-y-2">
+                          <input
+                            ref={el => { fileInputRefs.current[field.id] = el; }}
+                            type="file"
+                            className="hidden"
+                            onChange={e => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const maxSize = 5 * 1024 * 1024; // 5MB
+                              if (file.size > maxSize) {
+                                alert('文件大小不能超过 5MB');
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                const dataUrl = reader.result as string;
+                                setWorkingProduct({
+                                  ...workingProduct,
+                                  categoryCustomData: { ...workingProduct.categoryCustomData, [field.id]: dataUrl }
+                                });
+                              };
+                              reader.readAsDataURL(file);
+                              e.target.value = '';
+                            }}
+                          />
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {workingProduct.categoryCustomData?.[field.id] ? (
+                              <>
+                                {String(workingProduct.categoryCustomData[field.id]).startsWith('data:image/') ? (
+                                  <>
+                                    <img
+                                      src={workingProduct.categoryCustomData[field.id] as string}
+                                      alt={field.label}
+                                      className="h-16 w-16 object-cover rounded-xl border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400 transition-all"
+                                      onClick={() => { setFilePreviewUrl(workingProduct.categoryCustomData![field.id] as string); setFilePreviewType('image'); }}
+                                    />
+                                    <a href={workingProduct.categoryCustomData[field.id] as string} download={`附件.${getFileExtFromDataUrl(workingProduct.categoryCustomData[field.id] as string)}`} className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-xl text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
+                                      <Download className="w-4 h-4" /> 下载
+                                    </a>
+                                  </>
+                                ) : String(workingProduct.categoryCustomData[field.id]).startsWith('data:application/pdf') ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => { setFilePreviewUrl(workingProduct.categoryCustomData![field.id] as string); setFilePreviewType('pdf'); }}
+                                      className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-xl text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                                    >
+                                      <FileText className="w-4 h-4" /> 在线查看
+                                    </button>
+                                    <a href={workingProduct.categoryCustomData[field.id] as string} download={`附件.${getFileExtFromDataUrl(workingProduct.categoryCustomData[field.id] as string)}`} className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-xl text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
+                                      <Download className="w-4 h-4" /> 下载
+                                    </a>
+                                  </>
+                                ) : (
+                                  <a href={workingProduct.categoryCustomData[field.id] as string} download={`附件.${getFileExtFromDataUrl(workingProduct.categoryCustomData[field.id] as string)}`} className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-xl text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
+                                    <Download className="w-4 h-4" /> 下载
+                                  </a>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => setWorkingProduct({
+                                    ...workingProduct,
+                                    categoryCustomData: { ...workingProduct.categoryCustomData, [field.id]: '' }
+                                  })}
+                                  className="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-[10px] font-bold hover:bg-rose-100"
+                                >
+                                  删除
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => fileInputRefs.current[field.id]?.click()}
+                                className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                              >
+                                <ImagePlus className="w-4 h-4" /> 上传文件
+                              </button>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -826,7 +1002,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                         <div className="w-6 h-6 bg-indigo-600 text-white rounded-lg flex items-center justify-center text-[10px] font-black shrink-0">{idx + 1}</div>
                         <div className="flex-1 min-w-0">
                            <p className="text-xs font-bold text-slate-800 whitespace-nowrap">{node.name}</p>
-                           {node.hasBOM && <p className="text-[9px] text-amber-500 font-bold flex items-center gap-1 mt-0.5"><Boxes className="w-2.5 h-2.5" /> 需配置 BOM 物料</p>}
+                           {node.hasBOM && <p className="text-[9px] text-amber-500 font-bold flex items-center gap-1 mt-0.5 whitespace-nowrap"><Boxes className="w-2.5 h-2.5 shrink-0" /> 需配置 BOM 物料</p>}
                         </div>
                         <div className="flex flex-col sm:flex-row gap-2 sm:gap-6 shrink-0">
                            <div className="flex items-center gap-2">
@@ -863,6 +1039,39 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                  </div>
                </div>
             </div>
+
+            {/* 单 SKU 产品 BOM 配置（未开启颜色尺码时，产品仅 1 种 SKU，仍可配置需 BOM 的工序） */}
+            {workingProduct.variants.length === 0 && enabledBOMNodes.length > 0 && (
+              <div className="pt-10 border-t border-slate-50 space-y-6">
+                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest block">工序 BOM 配置（单 SKU 产品）</h4>
+                <div className="p-6 rounded-3xl border border-slate-100 bg-slate-50/50">
+                  <div className="flex justify-between items-start mb-4 pb-3 border-b border-slate-200/50">
+                    <div>
+                      <p className="text-sm font-black text-slate-800">本产品</p>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">SKU: {workingProduct.sku}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {enabledBOMNodes.map(node => {
+                      const hasNodeBOM = !!singleSkuNodeBOMs[node.id];
+                      const isEditing = activeVariantIdForBOM === singleSkuVariantId && activeNodeIdForBOM === node.id;
+                      const singleSkuVirtualVariant: ProductVariant = { id: singleSkuVariantId, colorId: '', sizeId: '', skuSuffix: workingProduct.sku, nodeBOMs: singleSkuNodeBOMs };
+                      return (
+                        <button
+                          key={node.id}
+                          onClick={() => openBOMEditor(singleSkuVirtualVariant, node.id)}
+                          className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border-2 ${isEditing ? 'bg-indigo-600 border-indigo-600 text-white' : (hasNodeBOM ? 'bg-amber-50 border-amber-100 text-amber-600' : 'bg-white border-slate-100 text-slate-500 hover:border-indigo-200')}`}
+                        >
+                          <Boxes className={`w-3.5 h-3.5 ${isEditing ? 'text-white' : (hasNodeBOM ? 'text-amber-500' : 'text-slate-300')}`} />
+                          {node.name} BOM
+                          {hasNodeBOM && !isEditing && <Check className="w-3.5 h-3.5" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* 变体 BOM 矩阵配置 (按颜色分组) */}
             {workingProduct.variants.length > 0 && enabledBOMNodes.length > 0 && (
@@ -924,16 +1133,28 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                       );
                     })}
                  </div>
+              </div>
+            )}
 
-                 {/* 嵌入式 BOM 编辑器 */}
-                 {activeVariantIdForBOM && activeNodeIdForBOM && workingBOM && (
-                   <div className="bg-white p-8 rounded-[32px] border-2 border-indigo-600 shadow-[0_32px_64px_-12px_rgba(79,70,229,0.25)] animate-in slide-in-from-top-8 relative z-50">
+            {/* 嵌入式 BOM 编辑器（单 SKU 与多变体共用） */}
+            {enabledBOMNodes.length > 0 && activeVariantIdForBOM && activeNodeIdForBOM && workingBOM && (() => {
+              const activeVariant = workingProduct?.variants.find(v => v.id === activeVariantIdForBOM);
+              const isSingleSku = !activeVariant || activeVariantIdForBOM.startsWith('single-');
+              const colorName = activeVariant?.colorId ? (dictionaries.colors.find(c => c.id === activeVariant.colorId)?.name ?? '') : '';
+              const sizeName = activeVariant?.sizeId ? (dictionaries.sizes.find(s => s.id === activeVariant.sizeId)?.name ?? '') : '';
+              const colorSizeLabel = isSingleSku ? '单 SKU（通用）' : [colorName, sizeName].filter(Boolean).join(' / ');
+              return (
+              <div className="pt-10 border-t border-slate-50">
+                <div className="bg-white p-8 rounded-[32px] border-2 border-indigo-600 shadow-[0_32px_64px_-12px_rgba(79,70,229,0.25)] animate-in slide-in-from-top-8 relative z-50">
                       <div className="flex items-center justify-between mb-8">
                          <div className="flex items-center gap-4">
                             <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg"><Boxes className="w-6 h-6" /></div>
                             <div>
                                <h5 className="text-sm font-black text-slate-800 uppercase tracking-widest">配置物料明细</h5>
                                <p className="text-[10px] text-slate-400 font-bold uppercase">{workingBOM.name}</p>
+                               <p className="text-[10px] text-indigo-500 font-bold mt-1">
+                                  {isSingleSku ? '适用：' : '适用颜色尺码：'}{colorSizeLabel}
+                               </p>
                             </div>
                          </div>
                          <div className="flex items-center gap-3">
@@ -955,35 +1176,39 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
 
                       <div className="space-y-4">
                          {workingBOM.items.map((item, idx) => (
-                           <div key={idx} className="bg-slate-50/50 p-6 rounded-2xl border border-slate-100 grid grid-cols-1 md:grid-cols-4 gap-4 items-end relative group shadow-sm hover:bg-white hover:border-indigo-100 transition-all">
+                           <div key={idx} className="bg-slate-50/50 p-6 rounded-2xl border border-slate-100 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 md:gap-6 items-start relative group shadow-sm hover:bg-white hover:border-indigo-100 transition-all">
                               <button onClick={() => {
                                 const newItems = [...workingBOM.items];
                                 newItems.splice(idx, 1);
                                 setWorkingBOM({...workingBOM, items: newItems});
                               }} className="absolute -top-2 -right-2 w-7 h-7 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-rose-600"><Trash2 className="w-4 h-4" /></button>
-                              <div>
-                                 <label className="text-[9px] font-black text-slate-400 uppercase mb-2 block tracking-widest">1. 选择物料分类</label>
-                                 <PortalSelect
-                                   value={item.categoryId}
-                                   onChange={v => updateBOMItem(idx, { categoryId: v })}
-                                   optionPairs={categories.map(cat => ({ value: cat.id, label: cat.name }))}
-                                   placeholder="请选择..."
-                                   className="w-full bg-white border border-slate-100 rounded-xl p-3 text-xs font-bold outline-none text-left flex items-center justify-between"
-                                 />
+                              <div className="space-y-4 min-w-0">
+                                 <div>
+                                   <label className="text-[9px] font-black text-slate-400 uppercase mb-2 block tracking-widest">1. 核心物料/组件 (支持搜索与分类筛选)</label>
+                                   <SearchableProductSelect
+                                     categories={categories}
+                                     value={item.productId}
+                                     onChange={val => {
+                                       const p = products.find(x => x.id === val);
+                                       updateBOMItem(idx, { productId: val, categoryId: p?.categoryId });
+                                     }}
+                                     options={products.filter(p => p.id !== workingProduct?.id)}
+                                     placeholder="搜索并选择产品型号..."
+                                   />
+                                 </div>
                               </div>
-                              <div className="md:col-span-2">
-                                 <label className="text-[9px] font-black text-slate-400 uppercase mb-2 block tracking-widest">2. 核心物料/组件 (支持搜索)</label>
-                                 <SearchableProductSelect 
-                                   disabled={!item.categoryId}
-                                   value={item.productId}
-                                   onChange={val => updateBOMItem(idx, { productId: val })}
-                                   options={products.filter(p => p.categoryId === item.categoryId && p.id !== workingProduct.id)}
-                                   placeholder={item.categoryId ? "输入物料名搜索..." : "需先选分类"}
+                              <div className="w-full md:w-32">
+                                 <label className="text-[9px] font-black text-slate-400 uppercase mb-2 block tracking-widest">2. 标准单位用量</label>
+                                 <input
+                                   type="number"
+                                   value={item.quantityInput ?? (Number.isFinite(item.quantity) ? item.quantity : '')}
+                                   onChange={e => {
+                                     const raw = e.target.value;
+                                     const num = raw === '' ? 0 : (parseFloat(raw) || 0);
+                                     updateBOMItem(idx, { quantityInput: raw, quantity: num });
+                                   }}
+                                   className="w-full bg-white border border-slate-100 rounded-xl p-3 text-xs font-bold outline-none text-center"
                                  />
-                              </div>
-                              <div>
-                                 <label className="text-[9px] font-black text-slate-400 uppercase mb-2 block tracking-widest">3. 标准单位用量</label>
-                                 <input type="number" value={item.quantity} onChange={e => updateBOMItem(idx, { quantity: parseFloat(e.target.value) || 0 })} className="w-full bg-white border border-slate-100 rounded-xl p-3 text-xs font-bold outline-none text-center" />
                               </div>
                            </div>
                          ))}
@@ -992,10 +1217,9 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                             <button onClick={saveBOM} className="bg-indigo-600 text-white px-12 py-3.5 rounded-2xl font-black text-xs shadow-2xl shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all">保存此节点的 BOM 方案</button>
                          </div>
                       </div>
-                   </div>
-                 )}
+                </div>
               </div>
-            )}
+            ); })()}
           </div>
         )}
         {/* 图片放大弹窗 */}
@@ -1047,11 +1271,45 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
               <h3 className="text-lg font-bold text-slate-900 mb-1 group-hover:text-indigo-600 transition-colors">{product.name}</h3>
               <p className="text-[11px] text-slate-400 font-bold mb-4 flex items-center gap-1 uppercase tracking-tighter"><Hash className="w-3 h-3 text-slate-300" /> {product.sku}</p>
               
-              {(category?.customFields?.filter(f => f.showInForm !== false).length ?? 0) > 0 && product.categoryCustomData && (
+              {(category?.customFields?.length ?? 0) > 0 && product.categoryCustomData && (
                 <div className="flex flex-wrap gap-2 mb-4">
-                  {category.customFields.filter(f => f.showInForm !== false).map(field => {
+                  {category.customFields.map(field => {
                     const val = product.categoryCustomData?.[field.id];
                     if (val == null || val === '') return null;
+                    if (field.type === 'file' && typeof val === 'string' && val.startsWith('data:')) {
+                      const isImg = val.startsWith('data:image/');
+                      const isPdf = val.startsWith('data:application/pdf');
+                      return (
+                        <div key={field.id} className="flex items-center gap-1.5">
+                          {isImg ? (
+                            <>
+                              <img
+                                src={val}
+                                alt={field.label}
+                                className="h-8 w-8 object-cover rounded-lg border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400 transition-all"
+                                onClick={(e) => { e.stopPropagation(); setFilePreviewUrl(val); setFilePreviewType('image'); }}
+                              />
+                              <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="flex items-center gap-1 px-2 py-1 bg-slate-100 rounded-lg text-[9px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600">
+                                <Download className="w-3 h-3" /> 下载
+                              </a>
+                            </>
+                          ) : isPdf ? (
+                            <>
+                              <button type="button" onClick={(e) => { e.stopPropagation(); setFilePreviewUrl(val); setFilePreviewType('pdf'); }} className="flex items-center gap-1 px-2 py-1 bg-slate-100 rounded-lg text-[9px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600">
+                                <FileText className="w-3 h-3" /> 在线查看
+                              </button>
+                              <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="flex items-center gap-1 px-2 py-1 bg-slate-100 rounded-lg text-[9px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600">
+                                <Download className="w-3 h-3" /> 下载
+                              </a>
+                            </>
+                          ) : (
+                            <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="flex items-center gap-1 px-2 py-1 bg-slate-100 rounded-lg text-[9px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600">
+                              <Download className="w-3 h-3" /> 下载
+                            </a>
+                          )}
+                        </div>
+                      );
+                    }
                     return (
                       <div key={field.id} className="px-2 py-1 bg-slate-50 rounded-lg text-[9px] font-bold text-slate-600">
                         {field.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}
@@ -1097,6 +1355,22 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
             <X className="w-8 h-8" />
           </button>
           <img src={lightboxImageUrl} alt="产品图片" className="relative z-10 max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()} />
+        </div>
+      )}
+
+      {/* 文件预览弹窗 (图片/PDF) */}
+      {filePreviewUrl && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-8 bg-slate-900/80 backdrop-blur-sm" onClick={() => setFilePreviewUrl(null)}>
+          <button onClick={() => setFilePreviewUrl(null)} className="absolute top-6 right-6 z-10 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-all">
+            <X className="w-8 h-8" />
+          </button>
+          <div className="relative z-10 w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            {filePreviewType === 'image' ? (
+              <img src={filePreviewUrl} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
+            ) : (
+              <iframe src={filePreviewUrl} title="PDF 预览" className="w-full h-[85vh] border-0" />
+            )}
+          </div>
         </div>
       )}
     </div>

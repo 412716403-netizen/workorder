@@ -16,6 +16,12 @@ export const MOCK_DICTIONARIES: AppDictionaries = {
     { id: 's-4', name: 'L', value: 'Large' },
     { id: 's-5', name: 'XL', value: 'Extra Large' },
     { id: 's-6', name: 'XXL', value: 'Double Extra Large' }
+  ],
+  units: [
+    { id: 'u-1', name: 'PCS', value: '件' },
+    { id: 'u-2', name: 'KG', value: '公斤' },
+    { id: 'u-3', name: 'M', value: '米' },
+    { id: 'u-4', name: 'BOX', value: '箱' }
   ]
 };
 
@@ -50,6 +56,7 @@ export const MOCK_CATEGORIES: ProductCategory[] = [
     hasSalesPrice: false,
     hasPurchasePrice: true,
     hasColorSize: false,
+    hasBatchManagement: true,
     customFields: [
       { id: 'brand', label: '品牌', type: 'text' },
       { id: 'spec', label: '规格型号', type: 'text' }
@@ -63,6 +70,7 @@ export const MOCK_CATEGORIES: ProductCategory[] = [
     hasSalesPrice: false, 
     hasPurchasePrice: false, 
     hasColorSize: true,
+    hasBatchManagement: false,
     customFields: [
       { id: 'stage', label: '生产阶段', type: 'select', options: ['初加工', '精加工', '组装中'] }
     ]
@@ -75,6 +83,7 @@ export const MOCK_CATEGORIES: ProductCategory[] = [
     hasSalesPrice: true, 
     hasPurchasePrice: false, 
     hasColorSize: true,
+    hasBatchManagement: false,
     customFields: [
       { id: 'warranty', label: '保修期限', type: 'number' }
     ]
@@ -114,6 +123,7 @@ export const MOCK_PRODUCTS: Product[] = [
     name: 'Gore-Tex 超细纤维面料',
     categoryId: 'cat-material',
     purchasePrice: 45.5,
+    unitId: 'u-3',
     colorIds: [],
     sizeIds: [],
     variants: [],
@@ -125,6 +135,7 @@ export const MOCK_PRODUCTS: Product[] = [
     name: 'YKK 防水拉链 (40cm)',
     categoryId: 'cat-material',
     purchasePrice: 12.8,
+    unitId: 'u-1',
     colorIds: [],
     sizeIds: [],
     variants: [],
@@ -136,6 +147,7 @@ export const MOCK_PRODUCTS: Product[] = [
     name: 'SmartHeat 温控传感器芯片',
     categoryId: 'cat-material',
     purchasePrice: 88.0,
+    unitId: 'u-1',
     colorIds: [],
     sizeIds: [],
     variants: [],
@@ -147,6 +159,7 @@ export const MOCK_PRODUCTS: Product[] = [
     name: 'Pro 系列加厚精品包装盒',
     categoryId: 'cat-material',
     purchasePrice: 5.2,
+    unitId: 'u-4',
     colorIds: [],
     sizeIds: [],
     variants: [],
@@ -159,6 +172,7 @@ export const MOCK_PRODUCTS: Product[] = [
     name: 'Pro-G1 智能防护夹克 (2025款)',
     categoryId: 'cat-finished',
     salesPrice: 1299,
+    unitId: 'u-1',
     colorIds: ['c-1', 'c-5'], // 曜石黑, 极地蓝
     sizeIds: ['s-3', 's-4'], // M, L
     variants: generateTestVariants('p3', 'G1', ['c-1', 'c-5'], ['s-3', 's-4']).map(v => ({

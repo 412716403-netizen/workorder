@@ -26,13 +26,13 @@ import {
   Wrench,
   UserPlus,
   Box,
+  Boxes,
   MapPin,
   ClipboardCheck,
   Edit3,
   ChevronRight,
   Package,
   ArrowRight,
-  Printer,
   ShoppingCart,
   ArrowDownToLine,
   Trash2,
@@ -41,9 +41,20 @@ import {
   FileSpreadsheet,
   ListOrdered,
   Split,
-  Sliders
+  Sliders,
+  Download
 } from 'lucide-react';
 import { PlanOrder, Product, PlanStatus, ProductCategory, AppDictionaries, ProductVariant, PlanItem, Worker, Equipment, NodeAssignment, GlobalNodeTemplate, BOM, PrintSettings, PlanFormSettings, Partner, PartnerCategory, ProcessPricingMode, PLAN_PRINT_FIELDS, PrintLayoutElement } from '../types';
+
+function getFileExtFromDataUrl(dataUrl: string): string {
+  const m = dataUrl.match(/^data:([^;]+);/);
+  if (!m) return 'bin';
+  const map: Record<string, string> = {
+    'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp',
+    'application/pdf': 'pdf',
+  };
+  return map[m[1]] || 'bin';
+}
 
 interface PlanOrderListViewProps {
   plans: PlanOrder[];
@@ -56,12 +67,14 @@ interface PlanOrderListViewProps {
   boms: BOM[];
   partners: Partner[];
   partnerCategories: PartnerCategory[];
+  psiRecords?: any[];
   printSettings: PrintSettings;
   planFormSettings: PlanFormSettings;
   onUpdatePlanFormSettings: (settings: PlanFormSettings) => void;
   onCreatePlan: (plan: PlanOrder) => void;
   onSplitPlan: (planId: string, newPlans: PlanOrder[]) => void;
   onConvertToOrder: (planId: string) => void;
+  onDeletePlan?: (planId: string) => void;
   onUpdateProduct: (product: Product) => void;
   onUpdatePlan?: (planId: string, updates: Partial<PlanOrder>) => void;
   onAddPSIRecord?: (record: any) => void; 
@@ -203,13 +216,21 @@ const SearchableMultiSelectWithProcessTabs = ({
   const [activeTab, setActiveTab] = useState<string>(currentNodeId);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  /** 仅显示数量不为 0 的标签：全部、未分配（有则显示）、各工序（有则显示） */
+  const UNASSIGNED_TAB = 'UNASSIGNED';
   const visibleProcessNodes = useMemo(
-    () => processNodes.filter(n => options.some(o => o.assignedMilestoneIds?.includes(n.id))),
+    () => processNodes.filter(n => options.filter(o => o.assignedMilestoneIds?.includes(n.id)).length > 0),
     [processNodes, options]
   );
+  const unassignedCount = useMemo(
+    () => options.filter(o => !o.assignedMilestoneIds?.length).length,
+    [options]
+  );
 
+  /** 先按当前标签分类筛选工人/设备，再按搜索关键词筛选 */
   const filteredByTab = useMemo(() => {
     if (activeTab === 'all') return options;
+    if (activeTab === UNASSIGNED_TAB) return options.filter(o => !o.assignedMilestoneIds?.length);
     return options.filter(o => o.assignedMilestoneIds?.includes(activeTab));
   }, [options, activeTab]);
 
@@ -227,10 +248,19 @@ const SearchableMultiSelectWithProcessTabs = ({
   }, [currentNodeId]);
 
   useEffect(() => {
-    if (activeTab !== 'all' && !visibleProcessNodes.some(n => n.id === activeTab)) {
-      setActiveTab(currentNodeId);
+    if (activeTab === 'all' || activeTab === UNASSIGNED_TAB) return;
+    if (!visibleProcessNodes.some(n => n.id === activeTab)) {
+      setActiveTab(visibleProcessNodes.some(n => n.id === currentNodeId) ? currentNodeId : 'all');
     }
   }, [activeTab, visibleProcessNodes, currentNodeId]);
+
+  /** 打开下拉时默认选当前工序（如横机）；若当前工序数量为 0 则选全部 */
+  useEffect(() => {
+    if (isOpen) {
+      const currentInList = visibleProcessNodes.some(n => n.id === currentNodeId);
+      setActiveTab(currentInList ? currentNodeId : 'all');
+    }
+  }, [isOpen, currentNodeId, visibleProcessNodes]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -284,6 +314,15 @@ const SearchableMultiSelectWithProcessTabs = ({
             >
               全部
             </button>
+            {unassignedCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setActiveTab(UNASSIGNED_TAB)}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeTab === UNASSIGNED_TAB ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+              >
+                未分配 ({unassignedCount})
+              </button>
+            )}
             {visibleProcessNodes.map(n => (
               <button
                 key={n.id}
@@ -326,7 +365,8 @@ const EnhancedProductSelector = ({
   value, 
   onChange, 
   disabled, 
-  placeholder 
+  placeholder,
+  onFilePreview
 }: { 
   options: Product[]; 
   categories: ProductCategory[];
@@ -334,6 +374,7 @@ const EnhancedProductSelector = ({
   onChange: (productId: string, categoryId: string) => void; 
   disabled?: boolean; 
   placeholder?: string;
+  onFilePreview?: (url: string, type: 'image' | 'pdf') => void;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -371,8 +412,13 @@ const EnhancedProductSelector = ({
           <span className={selectedProduct ? 'text-slate-900 truncate' : 'text-slate-400'}>
             {selectedProduct ? (() => {
               const cat = categories.find(c => c.id === selectedProduct.categoryId);
-              const customParts = cat?.customFields?.filter(f => f.showInForm !== false)
-                .map(f => { const v = selectedProduct.categoryCustomData?.[f.id]; return v != null && v !== '' ? `${f.label}: ${typeof v === 'boolean' ? (v ? '是' : '否') : String(v)}` : null; })
+              const customParts = cat?.customFields?.filter(f => f.showInForm !== false && f.type !== 'file')
+                .map(f => {
+                  const v = selectedProduct.categoryCustomData?.[f.id];
+                  if (v == null || v === '') return null;
+                  if (f.type === 'file' && typeof v === 'string' && v.startsWith('data:')) return `${f.label}: 已上传`;
+                  return `${f.label}: ${typeof v === 'boolean' ? (v ? '是' : '否') : String(v)}`;
+                })
                 .filter(Boolean) ?? [];
               const base = `${selectedProduct.name} (${selectedProduct.sku})`;
               return customParts.length > 0 ? `${base} ${customParts.join(' ')}` : base;
@@ -436,9 +482,28 @@ const EnhancedProductSelector = ({
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
                     <p className={`text-[10px] font-bold uppercase tracking-widest ${p.id === value ? 'text-indigo-400' : 'text-slate-400'}`}>{p.sku}</p>
-                    {cat?.customFields?.filter(f => f.showInForm !== false).map(f => {
+                    {cat?.customFields?.filter(f => f.showInForm !== false && f.type !== 'file').map(f => {
                       const val = p.categoryCustomData?.[f.id];
                       if (val == null || val === '') return null;
+                      if (f.type === 'file' && typeof val === 'string' && val.startsWith('data:')) {
+                        const isImg = val.startsWith('data:image/');
+                        const isPdf = val.startsWith('data:application/pdf');
+                        if (isImg) return (
+                          <span key={f.id} className="inline-flex items-center gap-1">
+                            <img src={val} alt={f.label} className="h-5 w-5 object-cover rounded border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400" onClick={e => { e.stopPropagation(); onFilePreview?.(val, 'image'); }} />
+                            <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[8px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
+                          </span>
+                        );
+                        if (isPdf) return (
+                          <span key={f.id} className="inline-flex items-center gap-1">
+                            <button type="button" onClick={e => { e.stopPropagation(); onFilePreview?.(val, 'pdf'); }} className="text-[8px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">在线查看</button>
+                            <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[8px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
+                          </span>
+                        );
+                        return (
+                          <a key={f.id} href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[8px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
+                        );
+                      }
                       return <span key={f.id} className="text-[8px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">{f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}</span>;
                     })}
                   </div>
@@ -583,16 +648,19 @@ const PartnerCustomerSelector = ({
   );
 };
 
-const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, categories, dictionaries, workers, equipment, globalNodes, boms, partners, partnerCategories = [], printSettings, planFormSettings, onUpdatePlanFormSettings, onCreatePlan, onSplitPlan, onConvertToOrder, onUpdateProduct, onUpdatePlan, onAddPSIRecord }) => {
+const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, categories, dictionaries, workers, equipment, globalNodes, boms, partners, partnerCategories = [], psiRecords = [], printSettings, planFormSettings, onUpdatePlanFormSettings, onCreatePlan, onSplitPlan, onConvertToOrder, onDeletePlan, onUpdateProduct, onUpdatePlan, onAddPSIRecord }) => {
   const [showModal, setShowModal] = useState(false);
   const [viewDetailPlanId, setViewDetailPlanId] = useState<string | null>(null);
+  const [viewProductId, setViewProductId] = useState<string | null>(null);
+  const [viewProductBomSkuId, setViewProductBomSkuId] = useState<string | null>(null);
   const [tempAssignments, setTempAssignments] = useState<Record<string, NodeAssignment>>({});
   const [tempPlanInfo, setTempPlanInfo] = useState<{
     customer: string;
     dueDate: string;
+    createdAt: string;
     items: PlanItem[];
     customData?: Record<string, any>;
-  }>({ customer: '', dueDate: '', items: [] });
+  }>({ customer: '', dueDate: '', createdAt: '', items: [] });
   
   const [isSaving, setIsSaving] = useState(false);
   const [tempNodeRates, setTempNodeRates] = useState<Record<string, number>>({});
@@ -606,16 +674,26 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
   const [printingPlanId, setPrintingPlanId] = useState<string | null>(null);
   /** 点击图片查看大图：url 为要放大的图片地址 */
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
+  const [filePreviewType, setFilePreviewType] = useState<'image' | 'pdf'>('image');
+
+  useEffect(() => {
+    setViewProductBomSkuId(null);
+  }, [viewProductId]);
 
   // 分组后的采购单状态
   const [proposedOrders, setProposedOrders] = useState<ProposedOrder[]>([]);
   const [isProcessingPO, setIsProcessingPO] = useState(false);
+  /** 点击「已生成采购单」时展示该物料关联的采购订单列表，值为 materialId */
+  const [relatedPOsMaterialId, setRelatedPOsMaterialId] = useState<string | null>(null);
 
+  const today = new Date().toISOString().split('T')[0];
   const [form, setForm] = useState<{
     categoryId: string;
     productId: string;
     customer: string;
     dueDate: string;
+    createdAt: string;
     variantQuantities: Record<string, number>;
     singleQuantity: number;
     customData: Record<string, any>;
@@ -623,7 +701,8 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
     categoryId: '',
     productId: '',
     customer: '',
-    dueDate: new Date().toISOString().split('T')[0],
+    dueDate: '',
+    createdAt: today,
     variantQuantities: {},
     singleQuantity: 0,
     customData: {}
@@ -634,6 +713,59 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
   const viewPlan = plans.find(p => p.id === viewDetailPlanId);
   const viewProduct = products.find(p => p.id === viewPlan?.productId);
   const planPrintConfig = printSettings.PLAN;
+
+  const getUnitName = (productId: string) => {
+    const p = products.find(x => x.id === productId);
+    const u = (dictionaries.units ?? []).find(x => x.id === p?.unitId);
+    return u?.name ?? 'PCS';
+  };
+
+  // 本计划已生成过采购订单的物料 ID（用于用料清单行标识）
+  const materialIdsWithPO = useMemo(() => {
+    if (!viewPlan?.planNumber || !psiRecords?.length) return new Set<string>();
+    const planMarker = `计划单[${viewPlan.planNumber}]`;
+    const ids = new Set<string>();
+    psiRecords.forEach((r: any) => {
+      if (r.type === 'PURCHASE_ORDER' && r.note && String(r.note).includes(planMarker) && r.productId) ids.add(r.productId);
+    });
+    return ids;
+  }, [viewPlan?.planNumber, psiRecords]);
+
+  // 本计划下各物料对应的采购订单记录（用于点击「已生成采购单」查看）
+  const relatedPOsByMaterial = useMemo(() => {
+    if (!viewPlan?.planNumber || !psiRecords?.length) return {} as Record<string, any[]>;
+    const planMarker = `计划单[${viewPlan.planNumber}]`;
+    const map: Record<string, any[]> = {};
+    psiRecords.forEach((r: any) => {
+      if (r.type === 'PURCHASE_ORDER' && r.note && String(r.note).includes(planMarker) && r.productId) {
+        if (!map[r.productId]) map[r.productId] = [];
+        map[r.productId].push(r);
+      }
+    });
+    return map;
+  }, [viewPlan?.planNumber, psiRecords]);
+
+  // 采购订单已入库数量（按 sourceOrderNumber::sourceLineId 汇总）
+  const receivedByOrderLine = useMemo(() => {
+    const map: Record<string, number> = {};
+    (psiRecords || []).filter((r: any) => r.type === 'PURCHASE_BILL' && r.sourceOrderNumber && r.sourceLineId).forEach((r: any) => {
+      const key = `${r.sourceOrderNumber}::${r.sourceLineId}`;
+      map[key] = (map[key] ?? 0) + (r.quantity ?? 0);
+    });
+    return map;
+  }, [psiRecords]);
+
+  const getInboundProgress = (materialId: string): { received: number; ordered: number } | null => {
+    const list = relatedPOsByMaterial[materialId];
+    if (!list?.length) return null;
+    let ordered = 0;
+    let received = 0;
+    list.forEach((r: any) => {
+      ordered += r.quantity ?? 0;
+      received += receivedByOrderLine[`${r.docNumber}::${r.id}`] ?? 0;
+    });
+    return { received, ordered };
+  };
 
   useEffect(() => {
     if (viewProduct) {
@@ -663,50 +795,160 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
     };
   }, [printingPlanId]);
 
-  // 用料清单汇总逻辑
+  // 用料清单汇总逻辑：多级 BOM 递归展开，每层子项按直接父件缺料数计算
   const materialRequirements = useMemo(() => {
     if (!viewPlan || !viewProduct || !tempPlanInfo.items) return [];
-    const reqMap: Record<string, { materialId: string; nodeId: string; quantity: number }> = {};
-    
+    type ReqEntry = { materialId: string; nodeId: string; quantity: number; level: number; parentProductId?: string };
+    const reqMap: Record<string, ReqEntry> = {};
+    const shortageDrivenList: { productId: string; nodeId: string; parentProductId: string; unitPerParent: number }[] = [];
+
+    const addToReqMap = (productId: string, quantity: number, nodeId: string, visited: Set<string>, level: number, parentProductId?: string) => {
+      if (quantity <= 0) return;
+      if (visited.has(productId)) return;
+      const key = `${productId}-${nodeId}`;
+      if (!reqMap[key]) reqMap[key] = { materialId: productId, nodeId, quantity: 0, level, parentProductId };
+      reqMap[key].quantity += quantity;
+      if (level > (reqMap[key].level ?? 0)) reqMap[key].level = level;
+      if (parentProductId) reqMap[key].parentProductId = parentProductId;
+
+      const subBom = boms.find(b => b.parentProductId === productId);
+      if (!subBom || !subBom.items.length) return;
+      visited.add(productId);
+      // 二级 BOM 子项默认按父件缺料数计算（替代料/补料）
+      subBom.items.forEach((bomItem: { productId: string; quantity: number }) => {
+        shortageDrivenList.push({ productId: bomItem.productId, nodeId, parentProductId: productId, unitPerParent: bomItem.quantity });
+      });
+      visited.delete(productId);
+    };
+
+    const stableMockStock = (materialId: string) => {
+      const seed = materialId.split('').reduce((s, c) => s + c.charCodeAt(0), 0);
+      return (seed % 40) + 5;
+    };
+
     tempPlanInfo.items.forEach((item: PlanItem) => {
-      const variant = viewProduct.variants.find(v => v.id === item.variantId);
-      const planQty = item.quantity;
+      const planQty = item.quantity ?? 0;
       if (planQty <= 0) return;
-      if (variant && variant.nodeBOMs) {
+
+      const variant = viewProduct.variants.find(v => v.id === item.variantId);
+      if (variant?.nodeBOMs) {
         Object.entries(variant.nodeBOMs).forEach(([nodeId, bomId]) => {
           const bom = boms.find(b => b.id === bomId);
           if (bom) {
-            bom.items.forEach(bomItem => {
-              const key = `${bomItem.productId}-${nodeId}`;
-              if (!reqMap[key]) {
-                reqMap[key] = { materialId: bomItem.productId, nodeId, quantity: 0 };
-              }
-              reqMap[key].quantity += bomItem.quantity * planQty;
+            bom.items.forEach((bomItem: { productId: string; quantity: number }) => {
+              addToReqMap(bomItem.productId, bomItem.quantity * planQty, nodeId, new Set(), 1);
+            });
+          }
+        });
+        return;
+      }
+
+      if (viewProduct.variants.length === 0) {
+        const singleSkuBoms = boms.filter(
+          b => b.parentProductId === viewProduct.id && b.variantId === `single-${viewProduct.id}` && b.nodeId
+        );
+        singleSkuBoms.forEach(bom => {
+          if (bom.nodeId) {
+            bom.items.forEach((bomItem: { productId: string; quantity: number }) => {
+              addToReqMap(bomItem.productId, bomItem.quantity * planQty, bom.nodeId!, new Set(), 1);
             });
           }
         });
       }
     });
 
-    return Object.values(reqMap).map(req => {
+    const list: Array<{ materialId: string; materialName: string; materialSku: string; nodeName: string; nodeId: string; totalNeeded: number; stock: number; shortage: number; level: number; parentProductId?: string }> = [];
+    Object.values(reqMap).forEach(req => {
       const material = products.find(p => p.id === req.materialId);
       const node = globalNodes.find(n => n.id === req.nodeId);
-      const mockStock = Math.floor(Math.random() * 40); 
-      return {
+      const stock = stableMockStock(req.materialId);
+      const shortage = Math.max(0, req.quantity - stock);
+      list.push({
         materialId: req.materialId,
         materialName: material?.name || '未知物料',
         materialSku: material?.sku || '-',
         nodeName: node?.name || '未知工序',
+        nodeId: req.nodeId,
         totalNeeded: req.quantity,
-        stock: mockStock,
-        shortage: Math.max(0, req.quantity - mockStock)
-      };
+        stock,
+        shortage,
+        level: req.level,
+        parentProductId: req.parentProductId
+      });
     });
+
+    // 多级 BOM：按层级循环，每层子项按父件缺料数计算，有 BOM 的继续展开下一层
+    // 按 (productId, nodeId, parentProductId) 聚合去重；unitPerParent 取其一不求和（父件缺料已是多变体汇总，子件用量=父缺料×单次BOM比例）
+    const aggregatePending = (items: { productId: string; nodeId: string; parentProductId: string; unitPerParent: number }[]) => {
+      const map: Record<string, { productId: string; nodeId: string; parentProductId: string; unitPerParent: number }> = {};
+      items.forEach(({ productId, nodeId, parentProductId, unitPerParent }) => {
+        const key = `${productId}-${nodeId}-${parentProductId}`;
+        if (!map[key]) map[key] = { productId, nodeId, parentProductId, unitPerParent };
+      });
+      return Object.values(map);
+    };
+    let pending = aggregatePending(shortageDrivenList);
+    let currentLevel = 2;
+    while (pending.length > 0) {
+      const nextPending: { productId: string; nodeId: string; parentProductId: string; unitPerParent: number }[] = [];
+      pending.forEach(({ productId, nodeId, parentProductId, unitPerParent }) => {
+        const parentRow = list.find(r => r.materialId === parentProductId && r.nodeId === nodeId);
+        const parentShortage = parentRow ? parentRow.shortage : 0;
+        const totalNeeded = parentShortage * unitPerParent;
+        const material = products.find(p => p.id === productId);
+        const node = globalNodes.find(n => n.id === nodeId);
+        const stock = stableMockStock(productId);
+        list.push({
+          materialId: productId,
+          materialName: material?.name || '未知物料',
+          materialSku: material?.sku || '-',
+          nodeName: node?.name || '未知工序',
+          nodeId,
+          totalNeeded,
+          stock,
+          shortage: Math.max(0, totalNeeded - stock),
+          level: currentLevel,
+          parentProductId
+        });
+        const subBom = boms.find(b => b.parentProductId === productId);
+        if (subBom?.items?.length) {
+          subBom.items.forEach((bomItem: { productId: string; quantity: number }) => {
+            nextPending.push({ productId: bomItem.productId, nodeId, parentProductId: productId, unitPerParent: bomItem.quantity });
+          });
+        }
+      });
+      pending = aggregatePending(nextPending);
+      currentLevel++;
+    }
+
+    // 深度优先排序：一级 → 其子孙按树形顺序
+    const level1Rows = list.filter(r => r.level === 1);
+    const appendSubtree = (out: typeof list, parentId: string, nid: string) => {
+      const children = list.filter(r => r.parentProductId === parentId && r.nodeId === nid);
+      children.forEach(c => {
+        out.push(c);
+        appendSubtree(out, c.materialId, c.nodeId);
+      });
+    };
+    const sorted: typeof list = [];
+    level1Rows.forEach(parent => {
+      sorted.push(parent);
+      appendSubtree(sorted, parent.materialId, parent.nodeId);
+    });
+    sorted.push(...list.filter(r => !sorted.includes(r)));
+
+    return sorted.map(({ parentProductId, ...r }) => ({
+      ...r,
+      parentProductId,
+      parentMaterialName: parentProductId ? (products.find(p => p.id === parentProductId)?.name) : undefined
+    }));
   }, [viewPlan, viewProduct, tempPlanInfo.items, boms, products, globalNodes]);
 
-  // --- 采购单生成逻辑 ---
+  // --- 采购单生成逻辑（按供应商智能拆单：只统计无下级 BOM 的物料，有下级 BOM 的只取其下一级子件）---
   const handleGenerateProposedOrders = () => {
-    const shortages = materialRequirements.filter(m => m.shortage > 0);
+    const hasSubBom = (materialId: string) => boms.some(b => b.parentProductId === materialId);
+    const leafOnly = materialRequirements.filter(m => !hasSubBom(m.materialId));
+    const shortages = leafOnly.filter(m => m.shortage > 0);
     if (shortages.length === 0) {
       alert("当前库存充裕，无需生成额外采购单。");
       return;
@@ -718,28 +960,44 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
     }
 
     const groupedMap: Record<string, ProposedOrder> = {};
-    const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    // 统一按 PO-{供应商代码}-{序号} 规则生成单号
+    const getNextSeqForPartner = (partnerId: string, partnerName: string) => {
+      const partnerCode = (partnerId || '0').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || '0';
+      const existingForPartner = (psiRecords || []).filter((r: any) =>
+        r.type === 'PURCHASE_ORDER' && (r.partnerId === partnerId || r.partner === partnerName)
+      );
+      const seqNums = existingForPartner.map((r: any) => {
+        const m = r.docNumber?.match(new RegExp(`PO-${partnerCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)`));
+        return m ? parseInt(m[1], 10) : 0;
+      });
+      const nextSeq = seqNums.length > 0 ? Math.max(...seqNums) + 1 : 1;
+      return { partnerCode, nextSeq };
+    };
 
     shortages.forEach((item, index) => {
-      const supplier = partners[index % partners.length];
-      
+      const materialProduct = products.find(p => p.id === item.materialId);
+      const supplierId = materialProduct?.supplierId;
+      const supplier = (supplierId && partners.find(p => p.id === supplierId)) || partners[0];
+      if (!supplier) return;
+
       if (!groupedMap[supplier.id]) {
-        const orderIndex = Object.keys(groupedMap).length + 1;
+        const { partnerCode, nextSeq } = getNextSeqForPartner(supplier.id, supplier.name);
         groupedMap[supplier.id] = {
-          orderNumber: `PO-${todayStr}-${String(orderIndex).padStart(3, '0')}`,
+          orderNumber: `PO-${partnerCode}-${String(nextSeq).padStart(3, '0')}`,
           partnerId: supplier.id,
           partnerName: supplier.name,
           items: []
         };
       }
 
+      const qtyRounded = Math.round(Number(item.shortage) * 100) / 100;
       groupedMap[supplier.id].items.push({
         id: `item-${Date.now()}-${item.materialId}-${index}`,
         productId: item.materialId,
         materialName: item.materialName,
         materialSku: item.materialSku,
-        quantity: item.shortage,
-        suggestedQty: item.shortage,
+        quantity: qtyRounded,
+        suggestedQty: qtyRounded,
         nodeName: item.nodeName
       });
     });
@@ -752,23 +1010,56 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
     setIsProcessingPO(true);
 
     try {
-        proposedOrders.forEach(order => {
-            order.items.forEach(item => {
-                const newRec = {
-                    id: `psi-po-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-                    docNumber: order.orderNumber, 
+        // 保存前确保单据号唯一：若与已有采购订单撞号（如手动新建过同号），则重新生成，避免 onAddPSIRecord 追加导致明细混在一起
+        const existingDocNumbers = new Set(
+          (psiRecords || []).filter((r: any) => r.type === 'PURCHASE_ORDER' && r.docNumber).map((r: any) => r.docNumber)
+        );
+        const getNextSeqForPartner = (partnerId: string, partnerName: string) => {
+          const partnerCode = (partnerId || '0').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || '0';
+          const existingForPartner = (psiRecords || []).filter((r: any) =>
+            r.type === 'PURCHASE_ORDER' && (r.partnerId === partnerId || r.partner === partnerName)
+          );
+          const seqNums = existingForPartner.map((r: any) => {
+            const m = r.docNumber?.match(new RegExp(`PO-${partnerCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)`));
+            return m ? parseInt(m[1], 10) : 0;
+          });
+          let nextSeq = seqNums.length > 0 ? Math.max(...seqNums) + 1 : 1;
+          let cand = `PO-${partnerCode}-${String(nextSeq).padStart(3, '0')}`;
+          while (existingDocNumbers.has(cand)) {
+            nextSeq++;
+            cand = `PO-${partnerCode}-${String(nextSeq).padStart(3, '0')}`;
+          }
+          existingDocNumbers.add(cand);
+          return cand;
+        };
+
+        const allRecs: any[] = [];
+        const baseId = Date.now();
+        proposedOrders.forEach((order, oi) => {
+            const docNum = existingDocNumbers.has(order.orderNumber)
+              ? getNextSeqForPartner(order.partnerId, order.partnerName)
+              : order.orderNumber;
+            existingDocNumbers.add(docNum);
+            order.items.forEach((item, ii) => {
+                const prod = products.find(p => p.id === item.productId);
+                const purchasePrice = prod?.purchasePrice ?? 0;
+                allRecs.push({
+                    id: `psi-po-${baseId}-${oi}-${ii}`,
+                    docNumber: docNum, 
                     type: 'PURCHASE_ORDER',
                     productId: item.productId,
                     quantity: item.quantity,
+                    purchasePrice,
                     partner: order.partnerName,
+                    partnerId: order.partnerId,
                     warehouseId: 'wh-1',
                     note: `计划单[${viewPlan?.planNumber}]补货需求 | 针对工序:${item.nodeName}`,
                     timestamp: new Date().toLocaleString(),
                     operator: '张主管(系统生成)'
-                };
-                onAddPSIRecord(newRec);
+                });
             });
         });
+        allRecs.reverse().forEach(r => onAddPSIRecord(r));
 
         setTimeout(() => {
             setIsProcessingPO(false);
@@ -782,7 +1073,8 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
   };
 
   const updateProposedItemQty = (orderNum: string, itemId: string, val: string) => {
-    const qty = parseInt(val) || 0;
+    const num = parseFloat(val);
+    const qty = Number.isFinite(num) ? Math.round(num * 100) / 100 : 0;
     setProposedOrders(prev => prev.map(order => {
         if (order.orderNumber !== orderNum) return order;
         return {
@@ -796,17 +1088,28 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
     setProposedOrders(prev => prev.filter(o => o.orderNumber !== orderNum));
   };
 
+  const removeProposedOrderItem = (orderNum: string, itemId: string) => {
+    setProposedOrders(prev => prev.flatMap(order => {
+      if (order.orderNumber !== orderNum) return [order];
+      const newItems = order.items.filter(item => item.id !== itemId);
+      if (newItems.length === 0) return [];
+      return [{ ...order, items: newItems }];
+    }));
+  };
+
   useEffect(() => {
     if (viewPlan) {
       setTempAssignments(viewPlan.assignments || {});
+      const createdDate = viewPlan.createdAt || (() => { const m = viewPlan.id.match(/^plan-(\d+)/); return m ? new Date(parseInt(m[1], 10)).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]; })();
       setTempPlanInfo({
         customer: viewPlan.customer,
         dueDate: viewPlan.dueDate,
+        createdAt: createdDate,
         items: JSON.parse(JSON.stringify(viewPlan.items || [])),
         customData: viewPlan.customData ? { ...viewPlan.customData } : {}
       });
       setTempNodePricingModes(viewPlan.nodePricingModes ? { ...viewPlan.nodePricingModes } : {});
-      setProposedOrders([]); 
+      setProposedOrders([]);
     }
   }, [viewPlan]);
 
@@ -828,11 +1131,6 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
       .map(id => globalNodes.find(gn => gn.id === id))
       .filter((n): n is GlobalNodeTemplate => Boolean(n));
   }, [viewProduct, selectedProduct, globalNodes]);
-
-  const assignableNodes = useMemo(
-    () => productNodes.filter(n => n.enableAssignment !== false),
-    [productNodes]
-  );
 
   /** 按新建顺序生成下一个计划单号：PLN1, PLN2, PLN3...（兼容旧格式 PLN-数字、PLN数字-1 等） */
   const getNextPlanNumber = (): string => {
@@ -870,12 +1168,13 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
       priority: 'Medium',
       assignments: {},
       customData: Object.keys(form.customData || {}).length ? form.customData : undefined,
-      createdAt: new Date().toISOString().split('T')[0]
+      createdAt: form.createdAt || new Date().toISOString().split('T')[0]
     };
     
     onCreatePlan(newPlan);
     setShowModal(false);
-    setForm({ categoryId: '', productId: '', customer: '', dueDate: new Date().toISOString().split('T')[0], variantQuantities: {}, singleQuantity: 0, customData: {} });
+    const nextToday = new Date().toISOString().split('T')[0];
+    setForm({ categoryId: '', productId: '', customer: '', dueDate: '', createdAt: nextToday, variantQuantities: {}, singleQuantity: 0, customData: {} });
   };
 
   const handleUpdateDetail = () => {
@@ -885,6 +1184,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
         assignments: tempAssignments,
         customer: tempPlanInfo.customer,
         dueDate: tempPlanInfo.dueDate,
+        createdAt: tempPlanInfo.createdAt,
         items: tempPlanInfo.items,
         customData: tempPlanInfo.customData,
         nodePricingModes: Object.keys(tempNodePricingModes).length > 0 ? tempNodePricingModes : undefined
@@ -1078,7 +1378,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                         const color = dictionaries.colors.find(c => c.id === v?.colorId);
                         const size = dictionaries.sizes.find(s => s.id === v?.sizeId);
                         const spec = v ? `${color?.name ?? ''}-${size?.name ?? ''}`.replace(/^-|-$/g, '') || `规格${idx + 1}` : '默认';
-                        return <tr key={idx}><td className="border border-slate-200 px-2 py-1">{spec}</td><td className="border border-slate-200 px-2 py-1 text-right">{item.quantity}</td></tr>;
+                        return <tr key={idx}><td className="border border-slate-200 px-2 py-1">{spec}</td><td className="border border-slate-200 px-2 py-1 text-right">{item.quantity} {getUnitName(printingPlan.productId)}</td></tr>;
                       })}
                     </tbody>
                   </table>
@@ -1122,7 +1422,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                     return (
                       <tr key={idx}>
                         {cols.map(c => {
-                          const val = c.fieldKey === 'spec' ? spec : c.fieldKey === 'quantity' ? item.quantity : '—';
+                          const val = c.fieldKey === 'spec' ? spec : c.fieldKey === 'quantity' ? `${item.quantity} ${getUnitName(printingPlan.productId)}` : '—';
                           return <td key={c.id} className="border border-slate-200 px-2 py-1">{val}</td>;
                         })}
                       </tr>
@@ -1239,7 +1539,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
             <button onClick={() => { setPlanFormConfigDraft(JSON.parse(JSON.stringify(planFormSettings))); setShowPlanFormConfigModal(true); }} className="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition-all border border-slate-200">
               <Sliders className="w-4 h-4" /> 表单配置
             </button>
-            <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-bold transition-all shadow-lg shadow-indigo-100">
+            <button onClick={() => { const t = new Date().toISOString().split('T')[0]; setForm(prev => ({ ...prev, dueDate: '', createdAt: t })); setShowModal(true); }} className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-bold transition-all shadow-lg shadow-indigo-100">
               <Plus className="w-4 h-4" /> 创建生产计划
             </button>
           </div>
@@ -1277,11 +1577,34 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                       )}
                       <div>
                         <div className="flex items-center gap-3 mb-1 flex-wrap">
-                          {showInList('planNumber') && <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-widest">{plan.planNumber}</span>}
-                          {showInList('product') && <h3 className="text-lg font-bold text-slate-800">{product?.name || '未知产品'}</h3>}
-                          {product && categories.find(c => c.id === product.categoryId)?.customFields?.filter(f => f.showInForm !== false).map(f => {
+                          <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-widest">{plan.planNumber}</span>
+                          {showInList('product') && product && (
+                            <button type="button" onClick={(e) => { e.stopPropagation(); setViewProductId(product.id); }} className="text-left text-lg font-bold text-slate-800 hover:text-indigo-600 hover:underline transition-colors">
+                              {product.name || '未知产品'}
+                            </button>
+                          )}
+                          {product && categories.find(c => c.id === product.categoryId)?.customFields?.filter(f => f.showInForm !== false && f.type !== 'file').map(f => {
                             const val = product.categoryCustomData?.[f.id];
                             if (val == null || val === '') return null;
+                            if (f.type === 'file' && typeof val === 'string' && val.startsWith('data:')) {
+                              const isImg = val.startsWith('data:image/');
+                              const isPdf = val.startsWith('data:application/pdf');
+                              if (isImg) return (
+                                <span key={f.id} className="inline-flex items-center gap-1">
+                                  <img src={val} alt={f.label} className="h-6 w-6 object-cover rounded border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400" onClick={e => { e.stopPropagation(); setFilePreviewUrl(val); setFilePreviewType('image'); }} />
+                                  <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[9px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
+                                </span>
+                              );
+                              if (isPdf) return (
+                                <span key={f.id} className="inline-flex items-center gap-1">
+                                  <button type="button" onClick={e => { e.stopPropagation(); setFilePreviewUrl(val); setFilePreviewType('pdf'); }} className="text-[9px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">在线查看</button>
+                                  <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[9px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
+                                </span>
+                              );
+                              return (
+                                <a key={f.id} href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[9px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
+                              );
+                            }
                             return <span key={f.id} className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">{f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}</span>;
                           })}
                           {showInList('assignedCount') && assignedCount > 0 && <span className="text-[9px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">已派发 {assignedCount} 工序</span>}
@@ -1296,11 +1619,6 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      {planPrintConfig.enabled && (
-                         <button onClick={() => handlePrint(plan)} className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all border border-slate-100 bg-white" title="打印单据">
-                           <Printer className="w-5 h-5" />
-                         </button>
-                      )}
                       <button onClick={() => setViewDetailPlanId(plan.id)} className="flex items-center gap-2 px-5 py-2.5 bg-slate-50 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl text-xs font-bold transition-all border border-slate-100">
                         <Edit3 className="w-4 h-4" /> 详情
                       </button>
@@ -1358,11 +1676,34 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                             )}
                             <div>
                               <div className="flex items-center gap-3 mb-1 flex-wrap">
-                                {showInList('planNumber') && <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-widest">{plan.planNumber}</span>}
-                                {showInList('product') && <h3 className="text-base font-bold text-slate-800">{product?.name || '未知产品'}</h3>}
-                                {product && categories.find(c => c.id === product.categoryId)?.customFields?.filter(f => f.showInForm !== false).map(f => {
+                                <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-widest">{plan.planNumber}</span>
+                                {showInList('product') && product && (
+                                  <button type="button" onClick={(e) => { e.stopPropagation(); setViewProductId(product.id); }} className="text-left text-base font-bold text-slate-800 hover:text-indigo-600 hover:underline transition-colors">
+                                    {product.name || '未知产品'}
+                                  </button>
+                                )}
+                                {product && categories.find(c => c.id === product.categoryId)?.customFields?.filter(f => f.showInForm !== false && f.type !== 'file').map(f => {
                                   const val = product.categoryCustomData?.[f.id];
                                   if (val == null || val === '') return null;
+                                  if (f.type === 'file' && typeof val === 'string' && val.startsWith('data:')) {
+                                    const isImg = val.startsWith('data:image/');
+                                    const isPdf = val.startsWith('data:application/pdf');
+                                    if (isImg) return (
+                                      <span key={f.id} className="inline-flex items-center gap-1">
+                                        <img src={val} alt={f.label} className="h-5 w-5 object-cover rounded border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400" onClick={e => { e.stopPropagation(); setFilePreviewUrl(val); setFilePreviewType('image'); }} />
+                                        <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[9px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
+                                      </span>
+                                    );
+                                    if (isPdf) return (
+                                      <span key={f.id} className="inline-flex items-center gap-1">
+                                        <button type="button" onClick={e => { e.stopPropagation(); setFilePreviewUrl(val); setFilePreviewType('pdf'); }} className="text-[9px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">在线查看</button>
+                                        <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[9px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
+                                      </span>
+                                    );
+                                    return (
+                                      <a key={f.id} href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[9px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
+                                    );
+                                  }
                                   return <span key={f.id} className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">{f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}</span>;
                                 })}
                                 {showInList('assignedCount') && assignedCount > 0 && <span className="text-[9px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">已派发 {assignedCount} 工序</span>}
@@ -1377,11 +1718,6 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            {planPrintConfig.enabled && (
-                              <button onClick={() => handlePrint(plan)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg border border-slate-100 bg-white" title="打印单据">
-                                <Printer className="w-4 h-4" />
-                              </button>
-                            )}
                             <button onClick={() => setViewDetailPlanId(plan.id)} className="flex items-center gap-1.5 px-4 py-2 bg-slate-50 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl text-xs font-bold border border-slate-100">
                               <Edit3 className="w-3.5 h-3.5" /> 详情
                             </button>
@@ -1445,6 +1781,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                         categories={categories}
                         value={form.productId} 
                         onChange={(pId, cId) => setForm({ ...form, productId: pId, categoryId: cId, variantQuantities: {}, singleQuantity: 0 })} 
+                        onFilePreview={(url, type) => { setFilePreviewUrl(url); setFilePreviewType(type); }}
                       />
                     </div>
                   </div>
@@ -1464,6 +1801,10 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                     <input type="date" value={form.dueDate} onChange={e => setForm({...form, dueDate: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
                   </div>
                 )}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">添加日期</label>
+                  <input type="date" value={form.createdAt} onChange={e => setForm({...form, createdAt: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
+                </div>
                 {planFormSettings.customFields.filter(f => f.showInCreate).map(cf => (
                   <div key={cf.id} className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{cf.label}</label>
@@ -1528,13 +1869,13 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                     <div className="flex justify-end p-4 bg-indigo-600 rounded-[24px] text-white shadow-xl shadow-indigo-100">
                        <div className="flex items-center gap-4">
                           <p className="text-xs font-bold opacity-80">计划生产汇总总量:</p>
-                          <p className="text-xl font-black">{(Object.values(form.variantQuantities) as number[]).reduce((s, q) => s + q, 0)} <span className="text-xs font-medium">PCS</span></p>
+                          <p className="text-xl font-black">{(Object.values(form.variantQuantities) as number[]).reduce((s, q) => s + q, 0)} <span className="text-xs font-medium">{getUnitName(form.productId)}</span></p>
                        </div>
                     </div>
                   </div>
                 ) : (
                   <div className="max-w-xs space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">计划生产总量 (PCS)</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">计划生产总量 ({getUnitName(form.productId)})</label>
                     <input 
                       type="number" 
                       value={form.singleQuantity || ''} 
@@ -1568,9 +1909,28 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                     <h2 className="text-2xl font-black text-slate-900 tracking-tight">查看生产计划</h2>
                     <p className="text-sm font-bold text-slate-400 mt-0.5 tracking-tighter uppercase flex flex-wrap items-center gap-2">
                       {viewPlan.planNumber} — 关联：{viewProduct.name}
-                      {categories.find(c => c.id === viewProduct.categoryId)?.customFields?.filter(f => f.showInForm !== false).map(f => {
+                      {categories.find(c => c.id === viewProduct.categoryId)?.customFields?.filter(f => f.showInForm !== false && f.type !== 'file').map(f => {
                         const val = viewProduct.categoryCustomData?.[f.id];
                         if (val == null || val === '') return null;
+                        if (f.type === 'file' && typeof val === 'string' && val.startsWith('data:')) {
+                          const isImg = val.startsWith('data:image/');
+                          const isPdf = val.startsWith('data:application/pdf');
+                          if (isImg) return (
+                            <span key={f.id} className="inline-flex items-center gap-1.5 align-middle">
+                              <img src={val} alt={f.label} className="h-6 w-6 object-cover rounded border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400" onClick={e => { e.stopPropagation(); setFilePreviewUrl(val); setFilePreviewType('image'); }} />
+                              <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[10px] font-bold text-indigo-500 px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
+                            </span>
+                          );
+                          if (isPdf) return (
+                            <span key={f.id} className="inline-flex items-center gap-1.5 align-middle">
+                              <button type="button" onClick={e => { e.stopPropagation(); setFilePreviewUrl(val); setFilePreviewType('pdf'); }} className="text-[10px] font-bold text-indigo-500 px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">在线查看</button>
+                              <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[10px] font-bold text-indigo-500 px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
+                            </span>
+                          );
+                          return (
+                            <a key={f.id} href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[10px] font-bold text-indigo-500 px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
+                          );
+                        }
                         return <span key={f.id} className="text-[10px] font-bold text-slate-500 px-2 py-0.5 rounded bg-slate-100">{f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}</span>;
                       })}
                     </p>
@@ -1588,13 +1948,13 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-white p-8 rounded-[32px] border border-slate-200 shadow-sm">
                     {planFormSettings.standardFields.find(f => f.id === 'customer')?.showInDetail !== false && (
-                      <div className="space-y-2">
-                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">计划客户名称</label>
-                         <div className="relative">
-                            <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                            <input type="text" value={tempPlanInfo.customer} onChange={e => setTempPlanInfo({...tempPlanInfo, customer: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-11 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
-                         </div>
-                      </div>
+                      <PartnerCustomerSelector
+                        value={tempPlanInfo.customer}
+                        onChange={customerName => setTempPlanInfo({ ...tempPlanInfo, customer: customerName })}
+                        partners={partners}
+                        categories={partnerCategories}
+                        placeholder="搜索并选择合作单位..."
+                      />
                     )}
                     {planFormSettings.standardFields.find(f => f.id === 'dueDate')?.showInDetail !== false && (
                       <div className="space-y-2">
@@ -1605,17 +1965,15 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                          </div>
                       </div>
                     )}
-                    {planFormSettings.standardFields.find(f => f.id === 'createdAt')?.showInDetail !== false && (() => {
-                      const createdDate = viewPlan.createdAt || (() => { const m = viewPlan.id.match(/^plan-(\d+)/); return m ? new Date(parseInt(m[1], 10)).toISOString().split('T')[0] : ''; })();
-                      return createdDate ? (
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">添加日期</label>
-                          <div className="flex items-center gap-2 bg-slate-50 rounded-2xl py-3 px-4 font-bold text-slate-700">
-                            <CalendarDays className="w-4 h-4 text-slate-400" /> {createdDate}
-                          </div>
+                    {planFormSettings.standardFields.find(f => f.id === 'createdAt')?.showInDetail !== false && (
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">添加日期</label>
+                        <div className="relative">
+                          <CalendarDays className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                          <input type="date" value={tempPlanInfo.createdAt} onChange={e => setTempPlanInfo({ ...tempPlanInfo, createdAt: e.target.value })} className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-11 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
                         </div>
-                      ) : null;
-                    })()}
+                      </div>
+                    )}
                     {planFormSettings.customFields.filter(f => f.showInDetail).map(cf => (
                       <div key={cf.id} className="space-y-2">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">{cf.label}</label>
@@ -1674,7 +2032,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                         </div>
                     ) : (
                         <div className="max-w-xs space-y-2">
-                             <label className="text-[10px] font-black text-slate-400 uppercase">总量 (PCS)</label>
+                             <label className="text-[10px] font-black text-slate-400 uppercase">总量 ({viewPlan ? getUnitName(viewPlan.productId) : 'PCS'})</label>
                              <input type="number" value={tempPlanInfo.items?.[0]?.quantity || 0} onChange={e => updateDetailItemQty(undefined, e.target.value)} className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-2xl font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none" />
                         </div>
                     )}
@@ -1691,7 +2049,9 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                      {productNodes.map((node, idx) => {
                        const eligibleWorkers = workers.filter(w => w.assignedMilestoneIds?.includes(node.id));
                        const isAssigned = (tempAssignments[node.id] as NodeAssignment)?.workerIds?.length > 0;
-                       const canAssign = node.enableAssignment !== false;
+                       const enableWorker = node.enableAssignment !== false && node.enableWorkerAssignment !== false;
+                       const enableEquipment = node.enableAssignment !== false && node.enableEquipmentAssignment !== false;
+                       const canAssign = enableWorker || enableEquipment;
                        const nodePricingMode: ProcessPricingMode = tempNodePricingModes[node.id] ?? viewProduct?.nodePricingModes?.[node.id] ?? 'per_piece';
                        const rateUnit = nodePricingMode === 'per_hour' ? '元/时' : '元/件';
                        return (
@@ -1702,7 +2062,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                                  <h4 className="text-sm font-black text-slate-800">{node.name}</h4>
                                  <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">
                                    {node.hasBOM ? '需配置BOM' : '标准工序'}
-                                   {canAssign ? ' · 参与派工' : ' · 不派工'}
+                                   {canAssign ? (enableWorker && enableEquipment ? ' · 工人/设备派工' : enableWorker ? ' · 工人派工' : ' · 设备派工') : ' · 不派工'}
                                  </p>
                                </div>
                             </div>
@@ -1731,6 +2091,38 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                                    />
                                    <span className="text-[9px] text-slate-400 whitespace-nowrap">{rateUnit}</span>
                                  </div>
+                                 {canAssign && (
+                                   <div className="flex flex-wrap items-center gap-4 md:gap-6 border-l border-slate-200 pl-4 md:pl-6 min-w-[480px] flex-1">
+                                     {enableWorker && (
+                                       <div className="min-w-[440px] w-full max-w-[640px]">
+                                         <SearchableMultiSelectWithProcessTabs
+                                           variant="compact"
+                                           icon={UserPlus}
+                                           placeholder="分派负责人..."
+                                           processNodes={globalNodes}
+                                           currentNodeId={node.id}
+                                           options={workers.map(w => ({ id: w.id, name: w.name, sub: w.group, assignedMilestoneIds: w.assignedMilestoneIds }))}
+                                           selectedIds={(tempAssignments[node.id] as NodeAssignment)?.workerIds || []}
+                                           onChange={(ids) => updateTempAssignment(node.id, { workerIds: ids })}
+                                         />
+                                       </div>
+                                     )}
+                                     {enableEquipment && (
+                                       <div className="min-w-[440px] w-full max-w-[640px]">
+                                         <SearchableMultiSelectWithProcessTabs
+                                           variant="compact"
+                                           icon={Wrench}
+                                           placeholder="分派设备..."
+                                           processNodes={globalNodes}
+                                           currentNodeId={node.id}
+                                           options={equipment.map(e => ({ id: e.id, name: e.name, sub: e.code, assignedMilestoneIds: e.assignedMilestoneIds }))}
+                                           selectedIds={(tempAssignments[node.id] as NodeAssignment)?.equipmentIds || []}
+                                           onChange={(ids) => updateTempAssignment(node.id, { equipmentIds: ids })}
+                                         />
+                                       </div>
+                                     )}
+                                   </div>
+                                 )}
                                </div>
                             </div>
                          </div>
@@ -1747,13 +2139,13 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                         <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">4. 计划生产用料清单 (BOM 汇总)</h3>
                      </div>
                      <button 
-                        onClick={handleGenerateProposedOrders}
-                        disabled={proposedOrders.length > 0 || materialRequirements.length === 0}
-                        className="bg-slate-900 text-white px-5 py-2 rounded-xl text-xs font-bold hover:bg-black transition-all flex items-center gap-2 shadow-lg disabled:opacity-50"
-                      >
-                         <ShoppingCart className="w-3.5 h-3.5" />
-                         按供应商智能拆单核算
-                      </button>
+                           onClick={handleGenerateProposedOrders}
+                           disabled={proposedOrders.length > 0 || materialRequirements.length === 0}
+                           className="bg-slate-900 text-white px-5 py-2 rounded-xl text-xs font-bold hover:bg-black transition-all flex items-center gap-2 shadow-lg disabled:opacity-50"
+                         >
+                            <ShoppingCart className="w-3.5 h-3.5" />
+                            按供应商智能拆单核算
+                         </button>
                   </div>
 
                   <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
@@ -1764,26 +2156,39 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                               <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">理论总需量</th>
                               <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">系统可用量</th>
                               <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">计算缺料数</th>
+                              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center min-w-[160px]">状态</th>
                            </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
                            {(materialRequirements as any[]).length === 0 ? (
-                              <tr><td colSpan={4} className="px-8 py-10 text-center text-slate-300 italic text-sm">尚未配置 BOM 详情</td></tr>
+                              <tr><td colSpan={5} className="px-8 py-10 text-center text-slate-300 italic text-sm">尚未配置 BOM 详情</td></tr>
                            ) : (
-                              (materialRequirements as any[]).map((req, idx) => (
-                                 <tr key={idx} className="hover:bg-slate-50/30 transition-colors group">
-                                    <td className="px-8 py-4">
-                                       <div className="flex flex-col">
+                              (materialRequirements as any[]).map((req: any, idx: number) => (
+                                 <tr
+                                    key={idx}
+                                    className={`hover:bg-slate-50/30 transition-colors group ${(req.level ?? 1) >= 2 ? 'bg-slate-50/40' : ''}`}
+                                 >
+                                    <td className={`py-4 pr-8 ${(req.level ?? 1) === 1 ? 'pl-8' : ''}`} style={(req.level ?? 1) >= 2 ? { paddingLeft: `${32 + ((req.level ?? 2) - 1) * 20}px` } : undefined}>
+                                       <div className="flex flex-col gap-0.5">
+                                          {(req.level ?? 1) >= 2 && (
+                                             <span className="text-[9px] font-black text-indigo-600 uppercase tracking-wider flex items-center gap-1.5">
+                                                <span className="inline-block w-4 border-l-2 border-indigo-300 border-b-0 rounded-b-none" aria-hidden />
+                                                {req.level === 2 ? '二级' : req.level === 3 ? '三级' : `${req.level}级`} BOM
+                                                {req.parentMaterialName && (
+                                                   <span className="text-amber-600 font-bold normal-case">· 按「{req.parentMaterialName}」缺料数计算</span>
+                                                )}
+                                             </span>
+                                          )}
                                           <span className="text-sm font-bold text-slate-800">{req.materialName}</span>
                                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">SKU: {req.materialSku}</span>
                                        </div>
                                     </td>
                                     <td className="px-8 py-4">
-                                       <span className="text-sm font-black text-slate-600">{req.totalNeeded.toLocaleString()} PCS</span>
+                                       <span className="text-sm font-black text-slate-600">{Number(req.totalNeeded).toFixed(2)} {getUnitName(req.materialId)}</span>
                                     </td>
                                     <td className="px-8 py-4 text-center">
                                        <span className={`text-sm font-black ${req.stock < req.totalNeeded ? 'text-rose-500' : 'text-emerald-500'}`}>
-                                          {req.stock.toLocaleString()} PCS
+                                          {Number(req.stock).toFixed(2)} {getUnitName(req.materialId)}
                                        </span>
                                     </td>
                                     <td className="px-8 py-4 text-right">
@@ -1791,13 +2196,41 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                                           <div className="flex flex-col items-end">
                                              <span className="text-sm font-black text-indigo-600 flex items-center gap-1">
                                                 <ArrowDownToLine className="w-3 h-3" />
-                                                {req.shortage.toLocaleString()} PCS
+                                                {Number(req.shortage).toFixed(2)} {getUnitName(req.materialId)}
                                              </span>
                                              <span className="text-[9px] font-black text-amber-500 uppercase">严重缺料</span>
                                           </div>
                                        ) : (
                                           <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">库存充沛</span>
                                        )}
+                                    </td>
+                                    <td className="px-8 py-4">
+                                       {(() => {
+                                          const progress = getInboundProgress(req.materialId);
+                                          if (progress) {
+                                             const unit = getUnitName(req.materialId);
+                                             const pct = progress.ordered > 0 ? Math.min(1, progress.received / progress.ordered) : 0;
+                                             return (
+                                                <button
+                                                   type="button"
+                                                   onClick={() => setRelatedPOsMaterialId(req.materialId)}
+                                                   className="w-full inline-flex flex-col items-stretch gap-1.5 px-3 py-2 rounded-xl bg-slate-50/80 border border-slate-100 hover:bg-indigo-50/80 hover:border-indigo-100 transition-colors cursor-pointer text-left"
+                                                   title="点击查看相关采购订单"
+                                                >
+                                                   <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                                      <div className={`h-full rounded-full transition-all ${pct >= 1 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${pct * 100}%` }} />
+                                                   </div>
+                                                   <span className="text-[10px] font-bold text-slate-700">
+                                                      已收 {Number(progress.received).toFixed(2)} / {Number(progress.ordered).toFixed(2)} {unit}
+                                                      {progress.received >= progress.ordered ? <span className="text-emerald-600 ml-1">已到齐</span> : null}
+                                                   </span>
+                                                </button>
+                                             );
+                                          }
+                                          return (
+                                             <span className="text-slate-300 text-[10px] font-bold uppercase">未生成采购单</span>
+                                          );
+                                       })()}
                                     </td>
                                  </tr>
                               ))
@@ -1865,7 +2298,8 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                                            <th className="pb-4 pl-2">物料档案 / SKU</th>
                                            <th className="pb-4 text-center">对应生产环节</th>
                                            <th className="pb-4 text-center">系统缺料数</th>
-                                           <th className="pb-4 pr-2 text-right">拟采购数量 (可编辑)</th>
+                                           <th className="pb-4 text-right">拟采购数量 (可编辑)</th>
+                                           <th className="pb-4 pr-2 w-16 text-center">操作</th>
                                         </tr>
                                      </thead>
                                      <tbody className="divide-y divide-slate-50">
@@ -1881,21 +2315,32 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                                                 <span className="text-[10px] font-black text-indigo-400 uppercase">{item.nodeName}</span>
                                              </td>
                                              <td className="py-4 text-center">
-                                                <span className="text-xs font-bold text-slate-400">{item.suggestedQty} PCS</span>
+                                                <span className="text-xs font-bold text-slate-400">{Number(item.suggestedQty).toFixed(2)} {getUnitName(item.productId)}</span>
                                              </td>
-                                             <td className="py-4 pr-2 text-right">
+                                             <td className="py-4 text-right">
                                                 <div className="flex items-center justify-end gap-2">
                                                    <div className="relative w-32">
                                                       <input 
                                                          type="number" 
-                                                         value={item.quantity} 
+                                                         step="0.01"
+                                                         value={Number(item.quantity).toFixed(2)} 
                                                          onChange={e => updateProposedItemQty(order.orderNumber, item.id, e.target.value)}
                                                          className="w-full bg-slate-50 border-none rounded-xl py-2.5 px-3 text-right text-sm font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none shadow-inner"
                                                       />
                                                       <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-300 uppercase">Qty</span>
                                                    </div>
-                                                   <span className="text-[10px] font-bold text-slate-400">PCS</span>
+                                                   <span className="text-[10px] font-bold text-slate-400">{getUnitName(item.productId)}</span>
                                                 </div>
+                                             </td>
+                                             <td className="py-4 pr-2 text-center">
+                                                <button
+                                                   type="button"
+                                                   onClick={() => removeProposedOrderItem(order.orderNumber, item.id)}
+                                                   className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                                                   title="删除该物料"
+                                                >
+                                                   <Trash2 className="w-4 h-4" />
+                                                </button>
                                              </td>
                                           </tr>
                                         ))}
@@ -1910,7 +2355,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                                   </div>
                                   <div className="flex items-center gap-2">
                                      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">单据预估总量：</span>
-                                     <span className="text-lg font-black text-slate-900">{order.items.reduce((s, i) => s + i.quantity, 0).toLocaleString()} PCS</span>
+                                     <span className="text-lg font-black text-slate-900">{Number(order.items.reduce((s, i) => s + i.quantity, 0)).toFixed(2)} {viewPlan ? getUnitName(viewPlan.productId) : 'PCS'}</span>
                                   </div>
                                </div>
                             </div>
@@ -1920,70 +2365,6 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                   )}
                </div>
 
-               {/* 5. 工序派工（仅当存在启用派工的工序时显示） */}
-               {assignableNodes.length > 0 && (
-                 <div className="space-y-6 pb-20 mt-10">
-                   <div className="flex items-center gap-3 border-b border-slate-100 pb-4 ml-2">
-                     <Users className="w-5 h-5 text-indigo-600" />
-                     <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">5. 工序派工</h3>
-                   </div>
-                   <div className="space-y-4">
-                     {assignableNodes.map((node, idx) => {
-                       const eligibleWorkers = workers.filter(w => w.assignedMilestoneIds?.includes(node.id));
-                       const eligibleEquipment = equipment.filter(e => e.assignedMilestoneIds?.includes(node.id));
-                       const isAssigned = (tempAssignments[node.id] as NodeAssignment)?.workerIds?.length > 0;
-                       return (
-                         <div
-                           key={node.id}
-                           className={`flex flex-col md:flex-row md:items-center gap-6 p-6 rounded-[28px] border transition-all ${
-                             isAssigned
-                               ? 'bg-white border-indigo-200 shadow-md ring-1 ring-indigo-50'
-                               : 'bg-white/60 border-slate-200'
-                           }`}
-                         >
-                           <div className="flex items-center gap-4 md:w-56 shrink-0">
-                             <div
-                               className={`w-10 h-10 rounded-xl flex items-center justify-center text-[11px] font-black shadow-inner ${
-                                 isAssigned ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'
-                               }`}
-                             >
-                               {idx + 1}
-                             </div>
-                             <div>
-                               <h4 className="text-sm font-black text-slate-800">{node.name}</h4>
-                               <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">
-                                 {node.hasBOM ? '需配置BOM' : '标准工序'} · 参与派工
-                               </p>
-                             </div>
-                           </div>
-                          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-                             <SearchableMultiSelectWithProcessTabs
-                               variant="compact"
-                               icon={UserPlus}
-                               placeholder="分派负责人..."
-                               processNodes={assignableNodes}
-                               currentNodeId={node.id}
-                               options={eligibleWorkers.map(w => ({ id: w.id, name: w.name, sub: w.group, assignedMilestoneIds: w.assignedMilestoneIds }))}
-                               selectedIds={(tempAssignments[node.id] as NodeAssignment)?.workerIds || []}
-                               onChange={(ids) => updateTempAssignment(node.id, { workerIds: ids })}
-                             />
-                             <SearchableMultiSelectWithProcessTabs
-                               variant="compact"
-                               icon={Wrench}
-                               placeholder="分派设备..."
-                               processNodes={assignableNodes}
-                               currentNodeId={node.id}
-                               options={eligibleEquipment.map(e => ({ id: e.id, name: e.name, sub: e.code, assignedMilestoneIds: e.assignedMilestoneIds }))}
-                               selectedIds={(tempAssignments[node.id] as NodeAssignment)?.equipmentIds || []}
-                               onChange={(ids) => updateTempAssignment(node.id, { equipmentIds: ids })}
-                             />
-                          </div>
-                         </div>
-                       );
-                     })}
-                   </div>
-                 </div>
-               )}
             </div>
 
             <div className="px-10 py-6 bg-white/80 backdrop-blur-lg border-t border-slate-100 flex justify-between items-center sticky bottom-0">
@@ -1993,6 +2374,19 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                </div>
                <div className="flex items-center gap-4">
                  <button onClick={() => setViewDetailPlanId(null)} className="px-8 py-3 text-sm font-black text-slate-400 hover:text-slate-800 transition-colors uppercase">放弃修改</button>
+                 {onDeletePlan && (
+                   <button
+                     onClick={() => {
+                       if (confirm('确定要删除该计划单吗？')) {
+                         onDeletePlan(viewPlan.id);
+                         setViewDetailPlanId(null);
+                       }
+                     }}
+                     className="px-6 py-3 text-sm font-black text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-2xl border border-rose-200 flex items-center gap-2"
+                   >
+                     <Trash2 className="w-4 h-4" /> 删除
+                   </button>
+                 )}
                  {viewPlan.status !== PlanStatus.CONVERTED && (
                    <>
                      <button onClick={() => { openSplit(viewPlan); setViewDetailPlanId(null); }} className="px-6 py-3 text-sm font-black text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-2xl border border-amber-200 flex items-center gap-2">
@@ -2016,6 +2410,58 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
           </div>
         </div>
       )}
+
+      {/* 点击「已生成采购单」后展示该物料关联的采购订单 */}
+      {relatedPOsMaterialId && (() => {
+        const list = relatedPOsByMaterial[relatedPOsMaterialId] || [];
+        const materialName = products.find(p => p.id === relatedPOsMaterialId)?.name || '未知物料';
+        return (
+          <div className="fixed inset-0 z-[75] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setRelatedPOsMaterialId(null)} />
+            <div className="relative bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                  <ClipboardCheck className="w-4 h-4 text-emerald-600" />
+                  相关采购订单 — {materialName}
+                </h3>
+                <button type="button" onClick={() => setRelatedPOsMaterialId(null)} className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-50"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="max-h-[60vh] overflow-auto">
+                {list.length === 0 ? (
+                  <p className="px-6 py-8 text-center text-slate-400 text-sm">暂无记录</p>
+                ) : (
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100">
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">单号</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">供应商</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">订购数量</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">已收</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {list.map((r: any, i: number) => {
+                        const received = receivedByOrderLine[`${r.docNumber}::${r.id}`] ?? 0;
+                        const ordered = r.quantity ?? 0;
+                        return (
+                        <tr key={r.id || i} className="hover:bg-slate-50/50">
+                          <td className="px-4 py-3 text-xs font-bold text-slate-700">{r.docNumber ?? '—'}</td>
+                          <td className="px-4 py-3 text-xs font-bold text-slate-700">{r.partner ?? '—'}</td>
+                          <td className="px-4 py-3 text-xs font-black text-indigo-600 text-right">{Number(ordered).toFixed(2)} {relatedPOsMaterialId ? getUnitName(relatedPOsMaterialId) : 'PCS'}</td>
+                          <td className="px-4 py-3 text-xs font-bold text-right">{Number(received).toFixed(2)} <span className="text-slate-400 font-normal">/ {Number(ordered).toFixed(2)}</span></td>
+                        </tr>
+                      );})}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              <div className="px-6 py-3 border-t border-slate-100 flex justify-end">
+                <button type="button" onClick={() => setRelatedPOsMaterialId(null)} className="px-5 py-2 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">关闭</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {splitPlanId && splitPlan && (() => {
         const splitProduct = products.find(p => p.id === splitPlan.productId);
@@ -2053,7 +2499,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                       {splitPlan.items.map((item, i) => (
                         <tr key={i} className="hover:bg-slate-50/50">
                           <td className="px-4 py-3 text-sm font-bold text-slate-700">{getItemLabel(item, i)}</td>
-                          <td className="px-4 py-3 text-sm font-black text-slate-800 text-right">{item.quantity}</td>
+                          <td className="px-4 py-3 text-sm font-black text-slate-800 text-right">{item.quantity} {splitPlan ? getUnitName(splitPlan.productId) : 'PCS'}</td>
                           {Array.from({ length: splitNumParts }, (_, j) => {
                             const isAuto = splitNumParts === 2 && j === 1;
                             return (
@@ -2112,7 +2558,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {planFormConfigDraft.standardFields
-                        .filter(f => !['product', 'totalQty', 'status', 'priority', 'assignedCount'].includes(f.id))
+                        .filter(f => !['product', 'totalQty', 'status', 'priority', 'assignedCount', 'planNumber'].includes(f.id))
                         .map(f => (
                         <tr key={f.id} className="hover:bg-slate-50/50">
                           <td className="px-4 py-2.5 text-sm font-bold text-slate-800">{f.label}</td>
@@ -2204,6 +2650,241 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ plans, products, 
           <button type="button" onClick={() => setImagePreviewUrl(null)} className="absolute top-4 right-4 p-2 rounded-full bg-white/20 text-white hover:bg-white/30 transition-all"><X className="w-6 h-6" /></button>
         </div>
       )}
+
+      {/* 文件预览弹窗 (图片/PDF) */}
+      {filePreviewUrl && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-8 bg-slate-900/80 backdrop-blur-sm" onClick={() => setFilePreviewUrl(null)}>
+          <button onClick={() => setFilePreviewUrl(null)} className="absolute top-6 right-6 z-10 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-all">
+            <X className="w-8 h-8" />
+          </button>
+          <div className="relative z-10 w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            {filePreviewType === 'image' ? (
+              <img src={filePreviewUrl} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
+            ) : (
+              <iframe src={filePreviewUrl} title="PDF 预览" className="w-full h-[85vh] border-0" />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 商品信息详情弹窗 */}
+      {viewProductId && (() => {
+        const p = products.find(x => x.id === viewProductId);
+        const cat = p && categories.find(c => c.id === p.categoryId);
+        const unitName = p?.unitId ? dictionaries.units?.find(u => u.id === p.unitId)?.name : '件';
+        if (!p) return null;
+        return (
+          <div className="fixed inset-0 z-[95] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setViewProductId(null)} />
+            <div className="relative bg-white w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  {p.imageUrl ? (
+                    <img src={p.imageUrl} alt={p.name} className="w-16 h-16 rounded-2xl object-cover border border-slate-200" />
+                  ) : (
+                    <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-400"><Package className="w-8 h-8" /></div>
+                  )}
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900">{p.name}</h2>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">SKU: {p.sku} · {cat?.name || '未分类'}</p>
+                  </div>
+                </div>
+                <button onClick={() => setViewProductId(null)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100"><X className="w-6 h-6" /></button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-8 space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  {(p.salesPrice ?? 0) > 0 && (
+                    <div className="bg-slate-50 rounded-2xl p-4">
+                      <p className="text-[10px] font-black text-slate-400 uppercase mb-1">销售单价</p>
+                      <p className="text-lg font-black text-indigo-600">¥ {(p.salesPrice ?? 0).toLocaleString()} <span className="text-slate-500 font-bold">{unitName}</span></p>
+                    </div>
+                  )}
+                  {(p.purchasePrice ?? 0) > 0 && (
+                    <div className="bg-slate-50 rounded-2xl p-4">
+                      <p className="text-[10px] font-black text-slate-400 uppercase mb-1">采购单价</p>
+                      <p className="text-lg font-black text-slate-600">¥ {(p.purchasePrice ?? 0).toLocaleString()} <span className="text-slate-500 font-bold">{unitName}</span></p>
+                    </div>
+                  )}
+                  {p.supplierId && (() => {
+                    const supplier = partners.find(pt => pt.id === p.supplierId);
+                    return supplier ? (
+                      <div className="bg-slate-50 rounded-2xl p-4">
+                        <p className="text-[10px] font-black text-slate-400 uppercase mb-1">供应商</p>
+                        <p className="text-sm font-bold text-slate-700">{supplier.name}</p>
+                      </div>
+                    ) : null;
+                  })()}
+                  {(!((p.salesPrice ?? 0) > 0) && !((p.purchasePrice ?? 0) > 0)) && (
+                    <div className="col-span-2 bg-slate-50 rounded-2xl p-4">
+                      <p className="text-[10px] font-black text-slate-400 uppercase mb-1">单位</p>
+                      <p className="text-sm font-bold text-slate-700">{unitName}</p>
+                    </div>
+                  )}
+                </div>
+                {cat?.customFields && cat.customFields.length > 0 && p.categoryCustomData && (
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Tag className="w-3.5 h-3.5" /> 扩展属性</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {cat.customFields.map(f => {
+                        const val = p.categoryCustomData?.[f.id];
+                        if (val == null || val === '') return null;
+                        if (f.type === 'file' && typeof val === 'string' && val.startsWith('data:')) {
+                          const isImg = val.startsWith('data:image/');
+                          const isPdf = val.startsWith('data:application/pdf');
+                          if (isImg) return (
+                            <div key={f.id} className="flex items-center gap-2">
+                              <img src={val} alt={f.label} className="h-12 w-12 object-cover rounded-xl border cursor-pointer hover:ring-2 hover:ring-indigo-400" onClick={() => { setFilePreviewUrl(val); setFilePreviewType('image'); }} />
+                              <a href={val} download={`${f.label}.${getFileExtFromDataUrl(val)}`} className="text-xs font-bold text-indigo-600 hover:underline">下载</a>
+                            </div>
+                          );
+                          if (isPdf) return (
+                            <div key={f.id} className="flex items-center gap-2">
+                              <button type="button" onClick={() => { setFilePreviewUrl(val); setFilePreviewType('pdf'); }} className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-100">在线查看</button>
+                              <a href={val} download={`${f.label}.${getFileExtFromDataUrl(val)}`} className="text-xs font-bold text-indigo-600 hover:underline">下载</a>
+                            </div>
+                          );
+                          return (
+                            <a key={f.id} href={val} download={`${f.label}.${getFileExtFromDataUrl(val)}`} className="px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 hover:bg-indigo-50">下载</a>
+                          );
+                        }
+                        return (
+                          <div key={f.id} className="px-3 py-1.5 bg-slate-100 rounded-lg">
+                            <span className="text-[10px] font-bold text-slate-400">{f.label}: </span>
+                            <span className="text-sm font-bold text-slate-700">{typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Wrench className="w-3.5 h-3.5" /> 工序</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {(p.milestoneNodeIds || []).map(nodeId => {
+                      const node = globalNodes.find(n => n.id === nodeId);
+                      return node ? (
+                        <span key={nodeId} className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-xl text-sm font-bold">{node.name}</span>
+                      ) : null;
+                    })}
+                    {(!p.milestoneNodeIds || p.milestoneNodeIds.length === 0) && (
+                      <span className="text-sm text-slate-400 italic">暂无工序</span>
+                    )}
+                  </div>
+                </div>
+                {(() => {
+                  const productBoms = boms.filter(b => b.parentProductId === p.id);
+                  const hasBomNodes = (p.milestoneNodeIds || []).some(nid => globalNodes.find(n => n.id === nid)?.hasBOM);
+                  const singleSkuId = `single-${p.id}`;
+                  const skuOptions: { id: string; label: string }[] = p.variants && p.variants.length > 0
+                    ? p.variants.map(v => ({
+                        id: v.id,
+                        label: [dictionaries.colors?.find(c => c.id === v.colorId)?.name, dictionaries.sizes?.find(s => s.id === v.sizeId)?.name].filter(Boolean).join(' / ') || v.skuSuffix
+                      }))
+                    : [{ id: singleSkuId, label: '单 SKU' }];
+                  const selectedSkuBoms = viewProductBomSkuId ? productBoms.filter(b => b.variantId === viewProductBomSkuId) : [];
+                  return (productBoms.length > 0 || hasBomNodes) ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Boxes className="w-3.5 h-3.5" /> 工艺 BOM</h3>
+                        {viewProductBomSkuId && (
+                          <button type="button" onClick={() => setViewProductBomSkuId(null)} className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
+                            <ArrowLeft className="w-3 h-3" /> 返回选择
+                          </button>
+                        )}
+                      </div>
+                      {!viewProductBomSkuId ? (
+                        <div className="space-y-2">
+                          <p className="text-sm text-slate-500">点击 SKU 查看该规格的 BOM 明细</p>
+                          <div className="flex flex-wrap gap-2">
+                            {skuOptions.map(opt => {
+                              const hasBom = productBoms.some(b => b.variantId === opt.id);
+                              return (
+                                <button
+                                  key={opt.id}
+                                  type="button"
+                                  onClick={() => setViewProductBomSkuId(opt.id)}
+                                  className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${hasBom ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200' : 'bg-slate-50 text-slate-400 border border-slate-200'}`}
+                                >
+                                  {opt.label}
+                                  {!hasBom && <span className="text-[10px] ml-1">(未配置)</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : selectedSkuBoms.length > 0 ? (
+                        <div className="space-y-4">
+                          <p className="text-sm font-bold text-indigo-600 bg-indigo-50 px-3 py-2 rounded-xl w-fit">
+                            当前查看：{skuOptions.find(o => o.id === viewProductBomSkuId)?.label || '该规格'}
+                          </p>
+                          {selectedSkuBoms.map(bom => {
+                            const nodeName = bom.nodeId ? globalNodes.find(n => n.id === bom.nodeId)?.name : null;
+                            return (
+                              <div key={bom.id} className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                                {nodeName && <p className="text-[10px] font-bold text-indigo-600 mb-2">{nodeName}</p>}
+                                <div className="space-y-1.5">
+                                  {bom.items.map((item, idx) => {
+                                    const subProd = products.find(x => x.id === item.productId);
+                                    const subUnit = subProd?.unitId ? dictionaries.units?.find(u => u.id === subProd.unitId)?.name : '件';
+                                    return (
+                                      <div key={idx} className="flex justify-between items-center text-sm">
+                                        <span className="font-bold text-slate-700 truncate flex-1">{subProd?.name || subProd?.sku || '未知物料'}</span>
+                                        <span className="text-slate-500 font-medium shrink-0 ml-2">{item.quantity} {subUnit}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-slate-400 italic py-2">该规格尚未配置 BOM 物料明细</p>
+                      )}
+                    </div>
+                  ) : null;
+                })()}
+                {cat?.hasColorSize && (
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Tag className="w-3.5 h-3.5" /> 颜色尺码</h3>
+                    <div className="space-y-2">
+                      {p.colorIds && p.colorIds.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 mb-1.5">颜色</p>
+                          <div className="flex flex-wrap gap-2">
+                            {(p.colorIds || []).map(cId => {
+                              const c = dictionaries.colors?.find(x => x.id === cId);
+                              return c ? (
+                                <span key={cId} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 rounded-xl text-sm font-bold text-slate-700">
+                                  <span className="w-2.5 h-2.5 rounded-full border border-slate-200" style={{ backgroundColor: c.value }} />
+                                  {c.name}
+                                </span>
+                              ) : null;
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {p.sizeIds && p.sizeIds.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 mb-1.5">尺码</p>
+                          <div className="flex flex-wrap gap-2">
+                            {(p.sizeIds || []).map(sId => {
+                              const s = dictionaries.sizes?.find(x => x.id === sId);
+                              return s ? (
+                                <span key={sId} className="px-3 py-1.5 bg-slate-50 rounded-xl text-sm font-bold text-slate-700">{s.name}</span>
+                              ) : null;
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
     </>
   );

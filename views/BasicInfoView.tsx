@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useLayoutEffect } from 'react';
 import { 
   Boxes, 
   Users, 
@@ -27,7 +27,8 @@ import {
   MapPin,
   Library,
   Palette,
-  Maximize2
+  Maximize2,
+  Package
 } from 'lucide-react';
 import ProductManagementView from './ProductManagementView';
 import { Product, GlobalNodeTemplate, ProductCategory, BOM, AppDictionaries, Partner, Worker, Equipment, PartnerCategory, DictionaryItem } from '../types';
@@ -58,7 +59,13 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
   onUpdateProduct, onUpdateBOM, onUpdateDictionaries, onUpdateWorkers, onUpdateEquipment, onUpdatePartners
 }) => {
   const [activeTab, setActiveTab] = useState<BasicTab>('PRODUCTS');
-  
+  /** 工人管理：按工序分类，null = 全部，'UNASSIGNED' = 未分配 */
+  const [workerNodeId, setWorkerNodeId] = useState<string | null>(null);
+  /** 设备管理：按工序分类，null = 全部，'UNASSIGNED' = 未分配 */
+  const [equipmentNodeId, setEquipmentNodeId] = useState<string | null>(null);
+  const WORKER_UNASSIGNED = 'UNASSIGNED';
+  const EQUIPMENT_UNASSIGNED = 'UNASSIGNED';
+
   // --- 合作单位视图特有状态 ---
   const [activePartnerCategoryId, setActivePartnerCategoryId] = useState<string>(partnerCategories[0]?.id || 'all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -74,6 +81,58 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
 
   const [newColorName, setNewColorName] = useState('');
   const [newSizeName, setNewSizeName] = useState('');
+  const [newUnitName, setNewUnitName] = useState('');
+  const [productDetailVisible, setProductDetailVisible] = useState(false);
+
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const tabsWrapRef = useRef<HTMLDivElement>(null);
+  const [isStuck, setIsStuck] = useState(false);
+  const [placeholderHeight, setPlaceholderHeight] = useState(0);
+  const [barStyle, setBarStyle] = useState<{ left: number; width: number } | null>(null);
+
+  const updateBarPosition = () => {
+    const scrollParent = sentinelRef.current?.closest('[class*="overflow-auto"]');
+    if (scrollParent) {
+      const rect = scrollParent.getBoundingClientRect();
+      setBarStyle({ left: rect.left, width: rect.width });
+    }
+  };
+
+  useEffect(() => {
+    if (productDetailVisible) {
+      setIsStuck(false);
+      setBarStyle(null);
+      return;
+    }
+    const sentinel = sentinelRef.current;
+    const scrollParent = sentinel?.closest('[class*="overflow-auto"]');
+    if (!sentinel || !scrollParent) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsStuck(!entry.isIntersecting),
+      { root: scrollParent, rootMargin: '0px', threshold: 0 }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [productDetailVisible]);
+
+  useLayoutEffect(() => {
+    if (isStuck) {
+      updateBarPosition();
+      window.addEventListener('resize', updateBarPosition);
+      return () => window.removeEventListener('resize', updateBarPosition);
+    } else {
+      setBarStyle(null);
+    }
+  }, [isStuck]);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      if (tabsWrapRef.current) {
+        setPlaceholderHeight(tabsWrapRef.current.offsetHeight);
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   const handleAddColor = () => {
     if (!newColorName.trim()) return;
@@ -87,6 +146,14 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
     const newItem: DictionaryItem = { id: `s-${Date.now()}`, name: newSizeName, value: newSizeName };
     onUpdateDictionaries({ ...dictionaries, sizes: [...dictionaries.sizes, newItem] });
     setNewSizeName('');
+  };
+
+  const units = dictionaries.units ?? [];
+  const handleAddUnit = () => {
+    if (!newUnitName.trim()) return;
+    const newItem: DictionaryItem = { id: `u-${Date.now()}`, name: newUnitName.trim(), value: newUnitName.trim() };
+    onUpdateDictionaries({ ...dictionaries, units: [...units, newItem] });
+    setNewUnitName('');
   };
 
   const tabs = [
@@ -190,31 +257,49 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
     </div>
   );
 
-  return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      {/* 主导航标签 */}
-      <div className="flex bg-white p-1.5 rounded-[24px] border border-slate-200 shadow-sm w-fit overflow-x-auto no-scrollbar">
-        <div className="flex gap-1 min-w-max">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => { setActiveTab(tab.id as BasicTab); setSearchTerm(''); }}
-              className={`flex items-center gap-3 px-6 py-3 rounded-[18px] text-sm font-bold transition-all whitespace-nowrap ${
-                activeTab === tab.id 
-                ? 'bg-indigo-50 text-indigo-600 shadow-sm' 
-                : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50/50'
-              }`}
-            >
-              <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? 'text-indigo-600' : 'text-slate-300'}`} />
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
+  const showTabs = !productDetailVisible;
 
-      <div className="animate-in slide-in-from-bottom-4 duration-500">
+  return (
+    <div className="space-y-8">
+      {showTabs && (
+        <>
+          <div>
+            <div ref={sentinelRef} className="h-px w-full" aria-hidden="true" />
+            <div
+              ref={tabsWrapRef}
+              className={`z-20 py-4 bg-slate-50/95 backdrop-blur-sm ${
+                isStuck ? 'fixed top-0 px-12' : '-mx-12 px-12'
+              }`}
+              style={isStuck && barStyle ? { left: barStyle.left, width: barStyle.width } : undefined}
+            >
+              <div className="flex bg-white p-1.5 rounded-[24px] border border-slate-200 shadow-sm w-full lg:w-fit overflow-x-auto no-scrollbar">
+                <div className="flex gap-1 min-w-max">
+                  {tabs.map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => { setActiveTab(tab.id as BasicTab); setSearchTerm(''); }}
+                      className={`flex items-center gap-3 px-6 py-3 rounded-[18px] text-sm font-bold transition-all whitespace-nowrap ${
+                        activeTab === tab.id
+                          ? 'bg-indigo-50 text-indigo-600 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50/50'
+                      }`}
+                    >
+                      <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? 'text-indigo-600' : 'text-slate-300'}`} />
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+          {isStuck && placeholderHeight > 0 && (
+            <div style={{ height: placeholderHeight }} aria-hidden="true" />
+          )}
+        </>
+      )}
+      <div>
         {activeTab === 'PRODUCTS' && (
-          <ProductManagementView products={products} globalNodes={globalNodes} categories={categories} boms={boms} dictionaries={dictionaries} partners={partners} onUpdateProduct={onUpdateProduct} onUpdateBOM={onUpdateBOM} onUpdateDictionaries={onUpdateDictionaries} />
+          <ProductManagementView products={products} globalNodes={globalNodes} categories={categories} boms={boms} dictionaries={dictionaries} partners={partners} onUpdateProduct={onUpdateProduct} onUpdateBOM={onUpdateBOM} onUpdateDictionaries={onUpdateDictionaries} onDetailViewChange={setProductDetailVisible} />
         )}
 
         {activeTab === 'PARTNERS' && !showModal && (
@@ -222,18 +307,18 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
             {renderHeader('合作单位中心', '分类管理外部单位档案及自定义扩展信息', () => handleOpenPartner(), '新增单位')}
             
             {/* 分类导航条 */}
-            <div className="flex bg-slate-100/50 p-1 rounded-xl w-fit overflow-x-auto no-scrollbar max-w-full">
-              <button 
-                onClick={() => setActivePartnerCategoryId('all')} 
-                className={`px-5 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${activePartnerCategoryId === 'all' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setActivePartnerCategoryId('all')}
+                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${activePartnerCategoryId === 'all' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
               >
                 全部单位 ({partners.length})
               </button>
               {partnerCategories.map(cat => (
-                <button 
-                  key={cat.id} 
-                  onClick={() => setActivePartnerCategoryId(cat.id)} 
-                  className={`px-5 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 ${activePartnerCategoryId === cat.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                <button
+                  key={cat.id}
+                  onClick={() => setActivePartnerCategoryId(cat.id)}
+                  className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${activePartnerCategoryId === cat.id ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                 >
                   {cat.name} ({partners.filter(p => p.categoryId === cat.id).length})
                 </button>
@@ -306,8 +391,47 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
         {activeTab === 'WORKERS' && !showModal && (
           <div className="space-y-8">
             {renderHeader('工人档案库', '追踪生产人员的技能分布与权限节点', () => handleOpenWorker(), '建立档案')}
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setWorkerNodeId(null)}
+                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${workerNodeId === null ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+              >
+                全部 ({workers.length})
+              </button>
+              {(() => {
+                const unassignedCount = workers.filter(w => !w.assignedMilestoneIds?.length).length;
+                return unassignedCount > 0 ? (
+                  <button
+                    onClick={() => setWorkerNodeId(WORKER_UNASSIGNED)}
+                    className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${workerNodeId === WORKER_UNASSIGNED ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  >
+                    未分配 ({unassignedCount})
+                  </button>
+                ) : null;
+              })()}
+              {globalNodes.map(n => {
+                const count = workers.filter(w => w.assignedMilestoneIds?.includes(n.id)).length;
+                if (count === 0) return null;
+                return (
+                  <button
+                    key={n.id}
+                    onClick={() => setWorkerNodeId(n.id)}
+                    className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${workerNodeId === n.id ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  >
+                    {n.name} ({count})
+                  </button>
+                );
+              })}
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {workers.filter(w => !searchTerm || w.name.includes(searchTerm)).map(w => (
+              {workers
+                .filter(w => {
+                  if (workerNodeId == null) return true;
+                  if (workerNodeId === WORKER_UNASSIGNED) return !w.assignedMilestoneIds?.length;
+                  return w.assignedMilestoneIds?.includes(workerNodeId);
+                })
+                .filter(w => !searchTerm || w.name.includes(searchTerm))
+                .map(w => (
                 <div key={w.id} className="bg-white p-6 rounded-[32px] border border-slate-200 hover:shadow-2xl transition-all group flex flex-col relative overflow-hidden">
                   <div className="flex justify-between items-start mb-4">
                     <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-black text-xl shadow-inner group-hover:scale-110 transition-transform">{w.name.charAt(0)}</div>
@@ -337,8 +461,47 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
         {activeTab === 'EQUIPMENT' && !showModal && (
           <div className="space-y-8">
             {renderHeader('生产设备管理', '追踪车间机械设备、工装夹具及关联工序', () => handleOpenEq(), '新增设备')}
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setEquipmentNodeId(null)}
+                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${equipmentNodeId === null ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+              >
+                全部 ({equipment.length})
+              </button>
+              {(() => {
+                const unassignedCount = equipment.filter(e => !e.assignedMilestoneIds?.length).length;
+                return unassignedCount > 0 ? (
+                  <button
+                    onClick={() => setEquipmentNodeId(EQUIPMENT_UNASSIGNED)}
+                    className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${equipmentNodeId === EQUIPMENT_UNASSIGNED ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  >
+                    未分配 ({unassignedCount})
+                  </button>
+                ) : null;
+              })()}
+              {globalNodes.map(n => {
+                const count = equipment.filter(e => e.assignedMilestoneIds?.includes(n.id)).length;
+                if (count === 0) return null;
+                return (
+                  <button
+                    key={n.id}
+                    onClick={() => setEquipmentNodeId(n.id)}
+                    className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${equipmentNodeId === n.id ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  >
+                    {n.name} ({count})
+                  </button>
+                );
+              })}
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {equipment.filter(e => !searchTerm || e.name.includes(searchTerm)).map(e => (
+              {equipment
+                .filter(e => {
+                  if (equipmentNodeId == null) return true;
+                  if (equipmentNodeId === EQUIPMENT_UNASSIGNED) return !e.assignedMilestoneIds?.length;
+                  return e.assignedMilestoneIds?.includes(equipmentNodeId);
+                })
+                .filter(e => !searchTerm || e.name.includes(searchTerm))
+                .map(e => (
                 <div key={e.id} className="bg-white p-6 rounded-[32px] border border-slate-200 hover:shadow-2xl transition-all group flex flex-col">
                    <div className="flex justify-between items-start mb-4">
                     <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:text-indigo-600 transition-all shadow-inner"><Cpu className="w-6 h-6" /></div>
@@ -362,7 +525,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
         )}
 
         {activeTab === 'DICTIONARIES' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in slide-in-from-bottom-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 animate-in slide-in-from-bottom-4">
             <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm p-8 space-y-8 flex flex-col">
               <div className="flex items-center justify-between border-b border-slate-50 pb-4">
                 <div className="flex items-center gap-3">
@@ -416,6 +579,34 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                 <div className="flex gap-3">
                   <input type="text" placeholder="尺码代号 (如: XL, 42)" value={newSizeName} onChange={e => setNewSizeName(e.target.value)} className="flex-1 bg-slate-50 border-none rounded-xl py-2.5 px-4 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500" />
                   <button onClick={handleAddSize} disabled={!newSizeName.trim()} className="bg-indigo-600 text-white p-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all"><Plus className="w-5 h-5" /></button>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm p-8 space-y-8 flex flex-col">
+              <div className="flex items-center justify-between border-b border-slate-50 pb-4">
+                <div className="flex items-center gap-3">
+                  <Package className="w-5 h-5 text-indigo-600" />
+                  <h3 className="font-bold text-slate-800 text-lg">产品单位库</h3>
+                </div>
+                <span className="text-[10px] font-black text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full">{units.length} 项</span>
+              </div>
+              <div className="flex-1 overflow-y-auto custom-scrollbar max-h-96 pr-2">
+                <div className="grid grid-cols-2 gap-3">
+                  {units.map(u => (
+                    <div key={u.id} className="flex items-center gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100 group">
+                      <div className="flex-1">
+                        <p className="text-xs font-bold text-slate-800">{u.name}</p>
+                      </div>
+                      <button onClick={() => onUpdateDictionaries({ ...dictionaries, units: units.filter(x => x.id !== u.id) })} className="opacity-0 group-hover:opacity-100 p-1.5 text-rose-400 hover:bg-rose-50 rounded-lg transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="pt-6 border-t border-slate-50 space-y-4">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">快速新增单位</h4>
+                <div className="flex gap-3">
+                  <input type="text" placeholder="单位名称 (如: PCS, 公斤)" value={newUnitName} onChange={e => setNewUnitName(e.target.value)} className="flex-1 bg-slate-50 border-none rounded-xl py-2.5 px-4 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500" />
+                  <button onClick={handleAddUnit} disabled={!newUnitName.trim()} className="bg-indigo-600 text-white p-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all"><Plus className="w-5 h-5" /></button>
                 </div>
               </div>
             </div>

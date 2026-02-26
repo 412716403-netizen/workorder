@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { 
   CalendarRange, 
   ClipboardList, 
@@ -25,6 +24,7 @@ interface ProductionManagementViewProps {
   workers: Worker[];
   equipment: Equipment[];
   prodRecords: ProductionOpRecord[];
+  psiRecords?: any[];
   globalNodes: GlobalNodeTemplate[];
   boms: BOM[];
   partners: Partner[];
@@ -37,6 +37,7 @@ interface ProductionManagementViewProps {
   onUpdatePlan?: (planId: string, updates: Partial<PlanOrder>) => void;
   onSplitPlan: (planId: string, newPlans: PlanOrder[]) => void;
   onConvertToOrder: (planId: string) => void;
+  onDeletePlan?: (planId: string) => void;
   onCreateOrder: (order: ProductionOrder) => void;
   onAddRecord: (record: ProductionOpRecord) => void;
   onAddPSIRecord?: (record: any) => void;
@@ -45,11 +46,55 @@ interface ProductionManagementViewProps {
 type MainTab = 'plans' | 'orders' | ProdOpType;
 
 const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
-  plans, orders, products, categories, dictionaries, workers, equipment, prodRecords, globalNodes, boms, partners, partnerCategories, printSettings,
+  plans, orders, products, categories, dictionaries, workers, equipment, prodRecords, psiRecords = [], globalNodes, boms, partners, partnerCategories, printSettings,
   planFormSettings, onUpdatePlanFormSettings,
-  onCreatePlan, onUpdateProduct, onUpdatePlan, onSplitPlan, onConvertToOrder, onCreateOrder, onAddRecord, onAddPSIRecord
+  onCreatePlan, onUpdateProduct, onUpdatePlan, onSplitPlan, onConvertToOrder, onDeletePlan, onCreateOrder, onAddRecord, onAddPSIRecord
 }) => {
   const [activeTab, setActiveTab] = useState<MainTab>('plans');
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const tabsWrapRef = useRef<HTMLDivElement>(null);
+  const [isStuck, setIsStuck] = useState(false);
+  const [placeholderHeight, setPlaceholderHeight] = useState(0);
+  const [barStyle, setBarStyle] = useState<{ left: number; width: number } | null>(null);
+
+  const updateBarPosition = () => {
+    const scrollParent = sentinelRef.current?.closest('[class*="overflow-auto"]');
+    if (scrollParent) {
+      const rect = scrollParent.getBoundingClientRect();
+      setBarStyle({ left: rect.left, width: rect.width });
+    }
+  };
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    const scrollParent = sentinel?.closest('[class*="overflow-auto"]');
+    if (!sentinel || !scrollParent) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsStuck(!entry.isIntersecting),
+      { root: scrollParent, rootMargin: '0px', threshold: 0 }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
+
+  useLayoutEffect(() => {
+    if (isStuck) {
+      updateBarPosition();
+      window.addEventListener('resize', updateBarPosition);
+      return () => window.removeEventListener('resize', updateBarPosition);
+    } else {
+      setBarStyle(null);
+    }
+  }, [isStuck]);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      if (tabsWrapRef.current) {
+        setPlaceholderHeight(tabsWrapRef.current.offsetHeight);
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   const tabs = [
     { id: 'plans', label: '生产计划', icon: CalendarRange, color: 'text-indigo-600', bg: 'bg-indigo-50' },
@@ -61,27 +106,40 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
   ];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex bg-white p-1.5 rounded-[24px] border border-slate-200 shadow-sm w-full lg:w-fit overflow-x-auto no-scrollbar">
-        <div className="flex gap-1 min-w-max">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as MainTab)}
-              className={`flex items-center gap-3 px-6 py-3 rounded-[18px] text-sm font-bold transition-all whitespace-nowrap ${
-                activeTab === tab.id 
-                ? `${tab.bg} ${tab.color} shadow-sm` 
-                : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50/50'
-              }`}
-            >
-              <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? tab.color : 'text-slate-300'}`} />
-              {tab.label}
-            </button>
-          ))}
+    <div className="space-y-8">
+      <div>
+        <div ref={sentinelRef} className="h-px w-full" aria-hidden="true" />
+        <div
+          ref={tabsWrapRef}
+          className={`z-20 py-4 bg-slate-50/95 backdrop-blur-sm ${
+            isStuck ? 'fixed top-0 px-12' : '-mx-12 px-12'
+          }`}
+          style={isStuck && barStyle ? { left: barStyle.left, width: barStyle.width } : undefined}
+        >
+        <div className="flex bg-white p-1.5 rounded-[24px] border border-slate-200 shadow-sm w-full lg:w-fit overflow-x-auto no-scrollbar">
+          <div className="flex gap-1 min-w-max">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as MainTab)}
+                className={`flex items-center gap-3 px-6 py-3 rounded-[18px] text-sm font-bold transition-all whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? `${tab.bg} ${tab.color} shadow-sm`
+                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50/50'
+                }`}
+              >
+                <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? tab.color : 'text-slate-300'}`} />
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
-
-      <div className="animate-in slide-in-from-bottom-4 duration-500 min-h-[600px]">
+      </div>
+      {isStuck && placeholderHeight > 0 && (
+        <div style={{ height: placeholderHeight }} aria-hidden="true" />
+      )}
+      <div className="min-h-[600px]">
         {activeTab === 'plans' && (
           <PlanOrderListView 
             plans={plans} 
@@ -94,6 +152,7 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
             boms={boms}
             partners={partners}
             partnerCategories={partnerCategories}
+            psiRecords={psiRecords}
             printSettings={printSettings}
             planFormSettings={planFormSettings}
             onUpdatePlanFormSettings={onUpdatePlanFormSettings}
@@ -101,7 +160,8 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
             onUpdateProduct={onUpdateProduct}
             onUpdatePlan={onUpdatePlan}
             onSplitPlan={onSplitPlan}
-            onConvertToOrder={onConvertToOrder} 
+            onConvertToOrder={onConvertToOrder}
+            onDeletePlan={onDeletePlan}
             onAddPSIRecord={onAddPSIRecord}
           />
         )}

@@ -19,7 +19,7 @@ export enum PlanStatus {
   CONVERTED = 'CONVERTED'
 }
 
-export type FieldType = 'text' | 'number' | 'select' | 'boolean' | 'date';
+export type FieldType = 'text' | 'number' | 'select' | 'boolean' | 'date' | 'file';
 
 export interface ReportFieldDefinition {
   id: string;
@@ -41,6 +41,7 @@ export interface DictionaryItem {
 export interface AppDictionaries {
   colors: DictionaryItem[];
   sizes: DictionaryItem[];
+  units: DictionaryItem[];
 }
 
 /** 工序计价方式：计件（元/件）或计时（元/时） */
@@ -52,8 +53,12 @@ export interface GlobalNodeTemplate {
   reportTemplate: ReportFieldDefinition[];
   hasBOM?: boolean;
   category?: string;
-  /** 是否在计划单查看页显示该工序的派工选项，默认 true */
+  /** @deprecated 用 enableWorkerAssignment / enableEquipmentAssignment 替代 */
   enableAssignment?: boolean;
+  /** 是否启用工人派工（计划单详情中显示分派负责人），默认 true */
+  enableWorkerAssignment?: boolean;
+  /** 是否启用设备派工（计划单详情中显示分派设备），默认 true */
+  enableEquipmentAssignment?: boolean;
 }
 
 export interface ProductCategory {
@@ -64,6 +69,8 @@ export interface ProductCategory {
   hasSalesPrice: boolean;
   hasPurchasePrice: boolean;
   hasColorSize: boolean;
+  /** 是否启用批次管理：启用后相关产品在采购、出入库和生产入库中按批次记录 */
+  hasBatchManagement?: boolean;
   customFields: ReportFieldDefinition[];
 }
 
@@ -78,7 +85,11 @@ export interface BOMItem {
   categoryId?: string;
   productId: string;
   quantity: number;
+  /** BOM 编辑时用于保留用户原始输入，避免 0 无法清空等交互问题 */
+  quantityInput?: string;
   note?: string;
+  /** 为 true 时，该子项用量按父物料的「缺料数」计算（用于替代料/补料，如毛条按全毛黑色缺料数计算） */
+  useShortageOnly?: boolean;
 }
 
 export interface BOM {
@@ -109,6 +120,8 @@ export interface Product {
   salesPrice?: number;    
   purchasePrice?: number; 
   supplierId?: string; 
+  /** 产品单位，关联公共数据字典 units */
+  unitId?: string;
   colorIds: string[];
   sizeIds: string[];
   variants: ProductVariant[];
@@ -202,6 +215,12 @@ export interface PlanFormSettings {
   standardFields: PlanFormFieldConfig[];
   customFields: PlanFormFieldConfig[];
 }
+
+/** 采购订单表单配置：结构同计划单，用于列表/新增/详情页字段显示控制 */
+export type PurchaseOrderFormSettings = PlanFormSettings;
+
+/** 采购单表单配置：结构同计划单 */
+export type PurchaseBillFormSettings = PlanFormSettings;
 
 export interface MilestoneReport {
   id: string;

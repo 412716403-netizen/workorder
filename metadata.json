@@ -1,0 +1,5 @@
+{
+  "name": "SmartTrack Pro - 生产进度节点报工系统",
+  "description": "一个面向现代工厂的高级生产进度管理与节点报工应用。集成实时看板、自动化报工流程以及基于 Gemini AI 的瓶颈分析与生产优化建议。",
+  "requestFramePermissions": []
+}

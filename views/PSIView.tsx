@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { 
   ClipboardList, 
   Receipt, 
@@ -6,7 +6,7 @@ import {
   CreditCard, 
   Warehouse
 } from 'lucide-react';
-import { Product, Warehouse as WarehouseType, ProductCategory, Partner, PartnerCategory } from '../types';
+import { Product, Warehouse as WarehouseType, ProductCategory, Partner, PartnerCategory, AppDictionaries, PurchaseOrderFormSettings, PurchaseBillFormSettings } from '../types';
 import PSIOpsView from './PSIOpsView';
 
 interface PSIViewProps {
@@ -16,14 +16,68 @@ interface PSIViewProps {
   categories: ProductCategory[];
   partners: Partner[];
   partnerCategories: PartnerCategory[];
+  dictionaries: AppDictionaries;
+  purchaseOrderFormSettings?: PurchaseOrderFormSettings;
+  onUpdatePurchaseOrderFormSettings?: (settings: PurchaseOrderFormSettings) => void;
+  purchaseBillFormSettings?: PurchaseBillFormSettings;
+  onUpdatePurchaseBillFormSettings?: (settings: PurchaseBillFormSettings) => void;
   onAddRecord: (record: any) => void;
+  /** 替换某一类单据、某个单号下的所有记录（用于编辑采购订单等场景） */
+  onReplaceRecords?: (type: string, docNumber: string, newRecords: any[]) => void;
+  /** 删除某一类单据、某个单号下的所有记录 */
+  onDeleteRecords?: (type: string, docNumber: string) => void;
 }
 
 // 简化业务类型，将仓库相关合并为 WAREHOUSE_MGMT
 type PSITab = 'PURCHASE_ORDER' | 'PURCHASE_BILL' | 'SALES_ORDER' | 'SALES_BILL' | 'WAREHOUSE_MGMT';
 
-const PSIView: React.FC<PSIViewProps> = ({ products, records, warehouses, categories, partners, partnerCategories, onAddRecord }) => {
+const PSIView: React.FC<PSIViewProps> = ({ products, records, warehouses, categories, partners, partnerCategories, dictionaries, purchaseOrderFormSettings, onUpdatePurchaseOrderFormSettings, purchaseBillFormSettings, onUpdatePurchaseBillFormSettings, onAddRecord, onReplaceRecords, onDeleteRecords }) => {
   const [activeTab, setActiveTab] = useState<PSITab>('PURCHASE_ORDER');
+  const [hideTabs, setHideTabs] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const tabsWrapRef = useRef<HTMLDivElement>(null);
+  const [isStuck, setIsStuck] = useState(false);
+  const [placeholderHeight, setPlaceholderHeight] = useState(0);
+  const [barStyle, setBarStyle] = useState<{ left: number; width: number } | null>(null);
+
+  const updateBarPosition = () => {
+    const scrollParent = sentinelRef.current?.closest('[class*="overflow-auto"]');
+    if (scrollParent) {
+      const rect = scrollParent.getBoundingClientRect();
+      setBarStyle({ left: rect.left, width: rect.width });
+    }
+  };
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    const scrollParent = sentinel?.closest('[class*="overflow-auto"]');
+    if (!sentinel || !scrollParent) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsStuck(!entry.isIntersecting),
+      { root: scrollParent, rootMargin: '0px', threshold: 0 }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
+
+  useLayoutEffect(() => {
+    if (isStuck) {
+      updateBarPosition();
+      window.addEventListener('resize', updateBarPosition);
+      return () => window.removeEventListener('resize', updateBarPosition);
+    } else {
+      setBarStyle(null);
+    }
+  }, [isStuck]);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      if (tabsWrapRef.current) {
+        setPlaceholderHeight(tabsWrapRef.current.offsetHeight);
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   const tabs = [
     { id: 'PURCHASE_ORDER', label: '采购订单', icon: ClipboardList, color: 'text-indigo-600', bg: 'bg-indigo-50', sub: '合同与采购计划' },
@@ -34,42 +88,66 @@ const PSIView: React.FC<PSIViewProps> = ({ products, records, warehouses, catego
   ];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      {/* 顶部统一导航栏 */}
-      <div className="flex bg-white p-1.5 rounded-[24px] border border-slate-200 shadow-sm w-full lg:w-fit overflow-x-auto no-scrollbar">
-        <div className="flex gap-1 min-w-max">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as PSITab)}
-              className={`flex items-center gap-3 px-6 py-3 rounded-[18px] text-sm font-bold transition-all whitespace-nowrap ${
-                activeTab === tab.id 
-                ? `${tab.bg} ${tab.color} shadow-sm` 
-                : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50/50'
+    <div className="space-y-8">
+      {!hideTabs && (
+        <>
+          <div>
+            <div ref={sentinelRef} className="h-px w-full" aria-hidden="true" />
+            <div
+              ref={tabsWrapRef}
+              className={`z-20 py-4 bg-slate-50/95 backdrop-blur-sm ${
+                isStuck ? 'fixed top-0 px-12' : '-mx-12 px-12'
               }`}
+              style={isStuck && barStyle ? { left: barStyle.left, width: barStyle.width } : undefined}
             >
-              <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? tab.color : 'text-slate-300'}`} />
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 统一视图容器 */}
-      <div className="animate-in slide-in-from-bottom-4 duration-500 min-h-[600px]">
+              <div className="flex bg-white p-1.5 rounded-[24px] border border-slate-200 shadow-sm w-full lg:w-fit overflow-x-auto no-scrollbar">
+                <div className="flex gap-1 min-w-max">
+                  {tabs.map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id as PSITab)}
+                      className={`flex items-center gap-3 px-6 py-3 rounded-[18px] text-sm font-bold transition-all whitespace-nowrap ${
+                        activeTab === tab.id
+                          ? `${tab.bg} ${tab.color} shadow-sm`
+                          : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50/50'
+                      }`}
+                    >
+                      <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? tab.color : 'text-slate-300'}`} />
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+          {isStuck && placeholderHeight > 0 && (
+            <div style={{ height: placeholderHeight }} aria-hidden="true" />
+          )}
+        </>
+      )}
+      <div className="min-h-[600px]">
         <PSIOpsView 
+          onDetailViewChange={setHideTabs}
           type={activeTab}
           products={products}
           warehouses={warehouses}
           categories={categories}
           partners={partners}
           partnerCategories={partnerCategories}
+          dictionaries={dictionaries}
           records={records}
+          purchaseOrderFormSettings={purchaseOrderFormSettings}
+          onUpdatePurchaseOrderFormSettings={onUpdatePurchaseOrderFormSettings}
+          purchaseBillFormSettings={purchaseBillFormSettings}
+          onUpdatePurchaseBillFormSettings={onUpdatePurchaseBillFormSettings}
           onAddRecord={onAddRecord}
+          onReplaceRecords={onReplaceRecords}
+          onDeleteRecords={onDeleteRecords}
         />
       </div>
     </div>
   );
 };
+
 
 export default PSIView;

@@ -23,6 +23,7 @@ import {
   Building2,
   Shapes,
   Users,
+  Wrench,
 } from 'lucide-react';
 import { ProductCategory, ReportFieldDefinition, FieldType, GlobalNodeTemplate, Warehouse, PartnerCategory } from '../types';
 
@@ -63,11 +64,12 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
 
   const tabs = [
-    { id: 'categories', label: '产品分类管理', icon: Tag, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-    { id: 'partner_categories', label: '合作单位分类', icon: Shapes, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-    { id: 'nodes', label: '工序节点库', icon: Database, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-    { id: 'warehouses', label: '仓库分类管理', icon: WarehouseIcon, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+    { id: 'categories', label: '产品分类管理', icon: Tag, color: 'text-indigo-600', bg: 'bg-indigo-50', title: '产品分类管理', sub: '定义产品分类、颜色尺码及扩展属性' },
+    { id: 'partner_categories', label: '合作单位分类', icon: Shapes, color: 'text-indigo-600', bg: 'bg-indigo-50', title: '合作单位分类', sub: '配置供应商、客户等单位类型的自定义字段' },
+    { id: 'nodes', label: '工序节点库', icon: Database, color: 'text-indigo-600', bg: 'bg-indigo-50', title: '工序节点库', sub: '定义生产工序、报工模板及 BOM 关联' },
+    { id: 'warehouses', label: '仓库分类管理', icon: WarehouseIcon, color: 'text-indigo-600', bg: 'bg-indigo-50', title: '仓库分类管理', sub: '维护实体仓库档案与分类' },
   ];
+  const activeTabMeta = tabs.find(t => t.id === activeTab);
 
   const addPartnerCategory = () => {
     if (!newPCatName.trim()) return;
@@ -233,27 +235,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex items-center gap-4">
-        <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-100">
-          <Settings className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">系统参数设置</h1>
-          <p className="text-slate-500 mt-1 italic text-sm">定义基础档案、标准化生产工序、打印模板及数据字典</p>
-        </div>
-      </div>
-
-      <div className="flex bg-white p-1.5 rounded-[24px] border border-slate-200 shadow-sm w-full lg:w-fit overflow-x-auto no-scrollbar">
+    <div className="space-y-8">
+      <div className="pt-4">
+        <div className="flex bg-white p-1.5 rounded-[24px] border border-slate-200 shadow-sm w-full lg:w-fit overflow-x-auto no-scrollbar">
         <div className="flex gap-1 min-w-max">
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as SettingsTab)}
               className={`flex items-center gap-3 px-6 py-3 rounded-[18px] text-sm font-bold transition-all whitespace-nowrap ${
-                activeTab === tab.id 
-                ? `${tab.bg} ${tab.color} shadow-sm` 
-                : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50/50'
+                activeTab === tab.id
+                  ? `${tab.bg} ${tab.color} shadow-sm`
+                  : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50/50'
               }`}
             >
               <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? tab.color : 'text-slate-300'}`} />
@@ -262,8 +255,16 @@ const SettingsView: React.FC<SettingsViewProps> = ({
           ))}
         </div>
       </div>
+      </div>
 
-      <div className="animate-in slide-in-from-bottom-4 duration-500 min-h-[600px]">
+      {activeTabMeta && (
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-slate-900">{(activeTabMeta as typeof tabs[0]).title}</h1>
+          <p className="text-slate-500 mt-1 italic text-sm">{(activeTabMeta as typeof tabs[0]).sub}</p>
+        </div>
+      )}
+
+      <div className="min-h-[600px]">
         {activeTab === 'categories' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div className="lg:col-span-4 space-y-6">
@@ -310,13 +311,33 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                       </div>
                       <div className="p-8 space-y-12">
                         <div className="space-y-6">
-                          <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><LayoutGrid className="w-4 h-4" /> 1. 模块权限与特性开关</h3>
+                          <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                            <LayoutGrid className="w-4 h-4" /> 1. 分类基础信息
+                          </h3>
+                          <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-100">
+                            <div className="space-y-1 max-w-sm">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">分类名称</label>
+                              <input
+                                type="text"
+                                value={cat.name}
+                                onChange={e => updateCategoryConfig(cat.id, { name: e.target.value })}
+                                className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-6">
+                          <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                            <LayoutGrid className="w-4 h-4" /> 2. 模块权限与特性开关
+                          </h3>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {[
                               { label: '启用工序设置', key: 'hasProcess', desc: '开启后支持配置生产工序路线。', icon: Info },
                               { label: '启用销售价格', key: 'hasSalesPrice', desc: '是否在该类产品中录入销售标价。', icon: DollarSign },
                               { label: '启用采购价格', key: 'hasPurchasePrice', desc: '启用后同时开启供应商管理功能。', icon: ShoppingCart },
                               { label: '启用颜色尺码', key: 'hasColorSize', desc: '开启后支持颜色、尺码库选择。', icon: Maximize },
+                              { label: '启用批次管理', key: 'hasBatchManagement', desc: '开启后该类产品在采购、出入库和生产入库中按批次记录库存。', icon: Tag },
                             ].map(toggle => (
                               <div key={toggle.key} className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
                                 <div className="flex items-center justify-between mb-2">
@@ -337,7 +358,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         <div className="space-y-6 pt-6 border-t border-slate-100">
                            <div className="flex items-center justify-between">
                               <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                <ListPlus className="w-4 h-4" /> 2. 分类专属扩展字段
+                                <ListPlus className="w-4 h-4" /> 3. 分类专属扩展字段
                               </h3>
                               <button onClick={() => addCustomField(cat.id)} className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black hover:bg-black transition-all">
                                 <PlusSquare className="w-3.5 h-3.5" /> 新增扩展项
@@ -348,11 +369,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                 <div key={field.id} className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 flex flex-col md:flex-row md:items-center gap-4 group hover:bg-white hover:border-indigo-200 transition-all">
                                   <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
                                     <input type="text" placeholder="属性名称" value={field.label} onChange={e => updateCustomField(cat.id, field.id, { label: e.target.value })} className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
-                                    <select value={field.type} onChange={e => updateCustomField(cat.id, field.id, { type: e.target.value as FieldType })} className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer">
-                                      <option value="text">文本输入</option><option value="number">数字录入</option><option value="select">下拉选择</option><option value="boolean">布尔开关</option>
+                                    <select value={field.type} onChange={e => { const v = e.target.value as FieldType; updateCustomField(cat.id, field.id, v === 'file' ? { type: v, showInForm: false } : { type: v }); }} className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer">
+                                      <option value="text">文本输入</option><option value="number">数字录入</option><option value="select">下拉选择</option><option value="file">文件上传</option>
                                     </select>
                                     <div className="flex items-center gap-4 px-2">
                                       <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={field.required} onChange={e => updateCustomField(cat.id, field.id, { required: e.target.checked })} className="w-4 h-4 rounded text-indigo-600" /><span className="text-[10px] font-black text-slate-400 uppercase">必填</span></label>
+                                      {field.type !== 'file' && (
+                                        <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={field.showInForm !== false} onChange={e => updateCustomField(cat.id, field.id, { showInForm: e.target.checked })} className="w-4 h-4 rounded text-indigo-600" /><span className="text-[10px] font-black text-slate-400 uppercase">生产/进销存列表中显示</span></label>
+                                      )}
                                     </div>
                                   </div>
                                   <button onClick={() => removeCustomField(cat.id, field.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-all"><Trash2 className="w-4 h-4" /></button>
@@ -454,6 +478,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                       </select>
                                       <div className="flex items-center gap-4 px-2">
                                         <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={field.required} onChange={e => updatePCustomField(cat.id, field.id, { required: e.target.checked })} className="w-4 h-4 rounded text-indigo-600 border-slate-300" /><span className="text-[10px] font-black text-slate-400 uppercase">必填</span></label>
+                                        <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={field.showInForm !== false} onChange={e => updatePCustomField(cat.id, field.id, { showInForm: e.target.checked })} className="w-4 h-4 rounded text-indigo-600 border-slate-300" /><span className="text-[10px] font-black text-slate-400 uppercase">表单中显示</span></label>
                                       </div>
                                     </div>
                                     <button onClick={() => removePCustomField(cat.id, field.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-all"><Trash2 className="w-4 h-4" /></button>
@@ -517,42 +542,77 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                     {globalNodes.filter(n => n.id === editingNodeId).map(node => (
                        <div key={node.id}>
                           <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                            <h2 className="font-black text-slate-800 text-lg">定制工序：{node.name}</h2>
+                            <h2 className="font-black text-slate-800 text-lg">编辑工序：{node.name}</h2>
                             <button onClick={() => removeNode(node.id)} className="text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition-all"><Trash2 className="w-5 h-5" /></button>
                           </div>
                           <div className="p-8 space-y-10">
                              <div className="space-y-6">
-                                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Settings className="w-4 h-4" /> 工序基础控制</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                  <Settings className="w-4 h-4" /> 1. 工序基础信息
+                                </h3>
+                                <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-100 max-w-md">
                                    <div className="space-y-1">
                                       <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest">工序名称</label>
-                                      <input type="text" value={node.name} onChange={e => updateNodeConfig(node.id, { name: e.target.value })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
+                                      <input
+                                        type="text"
+                                        value={node.name}
+                                        onChange={e => updateNodeConfig(node.id, { name: e.target.value })}
+                                        className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                      />
                                    </div>
-                                   <div className="flex flex-col gap-3 pt-7">
-                                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between">
+                                </div>
+                             </div>
+
+                             <div className="space-y-6">
+                                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                  <Settings className="w-4 h-4" /> 2. 工序功能开关
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                   <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                                      <div className="flex items-center justify-between mb-2">
                                          <div className="flex items-center gap-2">
                                            <Boxes className="w-4 h-4 text-indigo-400" />
-                                           <div className="flex flex-col">
-                                             <span className="text-sm font-bold text-slate-800">启用 BOM 依赖</span>
-                                             <p className="text-[9px] text-slate-400 font-medium">开启后在此工序报工将扣减关联物料</p>
-                                           </div>
+                                           <span className="text-sm font-bold text-slate-800">启用 BOM 依赖</span>
                                          </div>
                                          <button onClick={() => updateNodeConfig(node.id, { hasBOM: !node.hasBOM })}>
                                            {node.hasBOM ? <ToggleRight className="w-8 h-8 text-indigo-600" /> : <ToggleLeft className="w-8 h-8 text-slate-300" />}
                                          </button>
                                       </div>
-                                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between">
+                                      <p className="text-[10px] text-slate-400 font-medium">开启后在此工序报工将扣减关联物料。</p>
+                                   </div>
+                                   <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                                      <div className="flex items-center justify-between mb-2">
                                          <div className="flex items-center gap-2">
                                            <Users className="w-4 h-4 text-indigo-400" />
-                                           <div className="flex flex-col">
-                                             <span className="text-sm font-bold text-slate-800">启用派工</span>
-                                             <p className="text-[9px] text-slate-400 font-medium">开启后计划单查看页会显示该工序的派工（负责人/设备）选项</p>
-                                           </div>
+                                           <span className="text-sm font-bold text-slate-800">工人派工</span>
                                          </div>
-                                         <button onClick={() => updateNodeConfig(node.id, { enableAssignment: node.enableAssignment === false ? true : false })}>
-                                           {(node.enableAssignment !== false) ? <ToggleRight className="w-8 h-8 text-indigo-600" /> : <ToggleLeft className="w-8 h-8 text-slate-300" />}
+                                         <button
+                                           onClick={() => {
+                                             const next = !(node.enableAssignment !== false && node.enableWorkerAssignment !== false);
+                                             updateNodeConfig(node.id, next ? { enableAssignment: true, enableWorkerAssignment: true } : { enableWorkerAssignment: false });
+                                           }}
+                                         >
+                                           {(node.enableAssignment !== false && node.enableWorkerAssignment !== false) ? <ToggleRight className="w-8 h-8 text-indigo-600" /> : <ToggleLeft className="w-8 h-8 text-slate-300" />}
                                          </button>
                                       </div>
+                                      <p className="text-[10px] text-slate-400 font-medium">开启后计划单详情中显示该工序的「分派负责人」选项。</p>
+                                   </div>
+                                   <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                                      <div className="flex items-center justify-between mb-2">
+                                         <div className="flex items-center gap-2">
+                                           <Wrench className="w-4 h-4 text-indigo-400" />
+                                           <span className="text-sm font-bold text-slate-800">设备派工</span>
+                                         </div>
+                                         <button
+                                           onClick={() => {
+                                             const next = !(node.enableAssignment !== false && node.enableEquipmentAssignment !== false);
+                                             updateNodeConfig(node.id, next ? { enableAssignment: true, enableEquipmentAssignment: true } : { enableEquipmentAssignment: false });
+                                           }}
+                                         >
+                                           {(node.enableAssignment !== false && node.enableEquipmentAssignment !== false) ? <ToggleRight className="w-8 h-8 text-indigo-600" /> : <ToggleLeft className="w-8 h-8 text-slate-300" />}
+                                         </button>
+                                      </div>
+                                      <p className="text-[10px] text-slate-400 font-medium">开启后计划单详情中显示该工序的「分派设备」选项。</p>
                                    </div>
                                 </div>
                              </div>

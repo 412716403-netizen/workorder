@@ -30,6 +30,8 @@ import {
   Warehouse, 
   PrintSettings, 
   PlanFormSettings,
+  PurchaseOrderFormSettings,
+  PurchaseBillFormSettings,
   PlanStatus,
   MilestoneStatus,
   OrderStatus,
@@ -60,7 +62,29 @@ const DEFAULT_PLAN_FORM_SETTINGS: PlanFormSettings = {
     { id: 'planNumber', label: '计划单号', showInList: true, showInCreate: false, showInDetail: true },
     { id: 'customer', label: '客户', showInList: true, showInCreate: true, showInDetail: true },
     { id: 'dueDate', label: '交期', showInList: true, showInCreate: true, showInDetail: true },
-    { id: 'createdAt', label: '添加日期', showInList: true, showInCreate: false, showInDetail: true },
+    { id: 'createdAt', label: '添加日期', showInList: true, showInCreate: true, showInDetail: true },
+  ],
+  customFields: [],
+};
+
+const DEFAULT_PURCHASE_ORDER_FORM_SETTINGS: PurchaseOrderFormSettings = {
+  standardFields: [
+    { id: 'docNumber', label: '单据编号', showInList: true, showInCreate: true, showInDetail: true },
+    { id: 'partner', label: '供应商', showInList: true, showInCreate: true, showInDetail: true },
+    { id: 'dueDate', label: '期望到货日期', showInList: true, showInCreate: true, showInDetail: true },
+    { id: 'createdAt', label: '添加日期', showInList: true, showInCreate: true, showInDetail: true },
+    { id: 'note', label: '单据备注', showInList: false, showInCreate: true, showInDetail: true },
+  ],
+  customFields: [],
+};
+
+const DEFAULT_PURCHASE_BILL_FORM_SETTINGS: PurchaseBillFormSettings = {
+  standardFields: [
+    { id: 'docNumber', label: '单据编号', showInList: true, showInCreate: true, showInDetail: true },
+    { id: 'partner', label: '供应商', showInList: true, showInCreate: true, showInDetail: true },
+    { id: 'warehouse', label: '入库仓库', showInList: true, showInCreate: true, showInDetail: true },
+    { id: 'createdAt', label: '添加日期', showInList: true, showInCreate: true, showInDetail: true },
+    { id: 'note', label: '单据备注', showInList: true, showInCreate: true, showInDetail: true },
   ],
   customFields: [],
 };
@@ -93,8 +117,22 @@ export default function App() {
   const [warehouses, setWarehouses] = usePersistedState('warehouses', MOCK_WAREHOUSES);
   const [printSettings, setPrintSettings] = usePersistedState('printSettings', DEFAULT_PRINT_SETTINGS);
   const [planFormSettings, setPlanFormSettings] = usePersistedState<PlanFormSettings>('planFormSettings', DEFAULT_PLAN_FORM_SETTINGS);
+  const [purchaseOrderFormSettings, setPurchaseOrderFormSettings] = usePersistedState<PurchaseOrderFormSettings>('purchaseOrderFormSettings', DEFAULT_PURCHASE_ORDER_FORM_SETTINGS);
+  const [purchaseBillFormSettings, setPurchaseBillFormSettings] = usePersistedState<PurchaseBillFormSettings>('purchaseBillFormSettings', DEFAULT_PURCHASE_BILL_FORM_SETTINGS);
 
   const handleAddPSIRecord = (record: any) => setPsiRecords(prev => [record, ...prev]);
+  const handleReplacePSIRecords = (type: string, docNumber: string, newRecords: any[]) => {
+    setPsiRecords(prev => {
+      const firstIdx = prev.findIndex(r => r.type === type && r.docNumber === docNumber);
+      const filtered = prev.filter(r => !(r.type === type && r.docNumber === docNumber));
+      if (firstIdx < 0) return [...filtered, ...newRecords];
+      // 在原位置插入新记录，保持单据顺序不变
+      return [...filtered.slice(0, firstIdx), ...newRecords, ...filtered.slice(firstIdx)];
+    });
+  };
+  const handleDeletePSIRecords = (type: string, docNumber: string) => {
+    setPsiRecords(prev => prev.filter(r => !(r.type === type && r.docNumber === docNumber)));
+  };
 
   return (
     <BrowserRouter>
@@ -133,8 +171,8 @@ export default function App() {
           </nav>
         </div>
 
-        {/* Main Content Area */}
-        <div className="flex-1 overflow-auto p-12 bg-slate-50/30">
+        {/* Main Content Area - pt-4 减小顶部空白，min-h-0 让 overflow-auto 生效 */}
+        <div className="flex-1 min-h-0 overflow-auto pt-4 px-12 pb-12 bg-slate-50/30">
           <Routes>
             <Route path="/" element={<DashboardView orders={orders} financeRecords={financeRecords} psiRecords={psiRecords} products={products} />} />
             <Route path="/production" element={
@@ -147,6 +185,7 @@ export default function App() {
                 workers={workers}
                 equipment={equipment}
                 prodRecords={prodRecords}
+                psiRecords={psiRecords}
                 globalNodes={globalNodes}
                 boms={boms}
                 partners={partners}
@@ -161,6 +200,7 @@ export default function App() {
                 }}
                 onUpdatePlan={(id, updates) => setPlans(plans.map(p => p.id === id ? { ...p, ...updates } : p))}
                 onSplitPlan={(planId, newPlans) => setPlans(newPlans.concat(plans.filter(p => p.id !== planId)))}
+                onDeletePlan={(id) => setPlans(plans.filter(p => p.id !== id))}
                 onConvertToOrder={(id) => {
                   const plan = plans.find(p => p.id === id);
                   if (plan) {
@@ -240,7 +280,14 @@ export default function App() {
                 categories={categories}
                 partners={partners}
                 partnerCategories={partnerCategories}
+                dictionaries={dictionaries}
+                purchaseOrderFormSettings={purchaseOrderFormSettings}
+                onUpdatePurchaseOrderFormSettings={setPurchaseOrderFormSettings}
+                purchaseBillFormSettings={purchaseBillFormSettings}
+                onUpdatePurchaseBillFormSettings={setPurchaseBillFormSettings}
                 onAddRecord={handleAddPSIRecord}
+                onReplaceRecords={handleReplacePSIRecords}
+                onDeleteRecords={handleDeletePSIRecords}
               />
             } />
             <Route path="/finance" element={<FinanceView orders={orders} records={financeRecords} onAddRecord={(r) => setFinanceRecords([r, ...financeRecords])} />} />
@@ -259,7 +306,11 @@ export default function App() {
                   const exists = products.some(px => px.id === p.id);
                   setProducts(exists ? products.map(px => px.id === p.id ? p : px) : [p, ...products]);
                 }}
-                onUpdateBOM={(b) => setBoms(boms.map(bx => bx.id === b.id ? b : bx))}
+                onUpdateBOM={(b) => setBoms(prev => {
+                  const idx = prev.findIndex(bx => bx.id === b.id);
+                  if (idx >= 0) return prev.map(bx => bx.id === b.id ? b : bx);
+                  return [...prev, b];
+                })}
                 onUpdateDictionaries={setDictionaries}
                 onUpdateWorkers={setWorkers}
                 onUpdateEquipment={setEquipment}
