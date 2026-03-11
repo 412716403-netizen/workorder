@@ -32,7 +32,7 @@
 |------|--------|--------------|
 | **系统设置** | 产品分类管理 | categories |
 | | 合作单位分类 | partnerCategories |
-| | 工序节点库 | globalNodes |
+| | 工序节点库 | globalNodes（含 reportTemplate、enablePieceRate） |
 | | 仓库分类管理 | warehouses |
 | **基本信息** | 产品与 BOM | products, boms |
 | | 合作单位 | partners |
@@ -93,7 +93,7 @@ interface PlanOrder {
   assignments?: Record<string, NodeAssignment>;
   customData?: Record<string, any>;
   createdAt?: string;
-  nodePricingModes?: Record<string, ProcessPricingMode>;
+  nodePricingModes?: Record<string, ProcessPricingMode>;  // 已弃用，仅保留计件（元/件）
 }
 ```
 
@@ -119,7 +119,7 @@ interface BOM {
 
 ## 6. 产品 (Product)
 
-详见 `types.ts`。核心：`categoryId`、`variants`、`nodeRates`、`nodePricingModes`、`categoryCustomData`。
+详见 `types.ts`。核心：`categoryId`、`variants`、`nodeRates`（仅对工序节点开启计件工价的工序）、`categoryCustomData`。工价单位为元/件，仅当工序 `enablePieceRate` 为 true 时在产品与 BOM、计划详情中显示。
 
 ---
 
@@ -129,7 +129,10 @@ interface BOM {
 interface ProductionOrder {
   id: string;
   orderNumber: string;
-  planOrderId?: string;
+  planOrderId?: string;   // 来源计划 id
+  parentOrderId?: string; // 父工单 id，子工单使用
+  bomNodeId?: string;     // 来源 BOM 工序节点
+  sourcePlanId?: string;
   productId: string;
   productName: string;
   sku: string;
@@ -143,12 +146,52 @@ interface ProductionOrder {
 }
 ```
 
+**关联**：`parentOrderId` 建立父子工单关系；`planOrderId` 用于补充下达时查找已有父工单。
+
 ---
 
-## 8. 待补充
+## 8. 生产操作记录 (ProductionOpRecord)
 
-- [ ] 生产操作记录 (ProductionOpRecord) 详细结构
-- [ ] 其他新增实体
+```ts
+interface ProductionOpRecord {
+  id: string;
+  type: ProdOpType;  // STOCK_IN | STOCK_OUT | OUTSOURCE | REWORK | SCRAP
+  orderId: string;   // 关联工单，删除工单前需先删除关联记录
+  productId: string;
+  variantId?: string;
+  quantity: number;
+  reason?: string;
+  partner?: string;
+  operator: string;
+  timestamp: string;
+  status?: string;
+  nodeId?: string;       // 外协/返工：工序；返工时为返工目标工序；SCRAP 为报损所在工序
+  sourceNodeId?: string; // 返工专用：不良品来源工序（报工所在工序），用于从待处理不良中扣减
+  reworkNodeIds?: string[]; // 返工专用：返工目标工序 id 列表（多选时）
+}
+```
+
+**说明**：领料出库、外协、返工、报损、生产入库通过 `orderId` 关联工单；`orderId` 为可选时表示关联产品模式，详见 [05-production-link-mode.md](./05-production-link-mode.md)。**报损 (SCRAP)**：记录不良品报损数量，工单详情各工序报工汇总中展示「报损」列。**返工 (REWORK)**：`sourceNodeId` 为不良来源工序，`nodeId`/`reworkNodeIds` 为返工目标工序（可多选）。
+
+---
+
+## 9. 产品工序进度 (ProductMilestoneProgress)
+
+关联产品模式下使用，用于存储产品 × 工序维度的报工进度。
+
+```ts
+interface ProductMilestoneProgress {
+  id: string;
+  productId: string;
+  variantId?: string;  // 多规格产品按规格存储
+  milestoneTemplateId: string;
+  completedQuantity: number;
+  reports?: MilestoneReport[];
+  updatedAt?: string;
+}
+```
+
+详见 [05-production-link-mode.md](./05-production-link-mode.md)。
 
 ---
 

@@ -10,6 +10,7 @@
 | [02-data-structures.md](./02-data-structures.md) | **数据结构文档**：实体字段、关联关系、存储键 |
 | [03-data-flow-calculations.md](./03-data-flow-calculations.md) | **数据流与计算点清单**：各模块数据来源、计算逻辑所在位置 |
 | [04-migration-checklist.md](./04-migration-checklist.md) | **迁移清单**：接入数据库/后端时的 API 清单、前后端职责划分 |
+| [05-production-link-mode.md](./05-production-link-mode.md) | **生产关联模式**：关联工单/关联产品两种模式的需求规格、数据模型与迁移说明 |
 
 ## 当前架构概述
 

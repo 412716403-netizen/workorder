@@ -21,13 +21,14 @@ import {
   CreditCard,
   Warehouse
 } from 'lucide-react';
-import { ProductionOrder, FinanceRecord, MilestoneStatus, Product } from '../types';
+import { ProductionOrder, FinanceRecord, MilestoneStatus, Product, ProductionLinkMode } from '../types';
 
 interface DashboardViewProps {
   orders: ProductionOrder[];
   financeRecords: FinanceRecord[];
   psiRecords: any[];
   products: Product[];
+  productionLinkMode?: ProductionLinkMode;
 }
 
 const StatCard = ({ title, value, icon: Icon, trend, color, subValue }: any) => (
@@ -51,7 +52,7 @@ const StatCard = ({ title, value, icon: Icon, trend, color, subValue }: any) => 
   </div>
 );
 
-const DashboardView: React.FC<DashboardViewProps> = ({ orders, financeRecords, psiRecords, products }) => {
+const DashboardView: React.FC<DashboardViewProps> = ({ orders, financeRecords, psiRecords, products, productionLinkMode = 'order' }) => {
   // 1. 生产统计
   const activeOrders = orders.filter(o => o.status !== 'SHIPPED');
   const totalMilestones = orders.reduce((acc, curr) => acc + (curr.milestones?.length || 0), 0);

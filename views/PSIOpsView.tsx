@@ -642,12 +642,19 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
     const itemsToBill = availableItemsFromSelectedPOs.filter(item => selectedPOItemIds.includes(item.id));
     const todayStr = new Date().toLocaleString();
     const firstItem = itemsToBill[0];
-    const pbDocNumber = form.docNumber?.trim() || generatePBDocNumber(firstItem?.partnerId || '', firstItem?.partner || '');
+    let pbDocNumber = form.docNumber?.trim() || generatePBDocNumber(firstItem?.partnerId || '', firstItem?.partner || '');
+    // 新建时若单据号已存在，循环生成直至唯一，避免 onAddRecord 追加到已有采购单导致明细混在一起
+    const exists = (n: string) => records.some((r: any) => r.type === 'PURCHASE_BILL' && r.docNumber === n);
+    let attempts = 0;
+    while (exists(pbDocNumber) && attempts < 50) {
+      pbDocNumber = generatePBDocNumber(firstItem?.partnerId || '', firstItem?.partner || '');
+      attempts++;
+    }
     const baseId = Date.now();
 
     let addedCount = 0;
     itemsToBill.forEach((item, idx) => {
-      const qty = Math.max(0, Math.min(item.remainingQty, selectedPOItemQuantities[item.id] ?? item.remainingQty));
+      const qty = Math.max(0, selectedPOItemQuantities[item.id] ?? item.remainingQty ?? 0);
       if (qty <= 0) return;
       addedCount++;
       const batchVal = selectedPOItemBatches[item.id]?.trim();
@@ -769,9 +776,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
               onClick={() => { resetForm(); setEditingPODocNumber(null); setShowModal(type); }}
               className={`flex items-center gap-2 px-6 py-2.5 text-white rounded-xl text-sm font-bold transition-all shadow-lg ${current.color} shadow-indigo-100`}
             >
-              <Plus className="w-4 h-4" /> 登记新{current.label}
-            </button>
-          )}
+            <Plus className="w-4 h-4" /> 登记新{current.label}
+          </button>
+        )}
         </div>
       </div>
 
@@ -958,10 +965,19 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                         <div className="w-40 space-y-1 shrink-0">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">入库进度</label>
                           <div className="flex flex-col gap-1">
-                            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                              <div className={`h-full rounded-full ${progress >= 1 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${progress * 100}%` }} />
+                            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden flex">
+                              {received > lineQty ? (
+                                <>
+                                  <div className="h-full bg-emerald-500" style={{ width: `${(lineQty / received) * 100}%` }} />
+                                  <div className="h-full bg-rose-500" style={{ width: `${((received - lineQty) / received) * 100}%` }} />
+                                </>
+                              ) : (
+                                <div className={`h-full rounded-full ${progress >= 1 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${Math.min(100, progress * 100)}%` }} />
+                              )}
                             </div>
-                            <span className="text-[9px] font-bold text-slate-500">已收 {received} / {lineQty}</span>
+                            <span className="text-[9px] font-bold text-slate-500">
+                              {received > lineQty ? `已收 ${received} / ${lineQty}（已超收）` : `已收 ${received} / ${lineQty}`}
+                            </span>
                           </div>
                         </div>
                       )}
@@ -1060,7 +1076,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                 <button onClick={() => setCreationMethod('MANUAL')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${creationMethod === 'MANUAL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
                   <Plus className="w-3 h-3" /> 直接手动创建
                 </button>
-                <button onClick={() => setCreationMethod('FROM_ORDER')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${creationMethod === 'FROM_ORDER' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                <button onClick={() => { setCreationMethod('FROM_ORDER'); setPurchaseBillItems([]); }} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${creationMethod === 'FROM_ORDER' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
                   <ClipboardList className="w-3 h-3" /> 引用采购订单生成
                 </button>
               </div>
@@ -1418,11 +1434,11 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                 <td className="px-4 py-3 text-right"><span className="text-sm font-black text-indigo-600">{item.remainingQty}</span></td>
                                 <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                                   {isChecked ? (
-                                    <input type="number" min={0} max={item.remainingQty} value={qty} onChange={e => {
+                                    <input type="number" min={0} value={qty} onChange={e => {
                                       const v = parseFloat(e.target.value);
-                                      const clamped = Number.isFinite(v) ? Math.max(0, Math.min(item.remainingQty, v)) : 0;
-                                      setSelectedPOItemQuantities(prev => ({ ...prev, [item.id]: clamped }));
-                                    }} className="w-20 text-right py-1.5 px-2 rounded-lg border border-slate-200 text-sm font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                                      const val = Number.isFinite(v) ? Math.max(0, v) : 0;
+                                      setSelectedPOItemQuantities(prev => ({ ...prev, [item.id]: val }));
+                                    }} className="w-20 text-right py-1.5 px-2 rounded-lg border border-slate-200 text-sm font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none" title="允许超过采购订单数量（如超收）" />
                                   ) : <span className="text-slate-300">—</span>}
                                 </td>
                                 <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
@@ -1740,31 +1756,31 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                               : variantParts[0]
                                 ? variantParts[0]
                                 : '';
-                            return (
+                          return (
                               <tr key={gid} className="hover:bg-slate-50/30 transition-colors">
                                 <td className="py-4 pr-6">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-300"><Package className="w-4 h-4" /></div>
-                                    <div>
-                                      <p className="text-sm font-bold text-slate-700">{product?.name || '未知产品'}</p>
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-300"><Package className="w-4 h-4" /></div>
+                                  <div>
+                                    <p className="text-sm font-bold text-slate-700">{product?.name || '未知产品'}</p>
                                       <p className="text-[9px] text-slate-300 font-bold uppercase tracking-tight">
                                         {product?.sku}
                                         {variantLabel && ` · ${variantLabel}`}
                                       </p>
-                                    </div>
                                   </div>
-                                </td>
-                                {!current.hideWarehouse && (
+                                </div>
+                              </td>
+                              {!current.hideWarehouse && (
                                   <td className="py-4 px-3 text-center">
-                                    <span className="px-2 py-0.5 rounded-md bg-slate-50 text-slate-500 text-[10px] font-black uppercase border border-slate-100">
-                                      {warehouse?.name || '默认库'}
-                                    </span>
-                                  </td>
-                                )}
+                                  <span className="px-2 py-0.5 rounded-md bg-slate-50 text-slate-500 text-[10px] font-black uppercase border border-slate-100">
+                                    {warehouse?.name || '默认库'}
+                                  </span>
+                                </td>
+                              )}
                                 {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && (
                                   <td className="py-4 px-3 text-right">
                                     <span className="text-sm font-bold text-slate-600">¥{avgPrice.toFixed(2)}</span>
-                                  </td>
+                              </td>
                                 )}
                                 {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && (
                                   <td className="py-4 px-3 text-right">
@@ -1772,24 +1788,36 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                   </td>
                                 )}
                                 <td className="py-4 px-3 text-right">
-                                  <span className={`text-sm font-black ${type.includes('BILL') ? 'text-indigo-600' : 'text-slate-700'}`}>{orderQty.toLocaleString()} {first.productId ? getUnitName(first.productId) : 'PCS'}</span>
+                                  <span className={`text-sm font-black ${type.includes('BILL') ? 'text-indigo-600' : 'text-slate-700'}`}>
+                                    {type === 'PURCHASE_ORDER' && received > orderQty
+                                      ? `${received.toLocaleString()} / ${orderQty.toLocaleString()}`
+                                      : orderQty.toLocaleString()}{' '}
+                                    {first.productId ? getUnitName(first.productId) : 'PCS'}
+                                  </span>
                                 </td>
                                 {type === 'PURCHASE_ORDER' && (
                                   <td className="py-4 px-3">
                                     <div className="flex flex-col gap-2">
-                                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-full">
-                                        <div 
-                                          className={`h-full rounded-full transition-all ${progress >= 1 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
-                                          style={{ width: `${progress * 100}%` }}
-                                        />
+                                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-full flex">
+                                        {received > orderQty ? (
+                                          <>
+                                            <div className="h-full bg-emerald-500" style={{ width: `${(orderQty / received) * 100}%` }} />
+                                            <div className="h-full bg-rose-500" style={{ width: `${((received - orderQty) / received) * 100}%` }} />
+                                          </>
+                                        ) : (
+                                          <div 
+                                            className={`h-full rounded-full transition-all ${progress >= 1 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                                            style={{ width: `${Math.min(100, progress * 100)}%` }}
+                                          />
+                                        )}
                                       </div>
                                       <span className="text-[10px] font-bold text-slate-400">
-                                        {progress >= 1 ? '已完成' : `${received} / ${orderQty}`}
+                                        {received > orderQty ? `${received} / ${orderQty}（已超收）` : progress >= 1 ? '已完成' : `${received} / ${orderQty}`}
                                       </span>
                                     </div>
                                   </td>
                                 )}
-                              </tr>
+                            </tr>
                             );
                           });
                         })()}
@@ -1820,7 +1848,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                    <button onClick={() => setCreationMethod('MANUAL')} className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold transition-all ${creationMethod === 'MANUAL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
                      <Plus className="w-3 h-3" /> 直接手动创建
                    </button>
-                   <button onClick={() => setCreationMethod('FROM_ORDER')} className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold transition-all ${creationMethod === 'FROM_ORDER' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                   <button onClick={() => { setCreationMethod('FROM_ORDER'); setPurchaseBillItems([]); }} className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold transition-all ${creationMethod === 'FROM_ORDER' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
                      <ClipboardList className="w-3 h-3" /> 引用采购订单生成
                    </button>
                  </div>
@@ -2108,14 +2136,14 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                                <input
                                                  type="number"
                                                  min={0}
-                                                 max={item.remainingQty}
                                                  value={qty}
                                                  onChange={e => {
                                                    const v = parseFloat(e.target.value);
-                                                   const clamped = Number.isFinite(v) ? Math.max(0, Math.min(item.remainingQty, v)) : 0;
-                                                   setSelectedPOItemQuantities(prev => ({ ...prev, [item.id]: clamped }));
+                                                   const val = Number.isFinite(v) ? Math.max(0, v) : 0;
+                                                   setSelectedPOItemQuantities(prev => ({ ...prev, [item.id]: val }));
                                                  }}
                                                  className="w-20 text-right py-1.5 px-2 rounded-lg border border-slate-200 text-sm font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                                 title="允许超过采购订单数量（如超收）"
                                                />
                                              ) : (
                                                <span className="text-slate-300">—</span>

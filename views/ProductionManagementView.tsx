@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { 
   CalendarRange, 
   ClipboardList, 
@@ -9,13 +10,16 @@ import {
 } from 'lucide-react';
 import { 
   PlanOrder, ProductionOrder, Product, BOM,
-  ProductionOpRecord, GlobalNodeTemplate, ProdOpType, ProductCategory, AppDictionaries, Worker, Equipment, PrintSettings, PlanFormSettings, Partner, PartnerCategory 
+  ProductionOpRecord, GlobalNodeTemplate, ProdOpType, ProductCategory, AppDictionaries, Worker, Equipment, PrintSettings, PlanFormSettings, OrderFormSettings, Partner, PartnerCategory, ProductionLinkMode, ProductMilestoneProgress, ProcessSequenceMode, Warehouse
 } from '../types';
 import PlanOrderListView from './PlanOrderListView';
 import OrderListView from './OrderListView';
 import ProductionMgmtOpsView from './ProductionMgmtOpsView';
 
 interface ProductionManagementViewProps {
+  productionLinkMode?: ProductionLinkMode;
+  processSequenceMode?: ProcessSequenceMode;
+  allowExceedMaxReportQty?: boolean;
   plans: PlanOrder[];
   orders: ProductionOrder[];
   products: Product[];
@@ -25,6 +29,7 @@ interface ProductionManagementViewProps {
   equipment: Equipment[];
   prodRecords: ProductionOpRecord[];
   psiRecords?: any[];
+  warehouses?: Warehouse[];
   globalNodes: GlobalNodeTemplate[];
   boms: BOM[];
   partners: Partner[];
@@ -32,25 +37,48 @@ interface ProductionManagementViewProps {
   printSettings: PrintSettings;
   planFormSettings: PlanFormSettings;
   onUpdatePlanFormSettings: (settings: PlanFormSettings) => void;
+  orderFormSettings: OrderFormSettings;
+  onUpdateOrderFormSettings: (settings: OrderFormSettings) => void;
   onCreatePlan: (plan: PlanOrder) => void;
   onUpdateProduct: (product: Product) => void;
   onUpdatePlan?: (planId: string, updates: Partial<PlanOrder>) => void;
   onSplitPlan: (planId: string, newPlans: PlanOrder[]) => void;
   onConvertToOrder: (planId: string) => void;
   onDeletePlan?: (planId: string) => void;
-  onCreateOrder: (order: ProductionOrder) => void;
   onAddRecord: (record: ProductionOpRecord) => void;
+  onUpdateRecord?: (record: ProductionOpRecord) => void;
+  onDeleteRecord?: (recordId: string) => void;
   onAddPSIRecord?: (record: any) => void;
+  onReportSubmit?: (orderId: string, milestoneId: string, quantity: number, customData: any, variantId?: string) => void;
+  onCreateSubPlan?: (params: { productId: string; quantity: number; planId: string; bomNodeId: string }) => void;
+  onCreateSubPlans?: (params: { planId: string; items: Array<{ productId: string; quantity: number; bomNodeId: string; parentProductId?: string; parentNodeId?: string }> }) => void;
+  onUpdateOrder?: (orderId: string, updates: Partial<ProductionOrder>) => void;
+  onDeleteOrder?: (orderId: string) => void;
+  onUpdateReport?: (params: { orderId: string; milestoneId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string }) => void;
+  onDeleteReport?: (params: { orderId: string; milestoneId: string; reportId: string }) => void;
+  productMilestoneProgresses?: ProductMilestoneProgress[];
+  onReportSubmitProduct?: (productId: string, milestoneTemplateId: string, quantity: number, customData: any, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string) => void;
+  onUpdateReportProduct?: (params: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string }) => void;
+  onDeleteReportProduct?: (params: { progressId: string; reportId: string }) => void;
 }
 
 type MainTab = 'plans' | 'orders' | ProdOpType;
 
 const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
-  plans, orders, products, categories, dictionaries, workers, equipment, prodRecords, psiRecords = [], globalNodes, boms, partners, partnerCategories, printSettings,
-  planFormSettings, onUpdatePlanFormSettings,
-  onCreatePlan, onUpdateProduct, onUpdatePlan, onSplitPlan, onConvertToOrder, onDeletePlan, onCreateOrder, onAddRecord, onAddPSIRecord
+  productionLinkMode = 'order', processSequenceMode = 'free', allowExceedMaxReportQty = true, plans, orders, products, categories, dictionaries, workers, equipment, prodRecords, psiRecords = [], warehouses = [], globalNodes, boms, partners, partnerCategories, printSettings,
+  planFormSettings, onUpdatePlanFormSettings, orderFormSettings, onUpdateOrderFormSettings,
+  onCreatePlan, onUpdateProduct, onUpdatePlan, onSplitPlan, onConvertToOrder, onDeletePlan, onAddRecord, onUpdateRecord, onDeleteRecord, onAddPSIRecord, onReportSubmit, onCreateSubPlan, onCreateSubPlans, onUpdateOrder, onDeleteOrder, onUpdateReport, onDeleteReport,
+  productMilestoneProgresses = [], onReportSubmitProduct, onUpdateReportProduct, onDeleteReportProduct
 }) => {
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<MainTab>('plans');
+
+  useEffect(() => {
+    const tab = (location.state as { tab?: MainTab })?.tab;
+    if (tab && ['plans', 'orders', 'STOCK_OUT', 'OUTSOURCE', 'REWORK', 'STOCK_IN'].includes(tab)) {
+      setActiveTab(tab);
+    }
+  }, [location.state]);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const tabsWrapRef = useRef<HTMLDivElement>(null);
   const [isStuck, setIsStuck] = useState(false);
@@ -99,10 +127,10 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
   const tabs = [
     { id: 'plans', label: '生产计划', icon: CalendarRange, color: 'text-indigo-600', bg: 'bg-indigo-50' },
     { id: 'orders', label: '工单中心', icon: ClipboardList, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-    { id: 'STOCK_OUT', label: '领料出库', icon: ArrowUpFromLine, color: 'text-indigo-600', bg: 'bg-indigo-600' },
-    { id: 'OUTSOURCE', label: '外协管理', icon: Truck, color: 'text-indigo-600', bg: 'bg-indigo-600' },
-    { id: 'REWORK', label: '返工管理', icon: RotateCcw, color: 'text-indigo-600', bg: 'bg-indigo-600' },
-    { id: 'STOCK_IN', label: '生产入库', icon: ArrowDownToLine, color: 'text-indigo-600', bg: 'bg-indigo-600' },
+    { id: 'STOCK_OUT', label: '生产物料', icon: ArrowUpFromLine, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+    { id: 'OUTSOURCE', label: '外协管理', icon: Truck, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+    { id: 'REWORK', label: '返工管理', icon: RotateCcw, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+    { id: 'STOCK_IN', label: '生产入库', icon: ArrowDownToLine, color: 'text-indigo-600', bg: 'bg-indigo-50' },
   ];
 
   return (
@@ -142,6 +170,7 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
       <div className="min-h-[600px]">
         {activeTab === 'plans' && (
           <PlanOrderListView 
+            productionLinkMode={productionLinkMode}
             plans={plans} 
             products={products} 
             categories={categories}
@@ -163,27 +192,63 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
             onConvertToOrder={onConvertToOrder}
             onDeletePlan={onDeletePlan}
             onAddPSIRecord={onAddPSIRecord}
+            onCreateSubPlan={onCreateSubPlan}
+            onCreateSubPlans={onCreateSubPlans}
           />
         )}
 
         {activeTab === 'orders' && (
           <OrderListView 
+            initialDetailOrderId={(location.state as { detailOrderId?: string })?.detailOrderId}
+            productionLinkMode={productionLinkMode}
+            processSequenceMode={processSequenceMode}
+            allowExceedMaxReportQty={allowExceedMaxReportQty}
             orders={orders} 
             products={products} 
+            workers={workers}
+            equipment={equipment}
+            categories={categories}
+            dictionaries={dictionaries}
+            partners={partners}
+            boms={boms}
             globalNodes={globalNodes} 
             printSettings={printSettings}
-            onCreateOrder={onCreateOrder} 
+            orderFormSettings={orderFormSettings}
+            prodRecords={prodRecords}
+            warehouses={warehouses}
+            onUpdateOrderFormSettings={onUpdateOrderFormSettings}
+            onReportSubmit={onReportSubmit}
+            onUpdateOrder={onUpdateOrder}
+            onDeleteOrder={onDeleteOrder}
+            onUpdateReport={onUpdateReport}
+            onDeleteReport={onDeleteReport}
+            onUpdateProduct={onUpdateProduct}
+            onAddRecord={onAddRecord}
+            productMilestoneProgresses={productMilestoneProgresses}
+            onReportSubmitProduct={onReportSubmitProduct}
+            onUpdateReportProduct={onUpdateReportProduct}
+            onDeleteReportProduct={onDeleteReportProduct}
           />
         )}
 
         {['STOCK_OUT', 'OUTSOURCE', 'REWORK', 'STOCK_IN'].includes(activeTab) && (
           <ProductionMgmtOpsView 
+            productionLinkMode={productionLinkMode}
             records={prodRecords} 
             orders={orders} 
             products={products} 
+            warehouses={warehouses}
+            boms={boms}
+            dictionaries={dictionaries}
             printSettings={printSettings}
             onAddRecord={onAddRecord}
+            onUpdateRecord={onUpdateRecord}
+            onDeleteRecord={onDeleteRecord}
             limitType={activeTab as ProdOpType}
+            globalNodes={globalNodes}
+            partners={partners}
+            categories={categories}
+            partnerCategories={partnerCategories}
           />
         )}
       </div>

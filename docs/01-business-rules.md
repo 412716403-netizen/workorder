@@ -97,24 +97,101 @@
 
 ## 3. 计划/BOM (PlanOrder)
 
-### 3.1 物料需求计算 (materialRequirements)
+### 3.1 物料需求计算与计划用量 (materialRequirements)
 
-**逻辑**：多级 BOM 递归展开，每层子项按**父件缺料数**计算。
+**逻辑**：多级 BOM 递归，理论总需量按层级由生产计划/父件计划用量驱动。
 
-- 一级：按计划数量 × BOM 用量
-- 二级及以下：按父件 `shortage` × 子件 `unitPerParent`
-- 有 variant 的：按 `variant.nodeBOMs` 按工序展开
-- 无 variant：按 `single-{productId}` 的 BOM
+- 一级（如全毛黑色）：理论总需量 = 生产计划数量 × BOM 用量；计划用量默认 = 缺料数
+- 二级（如毛条）：理论总需量 = 全毛黑色**计划用量** × BOM 比例；计划用量默认 = 缺料数
+- 三级（如羊毛）：理论总需量 = 毛条**计划用量** × BOM 比例；计划用量默认 = 缺料数
+- **计划用量默认 = 计算缺料数**（理论总需量 − 库存）
 
-**stock**：当前为 mock（`stableMockStock` = 根据 materialId 字符种子取 5–44），后续需接入真实库存。
+**计划用量**：BOM 表格中可编辑列，为生产/采购的确认数量。修改父件计划用量会联动下级理论总需量。
 
-**位置**：`views/PlanOrderListView.tsx` → `materialRequirements` useMemo
+**创建子工单**：对有计划用量且可生产（有工序路线）的物料，批量创建或更新子计划单。**按 BOM 层级建立父子关系**：一级物料挂当前计划下，二级物料挂对应一级子计划下，支持多级（父→子→孙…）。
+
+**stock**：当前为 mock，后续需接入真实库存。
+
+**位置**：`views/PlanOrderListView.tsx` → `materialRequirements`、`plannedQtyByKey`、`handleCreateSubPlansFromPlannedQty`、`onCreateSubPlans`
 
 ### 3.2 采购单智能拆单
 
-仅统计**无下级 BOM** 的物料；有下级 BOM 的只取其下一级子件。按供应商聚合生成采购订单。
+仅统计**无下级 BOM** 的物料；数量取**计划用量**。**全部缺料物料的计划用量填写完成后**才允许生成采购订单。
 
 **位置**：`views/PlanOrderListView.tsx` → `handleGenerateProposedOrders`
+
+### 3.2.1 计划单号与工单号（单据编号生成逻辑）
+
+| 类型 | 格式 | 规则 |
+|------|------|------|
+| 计划单号 | PLN1, PLN2, ... | 按现有 plans 解析 `PLN-?(\d+)`，取 max+1 |
+| 子计划单号 | PLN1-S1, PLN1-S2, ... | 从父计划 BOM 创建：`{父计划号}-S{序号}`；多级为 PLN1-S1-S1 等 |
+| 工单号 | WO1, WO2, ... | 计划转工单时 `PLN`→`WO` 替换 |
+| 子工单号 | WO1-S1, WO1-S2, ... | 由子计划单号转换，多级如 WO1-S1-S1 |
+
+**转工单规则**：点击父计划「下达工单」时，递归转换父计划及所有子孙计划；父→主工单，子计划→子工单（设 parentOrderId），全部标记 CONVERTED。**补充下达**：父计划已转、后补子计划时，在父计划行显示「补充下达子工单」，仅转换未下达的子计划并挂到已有父工单下。
+
+**位置**：`PlanOrderListView.tsx` → `getNextPlanNumber`；`App.tsx` → `onConvertToOrder` 中生成工单号；`onCreateSubPlan`、`onCreateSubPlans`
+
+### 3.3 子工单 (Sub-Plans) 规则
+
+| 规则项 | 说明 |
+|--------|------|
+| **创建** | 在父计划或子计划详情页点击「创建子工单」，按 BOM 层级递归创建；一级物料挂当前计划，二级挂对应一级子计划，支持多级 |
+| **计划单号** | 子计划：`{父计划号}-S{序号}`；孙计划：`{父计划号}-S{序号}-S{序号}`（如 PLN879258-S1-S1） |
+| **列表展示** | 递归展示父-子-孙等多级，按层级缩进；支持四阶、五阶及以上 |
+| **子计划查找** | 用料清单、计划用量、状态等按**当前计划子树**递归查找，不混用父计划 |
+| **采购单关联** | 子工单创建的采购单 note 含当前计划单号；查找时匹配**当前计划及所有祖先**的单号 |
+| **下达** | 递归转换所有子孙计划；父已转时仅转换未转的子计划，挂到已有父工单 |
+| **补充下达** | 父计划已 CONVERTED、存在未转子计划时，父计划行显示「补充下达子工单」；列表卡片、分组、详情页均有入口 |
+
+**补充下达场景**：父计划先下达→工单中心有主工单；后创建子计划（如毛条）→子计划无法单独下达；点击父计划「补充下达子工单」→仅转换子计划并挂到已有主工单下。
+
+**位置**：`PlanOrderListView.tsx` → `getAllDescendantsWithDepth`、`hasUnconvertedSubPlans`、`findSubPlanForMaterial`、`planNumbersForPO`；`App.tsx` → `onConvertToOrder` 补充逻辑
+
+### 3.4 工单表单配置 (OrderFormSettings)
+
+**结构**：与计划单表单配置相同，含 `standardFields`、`customFields`，控制列表/详情页字段显示。
+
+**标准字段**：工单号、客户、交期、开始日期。产品、SKU、总量、状态为固定展示，不在此配置。
+
+**位置**：`App.tsx` 持久化 `orderFormSettings`；`OrderListView.tsx` 表单配置弹窗；`OrderDetailView.tsx` 按配置显示详情字段
+
+### 3.5 工单创建与来源
+
+**规则**：工单仅允许由生产计划「下达工单」生成，工单中心不提供「新建工单」入口。
+
+**位置**：`OrderListView.tsx` 无创建按钮；`App.tsx` → `onConvertToOrder`
+
+### 3.6 工单中心列表展示
+
+| 规则项 | 说明 |
+|--------|------|
+| **父子分组** | 主工单及子工单以分组形式展示，与计划单一致；标题「主工单及子工单（共 N 条）」 |
+| **收缩/展开** | 分组支持收缩/展开，默认收缩；收缩时仅显示主工单 |
+| **层级缩进** | 子工单按 depth 缩进，带「子工单」标签 |
+
+**位置**：`OrderListView.tsx` → `parentToSubOrders`、`getAllDescendantsWithDepth`、`listBlocks`、`expandedParents`、`toggleExpand`
+
+### 3.7 生产计划创建校验
+
+**规则**：创建计划时，若所选产品未配置工序（`milestoneNodeIds` 为空），保存时提示「该产品未配置工序，不允许创建生产计划。请先在产品管理中为该产品添加工序。」并阻止创建。
+
+**位置**：`PlanOrderListView.tsx` → `handleCreate`
+
+### 3.8 工单删除
+
+**规则**：工单详情页提供「删除工单」按钮。以下任一情况**不允许删除**，需用户先处理相关数据：
+
+| 条件 | 提示 |
+|------|------|
+| 有报工记录 | 该工单已有报工记录，不允许删除 |
+| 存在 ProductionOpRecord（领料出库/外协/返工/生产入库） | 该工单存在 N 条关联单据，请先在相关模块删除后再试 |
+| 存在子工单 | 该工单存在 N 条子工单，请先删除子工单后再试 |
+
+通过校验后二次确认，删除后跳转回工单中心。
+
+**位置**：`OrderDetailView.tsx` → `handleDelete`；`App.tsx` → `onDeleteOrder`
 
 ---
 
@@ -145,7 +222,7 @@
 |--------|----------|-------------|------|
 | 产品分类管理 | categories | `cat-${Date.now()}` | 含 customFields，扩展项 id: `cf-${Date.now()}` |
 | 合作单位分类 | partnerCategories | `pcat-${Date.now()}` | 含 customFields，扩展项 id: `pcf-${Date.now()}` |
-| 工序节点库 | globalNodes | `gn-${Date.now()}` | 含 reportTemplate，填报项 id: `f-${Date.now()}` |
+| 工序节点库 | globalNodes | `gn-${Date.now()}` | 含 reportTemplate、enablePieceRate（是否开启计件工价），填报项 id: `f-${Date.now()}` |
 | 仓库分类管理 | warehouses | `wh-${Date.now()}` | code 可自动生成或手动填写 |
 
 **位置**：`views/SettingsView.tsx`
@@ -162,6 +239,8 @@
 
 **关联**：工人/设备可按工序筛选（全部、未分配、指定工序）；合作单位按 partnerCategory 筛选。
 
+**工序工价**：工序节点库中可为每道工序开启「计件工价」；开启后，产品与 BOM 中可配置该工序工价（元/件），生产计划详情中显示工价输入；未开启的工序不显示工价。计价方式已简化为仅计件（元/件），计时已移除。
+
 **位置**：`views/BasicInfoView.tsx`、`views/ProductManagementView.tsx`
 
 ---
@@ -173,4 +252,4 @@
 
 ---
 
-*最后更新：按当前代码梳理。新模块开发完成后请在此补充对应规则。*
+*最后更新：补充工序工价规则（仅计件、enablePieceRate 开关）；工单创建来源、工单中心列表展示、计划创建校验、工单删除规则。*

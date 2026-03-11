@@ -213,6 +213,7 @@ export const MOCK_GLOBAL_NODES: GlobalNodeTemplate[] = [
     id: 'gn-1',
     name: '物料核对',
     hasBOM: true,
+    enablePieceRate: true,
     reportTemplate: [
       { id: 'batch', label: '原材料批号', type: 'text', required: true }
     ]
@@ -221,6 +222,7 @@ export const MOCK_GLOBAL_NODES: GlobalNodeTemplate[] = [
     id: 'gn-2',
     name: '结构加工',
     hasBOM: false,
+    enablePieceRate: true,
     reportTemplate: [
       { id: 'machine', label: '设备编号', type: 'text', required: true }
     ]
@@ -260,11 +262,16 @@ export const MOCK_EQUIPMENT: Equipment[] = [
 
 export const MOCK_ORDERS: ProductionOrder[] = [];
 
-export const STATUS_COLORS = {
+export const STATUS_COLORS: Record<string, string> = {
   [MilestoneStatus.PENDING]: 'bg-gray-100 text-gray-600',
   [MilestoneStatus.IN_PROGRESS]: 'bg-blue-100 text-blue-600',
   [MilestoneStatus.COMPLETED]: 'bg-emerald-100 text-emerald-600',
   [MilestoneStatus.DELAYED]: 'bg-red-100 text-red-600',
+  [OrderStatus.PLANNING]: 'bg-gray-100 text-gray-600',
+  [OrderStatus.PRODUCING]: 'bg-blue-100 text-blue-600',
+  [OrderStatus.QC]: 'bg-amber-100 text-amber-600',
+  [OrderStatus.SHIPPED]: 'bg-emerald-100 text-emerald-600',
+  [OrderStatus.ON_HOLD]: 'bg-red-100 text-red-600',
 };
 
 export const ORDER_STATUS_MAP = {

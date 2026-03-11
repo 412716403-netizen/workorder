@@ -57,7 +57,7 @@
 |-----------|----------|------|------|
 | 产品分类 CRUD | categories | SettingsView.tsx | 含 customFields 增删改 |
 | 合作单位分类 CRUD | partnerCategories | SettingsView.tsx | 含 customFields |
-| 工序节点 CRUD | globalNodes | SettingsView.tsx | 含 reportTemplate |
+| 工序节点 CRUD | globalNodes | SettingsView.tsx | 含 reportTemplate、enablePieceRate |
 | 仓库 CRUD | warehouses | SettingsView.tsx | 无 |
 
 **说明**：以 CRUD 为主，无聚合计算。
@@ -82,7 +82,10 @@
 
 | 计算/功能 | 数据来源 | 位置 | 依赖 |
 |-----------|----------|------|------|
-| （待补充） | orders, prodRecords | OrderDetailView, ProductionMgmtOpsView | - |
+| 工单父子分组 listBlocks | orders | OrderListView.tsx | parentToSubOrders、getAllDescendantsWithDepth |
+| 工单收缩/展开 | expandedParents 状态 | OrderListView.tsx | toggleExpand |
+| 工单删除校验 | order, prodRecords, orders | OrderDetailView.tsx handleDelete | 报工、ProductionOpRecord、子工单 |
+| 生产操作记录列表 | prodRecords, orders | ProductionMgmtOpsView.tsx | orderId 关联 |
 
 ---
 

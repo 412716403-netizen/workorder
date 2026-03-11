@@ -65,7 +65,7 @@
 |---|----------|----------|------|------|
 | 1 | 产品分类 CRUD | categories | 含 customFields | ⬜ |
 | 2 | 合作单位分类 CRUD | partnerCategories | 含 customFields | ⬜ |
-| 3 | 工序节点 CRUD | globalNodes | 含 reportTemplate | ⬜ |
+| 3 | 工序节点 CRUD | globalNodes | 含 reportTemplate、enablePieceRate | ⬜ |
 | 4 | 仓库 CRUD | warehouses | - | ⬜ |
 
 ### 5.2 基本信息入口 (BasicInfoView) — 5 个子模块
@@ -81,7 +81,20 @@
 
 ---
 
-## 6. 前后端职责划分建议
+## 6. 生产管理 (Production)
+
+| # | API/能力 | 对应前端逻辑 | 输入 | 输出 | 状态 |
+|---|----------|--------------|------|------|------|
+| 1 | 工单 CRUD | orders 增删改 | 工单数据 | 保存结果 | ⬜ |
+| 2 | 工单删除（含校验） | OrderDetailView handleDelete | orderId | 校验：报工、prodRecords、子工单 | ⬜ |
+| 3 | 生产操作记录 CRUD | ProductionMgmtOpsView | prodRecords | 领料出库/外协/返工/生产入库 | ⬜ |
+| 4 | 计划转工单 | App onConvertToOrder | planId | 新建 orders，更新 plans.status | ⬜ |
+
+**注意**：工单删除前需校验无报工、无 ProductionOpRecord、无子工单；后端可复用相同规则。
+
+---
+
+## 7. 前后端职责划分建议
 
 | 层级 | 职责 |
 |------|------|

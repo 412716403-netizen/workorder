@@ -21,7 +21,24 @@
         height: 100%;
         overflow: hidden;
       }
+      /* 数字输入框：隐藏上下箭头，鼠标滚轮不改变数值 */
+      input[type="number"]::-webkit-outer-spin-button,
+      input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type="number"] {
+        -moz-appearance: textfield;
+        appearance: textfield;
+      }
     </style>
+    <script>
+      document.addEventListener('wheel', function(e) {
+        if (e.target.matches && e.target.matches('input[type="number"]')) {
+          e.preventDefault();
+        }
+      }, { passive: false });
+    </script>
   <script type="importmap">
 {
   "imports": {

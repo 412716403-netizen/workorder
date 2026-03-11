@@ -47,6 +47,12 @@ export interface AppDictionaries {
 /** 工序计价方式：计件（元/件）或计时（元/时） */
 export type ProcessPricingMode = 'per_piece' | 'per_hour';
 
+/** 生产关联模式：关联工单（order）或关联产品（product） */
+export type ProductionLinkMode = 'order' | 'product';
+
+/** 工序顺序模式：不限制顺序（free）或按顺序生产（sequential） */
+export type ProcessSequenceMode = 'free' | 'sequential';
+
 export interface GlobalNodeTemplate {
   id: string;
   name: string;
@@ -59,6 +65,12 @@ export interface GlobalNodeTemplate {
   enableWorkerAssignment?: boolean;
   /** 是否启用设备派工（计划单详情中显示分派设备），默认 true */
   enableEquipmentAssignment?: boolean;
+  /** 报工时是否选择设备；开启后该工序报工时需选择设备 */
+  enableEquipmentOnReport?: boolean;
+  /** 是否开启计件工价；开启后产品与 BOM 中可配置该工序工价，计划单详情显示工价 */
+  enablePieceRate?: boolean;
+  /** 是否可外协；开启后该工序会在外协管理待发清单中显示，可按工单选择工序发出 */
+  allowOutsource?: boolean;
 }
 
 export interface ProductCategory {
@@ -181,6 +193,10 @@ export interface NodeAssignment {
 export interface PlanOrder {
   id: string;
   planNumber: string;
+  /** 父计划 id（子计划单时） */
+  parentPlanId?: string;
+  /** 来源 BOM 工序节点 id */
+  bomNodeId?: string;
   productId: string;
   items: PlanItem[];
   startDate: string;
@@ -222,14 +238,36 @@ export type PurchaseOrderFormSettings = PlanFormSettings;
 /** 采购单表单配置：结构同计划单 */
 export type PurchaseBillFormSettings = PlanFormSettings;
 
+/** 工单表单配置：结构同计划单，用于工单列表/新增/详情页字段显示控制 */
+export type OrderFormSettings = PlanFormSettings;
+
 export interface MilestoneReport {
   id: string;
   timestamp: string;
   operator: string;
   quantity: number;
+  /** 不良品数量 */
+  defectiveQuantity?: number;
+  /** 报工选择的设备 id */
+  equipmentId?: string;
   variantId?: string;
+  /** 同次报工（如多规格矩阵）的批次 id，用于流水汇总展示 */
+  reportBatchId?: string;
+  /** 报工单号，例如 BG20260302-0001；同一批次共用同一个编号 */
+  reportNo?: string;
   customData: Record<string, any>;
   notes?: string;
+}
+
+/** 关联产品模式下，产品 × 规格 × 工序维度的进度独立存储（报工不写入工单） */
+export interface ProductMilestoneProgress {
+  id: string;
+  productId: string;
+  variantId?: string;
+  milestoneTemplateId: string;
+  completedQuantity: number;
+  reports?: MilestoneReport[];
+  updatedAt?: string;
 }
 
 export interface Milestone {
@@ -256,7 +294,10 @@ export interface OrderItem {
 export interface ProductionOrder {
   id: string;
   orderNumber: string;
-  planOrderId?: string; 
+  planOrderId?: string;
+  parentOrderId?: string;
+  bomNodeId?: string;
+  sourcePlanId?: string;
   productId: string;
   productName: string;
   sku: string;
@@ -267,9 +308,11 @@ export interface ProductionOrder {
   status: OrderStatus;
   milestones: Milestone[];
   priority: 'High' | 'Medium' | 'Low';
+  /** 工单创建/下达日期，YYYY-MM-DD，用于工单流水统计 */
+  createdAt?: string;
 }
 
-export type ProdOpType = 'STOCK_IN' | 'STOCK_OUT' | 'OUTSOURCE' | 'REWORK';
+export type ProdOpType = 'STOCK_IN' | 'STOCK_OUT' | 'STOCK_RETURN' | 'OUTSOURCE' | 'REWORK' | 'SCRAP';
 
 export interface ProductionOpRecord {
   id: string;
@@ -279,10 +322,20 @@ export interface ProductionOpRecord {
   variantId?: string;
   quantity: number;
   reason?: string;
-  partner?: string; 
+  partner?: string;
   operator: string;
   timestamp: string;
-  status?: string; 
+  status?: string;
+  /** 领料出库 = 出库仓库；退料入库 = 入库仓库 */
+  warehouseId?: string;
+  /** 领料/退料单据号，规则同报工单号：领料 LLyyyyMMdd-0001，退料 TLyyyyMMdd-0001 */
+  docNo?: string;
+  /** 外协/返工等：关联工序节点 id（对应 Milestone.templateId / GlobalNodeTemplate.id）；返工时为返工目标工序 */
+  nodeId?: string;
+  /** 返工专用：不良品来源工序（报工所在工序），用于从待处理不良中扣减 */
+  sourceNodeId?: string;
+  /** 返工专用：返工目标工序 id 列表（多选时）；若有则 nodeId 可为第一项 */
+  reworkNodeIds?: string[];
 }
 
 export type FinanceOpType = 'RECEIPT' | 'PAYMENT' | 'RECONCILIATION' | 'SETTLEMENT';
@@ -299,7 +352,7 @@ export interface FinanceRecord {
   status: 'PENDING' | 'COMPLETED' | 'CANCELLED';
 }
 
-export type DocType = 'PLAN' | 'ORDER' | 'STOCK_OUT' | 'OUTSOURCE' | 'REWORK' | 'STOCK_IN';
+export type DocType = 'PLAN' | 'ORDER' | 'STOCK_OUT' | 'STOCK_RETURN' | 'OUTSOURCE' | 'REWORK' | 'STOCK_IN';
 
 export interface PrintTemplateField {
   id: string;

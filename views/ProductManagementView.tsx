@@ -34,7 +34,7 @@ import {
   Image as ImageIcon,
   Download
 } from 'lucide-react';
-import { Product, GlobalNodeTemplate, ProductCategory, BOM, BOMItem, AppDictionaries, ProductVariant, DictionaryItem, Partner, ProcessPricingMode } from '../types';
+import { Product, GlobalNodeTemplate, ProductCategory, BOM, BOMItem, AppDictionaries, ProductVariant, DictionaryItem, Partner } from '../types';
 
 function getFileExtFromDataUrl(dataUrl: string): string {
   const m = dataUrl.match(/^data:([^;]+);/);
@@ -533,11 +533,6 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     setWorkingProduct({ ...workingProduct, nodeRates: { ...workingProduct.nodeRates, [nodeId]: value } });
   };
 
-  const updateNodePricingMode = (nodeId: string, mode: ProcessPricingMode) => {
-    if (!workingProduct) return;
-    setWorkingProduct({ ...workingProduct, nodePricingModes: { ...workingProduct.nodePricingModes, [nodeId]: mode } });
-  };
-
   // --- BOM 逻辑 ---
   const openBOMEditor = (variant: ProductVariant, nodeId: string) => {
     setActiveVariantIdForBOM(variant.id);
@@ -995,8 +990,6 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                  <div className="space-y-2 relative">
                    {selectedNodesOrdered.length > 0 && <div className="absolute left-6 top-6 bottom-6 w-0.5 bg-slate-100 z-0"></div>}
                    {(selectedNodesOrdered as GlobalNodeTemplate[]).map((node, idx) => {
-                     const nodeMode: ProcessPricingMode = workingProduct.nodePricingModes?.[node.id] ?? 'per_piece';
-                     const rateUnit = nodeMode === 'per_hour' ? '元/时' : '元/件';
                      return (
                      <div key={node.id} className="relative z-10 flex flex-wrap items-center gap-x-6 gap-y-3 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm group">
                         <div className="w-6 h-6 bg-indigo-600 text-white rounded-lg flex items-center justify-center text-[10px] font-black shrink-0">{idx + 1}</div>
@@ -1005,16 +998,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                            {node.hasBOM && <p className="text-[9px] text-amber-500 font-bold flex items-center gap-1 mt-0.5 whitespace-nowrap"><Boxes className="w-2.5 h-2.5 shrink-0" /> 需配置 BOM 物料</p>}
                         </div>
                         <div className="flex flex-col sm:flex-row gap-2 sm:gap-6 shrink-0">
-                           <div className="flex items-center gap-2">
-                              <label className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">计价方式</label>
-                              <PortalSelect
-                                value={nodeMode}
-                                onChange={v => updateNodePricingMode(node.id, v as ProcessPricingMode)}
-                                optionPairs={[{ value: 'per_piece', label: '计件' }, { value: 'per_hour', label: '计时' }]}
-                                compact
-                                className="bg-slate-50 border border-slate-200 rounded-lg h-8 px-2 text-[10px] font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none min-w-[4rem] flex items-center"
-                              />
-                           </div>
+                           {node.enablePieceRate && (
                            <div className="flex items-center gap-2 min-w-[7rem]">
                               <label className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap shrink-0">工价</label>
                               <input
@@ -1026,8 +1010,9 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                                 onChange={e => updateNodeRate(node.id, parseFloat(e.target.value) || 0)}
                                 className="min-w-[5rem] w-20 bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
                               />
-                              <span className="text-[9px] text-slate-400 whitespace-nowrap shrink-0">{rateUnit}</span>
+                              <span className="text-[9px] text-slate-400 whitespace-nowrap shrink-0">元/件</span>
                            </div>
+                           )}
                         </div>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all w-12 justify-end">
                            {idx > 0 && <button onClick={() => moveNode(idx, idx - 1)} className="p-1.5 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-indigo-600 transition-all">↑</button>}
