@@ -604,23 +604,38 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
         <div className="flex flex-wrap gap-2 justify-start">
           {([
             { key: 'members' as const, label: '成员列表', icon: Users },
-            ...(canManage ? [{ key: 'applications' as const, label: `待审核 (${applications.length})`, icon: Shield }] : []),
+            ...(canManage
+              ? [{ key: 'applications' as const, label: '待审核', icon: Shield, badgeCount: applications.length } as const]
+              : []),
             { key: 'invite' as const, label: '邀请码', icon: ShieldCheck },
             ...(canManage ? [{ key: 'roles' as const, label: '角色管理', icon: KeyRound }] : []),
-          ]).map(t => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setTab(t.key)}
-              className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
-                tab === t.key
-                  ? 'bg-indigo-600 text-white shadow-lg'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <t.icon className="w-4 h-4 flex-shrink-0" /> {t.label}
-            </button>
-          ))}
+          ]).map(t => {
+            const badge =
+              'badgeCount' in t && t.badgeCount > 0 ? (
+                <span
+                  className={`ml-0.5 min-w-[18px] h-[18px] rounded-full text-[10px] font-black flex items-center justify-center ${
+                    tab === t.key ? 'bg-white text-indigo-600' : 'bg-indigo-600 text-white'
+                  }`}
+                >
+                  {t.badgeCount}
+                </span>
+              ) : null;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
+                  tab === t.key
+                    ? 'bg-indigo-600 text-white shadow-lg'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <t.icon className="w-4 h-4 flex-shrink-0" /> {t.label}
+                {badge}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -692,7 +707,7 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
                         {m.roleName}
                       </span>
                     )}
-                    {canManage && memberHasReportPerm(m) && (
+                    {canManage && m.role !== 'owner' && memberHasReportPerm(m) && (
                       <button
                         type="button"
                         onClick={() => openMilestoneModal(m)}

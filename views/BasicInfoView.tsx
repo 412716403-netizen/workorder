@@ -223,7 +223,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
     return partners.filter(p => {
       const matchesCategory = activePartnerCategoryId === 'all' || p.categoryId === activePartnerCategoryId;
       const term = searchTerm.toLowerCase();
-      const matchesSearch = p.name.toLowerCase().includes(term) || p.contact.toLowerCase().includes(term);
+      const matchesSearch = p.name.toLowerCase().includes(term);
       return matchesCategory && matchesSearch;
     });
   }, [partners, activePartnerCategoryId, searchTerm]);
@@ -281,7 +281,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500" />
           <input 
             type="text" 
-            placeholder="检索单位名称/联系人..." 
+            placeholder="检索单位名称..." 
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             className="bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 outline-none w-48"
@@ -388,14 +388,13 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                       <Phone className="w-3 h-3 text-slate-300" /> {phoneNumber || '未登记电话'}
                     </p>
                     
-                    <div className="flex flex-wrap gap-2 mb-6">
-                      <div className="px-2 py-1 bg-blue-50/50 rounded-lg text-[9px] font-bold text-blue-600 uppercase tracking-widest">{p.contact}</div>
-                      {category && (
+                    {category && (
+                      <div className="flex flex-wrap gap-2 mb-6">
                         <div className={`px-2 py-1 bg-indigo-50 rounded-lg text-[9px] font-bold text-indigo-600 uppercase tracking-widest border border-indigo-100`}>
                           {category.name}
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     {/* 自定义字段摘要展示 */}
                     {category && category.customFields.length > 0 && p.customData && (
@@ -498,8 +497,8 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
         )}
 
         {activeTab === 'DICTIONARIES' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 animate-in slide-in-from-bottom-4">
-            <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm p-8 space-y-8 flex flex-col">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start animate-in slide-in-from-bottom-4">
+            <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm p-8 space-y-8 flex flex-col h-fit">
               <div className="flex items-center justify-between border-b border-slate-50 pb-4">
                 <div className="flex items-center gap-3">
                   <Palette className="w-5 h-5 text-indigo-600" />
@@ -507,7 +506,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                 </div>
                 <span className="text-[10px] font-black text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full">{dictionaries.colors.length} 项</span>
               </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar max-h-96 pr-2">
+              <div className="overflow-y-auto custom-scrollbar max-h-96 pr-2">
                 <div className="grid grid-cols-2 gap-3">
                   {dictionaries.colors.map(c => (
                     <div key={c.id} className="flex items-center gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100 group">
@@ -529,7 +528,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
               </div>
               )}
             </div>
-            <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm p-8 space-y-8 flex flex-col">
+            <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm p-8 space-y-8 flex flex-col h-fit">
               <div className="flex items-center justify-between border-b border-slate-50 pb-4">
                 <div className="flex items-center gap-3">
                   <Maximize2 className="w-5 h-5 text-indigo-600" />
@@ -537,7 +536,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                 </div>
                 <span className="text-[10px] font-black text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full">{dictionaries.sizes.length} 项</span>
               </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar max-h-96 pr-2">
+              <div className="overflow-y-auto custom-scrollbar max-h-96 pr-2">
                 <div className="grid grid-cols-2 gap-3">
                   {dictionaries.sizes.map(s => (
                     <div key={s.id} className="flex items-center gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100 group">
@@ -559,7 +558,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
               </div>
               )}
             </div>
-            <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm p-8 space-y-8 flex flex-col">
+            <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm p-8 space-y-8 flex flex-col h-fit">
               <div className="flex items-center justify-between border-b border-slate-50 pb-4">
                 <div className="flex items-center gap-3">
                   <Package className="w-5 h-5 text-indigo-600" />
@@ -567,7 +566,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                 </div>
                 <span className="text-[10px] font-black text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full">{units.length} 项</span>
               </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar max-h-96 pr-2">
+              <div className="overflow-y-auto custom-scrollbar max-h-96 pr-2">
                 <div className="grid grid-cols-2 gap-3">
                   {units.map(u => (
                     <div key={u.id} className="flex items-center gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100 group">
@@ -620,10 +619,6 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                       <option value="">点击选择分类...</option>
                       {partnerCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">首要联系人</label>
-                    <input type="text" value={editPartner.contact} onChange={e => setEditPartner({...editPartner, contact: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" placeholder="业务对接人" />
                   </div>
                 </div>
 

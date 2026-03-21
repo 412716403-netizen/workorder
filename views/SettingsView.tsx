@@ -676,7 +676,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                             {[
                               { label: '启用工序设置', key: 'hasProcess', desc: '开启后支持配置生产工序路线。', icon: Info },
                               { label: '启用销售价格', key: 'hasSalesPrice', desc: '是否在该类产品中录入销售标价。', icon: DollarSign },
-                              { label: '启用采购价格', key: 'hasPurchasePrice', desc: '启用后同时开启供应商管理功能。', icon: ShoppingCart },
+                              { label: '启用采购价和供应商', key: 'hasPurchasePrice', desc: '开启后可维护参考采购单价并关联首选供应商。', icon: ShoppingCart },
                               { label: '启用颜色尺码', key: 'hasColorSize', desc: '开启后支持颜色、尺码库选择。', icon: Maximize },
                               { label: '启用批次管理', key: 'hasBatchManagement', desc: '开启后该类产品在采购、出入库和生产入库中按批次记录库存。', icon: Tag },
                             ].map(toggle => (
