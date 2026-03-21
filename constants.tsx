@@ -102,7 +102,7 @@ const generateTestVariants = (productId: string, skuPrefix: string, colorIds: st
         colorId: cId,
         sizeId: sId,
         skuSuffix: `${skuPrefix}-${cName}-${sName}`,
-        nodeBOMs: {} as Record<string, string>
+        nodeBoms: {} as Record<string, string>
       });
     }
   }
@@ -178,7 +178,7 @@ export const MOCK_PRODUCTS: Product[] = [
     variants: generateTestVariants('p3', 'G1', ['c-1', 'c-5'], ['s-3', 's-4']).map(v => ({
         ...v,
         // 为每个变体绑定 BOM 关系：在 gn-1(物料核对) 使用 bom-1，在 gn-4(包装入库) 使用 bom-pkg
-        nodeBOMs: { 'gn-1': 'bom-1', 'gn-4': 'bom-pkg' }
+        nodeBoms: { 'gn-1': 'bom-1', 'gn-4': 'bom-pkg' }
     })),
     categoryCustomData: { warranty: 12 },
     milestoneNodeIds: ['gn-1', 'gn-2', 'gn-3', 'gn-4']

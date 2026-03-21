@@ -93,6 +93,34 @@ export interface PartnerCategory {
   customFields: ReportFieldDefinition[];
 }
 
+/** 收付款单据分类：收款单/付款单下的类型（如预收款、材料款等），用于控制登记时显示的关联项与自定义字段 */
+export type FinanceCategoryKind = 'RECEIPT' | 'PAYMENT';
+
+export interface FinanceCategory {
+  id: string;
+  /** 分类归属：收款单 或 付款单 */
+  kind: FinanceCategoryKind;
+  /** 分类名称 */
+  name: string;
+  /** 是否关联工单 */
+  linkOrder?: boolean;
+  /** 是否关联合作单位 */
+  linkPartner?: boolean;
+  /** 是否选择收支账户 */
+  selectPaymentAccount?: boolean;
+  /** 是否关联工人 */
+  linkWorker?: boolean;
+  /** 是否关联产品 */
+  linkProduct?: boolean;
+  customFields: ReportFieldDefinition[];
+}
+
+/** 收支账户类型（如：现金、银行存款、微信、支付宝），用于收付款登记时选择 */
+export interface FinanceAccountType {
+  id: string;
+  name: string;
+}
+
 export interface BOMItem {
   categoryId?: string;
   productId: string;
@@ -119,7 +147,7 @@ export interface ProductVariant {
   colorId: string;
   sizeId: string;
   skuSuffix: string;
-  nodeBOMs?: Record<string, string>;
+  nodeBoms?: Record<string, string>;
 }
 
 export interface Product {
@@ -158,7 +186,7 @@ export interface Warehouse {
 export interface Worker {
   id: string;
   name: string;
-  group: string;
+  groupName: string;
   role: string;
   status: 'ACTIVE' | 'ON_LEAVE';
   skills: string[];
@@ -257,6 +285,10 @@ export interface MilestoneReport {
   reportNo?: string;
   customData: Record<string, any>;
   notes?: string;
+  /** 报工时的工序工价（元/件），保存时写入，流水与报工结算优先使用此项 */
+  rate?: number;
+  /** 报工人员 id，用于报工结算按工人筛选 */
+  workerId?: string;
 }
 
 /** 关联产品模式下，产品 × 规格 × 工序维度的进度独立存储（报工不写入工单） */
@@ -312,12 +344,13 @@ export interface ProductionOrder {
   createdAt?: string;
 }
 
-export type ProdOpType = 'STOCK_IN' | 'STOCK_OUT' | 'STOCK_RETURN' | 'OUTSOURCE' | 'REWORK' | 'SCRAP';
+export type ProdOpType = 'STOCK_IN' | 'STOCK_OUT' | 'STOCK_RETURN' | 'OUTSOURCE' | 'REWORK' | 'REWORK_REPORT' | 'SCRAP';
 
 export interface ProductionOpRecord {
   id: string;
   type: ProdOpType;
-  orderId: string;
+  /** 关联工单时必填，关联产品时为空 */
+  orderId?: string;
   productId: string;
   variantId?: string;
   quantity: number;
@@ -334,101 +367,58 @@ export interface ProductionOpRecord {
   nodeId?: string;
   /** 返工专用：不良品来源工序（报工所在工序），用于从待处理不良中扣减 */
   sourceNodeId?: string;
+  /** 返工报工：对应哪条 REWORK 单据，用于把完成数量回灌到该单所属工单的来源工序可报量 */
+  sourceReworkId?: string;
   /** 返工专用：返工目标工序 id 列表（多选时）；若有则 nodeId 可为第一项 */
   reworkNodeIds?: string[];
+  /** 返工专用：本单已完成的目标工序 id 列表，用于多工序返工时按节点推进；当与 reworkNodeIds 一致时整单视为已完成 */
+  completedNodeIds?: string[];
+  /** 返工专用：按目标工序已完成数量（支持部分完成），nodeId -> 已完工数；未设则按 completedNodeIds 整单计 */
+  reworkCompletedQuantityByNode?: Record<string, number>;
+  /** 返工报工：报工人员 id（与工单中心报工一致） */
+  workerId?: string;
+  /** 返工报工：设备 id（工序开启报工设备时必填） */
+  equipmentId?: string;
+  /** 关联产品模式下领料/退料：成品产品 id（物料行的 productId 为子项物料） */
+  sourceProductId?: string;
+  /** 外协收回：加工费单价（元/件） */
+  unitPrice?: number;
+  /** 外协收回：金额（加工费，元），一般为 quantity * unitPrice */
+  amount?: number;
 }
 
 export type FinanceOpType = 'RECEIPT' | 'PAYMENT' | 'RECONCILIATION' | 'SETTLEMENT';
 
+/** 收付款单据编号前缀：收款单 SKD、付款单 FKD、财务对账 DZD、工资单 GZD，规则同报工单 BG+日期+序号 */
+export const FINANCE_DOC_NO_PREFIX: Record<FinanceOpType, string> = {
+  RECEIPT: 'SKD',
+  PAYMENT: 'FKD',
+  RECONCILIATION: 'DZD',
+  SETTLEMENT: 'GZD',
+};
+
 export interface FinanceRecord {
   id: string;
   type: FinanceOpType;
+  /** 单据编号，规则：前缀(SKD/FKD/DZD/GZD)+yyyyMMdd-0001 */
+  docNo?: string;
   amount: number;
-  relatedId?: string; 
-  partner: string;    
+  relatedId?: string;
+  partner: string;
   operator: string;
   timestamp: string;
   note?: string;
   status: 'PENDING' | 'COMPLETED' | 'CANCELLED';
+  /** 收付款类型设置中的分类 id（仅收款单/付款单） */
+  categoryId?: string;
+  /** 关联工人 id（当分类开启“是否关联工人”时） */
+  workerId?: string;
+  /** 关联产品 id（当分类开启“是否关联产品”时） */
+  productId?: string;
+  /** 收支账户（当分类开启「是否选择收支账户」时） */
+  paymentAccount?: string;
+  /** 分类自定义字段值，key 为 customField.id */
+  customData?: Record<string, any>;
 }
 
 export type DocType = 'PLAN' | 'ORDER' | 'STOCK_OUT' | 'STOCK_RETURN' | 'OUTSOURCE' | 'REWORK' | 'STOCK_IN';
-
-export interface PrintTemplateField {
-  id: string;
-  label: string;
-  enabled: boolean;
-  /** 在打印平面上的位置与尺寸（mm），不设则按顺序自上而下排布 */
-  leftMm?: number;
-  topMm?: number;
-  widthMm?: number;
-  heightMm?: number;
-}
-
-/** 纸张规格 */
-export type PaperSize = 'A4' | 'A5' | 'B5' | 'custom';
-/** 打印方向 */
-export type PrintOrientation = 'portrait' | 'landscape';
-
-/** 画布布局元素：单字段或表格，用于计划单打印画布设计器 */
-export interface PrintLayoutTableColumn {
-  id: string;
-  header: string;
-  fieldKey: string;
-}
-
-export type PlanTableDataSource = 'planItems' | 'planAssignments';
-
-export interface PrintLayoutElement {
-  id: string;
-  type: 'field' | 'table';
-  leftMm: number;
-  topMm: number;
-  widthMm?: number;
-  heightMm?: number;
-  /** 当 type === 'field' 时：绑定单值字段 id */
-  fieldId?: string;
-  /** 当 type === 'table' 时：数据来源 */
-  tableDataSource?: PlanTableDataSource;
-  /** 当 type === 'table' 时：列配置 */
-  columns?: PrintLayoutTableColumn[];
-}
-
-export interface PrintTemplate {
-  id: DocType;
-  name: string;
-  enabled: boolean;
-  /** 纸张设置（可选，缺省时默认 A4 纵向） */
-  paperSize?: PaperSize;
-  orientation?: PrintOrientation;
-  paperWidthMm?: number;
-  paperHeightMm?: number;
-  marginTopMm?: number;
-  marginBottomMm?: number;
-  marginLeftMm?: number;
-  marginRightMm?: number;
-  /** 打印内容与布局 */
-  title: string;
-  headerText: string;
-  footerText: string;
-  showLogo: boolean;
-  showQRCode: boolean;
-  fontSize: 'sm' | 'base' | 'lg';
-  fields: PrintTemplateField[];
-  /** 计划单画布布局元素；若存在且 length > 0 则打印时使用画布布局，否则用 fields */
-  layoutElements?: PrintLayoutElement[];
-}
-
-export type PrintSettings = Record<DocType, PrintTemplate>;
-
-/** 计划单打印可选内容项（用于模版配置与画布设计器单字段） */
-export const PLAN_PRINT_FIELDS: { id: string; label: string }[] = [
-  { id: 'planNumber', label: '计划单号' },
-  { id: 'customer', label: '客户' },
-  { id: 'dueDate', label: '交期' },
-  { id: 'product', label: '产品信息' },
-  { id: 'status', label: '状态' },
-  { id: 'priority', label: '优先级' },
-  { id: 'itemsTable', label: '计划明细表' },
-  { id: 'assignmentsTable', label: '工序派工表' },
-];

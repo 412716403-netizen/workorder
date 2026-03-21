@@ -1,16 +1,15 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   CalendarRange, 
   ClipboardList, 
-  ArrowDownToLine,
   ArrowUpFromLine,
   Truck,
   RotateCcw
 } from 'lucide-react';
 import { 
   PlanOrder, ProductionOrder, Product, BOM,
-  ProductionOpRecord, GlobalNodeTemplate, ProdOpType, ProductCategory, AppDictionaries, Worker, Equipment, PrintSettings, PlanFormSettings, OrderFormSettings, Partner, PartnerCategory, ProductionLinkMode, ProductMilestoneProgress, ProcessSequenceMode, Warehouse
+  ProductionOpRecord, GlobalNodeTemplate, ProdOpType, ProductCategory, AppDictionaries, Worker, Equipment, PlanFormSettings, OrderFormSettings, Partner, PartnerCategory, ProductionLinkMode, ProductMilestoneProgress, ProcessSequenceMode, Warehouse
 } from '../types';
 import PlanOrderListView from './PlanOrderListView';
 import OrderListView from './OrderListView';
@@ -34,7 +33,6 @@ interface ProductionManagementViewProps {
   boms: BOM[];
   partners: Partner[];
   partnerCategories: PartnerCategory[];
-  printSettings: PrintSettings;
   planFormSettings: PlanFormSettings;
   onUpdatePlanFormSettings: (settings: PlanFormSettings) => void;
   orderFormSettings: OrderFormSettings;
@@ -46,9 +44,11 @@ interface ProductionManagementViewProps {
   onConvertToOrder: (planId: string) => void;
   onDeletePlan?: (planId: string) => void;
   onAddRecord: (record: ProductionOpRecord) => void;
+  onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
   onUpdateRecord?: (record: ProductionOpRecord) => void;
   onDeleteRecord?: (recordId: string) => void;
   onAddPSIRecord?: (record: any) => void;
+  onAddPSIRecordBatch?: (records: any[]) => Promise<void>;
   onReportSubmit?: (orderId: string, milestoneId: string, quantity: number, customData: any, variantId?: string) => void;
   onCreateSubPlan?: (params: { productId: string; quantity: number; planId: string; bomNodeId: string }) => void;
   onCreateSubPlans?: (params: { planId: string; items: Array<{ productId: string; quantity: number; bomNodeId: string; parentProductId?: string; parentNodeId?: string }> }) => void;
@@ -60,22 +60,54 @@ interface ProductionManagementViewProps {
   onReportSubmitProduct?: (productId: string, milestoneTemplateId: string, quantity: number, customData: any, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string) => void;
   onUpdateReportProduct?: (params: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string }) => void;
   onDeleteReportProduct?: (params: { progressId: string; reportId: string }) => void;
+  userPermissions?: string[];
+  tenantRole?: string;
 }
 
 type MainTab = 'plans' | 'orders' | ProdOpType;
 
 const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
-  productionLinkMode = 'order', processSequenceMode = 'free', allowExceedMaxReportQty = true, plans, orders, products, categories, dictionaries, workers, equipment, prodRecords, psiRecords = [], warehouses = [], globalNodes, boms, partners, partnerCategories, printSettings,
+  productionLinkMode = 'order', processSequenceMode = 'free', allowExceedMaxReportQty = true, plans, orders, products, categories, dictionaries, workers, equipment, prodRecords, psiRecords = [], warehouses = [], globalNodes, boms,   partners, partnerCategories,
   planFormSettings, onUpdatePlanFormSettings, orderFormSettings, onUpdateOrderFormSettings,
-  onCreatePlan, onUpdateProduct, onUpdatePlan, onSplitPlan, onConvertToOrder, onDeletePlan, onAddRecord, onUpdateRecord, onDeleteRecord, onAddPSIRecord, onReportSubmit, onCreateSubPlan, onCreateSubPlans, onUpdateOrder, onDeleteOrder, onUpdateReport, onDeleteReport,
-  productMilestoneProgresses = [], onReportSubmitProduct, onUpdateReportProduct, onDeleteReportProduct
+  onCreatePlan, onUpdateProduct, onUpdatePlan, onSplitPlan, onConvertToOrder, onDeletePlan, onAddRecord, onAddRecordBatch, onUpdateRecord, onDeleteRecord, onAddPSIRecord, onAddPSIRecordBatch, onReportSubmit, onCreateSubPlan, onCreateSubPlans, onUpdateOrder, onDeleteOrder, onUpdateReport, onDeleteReport,
+  productMilestoneProgresses = [], onReportSubmitProduct, onUpdateReportProduct, onDeleteReportProduct,
+  userPermissions, tenantRole
 }) => {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const isOwner = tenantRole === 'owner';
+  const hasProdPerm = (permKey: string): boolean => {
+    if (isOwner) return true;
+    if (!userPermissions) return true;
+    if (userPermissions.includes('production')) return true;
+    if (userPermissions.includes(permKey)) return true;
+    if (userPermissions.some(p => p.startsWith(`${permKey}:`))) return true;
+    return false;
+  };
+
+  const TAB_PERM_GROUPS: Record<string, string[]> = {
+    plans: ['plans'],
+    orders: ['orders_list', 'orders_form_config', 'orders_report_records', 'orders_pending_stock_in', 'orders_detail', 'orders_material', 'orders_rework'],
+    STOCK_OUT: ['material_list', 'material_records', 'material_issue', 'material_return'],
+    OUTSOURCE: ['outsource_list', 'outsource_send', 'outsource_receive', 'outsource_records'],
+    REWORK: ['rework_list', 'rework_defective', 'rework_records', 'rework_report_records', 'rework_detail', 'rework_material'],
+  };
+
   const [activeTab, setActiveTab] = useState<MainTab>('plans');
+
+  /** 关闭工单详情时清除 location.state 中的 detailOrderId，避免切到其他 tab 再回工单中心时弹窗再次打开 */
+  const clearDetailOrderIdFromState = () => {
+    const state = location.state && typeof location.state === 'object' && !Array.isArray(location.state) ? location.state as Record<string, unknown> : {};
+    if ('detailOrderId' in state) {
+      const { detailOrderId: _, ...rest } = state;
+      navigate(location.pathname, { replace: true, state: Object.keys(rest).length > 0 ? rest : undefined });
+    }
+  };
 
   useEffect(() => {
     const tab = (location.state as { tab?: MainTab })?.tab;
-    if (tab && ['plans', 'orders', 'STOCK_OUT', 'OUTSOURCE', 'REWORK', 'STOCK_IN'].includes(tab)) {
+    if (tab && ['plans', 'orders', 'STOCK_OUT', 'OUTSOURCE', 'REWORK'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [location.state]);
@@ -124,14 +156,24 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
     return () => cancelAnimationFrame(id);
   }, []);
 
-  const tabs = [
+  const allTabs = [
     { id: 'plans', label: '生产计划', icon: CalendarRange, color: 'text-indigo-600', bg: 'bg-indigo-50' },
     { id: 'orders', label: '工单中心', icon: ClipboardList, color: 'text-indigo-600', bg: 'bg-indigo-50' },
     { id: 'STOCK_OUT', label: '生产物料', icon: ArrowUpFromLine, color: 'text-indigo-600', bg: 'bg-indigo-50' },
     { id: 'OUTSOURCE', label: '外协管理', icon: Truck, color: 'text-indigo-600', bg: 'bg-indigo-50' },
     { id: 'REWORK', label: '返工管理', icon: RotateCcw, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-    { id: 'STOCK_IN', label: '生产入库', icon: ArrowDownToLine, color: 'text-indigo-600', bg: 'bg-indigo-50' },
   ];
+  const tabs = allTabs.filter(tab => {
+    const keys = TAB_PERM_GROUPS[tab.id];
+    if (!keys) return true;
+    return keys.some(k => hasProdPerm(`production:${k}`));
+  });
+
+  useEffect(() => {
+    if (tabs.length > 0 && !tabs.some(t => t.id === activeTab)) {
+      setActiveTab(tabs[0].id as MainTab);
+    }
+  }, [tabs.map(t => t.id).join(',')]);
 
   return (
     <div className="space-y-8">
@@ -182,24 +224,25 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
             partners={partners}
             partnerCategories={partnerCategories}
             psiRecords={psiRecords}
-            printSettings={printSettings}
             planFormSettings={planFormSettings}
             onUpdatePlanFormSettings={onUpdatePlanFormSettings}
-            onCreatePlan={onCreatePlan} 
+            onCreatePlan={hasProdPerm('production:plans:create') ? onCreatePlan : undefined as any}
             onUpdateProduct={onUpdateProduct}
-            onUpdatePlan={onUpdatePlan}
-            onSplitPlan={onSplitPlan}
-            onConvertToOrder={onConvertToOrder}
-            onDeletePlan={onDeletePlan}
+            onUpdatePlan={hasProdPerm('production:plans:edit') ? onUpdatePlan : undefined}
+            onSplitPlan={hasProdPerm('production:plans:edit') ? onSplitPlan : (() => {})}
+            onConvertToOrder={hasProdPerm('production:plans:edit') ? onConvertToOrder : (() => {})}
+            onDeletePlan={hasProdPerm('production:plans:delete') ? onDeletePlan : undefined}
             onAddPSIRecord={onAddPSIRecord}
+            onAddPSIRecordBatch={onAddPSIRecordBatch}
             onCreateSubPlan={onCreateSubPlan}
             onCreateSubPlans={onCreateSubPlans}
           />
         )}
 
         {activeTab === 'orders' && (
-          <OrderListView 
+<OrderListView
             initialDetailOrderId={(location.state as { detailOrderId?: string })?.detailOrderId}
+            onClearDetailOrderIdFromState={clearDetailOrderIdFromState}
             productionLinkMode={productionLinkMode}
             processSequenceMode={processSequenceMode}
             allowExceedMaxReportQty={allowExceedMaxReportQty}
@@ -212,7 +255,6 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
             partners={partners}
             boms={boms}
             globalNodes={globalNodes} 
-            printSettings={printSettings}
             orderFormSettings={orderFormSettings}
             prodRecords={prodRecords}
             warehouses={warehouses}
@@ -224,24 +266,30 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
             onDeleteReport={onDeleteReport}
             onUpdateProduct={onUpdateProduct}
             onAddRecord={onAddRecord}
+            onAddRecordBatch={onAddRecordBatch}
+            onUpdateRecord={onUpdateRecord}
+            onDeleteRecord={onDeleteRecord}
             productMilestoneProgresses={productMilestoneProgresses}
             onReportSubmitProduct={onReportSubmitProduct}
             onUpdateReportProduct={onUpdateReportProduct}
             onDeleteReportProduct={onDeleteReportProduct}
+            userPermissions={userPermissions}
+            tenantRole={tenantRole}
           />
         )}
 
-        {['STOCK_OUT', 'OUTSOURCE', 'REWORK', 'STOCK_IN'].includes(activeTab) && (
+        {['STOCK_OUT', 'OUTSOURCE', 'REWORK'].includes(activeTab) && (
           <ProductionMgmtOpsView 
             productionLinkMode={productionLinkMode}
+            productMilestoneProgresses={productMilestoneProgresses}
             records={prodRecords} 
             orders={orders} 
             products={products} 
             warehouses={warehouses}
             boms={boms}
             dictionaries={dictionaries}
-            printSettings={printSettings}
             onAddRecord={onAddRecord}
+            onAddRecordBatch={onAddRecordBatch}
             onUpdateRecord={onUpdateRecord}
             onDeleteRecord={onDeleteRecord}
             limitType={activeTab as ProdOpType}
@@ -249,6 +297,11 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
             partners={partners}
             categories={categories}
             partnerCategories={partnerCategories}
+            workers={workers}
+            equipment={equipment}
+            processSequenceMode={processSequenceMode}
+            userPermissions={userPermissions}
+            tenantRole={tenantRole}
           />
         )}
       </div>

@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { toast } from 'sonner';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Layers, Trash2, ClipboardList } from 'lucide-react';
 import { ProductionOrder, Product, OrderFormSettings, ProductionOpRecord, ProductionLinkMode } from '../types';
@@ -17,7 +18,7 @@ interface OrderDetailViewProps {
 }
 
 const OrderDetailView: React.FC<OrderDetailViewProps> = ({
-  orders, products, prodRecords, orderFormSettings, onDeleteOrder
+  orders, products, prodRecords, orderFormSettings, onDeleteOrder, productionLinkMode
 }) => {
   const showInDetail = (id: string) => orderFormSettings?.standardFields.find(f => f.id === id)?.showInDetail ?? true;
   const { id } = useParams<{ id: string }>();
@@ -31,20 +32,22 @@ const OrderDetailView: React.FC<OrderDetailViewProps> = ({
 
   const handleDelete = () => {
     if (!onDeleteOrder) return;
-    const hasReport = order.milestones.some(m => m.completedQuantity > 0 || (m.reports?.length ?? 0) > 0);
-    if (hasReport) {
-      alert('该工单已有报工记录，不允许删除。');
-      return;
-    }
-    const relatedRecords = prodRecords.filter(r => r.orderId === order.id);
-    if (relatedRecords.length > 0) {
-      alert(`该工单存在 ${relatedRecords.length} 条关联单据（领料出库/外协/返工/报损/生产入库），请先在相关模块删除后再试。`);
-      return;
-    }
-    const childOrders = orders.filter(o => o.parentOrderId === order.id);
-    if (childOrders.length > 0) {
-      alert(`该工单存在 ${childOrders.length} 条子工单，请先删除子工单后再试。`);
-      return;
+    if (productionLinkMode !== 'product') {
+      const hasReport = order.milestones.some(m => m.completedQuantity > 0 || (m.reports?.length ?? 0) > 0);
+      if (hasReport) {
+        toast.error('该工单已有报工记录，不允许删除。');
+        return;
+      }
+      const relatedRecords = prodRecords.filter(r => r.orderId === order.id);
+      if (relatedRecords.length > 0) {
+        toast.error(`该工单存在 ${relatedRecords.length} 条关联单据（领料出库/外协/返工/报损/生产入库），请先在相关模块删除后再试。`);
+        return;
+      }
+      const childOrders = orders.filter(o => o.parentOrderId === order.id);
+      if (childOrders.length > 0) {
+        toast.error(`该工单存在 ${childOrders.length} 条子工单，请先删除子工单后再试。`);
+        return;
+      }
     }
     if (window.confirm(`确定要删除工单「${order.orderNumber}」吗？此操作不可恢复。`)) {
       onDeleteOrder(order.id);

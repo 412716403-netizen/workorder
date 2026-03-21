@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useLayoutEffect } from 'react';
 import { 
   Boxes, 
-  Users, 
   Building2, 
   Cpu,
   Phone,
@@ -17,12 +16,10 @@ import {
   Save,
   Tag,
   Database,
-  Briefcase,
   Shapes,
   Info,
   ListPlus,
   CheckCircle,
-  ShieldAlert,
   Hammer,
   MapPin,
   Library,
@@ -31,7 +28,10 @@ import {
   Package
 } from 'lucide-react';
 import ProductManagementView from './ProductManagementView';
-import { Product, GlobalNodeTemplate, ProductCategory, BOM, AppDictionaries, Partner, Worker, Equipment, PartnerCategory, DictionaryItem } from '../types';
+import MemberManagementView from './MemberManagementView';
+import { Product, GlobalNodeTemplate, ProductCategory, BOM, AppDictionaries, Partner, Equipment, PartnerCategory, DictionaryItem } from '../types';
+import { toast } from 'sonner';
+import * as api from '../services/api';
 
 interface BasicInfoViewProps {
   products: Product[];
@@ -39,31 +39,66 @@ interface BasicInfoViewProps {
   categories: ProductCategory[];
   partnerCategories: PartnerCategory[];
   boms: BOM[];
-  workers: Worker[];
   equipment: Equipment[];
   dictionaries: AppDictionaries;
   partners: Partner[];
   onUpdateProduct: (product: Product) => void;
   onUpdateBOM: (bom: BOM) => void;
-  onUpdateDictionaries: (dicts: AppDictionaries) => void;
-  onUpdateWorkers: (workers: Worker[]) => void;
-  onUpdateEquipment: (equipment: Equipment[]) => void;
-  onUpdatePartners: (partners: Partner[]) => void;
-  onUpdatePartnerCategories: (categories: PartnerCategory[]) => void;
+  onRefreshDictionaries: () => Promise<void>;
+  onRefreshWorkers: () => Promise<void>;
+  onRefreshEquipment: () => Promise<void>;
+  onRefreshPartners: () => Promise<void>;
+  onRefreshPartnerCategories: () => Promise<void>;
+  tenantId: string;
+  tenantRole: string;
+  currentUserId: string;
+  userPermissions?: string[];
 }
 
-type BasicTab = 'PRODUCTS' | 'PARTNERS' | 'WORKERS' | 'EQUIPMENT' | 'DICTIONARIES';
+const TAB_PERM_MAP: Record<string, string> = {
+  PRODUCTS: 'basic:products',
+  PARTNERS: 'basic:partners',
+  MEMBERS: 'basic:members',
+  EQUIPMENT: 'basic:equipment',
+  DICTIONARIES: 'basic:dictionaries',
+};
+
+type BasicTab = 'PRODUCTS' | 'PARTNERS' | 'MEMBERS' | 'EQUIPMENT' | 'DICTIONARIES';
 
 const BasicInfoView: React.FC<BasicInfoViewProps> = ({
-  products, globalNodes, categories, partnerCategories, boms, workers, equipment, dictionaries, partners,
-  onUpdateProduct, onUpdateBOM, onUpdateDictionaries, onUpdateWorkers, onUpdateEquipment, onUpdatePartners
+  products, globalNodes, categories, partnerCategories, boms, equipment, dictionaries, partners,
+  onUpdateProduct, onUpdateBOM, onRefreshDictionaries, onRefreshWorkers, onRefreshEquipment, onRefreshPartners,
+  tenantId, tenantRole, currentUserId, userPermissions
 }) => {
+  const isOwner = tenantRole === 'owner';
+  const hasPerm = (perm: string): boolean => {
+    if (isOwner) return true;
+    if (!userPermissions) return true;
+    if (userPermissions.includes(perm)) return true;
+    const [module] = perm.split(':');
+    if (module && userPermissions.includes(module)) return true;
+    return false;
+  };
+  const canView = (tabId: string) => {
+    const base = TAB_PERM_MAP[tabId];
+    return base ? hasPerm(`${base}:view`) : true;
+  };
+  const canCreate = (tabId: string) => {
+    const base = TAB_PERM_MAP[tabId];
+    return base ? hasPerm(`${base}:create`) : true;
+  };
+  const canEdit = (tabId: string) => {
+    const base = TAB_PERM_MAP[tabId];
+    return base ? hasPerm(`${base}:edit`) : true;
+  };
+  const canDelete = (tabId: string) => {
+    const base = TAB_PERM_MAP[tabId];
+    return base ? hasPerm(`${base}:delete`) : true;
+  };
+
   const [activeTab, setActiveTab] = useState<BasicTab>('PRODUCTS');
-  /** 工人管理：按工序分类，null = 全部，'UNASSIGNED' = 未分配 */
-  const [workerNodeId, setWorkerNodeId] = useState<string | null>(null);
   /** 设备管理：按工序分类，null = 全部，'UNASSIGNED' = 未分配 */
   const [equipmentNodeId, setEquipmentNodeId] = useState<string | null>(null);
-  const WORKER_UNASSIGNED = 'UNASSIGNED';
   const EQUIPMENT_UNASSIGNED = 'UNASSIGNED';
 
   // --- 合作单位视图特有状态 ---
@@ -76,7 +111,6 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
 
   // 临时编辑数据
   const [editPartner, setEditPartner] = useState<Partial<Partner>>({});
-  const [editWorker, setEditWorker] = useState<Partial<Worker>>({});
   const [editEq, setEditEq] = useState<Partial<Equipment>>({});
 
   const [newColorName, setNewColorName] = useState('');
@@ -134,35 +168,55 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
     return () => cancelAnimationFrame(id);
   }, []);
 
-  const handleAddColor = () => {
-    if (!newColorName.trim()) return;
-    const newItem: DictionaryItem = { id: `c-${Date.now()}`, name: newColorName.trim(), value: newColorName.trim() };
-    onUpdateDictionaries({ ...dictionaries, colors: [...dictionaries.colors, newItem] });
-    setNewColorName('');
+  const handleAddColor = async () => {
+    const val = newColorName.trim();
+    if (!val) return;
+    if (dictionaries.colors.some(c => c.name === val)) { toast.warning(`颜色"${val}"已存在`); return; }
+    try {
+      await api.dictionaries.create({ type: 'color', name: val, value: val });
+      setNewColorName('');
+      await onRefreshDictionaries();
+    } catch (err: any) { toast.error(err.message || '操作失败'); }
   };
 
-  const handleAddSize = () => {
-    if (!newSizeName.trim()) return;
-    const newItem: DictionaryItem = { id: `s-${Date.now()}`, name: newSizeName, value: newSizeName };
-    onUpdateDictionaries({ ...dictionaries, sizes: [...dictionaries.sizes, newItem] });
-    setNewSizeName('');
+  const handleAddSize = async () => {
+    const val = newSizeName.trim();
+    if (!val) return;
+    if (dictionaries.sizes.some(s => s.name === val)) { toast.warning(`尺码"${val}"已存在`); return; }
+    try {
+      await api.dictionaries.create({ type: 'size', name: val, value: val });
+      setNewSizeName('');
+      await onRefreshDictionaries();
+    } catch (err: any) { toast.error(err.message || '操作失败'); }
   };
 
   const units = dictionaries.units ?? [];
-  const handleAddUnit = () => {
-    if (!newUnitName.trim()) return;
-    const newItem: DictionaryItem = { id: `u-${Date.now()}`, name: newUnitName.trim(), value: newUnitName.trim() };
-    onUpdateDictionaries({ ...dictionaries, units: [...units, newItem] });
-    setNewUnitName('');
+  const handleAddUnit = async () => {
+    const val = newUnitName.trim();
+    if (!val) return;
+    if (units.some(u => u.name === val)) { toast.warning(`单位"${val}"已存在`); return; }
+    try {
+      await api.dictionaries.create({ type: 'unit', name: val, value: val });
+      setNewUnitName('');
+      await onRefreshDictionaries();
+    } catch (err: any) { toast.error(err.message || '操作失败'); }
   };
 
-  const tabs = [
+  const handleDeleteDictionary = async (id: string) => {
+    try {
+      await api.dictionaries.delete(id);
+      await onRefreshDictionaries();
+    } catch (err: any) { toast.error(err.message || '操作失败'); }
+  };
+
+  const allTabs = [
     { id: 'PRODUCTS', label: '产品与 BOM', icon: Boxes },
     { id: 'PARTNERS', label: '合作单位', icon: Building2 },
-    { id: 'WORKERS', label: '工人管理', icon: Users },
+    { id: 'MEMBERS', label: '成员管理', icon: ShieldCheck },
     { id: 'EQUIPMENT', label: '设备管理', icon: Cpu },
     { id: 'DICTIONARIES', label: '公共数据字典', icon: Library },
   ];
+  const tabs = allTabs.filter(t => canView(t.id));
 
   // --- 过滤逻辑：合作单位 ---
   const filteredPartners = useMemo(() => {
@@ -186,33 +240,16 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
     setShowModal('PARTNERS');
   };
 
-  const savePartner = () => {
-    if (editingId) {
-      onUpdatePartners(partners.map(p => p.id === editingId ? { ...p, ...editPartner } as Partner : p));
-    } else {
-      const newPartner: Partner = { 
-        ...editPartner as Partner, 
-        id: `pa-${Date.now()}` 
-      };
-      onUpdatePartners([...partners, newPartner]);
-    }
-    setShowModal(null);
-  };
-
-  const handleOpenWorker = (w?: Worker) => {
-    setEditWorker(w || { name: '', group: '', skills: [], status: 'ACTIVE', assignedMilestoneIds: [] });
-    setEditingId(w?.id || null);
-    setShowModal('WORKERS');
-  };
-
-  const saveWorker = () => {
-    if (editingId) {
-      onUpdateWorkers(workers.map(w => w.id === editingId ? { ...w, ...editWorker } as Worker : w));
-    } else {
-      const worker: Worker = { ...editWorker as Worker, id: `w-${Date.now()}`, role: '普工', status: 'ACTIVE' };
-      onUpdateWorkers([...workers, worker]);
-    }
-    setShowModal(null);
+  const savePartner = async () => {
+    try {
+      if (editingId) {
+        await api.partners.update(editingId, editPartner);
+      } else {
+        await api.partners.create(editPartner);
+      }
+      setShowModal(null);
+      await onRefreshPartners();
+    } catch (err: any) { toast.error(err.message || '操作失败'); }
   };
 
   const handleOpenEq = (e?: Equipment) => {
@@ -221,14 +258,16 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
     setShowModal('EQUIPMENT');
   };
 
-  const saveEq = () => {
-    if (editingId) {
-      onUpdateEquipment(equipment.map(e => e.id === editingId ? { ...e, ...editEq } as Equipment : e));
-    } else {
-      const eq: Equipment = { ...editEq as Equipment, id: `e-${Date.now()}` };
-      onUpdateEquipment([...equipment, eq]);
-    }
-    setShowModal(null);
+  const saveEq = async () => {
+    try {
+      if (editingId) {
+        await api.equipment.update(editingId, editEq);
+      } else {
+        await api.equipment.create(editEq);
+      }
+      setShowModal(null);
+      await onRefreshEquipment();
+    } catch (err: any) { toast.error(err.message || '操作失败'); }
   };
 
   const renderHeader = (title: string, sub: string, onAdd: (() => void) | null, btnLabel: string) => (
@@ -277,7 +316,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                   {tabs.map(tab => (
                     <button
                       key={tab.id}
-                      onClick={() => { setActiveTab(tab.id as BasicTab); setSearchTerm(''); }}
+                      onClick={() => { setActiveTab(tab.id as BasicTab); setSearchTerm(''); setShowModal(null); }}
                       className={`flex items-center gap-3 px-6 py-3 rounded-[18px] text-sm font-bold transition-all whitespace-nowrap ${
                         activeTab === tab.id
                           ? 'bg-indigo-50 text-indigo-600 shadow-sm'
@@ -299,12 +338,12 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
       )}
       <div>
         {activeTab === 'PRODUCTS' && (
-          <ProductManagementView products={products} globalNodes={globalNodes} categories={categories} boms={boms} dictionaries={dictionaries} partners={partners} onUpdateProduct={onUpdateProduct} onUpdateBOM={onUpdateBOM} onUpdateDictionaries={onUpdateDictionaries} onDetailViewChange={setProductDetailVisible} />
+          <ProductManagementView products={products} globalNodes={globalNodes} categories={categories} boms={boms} dictionaries={dictionaries} partners={partners} onUpdateProduct={onUpdateProduct} onUpdateBOM={onUpdateBOM} onRefreshDictionaries={onRefreshDictionaries} onDetailViewChange={setProductDetailVisible} permCanCreate={canCreate('PRODUCTS')} permCanEdit={canEdit('PRODUCTS')} permCanDelete={canDelete('PRODUCTS')} />
         )}
 
         {activeTab === 'PARTNERS' && !showModal && (
           <div className="space-y-8">
-            {renderHeader('合作单位中心', '分类管理外部单位档案及自定义扩展信息', () => handleOpenPartner(), '新增单位')}
+            {renderHeader('合作单位中心', '分类管理外部单位档案及自定义扩展信息', canCreate('PARTNERS') ? () => handleOpenPartner() : null, '新增单位')}
             
             {/* 分类导航条 */}
             <div className="flex flex-wrap gap-2">
@@ -339,8 +378,8 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                         <Building2 className="w-6 h-6" />
                       </div>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                        <button onClick={() => handleOpenPartner(p)} className="p-2 text-slate-300 hover:text-indigo-600 bg-slate-50 rounded-xl transition-colors"><Edit2 className="w-4 h-4" /></button>
-                        <button onClick={() => onUpdatePartners(partners.filter(x => x.id !== p.id))} className="p-2 text-slate-300 hover:text-rose-600 bg-slate-50 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
+                        {canEdit('PARTNERS') && <button onClick={() => handleOpenPartner(p)} className="p-2 text-slate-300 hover:text-indigo-600 bg-slate-50 rounded-xl transition-colors"><Edit2 className="w-4 h-4" /></button>}
+                        {canDelete('PARTNERS') && <button onClick={async () => { try { await api.partners.delete(p.id); await onRefreshPartners(); } catch (err: any) { toast.error(err.message || '删除失败'); } }} className="p-2 text-slate-300 hover:text-rose-600 bg-slate-50 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>}
                       </div>
                     </div>
                     
@@ -388,79 +427,13 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
           </div>
         )}
 
-        {activeTab === 'WORKERS' && !showModal && (
-          <div className="space-y-8">
-            {renderHeader('工人档案库', '追踪生产人员的技能分布与权限节点', () => handleOpenWorker(), '建立档案')}
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setWorkerNodeId(null)}
-                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${workerNodeId === null ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-              >
-                全部 ({workers.length})
-              </button>
-              {(() => {
-                const unassignedCount = workers.filter(w => !w.assignedMilestoneIds?.length).length;
-                return unassignedCount > 0 ? (
-                  <button
-                    onClick={() => setWorkerNodeId(WORKER_UNASSIGNED)}
-                    className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${workerNodeId === WORKER_UNASSIGNED ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                  >
-                    未分配 ({unassignedCount})
-                  </button>
-                ) : null;
-              })()}
-              {globalNodes.map(n => {
-                const count = workers.filter(w => w.assignedMilestoneIds?.includes(n.id)).length;
-                if (count === 0) return null;
-                return (
-                  <button
-                    key={n.id}
-                    onClick={() => setWorkerNodeId(n.id)}
-                    className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${workerNodeId === n.id ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                  >
-                    {n.name} ({count})
-                  </button>
-                );
-              })}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {workers
-                .filter(w => {
-                  if (workerNodeId == null) return true;
-                  if (workerNodeId === WORKER_UNASSIGNED) return !w.assignedMilestoneIds?.length;
-                  return w.assignedMilestoneIds?.includes(workerNodeId);
-                })
-                .filter(w => !searchTerm || w.name.includes(searchTerm))
-                .map(w => (
-                <div key={w.id} className="bg-white p-6 rounded-[32px] border border-slate-200 hover:shadow-2xl transition-all group flex flex-col relative overflow-hidden">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-black text-xl shadow-inner group-hover:scale-110 transition-transform">{w.name.charAt(0)}</div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                      <button onClick={() => handleOpenWorker(w)} className="p-2 text-slate-300 hover:text-indigo-600 bg-slate-50 rounded-xl"><Edit2 className="w-4 h-4" /></button>
-                      <button onClick={() => onUpdateWorkers(workers.filter(x => x.id !== w.id))} className="p-2 text-slate-300 hover:text-rose-600 bg-slate-50 rounded-xl"><Trash2 className="w-4 h-4" /></button>
-                    </div>
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-900 mb-1">{w.name}</h3>
-                  <p className="text-[11px] text-slate-400 font-bold mb-4 flex items-center gap-1 uppercase tracking-tighter"><Briefcase className="w-3 h-3 text-slate-300" /> {w.group}</p>
-                  <div className="flex flex-wrap gap-2 mb-6">
-                    {w.skills.map(s => <span key={s} className="px-2 py-1 bg-slate-50 text-slate-500 text-[9px] font-bold rounded-lg uppercase tracking-widest">{s}</span>)}
-                  </div>
-                  <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
-                      <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">权限节点: {w.assignedMilestoneIds?.length || 0} 个</span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-slate-200 transition-all" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        {activeTab === 'MEMBERS' && (
+          <MemberManagementView tenantId={tenantId} tenantRole={tenantRole} currentUserId={currentUserId} globalNodes={globalNodes} onRefreshWorkers={onRefreshWorkers} />
         )}
 
         {activeTab === 'EQUIPMENT' && !showModal && (
           <div className="space-y-8">
-            {renderHeader('生产设备管理', '追踪车间机械设备、工装夹具及关联工序', () => handleOpenEq(), '新增设备')}
+            {renderHeader('生产设备管理', '追踪车间机械设备、工装夹具及关联工序', canCreate('EQUIPMENT') ? () => handleOpenEq() : null, '新增设备')}
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setEquipmentNodeId(null)}
@@ -506,8 +479,8 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                    <div className="flex justify-between items-start mb-4">
                     <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:text-indigo-600 transition-all shadow-inner"><Cpu className="w-6 h-6" /></div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                      <button onClick={() => handleOpenEq(e)} className="p-2 text-slate-300 hover:text-indigo-600 bg-slate-50 rounded-xl"><Edit2 className="w-4 h-4" /></button>
-                      <button onClick={() => onUpdateEquipment(equipment.filter(x => x.id !== e.id))} className="p-2 text-slate-300 hover:text-rose-600 bg-slate-50 rounded-xl"><Trash2 className="w-4 h-4" /></button>
+                      {canEdit('EQUIPMENT') && <button onClick={() => handleOpenEq(e)} className="p-2 text-slate-300 hover:text-indigo-600 bg-slate-50 rounded-xl"><Edit2 className="w-4 h-4" /></button>}
+                      {canDelete('EQUIPMENT') && <button onClick={async () => { try { await api.equipment.delete(e.id); await onRefreshEquipment(); } catch (err: any) { toast.error(err.message || '删除失败'); } }} className="p-2 text-slate-300 hover:text-rose-600 bg-slate-50 rounded-xl"><Trash2 className="w-4 h-4" /></button>}
                     </div>
                   </div>
                   <h3 className="text-lg font-bold text-slate-900 mb-1">{e.name}</h3>
@@ -541,11 +514,12 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                       <div className="flex-1">
                         <p className="text-xs font-bold text-slate-800">{c.name}</p>
                       </div>
-                      <button onClick={() => onUpdateDictionaries({ ...dictionaries, colors: dictionaries.colors.filter(x => x.id !== c.id) })} className="opacity-0 group-hover:opacity-100 p-1.5 text-rose-400 hover:bg-rose-50 rounded-lg transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
+                      {canDelete('DICTIONARIES') && <button onClick={() => handleDeleteDictionary(c.id)} className="opacity-0 group-hover:opacity-100 p-1.5 text-rose-400 hover:bg-rose-50 rounded-lg transition-all"><Trash2 className="w-3.5 h-3.5" /></button>}
                     </div>
                   ))}
                 </div>
               </div>
+              {canCreate('DICTIONARIES') && (
               <div className="pt-6 border-t border-slate-50 space-y-4">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">快速新增颜色</h4>
                 <div className="flex gap-3">
@@ -553,6 +527,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                   <button onClick={handleAddColor} disabled={!newColorName.trim()} className="bg-indigo-600 text-white p-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all"><Plus className="w-5 h-5" /></button>
                 </div>
               </div>
+              )}
             </div>
             <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm p-8 space-y-8 flex flex-col">
               <div className="flex items-center justify-between border-b border-slate-50 pb-4">
@@ -569,11 +544,12 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                       <div className="flex-1">
                         <p className="text-xs font-bold text-slate-800">{s.name}</p>
                       </div>
-                      <button onClick={() => onUpdateDictionaries({ ...dictionaries, sizes: dictionaries.sizes.filter(x => x.id !== s.id) })} className="opacity-0 group-hover:opacity-100 p-1.5 text-rose-400 hover:bg-rose-50 rounded-lg transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
+                      {canDelete('DICTIONARIES') && <button onClick={() => handleDeleteDictionary(s.id)} className="opacity-0 group-hover:opacity-100 p-1.5 text-rose-400 hover:bg-rose-50 rounded-lg transition-all"><Trash2 className="w-3.5 h-3.5" /></button>}
                     </div>
                   ))}
                 </div>
               </div>
+              {canCreate('DICTIONARIES') && (
               <div className="pt-6 border-t border-slate-50 space-y-4">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">快速新增尺码</h4>
                 <div className="flex gap-3">
@@ -581,6 +557,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                   <button onClick={handleAddSize} disabled={!newSizeName.trim()} className="bg-indigo-600 text-white p-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all"><Plus className="w-5 h-5" /></button>
                 </div>
               </div>
+              )}
             </div>
             <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm p-8 space-y-8 flex flex-col">
               <div className="flex items-center justify-between border-b border-slate-50 pb-4">
@@ -597,11 +574,12 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                       <div className="flex-1">
                         <p className="text-xs font-bold text-slate-800">{u.name}</p>
                       </div>
-                      <button onClick={() => onUpdateDictionaries({ ...dictionaries, units: units.filter(x => x.id !== u.id) })} className="opacity-0 group-hover:opacity-100 p-1.5 text-rose-400 hover:bg-rose-50 rounded-lg transition-all"><Trash2 className="w-3.5 h-3.5" /></button>
+                      {canDelete('DICTIONARIES') && <button onClick={() => handleDeleteDictionary(u.id)} className="opacity-0 group-hover:opacity-100 p-1.5 text-rose-400 hover:bg-rose-50 rounded-lg transition-all"><Trash2 className="w-3.5 h-3.5" /></button>}
                     </div>
                   ))}
                 </div>
               </div>
+              {canCreate('DICTIONARIES') && (
               <div className="pt-6 border-t border-slate-50 space-y-4">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">快速新增单位</h4>
                 <div className="flex gap-3">
@@ -609,12 +587,13 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                   <button onClick={handleAddUnit} disabled={!newUnitName.trim()} className="bg-indigo-600 text-white p-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all"><Plus className="w-5 h-5" /></button>
                 </div>
               </div>
+              )}
             </div>
           </div>
         )}
 
         {/* 合作单位编辑弹窗 */}
-        {showModal === 'PARTNERS' && (
+        {showModal === 'PARTNERS' && activeTab === 'PARTNERS' && (
            <div className="max-w-4xl mx-auto space-y-6 animate-in slide-in-from-bottom-4 pb-32">
              <div className="flex items-center justify-between sticky top-0 z-40 py-4 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200">
                <button onClick={() => setShowModal(null)} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
@@ -691,63 +670,17 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
            </div>
         )}
 
-        {(showModal === 'WORKERS' || showModal === 'EQUIPMENT') && (
+        {showModal === 'EQUIPMENT' && activeTab === 'EQUIPMENT' && (
           <div className="max-w-4xl mx-auto space-y-6 animate-in slide-in-from-bottom-4 pb-32">
              <div className="flex items-center justify-between sticky top-0 z-40 py-4 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200">
                <button onClick={() => setShowModal(null)} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
                  <ArrowLeft className="w-4 h-4" /> 返回列表
                </button>
-               <button onClick={showModal === 'WORKERS' ? saveWorker : saveEq} className="bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">
+               <button onClick={saveEq} className="bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">
                  <Save className="w-4 h-4" /> 保存档案
                </button>
              </div>
              <div className="bg-white rounded-[40px] p-8 border border-slate-200 shadow-sm space-y-8">
-                {showModal === 'WORKERS' && (
-                  <>
-                    <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
-                      <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600"><Users className="w-5 h-5" /></div>
-                      <h3 className="text-lg font-bold text-slate-800">工人基础资料</h3>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">姓名</label>
-                        <input type="text" value={editWorker.name} onChange={e => setEditWorker({...editWorker, name: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">班组</label>
-                        <input type="text" value={editWorker.group} onChange={e => setEditWorker({...editWorker, group: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-                      </div>
-                    </div>
-                    <div className="pt-6 space-y-6">
-                       <div className="flex items-center justify-between border-b border-slate-50 pb-4">
-                          <div className="flex items-center gap-3">
-                             <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600"><ShieldAlert className="w-5 h-5" /></div>
-                             <h3 className="text-lg font-bold text-slate-800">分配生产工序权限</h3>
-                          </div>
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">已分配 {(editWorker.assignedMilestoneIds || []).length} 节点</span>
-                       </div>
-                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                          {globalNodes.map(node => {
-                            const isChecked = editWorker.assignedMilestoneIds?.includes(node.id);
-                            return (
-                              <button 
-                                key={node.id} 
-                                onClick={() => {
-                                  const current = editWorker.assignedMilestoneIds || [];
-                                  const updated = current.includes(node.id) ? current.filter(id => id !== node.id) : [...current, node.id];
-                                  setEditWorker({ ...editWorker, assignedMilestoneIds: updated });
-                                }} 
-                                className={`flex items-center justify-between p-4 rounded-2xl border text-left transition-all ${isChecked ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-slate-50 border-slate-50 text-slate-600 hover:border-indigo-200'}`}
-                              >
-                                <span className="text-xs font-bold">{node.name}</span>
-                                {isChecked && <CheckCircle className="w-4 h-4 text-white" />}
-                              </button>
-                            );
-                          })}
-                       </div>
-                    </div>
-                  </>
-                )}
                 {showModal === 'EQUIPMENT' && (
                    <>
                     <div className="flex items-center gap-3 border-b border-slate-50 pb-4">

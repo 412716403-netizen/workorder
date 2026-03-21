@@ -1,5 +1,5 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Link, Navigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Link, Navigate, useNavigate } from 'react-router-dom';
 import { 
   Layout, 
   LayoutDashboard, 
@@ -7,37 +7,37 @@ import {
   Settings as SettingsIcon, 
   Boxes, 
   ShoppingCart, 
-  Wallet
+  Wallet,
+  LogOut,
+  User,
+  UserCog,
+  Building2,
+  Loader2,
 } from 'lucide-react';
-import { 
-  MOCK_PRODUCTS, 
-  MOCK_ORDERS, 
-  MOCK_CATEGORIES, 
-  MOCK_DICTIONARIES, 
-  MOCK_GLOBAL_NODES, 
-  MOCK_BOMS, 
-  MOCK_PARTNERS, 
-  MOCK_WORKERS, 
-  MOCK_EQUIPMENT,
-  MOCK_PARTNER_CATEGORIES 
-} from './constants';
-import { 
-  Product, 
-  ProductionOrder, 
-  PlanOrder, 
-  ProductionOpRecord, 
-  FinanceRecord, 
-  Warehouse, 
-  PrintSettings, 
-  PlanFormSettings, OrderFormSettings,
+import LoginView from './views/LoginView';
+import OnboardingView from './views/OnboardingView';
+import TenantSelectView from './views/TenantSelectView';
+import {
+  Product,
+  ProductionOrder,
+  PlanOrder,
+  ProductionOpRecord,
+  FinanceRecord,
+  Warehouse,
+  PlanFormSettings,
+  OrderFormSettings,
   PurchaseOrderFormSettings,
   PurchaseBillFormSettings,
-  PlanStatus,
-  MilestoneStatus,
-  OrderStatus,
   ProductionLinkMode,
   ProductMilestoneProgress,
   ProcessSequenceMode,
+  FinanceCategory,
+  FinanceAccountType,
+  AppDictionaries,
+  ProductCategory,
+  PartnerCategory,
+  GlobalNodeTemplate,
+  BOM,
 } from './types';
 
 // Views
@@ -47,19 +47,59 @@ import PSIView from './views/PSIView';
 import FinanceView from './views/FinanceView';
 import BasicInfoView from './views/BasicInfoView';
 import SettingsView from './views/SettingsView';
-import { usePersistedState } from './hooks/usePersistedState';
+import UserAdminView from './views/UserAdminView';
+import ProfileModal from './views/ProfileModal';
+import { toast } from 'sonner';
+import { clearTokens } from './services/api';
+import * as api from './services/api';
+import type { TenantInfo } from './services/api';
 
-const DEFAULT_PRINT_SETTINGS: PrintSettings = {
-  PLAN: { id: 'PLAN', name: '计划单', enabled: true, title: '生产计划指令单', headerText: '', footerText: '', showLogo: true, showQRCode: true, fontSize: 'base', fields: [] },
-  ORDER: { id: 'ORDER', name: '生产工单', enabled: true, title: '正式生产作业单', headerText: '', footerText: '', showLogo: true, showQRCode: true, fontSize: 'base', fields: [] },
-  STOCK_OUT: { id: 'STOCK_OUT', name: '领料单', enabled: true, title: '仓库领料出库单', headerText: '', footerText: '', showLogo: true, showQRCode: true, fontSize: 'base', fields: [] },
-  OUTSOURCE: { id: 'OUTSOURCE', name: '外协单', enabled: true, title: '委外加工指令单', headerText: '', footerText: '', showLogo: true, showQRCode: true, fontSize: 'base', fields: [] },
-  REWORK: { id: 'REWORK', name: '返工单', enabled: true, title: '生产返工通知单', headerText: '', footerText: '', showLogo: true, showQRCode: true, fontSize: 'base', fields: [] },
-  STOCK_IN: { id: 'STOCK_IN', name: '入库单', enabled: true, title: '成品入库凭证', headerText: '', footerText: '', showLogo: true, showQRCode: true, fontSize: 'base', fields: [] },
-};
+const DECIMAL_KEYS = new Set([
+  'quantity', 'purchasePrice', 'salesPrice', 'amount', 'actualQuantity',
+  'systemQuantity', 'diffQuantity', 'unitPrice', 'taxRate', 'taxAmount',
+  'totalAmount', 'completedQuantity', 'defectiveQuantity', 'weight', 'rate',
+  'allocatedQuantity', 'shippedQuantity',
+]);
+function normalizeDecimals<T>(arr: T[]): T[] {
+  return arr.map(item => {
+    const copy = { ...item } as any;
+    for (const k of DECIMAL_KEYS) {
+      if (k in copy && copy[k] != null && typeof copy[k] === 'string') copy[k] = Number(copy[k]) || 0;
+    }
+    if (Array.isArray(copy.items)) {
+      copy.items = copy.items.map((sub: any) => {
+        const s = { ...sub };
+        for (const k of DECIMAL_KEYS) {
+          if (k in s && s[k] != null && typeof s[k] === 'string') s[k] = Number(s[k]) || 0;
+        }
+        return s;
+      });
+    }
+    if (Array.isArray(copy.milestones)) {
+      copy.milestones = copy.milestones.map((ms: any) => {
+        const m = { ...ms };
+        for (const k of DECIMAL_KEYS) {
+          if (k in m && m[k] != null && typeof m[k] === 'string') m[k] = Number(m[k]) || 0;
+        }
+        if (Array.isArray(m.reports)) {
+          m.reports = m.reports.map((r: any) => {
+            const rc = { ...r };
+            for (const k2 of DECIMAL_KEYS) {
+              if (k2 in rc && rc[k2] != null && typeof rc[k2] === 'string') rc[k2] = Number(rc[k2]) || 0;
+            }
+            return rc;
+          });
+          const reportsSum = m.reports.reduce((s: number, r: any) => s + (Number(r.quantity) || 0), 0);
+          if (m.completedQuantity !== reportsSum) m.completedQuantity = reportsSum;
+        }
+        return m;
+      });
+    }
+    return copy as T;
+  });
+}
 
 const DEFAULT_PLAN_FORM_SETTINGS: PlanFormSettings = {
-  // 产品、计划量、状态、优先级、已派发工序数不在此配置，由系统固定展示
   standardFields: [
     { id: 'planNumber', label: '计划单号', showInList: true, showInCreate: false, showInDetail: true },
     { id: 'customer', label: '客户', showInList: true, showInCreate: true, showInDetail: true },
@@ -101,61 +141,577 @@ const DEFAULT_PURCHASE_BILL_FORM_SETTINGS: PurchaseBillFormSettings = {
   customFields: [],
 };
 
-const MOCK_WAREHOUSES: Warehouse[] = [
-  { id: 'wh-1', name: '中心原材料仓库', code: 'WH-RAW-01', category: '原料库', location: '1号楼101', contact: '张库管' },
-  { id: 'wh-2', name: '成品周转仓', code: 'WH-FIN-02', category: '成品库', location: '2号楼201', contact: '李库管' },
-];
+const EMPTY_DICTIONARIES: AppDictionaries = { colors: [], sizes: [], units: [] };
 
-/**
- * Main application component.
- * Manages global state for products, orders, plans, and accounting records.
- * Provides navigation and routing to different business modules.
- */
-export default function App() {
-  const [products, setProducts] = usePersistedState<Product[]>('products', MOCK_PRODUCTS);
-  const [orders, setOrders] = usePersistedState<ProductionOrder[]>('orders', MOCK_ORDERS);
-  const [plans, setPlans] = usePersistedState<PlanOrder[]>('plans', []);
-  const [psiRecords, setPsiRecords] = usePersistedState<any[]>('psiRecords', []);
-  const [financeRecords, setFinanceRecords] = usePersistedState<FinanceRecord[]>('financeRecords', []);
-  const [prodRecords, setProdRecords] = usePersistedState<ProductionOpRecord[]>('prodRecords', []);
-  const [categories, setCategories] = usePersistedState('categories', MOCK_CATEGORIES);
-  const [partnerCategories, setPartnerCategories] = usePersistedState('partnerCategories', MOCK_PARTNER_CATEGORIES);
-  const [dictionaries, setDictionaries] = usePersistedState('dictionaries', MOCK_DICTIONARIES);
-  const [globalNodes, setGlobalNodes] = usePersistedState('globalNodes', MOCK_GLOBAL_NODES);
-  const [boms, setBoms] = usePersistedState('boms', MOCK_BOMS);
-  const [partners, setPartners] = usePersistedState('partners', MOCK_PARTNERS);
-  const [workers, setWorkers] = usePersistedState('workers', MOCK_WORKERS);
-  const [equipment, setEquipment] = usePersistedState('equipment', MOCK_EQUIPMENT);
-  const [warehouses, setWarehouses] = usePersistedState('warehouses', MOCK_WAREHOUSES);
-  const [printSettings, setPrintSettings] = usePersistedState('printSettings', DEFAULT_PRINT_SETTINGS);
-  const [planFormSettings, setPlanFormSettings] = usePersistedState<PlanFormSettings>('planFormSettings', DEFAULT_PLAN_FORM_SETTINGS);
-  const [orderFormSettings, setOrderFormSettings] = usePersistedState<OrderFormSettings>('orderFormSettings', DEFAULT_ORDER_FORM_SETTINGS);
-  const [purchaseOrderFormSettings, setPurchaseOrderFormSettings] = usePersistedState<PurchaseOrderFormSettings>('purchaseOrderFormSettings', DEFAULT_PURCHASE_ORDER_FORM_SETTINGS);
-  const [purchaseBillFormSettings, setPurchaseBillFormSettings] = usePersistedState<PurchaseBillFormSettings>('purchaseBillFormSettings', DEFAULT_PURCHASE_BILL_FORM_SETTINGS);
-  const [productionLinkMode, setProductionLinkMode] = usePersistedState<ProductionLinkMode>('productionLinkMode', 'order');
-  const [processSequenceMode, setProcessSequenceMode] = usePersistedState<ProcessSequenceMode>('processSequenceMode', 'free');
-  const [allowExceedMaxReportQty, setAllowExceedMaxReportQty] = usePersistedState<boolean>('allowExceedMaxReportQty', true);
-  const [productMilestoneProgresses, setProductMilestoneProgresses] = usePersistedState<ProductMilestoneProgress[]>('productMilestoneProgresses', []);
+type TenantContext = {
+  tenantId: string;
+  tenantName: string;
+  tenantRole: string;
+  permissions: string[];
+};
 
-  const handleAddPSIRecord = (record: any) => setPsiRecords(prev => [record, ...prev]);
-  const handleReplacePSIRecords = (type: string, docNumber: string, newRecords: any[]) => {
-    setPsiRecords(prev => {
-      const firstIdx = prev.findIndex(r => r.type === type && r.docNumber === docNumber);
-      const filtered = prev.filter(r => !(r.type === type && r.docNumber === docNumber));
-      if (firstIdx < 0) return [...filtered, ...newRecords];
-      // 在原位置插入新记录，保持单据顺序不变
-      return [...filtered.slice(0, firstIdx), ...newRecords, ...filtered.slice(firstIdx)];
-    });
+function AppInner() {
+  const navigate = useNavigate();
+  const [currentUser, setCurrentUser] = useState<Record<string, unknown> | null>(() => {
+    const saved = localStorage.getItem('currentUser');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [tenantCtx, setTenantCtx] = useState<TenantContext | null>(() => {
+    const saved = localStorage.getItem('tenantCtx');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [userTenants, setUserTenants] = useState<TenantInfo[]>(() => {
+    const saved = localStorage.getItem('userTenants');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const isLoggedIn = !!currentUser && !!localStorage.getItem('accessToken');
+
+  const handleLogin = (loginData: { user: Record<string, unknown>; tenants: TenantInfo[]; isEnterprise: boolean; tenantId?: string | null }) => {
+    setCurrentUser(loginData.user);
+    localStorage.setItem('currentUser', JSON.stringify(loginData.user));
+    setUserTenants(loginData.tenants || []);
+    localStorage.setItem('userTenants', JSON.stringify(loginData.tenants || []));
+
+    if (loginData.tenantId && loginData.tenants?.length) {
+      const matched = loginData.tenants.find(t => t.id === loginData.tenantId);
+      if (matched) {
+        const ctx: TenantContext = {
+          tenantId: matched.id,
+          tenantName: matched.name,
+          tenantRole: matched.role,
+          permissions: matched.permissions,
+        };
+        setTenantCtx(ctx);
+        localStorage.setItem('tenantCtx', JSON.stringify(ctx));
+      }
+    } else {
+      setTenantCtx(null);
+      localStorage.removeItem('tenantCtx');
+    }
+    navigate('/', { replace: true });
   };
-  const handleDeletePSIRecords = (type: string, docNumber: string) => {
-    setPsiRecords(prev => prev.filter(r => !(r.type === type && r.docNumber === docNumber)));
+
+  const handleTenantReady = (result: { tenantId: string; tenantName: string; tenantRole: string; permissions: string[] }) => {
+    const ctx: TenantContext = result;
+    setTenantCtx(ctx);
+    localStorage.setItem('tenantCtx', JSON.stringify(ctx));
+    setShowOnboarding(false);
+    api.tenants.list().then(list => {
+      const infos: TenantInfo[] = list.map((t: any) => ({ id: t.id, name: t.name, role: t.role, permissions: typeof t.permissions === 'string' ? JSON.parse(t.permissions) : (t.permissions || []) }));
+      setUserTenants(infos);
+      localStorage.setItem('userTenants', JSON.stringify(infos));
+    }).catch(() => {});
+    navigate('/', { replace: true });
   };
+
+  const handleSwitchTenant = () => {
+    setTenantCtx(null);
+    setShowOnboarding(false);
+    localStorage.removeItem('tenantCtx');
+  };
+
+  const handleLogout = () => {
+    const refreshToken = localStorage.getItem('refreshToken');
+    const API_BASE = (import.meta as Record<string, Record<string, string>>).env?.VITE_API_BASE || 'http://localhost:3001/api';
+    if (refreshToken) {
+      fetch(`${API_BASE}/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      }).catch(() => {});
+    }
+    clearTokens();
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('tenantCtx');
+    localStorage.removeItem('userTenants');
+    setCurrentUser(null);
+    setTenantCtx(null);
+    setUserTenants([]);
+    navigate('/', { replace: true });
+  };
+
+  useEffect(() => {
+    if (!isLoggedIn || !tenantCtx) return;
+    let cancelled = false;
+    api.tenants.list().then(list => {
+      if (cancelled) return;
+      const infos: TenantInfo[] = list.map((t: any) => ({ id: t.id, name: t.name, role: t.role, permissions: typeof t.permissions === 'string' ? JSON.parse(t.permissions) : (t.permissions || []) }));
+      setUserTenants(infos);
+      localStorage.setItem('userTenants', JSON.stringify(infos));
+      const matched = infos.find(t => t.id === tenantCtx.tenantId);
+      if (matched) {
+        const next: TenantContext = {
+          tenantId: matched.id,
+          tenantName: matched.name,
+          tenantRole: matched.role,
+          permissions: matched.permissions,
+        };
+        const prev = JSON.stringify(tenantCtx);
+        if (JSON.stringify(next) !== prev) {
+          setTenantCtx(next);
+          localStorage.setItem('tenantCtx', JSON.stringify(next));
+        }
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [isLoggedIn, tenantCtx?.tenantId]);
+
+  if (!isLoggedIn) {
+    return <LoginView onLogin={handleLogin} />;
+  }
+
+  if (userTenants.length === 0 && !tenantCtx) {
+    return <OnboardingView onTenantReady={handleTenantReady} onBackToLogin={handleLogout} />;
+  }
+
+  if (showOnboarding && !tenantCtx) {
+    return (
+      <OnboardingView
+        onTenantReady={handleTenantReady}
+        onBack={userTenants.length > 0 ? () => setShowOnboarding(false) : undefined}
+        onBackToLogin={handleLogout}
+      />
+    );
+  }
+
+  if (userTenants.length > 0 && !tenantCtx) {
+    return <TenantSelectView tenants={userTenants} onSelect={handleTenantReady} onCreateOrJoin={() => setShowOnboarding(true)} />;
+  }
 
   return (
+    <AuthenticatedApp
+      key={`${currentUser!.id}_${tenantCtx!.tenantId}`}
+      currentUser={currentUser!}
+      tenantCtx={tenantCtx!}
+      onLogout={handleLogout}
+      onSwitchTenant={handleSwitchTenant}
+      onProfileUpdate={(user) => {
+        setCurrentUser(user);
+        localStorage.setItem('currentUser', JSON.stringify(user));
+      }}
+    />
+  );
+}
+
+export default function App() {
+  return (
     <BrowserRouter>
-      <div className="flex h-screen bg-slate-50 text-slate-900 font-sans">
+      <AppInner />
+    </BrowserRouter>
+  );
+}
+
+type AuthenticatedAppProps = {
+  currentUser: Record<string, unknown>;
+  tenantCtx: TenantContext;
+  onLogout: () => void;
+  onSwitchTenant: () => void;
+  onProfileUpdate: (user: Record<string, unknown>) => void;
+};
+
+function AuthenticatedApp({ currentUser, tenantCtx, onLogout, onSwitchTenant, onProfileUpdate }: AuthenticatedAppProps) {
+  const [profileOpen, setProfileOpen] = React.useState(false);
+  const userId = String(currentUser.id ?? '');
+  const hasPerm = (mod: string) => tenantCtx.tenantRole === 'owner' || tenantCtx.permissions.includes(mod) || tenantCtx.permissions.some(p => p.startsWith(`${mod}:`));
+  if (!userId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600 p-8">
+        <p className="text-center">当前账号缺少用户标识，请退出后重新登录。</p>
+      </div>
+    );
+  }
+
+  // ── State declarations (all from API, no localStorage) ──
+  const [dataLoading, setDataLoading] = useState(true);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<ProductionOrder[]>([]);
+  const [plans, setPlans] = useState<PlanOrder[]>([]);
+  const [psiRecords, setPsiRecords] = useState<any[]>([]);
+  const [financeRecords, setFinanceRecords] = useState<FinanceRecord[]>([]);
+  const [prodRecords, setProdRecords] = useState<ProductionOpRecord[]>([]);
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [partnerCategories, setPartnerCategories] = useState<PartnerCategory[]>([]);
+  const [dictionaries, setDictionaries] = useState<AppDictionaries>(EMPTY_DICTIONARIES);
+  const [globalNodes, setGlobalNodes] = useState<GlobalNodeTemplate[]>([]);
+  const [boms, setBoms] = useState<BOM[]>([]);
+  const [partners, setPartners] = useState<any[]>([]);
+  const [workers, setWorkers] = useState<any[]>([]);
+  const [equipment, setEquipment] = useState<any[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [financeCategories, setFinanceCategories] = useState<FinanceCategory[]>([]);
+  const [financeAccountTypes, setFinanceAccountTypes] = useState<FinanceAccountType[]>([]);
+  const [planFormSettings, setPlanFormSettings] = useState<PlanFormSettings>(DEFAULT_PLAN_FORM_SETTINGS);
+  const [orderFormSettings, setOrderFormSettings] = useState<OrderFormSettings>(DEFAULT_ORDER_FORM_SETTINGS);
+  const [purchaseOrderFormSettings, setPurchaseOrderFormSettings] = useState<PurchaseOrderFormSettings>(DEFAULT_PURCHASE_ORDER_FORM_SETTINGS);
+  const [purchaseBillFormSettings, setPurchaseBillFormSettings] = useState<PurchaseBillFormSettings>(DEFAULT_PURCHASE_BILL_FORM_SETTINGS);
+  const [productionLinkMode, setProductionLinkMode] = useState<ProductionLinkMode>('order');
+  const [processSequenceMode, setProcessSequenceMode] = useState<ProcessSequenceMode>('free');
+  const [allowExceedMaxReportQty, setAllowExceedMaxReportQty] = useState<boolean>(true);
+  const [productMilestoneProgresses, setProductMilestoneProgresses] = useState<ProductMilestoneProgress[]>([]);
+
+  // ── Initial data loading ──
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAll() {
+      try {
+        const results = await Promise.allSettled([
+          api.settings.getConfig(),
+          api.settings.categories.list(),
+          api.settings.partnerCategories.list(),
+          api.settings.nodes.list(),
+          api.settings.warehouses.list(),
+          api.settings.financeCategories.list(),
+          api.settings.financeAccountTypes.list(),
+          api.partners.list(),
+          api.tenants.getReportableMembers(tenantCtx.tenantId),
+          api.equipment.list(),
+          api.dictionaries.list(),
+          api.products.list(),
+          api.boms.list(),
+          api.plans.list(),
+          api.orders.list(),
+          api.production.list(),
+          api.psi.list(),
+          api.finance.list(),
+          api.orders.listProductProgress(),
+        ]);
+        if (cancelled) return;
+        const v = (i: number) => results[i].status === 'fulfilled' ? (results[i] as PromiseFulfilledResult<unknown>).value : undefined;
+        const failed = results.filter(r => r.status === 'rejected');
+        if (failed.length) console.warn(`数据加载: ${failed.length}/${results.length} 个请求失败`, failed.map(r => (r as PromiseRejectedResult).reason?.message));
+        const cfg = (v(0) || {}) as Record<string, unknown>;
+        setProductionLinkMode((cfg.productionLinkMode as ProductionLinkMode) ?? 'order');
+        setProcessSequenceMode((cfg.processSequenceMode as ProcessSequenceMode) ?? 'free');
+        setAllowExceedMaxReportQty(cfg.allowExceedMaxReportQty !== false);
+        setPlanFormSettings((cfg.planFormSettings as PlanFormSettings) ?? DEFAULT_PLAN_FORM_SETTINGS);
+        setOrderFormSettings((cfg.orderFormSettings as OrderFormSettings) ?? DEFAULT_ORDER_FORM_SETTINGS);
+        setPurchaseOrderFormSettings((cfg.purchaseOrderFormSettings as PurchaseOrderFormSettings) ?? DEFAULT_PURCHASE_ORDER_FORM_SETTINGS);
+        setPurchaseBillFormSettings((cfg.purchaseBillFormSettings as PurchaseBillFormSettings) ?? DEFAULT_PURCHASE_BILL_FORM_SETTINGS);
+        if (v(1))  setCategories(v(1) as ProductCategory[]);
+        if (v(2))  setPartnerCategories(v(2) as PartnerCategory[]);
+        if (v(3))  setGlobalNodes(v(3) as GlobalNodeTemplate[]);
+        if (v(4))  setWarehouses(v(4) as Warehouse[]);
+        if (v(5))  setFinanceCategories(v(5) as FinanceCategory[]);
+        if (v(6))  setFinanceAccountTypes(v(6) as FinanceAccountType[]);
+        if (v(7))  setPartners(v(7) as any[]);
+        if (v(8))  setWorkers(v(8) as any[]);
+        if (v(9))  setEquipment(v(9) as any[]);
+        if (v(10)) setDictionaries(v(10) as AppDictionaries);
+        if (v(11)) setProducts(normalizeDecimals(v(11) as Product[]));
+        if (v(12)) setBoms(normalizeDecimals(v(12) as BOM[]));
+        if (v(13)) setPlans(normalizeDecimals(v(13) as PlanOrder[]));
+        if (v(14)) setOrders(normalizeDecimals(v(14) as ProductionOrder[]));
+        if (v(15)) setProdRecords(normalizeDecimals(v(15) as ProductionOpRecord[]));
+        if (v(16)) setPsiRecords(normalizeDecimals(v(16) as any[]));
+        if (v(17)) setFinanceRecords(normalizeDecimals(v(17) as FinanceRecord[]));
+        if (v(18)) setProductMilestoneProgresses(normalizeDecimals(v(18) as ProductMilestoneProgress[]));
+      } catch (err) {
+        console.error('数据加载失败', err);
+      } finally {
+        if (!cancelled) setDataLoading(false);
+      }
+    }
+    loadAll();
+    return () => { cancelled = true; };
+  }, []);
+
+  // ── Refresh helpers ──
+  const refreshPlans = async () => setPlans(normalizeDecimals(await api.plans.list() as PlanOrder[]));
+  const refreshOrders = async () => setOrders(normalizeDecimals(await api.orders.list() as ProductionOrder[]));
+  const refreshProducts = async () => setProducts(normalizeDecimals(await api.products.list() as Product[]));
+  const refreshBoms = async () => setBoms(normalizeDecimals(await api.boms.list() as BOM[]));
+  const refreshProdRecords = async () => setProdRecords(normalizeDecimals(await api.production.list() as ProductionOpRecord[]));
+  const refreshPsiRecords = async () => setPsiRecords(normalizeDecimals(await api.psi.list() as any[]));
+  const refreshFinanceRecords = async () => setFinanceRecords(normalizeDecimals(await api.finance.list() as FinanceRecord[]));
+  const refreshPMP = async () => setProductMilestoneProgresses(normalizeDecimals(await api.orders.listProductProgress() as ProductMilestoneProgress[]));
+  const refreshCategories = async () => setCategories(await api.settings.categories.list() as ProductCategory[]);
+  const refreshPartnerCategories = async () => setPartnerCategories(await api.settings.partnerCategories.list() as PartnerCategory[]);
+  const refreshGlobalNodes = async () => setGlobalNodes(await api.settings.nodes.list() as GlobalNodeTemplate[]);
+  const refreshWarehouses = async () => setWarehouses(await api.settings.warehouses.list() as Warehouse[]);
+  const refreshFinanceCategories = async () => setFinanceCategories(await api.settings.financeCategories.list() as FinanceCategory[]);
+  const refreshFinanceAccountTypes = async () => setFinanceAccountTypes(await api.settings.financeAccountTypes.list() as FinanceAccountType[]);
+  const refreshPartners = async () => setPartners(await api.partners.list() as any[]);
+  const refreshWorkers = async () => setWorkers(await api.tenants.getReportableMembers(tenantCtx.tenantId) as any[]);
+  const refreshEquipment = async () => setEquipment(await api.equipment.list() as any[]);
+  const refreshDictionaries = async () => setDictionaries(await api.dictionaries.list() as AppDictionaries);
+
+  // ── Config update handlers (7 items) ──
+  const onUpdateProductionLinkMode = async (mode: ProductionLinkMode) => {
+    await api.settings.updateConfig('productionLinkMode', mode);
+    setProductionLinkMode(mode);
+  };
+  const onUpdateProcessSequenceMode = async (mode: ProcessSequenceMode) => {
+    await api.settings.updateConfig('processSequenceMode', mode);
+    setProcessSequenceMode(mode);
+  };
+  const onUpdateAllowExceedMaxReportQty = async (value: boolean) => {
+    await api.settings.updateConfig('allowExceedMaxReportQty', value);
+    setAllowExceedMaxReportQty(value);
+  };
+  const onUpdatePlanFormSettings = async (v: PlanFormSettings) => {
+    await api.settings.updateConfig('planFormSettings', v);
+    setPlanFormSettings(v);
+  };
+  const onUpdateOrderFormSettings = async (v: OrderFormSettings) => {
+    await api.settings.updateConfig('orderFormSettings', v);
+    setOrderFormSettings(v);
+  };
+  const onUpdatePurchaseOrderFormSettings = async (v: PurchaseOrderFormSettings) => {
+    await api.settings.updateConfig('purchaseOrderFormSettings', v);
+    setPurchaseOrderFormSettings(v);
+  };
+  const onUpdatePurchaseBillFormSettings = async (v: PurchaseBillFormSettings) => {
+    await api.settings.updateConfig('purchaseBillFormSettings', v);
+    setPurchaseBillFormSettings(v);
+  };
+
+  // ── Product / BOM handlers ──
+  const onUpdateProduct = async (p: Product) => {
+    try {
+      const exists = products.some(px => px.id === p.id);
+      if (exists) { await api.products.update(p.id, p); } else { await api.products.create(p); }
+      await refreshProducts();
+    } catch (err: any) { toast.error(err.message || '操作失败'); }
+  };
+  const onUpdateBOM = async (b: BOM) => {
+    try {
+      const exists = boms.some(bx => bx.id === b.id);
+      if (exists) { await api.boms.update(b.id, b); } else { await api.boms.create(b); }
+      await refreshBoms();
+    } catch (err: any) { toast.error(err.message || '操作失败'); }
+  };
+
+  // ── Plan handlers ──
+  const onCreatePlan = async (p: PlanOrder) => {
+    try {
+      await api.plans.create(p);
+      await refreshPlans();
+    } catch (err: any) { toast.error(err.message || '创建计划失败'); }
+  };
+  const onUpdatePlan = async (id: string, updates: Partial<PlanOrder>) => {
+    try {
+      await api.plans.update(id, updates);
+      await refreshPlans();
+    } catch (err: any) { toast.error(err.message || '更新计划失败'); }
+  };
+  const onSplitPlan = async (planId: string, newPlans: PlanOrder[]) => {
+    try {
+      for (const sp of newPlans) await api.plans.create(sp);
+      await api.plans.delete(planId);
+      await refreshPlans();
+    } catch (err: any) { toast.error(err.message || '拆分失败'); }
+  };
+  const onDeletePlan = async (id: string) => {
+    try {
+      await api.plans.delete(id);
+      await refreshPlans();
+    } catch (err: any) { toast.error(err.message || '删除计划失败'); }
+  };
+  const onConvertToOrder = async (id: string) => {
+    try {
+      await api.plans.convert(id);
+      await Promise.allSettled([refreshPlans(), refreshOrders()]);
+    } catch (err: any) { toast.error(err.message || '下达工单失败'); }
+  };
+  const onCreateSubPlan = async ({ productId, quantity, planId, bomNodeId }: { productId: string; quantity: number; planId: string; bomNodeId?: string }) => {
+    try {
+      await api.plans.createSubPlans(planId, [{ productId, bomNodeId, items: [{ quantity }] }]);
+      await refreshPlans();
+    } catch (err: any) { toast.error(err.message || '创建子计划失败'); }
+  };
+  const onCreateSubPlans = async ({ planId, items }: { planId: string; items: Array<{ productId: string; quantity: number; bomNodeId?: string; parentProductId?: string; parentNodeId?: string }> }) => {
+    try {
+      const subPlans = items.map(i => ({ productId: i.productId, bomNodeId: i.bomNodeId, items: [{ quantity: i.quantity }] }));
+      await api.plans.createSubPlans(planId, subPlans);
+      await refreshPlans();
+    } catch (err: any) { toast.error(err.message || '创建子计划失败'); }
+  };
+
+  // ── Order / report handlers ──
+  const onReportSubmit = async (oId: string, mId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string) => {
+    try {
+      const operatorName = workerId ? (workers.find((w: any) => w.id === workerId)?.name ?? '未知') : '张主管';
+      const rate = products.find(p => p.id === orders.find(o => o.id === oId)?.productId)?.nodeRates?.[orders.find(o => o.id === oId)?.milestones.find(m => m.id === mId)?.templateId ?? ''];
+      await api.orders.createReport(oId, mId, {
+        quantity: qty, operator: operatorName, defectiveQuantity: defectiveQty || 0,
+        variantId: vId, workerId, equipmentId, reportBatchId, reportNo,
+        customData: data ?? {}, rate: rate != null ? rate : undefined,
+      });
+      await refreshOrders();
+    } catch (err: any) { toast.error(err.message || '报工失败'); }
+  };
+
+  const onReportSubmitProduct = async (productId: string, milestoneTemplateId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string) => {
+    try {
+      const operatorName = workerId ? (workers.find((w: any) => w.id === workerId)?.name ?? '未知') : '张主管';
+      const rate = products.find(p => p.id === productId)?.nodeRates?.[milestoneTemplateId];
+      await api.orders.createProductReport({
+        productId, milestoneTemplateId, quantity: qty, operator: operatorName,
+        defectiveQuantity: defectiveQty || 0, variantId: vId, workerId, equipmentId,
+        reportBatchId, reportNo, customData: data ?? {}, rate: rate != null ? rate : undefined,
+      });
+      await refreshPMP();
+    } catch (err: any) { toast.error(err.message || '报工失败'); }
+  };
+
+  const onUpdateReport = async ({ orderId, milestoneId, reportId, quantity, defectiveQuantity, timestamp, operator, newMilestoneId }: { orderId: string; milestoneId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneId?: string }) => {
+    try {
+      const targetMilestoneId = newMilestoneId || milestoneId;
+      if (targetMilestoneId !== milestoneId) {
+        await api.orders.deleteReport(orderId, milestoneId, reportId);
+        await api.orders.createReport(orderId, targetMilestoneId, {
+          quantity, defectiveQuantity: defectiveQuantity || 0, timestamp, operator,
+        });
+      } else {
+        await api.orders.updateReport(orderId, milestoneId, reportId, {
+          quantity, defectiveQuantity: defectiveQuantity || 0, timestamp, operator,
+        });
+      }
+      await refreshOrders();
+    } catch (err: any) { toast.error(err.message || '更新报工失败'); }
+  };
+
+  const onDeleteReport = async ({ orderId, milestoneId, reportId }: { orderId: string; milestoneId: string; reportId: string }) => {
+    try {
+      await api.orders.deleteReport(orderId, milestoneId, reportId);
+      await refreshOrders();
+    } catch (err: any) { toast.error(err.message || '删除报工失败'); }
+  };
+
+  const onUpdateReportProduct = async ({ progressId, reportId, quantity, defectiveQuantity, timestamp, operator, newMilestoneTemplateId }: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string }) => {
+    try {
+      if (newMilestoneTemplateId) {
+        const srcProgress = productMilestoneProgresses.find(p => p.id === progressId);
+        if (!srcProgress) return;
+        await api.orders.deleteProductReport(reportId);
+        await api.orders.createProductReport({
+          productId: srcProgress.productId, variantId: srcProgress.variantId,
+          milestoneTemplateId: newMilestoneTemplateId,
+          quantity, defectiveQuantity: defectiveQuantity || 0, timestamp, operator,
+        });
+      } else {
+        await api.orders.updateProductReport(reportId, {
+          quantity, defectiveQuantity: defectiveQuantity || 0, timestamp, operator,
+        });
+      }
+      await refreshPMP();
+    } catch (err: any) { toast.error(err.message || '更新报工失败'); }
+  };
+
+  const onDeleteReportProduct = async ({ progressId, reportId }: { progressId: string; reportId: string }) => {
+    try {
+      await api.orders.deleteProductReport(reportId);
+      await refreshPMP();
+    } catch (err: any) { toast.error(err.message || '删除报工失败'); }
+  };
+
+  const onUpdateOrder = async (orderId: string, updates: Partial<ProductionOrder>) => {
+    try {
+      await api.orders.update(orderId, updates);
+      await refreshOrders();
+    } catch (err: any) { toast.error(err.message || '更新工单失败'); }
+  };
+
+  const onDeleteOrder = async (orderId: string) => {
+    try {
+      await api.orders.delete(orderId);
+      await refreshOrders();
+    } catch (err: any) { toast.error(err.message || '删除工单失败'); }
+  };
+
+  // ── Production record handlers ──
+  const handleAddProdRecord = async (record: ProductionOpRecord) => {
+    try {
+      await api.production.create(record);
+      await Promise.allSettled([refreshProdRecords(), refreshOrders(), refreshPMP()]);
+    } catch (err: any) { toast.error(err.message || '添加记录失败'); }
+  };
+  const handleAddProdRecordsBatch = async (records: ProductionOpRecord[]) => {
+    try {
+      for (const record of records) {
+        await api.production.create(record);
+      }
+      await Promise.allSettled([refreshProdRecords(), refreshOrders(), refreshPMP()]);
+    } catch (err: any) { toast.error(err.message || '批量添加记录失败'); }
+  };
+  const onUpdateProdRecord = async (r: ProductionOpRecord) => {
+    try {
+      await api.production.update(r.id, r);
+      await refreshProdRecords();
+    } catch (err: any) { toast.error(err.message || '更新记录失败'); }
+  };
+  const onDeleteProdRecord = async (id: string) => {
+    try {
+      await api.production.delete(id);
+      await refreshProdRecords();
+    } catch (err: any) { toast.error(err.message || '删除记录失败'); }
+  };
+
+  // ── PSI record handlers ──
+  const handleAddPSIRecord = async (record: any) => {
+    try {
+      await api.psi.create(record);
+      await refreshPsiRecords();
+    } catch (err: any) { toast.error(err.message || '添加记录失败'); }
+  };
+  const handleAddPSIRecordsBatch = async (records: any[]) => {
+    try {
+      await api.psi.createBatch(records);
+      await refreshPsiRecords();
+    } catch (err: any) { toast.error(err.message || '批量添加记录失败'); }
+  };
+  const handleReplacePSIRecords = async (type: string, docNumber: string, newRecords: any[]) => {
+    try {
+      const deleteIds = psiRecords.filter(r => r.type === type && r.docNumber === docNumber).map(r => r.id);
+      await api.psi.replace(deleteIds, newRecords);
+      await refreshPsiRecords();
+    } catch (err: any) { toast.error(err.message || '替换记录失败'); }
+  };
+  const handleDeletePSIRecords = async (type: string, docNumber: string) => {
+    try {
+      const ids = psiRecords.filter(r => r.type === type && r.docNumber === docNumber).map(r => r.id);
+      if (ids.length) await api.psi.deleteBatch(ids);
+      await refreshPsiRecords();
+    } catch (err: any) { toast.error(err.message || '删除记录失败'); }
+  };
+
+  // ── Finance record handlers ──
+  const onAddFinanceRecord = async (r: FinanceRecord) => {
+    try {
+      await api.finance.create(r);
+      await refreshFinanceRecords();
+    } catch (err: any) { toast.error(err.message || '添加记录失败'); }
+  };
+  const onUpdateFinanceRecord = async (r: FinanceRecord) => {
+    try {
+      await api.finance.update(r.id, r);
+      await refreshFinanceRecords();
+    } catch (err: any) { toast.error(err.message || '更新记录失败'); }
+  };
+  const onDeleteFinanceRecord = async (id: string) => {
+    try {
+      await api.finance.delete(id);
+      await refreshFinanceRecords();
+    } catch (err: any) { toast.error(err.message || '删除记录失败'); }
+  };
+
+  // ── Loading UI ──
+  if (dataLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
+          <span className="text-sm text-slate-400 font-medium">加载数据中…</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-screen bg-slate-50 text-slate-900 font-sans">
         {/* Sidebar Navigation */}
-        <div className="w-72 bg-white border-r border-slate-200 flex flex-col p-8 gap-10">
+        <div className="w-52 bg-white border-r border-slate-200 flex flex-col p-5 gap-8">
           <div className="flex items-center gap-4">
              <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-100">
                <Layout className="w-7 h-7" />
@@ -165,30 +721,80 @@ export default function App() {
                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enterprise OS</span>
              </div>
           </div>
+
+          <button onClick={onSwitchTenant}
+            className="flex items-center gap-2 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors text-left"
+            title="切换企业">
+            <Building2 className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+            <span className="truncate text-xs font-bold text-indigo-700">{tenantCtx.tenantName}</span>
+          </button>
           
           <nav className="flex flex-col gap-1.5">
-            <Link to="/" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
-              <LayoutDashboard className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 经营看板
-            </Link>
-            <Link to="/production" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
-              <ClipboardList className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 生产管理
-            </Link>
-            <Link to="/psi" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
-              <ShoppingCart className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 进销存
-            </Link>
-            <Link to="/finance" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
-              <Wallet className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 财务结算
-            </Link>
-            <Link to="/basic" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
-              <Boxes className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 基础信息
-            </Link>
-            <Link to="/settings" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
-              <SettingsIcon className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 系统设置
-            </Link>
+            {hasPerm('dashboard') && (
+              <Link to="/" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+                <LayoutDashboard className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 经营看板
+              </Link>
+            )}
+            {hasPerm('production') && (
+              <Link to="/production" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+                <ClipboardList className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 生产管理
+              </Link>
+            )}
+            {hasPerm('psi') && (
+              <Link to="/psi" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+                <ShoppingCart className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 进销存
+              </Link>
+            )}
+            {hasPerm('finance') && (
+              <Link to="/finance" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+                <Wallet className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 财务结算
+              </Link>
+            )}
+            {hasPerm('basic') && (
+              <Link to="/basic" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+                <Boxes className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 基础信息
+              </Link>
+            )}
+            {hasPerm('settings') && (
+              <Link to="/settings" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+                <SettingsIcon className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 系统设置
+              </Link>
+            )}
+            {(currentUser as Record<string, unknown>)?.role === 'admin' && (
+              <Link to="/admin/users" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+                <UserCog className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 账号管理
+              </Link>
+            )}
           </nav>
+          <div className="mt-auto pt-4 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setProfileOpen(true)}
+              className="flex items-center gap-2 w-full px-3 py-2 text-xs text-slate-500 hover:bg-slate-50 rounded-lg transition-colors text-left"
+              title="个人信息"
+            >
+              <User className="w-4 h-4 flex-shrink-0" />
+              <span className="truncate font-medium">
+                {(currentUser as Record<string, unknown>)?.displayName as string ||
+                  (currentUser as Record<string, unknown>)?.username as string ||
+                  '用户'}
+              </span>
+            </button>
+            <ProfileModal
+              open={profileOpen}
+              onClose={() => setProfileOpen(false)}
+              onUpdated={onProfileUpdate}
+            />
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-2 w-full px-3 py-2 text-xs text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <LogOut className="w-4 h-4" /> 退出登录
+            </button>
+          </div>
         </div>
 
-        {/* Main Content Area - pt-4 减小顶部空白，min-h-0 让 overflow-auto 生效 */}
+        {/* Main Content Area */}
         <div className="flex-1 min-h-0 overflow-auto pt-4 px-12 pb-12 bg-slate-50/30">
           <Routes>
             <Route path="/" element={<DashboardView orders={orders} financeRecords={financeRecords} psiRecords={psiRecords} products={products} productionLinkMode={productionLinkMode} />} />
@@ -211,412 +817,81 @@ export default function App() {
                 boms={boms}
                 partners={partners}
                 partnerCategories={partnerCategories}
-                printSettings={printSettings}
                 planFormSettings={planFormSettings}
-                onUpdatePlanFormSettings={setPlanFormSettings}
+                onUpdatePlanFormSettings={onUpdatePlanFormSettings}
                 orderFormSettings={orderFormSettings}
-                onUpdateOrderFormSettings={setOrderFormSettings}
-                onCreatePlan={(p) => setPlans([p, ...plans])}
-                onUpdateProduct={(p) => {
-                  const exists = products.some(px => px.id === p.id);
-                  setProducts(exists ? products.map(px => px.id === p.id ? p : px) : [p, ...products]);
-                }}
-                onUpdatePlan={(id, updates) => setPlans(plans.map(p => p.id === id ? { ...p, ...updates } : p))}
-                onSplitPlan={(planId, newPlans) => setPlans(newPlans.concat(plans.filter(p => p.id !== planId)))}
-                onDeletePlan={(id) => setPlans(plans.filter(p => p.id !== id))}
-                onConvertToOrder={(id) => {
-                  const plan = plans.find(p => p.id === id);
-                  if (!plan) return;
-                  const getAllDescendants = (planId: string): PlanOrder[] => {
-                    const direct = plans.filter(p => p.parentPlanId === planId);
-                    return direct.flatMap(p => [p, ...getAllDescendants(p.id)]);
-                  };
-                  const allDescendants = getAllDescendants(id);
-                  const toConvert = [plan, ...allDescendants].filter(p => p.status !== PlanStatus.CONVERTED);
-                  if (toConvert.length === 0) {
-                    alert('该计划及所有子计划均已下达，无需重复操作。');
-                    return;
-                  }
-                  const existingParentOrder = plan.status === PlanStatus.CONVERTED
-                    ? orders.find(o => o.planOrderId === plan.id)
-                    : null;
-                  const planIdToOrderId = new Map<string, string>();
-                  if (existingParentOrder) planIdToOrderId.set(plan.id, existingParentOrder.id);
-                  let mainOrderId = existingParentOrder?.id;
-                  const newOrders: ProductionOrder[] = [];
-                  const baseTs = Date.now();
-                  toConvert.forEach((p, idx) => {
-                    const prod = products.find(px => px.id === p.productId);
-                    const parentOrderId = productionLinkMode === 'product' ? undefined : (p.parentPlanId ? (planIdToOrderId.get(p.parentPlanId) ?? orders.find(o => o.planOrderId === p.parentPlanId)?.id) : undefined);
-                    const today = new Date().toISOString().split('T')[0];
-                    const ord: ProductionOrder = {
-                      id: `ord-${baseTs}-${idx}`,
-                      orderNumber: p.planNumber.replace(/^PLN/i, 'WO'),
-                      planOrderId: p.id,
-                      productId: p.productId,
-                      productName: prod?.name || '',
-                      sku: prod?.sku || '',
-                      items: p.items.map(i => ({ ...i, completedQuantity: 0 })),
-                      customer: p.customer,
-                      startDate: p.startDate,
-                      dueDate: p.dueDate,
-                      status: OrderStatus.PRODUCING,
-                      priority: p.priority,
-                      parentOrderId,
-                      bomNodeId: p.bomNodeId,
-                      sourcePlanId: p.parentPlanId,
-                      createdAt: today,
-                      milestones: (prod?.milestoneNodeIds || []).map(gnId => {
-                        const gn = globalNodes.find(n => n.id === gnId);
-                        return {
-                          id: `ms-${baseTs}-${gnId}-${idx}`,
-                          templateId: gnId,
-                          name: gn?.name || '',
-                          status: MilestoneStatus.PENDING,
-                          plannedDate: p.dueDate,
-                          completedQuantity: 0,
-                          reportTemplate: gn?.reportTemplate || [],
-                          reports: [],
-                          weight: 1,
-                          assignedWorkerIds: p.assignments?.[gnId]?.workerIds || [],
-                          assignedEquipmentIds: p.assignments?.[gnId]?.equipmentIds || []
-                        };
-                      })
-                    };
-                    planIdToOrderId.set(p.id, ord.id);
-                    if (!mainOrderId) mainOrderId = ord.id;
-                    newOrders.push(ord);
-                  });
-                  setOrders([...newOrders, ...orders]);
-                  const convertedIds = new Set(toConvert.map(p => p.id));
-                  setPlans(plans.map(p => convertedIds.has(p.id) ? { ...p, status: PlanStatus.CONVERTED } : p));
-                }}
-                onAddRecord={(r) => setProdRecords(prev => [r, ...prev])}
-                onUpdateRecord={(r) => setProdRecords(prev => prev.map(x => x.id === r.id ? r : x))}
-                onDeleteRecord={(id) => setProdRecords(prev => prev.filter(x => x.id !== id))}
+                onUpdateOrderFormSettings={onUpdateOrderFormSettings}
+                onCreatePlan={onCreatePlan}
+                onUpdateProduct={onUpdateProduct}
+                onUpdatePlan={onUpdatePlan}
+                onSplitPlan={onSplitPlan}
+                onDeletePlan={onDeletePlan}
+                onConvertToOrder={onConvertToOrder}
+                onAddRecord={handleAddProdRecord}
+                onAddRecordBatch={handleAddProdRecordsBatch}
+                onUpdateRecord={onUpdateProdRecord}
+                onDeleteRecord={onDeleteProdRecord}
                 onAddPSIRecord={handleAddPSIRecord}
-                onCreateSubPlan={({ productId, quantity, planId, bomNodeId }) => {
-                  const plan = plans.find(p => p.id === planId);
-                  const product = products.find(p => p.id === productId);
-                  if (!plan || !product) return;
-                  const baseNum = plan.planNumber.includes('-S') ? plan.planNumber : plan.planNumber.replace(/PLN-?(\d+)/i, (_, n) => `PLN${n}`);
-                  setPlans(prev => {
-                    const subCount = prev.filter(p => p.parentPlanId === planId).length + 1;
-                    const subPlan: PlanOrder = {
-                      id: `plan-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-                      planNumber: `${baseNum}-S${subCount}`,
-                      parentPlanId: planId,
-                      bomNodeId,
-                      productId,
-                      items: [{ variantId: product.variants?.[0]?.id, quantity }],
-                      startDate: plan.startDate,
-                      dueDate: plan.dueDate,
-                      status: PlanStatus.APPROVED,
-                      customer: plan.customer,
-                      priority: plan.priority,
-                      assignments: {},
-                      createdAt: new Date().toISOString().split('T')[0]
-                    };
-                    return [subPlan, ...prev];
-                  });
-                }}
-                onCreateSubPlans={({ planId, items }) => {
-                  const rootPlan = plans.find(p => p.id === planId);
-                  if (!rootPlan || !items.length) return;
-                  setPlans(prev => {
-                    const createdByKey = new Map<string, string>();
-                    const getBaseNum = (p: PlanOrder) => p.planNumber.includes('-S') ? p.planNumber : p.planNumber.replace(/PLN-?(\d+)/i, (_, n) => `PLN${n}`);
-                    const newPlans: PlanOrder[] = [];
-                    items.forEach(({ productId, quantity, bomNodeId, parentProductId, parentNodeId }) => {
-                      const product = products.find(p => p.id === productId);
-                      if (!product) return;
-                      let effectiveParentId = planId;
-                      if (parentProductId != null) {
-                        const key = `${parentProductId}-${parentNodeId || ''}`;
-                        effectiveParentId = createdByKey.get(key) ?? (() => {
-                          const queue: string[] = [planId];
-                          while (queue.length > 0) {
-                            const pid = queue.shift()!;
-                            const found = prev.find(p => p.parentPlanId === pid && p.productId === parentProductId && (p.bomNodeId || '') === (parentNodeId || ''));
-                            if (found) return found.id;
-                            prev.filter(p => p.parentPlanId === pid).forEach(p => queue.push(p.id));
-                          }
-                          return planId;
-                        })();
-                      }
-                      const parentPlan = prev.find(p => p.id === effectiveParentId) || newPlans.find(p => p.id === effectiveParentId) || (effectiveParentId === planId ? rootPlan : null);
-                      const baseNum = parentPlan ? getBaseNum(parentPlan) : (rootPlan.planNumber.includes('-S') ? rootPlan.planNumber : rootPlan.planNumber.replace(/PLN-?(\d+)/i, (_, n) => `PLN${n}`));
-                      const subCount = prev.filter(p => p.parentPlanId === effectiveParentId).length + newPlans.filter(p => p.parentPlanId === effectiveParentId).length + 1;
-                      const subPlan: PlanOrder = {
-                        id: `plan-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-                        planNumber: `${baseNum}-S${subCount}`,
-                        parentPlanId: effectiveParentId,
-                        bomNodeId,
-                        productId,
-                        items: [{ variantId: product.variants?.[0]?.id, quantity }],
-                        startDate: rootPlan.startDate,
-                        dueDate: rootPlan.dueDate,
-                        status: PlanStatus.APPROVED,
-                        customer: rootPlan.customer,
-                        priority: rootPlan.priority,
-                        assignments: {},
-                        createdAt: new Date().toISOString().split('T')[0]
-                      };
-                      createdByKey.set(`${productId}-${bomNodeId || ''}`, subPlan.id);
-                      newPlans.push(subPlan);
-                    });
-                    return [...newPlans, ...prev];
-                  });
-                }}
-                onReportSubmit={(oId, mId, qty, data, vId, workerId, defectiveQty, equipmentId, reportBatchId, reportNo) => {
-                  const operatorName = workerId ? (workers.find(w => w.id === workerId)?.name ?? '未知') : '张主管';
-                  const defQty = defectiveQty ?? 0;
-                  setOrders(prev => prev.map(o => {
-                    if (o.id !== oId) return o;
-                    const newMilestones = o.milestones.map(m => {
-                      if (m.id !== mId) return m;
-                      const newReport = {
-                        id: `rep-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-                        timestamp: new Date().toLocaleString(),
-                        operator: operatorName,
-                        quantity: qty,
-                        defectiveQuantity: defQty > 0 ? defQty : undefined,
-                        equipmentId: equipmentId || undefined,
-                        variantId: vId,
-                        reportBatchId: reportBatchId || undefined,
-                        reportNo: reportNo || undefined,
-                        customData: data ?? {}
-                      };
-                      const newQty = m.completedQuantity + qty;
-                      const totalQty = o.items.reduce((s, i) => s + i.quantity, 0);
-                      return { ...m, completedQuantity: newQty, reports: [...m.reports, newReport], status: newQty >= totalQty ? MilestoneStatus.COMPLETED : MilestoneStatus.IN_PROGRESS };
-                    });
-                    const newItems = o.items.length === 1
-                      ? [{ ...o.items[0], completedQuantity: o.items[0].completedQuantity + qty }]
-                      : o.items.map(item => item.variantId === vId ? { ...item, completedQuantity: item.completedQuantity + qty } : item);
-                    return { ...o, milestones: newMilestones, items: newItems };
-                  }));
-                }}
-                onReportSubmitProduct={(productId, milestoneTemplateId, qty, data, vId, workerId, defectiveQty, equipmentId, reportBatchId, reportNo) => {
-                  const operatorName = workerId ? (workers.find(w => w.id === workerId)?.name ?? '未知') : '张主管';
-                  const defQty = defectiveQty ?? 0;
-                  const newReport = {
-                    id: `rep-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-                    timestamp: new Date().toLocaleString(),
-                    operator: operatorName,
-                    quantity: qty,
-                    defectiveQuantity: defQty > 0 ? defQty : undefined,
-                    equipmentId: equipmentId || undefined,
-                    variantId: vId,
-                    reportBatchId: reportBatchId || undefined,
-                    reportNo: reportNo || undefined,
-                    customData: data ?? {}
-                  };
-                  setProductMilestoneProgresses(prev => {
-                    const vid = vId ?? '';
-                    const existing = prev.find(p => p.productId === productId && (p.variantId ?? '') === vid && p.milestoneTemplateId === milestoneTemplateId);
-                    const reports = [...(existing?.reports ?? []), newReport];
-                    const completedQuantity = reports.reduce((s, r) => s + r.quantity, 0);
-                    const updated = { id: existing?.id ?? `pmp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, productId, variantId: vId, milestoneTemplateId, completedQuantity, reports, updatedAt: new Date().toISOString() };
-                    if (existing) return prev.map(p => p.id === existing.id ? updated : p);
-                    return [...prev, updated];
-                  });
-                }}
-                onUpdateReport={({ orderId, milestoneId, reportId, quantity, defectiveQuantity, timestamp, operator, newMilestoneId }) => {
-                  const targetMilestoneId = newMilestoneId || milestoneId;
-                  setOrders(prev => {
-                    let oldReport: { quantity: number; variantId?: string; reportBatchId?: string; reportNo?: string; customData?: Record<string, any>; notes?: string; equipmentId?: string; timestamp?: string; operator?: string } | null = null;
-                    const afterRemove = prev.map(o => {
-                      if (o.id !== orderId) return o;
-                      const totalQty = o.items.reduce((s, i) => s + i.quantity, 0);
-                      const newMilestones = o.milestones.map(m => {
-                        if (m.id !== milestoneId) return m;
-                        const r = m.reports.find(x => x.id === reportId);
-                        if (!r) return m;
-                        oldReport = { quantity: r.quantity, variantId: r.variantId, reportBatchId: r.reportBatchId, reportNo: r.reportNo, customData: r.customData, notes: r.notes, equipmentId: r.equipmentId, timestamp: r.timestamp, operator: r.operator };
-                        const remaining = m.reports.filter(x => x.id !== reportId);
-                        const completed = remaining.reduce((s, rep) => s + rep.quantity, 0);
-                        const status = completed >= totalQty ? MilestoneStatus.COMPLETED : completed > 0 ? MilestoneStatus.IN_PROGRESS : MilestoneStatus.PENDING;
-                        return { ...m, completedQuantity: completed, reports: remaining, status };
-                      });
-                      let newItems = o.items;
-                      if (oldReport) {
-                        const v = oldReport.variantId;
-                        const delta = -oldReport.quantity;
-                        if (o.items.length === 1 && !v) {
-                          newItems = [{ ...o.items[0], completedQuantity: Math.max(0, o.items[0].completedQuantity + delta) }];
-                        } else {
-                          newItems = o.items.map(item =>
-                            (item.variantId || '') !== (v || '')
-                              ? item
-                              : { ...item, completedQuantity: Math.max(0, (item.completedQuantity || 0) + delta) }
-                          );
-                        }
-                      }
-                      return { ...o, milestones: newMilestones, items: newItems };
-                    });
-                    if (!oldReport) return prev;
-                    const newQty = Math.max(0, quantity);
-                    const newDef = Math.max(0, defectiveQuantity ?? 0);
-                    const defForReport = newDef > 0 ? newDef : undefined;
-                    return afterRemove.map(o => {
-                      if (o.id !== orderId) return o;
-                      const totalQty = o.items.reduce((s, i) => s + i.quantity, 0);
-                      const newMilestones = o.milestones.map(m => {
-                        if (m.id !== targetMilestoneId) return m;
-                        const updatedReport = {
-                          id: reportId,
-                          timestamp: timestamp ?? oldReport!.timestamp ?? new Date().toLocaleString(),
-                          operator: operator ?? oldReport!.operator ?? '未知',
-                          quantity: newQty,
-                          defectiveQuantity: defForReport,
-                          variantId: oldReport!.variantId,
-                          reportBatchId: oldReport!.reportBatchId,
-                          reportNo: oldReport!.reportNo,
-                          customData: oldReport!.customData ?? {},
-                          notes: oldReport!.notes,
-                          equipmentId: oldReport!.equipmentId
-                        };
-                        const others = m.reports.filter(r => r.id !== reportId);
-                        const reports = [...others, updatedReport];
-                        const completed = reports.reduce((s, rep) => s + rep.quantity, 0);
-                        const status = completed >= totalQty ? MilestoneStatus.COMPLETED : completed > 0 ? MilestoneStatus.IN_PROGRESS : MilestoneStatus.PENDING;
-                        return { ...m, completedQuantity: completed, reports, status };
-                      });
-                      let newItems = o.items;
-                      const v = oldReport!.variantId;
-                      if (newQty > 0) {
-                        if (o.items.length === 1 && !v) {
-                          newItems = [{
-                            ...o.items[0],
-                            completedQuantity: Math.min(o.items[0].quantity, o.items[0].completedQuantity + newQty)
-                          }];
-                        } else {
-                          newItems = o.items.map(item =>
-                            (item.variantId || '') !== (v || '')
-                              ? item
-                              : {
-                                  ...item,
-                                  completedQuantity: Math.min(item.quantity, (item.completedQuantity || 0) + newQty)
-                                }
-                          );
-                        }
-                      }
-                      return { ...o, milestones: newMilestones, items: newItems };
-                    });
-                  });
-                }}
-                onDeleteReport={({ orderId, milestoneId, reportId }) => {
-                  setOrders(prev => prev.map(o => {
-                    if (o.id !== orderId) return o;
-                    const totalQty = o.items.reduce((s, i) => s + i.quantity, 0);
-                    let removed: { quantity: number; variantId?: string } | null = null;
-                    const newMilestones = o.milestones.map(m => {
-                      if (m.id !== milestoneId) return m;
-                      const r = m.reports.find(x => x.id === reportId);
-                      if (!r) return m;
-                      removed = { quantity: r.quantity, variantId: r.variantId };
-                      const remaining = m.reports.filter(x => x.id !== reportId);
-                      const completed = remaining.reduce((s, rep) => s + rep.quantity, 0);
-                      const status = completed >= totalQty ? MilestoneStatus.COMPLETED : completed > 0 ? MilestoneStatus.IN_PROGRESS : MilestoneStatus.PENDING;
-                      return { ...m, completedQuantity: completed, reports: remaining, status };
-                    });
-                    let newItems = o.items;
-                    if (removed) {
-                      const v = removed.variantId;
-                      const delta = -removed.quantity;
-                      if (o.items.length === 1 && !v) {
-                        newItems = [{ ...o.items[0], completedQuantity: Math.max(0, o.items[0].completedQuantity + delta) }];
-                      } else {
-                        newItems = o.items.map(item =>
-                          (item.variantId || '') !== (v || '')
-                            ? item
-                            : { ...item, completedQuantity: Math.max(0, (item.completedQuantity || 0) + delta) }
-                        );
-                      }
-                    }
-                    return { ...o, milestones: newMilestones, items: newItems };
-                  }));
-                }}
+                onAddPSIRecordBatch={handleAddPSIRecordsBatch}
+                onCreateSubPlan={onCreateSubPlan}
+                onCreateSubPlans={onCreateSubPlans}
+                onReportSubmit={onReportSubmit}
+                onReportSubmitProduct={onReportSubmitProduct}
+                onUpdateReport={onUpdateReport}
+                onDeleteReport={onDeleteReport}
                 productMilestoneProgresses={productMilestoneProgresses}
-                onUpdateReportProduct={({ progressId, reportId, quantity, defectiveQuantity, timestamp, operator, newMilestoneTemplateId }) => {
-                  setProductMilestoneProgresses(prev => {
-                    const srcProgress = prev.find(p => p.id === progressId);
-                    if (!srcProgress) return prev;
-                    const srcReport = (srcProgress.reports ?? []).find(r => r.id === reportId);
-                    if (!srcReport) return prev;
-                    const defQ = defectiveQuantity ?? 0;
-                    const updatedReport = { ...srcReport, quantity, defectiveQuantity: defQ > 0 ? defQ : undefined, timestamp: timestamp ?? srcReport.timestamp, operator: operator ?? srcReport.operator };
-                    if (!newMilestoneTemplateId || newMilestoneTemplateId === srcProgress.milestoneTemplateId) {
-                      return prev.map(p => {
-                        if (p.id !== progressId) return p;
-                        const reports = (p.reports ?? []).map(r => r.id === reportId ? updatedReport : r);
-                        const completedQuantity = reports.reduce((s, r) => s + r.quantity, 0);
-                        return { ...p, reports, completedQuantity, updatedAt: new Date().toISOString() };
-                      });
-                    }
-                    const afterRemove = prev.map(p => {
-                      if (p.id !== progressId) return p;
-                      const reports = (p.reports ?? []).filter(r => r.id !== reportId);
-                      const completedQuantity = reports.reduce((s, r) => s + r.quantity, 0);
-                      return { ...p, reports, completedQuantity, updatedAt: new Date().toISOString() };
-                    });
-                    const targetProgress = afterRemove.find(p => p.productId === srcProgress.productId && p.milestoneTemplateId === newMilestoneTemplateId && (p.variantId || '') === (srcProgress.variantId || ''));
-                    if (targetProgress) {
-                      return afterRemove.map(p => {
-                        if (p.id !== targetProgress.id) return p;
-                        const reports = [...(p.reports ?? []), updatedReport];
-                        const completedQuantity = reports.reduce((s, r) => s + r.quantity, 0);
-                        return { ...p, reports, completedQuantity, updatedAt: new Date().toISOString() };
-                      });
-                    }
-                    const gn = globalNodes.find(n => n.id === newMilestoneTemplateId);
-                    const newProgress: ProductMilestoneProgress = {
-                      id: crypto.randomUUID(),
-                      productId: srcProgress.productId,
-                      variantId: srcProgress.variantId,
-                      milestoneTemplateId: newMilestoneTemplateId,
-                      milestoneName: gn?.name || newMilestoneTemplateId,
-                      completedQuantity: updatedReport.quantity,
-                      reports: [updatedReport],
-                      updatedAt: new Date().toISOString()
-                    };
-                    return [...afterRemove, newProgress];
-                  });
-                }}
-                onDeleteReportProduct={({ progressId, reportId }) => {
-                  setProductMilestoneProgresses(prev => prev.map(p => {
-                    if (p.id !== progressId) return p;
-                    const reports = (p.reports ?? []).filter(r => r.id !== reportId);
-                    const completedQuantity = reports.reduce((s, r) => s + r.quantity, 0);
-                    return { ...p, reports, completedQuantity, updatedAt: new Date().toISOString() };
-                  }));
-                }}
-                onUpdateOrder={(orderId, updates) => {
-                  setOrders(orders.map(o => o.id === orderId ? { ...o, ...updates } : o));
-                }}
-                onDeleteOrder={(orderId) => setOrders(orders.filter(o => o.id !== orderId))}
+                onUpdateReportProduct={onUpdateReportProduct}
+                onDeleteReportProduct={onDeleteReportProduct}
+                onUpdateOrder={onUpdateOrder}
+                onDeleteOrder={onDeleteOrder}
+                userPermissions={tenantCtx?.permissions}
+                tenantRole={tenantCtx?.tenantRole}
               />
             } />
             <Route path="/psi" element={
               <PSIView 
                 products={products}
                 records={psiRecords}
+                prodRecords={prodRecords}
+                orders={orders}
                 warehouses={warehouses}
                 categories={categories}
                 partners={partners}
                 partnerCategories={partnerCategories}
                 dictionaries={dictionaries}
                 purchaseOrderFormSettings={purchaseOrderFormSettings}
-                onUpdatePurchaseOrderFormSettings={setPurchaseOrderFormSettings}
+                onUpdatePurchaseOrderFormSettings={onUpdatePurchaseOrderFormSettings}
                 purchaseBillFormSettings={purchaseBillFormSettings}
-                onUpdatePurchaseBillFormSettings={setPurchaseBillFormSettings}
+                onUpdatePurchaseBillFormSettings={onUpdatePurchaseBillFormSettings}
                 onAddRecord={handleAddPSIRecord}
+                onAddRecordBatch={handleAddPSIRecordsBatch}
                 onReplaceRecords={handleReplacePSIRecords}
                 onDeleteRecords={handleDeletePSIRecords}
+                userPermissions={tenantCtx?.permissions}
+                tenantRole={tenantCtx?.tenantRole || ''}
               />
             } />
-            <Route path="/finance" element={<FinanceView orders={orders} records={financeRecords} onAddRecord={(r) => setFinanceRecords(prev => [r, ...prev])} />} />
+            <Route path="/finance" element={
+              <FinanceView
+                orders={orders}
+                records={financeRecords}
+                psiRecords={psiRecords}
+                prodRecords={prodRecords}
+                onAddRecord={onAddFinanceRecord}
+                onUpdateRecord={onUpdateFinanceRecord}
+                onDeleteRecord={onDeleteFinanceRecord}
+                financeCategories={financeCategories}
+                financeAccountTypes={financeAccountTypes}
+                partners={partners}
+                workers={workers}
+                products={products}
+                partnerCategories={partnerCategories}
+                categories={categories}
+                globalNodes={globalNodes}
+                userPermissions={tenantCtx?.permissions}
+                tenantRole={tenantCtx?.tenantRole}
+              />
+            } />
             <Route path="/basic" element={
               <BasicInfoView 
                 products={products}
@@ -624,24 +899,20 @@ export default function App() {
                 categories={categories}
                 partnerCategories={partnerCategories}
                 boms={boms}
-                workers={workers}
                 equipment={equipment}
                 dictionaries={dictionaries}
                 partners={partners}
-                onUpdateProduct={(p) => {
-                  const exists = products.some(px => px.id === p.id);
-                  setProducts(exists ? products.map(px => px.id === p.id ? p : px) : [p, ...products]);
-                }}
-                onUpdateBOM={(b) => setBoms(prev => {
-                  const idx = prev.findIndex(bx => bx.id === b.id);
-                  if (idx >= 0) return prev.map(bx => bx.id === b.id ? b : bx);
-                  return [...prev, b];
-                })}
-                onUpdateDictionaries={setDictionaries}
-                onUpdateWorkers={setWorkers}
-                onUpdateEquipment={setEquipment}
-                onUpdatePartners={setPartners}
-                onUpdatePartnerCategories={setPartnerCategories}
+                onUpdateProduct={onUpdateProduct}
+                onUpdateBOM={onUpdateBOM}
+                onRefreshDictionaries={refreshDictionaries}
+                onRefreshWorkers={refreshWorkers}
+                onRefreshEquipment={refreshEquipment}
+                onRefreshPartners={refreshPartners}
+                onRefreshPartnerCategories={refreshPartnerCategories}
+                tenantId={tenantCtx.tenantId}
+                tenantRole={tenantCtx.tenantRole}
+                currentUserId={userId}
+                userPermissions={tenantCtx.permissions}
               />
             } />
             <Route path="/settings" element={
@@ -651,22 +922,45 @@ export default function App() {
                 globalNodes={globalNodes}
                 warehouses={warehouses}
                 productionLinkMode={productionLinkMode}
-                onUpdateProductionLinkMode={setProductionLinkMode}
+                onUpdateProductionLinkMode={onUpdateProductionLinkMode}
                 processSequenceMode={processSequenceMode}
-                onUpdateProcessSequenceMode={setProcessSequenceMode}
+                onUpdateProcessSequenceMode={onUpdateProcessSequenceMode}
                 allowExceedMaxReportQty={allowExceedMaxReportQty}
-                onUpdateAllowExceedMaxReportQty={setAllowExceedMaxReportQty}
-                onUpdateCategories={setCategories}
-                onUpdatePartnerCategories={setPartnerCategories}
-                onUpdateGlobalNodes={setGlobalNodes}
-                onUpdateWarehouses={setWarehouses}
+                onUpdateAllowExceedMaxReportQty={onUpdateAllowExceedMaxReportQty}
+                onRefreshCategories={refreshCategories}
+                onRefreshPartnerCategories={refreshPartnerCategories}
+                onRefreshGlobalNodes={refreshGlobalNodes}
+                onRefreshWarehouses={refreshWarehouses}
+                financeCategories={financeCategories}
+                onRefreshFinanceCategories={refreshFinanceCategories}
+                financeAccountTypes={financeAccountTypes}
+                onRefreshFinanceAccountTypes={refreshFinanceAccountTypes}
+                userPermissions={tenantCtx?.permissions}
+                tenantRole={tenantCtx?.tenantRole}
               />
             } />
+            <Route
+              path="/admin/users"
+              element={
+                (currentUser as Record<string, unknown>)?.role === 'admin' &&
+                (currentUser as Record<string, unknown>)?.id ? (
+                  <UserAdminView
+                    currentUserId={String((currentUser as Record<string, unknown>).id)}
+                  />
+                ) : (
+                  <div className="max-w-md mx-auto mt-24 p-8 bg-white rounded-2xl border border-slate-200 text-center shadow-sm">
+                    <p className="text-slate-700 font-bold mb-4">仅管理员可访问账号管理</p>
+                    <Link to="/" className="text-indigo-600 font-bold hover:underline">
+                      返回首页
+                    </Link>
+                  </div>
+                )
+              }
+            />
             <Route path="/orders/:id" element={<Navigate to="/production" replace state={{ tab: 'orders' }} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
       </div>
-    </BrowserRouter>
   );
 }

@@ -43,7 +43,8 @@ import {
   Sliders,
   Download
 } from 'lucide-react';
-import { PlanOrder, Product, PlanStatus, ProductCategory, AppDictionaries, ProductVariant, PlanItem, Worker, Equipment, NodeAssignment, GlobalNodeTemplate, BOM, PrintSettings, PlanFormSettings, Partner, PartnerCategory, PLAN_PRINT_FIELDS, PrintLayoutElement } from '../types';
+import { toast } from 'sonner';
+import { PlanOrder, Product, PlanStatus, ProductCategory, AppDictionaries, ProductVariant, PlanItem, Worker, Equipment, NodeAssignment, GlobalNodeTemplate, BOM, PlanFormSettings, Partner, PartnerCategory } from '../types';
 
 function getFileExtFromDataUrl(dataUrl: string): string {
   const m = dataUrl.match(/^data:([^;]+);/);
@@ -53,6 +54,27 @@ function getFileExtFromDataUrl(dataUrl: string): string {
     'application/pdf': 'pdf',
   };
   return map[m[1]] || 'bin';
+}
+
+/** 列表交期展示：仅日期，不含时间 */
+function formatPlanDueDateList(due: string): string {
+  const s = String(due).trim();
+  if (!s) return '';
+  if (s.includes('T')) return s.split('T')[0];
+  const sp = s.indexOf(' ');
+  if (sp > 0) return s.slice(0, sp);
+  return s.length >= 10 ? s.slice(0, 10) : s;
+}
+
+/** 列表添加日期展示：仅日期，不含时间 */
+function formatPlanCreatedDateList(created: string | undefined | null): string {
+  if (!created) return '';
+  const s = String(created).trim();
+  if (!s) return '';
+  if (s.includes('T')) return s.split('T')[0];
+  const sp = s.indexOf(' ');
+  if (sp > 0) return s.slice(0, sp);
+  return s.length >= 10 ? s.slice(0, 10) : s;
 }
 
 interface PlanOrderListViewProps {
@@ -68,7 +90,6 @@ interface PlanOrderListViewProps {
   partners: Partner[]; 
   partnerCategories: PartnerCategory[];
   psiRecords?: any[];
-  printSettings: PrintSettings;
   planFormSettings: PlanFormSettings;
   onUpdatePlanFormSettings: (settings: PlanFormSettings) => void;
   onCreatePlan: (plan: PlanOrder) => void;
@@ -77,7 +98,8 @@ interface PlanOrderListViewProps {
   onDeletePlan?: (planId: string) => void;
   onUpdateProduct: (product: Product) => void;
   onUpdatePlan?: (planId: string, updates: Partial<PlanOrder>) => void;
-  onAddPSIRecord?: (record: any) => void; 
+  onAddPSIRecord?: (record: any) => void;
+  onAddPSIRecordBatch?: (records: any[]) => Promise<void>;
   onCreateSubPlan?: (params: { productId: string; quantity: number; planId: string; bomNodeId: string }) => void;
   onCreateSubPlans?: (params: { planId: string; items: Array<{ productId: string; quantity: number; bomNodeId: string; parentProductId?: string; parentNodeId?: string }> }) => void;
 }
@@ -650,7 +672,7 @@ const PartnerCustomerSelector = ({
   );
 };
 
-const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMode = 'order', plans, products, categories, dictionaries, workers, equipment, globalNodes, boms, partners, partnerCategories = [], psiRecords = [], printSettings, planFormSettings, onUpdatePlanFormSettings, onCreatePlan, onSplitPlan, onConvertToOrder, onDeletePlan, onUpdateProduct, onUpdatePlan, onAddPSIRecord, onCreateSubPlan, onCreateSubPlans }) => {
+const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMode = 'order', plans, products, categories, dictionaries, workers, equipment, globalNodes, boms, partners, partnerCategories = [], psiRecords = [], planFormSettings, onUpdatePlanFormSettings, onCreatePlan, onSplitPlan, onConvertToOrder, onDeletePlan, onUpdateProduct, onUpdatePlan, onAddPSIRecord, onAddPSIRecordBatch, onCreateSubPlan, onCreateSubPlans }) => {
   const [showModal, setShowModal] = useState(false);
   const [viewDetailPlanId, setViewDetailPlanId] = useState<string | null>(null);
   const [viewProductId, setViewProductId] = useState<string | null>(null);
@@ -671,7 +693,6 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   const [splitPlanId, setSplitPlanId] = useState<string | null>(null);
   const splitNumParts = 2;
   const [splitQuantities, setSplitQuantities] = useState<number[][]>([]);
-  const [printingPlanId, setPrintingPlanId] = useState<string | null>(null);
   /** 点击图片查看大图：url 为要放大的图片地址 */
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
@@ -724,7 +745,6 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   const activeCategory = categories.find(c => c.id === form.categoryId);
   const viewPlan = plans.find(p => p.id === viewDetailPlanId);
   const viewProduct = products.find(p => p.id === viewPlan?.productId);
-  const planPrintConfig = printSettings.PLAN;
   /** 子工单详情页物料状态同步父工单：用于 relatedPOsByMaterial、subPlan 判断等 */
   const parentPlan = viewPlan?.parentPlanId ? plans.find(p => p.id === viewPlan.parentPlanId) : null;
   const effectivePlanForMaterial = parentPlan || viewPlan;
@@ -802,26 +822,6 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
     }
   }, [viewProduct?.id]);
 
-  const handlePrint = (plan: PlanOrder) => {
-    setPrintingPlanId(plan.id);
-  };
-
-  const printingPlan = printingPlanId ? plans.find(p => p.id === printingPlanId) : null;
-  const printingProduct = printingPlan ? products.find(p => p.id === printingPlan.productId) : null;
-
-  useEffect(() => {
-    if (!printingPlanId) return;
-    const onAfterPrint = () => setPrintingPlanId(null);
-    window.addEventListener('afterprint', onAfterPrint);
-    const t = setTimeout(() => {
-    window.print();
-    }, 100);
-    return () => {
-      clearTimeout(t);
-      window.removeEventListener('afterprint', onAfterPrint);
-  };
-  }, [printingPlanId]);
-
   // 用料清单汇总逻辑：多级 BOM 递归
   // 理论总需量：一级=生产计划数量×BOM；二级+=父件计划用量×BOM（毛条依全毛黑色计划用量，羊毛依毛条计划用量）
   // 计划用量：默认=缺料数（理论总需量−库存）；当父件有子计划时 getEffectiveQty 使用子计划数量
@@ -862,32 +862,37 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
       if (!subBom || !subBom.items.length) return;
       visited.add(productId);
       subBom.items.forEach((bomItem: { productId: string; quantity: number }) => {
-        shortageDrivenList.push({ productId: bomItem.productId, nodeId, parentProductId: productId, unitPerParent: bomItem.quantity });
+        shortageDrivenList.push({ productId: bomItem.productId, nodeId, parentProductId: productId, unitPerParent: Number(bomItem.quantity) || 0 });
       });
       visited.delete(productId);
     };
 
-    const stableMockStock = (materialId: string) => {
-      const seed = materialId.split('').reduce((s, c) => s + c.charCodeAt(0), 0);
-      return (seed % 40) + 5;
+    const getRealStock = (materialId: string) => {
+      if (!psiRecords || psiRecords.length === 0) return 0;
+      const ins = psiRecords
+        .filter(r => r.type === 'PURCHASE_BILL' && r.productId === materialId)
+        .reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+      const outs = psiRecords
+        .filter(r => r.type === 'SALES_BILL' && r.productId === materialId)
+        .reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+      const stocktakeAdjust = psiRecords
+        .filter(r => r.type === 'STOCKTAKE' && r.productId === materialId)
+        .reduce((s, r) => s + (Number(r.diffQuantity) || 0), 0);
+      return ins - outs + stocktakeAdjust;
     };
     
     tempPlanInfo.items.forEach((item: PlanItem) => {
-      const planQty = item.quantity ?? 0;
+      const planQty = Number(item.quantity) || 0;
       if (planQty <= 0) return;
-      const variant = viewProduct.variants.find(v => v.id === item.variantId);
-      if (variant?.nodeBOMs) {
-        Object.entries(variant.nodeBOMs).forEach(([nodeId, bomId]) => {
-          const bom = boms.find(b => b.id === bomId);
-          if (bom) bom.items.forEach((bomItem: { productId: string; quantity: number }) => addToReqMap(bomItem.productId, bomItem.quantity * planQty, nodeId, new Set(), 1));
-        });
-        return;
-      }
-      if (viewProduct.variants.length === 0) {
-        boms.filter(b => b.parentProductId === viewProduct.id && b.variantId === `single-${viewProduct.id}` && b.nodeId).forEach(bom => {
-          if (bom.nodeId) bom.items.forEach((bomItem: { productId: string; quantity: number }) => addToReqMap(bomItem.productId, bomItem.quantity * planQty, bom.nodeId!, new Set(), 1));
-        });
-      }
+      const variantId = item.variantId || `single-${viewProduct.id}`;
+      const variantBoms = boms.filter(b => b.parentProductId === viewProduct.id && b.variantId === variantId && b.nodeId);
+      variantBoms.forEach(bom => {
+        if (bom.nodeId) {
+          bom.items.forEach((bomItem: { productId: string; quantity: number }) => {
+            addToReqMap(bomItem.productId, Number(bomItem.quantity) * planQty, bom.nodeId!, new Set(), 1);
+          });
+        }
+      });
     });
 
     type Row = { rowKey: string; materialId: string; materialName: string; materialSku: string; nodeName: string; nodeId: string; totalNeeded: number; stock: number; shortage: number; level: number; parentProductId?: string; parentMaterialName?: string; plannedQty: number };
@@ -895,7 +900,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
     Object.values(reqMap).forEach(req => {
       const material = products.find(p => p.id === req.materialId);
       const node = globalNodes.find(n => n.id === req.nodeId);
-      const stock = stableMockStock(req.materialId);
+      const stock = getRealStock(req.materialId);
       const totalNeeded = req.quantity;
       const shortage = Math.max(0, totalNeeded - stock);
       const parentId = req.parentProductId ?? viewProduct.id;
@@ -936,7 +941,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
         const totalNeeded = parentPlannedQty * unitPerParent;
         const material = products.find(p => p.id === productId);
         const node = globalNodes.find(n => n.id === nodeId);
-        const stock = stableMockStock(productId);
+        const stock = getRealStock(productId);
         const shortage = Math.max(0, totalNeeded - stock);
         const rowKey = `${productId}-${nodeId}-${parentProductId}`;
         const plannedQty = plannedQtyByKey[rowKey] !== undefined ? (plannedQtyByKey[rowKey] ?? 0) : shortage;
@@ -955,7 +960,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
           plannedQty
         });
         const subBom = boms.find(b => b.parentProductId === productId);
-        if (subBom?.items?.length) subBom.items.forEach((bomItem: { productId: string; quantity: number }) => nextPending.push({ productId: bomItem.productId, nodeId, parentProductId: productId, unitPerParent: bomItem.quantity }));
+        if (subBom?.items?.length) subBom.items.forEach((bomItem: { productId: string; quantity: number }) => nextPending.push({ productId: bomItem.productId, nodeId, parentProductId: productId, unitPerParent: Number(bomItem.quantity) || 0 }));
       });
       pending = aggregatePending(nextPending);
       currentLevel++;
@@ -973,7 +978,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
       ...r,
       parentMaterialName: r.parentProductId ? (products.find(p => p.id === r.parentProductId)?.name) : undefined
     }));
-  }, [viewPlan, viewProduct, tempPlanInfo.items, boms, products, globalNodes, plannedQtyByKey, plans, effectivePlanForMaterial]);
+  }, [viewPlan, viewProduct, tempPlanInfo.items, boms, products, globalNodes, plannedQtyByKey, plans, effectivePlanForMaterial, psiRecords]);
 
   /** 创建子工单按钮：仅与需生成计划单的物料相关；当所有可生产物料均已生成子计划时禁用 */
   const hasProducibleNeedingSubPlan = (materialRequirements as any[]).some((r: any) => {
@@ -992,7 +997,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
       return (p?.milestoneNodeIds?.length ?? 0) > 0 && r.plannedQty > 0;
     });
     if (producible.length === 0) {
-      alert("请先填写可生产物料的计划用量（有工序路线的物料）。");
+      toast.warning("请先填写可生产物料的计划用量（有工序路线的物料）。");
       return;
     }
     const existingByProductNode = new Map<string, PlanOrder>();
@@ -1040,7 +1045,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
         });
       }
     }
-    alert(`已创建/更新 ${toUpdate.length + toCreate.length} 条子计划单。`);
+    toast.success(`已创建/更新 ${toUpdate.length + toCreate.length} 条子计划单。`);
   };
 
   // --- 采购单生成逻辑：按计划用量，仅当全部缺料物料已填计划用量时可用；已创建过则不允许再次创建 ---
@@ -1053,14 +1058,14 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
 
   const handleGenerateProposedOrders = () => {
     if (!canGeneratePO) {
-      if (hasExistingPOs) alert("采购订单已创建，不可重复创建。");
-      else if (leafWithShortage.length === 0) alert("当前库存充裕，无需生成额外采购单。");
-      else if (!allPlannedFilled) alert("请先为所有缺料物料填写计划用量。");
+      if (hasExistingPOs) toast.warning("采购订单已创建，不可重复创建。");
+      else if (leafWithShortage.length === 0) toast.info("当前库存充裕，无需生成额外采购单。");
+      else if (!allPlannedFilled) toast.warning("请先为所有缺料物料填写计划用量。");
       return;
     }
 
     if (partners.length === 0) {
-      alert("未找到系统定义的单位，请先在基本信息中创建供应商。");
+      toast.error("未找到系统定义的单位，请先在基本信息中创建供应商。");
       return;
     }
 
@@ -1103,7 +1108,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
     setProposedOrders(Object.values(groupedMap));
   };
 
-  const handleConfirmAndSaveOrders = () => {
+  const handleConfirmAndSaveOrders = async () => {
     if (!onAddPSIRecord) return;
     setIsProcessingPO(true);
 
@@ -1154,17 +1159,22 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                     partnerId: order.partnerId,
                     warehouseId: 'wh-1',
                     note: `计划单[${viewPlan?.planNumber}]补货需求 | 针对工序:${item.nodeName}`,
-                    timestamp: new Date().toLocaleString(),
-                    operator: '张主管(系统生成)'
+                    timestamp: new Date().toISOString(),
+                    operator: '系统生成',
             });
         });
         });
-        allRecs.reverse().forEach(r => onAddPSIRecord(r));
+        const reversed = allRecs.reverse();
+        if (onAddPSIRecordBatch) {
+          await onAddPSIRecordBatch(reversed);
+        } else {
+          for (const r of reversed) await onAddPSIRecord(r);
+        }
 
         setTimeout(() => {
             setIsProcessingPO(false);
-            setProposedOrders([]); 
-            alert(`已成功保存 ${proposedOrders.length} 张采购订单，可在进销存模块查看详情。`);
+            setProposedOrders([]);
+            toast.success(`已成功保存 ${proposedOrders.length} 张采购订单，可在进销存模块查看详情。`);
         }, 500);
     } catch (err) {
         setIsProcessingPO(false);
@@ -1200,10 +1210,11 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   useEffect(() => {
     if (viewPlan) {
       setTempAssignments(viewPlan.assignments || {});
-      const createdDate = viewPlan.createdAt || (() => { const m = viewPlan.id.match(/^plan-(\d+)/); return m ? new Date(parseInt(m[1], 10)).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]; })();
+      const createdDate = formatPlanCreatedDateList(viewPlan.createdAt || (() => { const m = viewPlan.id.match(/^plan-(\d+)/); return m ? new Date(parseInt(m[1], 10)).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]; })());
+      const dueDateOnly = formatPlanDueDateList(viewPlan.dueDate || '');
       setTempPlanInfo({
         customer: viewPlan.customer,
-        dueDate: viewPlan.dueDate,
+        dueDate: dueDateOnly || viewPlan.dueDate || '',
         createdAt: createdDate,
         items: JSON.parse(JSON.stringify(viewPlan.items || [])),
         customData: viewPlan.customData ? { ...viewPlan.customData } : {}
@@ -1246,7 +1257,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   const handleCreate = () => {
     if (!selectedProduct) return;
     if ((selectedProduct.milestoneNodeIds?.length ?? 0) === 0) {
-      alert("该产品未配置工序，不允许创建生产计划。请先在产品管理中为该产品添加工序。");
+      toast.error("该产品未配置工序，不允许创建生产计划。请先在产品管理中为该产品添加工序。");
       return;
     }
     const items: PlanItem[] = [];
@@ -1369,18 +1380,25 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
     const m = planNumber.match(/^(.+)-([1-9]\d?)$/);
     return m ? m[1] : null;
   };
-  /** 拆分组 → 该组下所有计划单（仅包含至少有 2 条的同组） */
-  const splitGroupToPlans = useMemo(() => {
+  /** 多次拆单后的「根单号」：反复去掉末尾 -数字，如 PLN1-1-2 → PLN1-1 → PLN1，保证同一原单的所有拆单归到同一框 */
+  const getRootPlanNumber = (planNumber: string): string => {
+    let s = planNumber;
+    for (;;) {
+      const m = s.match(/^(.+)-([1-9]\d?)$/);
+      if (!m) return s;
+      s = m[1];
+    }
+  };
+  /** 根单号 → 该原单下所有计划单（含多次拆单后的 PLN1-1-1、PLN1-1-2、PLN1-2 等，仅包含至少有 2 条的同组） */
+  const rootToPlans = useMemo(() => {
     const map = new Map<string, PlanOrder[]>();
     plans.forEach(p => {
-      const key = getSplitGroupKey(p.planNumber);
-      if (key) {
-        if (!map.has(key)) map.set(key, []);
-        map.get(key)!.push(p);
-      }
+      const root = getRootPlanNumber(p.planNumber);
+      if (!map.has(root)) map.set(root, []);
+      map.get(root)!.push(p);
     });
     const multi = new Map<string, PlanOrder[]>();
-    map.forEach((arr, key) => { if (arr.length >= 2) multi.set(key, arr); });
+    map.forEach((arr, root) => { if (arr.length >= 2) multi.set(root, arr); });
     return multi;
   }, [plans]);
   /** 列表排序：最新添加的单据排在前面（按 id 内时间戳倒序），不受拆单分组影响 */
@@ -1424,11 +1442,11 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
     for (const plan of sortedPlansForList) {
       if (used.has(plan.id)) continue;
       if (plan.parentPlanId) continue;
-      const key = getSplitGroupKey(plan.planNumber);
-      if (key && splitGroupToPlans.has(key)) {
-        const groupPlans = splitGroupToPlans.get(key)!;
+      const root = getRootPlanNumber(plan.planNumber);
+      if (rootToPlans.has(root)) {
+        const groupPlans = rootToPlans.get(root)!;
         groupPlans.forEach(p => used.add(p.id));
-        blocks.push({ type: 'group', groupKey: key, plans: [...groupPlans].sort((a, b) => (a.planNumber || '').localeCompare(b.planNumber || '')) });
+        blocks.push({ type: 'group', groupKey: root, plans: [...groupPlans].sort((a, b) => (a.planNumber || '').localeCompare(b.planNumber || '')) });
       } else {
         const children = parentToSubPlans.get(plan.id) || [];
         if (children.length > 0) {
@@ -1443,7 +1461,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
       }
     }
     return blocks;
-  }, [sortedPlansForList, splitGroupToPlans, parentToSubPlans]);
+  }, [sortedPlansForList, rootToPlans, parentToSubPlans]);
 
   const splitRowSums = useMemo(() => splitPlan ? splitQuantities.map((row, i) => ({ sum: row.reduce((a, b) => a + b, 0), original: splitPlan.items[i]?.quantity ?? 0 })) : [], [splitPlan, splitQuantities]);
   const splitValid = splitRowSums.length === 0 || splitRowSums.every(({ sum, original }) => sum === original);
@@ -1463,209 +1481,15 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
       });
     }
     if (newPlans.length < 2) {
-      alert('请拆成至少两份且每份数量大于 0。');
+      toast.error('请拆成至少两份且每份数量大于 0。');
       return;
     }
     onSplitPlan(splitPlanId, newPlans);
     setSplitPlanId(null);
   };
 
-  const cfg = planPrintConfig;
-  const isLandscape = cfg.orientation === 'landscape';
-  const paperW = cfg.paperSize === 'A4' ? 210 : cfg.paperSize === 'A5' ? 148 : cfg.paperSize === 'B5' ? 176 : (cfg.paperWidthMm ?? 210);
-  const paperH = cfg.paperSize === 'A4' ? 297 : cfg.paperSize === 'A5' ? 210 : cfg.paperSize === 'B5' ? 250 : (cfg.paperHeightMm ?? 297);
-  const printPaper = {
-    size: isLandscape ? `${paperH}mm ${paperW}mm` : `${paperW}mm ${paperH}mm`,
-    margin: `${cfg.marginTopMm ?? 15}mm ${cfg.marginRightMm ?? 15}mm ${cfg.marginBottomMm ?? 15}mm ${cfg.marginLeftMm ?? 15}mm`,
-  };
-
   return (
     <>
-      {printingPlanId && cfg && (
-        <style>{`
-          @media print {
-            @page { size: ${printPaper.size}; margin: ${printPaper.margin}; }
-            #root * { visibility: hidden; }
-            .plan-print-root, .plan-print-root * { visibility: visible; }
-            .plan-print-root { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; min-height: 100vh !important; background: #fff !important; }
-          }
-        `}</style>
-      )}
-      {printingPlan && printingProduct && (() => {
-        const marginT = cfg.marginTopMm ?? 15, marginR = cfg.marginRightMm ?? 15, marginB = cfg.marginBottomMm ?? 15, marginL = cfg.marginLeftMm ?? 15;
-        const contentH = isLandscape ? paperW - marginT - marginB - 70 : paperH - marginT - marginB - 70;
-        const rootWidthMm = isLandscape ? paperH : paperW;
-        const rootHeightMm = isLandscape ? paperW : paperH;
-        const renderBlockContent = (id: string) => {
-          switch (id) {
-            case 'planNumber': return <><span className="font-bold text-slate-500">计划单号 </span>{printingPlan.planNumber}</>;
-            case 'customer': return productionLinkMode !== 'product' ? <><span className="font-bold text-slate-500">客户 </span>{printingPlan.customer}</> : null;
-            case 'dueDate': return <><span className="font-bold text-slate-500">交期 </span>{printingPlan.dueDate}</>;
-            case 'product': return <><span className="font-bold text-slate-500">产品 </span>{printingProduct.name} {printingProduct.sku ? `(${printingProduct.sku})` : ''}</>;
-            case 'status': return <><span className="font-bold text-slate-500">状态 </span>{printingPlan.status === PlanStatus.CONVERTED ? '已转工单' : printingPlan.status === PlanStatus.APPROVED ? '已审核' : '草稿'}</>;
-            case 'priority': return <><span className="font-bold text-slate-500">优先级 </span>{printingPlan.priority}</>;
-            case 'itemsTable':
-              return (
-                <div>
-                  <div className="font-bold text-slate-600 mb-1">计划明细</div>
-                  <table className="w-full border border-slate-200 border-collapse text-slate-800">
-                    <thead><tr className="bg-slate-50"><th className="border border-slate-200 px-2 py-1 text-left font-bold text-slate-700 text-xs">规格</th><th className="border border-slate-200 px-2 py-1 text-right font-bold text-slate-700 text-xs">数量</th></tr></thead>
-                    <tbody>
-                      {printingPlan.items.map((item, idx) => {
-                        const v = printingProduct.variants.find(x => x.id === item.variantId);
-                        const color = dictionaries.colors.find(c => c.id === v?.colorId);
-                        const size = dictionaries.sizes.find(s => s.id === v?.sizeId);
-                        const spec = v ? `${color?.name ?? ''}-${size?.name ?? ''}`.replace(/^-|-$/g, '') || `规格${idx + 1}` : '默认';
-                        return <tr key={idx}><td className="border border-slate-200 px-2 py-1">{spec}</td><td className="border border-slate-200 px-2 py-1 text-right">{item.quantity} {getUnitName(printingPlan.productId)}</td></tr>;
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            case 'assignmentsTable':
-              if (!printingPlan.assignments || Object.keys(printingPlan.assignments).length === 0) return null;
-              return (
-                <div>
-                  <div className="font-bold text-slate-600 mb-1">工序派工</div>
-                  <table className="w-full border border-slate-200 border-collapse text-slate-800">
-                    <thead><tr className="bg-slate-50"><th className="border border-slate-200 px-2 py-1 text-left font-bold text-slate-700 text-xs">工序</th><th className="border border-slate-200 px-2 py-1 text-left font-bold text-slate-700 text-xs">负责人/设备</th></tr></thead>
-                    <tbody>
-                      {Object.entries(printingPlan.assignments).map(([nodeId, a]) => {
-                        const node = globalNodes.find(n => n.id === nodeId);
-                        const as = a as NodeAssignment;
-                        const names = (as.workerIds || []).map(wid => workers.find(w => w.id === wid)?.name).filter(Boolean).join('、') || '-';
-                        const eqNames = (as.equipmentIds || []).map(eid => equipment.find(e => e.id === eid)?.name).filter(Boolean).join('、') || '-';
-                        return <tr key={nodeId}><td className="border border-slate-200 px-2 py-1">{node?.name ?? nodeId}</td><td className="border border-slate-200 px-2 py-1">{names} {eqNames !== '-' ? ` / ${eqNames}` : ''}</td></tr>;
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            default: return null;
-          }
-        };
-
-        const renderLayoutTable = (el: PrintLayoutElement) => {
-          const cols = el.columns ?? [];
-          if (el.tableDataSource === 'planItems') {
-            return (
-              <table className="w-full border border-slate-200 border-collapse text-slate-800">
-                <thead><tr className="bg-slate-50">{cols.map(c => <th key={c.id} className="border border-slate-200 px-2 py-1 text-left font-bold text-slate-700 text-xs">{c.header}</th>)}</tr></thead>
-                <tbody>
-                  {printingPlan.items.map((item, idx) => {
-                    const v = printingProduct.variants.find(x => x.id === item.variantId);
-                    const color = dictionaries.colors.find(c => c.id === v?.colorId);
-                    const size = dictionaries.sizes.find(s => s.id === v?.sizeId);
-                    const spec = v ? `${color?.name ?? ''}-${size?.name ?? ''}`.replace(/^-|-$/g, '') || `规格${idx + 1}` : '默认';
-                    return (
-                      <tr key={idx}>
-                        {cols.map(c => {
-                          const val = c.fieldKey === 'spec' ? spec : c.fieldKey === 'quantity' ? `${item.quantity} ${getUnitName(printingPlan.productId)}` : '—';
-                          return <td key={c.id} className="border border-slate-200 px-2 py-1">{val}</td>;
-                        })}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            );
-          }
-          if (el.tableDataSource === 'planAssignments' && printingPlan.assignments && Object.keys(printingPlan.assignments).length > 0) {
-            return (
-              <table className="w-full border border-slate-200 border-collapse text-slate-800">
-                <thead><tr className="bg-slate-50">{cols.map(c => <th key={c.id} className="border border-slate-200 px-2 py-1 text-left font-bold text-slate-700 text-xs">{c.header}</th>)}</tr></thead>
-                <tbody>
-                  {Object.entries(printingPlan.assignments).map(([nodeId, a]) => {
-                    const node = globalNodes.find(n => n.id === nodeId);
-                    const as = a as NodeAssignment;
-                    const names = (as.workerIds || []).map(wid => workers.find(w => w.id === wid)?.name).filter(Boolean).join('、') || '—';
-                    const eqNames = (as.equipmentIds || []).map(eid => equipment.find(e => e.id === eid)?.name).filter(Boolean).join('、') || '—';
-                    return (
-                      <tr key={nodeId}>
-                        {cols.map(c => {
-                          const val = c.fieldKey === 'nodeName' ? (node?.name ?? nodeId) : c.fieldKey === 'workers' ? names : c.fieldKey === 'equipment' ? eqNames : '—';
-                          return <td key={c.id} className="border border-slate-200 px-2 py-1">{val}</td>;
-                        })}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            );
-          }
-          return <table className="w-full border border-slate-200 border-collapse text-slate-800"><thead><tr className="bg-slate-50">{cols.map(c => <th key={c.id} className="border border-slate-200 px-2 py-1 text-left font-bold text-slate-700 text-xs">{c.header}</th>)}</tr></thead><tbody><tr>{cols.map(c => <td key={c.id} className="border border-slate-200 px-2 py-1">—</td>)}</tr></tbody></table>;
-        };
-
-        const useCanvasLayout = (cfg.layoutElements?.length ?? 0) > 0;
-        const layoutElements: PrintLayoutElement[] = useCanvasLayout ? (cfg.layoutElements ?? []) : [];
-
-        const orderedEnabled = (cfg.fields && cfg.fields.length > 0 ? cfg.fields : PLAN_PRINT_FIELDS.map(f => ({ id: f.id, label: f.label, enabled: true }))).filter(f => f.enabled);
-        const blockWithPosition = orderedEnabled.map((f, idx) => ({
-          ...f,
-          leftMm: f.leftMm ?? 0,
-          topMm: f.topMm ?? (15 + idx * 14),
-          widthMm: f.widthMm,
-          heightMm: f.heightMm,
-        }));
-
-        const renderPlaneContent = () => {
-          if (useCanvasLayout) {
-            return layoutElements.map((el) => {
-              const style: React.CSSProperties = {
-                position: 'absolute',
-                left: `${el.leftMm}mm`,
-                top: `${el.topMm}mm`,
-                ...(el.widthMm != null ? { width: `${el.widthMm}mm` } : {}),
-                ...(el.heightMm != null ? { height: `${el.heightMm}mm`, overflow: 'hidden' as const } : {}),
-              };
-              if (el.type === 'field') {
-                const content = renderBlockContent(el.fieldId!);
-                if (content == null) return null;
-                return <div key={el.id} style={style} className="text-slate-800">{content}</div>;
-              }
-              return <div key={el.id} style={style} className="text-slate-800">{renderLayoutTable(el)}</div>;
-            });
-          }
-          return blockWithPosition.map((f) => {
-            const content = renderBlockContent(f.id);
-            if (content == null) return null;
-            const style: React.CSSProperties = {
-              position: 'absolute',
-              left: `${f.leftMm}mm`,
-              top: `${f.topMm}mm`,
-              ...(f.widthMm != null ? { width: `${f.widthMm}mm` } : {}),
-              ...(f.heightMm != null ? { height: `${f.heightMm}mm`, overflow: 'hidden' as const } : {}),
-            };
-            return <div key={f.id} style={style} className="text-slate-800">{content}</div>;
-          });
-        };
-
-        return (
-          <div
-            className="plan-print-root"
-            style={{ position: 'fixed', left: '-9999px', top: 0, width: `${rootWidthMm}mm`, minHeight: `${rootHeightMm}mm`, background: '#fff', padding: `${marginT}mm ${marginR}mm ${marginB}mm ${marginL}mm`, boxSizing: 'border-box' }}
-            aria-hidden="true"
-          >
-            <div className={cfg.fontSize === 'sm' ? 'text-sm' : cfg.fontSize === 'lg' ? 'text-lg' : 'text-base'}>
-              {cfg.headerText && <div className="mb-1 text-slate-600 border-b border-slate-200 pb-1 text-xs">{cfg.headerText}</div>}
-              <h1 className="text-lg font-black text-slate-900 mb-2">{cfg.title}</h1>
-              <div
-                className="plan-print-plane"
-                style={{ position: 'relative', width: '100%', minHeight: `${Math.max(contentH, 120)}mm` }}
-              >
-                {renderPlaneContent()}
-              </div>
-              {cfg.footerText && <div className="mt-2 pt-1 border-t border-slate-200 text-slate-500 text-xs">{cfg.footerText}</div>}
-              {(cfg.showLogo || cfg.showQRCode) && (
-                <div className="mt-2 flex gap-3 items-center">
-                  {cfg.showLogo && <div className="w-12 h-12 border border-slate-200 rounded flex items-center justify-center text-slate-400 text-[10px]">Logo</div>}
-                  {cfg.showQRCode && <div className="w-12 h-12 border border-slate-200 rounded flex items-center justify-center text-slate-400 text-[9px] text-center">二维码</div>}
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -1696,11 +1520,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
               if (block.type === 'single') {
                 const plan = block.plan;
               const product = products.find(p => p.id === plan.productId);
-              const totalQty = plan.items ? plan.items.reduce((sum, item) => sum + item.quantity, 0) : 0;
+              const totalQty = plan.items && Array.isArray(plan.items) ? plan.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) : 0;
               const assignedCount = plan.assignments ? Object.values(plan.assignments).filter(a => (a as NodeAssignment).workerIds && (a as NodeAssignment).workerIds.length > 0).length : 0;
                 const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
                 const customListFields = planFormSettings.customFields.filter(f => f.showInList);
-                const createdDate = plan.createdAt || (() => { const m = plan.id.match(/^plan-(\d+)/); return m ? new Date(parseInt(m[1], 10)).toISOString().split('T')[0] : ''; })();
+                const createdDateRaw = plan.createdAt || (() => { const m = plan.id.match(/^plan-(\d+)/); return m ? new Date(parseInt(m[1], 10)).toISOString().split('T')[0] : ''; })();
+                const createdDate = formatPlanCreatedDateList(createdDateRaw);
               return (
                 <div key={plan.id} className="bg-white p-6 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group flex items-center justify-between">
                   <div className="flex items-center gap-6">
@@ -1750,7 +1575,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                           {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
                           {showInList('totalQty') && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 计划总量: {totalQty}</span>}
-                          {showInList('dueDate') && plan.dueDate && <span className="flex items-center gap-1 text-rose-500 font-bold"><Clock className="w-3 h-3" /> 交期: {plan.dueDate}</span>}
+                          {showInList('dueDate') && plan.dueDate && <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3" /> 交期: {formatPlanDueDateList(plan.dueDate)}</span>}
                           {showInList('createdAt') && createdDate && <span className="flex items-center gap-1 text-slate-500"><CalendarDays className="w-3 h-3" /> 添加: {createdDate}</span>}
                           {customListFields.map(cf => (plan.customData?.[cf.id] != null && plan.customData?.[cf.id] !== '') && <span key={cf.id} className="flex items-center gap-1">{cf.label}: {String(plan.customData[cf.id])}</span>)}
                       </div>
@@ -1795,13 +1620,14 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                     <div className="p-4 space-y-3">
                       {allWithDepth.map(({ plan, depth }, idx) => {
                         const product = products.find(p => p.id === plan.productId);
-                        const totalQty = plan.items ? plan.items.reduce((sum, item) => sum + item.quantity, 0) : 0;
+                        const totalQty = plan.items && Array.isArray(plan.items) ? plan.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) : 0;
                         const isChild = depth > 0;
                         const indentPx = isChild ? 24 * depth : 0;
                         const assignedCount = plan.assignments ? Object.values(plan.assignments).filter(a => (a as NodeAssignment).workerIds && (a as NodeAssignment).workerIds.length > 0).length : 0;
                         const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
                         const customListFields = planFormSettings.customFields.filter(f => f.showInList);
-                        const createdDate = plan.createdAt || (() => { const m = plan.id.match(/^plan-(\d+)/); return m ? new Date(parseInt(m[1], 10)).toISOString().split('T')[0] : ''; })();
+                        const createdDateRaw = plan.createdAt || (() => { const m = plan.id.match(/^plan-(\d+)/); return m ? new Date(parseInt(m[1], 10)).toISOString().split('T')[0] : ''; })();
+                        const createdDate = formatPlanCreatedDateList(createdDateRaw);
                         return (
                           <div key={plan.id} className={`bg-white p-5 rounded-2xl border transition-all flex items-center justify-between ${isChild ? 'border-l-4 border-l-slate-300 border-slate-200' : 'border-slate-200'} hover:shadow-lg hover:border-slate-300`} style={indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
                             <div className="flex items-center gap-5">
@@ -1824,7 +1650,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                 <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                                   {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
                                   {showInList('totalQty') && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 计划总量: {totalQty}</span>}
-                                  {showInList('dueDate') && plan.dueDate && <span className="flex items-center gap-1 text-rose-500 font-bold"><Clock className="w-3 h-3" /> 交期: {plan.dueDate}</span>}
+                                  {showInList('dueDate') && plan.dueDate && <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3" /> 交期: {formatPlanDueDateList(plan.dueDate)}</span>}
                                   {showInList('createdAt') && createdDate && <span className="flex items-center gap-1 text-slate-500"><CalendarDays className="w-3 h-3" /> 添加: {createdDate}</span>}
                                   {customListFields.map(cf => (plan.customData?.[cf.id] != null && plan.customData?.[cf.id] !== '') && <span key={cf.id} className="flex items-center gap-1">{cf.label}: {String(plan.customData[cf.id])}</span>)}
                                 </div>
@@ -1868,11 +1694,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         const isChild = depth > 0;
                         const plan = p;
                         const product = products.find(pr => pr.id === plan.productId);
-                        const totalQty = plan.items ? plan.items.reduce((sum, item) => sum + item.quantity, 0) : 0;
+                        const totalQty = plan.items && Array.isArray(plan.items) ? plan.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) : 0;
                         const assignedCount = plan.assignments ? Object.values(plan.assignments).filter(a => (a as NodeAssignment).workerIds && (a as NodeAssignment).workerIds.length > 0).length : 0;
                         const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
                         const customListFields = planFormSettings.customFields.filter(f => f.showInList);
-                        const createdDate = plan.createdAt || (() => { const m = plan.id.match(/^plan-(\d+)/); return m ? new Date(parseInt(m[1], 10)).toISOString().split('T')[0] : ''; })();
+                        const createdDateRaw = plan.createdAt || (() => { const m = plan.id.match(/^plan-(\d+)/); return m ? new Date(parseInt(m[1], 10)).toISOString().split('T')[0] : ''; })();
+                        const createdDate = formatPlanCreatedDateList(createdDateRaw);
                         const indentPx = isChild ? 24 * depth : 0;
                         return (
                           <div key={plan.id} className={`bg-white p-5 rounded-2xl border transition-all flex items-center justify-between ${isChild ? 'border-l-4 border-l-slate-300 border-slate-200' : 'border-slate-200'} hover:shadow-lg hover:border-slate-300`} style={indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
@@ -1924,7 +1751,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                               <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                                 {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
                                 {showInList('totalQty') && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 计划总量: {totalQty}</span>}
-                                {showInList('dueDate') && plan.dueDate && <span className="flex items-center gap-1 text-rose-500 font-bold"><Clock className="w-3 h-3" /> 交期: {plan.dueDate}</span>}
+                                {showInList('dueDate') && plan.dueDate && <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3" /> 交期: {formatPlanDueDateList(plan.dueDate)}</span>}
                                 {showInList('createdAt') && createdDate && <span className="flex items-center gap-1 text-slate-500"><CalendarDays className="w-3 h-3" /> 添加: {createdDate}</span>}
                                 {customListFields.map(cf => (plan.customData?.[cf.id] != null && plan.customData?.[cf.id] !== '') && <span key={cf.id} className="flex items-center gap-1">{cf.label}: {String(plan.customData[cf.id])}</span>)}
                               </div>
@@ -2190,24 +2017,21 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         placeholder="搜索并选择合作单位..."
                       />
                     )}
-                    {planFormSettings.standardFields.find(f => f.id === 'dueDate')?.showInDetail !== false && (
+                    {/* 交期与添加日期在详情中始终显示，便于查看与编辑 */}
                     <div className="space-y-2">
-                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">交期截止日期</label>
-                       <div className="relative">
-                            <CalendarDays className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                            <input type="date" value={tempPlanInfo.dueDate} onChange={e => setTempPlanInfo({...tempPlanInfo, dueDate: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-11 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
-                       </div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">交期截止日期</label>
+                      <div className="relative">
+                        <CalendarDays className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                        <input type="date" value={tempPlanInfo.dueDate || ''} onChange={e => setTempPlanInfo({ ...tempPlanInfo, dueDate: e.target.value })} className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-11 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                      </div>
                     </div>
-                    )}
-                    {planFormSettings.standardFields.find(f => f.id === 'createdAt')?.showInDetail !== false && (
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">添加日期</label>
-                       <div className="relative">
-                          <CalendarDays className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                          <input type="date" value={tempPlanInfo.createdAt} onChange={e => setTempPlanInfo({ ...tempPlanInfo, createdAt: e.target.value })} className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-11 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
-                       </div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">添加日期</label>
+                      <div className="relative">
+                        <CalendarDays className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                        <input type="date" value={tempPlanInfo.createdAt || ''} onChange={e => setTempPlanInfo({ ...tempPlanInfo, createdAt: e.target.value })} className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-11 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                      </div>
                     </div>
-                    )}
                     {planFormSettings.customFields.filter(f => f.showInDetail).map(cf => (
                       <div key={cf.id} className="space-y-2">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">{cf.label}</label>
@@ -2328,7 +2152,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                            placeholder="分派负责人..."
                                            processNodes={globalNodes}
                                            currentNodeId={node.id}
-                                           options={workers.map(w => ({ id: w.id, name: w.name, sub: w.group, assignedMilestoneIds: w.assignedMilestoneIds }))}
+                                           options={workers.map(w => ({ id: w.id, name: w.name, sub: w.groupName, assignedMilestoneIds: w.assignedMilestoneIds }))}
                                            selectedIds={(tempAssignments[node.id] as NodeAssignment)?.workerIds || []}
                                            onChange={(ids) => updateTempAssignment(node.id, { workerIds: ids })}
                                          />
@@ -2397,7 +2221,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                            <tr className="bg-slate-50/50 border-b border-slate-100">
                               <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">物料名称 / SKU</th>
                               <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">理论总需量</th>
-                              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">系统可用量</th>
+                              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">库存</th>
                               <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">计算缺料数</th>
                               <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center min-w-[140px]">计划用量</th>
                               <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center min-w-[220px]">状态</th>
@@ -2584,7 +2408,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                 className="bg-emerald-600 text-white px-8 py-2.5 rounded-xl text-xs font-black shadow-xl shadow-emerald-100 flex items-center gap-2 hover:bg-emerald-700 active:scale-95 transition-all"
                              >
                                 {isProcessingPO ? <Clock className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                                确认并批量保存采购单
+                                确认并保存采购订单
                              </button>
                           </div>
                        </div>

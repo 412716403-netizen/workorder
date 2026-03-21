@@ -2,19 +2,33 @@ import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { 
   ArrowDownCircle, 
   ArrowUpCircle, 
-  Scale, 
-  Coins
+  Scale
 } from 'lucide-react';
-import { ProductionOrder, FinanceRecord, FinanceOpType } from '../types';
+import { ProductionOrder, FinanceRecord, FinanceOpType, FinanceCategory, FinanceAccountType, Partner, Worker, Product } from '../types';
+import { PartnerCategory, ProductCategory, GlobalNodeTemplate } from '../types';
 import FinanceOpsView from './FinanceOpsView';
 
 interface FinanceViewProps {
   orders: ProductionOrder[];
   records: FinanceRecord[];
+  psiRecords?: any[];
+  prodRecords?: any[];
   onAddRecord: (record: FinanceRecord) => void;
+  onUpdateRecord: (record: FinanceRecord) => void;
+  onDeleteRecord: (id: string) => void;
+  financeCategories: FinanceCategory[];
+  financeAccountTypes: FinanceAccountType[];
+  partners: Partner[];
+  workers: Worker[];
+  products: Product[];
+  partnerCategories: PartnerCategory[];
+  categories: ProductCategory[];
+  globalNodes: GlobalNodeTemplate[];
+  userPermissions?: string[];
+  tenantRole?: string;
 }
 
-const FinanceView: React.FC<FinanceViewProps> = ({ orders, records, onAddRecord }) => {
+const FinanceView: React.FC<FinanceViewProps> = ({ orders, records, psiRecords = [], prodRecords = [], onAddRecord, onUpdateRecord, onDeleteRecord, financeCategories, financeAccountTypes, partners, workers, products, partnerCategories, categories, globalNodes, userPermissions, tenantRole }) => {
   const [activeTab, setActiveTab] = useState<FinanceOpType>('RECEIPT');
   const sentinelRef = useRef<HTMLDivElement>(null);
   const tabsWrapRef = useRef<HTMLDivElement>(null);
@@ -61,13 +75,25 @@ const FinanceView: React.FC<FinanceViewProps> = ({ orders, records, onAddRecord 
     return () => cancelAnimationFrame(id);
   }, []);
 
-  // 严格排序：收款单、付款单、财务对账、工人工资
-  const tabs = [
+  const _isOwner = tenantRole === 'owner';
+  const hasFinancePerm = (permKey: string): boolean => {
+    if (_isOwner) return true;
+    if (!userPermissions || userPermissions.length === 0) return true;
+    if (userPermissions.includes('finance') && !userPermissions.some(p => p.startsWith('finance:'))) return true;
+    return userPermissions.includes(permKey);
+  };
+
+  const allTabs = [
     { id: 'RECEIPT', label: '收款单', icon: ArrowDownCircle, color: 'text-indigo-600', bg: 'bg-indigo-50', sub: '客户款项回收记录' },
     { id: 'PAYMENT', label: '付款单', icon: ArrowUpCircle, color: 'text-indigo-600', bg: 'bg-indigo-50', sub: '供应商及费用支出记录' },
     { id: 'RECONCILIATION', label: '财务对账', icon: Scale, color: 'text-indigo-600', bg: 'bg-indigo-50', sub: '往来款项核对与差异分析' },
-    { id: 'SETTLEMENT', label: '工人工资', icon: Coins, color: 'text-indigo-600', bg: 'bg-indigo-50', sub: '核算并登记工人的计件工资发放' },
   ];
+  const permMap: Record<string, string> = {
+    RECEIPT: 'finance:receipt:view',
+    PAYMENT: 'finance:payment:view',
+    RECONCILIATION: 'finance:reconciliation:allow',
+  };
+  const tabs = allTabs.filter(tab => hasFinancePerm(permMap[tab.id]));
 
   return (
     <div className="space-y-8">
@@ -108,7 +134,22 @@ const FinanceView: React.FC<FinanceViewProps> = ({ orders, records, onAddRecord 
           type={activeTab}
           orders={orders}
           records={records.filter(r => r.type === activeTab)}
+          allRecords={records}
+          psiRecords={psiRecords}
+          prodRecords={prodRecords}
           onAddRecord={onAddRecord}
+          onUpdateRecord={onUpdateRecord}
+          onDeleteRecord={onDeleteRecord}
+          financeCategories={financeCategories}
+          financeAccountTypes={financeAccountTypes}
+          partners={partners}
+          workers={workers}
+          products={products}
+          partnerCategories={partnerCategories}
+          categories={categories}
+          globalNodes={globalNodes}
+          userPermissions={userPermissions}
+          tenantRole={tenantRole}
         />
       </div>
     </div>

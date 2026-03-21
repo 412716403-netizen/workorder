@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Package, 
@@ -35,6 +35,8 @@ import {
   Download
 } from 'lucide-react';
 import { Product, GlobalNodeTemplate, ProductCategory, BOM, BOMItem, AppDictionaries, ProductVariant, DictionaryItem, Partner } from '../types';
+import { toast } from 'sonner';
+import * as api from '../services/api';
 
 function getFileExtFromDataUrl(dataUrl: string): string {
   const m = dataUrl.match(/^data:([^;]+);/);
@@ -55,8 +57,11 @@ interface ProductManagementViewProps {
   partners: Partner[];
   onUpdateProduct: (product: Product) => void;
   onUpdateBOM: (bom: BOM) => void;
-  onUpdateDictionaries: (dicts: AppDictionaries) => void;
+  onRefreshDictionaries: () => Promise<void>;
   onDetailViewChange?: (inDetail: boolean) => void;
+  permCanCreate?: boolean;
+  permCanEdit?: boolean;
+  permCanDelete?: boolean;
 }
 
 const SpecSelectorModal = ({ 
@@ -157,14 +162,15 @@ const SpecSelectorModal = ({
   );
 };
 
-// 与创建生产计划中「搜索并选择产品型号」一致：触发样式、绝对定位下拉、输入框显示自定义内容（含分类自定义字段）
+// 与创建生产计划中「搜索并选择产品型号」一致；下拉使用 Portal+fixed，避免在弹窗/滚动区内被裁切或被迫滚外层
 const SearchableProductSelect = ({
   options,
   value,
   onChange,
   disabled,
   placeholder,
-  categories = []
+  categories = [],
+  compact = false,
 }: {
   options: Product[];
   value: string;
@@ -172,11 +178,14 @@ const SearchableProductSelect = ({
   disabled?: boolean;
   placeholder?: string;
   categories?: ProductCategory[];
+  /** BOM 等场景：更小的触发器与选项行，一屏展示更多 */
+  compact?: boolean;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<string>('all');
-  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
 
   const selectedProduct = options.find(p => p.id === value);
 
@@ -188,25 +197,186 @@ const SearchableProductSelect = ({
     });
   }, [options, search, activeTab]);
 
+  const updatePanelPosition = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el || !isOpen) return;
+    const rect = el.getBoundingClientRect();
+    const gap = 6;
+    const pad = 8;
+    const w = Math.min(Math.max(rect.width, 280), window.innerWidth - pad * 2);
+    let left = rect.left;
+    if (left + w > window.innerWidth - pad) left = window.innerWidth - w - pad;
+    if (left < pad) left = pad;
+
+    const spaceBelow = window.innerHeight - rect.bottom - gap - pad;
+    const spaceAbove = rect.top - gap - pad;
+    const preferBelow = spaceBelow >= 200 || spaceBelow >= spaceAbove;
+    const cap = Math.min(window.innerHeight * 0.62, Math.max(preferBelow ? spaceBelow : spaceAbove, 200));
+
+    if (preferBelow) {
+      setPanelStyle({
+        position: 'fixed',
+        top: rect.bottom + gap,
+        left,
+        width: w,
+        maxHeight: cap,
+        zIndex: 10050,
+        display: 'flex',
+        flexDirection: 'column',
+      });
+    } else {
+      setPanelStyle({
+        position: 'fixed',
+        bottom: window.innerHeight - rect.top + gap,
+        left,
+        width: w,
+        maxHeight: cap,
+        zIndex: 10050,
+        display: 'flex',
+        flexDirection: 'column',
+      });
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updatePanelPosition();
+    let raf = requestAnimationFrame(updatePanelPosition);
+    const onScroll = () => updatePanelPosition();
+    const onResize = () => updatePanelPosition();
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [isOpen, updatePanelPosition, search, activeTab, filteredOptions.length]);
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setIsOpen(false);
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t)) return;
+      if ((e.target as Element)?.closest?.('[data-searchable-product-dropdown]')) return;
+      setIsOpen(false);
     };
-    document.addEventListener('mousedown', handleClickOutside);
+    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [isOpen]);
+
+  const triggerCls = compact
+    ? 'w-full bg-slate-50 border-none rounded-xl py-2.5 px-3 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between disabled:opacity-50 transition-all min-h-[40px]'
+    : 'w-full bg-slate-50 border-none rounded-xl py-3.5 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between disabled:opacity-50 transition-all min-h-[48px]';
+
+  const searchInputCls = compact
+    ? 'w-full bg-slate-50 border-none rounded-lg py-2 pl-9 pr-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500'
+    : 'w-full bg-slate-50 border-none rounded-xl py-3 pl-11 pr-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500';
+
+  const tabBtnCls = (active: boolean) =>
+    compact
+      ? `px-2 py-1 rounded-md text-[9px] font-black uppercase transition-all whitespace-nowrap ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`
+      : `px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`;
+
+  const rowBtnCls = (selected: boolean) => {
+    const pad = compact ? 'py-2 px-2.5 rounded-xl' : 'p-3 rounded-2xl';
+    return `w-full text-left ${pad} transition-all border-2 ${
+      selected ? 'bg-indigo-50 border-indigo-600/20 text-indigo-700' : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'
+    }`;
+  };
+
+  const dropdownPanel = isOpen && typeof document !== 'undefined' && (
+    <div
+      data-searchable-product-dropdown
+      className={`bg-white border border-slate-200 shadow-2xl animate-in fade-in zoom-in-95 duration-150 ${compact ? 'rounded-xl p-3' : 'rounded-2xl p-4'}`}
+      style={panelStyle}
+      onMouseDown={e => e.preventDefault()}
+    >
+      <div className={`relative flex-shrink-0 ${compact ? 'mb-2' : 'mb-4'}`}>
+        <Search className={`absolute text-slate-400 ${compact ? 'left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5' : 'left-3.5 top-1/2 -translate-y-1/2 w-4 h-4'}`} />
+        <input
+          autoFocus
+          type="text"
+          className={searchInputCls}
+          placeholder="输入名称或 SKU 搜索..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+
+      <div className={`flex items-center gap-1 flex-shrink-0 overflow-x-auto no-scrollbar ${compact ? 'mb-2 pb-0.5' : 'mb-4 pb-1'}`}>
+        <button type="button" onClick={() => setActiveTab('all')} className={tabBtnCls(activeTab === 'all')}>
+          全部
+        </button>
+        {categories.map(cat => (
+          <button key={cat.id} type="button" onClick={() => setActiveTab(cat.id)} className={tabBtnCls(activeTab === cat.id)}>
+            {cat.name}
+          </button>
+        ))}
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar space-y-0.5">
+        {filteredOptions.map(p => {
+          const cat = categories.find(c => c.id === p.categoryId);
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => {
+                onChange(p.id);
+                setIsOpen(false);
+                setSearch('');
+              }}
+              className={rowBtnCls(p.id === value)}
+            >
+              <div className={`flex justify-between items-start ${compact ? 'mb-0' : 'mb-0.5'}`}>
+                <p className={`font-black truncate ${compact ? 'text-xs' : 'text-sm'}`}>{p.name}</p>
+                {cat && (
+                  <span className={`rounded bg-slate-100 text-slate-400 font-black uppercase shrink-0 ${compact ? 'px-1 py-0 text-[7px]' : 'px-1.5 py-0.5 text-[8px]'}`}>{cat.name}</span>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-1">
+                <p className={`font-bold uppercase tracking-widest ${compact ? 'text-[9px]' : 'text-[10px]'} ${p.id === value ? 'text-indigo-400' : 'text-slate-400'}`}>{p.sku}</p>
+                {cat?.customFields?.map(f => {
+                  const val = p.categoryCustomData?.[f.id];
+                  if (val == null || val === '') return null;
+                  if (f.type === 'file')
+                    return (
+                      <span key={f.id} className={`font-bold text-slate-500 rounded bg-slate-50 ${compact ? 'text-[7px] px-1 py-0' : 'text-[8px] px-1.5 py-0.5'}`}>
+                        {f.label}: 已上传
+                      </span>
+                    );
+                  return (
+                    <span key={f.id} className={`font-bold text-slate-500 rounded bg-slate-50 ${compact ? 'text-[7px] px-1 py-0' : 'text-[8px] px-1.5 py-0.5'}`}>
+                      {f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}
+                    </span>
+                  );
+                })}
+              </div>
+            </button>
+          );
+        })}
+        {filteredOptions.length === 0 && (
+          <div className={compact ? 'py-6 text-center' : 'py-10 text-center'}>
+            <Package className={`text-slate-100 mx-auto mb-2 block ${compact ? 'w-6 h-6' : 'w-8 h-8'}`} />
+            <p className={`text-slate-400 font-medium ${compact ? 'text-[10px]' : 'text-xs'}`}>未找到符合条件的产品</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
-    <div className="relative w-full" ref={containerRef}>
+    <div className="relative w-full">
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full bg-slate-50 border-none rounded-xl py-3.5 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between disabled:opacity-50 transition-all min-h-[48px]"
+        onClick={() => setIsOpen(o => !o)}
+        className={triggerCls}
       >
         <div className="flex items-center gap-2 truncate min-w-0">
-          <Package className={`w-4 h-4 shrink-0 ${selectedProduct ? 'text-indigo-600' : 'text-slate-300'}`} />
-          <span className={`text-xs font-bold truncate ${selectedProduct ? 'text-slate-900' : 'text-slate-400'}`}>
+          <Package className={`shrink-0 ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} ${selectedProduct ? 'text-indigo-600' : 'text-slate-300'}`} />
+          <span className={`font-bold truncate ${compact ? 'text-[11px]' : 'text-xs'} ${selectedProduct ? 'text-slate-900' : 'text-slate-400'}`}>
             {selectedProduct
               ? (() => {
                   const cat = categories.find(c => c.id === selectedProduct.categoryId);
@@ -225,91 +395,10 @@ const SearchableProductSelect = ({
               : placeholder || '搜索并选择产品型号...'}
           </span>
         </div>
-        <ChevronRight className={`w-4 h-4 shrink-0 transition-transform ${isOpen ? 'rotate-90' : 'text-slate-400'}`} />
+        <ChevronRight className={`shrink-0 transition-transform ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} ${isOpen ? 'rotate-90' : 'text-slate-400'}`} />
       </button>
 
-      {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[100] p-4 animate-in fade-in zoom-in-95">
-          <div className="relative mb-4">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              autoFocus
-              type="text"
-              className="w-full bg-slate-50 border-none rounded-xl py-3 pl-11 pr-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="输入名称或 SKU 搜索..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-          </div>
-
-          <div className="flex items-center gap-1.5 mb-4 overflow-x-auto no-scrollbar pb-1">
-            <button
-              type="button"
-              onClick={() => setActiveTab('all')}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeTab === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
-            >
-              全部
-            </button>
-            {categories.map(cat => (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => setActiveTab(cat.id)}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeTab === cat.id ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
-              >
-                {cat.name}
-              </button>
-            ))}
-          </div>
-
-          <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1">
-            {filteredOptions.map(p => {
-              const cat = categories.find(c => c.id === p.categoryId);
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => {
-                    onChange(p.id);
-                    setIsOpen(false);
-                    setSearch('');
-                  }}
-                  className={`w-full text-left p-3 rounded-2xl transition-all border-2 ${
-                    p.id === value ? 'bg-indigo-50 border-indigo-600/20 text-indigo-700' : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-0.5">
-                    <p className="text-sm font-black truncate">{p.name}</p>
-                    {cat && <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-400 text-[8px] font-black uppercase shrink-0">{cat.name}</span>}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <p className={`text-[10px] font-bold uppercase tracking-widest ${p.id === value ? 'text-indigo-400' : 'text-slate-400'}`}>{p.sku}</p>
-                    {cat?.customFields
-                      ?.map(f => {
-                        const val = p.categoryCustomData?.[f.id];
-                        if (val == null || val === '') return null;
-                        if (f.type === 'file') return (
-                          <span key={f.id} className="text-[8px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">{f.label}: 已上传</span>
-                        );
-                        return (
-                          <span key={f.id} className="text-[8px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">
-                            {f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}
-                          </span>
-                        );
-                      })}
-                  </div>
-                </button>
-              );
-            })}
-            {filteredOptions.length === 0 && (
-              <div className="py-10 text-center">
-                <Package className="w-8 h-8 text-slate-100 mx-auto mb-2 block" />
-                <p className="text-xs text-slate-400 font-medium">未找到符合条件的产品</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {dropdownPanel && createPortal(dropdownPanel, document.body)}
     </div>
   );
 };
@@ -376,8 +465,11 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   partners,
   onUpdateProduct, 
   onUpdateBOM,
-  onUpdateDictionaries,
-  onDetailViewChange
+  onRefreshDictionaries,
+  onDetailViewChange,
+  permCanCreate = true,
+  permCanEdit = true,
+  permCanDelete = true,
 }) => {
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>(categories[0]?.id || 'cat-material');
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
@@ -439,7 +531,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
             id: `v-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
             colorId: cId, sizeId: sId,
             skuSuffix: `${colorName}${colorName && sizeName ? '-' : ''}${sizeName}`,
-            nodeBOMs: {}
+            nodeBoms: {}
           });
         }
       });
@@ -466,15 +558,16 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     setWorkingProduct({ ...workingProduct, [key]: current });
   };
 
-  const handleAddNewSpec = (type: 'colors' | 'sizes', name: string) => {
-    const newId = `${type === 'colors' ? 'c' : 's'}-${Date.now()}`;
-    const newItem: DictionaryItem = { id: newId, name, value: type === 'colors' ? '#ccc' : name };
-    const newDicts = { ...dictionaries, [type]: [...dictionaries[type], newItem] };
-    onUpdateDictionaries(newDicts);
-    if (workingProduct) {
-      const key = type === 'colors' ? 'colorIds' : 'sizeIds';
-      setWorkingProduct({ ...workingProduct, [key]: [...workingProduct[key], newId] });
-    }
+  const handleAddNewSpec = async (type: 'colors' | 'sizes', name: string) => {
+    try {
+      const dictType = type === 'colors' ? 'color' : 'size';
+      const created = await api.dictionaries.create({ type: dictType, name, value: type === 'colors' ? '#ccc' : name }) as DictionaryItem;
+      await onRefreshDictionaries();
+      if (workingProduct) {
+        const key = type === 'colors' ? 'colorIds' : 'sizeIds';
+        setWorkingProduct({ ...workingProduct, [key]: [...workingProduct[key], created.id] });
+      }
+    } catch (err: any) { toast.error(err.message || '操作失败'); }
   };
 
   const handleStartEditProduct = (p: Product) => {
@@ -488,10 +581,10 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     const newId = `p-${Date.now()}`;
     setEditingProductId(newId);
     setWorkingProduct({
-      id: newId, sku: '', name: '新产品名称',
+      id: newId, sku: '', name: '',
       categoryId: activeCategoryFilter, milestoneNodeIds: [],
-      categoryCustomData: {}, salesPrice: 0, purchasePrice: 0,
-      unitId: (dictionaries.units ?? [])[0]?.id ?? '',
+      categoryCustomData: {}, salesPrice: undefined, purchasePrice: undefined,
+      unitId: undefined,
       colorIds: [], sizeIds: [], variants: [], imageUrl: ''
     });
   };
@@ -554,27 +647,37 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     }
   };
 
-  const saveBOM = () => {
-    if (workingBOM && workingProduct && activeVariantIdForBOM && activeNodeIdForBOM) {
-      onUpdateBOM(workingBOM);
-      if (activeVariantIdForBOM.startsWith('single-')) {
-        setActiveVariantIdForBOM(null);
-        setActiveNodeIdForBOM(null);
-        setWorkingBOM(null);
-        return;
-      }
-      const updatedVariants = workingProduct.variants.map(v => {
-        if (v.id === activeVariantIdForBOM) {
-          const nodeBOMs = { ...(v.nodeBOMs || {}), [activeNodeIdForBOM]: workingBOM.id };
-          return { ...v, nodeBOMs };
-        }
-        return v;
+  const closeBOMEditor = useCallback(() => {
+    setCopyBOMDropdownOpen(false);
+    setActiveVariantIdForBOM(null);
+    setActiveNodeIdForBOM(null);
+    setWorkingBOM(null);
+  }, []);
+
+  useEffect(() => {
+    if (!activeVariantIdForBOM || !activeNodeIdForBOM || !workingBOM) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeBOMEditor();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [activeVariantIdForBOM, activeNodeIdForBOM, workingBOM, closeBOMEditor]);
+
+  const [bomSaving, setBomSaving] = useState(false);
+  const saveBOM = async () => {
+    if (!workingBOM || !workingProduct || !activeVariantIdForBOM || !activeNodeIdForBOM) return;
+    setBomSaving(true);
+    try {
+      await onUpdateProduct({
+        ...workingProduct,
+        salesPrice: workingProduct.salesPrice ?? 0,
+        purchasePrice: workingProduct.purchasePrice ?? 0,
       });
-      setWorkingProduct({ ...workingProduct, variants: updatedVariants });
-      setActiveVariantIdForBOM(null);
-      setActiveNodeIdForBOM(null);
-      setWorkingBOM(null);
+      await onUpdateBOM(workingBOM);
+    } finally {
+      setBomSaving(false);
     }
+    closeBOMEditor();
   };
 
   const copyBOMFrom = (sourceVariantId: string) => {
@@ -617,7 +720,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     );
     const availableBOMSources = workingProduct.variants.filter(srcV => {
       if (!activeVariantIdForBOM || !activeNodeIdForBOM) return false;
-      return srcV.id !== activeVariantIdForBOM && srcV.nodeBOMs && srcV.nodeBOMs[activeNodeIdForBOM];
+      return srcV.id !== activeVariantIdForBOM && boms.some(b => b.variantId === srcV.id && b.nodeId === activeNodeIdForBOM);
     });
 
     return (
@@ -725,7 +828,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                       <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">标准销售单价 (CNY)</label>
                       <div className="relative">
                         <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                        <input type="number" value={workingProduct.salesPrice} onChange={e => setWorkingProduct({...workingProduct, salesPrice: parseFloat(e.target.value)||0})} className="w-full bg-slate-50 border-none rounded-xl py-3 pl-10 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                        <input type="number" value={workingProduct.salesPrice ?? ''} onChange={e => setWorkingProduct({...workingProduct, salesPrice: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0)})} className="w-full bg-slate-50 border-none rounded-xl py-3 pl-10 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="" />
                       </div>
                     </div>
                  )}
@@ -735,7 +838,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                         <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">参考采购单价 (CNY)</label>
                         <div className="relative">
                           <ShoppingCart className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                          <input type="number" value={workingProduct.purchasePrice} onChange={e => setWorkingProduct({...workingProduct, purchasePrice: parseFloat(e.target.value)||0})} className="w-full bg-slate-50 border-none rounded-xl py-3 pl-10 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                          <input type="number" value={workingProduct.purchasePrice ?? ''} onChange={e => setWorkingProduct({...workingProduct, purchasePrice: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0)})} className="w-full bg-slate-50 border-none rounded-xl py-3 pl-10 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="" />
                         </div>
                       </div>
                       <div className="space-y-1">
@@ -826,7 +929,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                               if (!file) return;
                               const maxSize = 5 * 1024 * 1024; // 5MB
                               if (file.size > maxSize) {
-                                alert('文件大小不能超过 5MB');
+                                toast.error('文件大小不能超过 5MB');
                                 return;
                               }
                               const reader = new FileReader();
@@ -1040,7 +1143,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                     {enabledBOMNodes.map(node => {
                       const hasNodeBOM = !!singleSkuNodeBOMs[node.id];
                       const isEditing = activeVariantIdForBOM === singleSkuVariantId && activeNodeIdForBOM === node.id;
-                      const singleSkuVirtualVariant: ProductVariant = { id: singleSkuVariantId, colorId: '', sizeId: '', skuSuffix: workingProduct.sku, nodeBOMs: singleSkuNodeBOMs };
+                      const singleSkuVirtualVariant: ProductVariant = { id: singleSkuVariantId, colorId: '', sizeId: '', skuSuffix: workingProduct.sku, nodeBoms: singleSkuNodeBOMs };
                       return (
                         <button
                           key={node.id}
@@ -1080,7 +1183,9 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                               {colorVariants.map(v => {
                                  const size = dictionaries.sizes.find(s => s.id === v.sizeId);
-                                 const nodeBOMs = v.nodeBOMs || {};
+                                 const nodeBoms = Object.fromEntries(
+                                   boms.filter(b => b.parentProductId === workingProduct.id && b.variantId === v.id && b.nodeId).map(b => [b.nodeId!, b.id])
+                                 );
                                  const isActiveVar = activeVariantIdForBOM === v.id;
                                  return (
                                    <div key={v.id} className={`p-5 rounded-3xl border transition-all ${isActiveVar ? 'border-indigo-600 bg-indigo-50/40 shadow-xl ring-2 ring-indigo-500/10' : 'bg-slate-50/50 border-slate-100 hover:border-slate-200 hover:bg-white'}`}>
@@ -1092,7 +1197,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                                       </div>
                                       <div className="space-y-2">
                                          {enabledBOMNodes.map(node => {
-                                           const hasNodeBOM = !!nodeBOMs[node.id];
+                                           const hasNodeBOM = !!nodeBoms[node.id];
                                            const isEditing = activeVariantIdForBOM === v.id && activeNodeIdForBOM === node.id;
                                            return (
                                              <button 
@@ -1121,90 +1226,99 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
               </div>
             )}
 
-            {/* 嵌入式 BOM 编辑器（单 SKU 与多变体共用） */}
-            {enabledBOMNodes.length > 0 && activeVariantIdForBOM && activeNodeIdForBOM && workingBOM && (() => {
+            {/* BOM 配置弹窗（单 SKU 与多变体共用） */}
+            {enabledBOMNodes.length > 0 && activeVariantIdForBOM && activeNodeIdForBOM && workingBOM && typeof document !== 'undefined' && (() => {
               const activeVariant = workingProduct?.variants.find(v => v.id === activeVariantIdForBOM);
               const isSingleSku = !activeVariant || activeVariantIdForBOM.startsWith('single-');
               const colorName = activeVariant?.colorId ? (dictionaries.colors.find(c => c.id === activeVariant.colorId)?.name ?? '') : '';
               const sizeName = activeVariant?.sizeId ? (dictionaries.sizes.find(s => s.id === activeVariant.sizeId)?.name ?? '') : '';
               const colorSizeLabel = isSingleSku ? '单 SKU（通用）' : [colorName, sizeName].filter(Boolean).join(' / ');
-              return (
-              <div className="pt-10 border-t border-slate-50">
-                <div className="bg-white p-8 rounded-[32px] border-2 border-indigo-600 shadow-[0_32px_64px_-12px_rgba(79,70,229,0.25)] animate-in slide-in-from-top-8 relative z-50">
-                      <div className="flex items-center justify-between mb-8">
-                         <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg"><Boxes className="w-6 h-6" /></div>
-                            <div>
-                               <h5 className="text-sm font-black text-slate-800 uppercase tracking-widest">配置物料明细</h5>
-                               <p className="text-[10px] text-slate-400 font-bold uppercase">{workingBOM.name}</p>
-                               <p className="text-[10px] text-indigo-500 font-bold mt-1">
-                                  {isSingleSku ? '适用：' : '适用颜色尺码：'}{colorSizeLabel}
-                               </p>
-                            </div>
-                         </div>
-                         <div className="flex items-center gap-3">
-                            <div className="relative">
-                               <button ref={copyBOMTriggerRef} type="button" onClick={() => setCopyBOMDropdownOpen(!copyBOMDropdownOpen)} className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-600 hover:bg-white transition-all"><Copy className="w-3.5 h-3.5" /> 复制现有方案</button>
-                               {copyBOMDropdownOpen && typeof document !== 'undefined' && createPortal(
-                                 <div data-portal-copy-bom className="bg-white rounded-2xl border border-slate-200 shadow-2xl p-2 max-h-48 overflow-y-auto custom-scrollbar" style={copyBOMDropdownStyle}>
-                                   {availableBOMSources.map(srcV => (
-                                     <button key={srcV.id} type="button" onClick={() => { copyBOMFrom(srcV.id); setCopyBOMDropdownOpen(false); }} className="w-full text-left p-3 hover:bg-indigo-50 rounded-xl text-xs font-bold text-slate-700">{srcV.skuSuffix}</button>
-                                   ))}
-                                   {availableBOMSources.length === 0 && <p className="text-[10px] text-slate-300 p-4 italic text-center">暂无可复用的配置</p>}
-                                 </div>,
-                                 document.body
-                               )}
-                            </div>
-                            <button onClick={() => { setActiveVariantIdForBOM(null); setActiveNodeIdForBOM(null); }} className="p-2 text-slate-400 hover:text-slate-600 transition-all"><X className="w-6 h-6" /></button>
-                         </div>
+              return createPortal(
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="bom-editor-title">
+                  <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" onClick={closeBOMEditor} aria-hidden />
+                  <div
+                    className="relative w-full max-w-3xl max-h-[90vh] flex flex-col bg-white rounded-[32px] border-2 border-indigo-600 shadow-[0_32px_64px_-12px_rgba(79,70,229,0.25)] animate-in zoom-in-95 duration-200"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="flex-shrink-0 flex items-center justify-between gap-4 p-6 pb-4 border-b border-slate-100">
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg flex-shrink-0"><Boxes className="w-6 h-6" /></div>
+                        <div className="min-w-0">
+                          <h5 id="bom-editor-title" className="text-sm font-black text-slate-800 uppercase tracking-widest">配置物料明细</h5>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase truncate">{workingBOM.name}</p>
+                          <p className="text-[10px] text-indigo-500 font-bold mt-1">
+                            {isSingleSku ? '适用：' : '适用颜色尺码：'}{colorSizeLabel}
+                          </p>
+                        </div>
                       </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="relative">
+                          <button ref={copyBOMTriggerRef} type="button" onClick={() => setCopyBOMDropdownOpen(!copyBOMDropdownOpen)} className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-600 hover:bg-white transition-all"><Copy className="w-3.5 h-3.5" /> 复制现有方案</button>
+                          {copyBOMDropdownOpen && createPortal(
+                            <div data-portal-copy-bom className="bg-white rounded-2xl border border-slate-200 shadow-2xl p-2 max-h-48 overflow-y-auto custom-scrollbar" style={copyBOMDropdownStyle}>
+                              {availableBOMSources.map(srcV => (
+                                <button key={srcV.id} type="button" onClick={() => { copyBOMFrom(srcV.id); setCopyBOMDropdownOpen(false); }} className="w-full text-left p-3 hover:bg-indigo-50 rounded-xl text-xs font-bold text-slate-700">{srcV.skuSuffix}</button>
+                              ))}
+                              {availableBOMSources.length === 0 && <p className="text-[10px] text-slate-300 p-4 italic text-center">暂无可复用的配置</p>}
+                            </div>,
+                            document.body
+                          )}
+                        </div>
+                        <button type="button" onClick={closeBOMEditor} className="p-2 text-slate-400 hover:text-slate-600 transition-all rounded-xl hover:bg-slate-50" aria-label="关闭"><X className="w-6 h-6" /></button>
+                      </div>
+                    </div>
 
-                      <div className="space-y-4">
-                         {workingBOM.items.map((item, idx) => (
-                           <div key={idx} className="bg-slate-50/50 p-6 rounded-2xl border border-slate-100 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 md:gap-6 items-start relative group shadow-sm hover:bg-white hover:border-indigo-100 transition-all">
-                              <button onClick={() => {
-                                const newItems = [...workingBOM.items];
-                                newItems.splice(idx, 1);
-                                setWorkingBOM({...workingBOM, items: newItems});
-                              }} className="absolute -top-2 -right-2 w-7 h-7 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-rose-600"><Trash2 className="w-4 h-4" /></button>
-                              <div className="space-y-4 min-w-0">
-                                 <div>
-                                   <label className="text-[9px] font-black text-slate-400 uppercase mb-2 block tracking-widest">1. 核心物料/组件 (支持搜索与分类筛选)</label>
-                                   <SearchableProductSelect
-                                     categories={categories}
-                                     value={item.productId}
-                                     onChange={val => {
-                                       const p = products.find(x => x.id === val);
-                                       updateBOMItem(idx, { productId: val, categoryId: p?.categoryId });
-                                     }}
-                                     options={products.filter(p => p.id !== workingProduct?.id)}
-                                     placeholder="搜索并选择产品型号..."
-                                   />
-                                 </div>
-                              </div>
-                              <div className="w-full md:w-32">
-                                 <label className="text-[9px] font-black text-slate-400 uppercase mb-2 block tracking-widest">2. 标准单位用量</label>
-                                 <input
-                                   type="number"
-                                   value={item.quantityInput ?? (Number.isFinite(item.quantity) ? item.quantity : '')}
-                                   onChange={e => {
-                                     const raw = e.target.value;
-                                     const num = raw === '' ? 0 : (parseFloat(raw) || 0);
-                                     updateBOMItem(idx, { quantityInput: raw, quantity: num });
-                                   }}
-                                   className="w-full bg-white border border-slate-100 rounded-xl p-3 text-xs font-bold outline-none text-center"
-                                 />
-                              </div>
-                           </div>
-                         ))}
-                         <button onClick={() => setWorkingBOM({...workingBOM, items: [...workingBOM.items, { productId: '', quantity: 1 }]})} className="w-full py-5 border-2 border-dashed border-indigo-200 rounded-2xl text-indigo-500 font-bold text-xs hover:bg-white hover:border-indigo-400 transition-all flex items-center justify-center gap-2 group"><Plus className="w-4 h-4 group-hover:scale-110 transition-transform" /> 添加物料清单行</button>
-                         <div className="flex justify-end pt-6">
-                            <button onClick={saveBOM} className="bg-indigo-600 text-white px-12 py-3.5 rounded-2xl font-black text-xs shadow-2xl shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all">保存此节点的 BOM 方案</button>
-                         </div>
-                      </div>
-                </div>
-              </div>
-            ); })()}
+                    <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4 space-y-4">
+                      {workingBOM.items.map((item, idx) => (
+                        <div key={idx} className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 md:gap-4 items-start relative group shadow-sm hover:bg-white hover:border-indigo-100 transition-all">
+                          <button type="button" onClick={() => {
+                            const newItems = [...workingBOM.items];
+                            newItems.splice(idx, 1);
+                            setWorkingBOM({ ...workingBOM, items: newItems });
+                          }} className="absolute -top-2 -right-2 w-7 h-7 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-rose-600"><Trash2 className="w-4 h-4" /></button>
+                          <div className="space-y-2 min-w-0">
+                            <div>
+                              <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block tracking-widest">1. 核心物料/组件 (支持搜索与分类筛选)</label>
+                              <SearchableProductSelect
+                                compact
+                                categories={categories}
+                                value={item.productId}
+                                onChange={val => {
+                                  const p = products.find(x => x.id === val);
+                                  updateBOMItem(idx, { productId: val, categoryId: p?.categoryId });
+                                }}
+                                options={products.filter(p => p.id !== workingProduct?.id)}
+                                placeholder="搜索并选择产品型号..."
+                              />
+                            </div>
+                          </div>
+                          <div className="w-full md:w-32">
+                            <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block tracking-widest">2. 标准单位用量</label>
+                            <input
+                              type="number"
+                              value={item.quantityInput ?? (item.quantity != null && item.quantity !== '' && item.quantity !== 0 ? Number(item.quantity) : '')}
+                              onChange={e => {
+                                const raw = e.target.value;
+                                const num = raw === '' ? 0 : (parseFloat(raw) || 0);
+                                updateBOMItem(idx, { quantityInput: raw, quantity: num });
+                              }}
+                              className="w-full bg-white border border-slate-100 rounded-xl p-3 text-xs font-bold outline-none text-center"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => setWorkingBOM({ ...workingBOM, items: [...workingBOM.items, { productId: '', quantity: 0 }] })} className="w-full py-3.5 border-2 border-dashed border-indigo-200 rounded-2xl text-indigo-500 font-bold text-xs hover:bg-white hover:border-indigo-400 transition-all flex items-center justify-center gap-2 group"><Plus className="w-4 h-4 group-hover:scale-110 transition-transform" /> 添加物料清单行</button>
+                    </div>
+
+                    <div className="flex-shrink-0 flex justify-end gap-3 p-6 pt-4 border-t border-slate-100 bg-white rounded-b-[28px]">
+                      <button type="button" onClick={closeBOMEditor} disabled={bomSaving} className="px-5 py-3 rounded-2xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all disabled:opacity-50">取消</button>
+                      <button type="button" onClick={saveBOM} disabled={bomSaving} className="bg-indigo-600 text-white px-10 py-3 rounded-2xl font-black text-xs shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed">{bomSaving ? '保存中…' : '保存此节点的 BOM 方案'}</button>
+                    </div>
+                  </div>
+                </div>,
+                document.body
+              );
+            })()}
           </div>
         )}
         {/* 图片放大弹窗 */}
@@ -1228,7 +1342,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
           <h1 className="text-2xl font-bold text-slate-900">产品与 BOM 档案中心</h1>
           <p className="text-slate-500 mt-1 italic text-sm">定义业务规则、生产规格与工序物料明细</p>
         </div>
-        <button onClick={handleStartCreateProduct} className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all"><Plus className="w-4 h-4" /> 创建新产品</button>
+        {permCanCreate && <button onClick={handleStartCreateProduct} className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all"><Plus className="w-4 h-4" /> 创建新产品</button>}
       </div>
 
       <div className="flex bg-slate-100/50 p-1 rounded-xl w-fit">
@@ -1251,7 +1365,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                     <Package className="w-6 h-6" />
                   )}
                 </div>
-                <button type="button" onClick={() => handleStartEditProduct(product)} className="p-2 text-slate-300 hover:text-indigo-600 transition-colors bg-slate-50 rounded-xl"><Settings2 className="w-5 h-5" /></button>
+                {permCanEdit && <button type="button" onClick={() => handleStartEditProduct(product)} className="p-2 text-slate-300 hover:text-indigo-600 transition-colors bg-slate-50 rounded-xl"><Settings2 className="w-5 h-5" /></button>}
               </div>
               <h3 className="text-lg font-bold text-slate-900 mb-1 group-hover:text-indigo-600 transition-colors">{product.name}</h3>
               <p className="text-[11px] text-slate-400 font-bold mb-4 flex items-center gap-1 uppercase tracking-tighter"><Hash className="w-3 h-3 text-slate-300" /> {product.sku}</p>

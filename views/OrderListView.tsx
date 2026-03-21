@@ -1,12 +1,19 @@
 
 import React, { useState, useMemo } from 'react';
-import { Clock, Layers, Plus, History, User, Sliders, X, Trash2, FileText, Check, ChevronDown, ChevronRight, ScrollText, UserPlus, Filter, Pencil, ClipboardList, Search, Package, ArrowUpFromLine } from 'lucide-react';
-import { ProductionOrder, MilestoneStatus, Milestone, Product, GlobalNodeTemplate, PrintSettings, OrderFormSettings, ProductCategory, AppDictionaries, Partner, BOM, ProductionOpRecord, ProdOpType, Worker, ProductMilestoneProgress, ProcessSequenceMode, Warehouse } from '../types';
+import { Clock, Layers, Plus, History, User, Sliders, X, Trash2, FileText, Check, ChevronDown, ChevronRight, ScrollText, UserPlus, Filter, Pencil, ClipboardList, Search, Package, ArrowUpFromLine, RotateCcw, ArrowDownToLine, Split } from 'lucide-react';
+import { ProductionOrder, MilestoneStatus, Milestone, Product, GlobalNodeTemplate, OrderFormSettings, ProductCategory, AppDictionaries, Partner, BOM, ProductionOpRecord, ProdOpType, Worker, ProductMilestoneProgress, ProcessSequenceMode, Warehouse, ProductVariant } from '../types';
 import ProductDetailModal from './ProductDetailModal';
 import OrderDetailModal from './OrderDetailModal';
 import OrderFlowView from './OrderFlowView';
 import WorkerSelector from '../components/WorkerSelector';
 import EquipmentSelector from '../components/EquipmentSelector';
+import {
+  sumBlockOrderQty,
+  pmpCompletedAtTemplate,
+  productGroupMaxReportableSum,
+  variantMaxGoodProductMode
+} from '../utils/productReportAggregates';
+import { buildDefectiveReworkByOrderMilestone } from '../utils/defectiveReworkByOrderMilestone';
 
 interface OrderListViewProps {
   productionLinkMode?: 'order' | 'product';
@@ -21,7 +28,6 @@ interface OrderListViewProps {
   partners: Partner[];
   boms: BOM[];
   globalNodes: GlobalNodeTemplate[];
-  printSettings: PrintSettings;
   orderFormSettings: OrderFormSettings;
   prodRecords?: ProductionOpRecord[];
   warehouses?: Warehouse[];
@@ -45,14 +51,21 @@ type ReportUpdateParams = {
 
 interface OrderListViewExtendedProps extends OrderListViewProps {
   initialDetailOrderId?: string | null;
+  /** 关闭工单详情弹窗时由父组件清除 location.state 中的 detailOrderId，避免切 tab 再回来时弹窗再次打开 */
+  onClearDetailOrderIdFromState?: () => void;
   onUpdateReport?: (params: ReportUpdateParams) => void;
   onDeleteReport?: (params: { orderId: string; milestoneId: string; reportId: string }) => void;
   onUpdateProduct?: (product: Product) => void;
   onAddRecord?: (record: ProductionOpRecord) => void;
+  onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
+  onUpdateRecord?: (record: ProductionOpRecord) => void;
+  onDeleteRecord?: (recordId: string) => void;
   productMilestoneProgresses?: ProductMilestoneProgress[];
   onReportSubmitProduct?: (productId: string, milestoneTemplateId: string, quantity: number, customData: any, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string) => void;
   onUpdateReportProduct?: (params: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string }) => void;
   onDeleteReportProduct?: (params: { progressId: string; reportId: string }) => void;
+  userPermissions?: string[];
+  tenantRole?: string;
 }
 
 const OrderListView: React.FC<OrderListViewExtendedProps> = ({
@@ -60,6 +73,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   processSequenceMode = 'free',
   allowExceedMaxReportQty = true,
   initialDetailOrderId,
+  onClearDetailOrderIdFromState,
   orders,
   products,
   workers = [],
@@ -69,7 +83,6 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   partners,
   boms,
   globalNodes,
-  printSettings,
   orderFormSettings,
   prodRecords = [],
   warehouses = [],
@@ -81,11 +94,33 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   onDeleteReport,
   onUpdateProduct,
   onAddRecord,
+  onAddRecordBatch,
+  onUpdateRecord,
+  onDeleteRecord,
   productMilestoneProgresses = [],
   onReportSubmitProduct,
   onUpdateReportProduct,
-  onDeleteReportProduct
+  onDeleteReportProduct,
+  userPermissions,
+  tenantRole
 }) => {
+  const _isOwner = tenantRole === 'owner';
+  const hasOrderPerm = (permKey: string): boolean => {
+    if (_isOwner) return true;
+    if (!userPermissions) return true;
+    if (userPermissions.includes('production')) return true;
+    if (userPermissions.includes(permKey)) return true;
+    if (userPermissions.some(p => p.startsWith(`${permKey}:`))) return true;
+    return false;
+  };
+  const hasProcessReportPerm = (): boolean => {
+    if (_isOwner) return true;
+    if (!userPermissions) return true;
+    if (userPermissions.includes('production')) return true;
+    if (userPermissions.includes('process_report')) return true;
+    if (userPermissions.includes('production:orders_list:allow')) return true;
+    return false;
+  };
   const [detailOrderId, setDetailOrderId] = useState<string | null>(initialDetailOrderId ?? null);
   const [showOrderFlowModal, setShowOrderFlowModal] = useState(false);
   /** 从产品卡片打开工单流水时传入，用于预填搜索筛选 */
@@ -182,10 +217,17 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
   /** 物料发出弹窗：选中的父工单 id */
   const [materialIssueOrderId, setMaterialIssueOrderId] = useState<string | null>(null);
+  /** 关联产品模式：按成品聚合多工单的物料发出（与产品卡片行一致） */
+  const [materialIssueForProduct, setMaterialIssueForProduct] = useState<{ productId: string; orders: ProductionOrder[] } | null>(null);
   /** 物料发出弹窗：各物料领料数量输入 */
   const [materialIssueQty, setMaterialIssueQty] = useState<Record<string, number>>({});
   /** 物料发出弹窗：选择的出库仓库 */
   const [materialIssueWarehouseId, setMaterialIssueWarehouseId] = useState<string>(warehouses[0]?.id ?? '');
+
+  /** 返工详情弹窗：选中的主工单 id（工单中心列表点击「返工」打开） */
+  const [reworkDetailOrderId, setReworkDetailOrderId] = useState<string | null>(null);
+  /** 返工详情弹窗（关联产品模式）：选中的产品 id */
+  const [reworkDetailProductId, setReworkDetailProductId] = useState<string | null>(null);
 
   /** 已展开的父工单 id 集合，默认空 = 全部收缩（仅 order 模式） */
   const [expandedParents, setExpandedParents] = useState<Set<string>>(() => new Set());
@@ -197,6 +239,59 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
       return next;
     });
   };
+
+  /** 顺序模式：单条返工记录在工序 nodeId 上的「剩余可报数」= 上道已完成流入本道 - 本道已完成 */
+  const reworkRemainingAtNode = (r: ProductionOpRecord, nodeId: string): number => {
+    const pathNodes = (r.reworkNodeIds && r.reworkNodeIds.length > 0) ? r.reworkNodeIds : (r.nodeId ? [r.nodeId] : []);
+    const idx = pathNodes.indexOf(nodeId);
+    if (idx < 0) return 0;
+    const doneAtNode = r.reworkCompletedQuantityByNode?.[nodeId] ?? ((r.completedNodeIds ?? []).includes(nodeId) ? r.quantity : 0);
+    if (processSequenceMode === 'sequential' && idx > 0) {
+      const prevNodeId = pathNodes[idx - 1];
+      const doneAtPrev = r.reworkCompletedQuantityByNode?.[prevNodeId] ?? 0;
+      return Math.max(0, Math.min(doneAtPrev, r.quantity) - doneAtNode);
+    }
+    return Math.max(0, r.quantity - doneAtNode);
+  };
+
+  /** 按单 + 目标工序聚合返工统计（工单中心返工详情弹窗用）；顺序模式下 pendingQty = 按路径上道完成后的可报数 */
+  const reworkStatsByOrderId = useMemo(() => {
+    if (productionLinkMode !== 'order') return new Map<string, { nodeId: string; nodeName: string; totalQty: number; completedQty: number; pendingQty: number }[]>();
+    const reworkRecords = prodRecords.filter(r => r.type === 'REWORK');
+    const result = new Map<string, { nodeId: string; nodeName: string; totalQty: number; completedQty: number; pendingQty: number }[]>();
+    orders.forEach(order => {
+      const byNode = new Map<string, { totalQty: number; completedQty: number; pendingSeq: number }>();
+      reworkRecords.forEach(r => {
+        if (r.orderId !== order.id) return;
+        const targetNodes = (r.reworkNodeIds && r.reworkNodeIds.length > 0) ? r.reworkNodeIds : (r.nodeId ? [r.nodeId] : []);
+        const completed = r.status === '已完成' || (targetNodes.length > 0 && targetNodes.every(n => (r.reworkCompletedQuantityByNode?.[n] ?? 0) >= r.quantity));
+        targetNodes.forEach(nodeId => {
+          const cur = byNode.get(nodeId) ?? { totalQty: 0, completedQty: 0, pendingSeq: 0 };
+          cur.totalQty += r.quantity;
+          const doneAtNode = r.reworkCompletedQuantityByNode?.[nodeId] ?? ((r.completedNodeIds ?? []).includes(nodeId) || completed ? r.quantity : 0);
+          cur.completedQty += Math.min(r.quantity, doneAtNode);
+          cur.pendingSeq += reworkRemainingAtNode(r, nodeId);
+          byNode.set(nodeId, cur);
+        });
+      });
+      const list = Array.from(byNode.entries())
+        .filter(([, v]) => v.totalQty > 0)
+        .map(([nodeId, v]) => ({
+          nodeId,
+          nodeName: globalNodes.find(n => n.id === nodeId)?.name ?? nodeId,
+          totalQty: v.totalQty,
+          completedQty: v.completedQty,
+          pendingQty: processSequenceMode === 'sequential' ? v.pendingSeq : (v.totalQty - v.completedQty)
+        }))
+        .sort((a, b) => {
+          const idxA = globalNodes.findIndex(n => n.id === a.nodeId);
+          const idxB = globalNodes.findIndex(n => n.id === b.nodeId);
+          return (idxA < 0 ? 999 : idxA) - (idxB < 0 ? 999 : idxB);
+        });
+      if (list.length > 0) result.set(order.id, list);
+    });
+    return result;
+  }, [productionLinkMode, prodRecords, orders, globalNodes, processSequenceMode]);
 
   const showInList = (id: string) => orderFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
 
@@ -252,9 +347,34 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     return result;
   };
 
-  /** 列表展示块：单条 或 主工单+子工单分组 或 按产品分组（product 模式） */
+  /** 关联工单模式下：工单号根（反复去掉末尾 -数字），如 WO2-1-2 → WO2-1 → WO2，同一计划单拆出的工单归到同一框 */
+  const getRootOrderNumber = (orderNumber: string): string => {
+    let s = orderNumber || '';
+    for (;;) {
+      const m = s.match(/^(.+)-([1-9]\d?)$/);
+      if (!m) return s;
+      s = m[1];
+    }
+  };
+
+  /** 关联工单模式下：根工单号 → 该原单下所有工单（WO2-1-1、WO2-1-2、WO2-2 等，仅包含至少 2 条的同组；基于当前筛选列表） */
+  const rootToOrders = useMemo(() => {
+    if (productionLinkMode !== 'order') return new Map<string, ProductionOrder[]>();
+    const map = new Map<string, ProductionOrder[]>();
+    filteredOrdersForList.forEach(o => {
+      const root = getRootOrderNumber(o.orderNumber || '');
+      if (!map.has(root)) map.set(root, []);
+      map.get(root)!.push(o);
+    });
+    const multi = new Map<string, ProductionOrder[]>();
+    map.forEach((arr, root) => { if (arr.length >= 2) multi.set(root, arr); });
+    return multi;
+  }, [filteredOrdersForList, productionLinkMode]);
+
+  /** 列表展示块：单条 或 原单分组（同一计划拆出的多工单） 或 主工单+子工单分组 或 按产品分组（product 模式） */
   type ListBlock =
     | { type: 'single'; order: ProductionOrder }
+    | { type: 'orderGroup'; groupKey: string; orders: ProductionOrder[] }
     | { type: 'parentChild'; parent: ProductionOrder; children: ProductionOrder[] }
     | { type: 'productGroup'; productId: string; productName: string; orders: ProductionOrder[] };
   const listBlocks = useMemo((): ListBlock[] => {
@@ -279,18 +399,127 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     for (const order of filteredOrdersForList) {
       if (used.has(order.id)) continue;
       if (order.parentOrderId) continue;
-      const children = parentToSubOrders.get(order.id) || [];
-      if (children.length > 0) {
-        used.add(order.id);
-        getAllDescendantsWithDepth(order.id, 1).forEach(({ order: o }) => used.add(o.id));
-        blocks.push({ type: 'parentChild', parent: order, children });
+      const root = getRootOrderNumber(order.orderNumber || '');
+      if (rootToOrders.has(root)) {
+        const groupOrders = rootToOrders.get(root)!;
+        groupOrders.forEach(o => used.add(o.id));
+        blocks.push({ type: 'orderGroup', groupKey: root, orders: [...groupOrders].sort((a, b) => (a.orderNumber || '').localeCompare(b.orderNumber || '')) });
       } else {
-        used.add(order.id);
-        blocks.push({ type: 'single', order });
+        const children = parentToSubOrders.get(order.id) || [];
+        if (children.length > 0) {
+          used.add(order.id);
+          getAllDescendantsWithDepth(order.id, 1).forEach(({ order: o }) => used.add(o.id));
+          blocks.push({ type: 'parentChild', parent: order, children });
+        } else {
+          used.add(order.id);
+          blocks.push({ type: 'single', order });
+        }
       }
     }
     return blocks;
-  }, [filteredOrdersForList, parentToSubOrders, productionLinkMode, products]);
+  }, [filteredOrdersForList, parentToSubOrders, rootToOrders, productionLinkMode, products]);
+
+  /** 单位名称（用于待入库等展示） */
+  const getUnitName = (productId: string) => {
+    const p = products.find(x => x.id === productId);
+    const u = (dictionaries.units ?? []).find((x: { id: string; name: string }) => x.id === p?.unitId);
+    return (u as { name: string } | undefined)?.name ?? 'PCS';
+  };
+
+  /** 待入库清单：有完成数量即可显示。可入库数量 = 最后一道工序的完成量 - 已入库量；有颜色尺码时按规格取最后一道工序报工汇总。 */
+  type PendingStockItem = {
+    order: ProductionOrder;
+    orderTotal: number;
+    alreadyIn: number;
+    pendingTotal: number;
+    alreadyInByVariant: Record<string, number>;
+    /** 每规格待入库 = 该规格最后一道工序报工合计 - 该规格已入库（与成衣报工一致） */
+    pendingByVariant: Record<string, number>;
+  };
+  const pendingStockOrders = useMemo((): PendingStockItem[] => {
+    const list: PendingStockItem[] = [];
+    for (const order of orders) {
+      if (!order.milestones?.length) continue;
+      const orderTotal = order.items.reduce((s, i) => s + i.quantity, 0);
+      const lastMilestone = order.milestones[order.milestones.length - 1];
+      /** 最后一道工序按规格汇总的完成量（成衣报工按 variantId 汇总） */
+      const completedByVariant: Record<string, number> = {};
+      (lastMilestone?.reports ?? []).forEach(r => {
+        const vid = r.variantId ?? '';
+        completedByVariant[vid] = (completedByVariant[vid] ?? 0) + r.quantity;
+      });
+      const hasVariantBreakdown = Object.keys(completedByVariant).some(k => k !== '');
+      /** 总完成量：有按规格报工时用汇总值，否则用工序的 completedQuantity */
+      const completedProduced = hasVariantBreakdown
+        ? Object.values(completedByVariant).reduce((s, q) => s + q, 0)
+        : (lastMilestone?.completedQuantity ?? 0);
+      const stockInRecords = (prodRecords || []).filter(r => r.type === 'STOCK_IN' && r.orderId === order.id);
+      const alreadyIn = stockInRecords.reduce((s, r) => s + r.quantity, 0);
+      const alreadyInByVariant: Record<string, number> = {};
+      stockInRecords.forEach(r => {
+        const vid = r.variantId ?? '';
+        alreadyInByVariant[vid] = (alreadyInByVariant[vid] ?? 0) + r.quantity;
+      });
+      /** 待入库总量 = 已完成产量 - 已入库 */
+      const pendingTotal = Math.max(0, completedProduced - alreadyIn);
+      if (pendingTotal <= 0) continue;
+      /** 每规格待入库 = 该规格完成量 - 该规格已入库（与成衣报工数量一致） */
+      const pendingByVariant: Record<string, number> = {};
+      if (hasVariantBreakdown) {
+        Object.entries(completedByVariant).forEach(([vid, qty]) => {
+          const inV = alreadyInByVariant[vid] ?? 0;
+          const p = Math.max(0, qty - inV);
+          pendingByVariant[vid] = p;
+        });
+      }
+      list.push({
+        order,
+        orderTotal,
+        alreadyIn,
+        pendingTotal,
+        alreadyInByVariant,
+        pendingByVariant: Object.keys(pendingByVariant).length > 0 ? pendingByVariant : { '': pendingTotal }
+      });
+    }
+    return list.sort((a, b) => (b.order.orderNumber || '').localeCompare(a.order.orderNumber || ''));
+  }, [orders, prodRecords]);
+
+  /** 待入库清单弹窗 & 选择入库表单 */
+  const [showPendingStockModal, setShowPendingStockModal] = useState(false);
+  const [stockInOrder, setStockInOrder] = useState<PendingStockItem | null>(null);
+  const [stockInForm, setStockInForm] = useState<{
+    warehouseId: string;
+    variantQuantities: Record<string, number>;
+    singleQuantity: number;
+  }>({ warehouseId: '', variantQuantities: {}, singleQuantity: 0 });
+
+  const [showStockInFlowModal, setShowStockInFlowModal] = useState(false);
+  const [stockInFlowFilter, setStockInFlowFilter] = useState<{
+    dateFrom: string; dateTo: string; docNo: string; orderNumber: string; productName: string; warehouseId: string;
+  }>({ dateFrom: '', dateTo: '', docNo: '', orderNumber: '', productName: '', warehouseId: '' });
+  const [stockInFlowDetailDocNo, setStockInFlowDetailDocNo] = useState<string | null>(null);
+  const [stockInFlowEditing, setStockInFlowEditing] = useState<{
+    warehouseId: string;
+    operator: string;
+    rows: { id: string; variantId?: string; quantity: number }[];
+  } | null>(null);
+
+  const getNextStockInDocNo = () => {
+    const prefix = 'RK';
+    const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const pattern = `${prefix}${todayStr}-`;
+    const existing = prodRecords.filter(r => r.type === 'STOCK_IN' && r.docNo && (r.docNo as string).startsWith(pattern));
+    const seqs = existing.map(r => parseInt(((r.docNo as string) ?? '').slice(pattern.length), 10)).filter(n => !isNaN(n));
+    const maxSeq = seqs.length ? Math.max(...seqs) : 0;
+    return `${prefix}${todayStr}-${String(maxSeq + 1).padStart(4, '0')}`;
+  };
+
+  const defectiveAndReworkByOrderMilestone = useMemo(
+    () => buildDefectiveReworkByOrderMilestone(orders, prodRecords),
+    [orders, prodRecords]
+  );
+
+  const getDefectiveRework = (orderId: string, templateId: string) => defectiveAndReworkByOrderMilestone.get(`${orderId}|${templateId}`) ?? { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> };
 
   /** 顺序模式下：判断某工单某工序是否允许报工（前一道有报工或本身为第一道） */
   const canReportMilestone = (order: ProductionOrder, ms: Milestone): boolean => {
@@ -308,9 +537,25 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     ms: Milestone,
     productAggregate?: { totalQty: number; completedQty: number; orders: ProductionOrder[]; items?: { variantId?: string; quantity: number; completedQuantity: number }[] }
   ) => {
-    // 顺序模式下，如果前一工序尚无报工记录，则不允许打开报工弹窗
-    if (processSequenceMode === 'sequential' && !canReportMilestone(order, ms)) {
-      return;
+    if (processSequenceMode === 'sequential') {
+      const idx = order.milestones.findIndex(m => m.id === ms.id);
+      if (idx > 0) {
+        const blockOrders = productAggregate?.orders ?? [order];
+        const prevTid = order.milestones[idx - 1].templateId;
+        const prevDone =
+          productionLinkMode === 'product' && productMilestoneProgresses.length > 0
+            ? pmpCompletedAtTemplate(productMilestoneProgresses, order.productId, prevTid)
+            : order.milestones[idx - 1].completedQuantity ?? 0;
+        const blockQty = sumBlockOrderQty(blockOrders);
+        const orderQty = order.items.reduce((s, i) => s + i.quantity, 0);
+        const prevAlloc =
+          productionLinkMode === 'product' && productMilestoneProgresses.length > 0 && blockQty > 0
+            ? (orderQty * prevDone) / blockQty
+            : prevDone;
+        const prevReady =
+          (order.milestones[idx - 1].completedQuantity ?? 0) > 0 || prevAlloc > 0;
+        if (!canReportMilestone(order, ms) && !prevReady) return;
+      } else if (!canReportMilestone(order, ms)) return;
     }
     if (!onReportSubmit && !(productionLinkMode === 'product' && onReportSubmitProduct)) return;
     const initialData: Record<string, any> = {};
@@ -412,13 +657,13 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     }
 
     if (productionLinkMode === 'product' && productMilestoneProgresses.length > 0 && prevTemplateId) {
-      const prevCompleted = productMilestoneProgresses
-        .filter(p => p.productId === productId && p.milestoneTemplateId === prevTemplateId && (p.variantId ?? '') === variantId)
-        .reduce((sum, p) => sum + (p.completedQuantity ?? 0), 0);
       const curCompleted = productMilestoneProgresses
         .filter(p => p.productId === productId && p.milestoneTemplateId === milestoneTemplateId && (p.variantId ?? '') === variantId)
         .reduce((sum, p) => sum + (p.completedQuantity ?? 0), 0);
-      return prevCompleted - curCompleted;
+      const prevCompleted = productMilestoneProgresses
+        .filter(p => p.productId === productId && p.milestoneTemplateId === prevTemplateId && (p.variantId ?? '') === variantId)
+        .reduce((sum, p) => sum + (p.completedQuantity ?? 0), 0);
+      return Math.max(0, prevCompleted - curCompleted);
     }
 
     let prevQty = 0;
@@ -477,7 +722,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     return `BG${todayStr}-${seqStr}`;
   };
 
-  const submitReport = () => {
+  const submitReport = async () => {
     if (!reportModal) return;
     const productId = reportModal.order.productId;
     const milestoneTemplateId = reportModal.milestone.templateId;
@@ -494,9 +739,9 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         if (entries.length === 0) return;
         const batchId = `batch-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
         const reportNo = getNextReportNo();
-        entries.forEach(([vId, qty]) => {
+        for (const [vId, qty] of entries) {
           const defQty = reportForm.variantDefectiveQuantities?.[vId] ?? 0;
-          onReportSubmitProduct!(
+          await onReportSubmitProduct!(
             productId,
             milestoneTemplateId,
             qty,
@@ -508,10 +753,10 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
             batchId,
             reportNo
           );
-        });
+        }
       } else {
         const reportNo = getNextReportNo();
-        onReportSubmitProduct(
+        await onReportSubmitProduct(
           productId,
           milestoneTemplateId,
           reportForm.quantity,
@@ -537,7 +782,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
       if (entries.length === 0) return;
       const batchId = `batch-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       const reportNo = getNextReportNo();
-      entries.forEach(([vId, qty]) => {
+      for (const [vId, qty] of entries) {
         let targetOrder = reportModal!.order;
         if (reportModal!.productOrders?.length) {
           const withVariant = reportModal!.productOrders.find(o => o.items.some(i => i.variantId === vId));
@@ -545,7 +790,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         }
         const ms = targetOrder.milestones.find(m => m.templateId === reportModal!.milestone.templateId) ?? reportModal!.milestone;
         const defQty = reportForm.variantDefectiveQuantities?.[vId] ?? 0;
-        onReportSubmit!(
+        await onReportSubmit!(
           targetOrder.id,
           ms.id,
           qty,
@@ -557,7 +802,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           batchId,
           reportNo
         );
-      });
+      }
     } else {
       let targetOrder = reportModal.order;
       if (reportModal.productOrders && reportModal.productOrders.length > 0) {
@@ -569,7 +814,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
       }
       const ms = targetOrder.milestones.find(m => m.templateId === reportModal.milestone.templateId) ?? reportModal.milestone;
       const reportNo = getNextReportNo();
-      onReportSubmit(
+      await onReportSubmit(
         targetOrder.id,
         ms.id,
         reportForm.quantity,
@@ -620,12 +865,14 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
               className="pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-500 w-56 bg-white"
             />
           </div>
+          {hasOrderPerm('production:orders_form_config:allow') && (
           <button
             onClick={() => { setOrderFormConfigDraft(JSON.parse(JSON.stringify(orderFormSettings))); setShowOrderFormConfigModal(true); }}
             className="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition-all border border-slate-200"
           >
             <Sliders className="w-4 h-4" /> 表单配置
           </button>
+          )}
           {productionLinkMode === 'product' && (
             <button
               onClick={() => { setOrderFlowProductId(null); setShowOrderFlowModal(true); }}
@@ -635,6 +882,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
               工单流水
             </button>
           )}
+          {hasOrderPerm('production:orders_report_records:view') && (
           <button 
             onClick={() => setShowHistoryModal(true)}
             className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 text-sm font-bold transition-all"
@@ -642,9 +890,30 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
             <History className="w-4 h-4" />
             报工流水
           </button>
+          )}
+          {hasOrderPerm('production:orders_pending_stock_in') && (
+          <button
+            onClick={() => { setShowPendingStockModal(true); setStockInOrder(null); }}
+            className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 text-sm font-bold transition-all"
+          >
+            <ArrowDownToLine className="w-4 h-4" />
+            待入库清单
+            {pendingStockOrders.length > 0 && (
+              <span className="ml-0.5 min-w-[18px] h-[18px] rounded-full bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center">
+                {pendingStockOrders.length}
+              </span>
+            )}
+          </button>
+          )}
         </div>
       </div>
 
+      {!hasOrderPerm('production:orders_list:allow') ? (
+        <div className="bg-white border-2 border-dashed border-slate-100 rounded-[32px] p-20 text-center">
+          <Layers className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+          <p className="text-slate-400 font-medium">无权限查看工单列表</p>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 gap-4">
           {orders.length === 0 ? (
             <div className="bg-white border-2 border-dashed border-slate-100 rounded-[32px] p-20 text-center">
@@ -669,11 +938,11 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                   <div key={order.id} className={cardClass} style={indentPx != null && indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
                     <div className="flex items-center gap-6 min-w-0">
                       {product?.imageUrl ? (
-                        <button type="button" onClick={() => setDetailOrderId(order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none block`}>
+                        <button type="button" onClick={() => hasOrderPerm('production:orders_detail:view') && setDetailOrderId(order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none block`}>
                           <img src={product.imageUrl} alt={order.productName} className="w-full h-full object-cover block" />
                         </button>
                       ) : (
-                        <button type="button" onClick={() => setDetailOrderId(order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 transition-colors`}>
+                        <button type="button" onClick={() => hasOrderPerm('production:orders_detail:view') && setDetailOrderId(order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 transition-colors`}>
                           <Layers className={isChild ? 'w-6 h-6' : 'w-7 h-7'} />
                         </button>
                       )}
@@ -706,19 +975,19 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                             {order.milestones.map((ms) => {
                               const isCompleted = ms.status === MilestoneStatus.COMPLETED;
                               const canReport = !!onReportSubmit && canReportMilestone(order, ms);
-                              // 可报工数 / 剩余可报工数：在不限制模式下 = 工单总量 / (总量 - 当前工序已报)；
-                              // 顺序模式下 = 上一道工序已报量 / (上道已报量 - 当前工序已报量)
-                              let availableQty = orderTotalQty;
+                              let baseQty = orderTotalQty;
                               const currentCompleted = ms.completedQuantity;
                               if (processSequenceMode === 'sequential') {
                                 const idx = order.milestones.findIndex(m => m.id === ms.id);
                                 if (idx > 0) {
                                   const prev = order.milestones[idx - 1];
-                                  availableQty = prev?.completedQuantity ?? 0;
+                                  baseQty = prev?.completedQuantity ?? 0;
                                 }
                               }
+                              const { defective, rework } = getDefectiveRework(order.id, ms.templateId);
+                              const availableQty = Math.max(0, baseQty - defective + rework);
                               const remaining = availableQty - currentCompleted;
-                              const tooltip = `工序「${ms.name}」：已完成 ${currentCompleted} 件，基础数量 ${availableQty} 件，剩余 ${remaining} 件`;
+                              const tooltip = `工序「${ms.name}」：已完成 ${currentCompleted} 件，可报最多 ${availableQty} 件（已扣不良、加返工完成），剩余 ${remaining} 件`;
                               const content = (
                                 <>
                                   <span className="text-[10px] font-bold text-emerald-600 mb-2 truncate w-full text-center">{ms.name}</span>
@@ -730,7 +999,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                   </div>
                                 </>
                               );
-                              return onReportSubmit ? (
+                              return (onReportSubmit && hasProcessReportPerm()) ? (
                                 <button
                                   key={ms.id}
                                   type="button"
@@ -749,7 +1018,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                 <button
                                   key={ms.id}
                                   type="button"
-                                  onClick={e => { e.stopPropagation(); setDetailOrderId(order.id); }}
+                                  onClick={e => { e.stopPropagation(); hasOrderPerm('production:orders_detail:view') && setDetailOrderId(order.id); }}
                                   className="flex flex-col items-center shrink-0 min-w-[88px] py-2 px-2 bg-slate-50 rounded-xl border border-slate-100 hover:bg-slate-100 hover:border-slate-200 transition-colors cursor-pointer"
                                   title={tooltip}
                                 >
@@ -771,6 +1040,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         </div>
                       )}
                       <div className="flex flex-col gap-2 shrink-0">
+                        {hasOrderPerm('production:orders_detail:view') && (
                         <button
                           type="button"
                           onClick={e => { e.stopPropagation(); setDetailOrderId(order.id); }}
@@ -778,14 +1048,24 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         >
                           <FileText className="w-3.5 h-3.5" /> 详情
                         </button>
-                        {onAddRecord && (
+                        )}
+                        {onAddRecord && hasOrderPerm('production:orders_material:allow') && (
                           <button
                             type="button"
-                            onClick={e => { e.stopPropagation(); setMaterialIssueOrderId(order.id); }}
+                            onClick={e => { e.stopPropagation(); setMaterialIssueForProduct(null); setMaterialIssueOrderId(order.id); setMaterialIssueQty({}); setMaterialIssueWarehouseId(warehouses[0]?.id ?? ''); }}
                             className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all w-full justify-center"
                           >
                             <Package className="w-3.5 h-3.5" /> 物料
                           </button>
+                        )}
+                        {hasOrderPerm('production:orders_rework:allow') && (
+                        <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); setReworkDetailOrderId(order.parentOrderId ?? order.id); }}
+                          className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-amber-100 text-amber-600 bg-white hover:bg-amber-50 transition-all w-full justify-center"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" /> 返工
+                        </button>
                         )}
                       </div>
                     </div>
@@ -795,6 +1075,22 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
               if (block.type === 'single') {
                 return <div key={block.order.id}>{renderOrderCard(block.order)}</div>;
+              }
+              if (block.type === 'orderGroup') {
+                const { groupKey, orders: groupOrders } = block;
+                return (
+                  <div key={`orderGroup-${groupKey}`} className="rounded-[32px] border-2 border-slate-300 bg-slate-50/50 overflow-hidden">
+                    <div className="px-5 py-3 border-b border-slate-200 bg-slate-100/80 flex items-center gap-2">
+                      <Split className="w-4 h-4 text-slate-600" />
+                      <span className="text-sm font-bold text-slate-800">原单 {groupKey}（共 {groupOrders.length} 条工单）</span>
+                    </div>
+                    <div className="p-4 space-y-3">
+                      {groupOrders.map(order => (
+                        <div key={order.id}>{renderOrderCard(order)}</div>
+                      ))}
+                    </div>
+                  </div>
+                );
               }
               if (block.type === 'productGroup') {
                 const product = products.find(p => p.id === block.productId);
@@ -870,16 +1166,35 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                       return ia - ib;
                                     });
                                     return templateEntries.map(([tid, m], mIdx) => {
-                                    // 可报工数：free 模式 = 总量；sequential 模式 = 上一道工序已报量（第一道 = 总量）
-                                    let availableQty = totalQty;
-                                    if (processSequenceMode === 'sequential' && mIdx > 0) {
-                                      availableQty = templateEntries[mIdx - 1][1].completed;
-                                    }
+                                    /** 关联产品报工写在 pmp，不良不在工单里程碑；顺序+产品时不能用「合计−里程碑不良」否则会漏扣 pmp 不良（如横机显示成下单总数 450） */
+                                    const availableQty =
+                                      productionLinkMode === 'product' && productMilestoneProgresses.length > 0
+                                        ? productGroupMaxReportableSum(
+                                            block.orders,
+                                            tid,
+                                            block.productId,
+                                            productMilestoneProgresses,
+                                            processSequenceMode,
+                                            (oid, t) => getDefectiveRework(oid, t)
+                                          )
+                                        : (() => {
+                                            let baseQty = totalQty;
+                                            if (processSequenceMode === 'sequential' && mIdx > 0) {
+                                              baseQty = templateEntries[mIdx - 1][1].completed;
+                                            }
+                                            const defectiveSum = block.orders.reduce((s, o) => s + getDefectiveRework(o.id, tid).defective, 0);
+                                            const reworkSum = block.orders.reduce((s, o) => s + getDefectiveRework(o.id, tid).rework, 0);
+                                            return Math.max(0, baseQty - defectiveSum + reworkSum);
+                                          })();
+                                    const availDisplay = Math.max(0, Math.round(Number(availableQty) || 0));
+                                    const remainingRaw = Math.round((Number(availableQty) || 0) - m.completed);
+                                    const remainingDisplay = allowExceedMaxReportQty ? remainingRaw : Math.max(0, remainingRaw);
                                     const remaining = availableQty - m.completed;
                                     const isDone = remaining <= 0 && m.completed > 0;
-                                    // 顺序模式下，前一道工序无报工则禁用后续工序
                                     const allowReport = (onReportSubmit || (productionLinkMode === 'product' && onReportSubmitProduct)) && (
-                                      processSequenceMode !== 'sequential' || mIdx === 0 || templateEntries[mIdx - 1][1].completed > 0
+                                      processSequenceMode !== 'sequential' ||
+                                      mIdx === 0 ||
+                                      templateEntries[mIdx - 1][1].completed > 0
                                     );
                                     const handleProductGroupMsClick = () => {
                                       if (!allowReport) return;
@@ -934,7 +1249,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                         items: productItems
                                       });
                                     };
-                                    return (onReportSubmit || (productionLinkMode === 'product' && onReportSubmitProduct)) ? (
+                                    return ((onReportSubmit || (productionLinkMode === 'product' && onReportSubmitProduct)) && hasProcessReportPerm()) ? (
                                       <button
                                         key={tid}
                                         type="button"
@@ -945,14 +1260,18 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                             ? 'bg-slate-50 border-slate-100 hover:bg-slate-100 hover:border-slate-200 cursor-pointer'
                                             : 'bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed'
                                         }`}
-                                        title={allowReport ? '点击报工' : '需先完成前一道工序的报工后才能报本工序'}
+                                        title={
+                                          allowReport
+                                            ? `可报最多 ${availDisplay}，已完成 ${m.completed}，剩余 ${remainingDisplay}（点击报工）`
+                                            : '需先完成前一道工序的报工后才能报本工序'
+                                        }
                                       >
                                         <span className="text-[10px] font-bold text-emerald-600 mb-2 truncate w-full text-center">{m.name}</span>
                                         <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-2 ${isDone ? 'border-emerald-400' : 'border-indigo-300'}`}>
                                           <span className="text-base font-black text-slate-900">{m.completed}</span>
                                         </div>
                                         <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500">
-                                          <span>{availableQty} / <span className={remaining <= 0 && m.completed === 0 ? '' : remaining < 0 ? 'text-rose-500' : ''}>{remaining}</span></span>
+                                          <span>{availDisplay} / <span className={remaining <= 0 && m.completed === 0 ? '' : remaining < 0 ? 'text-rose-500' : ''}>{remainingDisplay}</span></span>
                                         </div>
                                       </button>
                                     ) : (
@@ -962,7 +1281,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                           <span className="text-base font-black text-slate-900">{m.completed}</span>
                                         </div>
                                         <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500">
-                                          <span>{availableQty} / <span className={remaining < 0 ? 'text-rose-500' : ''}>{remaining}</span></span>
+                                          <span>{availDisplay} / <span className={remaining < 0 ? 'text-rose-500' : ''}>{remainingDisplay}</span></span>
                                         </div>
                                       </div>
                                     );
@@ -981,13 +1300,40 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                 </div>
                               </div>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => { setOrderFlowProductId(block.productId); setShowOrderFlowModal(true); }}
-                              className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all shrink-0"
-                            >
-                              <ScrollText className="w-3.5 h-3.5" /> 查看明细
-                            </button>
+                            <div className="flex flex-col gap-2 shrink-0">
+                              {hasOrderPerm('production:orders_detail:view') && (
+                              <button
+                                type="button"
+                                onClick={() => { setOrderFlowProductId(block.productId); setShowOrderFlowModal(true); }}
+                                className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all w-full justify-center"
+                              >
+                                <FileText className="w-3.5 h-3.5" /> 详情
+                              </button>
+                              )}
+                              {onAddRecord && hasOrderPerm('production:orders_material:allow') && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMaterialIssueOrderId(null);
+                                    setMaterialIssueForProduct({ productId: block.productId, orders: block.orders });
+                                    setMaterialIssueQty({});
+                                    setMaterialIssueWarehouseId(warehouses[0]?.id ?? '');
+                                  }}
+                                  className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all w-full justify-center"
+                                >
+                                  <Package className="w-3.5 h-3.5" /> 物料
+                                </button>
+                              )}
+                              {hasOrderPerm('production:orders_rework:allow') && (
+                              <button
+                                type="button"
+                                onClick={() => setReworkDetailProductId(block.productId)}
+                                className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-amber-100 text-amber-600 bg-white hover:bg-amber-50 transition-all w-full justify-center"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" /> 返工
+                              </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                     </div>
@@ -1030,6 +1376,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
             })
           )}
         </div>
+      )}
 
       {/* 工单流水弹窗 */}
       {showOrderFlowModal && (
@@ -1163,8 +1510,70 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         </div>
       )}
 
-      {/* 工序报工弹窗 */}
-      {reportModal && (onReportSubmit || (productionLinkMode === 'product' && onReportSubmitProduct)) && (
+      {/* 工序报工弹窗：用当前 orders 中的工单算可报最多，避免提交后仍用旧快照导致「最多」不随不良变化 */}
+      {reportModal && (onReportSubmit || (productionLinkMode === 'product' && onReportSubmitProduct)) && (() => {
+        const orderIdsInModal = reportModal.productOrders?.length ? reportModal.productOrders.map(o => o.id) : [reportModal.order.id];
+        const resolvedFromOrders = orderIdsInModal.map(id => orders.find(o => o.id === id)).filter((o): o is ProductionOrder => o != null);
+        const ordersInModal = resolvedFromOrders.length > 0 ? resolvedFromOrders : (reportModal.productOrders?.length ? reportModal.productOrders : [reportModal.order]);
+        const tid = reportModal.milestone.templateId;
+        const pid = reportModal.order.productId;
+        const useProductPmp =
+          productionLinkMode === 'product' && productMilestoneProgresses.length > 0;
+        const productForModal = products.find(p => p.id === pid);
+        const modalMilestoneOrder = productForModal?.milestoneNodeIds ?? [];
+        const seqIdx = modalMilestoneOrder.indexOf(tid);
+        const totalBase = useProductPmp
+          ? processSequenceMode === 'sequential' && seqIdx > 0
+            ? Math.max(
+                0,
+                pmpCompletedAtTemplate(productMilestoneProgresses, pid, modalMilestoneOrder[seqIdx - 1]) -
+                  ordersInModal.reduce((s, o) => s + getDefectiveRework(o.id, tid).defective, 0) +
+                  ordersInModal.reduce((s, o) => s + getDefectiveRework(o.id, tid).rework, 0)
+              )
+            : productGroupMaxReportableSum(ordersInModal, tid, pid, productMilestoneProgresses, processSequenceMode, (oid, t) =>
+                getDefectiveRework(oid, t)
+              )
+          : processSequenceMode === 'sequential'
+            ? ordersInModal.reduce((s, o) => {
+                const idx = o.milestones.findIndex(m => m.templateId === tid);
+                if (idx <= 0) return s + o.items.reduce((a, i) => a + i.quantity, 0);
+                const prev = o.milestones[idx - 1];
+                return s + (prev?.completedQuantity ?? 0);
+              }, 0)
+            : ordersInModal.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0);
+        const totalDefective = ordersInModal.reduce((s, o) => s + getDefectiveRework(o.id, tid).defective, 0);
+        const totalRework = ordersInModal.reduce((s, o) => s + getDefectiveRework(o.id, tid).rework, 0);
+        const totalCompleted = useProductPmp
+          ? pmpCompletedAtTemplate(productMilestoneProgresses, pid, tid)
+          : ordersInModal.reduce((s, o) => s + (o.milestones.find(m => m.templateId === tid)?.completedQuantity ?? 0), 0);
+        /** 本工序已外协未收回（关联产品模式按产品+工序；工单模式按工单+工序） */
+        const outsourcePendingRecords = useProductPmp
+          ? prodRecords.filter(
+              r =>
+                r.type === 'OUTSOURCE' &&
+                r.status === '加工中' &&
+                !r.orderId &&
+                r.productId === pid &&
+                r.nodeId === tid
+            )
+          : prodRecords.filter(
+              r =>
+                r.type === 'OUTSOURCE' &&
+                r.status === '加工中' &&
+                r.nodeId === tid &&
+                orderIdsInModal.includes(r.orderId ?? '')
+            );
+        const totalOutsourcedAtNode = outsourcePendingRecords.reduce((s, r) => s + (r.quantity ?? 0), 0);
+        const outsourcedByVariantId: Record<string, number> = {};
+        outsourcePendingRecords.forEach(r => {
+          const vid = r.variantId ?? '';
+          if (!vid) return;
+          outsourcedByVariantId[vid] = (outsourcedByVariantId[vid] ?? 0) + (r.quantity ?? 0);
+        });
+        const effectiveRemainingForModal = useProductPmp
+          ? Math.max(0, totalBase - totalCompleted - totalOutsourcedAtNode)
+          : Math.max(0, totalBase - totalDefective + totalRework - totalCompleted - totalOutsourcedAtNode);
+        return (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setReportModal(null)} />
           <div className="relative bg-white w-full max-w-lg rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
@@ -1180,7 +1589,14 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                     <span className="mx-2">·</span>
                     <span>产品合计 {reportModal.productTotalQty} 件</span>
                     {reportModal.productCompletedQty != null && (
-                      <span className="ml-2">该工序已完成 {reportModal.productCompletedQty} 件，剩余 {Math.max(0, reportModal.productTotalQty - reportModal.productCompletedQty)} 件</span>
+                      <span className="ml-2">
+                        该工序已完成 {reportModal.productCompletedQty} 件，剩余{' '}
+                        {Math.max(0, (reportModal.productTotalQty ?? 0) - (reportModal.productCompletedQty ?? 0) - (useProductPmp ? totalOutsourcedAtNode : 0))}{' '}
+                        件
+                        {useProductPmp && totalOutsourcedAtNode > 0 && (
+                          <span className="text-slate-400">（已扣外协未收回 {totalOutsourcedAtNode}）</span>
+                        )}
+                      </span>
                     )}
                   </>
                 ) : (
@@ -1206,7 +1622,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-slate-400 uppercase">生产人员 <span className="text-rose-500">*</span></label>
                 <WorkerSelector
-                  options={workers.filter(w => w.status === 'ACTIVE').map(w => ({ id: w.id, name: w.name, sub: w.group, assignedMilestoneIds: w.assignedMilestoneIds }))}
+                  options={workers.filter(w => w.status === 'ACTIVE').map(w => ({ id: w.id, name: w.name, sub: w.groupName, assignedMilestoneIds: w.assignedMilestoneIds }))}
                   processNodes={globalNodes}
                   currentNodeId={reportModal.milestone.templateId}
                   value={reportForm.workerId}
@@ -1240,6 +1656,42 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                     {(() => {
                       const product = products.find(p => p.id === reportModal.order.productId);
                       if (!product?.colorIds?.length || !product?.sizeIds?.length || !dictionaries?.colors || !dictionaries?.sizes) return null;
+                      const currentOrder = ordersInModal[0];
+                      const currentMs = currentOrder?.milestones.find(m => m.templateId === tid);
+                      const { reworkByVariant } = currentOrder ? getDefectiveRework(currentOrder.id, tid) : { reworkByVariant: {} as Record<string, number> };
+                      const itemsSource = currentOrder?.items ?? reportModal.productItems ?? reportModal.order.items ?? [];
+                      const milestoneNodeIds = product.milestoneNodeIds || [];
+                      const variantRemainingBaseMap = new Map<string, number>();
+                      product.colorIds.forEach(colorId => {
+                        product.sizeIds.forEach(sizeId => {
+                          const variant = product.variants?.find(v => v.colorId === colorId && v.sizeId === sizeId);
+                          if (!variant) return;
+                          if (productionLinkMode === 'product' && productMilestoneProgresses.length > 0) {
+                            const rawMax =
+                              variantMaxGoodProductMode(
+                                variant.id,
+                                tid,
+                                reportModal.order.productId,
+                                ordersInModal,
+                                productMilestoneProgresses,
+                                processSequenceMode,
+                                milestoneNodeIds,
+                                (oid, t) => getDefectiveRework(oid, t)
+                              ) - (outsourcedByVariantId[variant.id] ?? 0);
+                            variantRemainingBaseMap.set(variant.id, Math.max(0, rawMax));
+                            return;
+                          }
+                          const item = Array.isArray(itemsSource) ? itemsSource.find((i: { variantId?: string }) => (i.variantId || '') === variant.id) : undefined;
+                          const completedInMilestone = (currentMs?.reports || []).filter((r: { variantId?: string }) => (r.variantId || '') === variant.id).reduce((s: number, r: { quantity?: number }) => s + (r.quantity ?? 0), 0);
+                          const defectiveForThisVariant = (currentMs?.reports || []).filter((r: { variantId?: string; defectiveQuantity?: number }) => (r.variantId || '') === variant.id).reduce((s: number, r: { defectiveQuantity?: number }) => s + (r.defectiveQuantity ?? 0), 0);
+                          const base = processSequenceMode === 'sequential'
+                            ? Math.max(0, getSeqRemainingForVariant(variant.id) - defectiveForThisVariant)
+                            : (item ? Math.max(0, (item.quantity ?? 0) - completedInMilestone - defectiveForThisVariant) : 0);
+                          const reworkForVariant = reworkByVariant[variant.id] ?? 0;
+                          const outsourcedForVariant = outsourcedByVariantId[variant.id] ?? 0;
+                          variantRemainingBaseMap.set(variant.id, Math.max(0, base + reworkForVariant - outsourcedForVariant));
+                        });
+                      });
                       return product.colorIds.map(colorId => {
                         const color = dictionaries.colors.find((c: { id: string; name: string; value: string }) => c.id === colorId);
                         if (!color) return null;
@@ -1255,17 +1707,10 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                 const variant = product.variants?.find(v => v.colorId === colorId && v.sizeId === sizeId);
                                 if (!size || !variant) return null;
                                 const qty = reportForm.variantQuantities?.[variant.id] ?? 0;
-                                const item = (reportModal.productItems ?? reportModal.order.items).find(i => (i.variantId || '') === variant.id);
-                                let remaining = 0;
-                                if (processSequenceMode === 'sequential') {
-                                  remaining = getSeqRemainingForVariant(variant.id);
-                                } else {
-                                  const completedInMilestone = reportModal.productItems
-                                    ? (item?.completedQuantity ?? 0)
-                                    : (reportModal.milestone.reports || []).filter(r => (r.variantId || '') === variant.id).reduce((s, r) => s + r.quantity, 0);
-                                  remaining = item ? item.quantity - completedInMilestone : 0;
-                                }
-                                const maxAllowed = Math.max(remaining, 0);
+                                const remaining = Math.max(0, variantRemainingBaseMap.get(variant.id) ?? 0);
+                                const currentCellQty = reportForm.variantQuantities?.[variant.id] ?? 0;
+                                const otherTotal = matrixTotalQty - currentCellQty;
+                                const maxAllowed = Math.max(0, allowExceedMaxReportQty ? remaining : Math.min(remaining, effectiveRemainingForModal - otherTotal));
                                 return (
                                   <div key={sizeId} className="flex flex-col gap-1 min-w-[64px]">
                                     <span className="text-[10px] font-bold text-slate-400">{size.name}</span>
@@ -1279,7 +1724,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                         handleVariantQuantityChange(variant.id, next);
                                       }}
                                       className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200 placeholder:text-[10px] placeholder:text-slate-400"
-                                      placeholder={`最多${remaining}`}
+                                      placeholder={`最多${maxAllowed}`}
                                     />
                                     <input
                                       type="number"
@@ -1336,38 +1781,10 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                       value={reportForm.quantity === 0 ? '' : reportForm.quantity}
                       onChange={(e) => {
                         const raw = parseInt(e.target.value) || 0;
-                        const max = (() => {
-                        const items = reportModal.productItems ?? reportModal.order.items;
-                        const item = items.length === 1 ? items[0] : items.find(i => (i.variantId || '') === reportForm.variantId);
-                        if (!item) return 0;
-                        if (processSequenceMode === 'sequential') {
-                          return getSeqRemainingForVariant(item.variantId || reportForm.variantId || '');
-                        }
-                        const completedInMilestone = reportModal.productItems
-                          ? (item.completedQuantity ?? 0)
-                          : (items.length === 1 && !item.variantId)
-                            ? (reportModal.milestone.completedQuantity || 0)
-                            : (reportModal.milestone.reports || []).filter(r => (r.variantId || '') === (item.variantId || '')).reduce((s, r) => s + r.quantity, 0);
-                        return item.quantity - completedInMilestone;
-                      })();
-                        const maxAllowed = Math.max(max, 0);
-                        const next = allowExceedMaxReportQty ? raw : Math.min(raw, maxAllowed);
+                        const next = allowExceedMaxReportQty ? raw : Math.min(raw, effectiveRemainingForModal);
                         setReportForm({ ...reportForm, quantity: next });
                       }}
-                      placeholder={`最多${(() => {
-                        const items = reportModal.productItems ?? reportModal.order.items;
-                        const item = items.length === 1 ? items[0] : items.find(i => (i.variantId || '') === reportForm.variantId);
-                        if (!item) return 0;
-                        if (processSequenceMode === 'sequential') {
-                          return getSeqRemainingForVariant(item.variantId || reportForm.variantId || '');
-                        }
-                        const completedInMilestone = reportModal.productItems
-                          ? (item.completedQuantity ?? 0)
-                          : (items.length === 1 && !item.variantId)
-                            ? (reportModal.milestone.completedQuantity || 0)
-                            : (reportModal.milestone.reports || []).filter(r => (r.variantId || '') === (item.variantId || '')).reduce((s, r) => s + r.quantity, 0);
-                        return item.quantity - completedInMilestone;
-                      })()}`}
+                      placeholder={`最多${effectiveRemainingForModal}`}
                       className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200 placeholder:text-[10px] placeholder:text-slate-400"
                     />
               </div>
@@ -1413,7 +1830,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
             </div>
           </div>
         </div>
-      )}
+      );
+      })()}
 
       {/* 报工流水弹窗 */}
       {showHistoryModal && (() => {
@@ -1482,7 +1900,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           totalDefective: rows.reduce((s, r) => s + (r.report.defectiveQuantity ?? 0), 0),
           totalAmount: rows.reduce((s, r) => {
             const p = products.find(px => px.id === r.order.productId);
-            const rate = p?.nodeRates?.[r.milestone.templateId] ?? 0;
+            const rate = r.report.rate ?? p?.nodeRates?.[r.milestone.templateId] ?? 0;
             return s + r.report.quantity * rate;
           }, 0),
           reportNo: rows.find(r => r.report.reportBatchId || r.report.reportNo)?.report.reportNo
@@ -1528,7 +1946,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           productBatches = Array.from(productGroups.entries()).map(([k, rows]) => {
             const first = rows[0];
             const p = products.find(px => px.id === first.progress.productId);
-            const rate = p?.nodeRates?.[first.progress.milestoneTemplateId] ?? 0;
+            const defaultRate = p?.nodeRates?.[first.progress.milestoneTemplateId] ?? 0;
             return {
               source: 'product' as const,
               key: `product-${k}`,
@@ -1541,7 +1959,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
               first,
               totalGood: rows.reduce((s, x) => s + x.report.quantity, 0),
               totalDefective: rows.reduce((s, x) => s + (x.report.defectiveQuantity ?? 0), 0),
-              totalAmount: rows.reduce((s, x) => s + x.report.quantity * rate, 0),
+              totalAmount: rows.reduce((s, x) => s + x.report.quantity * (x.report.rate ?? defaultRate), 0),
               reportNo: rows.find(r => r.report.reportBatchId || r.report.reportNo)?.report.reportNo
             };
           });
@@ -1666,7 +2084,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         {batches.map(batch => {
                           const batchUnit = getUnitName(batch.source === 'order' ? batch.first.order.productId : batch.productId);
                           const rawKey = batch.source === 'product' && batch.key.startsWith('product-') ? batch.key.slice('product-'.length) : batch.key;
-                          const reportNo = batch.reportNo || rawKey;
+                          const reportNoRaw = batch.reportNo || rawKey;
+                          const reportNo = reportNoRaw.startsWith('外协收回·') ? reportNoRaw.slice(5) : reportNoRaw;
                           return (
                           <tr key={batch.key} className="border-b border-slate-100 hover:bg-slate-50/50">
                             <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{batch.first.report.timestamp}</td>
@@ -1706,6 +2125,681 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
               </div>
             </div>
           </div>
+        );
+      })()}
+
+      {/* 待入库清单弹窗 */}
+      {showPendingStockModal && (() => {
+        const product = stockInOrder ? products.find(p => p.id === stockInOrder.order.productId) : null;
+        const category = product ? categories.find(c => c.id === product.categoryId) : null;
+        const hasColorSize = !!(category?.hasColorSize && product?.variants?.length);
+        const groupedVariantsForStock: Record<string, ProductVariant[]> = (() => {
+          if (!product?.variants?.length) return {};
+          const groups: Record<string, ProductVariant[]> = {};
+          product.variants.forEach(v => {
+            if (!groups[v.colorId]) groups[v.colorId] = [];
+            groups[v.colorId].push(v);
+          });
+          return groups;
+        })();
+        const totalStockInQty = hasColorSize
+          ? (Object.values(stockInForm.variantQuantities) as number[]).reduce((s, q) => s + (q || 0), 0)
+          : stockInForm.singleQuantity;
+        const canSubmitStockIn = onAddRecord && totalStockInQty > 0 && totalStockInQty <= stockInOrder.pendingTotal && (warehouses.length === 0 || !!stockInForm.warehouseId);
+
+        if (stockInOrder) {
+          // 选择入库表单（含颜色尺码明细）
+          const order = stockInOrder.order;
+          const unitName = getUnitName(order.productId);
+          return (
+            <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: warehouses[0]?.id ?? '', variantQuantities: {}, singleQuantity: 0 }); }} />
+              <div className="relative bg-white w-full max-w-2xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2"><ArrowDownToLine className="w-5 h-5 text-indigo-600" /> 选择入库 — {order.orderNumber}</h3>
+                  <button onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: warehouses[0]?.id ?? '', variantQuantities: {}, singleQuantity: 0 }); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
+                </div>
+                <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
+                  <p className="text-sm font-bold text-slate-700">{order.productName || product?.name}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">工单总量 {stockInOrder.orderTotal} {unitName}，已入库 {stockInOrder.alreadyIn} {unitName}，待入库 {stockInOrder.pendingTotal} {unitName}</p>
+                </div>
+                <div className="flex-1 overflow-auto p-6 space-y-6">
+                  {warehouses.length > 0 && (
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">入库仓库</label>
+                      <select
+                        value={stockInForm.warehouseId}
+                        onChange={e => setStockInForm(f => ({ ...f, warehouseId: e.target.value }))}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+                      >
+                        <option value="">请选择仓库</option>
+                        {warehouses.map(w => (
+                          <option key={w.id} value={w.id}>{w.name}{w.code ? ` (${w.code})` : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  {hasColorSize && product?.variants?.length ? (
+                    <div className="space-y-6">
+                      <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider">入库数量明细（颜色尺码）</h4>
+                      {(Object.entries(groupedVariantsForStock) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                        const color = (dictionaries.colors as { id: string; name: string; value: string }[] | undefined)?.find(c => c.id === colorId);
+                        return (
+                          <div key={colorId} className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 flex flex-col md:flex-row md:items-center gap-4">
+                            <div className="flex items-center gap-2 w-32 shrink-0">
+                              <div className="w-4 h-4 rounded-full border border-slate-200" style={{ backgroundColor: (color as { value?: string })?.value }} />
+                              <span className="text-sm font-bold text-slate-700">{color?.name ?? colorId}</span>
+                            </div>
+                            <div className="flex-1 flex flex-wrap gap-3">
+                              {(colorVariants as ProductVariant[]).map(v => {
+                                const size = (dictionaries.sizes as { id: string; name: string }[] | undefined)?.find(s => s.id === v.sizeId);
+                                const pending = stockInOrder.pendingByVariant[v.id] ?? 0;
+                                return (
+                                  <div key={v.id} className="flex flex-col gap-1 w-20">
+                                    <span className="text-[10px] font-black text-slate-400 text-center uppercase">{size?.name ?? v.skuSuffix}</span>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      placeholder={`待入库 ${pending}`}
+                                      value={stockInForm.variantQuantities[v.id] ?? ''}
+                                      onChange={e => setStockInForm(f => ({
+                                        ...f,
+                                        variantQuantities: { ...f.variantQuantities, [v.id]: Math.max(0, parseInt(e.target.value, 10) || 0) }
+                                      }))}
+                                      className="w-full bg-white border border-slate-200 rounded-xl py-2 px-2 text-sm font-bold text-indigo-600 text-center focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-[9px] font-black text-slate-300 uppercase">颜色小计</p>
+                              <p className="text-sm font-bold text-slate-600">{(colorVariants as ProductVariant[]).reduce((s, v) => s + (stockInForm.variantQuantities[v.id] || 0), 0)}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div className="flex flex-col items-end gap-1 p-3 bg-indigo-600 rounded-2xl text-white">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold opacity-80">本次入库合计:</span>
+                          <span className="text-lg font-black">{totalStockInQty} {unitName}</span>
+                        </div>
+                        {totalStockInQty > stockInOrder.pendingTotal && (
+                          <span className="text-xs font-bold text-amber-200">不得超过可入库数量 {stockInOrder.pendingTotal} {unitName}</span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">入库数量 ({unitName})</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={stockInOrder.pendingTotal}
+                        value={stockInForm.singleQuantity || ''}
+                        onChange={e => setStockInForm(f => ({ ...f, singleQuantity: Math.max(0, Math.min(stockInOrder.pendingTotal, parseInt(e.target.value, 10) || 0)) }))}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-4 px-6 text-xl font-bold text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none"
+                        placeholder={`最多 ${stockInOrder.pendingTotal}`}
+                      />
+                    </div>
+                  )}
+                </div>
+                <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: warehouses[0]?.id ?? '', variantQuantities: {}, singleQuantity: 0 }); }}
+                    className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200"
+                  >
+                    返回列表
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canSubmitStockIn}
+                    onClick={async () => {
+                      if (!(onAddRecord || onAddRecordBatch) || !canSubmitStockIn) return;
+                      const ts = new Date().toLocaleString();
+                      const operator = '张主管';
+                      const docNo = getNextStockInDocNo();
+                      if (hasColorSize && product?.variants?.length) {
+                        const records = (Object.entries(stockInForm.variantQuantities) as [string, number][])
+                          .filter(([, qty]) => qty > 0)
+                          .map(([variantId, qty]) => ({
+                            id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                            type: 'STOCK_IN' as const,
+                            orderId: order.id,
+                            productId: order.productId,
+                            variantId: variantId || undefined,
+                            quantity: qty,
+                            operator,
+                            timestamp: ts,
+                            status: '已完成',
+                            warehouseId: stockInForm.warehouseId || undefined,
+                            docNo
+                          }));
+                        if (onAddRecordBatch) {
+                          await onAddRecordBatch(records as ProductionOpRecord[]);
+                        } else {
+                          for (const rec of records) await onAddRecord!(rec as ProductionOpRecord);
+                        }
+                      } else {
+                        const qty = stockInForm.singleQuantity || 0;
+                        if (qty <= 0) return;
+                        await onAddRecord!({
+                          id: `rec-${Date.now()}`,
+                          type: 'STOCK_IN',
+                          orderId: order.id,
+                          productId: order.productId,
+                          quantity: qty,
+                          operator,
+                          timestamp: ts,
+                          status: '已完成',
+                          warehouseId: stockInForm.warehouseId || undefined,
+                          docNo
+                        } as ProductionOpRecord);
+                      }
+                      setStockInOrder(null);
+                      setStockInForm({ warehouseId: warehouses[0]?.id ?? '', variantQuantities: {}, singleQuantity: 0 });
+                    }}
+                    className="px-6 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Check className="w-4 h-4" /> 确认入库
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // 待入库列表
+        return (
+          <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setShowPendingStockModal(false)} />
+            <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+              <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2"><ArrowDownToLine className="w-5 h-5 text-indigo-600" /> 待入库清单</h3>
+                <div className="flex items-center gap-2">
+                  {hasOrderPerm('production:orders_pending_stock_in:view') && (
+                  <button
+                    onClick={() => setShowStockInFlowModal(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-all"
+                  >
+                    <History className="w-4 h-4" /> 入库流水
+                  </button>
+                  )}
+                  <button onClick={() => setShowPendingStockModal(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-auto p-6">
+                {pendingStockOrders.length === 0 ? (
+                  <p className="text-slate-500 text-center py-12">暂无待入库工单（有完成数量且待入库&gt;0 的工单将显示在此）</p>
+                ) : (
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">工单号</th>
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">产品</th>
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">工单总量</th>
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">已入库</th>
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">待入库</th>
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase w-28"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pendingStockOrders.map(item => {
+                          const unitName = getUnitName(item.order.productId);
+                          return (
+                            <tr key={item.order.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                              <td className="px-4 py-3 font-bold text-slate-800">{item.order.orderNumber}</td>
+                              <td className="px-4 py-3 text-slate-700">{item.order.productName}</td>
+                              <td className="px-4 py-3 text-slate-600 text-right">{item.orderTotal} {unitName}</td>
+                              <td className="px-4 py-3 text-slate-600 text-right">{item.alreadyIn} {unitName}</td>
+                              <td className="px-4 py-3 font-bold text-indigo-600 text-right">{item.pendingTotal} {unitName}</td>
+                              <td className="px-4 py-3">
+                                {hasOrderPerm('production:orders_pending_stock_in:create') && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setStockInOrder(item);
+                                    let defaultVariantQuantities: Record<string, number> = {};
+                                    if (item.order.items.some(i => i.variantId) && Object.keys(item.pendingByVariant).length > 0) {
+                                      Object.entries(item.pendingByVariant).forEach(([vid, q]) => { if (q > 0) defaultVariantQuantities[vid] = q; });
+                                      const sum = Object.values(defaultVariantQuantities).reduce((s, q) => s + q, 0);
+                                      if (sum > item.pendingTotal && item.pendingTotal > 0) {
+                                        const scale = item.pendingTotal / sum;
+                                        defaultVariantQuantities = Object.fromEntries(
+                                          Object.entries(defaultVariantQuantities).map(([vid, q]) => [vid, Math.max(0, Math.round(q * scale))])
+                                        );
+                                      }
+                                    }
+                                    setStockInForm({
+                                      warehouseId: warehouses[0]?.id ?? '',
+                                      variantQuantities: defaultVariantQuantities,
+                                      singleQuantity: item.pendingTotal
+                                    });
+                                  }}
+                                  className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700"
+                                >
+                                  选择入库
+                                </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 生产入库流水弹窗 */}
+      {showStockInFlowModal && (() => {
+        type StockInRow = {
+          id: string;
+          docNo: string;
+          orderId: string;
+          orderNumber: string;
+          productId: string;
+          productName: string;
+          warehouseId?: string;
+          warehouseName: string;
+          variantId?: string;
+          quantity: number;
+          operator: string;
+          timestamp: string;
+        };
+        const allStockInRows: StockInRow[] = (prodRecords || [])
+          .filter(r => r.type === 'STOCK_IN')
+          .map(r => {
+            const order = orders.find(o => o.id === r.orderId);
+            const product = products.find(p => p.id === r.productId);
+            const wh = warehouses.find(w => w.id === r.warehouseId);
+            return {
+              id: r.id,
+              docNo: (r.docNo as string) || r.id,
+              orderId: r.orderId ?? '',
+              orderNumber: order?.orderNumber ?? '',
+              productId: r.productId ?? '',
+              productName: order?.productName || product?.name || '',
+              warehouseId: r.warehouseId,
+              warehouseName: wh?.name ?? '',
+              variantId: r.variantId,
+              quantity: r.quantity ?? 0,
+              operator: r.operator ?? '',
+              timestamp: r.timestamp ?? '',
+            };
+          });
+
+        const sf = stockInFlowFilter;
+        const filteredRows = allStockInRows.filter(r => {
+          if (sf.dateFrom || sf.dateTo) {
+            const dt = new Date(r.timestamp);
+            const dateStr = isNaN(dt.getTime()) ? '' : dt.toISOString().split('T')[0];
+            if (sf.dateFrom && dateStr < sf.dateFrom) return false;
+            if (sf.dateTo && dateStr > sf.dateTo) return false;
+          }
+          if (sf.docNo && !r.docNo.toLowerCase().includes(sf.docNo.toLowerCase())) return false;
+          if (sf.orderNumber && !r.orderNumber.toLowerCase().includes(sf.orderNumber.toLowerCase())) return false;
+          if (sf.productName && !r.productName.toLowerCase().includes(sf.productName.toLowerCase())) return false;
+          if (sf.warehouseId && r.warehouseId !== sf.warehouseId) return false;
+          return true;
+        });
+
+        type StockInBatch = {
+          docNo: string;
+          rows: StockInRow[];
+          first: StockInRow;
+          totalQty: number;
+          orderNumber: string;
+          productName: string;
+          warehouseName: string;
+        };
+        const groups = new Map<string, StockInRow[]>();
+        filteredRows.forEach(r => {
+          const k = r.docNo;
+          if (!groups.has(k)) groups.set(k, []);
+          groups.get(k)!.push(r);
+        });
+        const batches: StockInBatch[] = Array.from(groups.entries())
+          .map(([docNo, rows]) => ({
+            docNo,
+            rows,
+            first: rows[0],
+            totalQty: rows.reduce((s, r) => s + r.quantity, 0),
+            orderNumber: rows[0].orderNumber,
+            productName: rows[0].productName,
+            warehouseName: rows[0].warehouseName,
+          }))
+          .sort((a, b) => new Date(b.first.timestamp).getTime() - new Date(a.first.timestamp).getTime());
+
+        const totalQtyAll = batches.reduce((s, b) => s + b.totalQty, 0);
+        const uniqueWarehouses = [...new Set(allStockInRows.map(r => r.warehouseId).filter(Boolean))] as string[];
+
+        const detailBatch = stockInFlowDetailDocNo ? batches.find(b => b.docNo === stockInFlowDetailDocNo) : null;
+
+        return (
+          <>
+            <div className="fixed inset-0 z-[86] flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setShowStockInFlowModal(false); setStockInFlowDetailDocNo(null); }} />
+              <div className="relative bg-white w-full max-w-6xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2"><History className="w-5 h-5 text-indigo-600" /> 生产入库流水</h3>
+                  <button onClick={() => { setShowStockInFlowModal(false); setStockInFlowDetailDocNo(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
+                </div>
+                <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Filter className="w-4 h-4 text-slate-500" />
+                    <span className="text-xs font-bold text-slate-500 uppercase">筛选</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 block mb-1">开始时间</label>
+                      <input type="date" value={sf.dateFrom} onChange={e => setStockInFlowFilter(prev => ({ ...prev, dateFrom: e.target.value }))} className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 block mb-1">结束时间</label>
+                      <input type="date" value={sf.dateTo} onChange={e => setStockInFlowFilter(prev => ({ ...prev, dateTo: e.target.value }))} className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 block mb-1">单据号</label>
+                      <input type="text" value={sf.docNo} onChange={e => setStockInFlowFilter(prev => ({ ...prev, docNo: e.target.value }))} placeholder="RK2026... 模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 block mb-1">工单号</label>
+                      <input type="text" value={sf.orderNumber} onChange={e => setStockInFlowFilter(prev => ({ ...prev, orderNumber: e.target.value }))} placeholder="模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 block mb-1">产品名称</label>
+                      <input type="text" value={sf.productName} onChange={e => setStockInFlowFilter(prev => ({ ...prev, productName: e.target.value }))} placeholder="产品名称模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 block mb-1">入库仓库</label>
+                      <select value={sf.warehouseId} onChange={e => setStockInFlowFilter(prev => ({ ...prev, warehouseId: e.target.value }))} className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200">
+                        <option value="">全部</option>
+                        {uniqueWarehouses.map(wid => {
+                          const w = warehouses.find(x => x.id === wid);
+                          return <option key={wid} value={wid}>{w?.name ?? wid}</option>;
+                        })}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center gap-4">
+                    <button onClick={() => setStockInFlowFilter({ dateFrom: '', dateTo: '', docNo: '', orderNumber: '', productName: '', warehouseId: '' })} className="text-xs font-bold text-slate-500 hover:text-slate-700">清空筛选</button>
+                    <span className="text-xs text-slate-400">共 {batches.length} 次入库，合计 {totalQtyAll} 件</span>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-auto p-6">
+                  {batches.length === 0 ? (
+                    <p className="text-slate-500 text-center py-12">暂无生产入库流水</p>
+                  ) : (
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                      <table className="w-full text-left text-sm">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200">
+                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">时间</th>
+                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">单号</th>
+                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">产品</th>
+                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">工单号</th>
+                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">入库仓库</th>
+                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">数量</th>
+                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">经办人</th>
+                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase w-24"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {batches.map(batch => {
+                            const batchProduct = products.find(p => p.id === batch.first.productId);
+                            const batchUnit = (batchProduct?.unitId && dictionaries?.units?.find(u => u.id === batchProduct.unitId)?.name) || '件';
+                            return (
+                              <tr key={batch.docNo} className="border-b border-slate-100 hover:bg-slate-50/50">
+                                <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{batch.first.timestamp}</td>
+                                <td className="px-4 py-3 font-bold text-slate-800 whitespace-nowrap">{batch.docNo}</td>
+                                <td className="px-4 py-3 text-slate-800 whitespace-nowrap">{batch.productName}</td>
+                                <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{batch.orderNumber}</td>
+                                <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{batch.warehouseName || '—'}</td>
+                                <td className="px-4 py-3 font-bold text-emerald-600 text-right whitespace-nowrap">{batch.totalQty} {batchUnit}</td>
+                                <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{batch.first.operator}</td>
+                                <td className="px-4 py-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => setStockInFlowDetailDocNo(batch.docNo)}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all whitespace-nowrap shrink-0"
+                                  >
+                                    <FileText className="w-3.5 h-3.5" /> 详情
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          <tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold">
+                            <td className="px-4 py-3" colSpan={5}></td>
+                            <td className="px-4 py-3 text-emerald-600 text-right">{totalQtyAll} 件</td>
+                            <td className="px-4 py-3" colSpan={2}></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 入库流水详情弹窗 */}
+            {detailBatch && (() => {
+              const product = products.find(p => p.id === detailBatch.first.productId);
+              const category = product ? categories.find(c => c.id === product.categoryId) : null;
+              const hasColorSize = Boolean(product?.colorIds?.length && product?.sizeIds?.length) || Boolean(category?.hasColorSize);
+              const unitName = (product?.unitId && dictionaries?.units?.find(u => u.id === product.unitId)?.name) || '件';
+              const wh = warehouses.find(w => w.id === detailBatch.first.warehouseId);
+              const isEditing = stockInFlowEditing !== null;
+              const getVariantLabel = (variantId?: string) => {
+                if (!variantId) return '—';
+                const v = product?.variants?.find((x: { id: string }) => x.id === variantId);
+                if (!v) return variantId;
+                const color = (dictionaries.colors as { id: string; name: string }[] | undefined)?.find(c => c.id === v.colorId);
+                const size = (dictionaries.sizes as { id: string; name: string }[] | undefined)?.find(s => s.id === v.sizeId);
+                const parts: string[] = [];
+                if (color) parts.push(color.name);
+                if (size) parts.push(size.name);
+                return parts.length > 0 ? parts.join(' / ') : ((v as { skuSuffix?: string })?.skuSuffix || variantId);
+              };
+              const startEdit = () => setStockInFlowEditing({
+                warehouseId: detailBatch.first.warehouseId ?? '',
+                operator: detailBatch.first.operator,
+                rows: detailBatch.rows.map(r => ({ id: r.id, variantId: r.variantId, quantity: r.quantity })),
+              });
+              const cancelEdit = () => setStockInFlowEditing(null);
+              const saveEdit = () => {
+                if (!stockInFlowEditing || !onUpdateRecord) return;
+                const docRecords = prodRecords.filter(r => r.type === 'STOCK_IN' && r.docNo === detailBatch.docNo);
+                docRecords.forEach(rec => {
+                  const editRow = stockInFlowEditing.rows.find(r => r.id === rec.id);
+                  if (editRow) {
+                    onUpdateRecord({
+                      ...rec,
+                      quantity: Math.max(0, editRow.quantity),
+                      warehouseId: stockInFlowEditing.warehouseId || undefined,
+                      operator: stockInFlowEditing.operator,
+                    });
+                  }
+                });
+                setStockInFlowEditing(null);
+              };
+              const handleDelete = () => {
+                if (!onDeleteRecord) return;
+                if (!window.confirm('确定要删除该入库单的所有记录吗？此操作不可恢复。')) return;
+                const docRecords = prodRecords.filter(r => r.type === 'STOCK_IN' && r.docNo === detailBatch.docNo);
+                docRecords.forEach(rec => onDeleteRecord(rec.id));
+                setStockInFlowDetailDocNo(null);
+                setStockInFlowEditing(null);
+              };
+              const ef = stockInFlowEditing;
+              const editTotalQty = ef ? ef.rows.reduce((s, r) => s + r.quantity, 0) : 0;
+              return (
+                <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
+                  <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setStockInFlowDetailDocNo(null); setStockInFlowEditing(null); }} />
+                  <div className="relative bg-white w-full max-w-2xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+                    <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+                      <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                        <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
+                          {detailBatch.docNo}
+                        </span>
+                        入库详情
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        {isEditing ? (
+                          <>
+                            <button type="button" onClick={cancelEdit} className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">取消</button>
+                            <button type="button" onClick={saveEdit} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700">
+                              <Check className="w-4 h-4" /> 保存
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {onUpdateRecord && hasOrderPerm('production:orders_pending_stock_in:edit') && (
+                              <button type="button" onClick={startEdit} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200">
+                                <Pencil className="w-4 h-4" /> 编辑
+                              </button>
+                            )}
+                            {onDeleteRecord && hasOrderPerm('production:orders_pending_stock_in:delete') && (
+                              <button type="button" onClick={handleDelete} className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold">
+                                <Trash2 className="w-4 h-4" /> 删除
+                              </button>
+                            )}
+                          </>
+                        )}
+                        <button onClick={() => { setStockInFlowDetailDocNo(null); setStockInFlowEditing(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50">
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex-1 overflow-auto p-6 space-y-6">
+                      <h2 className="text-xl font-bold text-slate-900">{detailBatch.productName}</h2>
+                      {isEditing && ef ? (
+                        <>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">入库仓库</label>
+                              <select
+                                value={ef.warehouseId}
+                                onChange={e => setStockInFlowEditing(prev => prev ? { ...prev, warehouseId: e.target.value } : prev)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+                              >
+                                <option value="">请选择仓库</option>
+                                {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}{w.code ? ` (${w.code})` : ''}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">经办人</label>
+                              <input
+                                type="text"
+                                value={ef.operator}
+                                onChange={e => setStockInFlowEditing(prev => prev ? { ...prev, operator: e.target.value } : prev)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+                              />
+                            </div>
+                          </div>
+                          <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                            <table className="w-full text-left text-sm">
+                              <thead>
+                                <tr className="bg-slate-50 border-b border-slate-200">
+                                  <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">规格</th>
+                                  <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">数量</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {ef.rows.map(row => (
+                                  <tr key={row.id} className="border-b border-slate-100">
+                                    <td className="px-4 py-3 text-slate-800">{getVariantLabel(row.variantId)}</td>
+                                    <td className="px-4 py-3 text-right">
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        value={row.quantity}
+                                        onChange={e => setStockInFlowEditing(prev => prev ? {
+                                          ...prev,
+                                          rows: prev.rows.map(r => r.id === row.id ? { ...r, quantity: Math.max(0, parseInt(e.target.value, 10) || 0) } : r)
+                                        } : prev)}
+                                        className="w-24 bg-white border border-slate-200 rounded-xl py-1.5 px-2 text-sm font-bold text-indigo-600 text-center focus:ring-2 focus:ring-indigo-500 outline-none"
+                                      />
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              {ef.rows.length > 1 && (
+                                <tfoot>
+                                  <tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold">
+                                    <td className="px-4 py-3">合计</td>
+                                    <td className="px-4 py-3 text-emerald-600 text-right">{editTotalQty} {unitName}</td>
+                                  </tr>
+                                </tfoot>
+                              )}
+                            </table>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex flex-wrap gap-4">
+                            <div className="bg-slate-50 rounded-xl px-4 py-2">
+                              <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">工单号</p>
+                              <p className="text-sm font-bold text-slate-800">{detailBatch.orderNumber || '—'}</p>
+                            </div>
+                            <div className="bg-slate-50 rounded-xl px-4 py-2">
+                              <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">入库仓库</p>
+                              <p className="text-sm font-bold text-slate-800">{wh?.name || '—'}</p>
+                            </div>
+                            <div className="bg-slate-50 rounded-xl px-4 py-2">
+                              <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">入库数量</p>
+                              <p className="text-sm font-bold text-indigo-600">{detailBatch.totalQty} {unitName}</p>
+                            </div>
+                            <div className="bg-slate-50 rounded-xl px-4 py-2">
+                              <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">入库时间</p>
+                              <p className="text-sm font-bold text-slate-800">{detailBatch.first.timestamp}</p>
+                            </div>
+                            <div className="bg-slate-50 rounded-xl px-4 py-2">
+                              <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">经办人</p>
+                              <p className="text-sm font-bold text-slate-800">{detailBatch.first.operator}</p>
+                            </div>
+                          </div>
+                          <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                            <table className="w-full text-left text-sm">
+                              <thead>
+                                <tr className="bg-slate-50 border-b border-slate-200">
+                                  <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">规格</th>
+                                  <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">数量</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {detailBatch.rows.map(row => (
+                                  <tr key={row.id} className="border-b border-slate-100">
+                                    <td className="px-4 py-3 text-slate-800">{getVariantLabel(row.variantId)}</td>
+                                    <td className="px-4 py-3 font-bold text-emerald-600 text-right">{row.quantity} {unitName}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              {hasColorSize && detailBatch.rows.length > 1 && (
+                                <tfoot>
+                                  <tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold">
+                                    <td className="px-4 py-3">合计</td>
+                                    <td className="px-4 py-3 text-emerald-600 text-right">{detailBatch.totalQty} {unitName}</td>
+                                  </tr>
+                                </tfoot>
+                              )}
+                            </table>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </>
         );
       })()}
 
@@ -1779,7 +2873,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                   </>
                 ) : (
                   <>
-                    {reportDetailBatch.source === 'order' && onUpdateReport && reportDetailBatch.rows.length > 0 && (
+                    {reportDetailBatch.source === 'order' && onUpdateReport && reportDetailBatch.rows.length > 0 && hasOrderPerm('production:orders_report_records:edit') && (
                       <button
                         type="button"
                         onClick={() => {
@@ -1816,7 +2910,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         <Pencil className="w-4 h-4" /> 编辑
                       </button>
                     )}
-                    {reportDetailBatch.source === 'product' && onUpdateReportProduct && reportDetailBatch.rows.length > 0 && (
+                    {reportDetailBatch.source === 'product' && onUpdateReportProduct && reportDetailBatch.rows.length > 0 && hasOrderPerm('production:orders_report_records:edit') && (
                       <button
                         type="button"
                         onClick={() => {
@@ -1854,7 +2948,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         <Pencil className="w-4 h-4" /> 编辑
                       </button>
                     )}
-                    {reportDetailBatch.source === 'order' && onDeleteReport && (
+                    {reportDetailBatch.source === 'order' && onDeleteReport && hasOrderPerm('production:orders_report_records:delete') && (
                       <button
                         type="button"
                         onClick={() => {
@@ -1871,7 +2965,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         <Trash2 className="w-4 h-4" /> 删除
                       </button>
                     )}
-                    {reportDetailBatch.source === 'product' && onDeleteReportProduct && (
+                    {reportDetailBatch.source === 'product' && onDeleteReportProduct && hasOrderPerm('production:orders_report_records:delete') && (
                       <button
                         type="button"
                         onClick={() => {
@@ -1896,8 +2990,29 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
             </div>
             <div className="flex-1 overflow-auto p-6 space-y-6">
               <h2 className="text-xl font-bold text-slate-900">{reportDetailBatch.source === 'order' ? reportDetailBatch.first.order.productName : reportDetailBatch.productName}</h2>
-              {editingReport ? (
+              {editingReport ? (() => {
+                const order = reportDetailBatch.source === 'order' ? orders.find(o => o.id === editingReport.orderId) : null;
+                const milestone = order?.milestones.find(m => m.templateId === editingReport.templateId);
+                const tid = editingReport.templateId;
+                const orderTotal = order ? order.items.reduce((s, i) => s + i.quantity, 0) : 0;
+                const totalBase = order && milestone && processSequenceMode === 'sequential'
+                  ? (() => { const idx = order.milestones.findIndex(m => m.templateId === tid); if (idx <= 0) return orderTotal; const prev = order.milestones[idx - 1]; return prev?.completedQuantity ?? 0; })()
+                  : (orderTotal || 0);
+                const { defective: totalDefective, rework: totalRework } = order ? getDefectiveRework(order.id, tid) : { defective: 0, rework: 0 };
+                const totalCompleted = milestone?.completedQuantity ?? 0;
+                const outsourcedPendingEdit = order ? prodRecords.filter(
+                  r => r.type === 'OUTSOURCE' && r.status === '加工中' && r.orderId === order.id && r.nodeId === tid
+                ).reduce((s, r) => s + (r.quantity ?? 0), 0) : 0;
+                const effectiveRemainingSaved = Math.max(0, totalBase - totalDefective + totalRework - totalCompleted - outsourcedPendingEdit);
+                const batchDefectiveSum = editingReport.form.rowEdits.reduce((s, r) => s + r.defectiveQuantity, 0);
+                const maxBatchGood = effectiveRemainingSaved + reportDetailBatch.totalGood + reportDetailBatch.totalDefective - batchDefectiveSum;
+                return (
                 <>
+                  {reportDetailBatch.source === 'order' && order && (
+                    <div className="text-xs text-slate-500 bg-slate-50 rounded-xl px-4 py-2">
+                      本工序可报最多 <span className="font-bold text-indigo-600">{effectiveRemainingSaved}</span> 件（已扣不良、加返工）；当前批良品合计不超过 <span className="font-bold text-indigo-600">{Math.max(0, maxBatchGood)}</span> 件
+                    </div>
+                  )}
                   <div className="grid grid-cols-[1fr_1.5fr_2.5fr] gap-3">
                     <div className="bg-slate-50 rounded-xl px-4 py-2">
                       <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">工序</p>
@@ -1943,7 +3058,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                     <div className="bg-slate-50 rounded-xl px-4 py-2">
                       <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">操作人</p>
                       <WorkerSelector
-                        options={workers.filter(w => w.status === 'ACTIVE').map(w => ({ id: w.id, name: w.name, sub: w.group, assignedMilestoneIds: w.assignedMilestoneIds }))}
+                        options={workers.filter(w => w.status === 'ACTIVE').map(w => ({ id: w.id, name: w.name, sub: w.groupName, assignedMilestoneIds: w.assignedMilestoneIds }))}
                         processNodes={globalNodes}
                         currentNodeId={editingReport.templateId}
                         value={editingReport.form.workerId}
@@ -1972,6 +3087,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                           ? reportDetailBatch.rows.map(({ order, milestone, report }) => {
                               const rowEdit = editingReport.form.rowEdits.find(r => r.reportId === report.id);
                               if (!rowEdit) return null;
+                              const otherGoodSum = editingReport.form.rowEdits.filter(r => r.reportId !== report.id).reduce((s, r) => s + r.quantity, 0);
+                              const maxThisRow = Math.max(0, maxBatchGood - otherGoodSum);
                               const p = products.find(px => px.id === order.productId);
                               const detailUnit = (p?.unitId && dictionaries?.units?.find(u => u.id === p.unitId)?.name) || '件';
                               const variantSuffix = report.variantId && (() => {
@@ -1988,9 +3105,12 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                       <input
                                         type="number"
                                         min={0}
+                                        max={maxThisRow || undefined}
+                                        title={maxBatchGood >= 0 ? `本批良品合计最多 ${maxBatchGood} 件` : ''}
                                         value={rowEdit.quantity}
                                         onChange={e => {
-                                          const v = parseInt(e.target.value) || 0;
+                                          const raw = parseInt(e.target.value) || 0;
+                                          const v = maxBatchGood >= 0 ? Math.min(raw, maxThisRow) : raw;
                                           setEditingReport(prev => prev ? {
                                             ...prev,
                                             form: {
@@ -2011,14 +3131,22 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                         min={0}
                                         value={rowEdit.defectiveQuantity}
                                         onChange={e => {
-                                          const v = parseInt(e.target.value) || 0;
-                                          setEditingReport(prev => prev ? {
-                                            ...prev,
-                                            form: {
-                                              ...prev.form,
-                                              rowEdits: prev.form.rowEdits.map(r => r.reportId === report.id ? { ...r, defectiveQuantity: v } : r)
+                                          const v = Math.max(0, parseInt(e.target.value) || 0);
+                                          setEditingReport(prev => {
+                                            if (!prev) return prev;
+                                            const nextEdits = prev.form.rowEdits.map(r => r.reportId === report.id ? { ...r, defectiveQuantity: v } : r);
+                                            const newDefSum = nextEdits.reduce((s, r) => s + r.defectiveQuantity, 0);
+                                            const newMaxBatchGood = effectiveRemainingSaved + reportDetailBatch.totalGood + reportDetailBatch.totalDefective - newDefSum;
+                                            const totalQty = nextEdits.reduce((s, r) => s + r.quantity, 0);
+                                            if (totalQty > newMaxBatchGood && newMaxBatchGood >= 0) {
+                                              const scale = totalQty > 0 ? newMaxBatchGood / totalQty : 0;
+                                              const clamped = nextEdits.map(r => ({ ...r, quantity: Math.floor(r.quantity * scale) }));
+                                              const remainder = newMaxBatchGood - clamped.reduce((s, r) => s + r.quantity, 0);
+                                              const final = clamped.length > 0 && remainder > 0 ? clamped.map((r, i) => i === 0 ? { ...r, quantity: r.quantity + remainder } : r) : clamped;
+                                              return { ...prev, form: { ...prev.form, rowEdits: final } };
                                             }
-                                          } : prev);
+                                            return { ...prev, form: { ...prev.form, rowEdits: nextEdits } };
+                                          });
                                         }}
                                         className="w-20 bg-amber-50/80 border border-amber-100 rounded-lg px-2 py-1 text-sm font-bold text-amber-800 text-right outline-none focus:ring-2 focus:ring-amber-200"
                                       />
@@ -2146,7 +3274,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                     </table>
                   </div>
                 </>
-              ) : (
+              );
+              })() : (
                 <>
                   <div className="flex flex-wrap gap-4">
                     {(() => {
@@ -2156,12 +3285,30 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                       const milestoneName = reportDetailBatch.source === 'order'
                         ? reportDetailBatch.first.milestone.name
                         : reportDetailBatch.milestoneName;
+                      const order = reportDetailBatch.source === 'order' ? reportDetailBatch.first.order : null;
+                      const tid = reportDetailBatch.source === 'order' ? reportDetailBatch.first.milestone.templateId : reportDetailBatch.milestoneTemplateId;
+                      const orderTotal = order ? order.items.reduce((s, i) => s + i.quantity, 0) : 0;
+                      const ms = order?.milestones.find(m => m.templateId === tid);
+                      const totalBase = order && ms && processSequenceMode === 'sequential'
+                        ? (() => { const idx = order.milestones.findIndex(m => m.templateId === tid); if (idx <= 0) return orderTotal; const prev = order.milestones[idx - 1]; return prev?.completedQuantity ?? 0; })()
+                        : (orderTotal || 0);
+                      const { defective: drDef, rework: drRework } = order ? getDefectiveRework(order.id, tid) : { defective: 0, rework: 0 };
+                      const outsourcedPendingView = order ? prodRecords.filter(
+                        r => r.type === 'OUTSOURCE' && r.status === '加工中' && r.orderId === order.id && r.nodeId === tid
+                      ).reduce((s, r) => s + (r.quantity ?? 0), 0) : 0;
+                      const effectiveRemainingView = order && ms ? Math.max(0, totalBase - drDef + drRework - (ms.completedQuantity ?? 0) - outsourcedPendingView) : null;
                       return (
                         <>
                           <div className="bg-slate-50 rounded-xl px-4 py-2">
                             <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">工序</p>
                             <p className="text-sm font-bold text-slate-800">{milestoneName || '—'}</p>
                           </div>
+                          {effectiveRemainingView != null && (
+                            <div className="bg-slate-50 rounded-xl px-4 py-2">
+                              <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">本工序可报最多</p>
+                              <p className="text-sm font-bold text-indigo-600">{effectiveRemainingView} {unitName} <span className="text-[10px] font-normal text-slate-400">（已扣不良、加返工、已外协）</span></p>
+                            </div>
+                          )}
                           <div className="bg-slate-50 rounded-xl px-4 py-2">
                             <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">本次报工量</p>
                             <p className="text-sm font-bold text-indigo-600">{reportDetailBatch.totalGood} {unitName}</p>
@@ -2199,7 +3346,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                   const v = p?.variants?.find((x: { id: string }) => x.id === report.variantId);
                                   return (v as { skuSuffix?: string })?.skuSuffix;
                                 })();
-                                const rate = p?.nodeRates?.[milestone.templateId] ?? 0;
+                                const rate = report.rate ?? p?.nodeRates?.[milestone.templateId] ?? 0;
                                 const amount = report.quantity * rate;
                                 return (
                                   <tr key={report.id} className="border-b border-slate-100">
@@ -2226,7 +3373,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                   const v = p?.variants?.find((x: { id: string }) => x.id === progress.variantId);
                                   return (v as { skuSuffix?: string })?.skuSuffix;
                                 })();
-                                const rate = p?.nodeRates?.[progress.milestoneTemplateId] ?? 0;
+                                const rate = report.rate ?? p?.nodeRates?.[progress.milestoneTemplateId] ?? 0;
                                 const amount = report.quantity * rate;
                                 return (
                                   <tr key={report.id} className="border-b border-slate-100">
@@ -2284,7 +3431,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
       <OrderDetailModal
         orderId={detailOrderId}
-        onClose={() => setDetailOrderId(null)}
+        onClose={() => { setDetailOrderId(null); onClearDetailOrderIdFromState?.(); }}
         orders={orders}
         products={products}
         prodRecords={prodRecords}
@@ -2292,8 +3439,10 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         categories={categories}
         orderFormSettings={orderFormSettings}
         productionLinkMode={productionLinkMode}
-        onUpdateOrder={onUpdateOrder}
-        onDeleteOrder={onDeleteOrder ? (id) => { onDeleteOrder(id); setDetailOrderId(null); } : undefined}
+        productMilestoneProgresses={productMilestoneProgresses}
+        globalNodes={globalNodes}
+        onUpdateOrder={hasOrderPerm('production:orders_detail:edit') ? onUpdateOrder : undefined}
+        onDeleteOrder={hasOrderPerm('production:orders_detail:delete') && onDeleteOrder ? (id) => { onDeleteOrder(id); setDetailOrderId(null); onClearDetailOrderIdFromState?.(); } : undefined}
       />
 
       <ProductDetailModal
@@ -2307,59 +3456,367 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         globalNodes={globalNodes}
       />
 
+      {/* 返工详情弹窗：工单简要信息 + 不良与处理汇总 + 工序返工未报工 + 处理不良品记录 + 返工报工记录 */}
+      {reworkDetailOrderId && (() => {
+        const mainOrder = orders.find(o => o.id === reworkDetailOrderId);
+        if (!mainOrder) return null;
+        const childOrders = orders.filter(o => o.parentOrderId === reworkDetailOrderId);
+        const orderIds = [reworkDetailOrderId, ...childOrders.map(o => o.id)];
+        const product = products.find(p => p.id === mainOrder.productId);
+        const orderTotalQty = mainOrder.items?.reduce((s, i) => s + i.quantity, 0) ?? 0;
+
+        const defectByNode = new Map<string, { name: string; defective: number; rework: number; scrap: number; pending: number }>();
+        orderIds.forEach(oid => {
+          const order = orders.find(o => o.id === oid);
+          if (!order) return;
+          order.milestones?.forEach(ms => {
+            const defective = (ms.reports || []).reduce((s, r) => s + (r.defectiveQuantity ?? 0), 0);
+            const rework = (prodRecords || []).filter(r => r.type === 'REWORK' && r.orderId === oid && (r.sourceNodeId ?? r.nodeId) === ms.templateId).reduce((s, r) => s + (r.quantity ?? 0), 0);
+            const scrap = (prodRecords || []).filter(r => r.type === 'SCRAP' && r.orderId === oid && r.nodeId === ms.templateId).reduce((s, r) => s + (r.quantity ?? 0), 0);
+            const pending = Math.max(0, defective - rework - scrap);
+            if (defective <= 0 && rework <= 0 && scrap <= 0) return;
+            const name = globalNodes.find(n => n.id === ms.templateId)?.name ?? ms.templateId;
+            const cur = defectByNode.get(ms.templateId) ?? { name, defective: 0, rework: 0, scrap: 0, pending: 0 };
+            cur.defective += defective;
+            cur.rework += rework;
+            cur.scrap += scrap;
+            cur.pending += pending;
+            defectByNode.set(ms.templateId, cur);
+          });
+        });
+        const defectRows = Array.from(defectByNode.entries()).map(([nodeId, v]) => ({ nodeId, ...v })).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+        const reworkStatsByNode = new Map<string, { name: string; totalQty: number; completedQty: number; pendingQty: number }>();
+        orderIds.forEach(oid => {
+          const stats = reworkStatsByOrderId.get(oid) ?? [];
+          stats.forEach(s => {
+            const cur = reworkStatsByNode.get(s.nodeId) ?? { name: s.nodeName, totalQty: 0, completedQty: 0, pendingQty: 0 };
+            cur.totalQty += s.totalQty;
+            cur.completedQty += s.completedQty;
+            cur.pendingQty += s.pendingQty;
+            reworkStatsByNode.set(s.nodeId, cur);
+          });
+        });
+        const reworkStatRows = Array.from(reworkStatsByNode.entries()).map(([nodeId, v]) => ({ nodeId, ...v })).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+        const defectRecordsList = (prodRecords || []).filter((r): r is ProductionOpRecord => (r.type === 'REWORK' || r.type === 'SCRAP') && orderIds.includes(r.orderId ?? '')).sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
+        const reworkReportList = (prodRecords || []).filter((r): r is ProductionOpRecord => r.type === 'REWORK_REPORT' && orderIds.includes(r.orderId ?? '')).sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
+
+        const getSourceNodeName = (rec: ProductionOpRecord) => {
+          const sid = rec.type === 'REWORK' ? (rec.sourceNodeId ?? rec.nodeId) : rec.nodeId;
+          return sid ? (globalNodes.find(n => n.id === sid)?.name ?? sid) : '—';
+        };
+        const getReworkTargetNodes = (rec: ProductionOpRecord) => (rec.reworkNodeIds?.length ? rec.reworkNodeIds.map(nid => globalNodes.find(n => n.id === nid)?.name ?? nid).join('、') : (rec.nodeId ? (globalNodes.find(n => n.id === rec.nodeId)?.name ?? rec.nodeId) : '—'));
+
+        return (
+          <div className="fixed inset-0 z-[75] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setReworkDetailOrderId(null)} aria-hidden />
+            <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="px-6 py-5 border-b border-slate-100 shrink-0">
+                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                  <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{mainOrder.orderNumber}</span>
+                  返工详情
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">本页仅展示该工单的返工与不良处理情况</p>
+                <div className="flex flex-wrap gap-4 mt-3 text-sm">
+                  <span className="font-bold text-slate-800">{mainOrder.productName ?? product?.name ?? '—'}</span>
+                  <span className="text-slate-500">总数量 {orderTotalQty} 件</span>
+                  {mainOrder.customer && <span className="text-slate-500">客户 {mainOrder.customer}</span>}
+                </div>
+              </div>
+              <div className="flex-1 overflow-auto p-6 space-y-6">
+                {defectRows.length > 0 && (
+                  <div>
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">不良与处理汇总（按来源工序）</h4>
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead><tr className="bg-slate-50 border-b border-slate-200"><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">工序</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">报工不良</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">已生成返工</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">已报损</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">待处理</th></tr></thead>
+                        <tbody>
+                          {defectRows.map(row => (
+                            <tr key={row.nodeId} className="border-b border-slate-100"><td className="px-4 py-3 font-bold text-slate-800">{row.name}</td><td className="px-4 py-3 text-right text-slate-600">{row.defective}</td><td className="px-4 py-3 text-right text-slate-600">{row.rework}</td><td className="px-4 py-3 text-right text-slate-600">{row.scrap}</td><td className="px-4 py-3 text-right font-bold text-amber-600">{row.pending}</td></tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                {reworkStatRows.length > 0 && (
+                  <div>
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">工序返工未报工</h4>
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead><tr className="bg-slate-50 border-b border-slate-200"><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">工序</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">返工总量</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">已报工</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">未报工</th></tr></thead>
+                        <tbody>
+                          {reworkStatRows.map(row => (
+                            <tr key={row.nodeId} className="border-b border-slate-100"><td className="px-4 py-3 font-bold text-slate-800">{row.name}</td><td className="px-4 py-3 text-right text-slate-600">{row.totalQty}</td><td className="px-4 py-3 text-right text-emerald-600">{row.completedQty}</td><td className="px-4 py-3 text-right font-bold text-amber-600">{row.pendingQty}</td></tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">处理不良品记录（生成返工 + 报损）</h4>
+                  {defectRecordsList.length === 0 ? <p className="text-slate-400 text-sm py-4">暂无记录</p> : (
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead><tr className="bg-slate-50 border-b border-slate-200"><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">单号</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">类型</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">来源工序</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">数量</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">返工目标工序</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">时间</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">操作人</th></tr></thead>
+                        <tbody>
+                          {defectRecordsList.map(r => (
+                            <tr key={r.id} className="border-b border-slate-100"><td className="px-4 py-3 text-slate-700 font-mono text-xs">{r.docNo ?? '—'}</td><td className="px-4 py-3"><span className={r.type === 'REWORK' ? 'text-indigo-600 font-bold' : 'text-rose-600 font-bold'}>{r.type === 'REWORK' ? '返工' : '报损'}</span></td><td className="px-4 py-3 text-slate-700">{getSourceNodeName(r)}</td><td className="px-4 py-3 text-right font-bold text-slate-800">{r.quantity ?? 0}</td><td className="px-4 py-3 text-slate-600">{r.type === 'REWORK' ? getReworkTargetNodes(r) : '—'}</td><td className="px-4 py-3 text-slate-500 text-xs">{r.timestamp || '—'}</td><td className="px-4 py-3 text-slate-600">{r.operator ?? '—'}</td></tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">返工报工记录</h4>
+                  {reworkReportList.length === 0 ? <p className="text-slate-400 text-sm py-4">暂无记录</p> : (
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead><tr className="bg-slate-50 border-b border-slate-200"><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">单号</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">工序</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">报工数量</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">规格</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">时间</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">操作人</th></tr></thead>
+                        <tbody>
+                          {reworkReportList.map(r => (
+                            <tr key={r.id} className="border-b border-slate-100"><td className="px-4 py-3 text-slate-700 font-mono text-xs">{r.docNo ?? '—'}</td><td className="px-4 py-3 text-slate-700">{globalNodes.find(n => n.id === r.nodeId)?.name ?? r.nodeId ?? '—'}</td><td className="px-4 py-3 text-right font-bold text-indigo-600">{r.quantity ?? 0}</td><td className="px-4 py-3 text-slate-600">{r.variantId ? (product?.variants?.find(v => v.id === r.variantId) as { skuSuffix?: string } | undefined)?.skuSuffix ?? r.variantId : '—'}</td><td className="px-4 py-3 text-slate-500 text-xs">{r.timestamp || '—'}</td><td className="px-4 py-3 text-slate-600">{r.operator ?? '—'}</td></tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="px-6 py-4 border-t border-slate-100 shrink-0 flex justify-end">
+                <button type="button" onClick={() => setReworkDetailOrderId(null)} className="px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200">关闭</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 返工详情弹窗（关联产品模式）：按产品汇总，不区分工单 */}
+      {reworkDetailProductId && productionLinkMode === 'product' && (() => {
+        const product = products.find(p => p.id === reworkDetailProductId);
+        if (!product) return null;
+        const relatedOrders = orders.filter(o => o.productId === reworkDetailProductId && !o.parentOrderId);
+        const relatedOrderIds = new Set<string>();
+        relatedOrders.forEach(o => {
+          relatedOrderIds.add(o.id);
+          orders.filter(c => c.parentOrderId === o.id).forEach(c => relatedOrderIds.add(c.id));
+        });
+        const allOrderIds = Array.from(relatedOrderIds);
+        const totalQty = relatedOrders.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0);
+
+        const defectByNode = new Map<string, { name: string; defective: number; rework: number; scrap: number; pending: number }>();
+        allOrderIds.forEach(oid => {
+          const order = orders.find(o => o.id === oid);
+          if (!order) return;
+          order.milestones?.forEach(ms => {
+            const defective = (ms.reports || []).reduce((s, r) => s + (r.defectiveQuantity ?? 0), 0);
+            const rework = (prodRecords || []).filter(r => r.type === 'REWORK' && (r.orderId === oid || (!r.orderId && r.productId === reworkDetailProductId)) && (r.sourceNodeId ?? r.nodeId) === ms.templateId).reduce((s, r) => s + (r.quantity ?? 0), 0);
+            const scrap = (prodRecords || []).filter(r => r.type === 'SCRAP' && (r.orderId === oid || (!r.orderId && r.productId === reworkDetailProductId)) && r.nodeId === ms.templateId).reduce((s, r) => s + (r.quantity ?? 0), 0);
+            const pending = Math.max(0, defective - rework - scrap);
+            if (defective <= 0 && rework <= 0 && scrap <= 0) return;
+            const name = globalNodes.find(n => n.id === ms.templateId)?.name ?? ms.templateId;
+            const cur = defectByNode.get(ms.templateId) ?? { name, defective: 0, rework: 0, scrap: 0, pending: 0 };
+            cur.defective += defective;
+            cur.rework += rework;
+            cur.scrap += scrap;
+            cur.pending += pending;
+            defectByNode.set(ms.templateId, cur);
+          });
+        });
+        if (productMilestoneProgresses.length > 0) {
+          productMilestoneProgresses.filter(p => p.productId === reworkDetailProductId).forEach(pmp => {
+            const defective = (pmp.reports || []).reduce((s, r) => s + (r.defectiveQuantity ?? 0), 0);
+            if (defective <= 0) return;
+            const nodeId = pmp.milestoneTemplateId;
+            const name = globalNodes.find(n => n.id === nodeId)?.name ?? nodeId;
+            const cur = defectByNode.get(nodeId);
+            if (!cur) {
+              const rework = (prodRecords || []).filter(r => r.type === 'REWORK' && r.productId === reworkDetailProductId && (r.sourceNodeId ?? r.nodeId) === nodeId).reduce((s, r) => s + (r.quantity ?? 0), 0);
+              const scrap = (prodRecords || []).filter(r => r.type === 'SCRAP' && r.productId === reworkDetailProductId && r.nodeId === nodeId).reduce((s, r) => s + (r.quantity ?? 0), 0);
+              defectByNode.set(nodeId, { name, defective, rework, scrap, pending: Math.max(0, defective - rework - scrap) });
+            }
+          });
+        }
+        const defectRows = Array.from(defectByNode.entries()).map(([nodeId, v]) => ({ nodeId, ...v })).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+        const reworkRecords = prodRecords.filter(r => r.type === 'REWORK' && (allOrderIds.includes(r.orderId ?? '') || (!r.orderId && r.productId === reworkDetailProductId)));
+        const reworkStatsByNode = new Map<string, { name: string; totalQty: number; completedQty: number; pendingQty: number }>();
+        reworkRecords.forEach(r => {
+          const targetNodes = (r.reworkNodeIds && r.reworkNodeIds.length > 0) ? r.reworkNodeIds : (r.nodeId ? [r.nodeId] : []);
+          const completed = r.status === '已完成' || (targetNodes.length > 0 && targetNodes.every(n => (r.reworkCompletedQuantityByNode?.[n] ?? 0) >= r.quantity));
+          targetNodes.forEach(nodeId => {
+            const cur = reworkStatsByNode.get(nodeId) ?? { name: globalNodes.find(n => n.id === nodeId)?.name ?? nodeId, totalQty: 0, completedQty: 0, pendingQty: 0 };
+            cur.totalQty += r.quantity;
+            const doneAtNode = r.reworkCompletedQuantityByNode?.[nodeId] ?? ((r.completedNodeIds ?? []).includes(nodeId) || completed ? r.quantity : 0);
+            cur.completedQty += Math.min(r.quantity, doneAtNode);
+            cur.pendingQty += reworkRemainingAtNode(r, nodeId);
+            reworkStatsByNode.set(nodeId, cur);
+          });
+        });
+        const reworkStatRows = Array.from(reworkStatsByNode.entries()).map(([nodeId, v]) => ({ nodeId, ...v })).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+        const defectRecordsList = (prodRecords || []).filter((r): r is ProductionOpRecord => (r.type === 'REWORK' || r.type === 'SCRAP') && (allOrderIds.includes(r.orderId ?? '') || (!r.orderId && r.productId === reworkDetailProductId))).sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
+        const reworkReportList = (prodRecords || []).filter((r): r is ProductionOpRecord => r.type === 'REWORK_REPORT' && (allOrderIds.includes(r.orderId ?? '') || (!r.orderId && r.productId === reworkDetailProductId))).sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
+
+        const getSourceNodeName = (rec: ProductionOpRecord) => {
+          const sid = rec.type === 'REWORK' ? (rec.sourceNodeId ?? rec.nodeId) : rec.nodeId;
+          return sid ? (globalNodes.find(n => n.id === sid)?.name ?? sid) : '—';
+        };
+        const getReworkTargetNodes = (rec: ProductionOpRecord) => (rec.reworkNodeIds?.length ? rec.reworkNodeIds.map(nid => globalNodes.find(n => n.id === nid)?.name ?? nid).join('、') : (rec.nodeId ? (globalNodes.find(n => n.id === rec.nodeId)?.name ?? rec.nodeId) : '—'));
+
+        return (
+          <div className="fixed inset-0 z-[75] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setReworkDetailProductId(null)} aria-hidden />
+            <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="px-6 py-5 border-b border-slate-100 shrink-0">
+                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                  <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{product.name}</span>
+                  返工详情
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">本页展示该产品下所有工单的返工与不良处理汇总</p>
+                <div className="flex flex-wrap gap-4 mt-3 text-sm">
+                  <span className="font-bold text-slate-800">{product.name}</span>
+                  {product.sku && <span className="text-slate-500">{product.sku}</span>}
+                  <span className="text-slate-500">合计 {totalQty} 件</span>
+                </div>
+              </div>
+              <div className="flex-1 overflow-auto p-6 space-y-6">
+                {defectRows.length > 0 && (
+                  <div>
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">不良与处理汇总（按来源工序）</h4>
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead><tr className="bg-slate-50 border-b border-slate-200"><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">工序</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">报工不良</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">已生成返工</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">已报损</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">待处理</th></tr></thead>
+                        <tbody>
+                          {defectRows.map(row => (
+                            <tr key={row.nodeId} className="border-b border-slate-100"><td className="px-4 py-3 font-bold text-slate-800">{row.name}</td><td className="px-4 py-3 text-right text-slate-600">{row.defective}</td><td className="px-4 py-3 text-right text-slate-600">{row.rework}</td><td className="px-4 py-3 text-right text-slate-600">{row.scrap}</td><td className="px-4 py-3 text-right font-bold text-amber-600">{row.pending}</td></tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                {reworkStatRows.length > 0 && (
+                  <div>
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">工序返工进度</h4>
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead><tr className="bg-slate-50 border-b border-slate-200"><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">工序</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">返工总量</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">已报工</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">未报工</th></tr></thead>
+                        <tbody>
+                          {reworkStatRows.map(row => (
+                            <tr key={row.nodeId} className="border-b border-slate-100"><td className="px-4 py-3 font-bold text-slate-800">{row.name}</td><td className="px-4 py-3 text-right text-slate-600">{row.totalQty}</td><td className="px-4 py-3 text-right text-emerald-600">{row.completedQty}</td><td className="px-4 py-3 text-right font-bold text-amber-600">{row.pendingQty}</td></tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">处理不良品记录（生成返工 + 报损）</h4>
+                  {defectRecordsList.length === 0 ? <p className="text-slate-400 text-sm py-4">暂无记录</p> : (
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead><tr className="bg-slate-50 border-b border-slate-200"><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">单号</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">类型</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">来源工序</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">数量</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">返工目标工序</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">时间</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">操作人</th></tr></thead>
+                        <tbody>
+                          {defectRecordsList.map(r => (
+                            <tr key={r.id} className="border-b border-slate-100"><td className="px-4 py-3 text-slate-700 font-mono text-xs">{r.docNo ?? '—'}</td><td className="px-4 py-3"><span className={r.type === 'REWORK' ? 'text-indigo-600 font-bold' : 'text-rose-600 font-bold'}>{r.type === 'REWORK' ? '返工' : '报损'}</span></td><td className="px-4 py-3 text-slate-700">{getSourceNodeName(r)}</td><td className="px-4 py-3 text-right font-bold text-slate-800">{r.quantity ?? 0}</td><td className="px-4 py-3 text-slate-600">{r.type === 'REWORK' ? getReworkTargetNodes(r) : '—'}</td><td className="px-4 py-3 text-slate-500 text-xs">{r.timestamp || '—'}</td><td className="px-4 py-3 text-slate-600">{r.operator ?? '—'}</td></tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">返工报工记录</h4>
+                  {reworkReportList.length === 0 ? <p className="text-slate-400 text-sm py-4">暂无记录</p> : (
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead><tr className="bg-slate-50 border-b border-slate-200"><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">单号</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">工序</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">报工数量</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">规格</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">时间</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">操作人</th></tr></thead>
+                        <tbody>
+                          {reworkReportList.map(r => (
+                            <tr key={r.id} className="border-b border-slate-100"><td className="px-4 py-3 text-slate-700 font-mono text-xs">{r.docNo ?? '—'}</td><td className="px-4 py-3 text-slate-700">{globalNodes.find(n => n.id === r.nodeId)?.name ?? r.nodeId ?? '—'}</td><td className="px-4 py-3 text-right font-bold text-indigo-600">{r.quantity ?? 0}</td><td className="px-4 py-3 text-slate-600">{r.variantId ? (product.variants?.find(v => v.id === r.variantId) as { skuSuffix?: string } | undefined)?.skuSuffix ?? r.variantId : '—'}</td><td className="px-4 py-3 text-slate-500 text-xs">{r.timestamp || '—'}</td><td className="px-4 py-3 text-slate-600">{r.operator ?? '—'}</td></tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="px-6 py-4 border-t border-slate-100 shrink-0 flex justify-end">
+                <button type="button" onClick={() => setReworkDetailProductId(null)} className="px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200">关闭</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 物料发出弹窗：显示该工单 BOM 所需物料，可输入数量批量领料 */}
-      {materialIssueOrderId && onAddRecord && (() => {
+      {materialIssueOrderId && onAddRecord && !materialIssueForProduct && (() => {
         const order = orders.find(o => o.id === materialIssueOrderId);
         if (!order) return null;
         const product = products.find(p => p.id === order.productId);
         const orderQty = order.items.reduce((s, i) => s + i.quantity, 0);
         const bomMaterials: { productId: string; name: string; sku: string; unitNeeded: number; nodeNames: string[] }[] = [];
         const matMap = new Map<string, { name: string; sku: string; unitNeeded: number; nodeNames: Set<string> }>();
+        const addBomItems = (bom: BOM, qty: number, nodeName: string) => {
+          bom.items.forEach(bi => {
+            const mp = products.find(px => px.id === bi.productId);
+            const add = Number(bi.quantity) * qty;
+            const existing = matMap.get(bi.productId);
+            if (existing) {
+              existing.unitNeeded += add;
+              if (nodeName) existing.nodeNames.add(nodeName);
+            } else {
+              const ns = new Set<string>();
+              if (nodeName) ns.add(nodeName);
+              matMap.set(bi.productId, { name: mp?.name ?? '未知物料', sku: mp?.sku ?? '', unitNeeded: add, nodeNames: ns });
+            }
+          });
+        };
         const variants = product?.variants ?? [];
         if (variants.length > 0) {
-          variants.forEach(v => {
-            if (v.nodeBOMs) {
-              Object.entries(v.nodeBOMs).forEach(([nodeId, bomId]) => {
+          order.items.forEach(item => {
+            const v = variants.find(vx => vx.id === item.variantId) ?? variants[0];
+            const lineQty = item.quantity;
+            const seenBomIds = new Set<string>();
+            if (v?.nodeBoms && Object.keys(v.nodeBoms).length > 0) {
+              Object.entries(v.nodeBoms).forEach(([nodeId, bomId]) => {
+                if (seenBomIds.has(bomId)) return;
+                seenBomIds.add(bomId);
                 const nodeName = globalNodes.find(n => n.id === nodeId)?.name ?? '';
                 const bom = boms.find(b => b.id === bomId);
-                bom?.items.forEach(bi => {
-                  const mp = products.find(px => px.id === bi.productId);
-                  const existing = matMap.get(bi.productId);
-                  if (existing) {
-                    existing.unitNeeded += bi.quantity * orderQty;
-                    if (nodeName) existing.nodeNames.add(nodeName);
-                  } else {
-                    const ns = new Set<string>();
-                    if (nodeName) ns.add(nodeName);
-                    matMap.set(bi.productId, { name: mp?.name ?? '未知物料', sku: mp?.sku ?? '', unitNeeded: bi.quantity * orderQty, nodeNames: ns });
-                  }
-                });
+                if (bom) addBomItems(bom, lineQty, nodeName);
+              });
+            } else {
+              boms.filter(b => b.parentProductId === product!.id && b.variantId === v.id && b.nodeId).forEach(bom => {
+                if (seenBomIds.has(bom.id)) return;
+                seenBomIds.add(bom.id);
+                const nodeName = globalNodes.find(n => n.id === bom.nodeId)?.name ?? '';
+                addBomItems(bom, lineQty, nodeName);
               });
             }
           });
         }
         if (matMap.size === 0 && product) {
+          const seenBomIds = new Set<string>();
           boms.filter(b => b.parentProductId === product.id && b.nodeId).forEach(bom => {
+            if (seenBomIds.has(bom.id)) return;
+            seenBomIds.add(bom.id);
             const nodeName = globalNodes.find(n => n.id === bom.nodeId)?.name ?? '';
-            bom.items.forEach(bi => {
-              const mp = products.find(px => px.id === bi.productId);
-              const existing = matMap.get(bi.productId);
-              if (existing) {
-                existing.unitNeeded += bi.quantity * orderQty;
-                if (nodeName) existing.nodeNames.add(nodeName);
-              } else {
-                const ns = new Set<string>();
-                if (nodeName) ns.add(nodeName);
-                matMap.set(bi.productId, { name: mp?.name ?? '未知物料', sku: mp?.sku ?? '', unitNeeded: bi.quantity * orderQty, nodeNames: ns });
-              }
-            });
+            const qty = bom.variantId
+              ? (order.items.find(i => i.variantId === bom.variantId)?.quantity ?? 0)
+              : orderQty;
+            addBomItems(bom, qty, nodeName);
           });
         }
         matMap.forEach((v, productId) => {
           bomMaterials.push({ productId, ...v, nodeNames: Array.from(v.nodeNames) });
         });
         const issuedMap = new Map<string, number>();
-        prodRecords.filter(r => r.type === 'STOCK_OUT' && r.orderId === order.id).forEach(r => {
+        prodRecords.filter(r => r.type === 'STOCK_OUT' && r.orderId === order.id && r.reason !== '来自于返工').forEach(r => {
           issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
         });
         const getNextStockDocNo = () => {
@@ -2377,7 +3834,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           const docNo = getNextStockDocNo();
           toIssue.forEach(m => {
             const rec: ProductionOpRecord = {
-              id: `rec-${Date.now()}-${m.productId}`,
+              id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
               type: 'STOCK_OUT' as ProdOpType,
               orderId: order.id,
               productId: m.productId,
@@ -2497,6 +3954,283 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                   <button
                     type="button"
                     onClick={() => { setMaterialIssueOrderId(null); setMaterialIssueQty({}); }}
+                    className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleIssueMaterials}
+                    disabled={!bomMaterials.some(m => (materialIssueQty[m.productId] ?? 0) > 0)}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                  >
+                    <ArrowUpFromLine className="w-4 h-4" /> 确认领料发出
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 关联产品：多工单合并 BOM，领料写入 sourceProductId（无工单） */}
+      {materialIssueForProduct && onAddRecord && (() => {
+        const { productId: sourceProductId, orders: groupOrders } = materialIssueForProduct;
+        const finishedProduct = products.find(p => p.id === sourceProductId);
+        const matMap = new Map<string, { name: string; sku: string; unitNeeded: number; nodeNames: Set<string> }>();
+        const mergeLocal = (local: Map<string, { name: string; sku: string; unitNeeded: number; nodeNames: Set<string> }>) => {
+          local.forEach((v, pid) => {
+            const existing = matMap.get(pid);
+            if (existing) {
+              existing.unitNeeded += v.unitNeeded;
+              v.nodeNames.forEach(n => existing.nodeNames.add(n));
+            } else {
+              matMap.set(pid, {
+                name: v.name,
+                sku: v.sku,
+                unitNeeded: v.unitNeeded,
+                nodeNames: new Set(v.nodeNames)
+              });
+            }
+          });
+        };
+        const addOrderBom = (order: ProductionOrder) => {
+          const orderQty = order.items.reduce((s, i) => s + i.quantity, 0);
+          if (orderQty <= 0) return;
+          const product = products.find(p => p.id === order.productId) ?? finishedProduct;
+          const local = new Map<string, { name: string; sku: string; unitNeeded: number; nodeNames: Set<string> }>();
+          const variants = product?.variants ?? [];
+          const addLocal = (bom: BOM, qty: number, nodeName: string) => {
+            bom.items.forEach(bi => {
+              const mp = products.find(px => px.id === bi.productId);
+              const add = Number(bi.quantity) * qty;
+              const existing = local.get(bi.productId);
+              if (existing) {
+                existing.unitNeeded += add;
+                if (nodeName) existing.nodeNames.add(nodeName);
+              } else {
+                const ns = new Set<string>();
+                if (nodeName) ns.add(nodeName);
+                local.set(bi.productId, { name: mp?.name ?? '未知物料', sku: mp?.sku ?? '', unitNeeded: add, nodeNames: ns });
+              }
+            });
+          };
+          if (variants.length > 0) {
+            order.items.forEach(item => {
+              const v = variants.find(vx => vx.id === item.variantId) ?? variants[0];
+              const lineQty = item.quantity;
+              const seenBomIds = new Set<string>();
+              if (v?.nodeBoms && Object.keys(v.nodeBoms).length > 0) {
+                Object.entries(v.nodeBoms).forEach(([nodeId, bomId]) => {
+                  if (seenBomIds.has(bomId)) return;
+                  seenBomIds.add(bomId);
+                  const nodeName = globalNodes.find(n => n.id === nodeId)?.name ?? '';
+                  const bom = boms.find(b => b.id === bomId);
+                  if (bom) addLocal(bom, lineQty, nodeName);
+                });
+              } else {
+                boms.filter(b => b.parentProductId === (product ?? finishedProduct)!.id && b.variantId === v.id && b.nodeId).forEach(bom => {
+                  if (seenBomIds.has(bom.id)) return;
+                  seenBomIds.add(bom.id);
+                  const nodeName = globalNodes.find(n => n.id === bom.nodeId)?.name ?? '';
+                  addLocal(bom, lineQty, nodeName);
+                });
+              }
+            });
+          }
+          if (local.size === 0 && product) {
+            const seenBomIds = new Set<string>();
+            boms.filter(b => b.parentProductId === product.id && b.nodeId).forEach(bom => {
+              if (seenBomIds.has(bom.id)) return;
+              seenBomIds.add(bom.id);
+              const nodeName = globalNodes.find(n => n.id === bom.nodeId)?.name ?? '';
+              const qty = bom.variantId
+                ? (order.items.find(i => i.variantId === bom.variantId)?.quantity ?? 0)
+                : orderQty;
+              addLocal(bom, qty, nodeName);
+            });
+          }
+          mergeLocal(local);
+        };
+        groupOrders.forEach(addOrderBom);
+        const bomMaterials: { productId: string; name: string; sku: string; unitNeeded: number; nodeNames: string[] }[] = [];
+        matMap.forEach((v, pid) => {
+          bomMaterials.push({ productId: pid, ...v, nodeNames: Array.from(v.nodeNames) });
+        });
+        const familyIds = new Set(groupOrders.map(o => o.id));
+        const issuedMap = new Map<string, number>();
+        prodRecords
+          .filter(r => r.type === 'STOCK_OUT' && r.reason !== '来自于返工')
+          .forEach(r => {
+            const hit =
+              r.sourceProductId === sourceProductId ||
+              (!r.sourceProductId && r.orderId && familyIds.has(r.orderId));
+            if (hit) issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
+          });
+        const getNextStockDocNo = () => {
+          const prefix = 'LL';
+          const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+          const pattern = `${prefix}${todayStr}-`;
+          const existing = prodRecords.filter(r => r.type === 'STOCK_OUT' && r.docNo && r.docNo.startsWith(pattern));
+          const seqs = existing.map(r => parseInt(r.docNo!.slice(pattern.length), 10)).filter(n => !isNaN(n));
+          const maxSeq = seqs.length ? Math.max(...seqs) : 0;
+          return `${prefix}${todayStr}-${String(maxSeq + 1).padStart(4, '0')}`;
+        };
+        const handleIssueMaterials = () => {
+          const toIssue = bomMaterials.filter(m => (materialIssueQty[m.productId] ?? 0) > 0);
+          if (toIssue.length === 0) return;
+          const docNo = getNextStockDocNo();
+          toIssue.forEach((m, i) => {
+            onAddRecord({
+              id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              type: 'STOCK_OUT' as ProdOpType,
+              productId: m.productId,
+              quantity: materialIssueQty[m.productId],
+              operator: '张主管',
+              timestamp: new Date().toLocaleString(),
+              status: '已完成',
+              warehouseId: materialIssueWarehouseId || undefined,
+              docNo,
+              sourceProductId
+            });
+          });
+          setMaterialIssueForProduct(null);
+          setMaterialIssueQty({});
+        };
+        const orderLabels = groupOrders.map(o => o.orderNumber).filter(Boolean).join('、');
+        return (
+          <div className="fixed inset-0 z-[75] flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
+              onClick={() => { setMaterialIssueForProduct(null); setMaterialIssueQty({}); }}
+              aria-hidden
+            />
+            <div className="relative bg-white w-full max-w-2xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                    <Package className="w-5 h-5 text-indigo-600" /> 物料发出（关联产品）
+                  </h3>
+                  <p className="text-sm text-slate-500 mt-0.5">
+                    {finishedProduct?.name ?? '—'} · 共 {groupOrders.length} 条工单{orderLabels ? `（${orderLabels}）` : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setMaterialIssueForProduct(null); setMaterialIssueQty({}); }}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-auto p-6">
+                {warehouses.length > 0 && (
+                  <div className="mb-4">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">出库仓库</label>
+                    <select
+                      value={materialIssueWarehouseId}
+                      onChange={e => setMaterialIssueWarehouseId(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                    >
+                      {warehouses.map(w => (
+                        <option key={w.id} value={w.id}>
+                          {w.name}
+                          {w.code ? ` (${w.code})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {bomMaterials.length === 0 ? (
+                  <p className="py-8 text-center text-slate-400 text-sm">该产品未配置 BOM 物料，无法进行物料发出</p>
+                ) : (
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/80 border-b border-slate-100">
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">物料</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">累计理论需量</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-36">领料进度</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-40">本次领料</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {bomMaterials.map(m => {
+                        const issued = issuedMap.get(m.productId) ?? 0;
+                        return (
+                          <tr key={m.productId} className="hover:bg-slate-50/50">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-sm font-bold text-slate-800">{m.name}</p>
+                                {m.nodeNames.map(nn => (
+                                  <span key={nn} className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                                    {nn}
+                                  </span>
+                                ))}
+                              </div>
+                              {m.sku && <p className="text-[10px] text-slate-400 mt-0.5">{m.sku}</p>}
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm font-bold text-slate-600">{m.unitNeeded}</td>
+                            <td className="px-4 py-3">
+                              {(() => {
+                                const needed = m.unitNeeded;
+                                const pct = needed > 0 ? Math.min(100, (issued / needed) * 100) : 0;
+                                const overIssue = issued > needed;
+                                return (
+                                  <div className="flex flex-col gap-1">
+                                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden flex">
+                                      {overIssue ? (
+                                        <>
+                                          <div className="h-full bg-emerald-500" style={{ width: `${(needed / issued) * 100}%` }} />
+                                          <div
+                                            className="h-full bg-rose-500"
+                                            style={{ width: `${((issued - needed) / issued) * 100}%` }}
+                                          />
+                                        </>
+                                      ) : (
+                                        <div
+                                          className={`h-full rounded-full ${pct >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                                          style={{ width: `${pct}%` }}
+                                        />
+                                      )}
+                                    </div>
+                                    <span className="text-[9px] font-bold text-slate-500">
+                                      {overIssue ? (
+                                        <span>
+                                          已发 {issued} <span className="text-rose-500">（超发 {issued - needed}）</span>
+                                        </span>
+                                      ) : (
+                                        `已发 ${issued}`
+                                      )}
+                                    </span>
+                                  </div>
+                                );
+                              })()}
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="number"
+                                min={0}
+                                step={1}
+                                value={materialIssueQty[m.productId] ?? ''}
+                                onChange={e =>
+                                  setMaterialIssueQty(prev => ({ ...prev, [m.productId]: Number(e.target.value) || 0 }))
+                                }
+                                className="w-full rounded-xl border border-slate-200 py-2 px-3 text-sm font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
+                                placeholder="0"
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              {bomMaterials.length > 0 && (
+                <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => { setMaterialIssueForProduct(null); setMaterialIssueQty({}); }}
                     className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
                   >
                     取消
