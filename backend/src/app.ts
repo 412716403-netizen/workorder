@@ -22,6 +22,31 @@ import rolesRoutes from './routes/roles.js';
 
 const app = express();
 
+function convertDecimals(obj: unknown): unknown {
+  if (obj === null || obj === undefined) return obj;
+  if (obj instanceof Date) return obj;
+  if (typeof obj === 'object' && typeof (obj as any).toNumber === 'function' && typeof (obj as any).toFixed === 'function') {
+    return (obj as any).toNumber();
+  }
+  if (Array.isArray(obj)) return obj.map(convertDecimals);
+  if (typeof obj === 'object' && obj.constructor === Object) {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+      result[k] = convertDecimals(v);
+    }
+    return result;
+  }
+  return obj;
+}
+
+app.use((_req, res, next) => {
+  const origJson = res.json.bind(res);
+  res.json = function (body: unknown) {
+    return origJson(convertDecimals(body));
+  } as any;
+  next();
+});
+
 app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 

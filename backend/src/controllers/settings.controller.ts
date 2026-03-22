@@ -41,7 +41,7 @@ export async function deleteCategory(req: Request, res: Response, next: NextFunc
 export async function listPartnerCategories(req: Request, res: Response, next: NextFunction) {
   try {
     const db = getTenantPrisma(req.tenantId!);
-    res.json(await db.partnerCategory.findMany({ orderBy: { createdAt: 'asc' } }));
+    res.json(await db.partnerCategory.findMany({ orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }));
   } catch (e) { next(e); }
 }
 export async function createPartnerCategory(req: Request, res: Response, next: NextFunction) {
@@ -104,7 +104,7 @@ export async function deleteNode(req: Request, res: Response, next: NextFunction
 export async function listWarehouses(req: Request, res: Response, next: NextFunction) {
   try {
     const db = getTenantPrisma(req.tenantId!);
-    res.json(await db.warehouse.findMany({ orderBy: { createdAt: 'asc' } }));
+    res.json(await db.warehouse.findMany({ orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }));
   } catch (e) { next(e); }
 }
 export async function createWarehouse(req: Request, res: Response, next: NextFunction) {
@@ -126,7 +126,7 @@ export async function deleteWarehouse(req: Request, res: Response, next: NextFun
 export async function listFinanceCategories(req: Request, res: Response, next: NextFunction) {
   try {
     const db = getTenantPrisma(req.tenantId!);
-    res.json(await db.financeCategory.findMany({ orderBy: { createdAt: 'asc' } }));
+    res.json(await db.financeCategory.findMany({ orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }));
   } catch (e) { next(e); }
 }
 export async function createFinanceCategory(req: Request, res: Response, next: NextFunction) {
@@ -148,7 +148,7 @@ export async function deleteFinanceCategory(req: Request, res: Response, next: N
 export async function listFinanceAccountTypes(req: Request, res: Response, next: NextFunction) {
   try {
     const db = getTenantPrisma(req.tenantId!);
-    res.json(await db.financeAccountType.findMany());
+    res.json(await db.financeAccountType.findMany({ orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }));
   } catch (e) { next(e); }
 }
 export async function createFinanceAccountType(req: Request, res: Response, next: NextFunction) {

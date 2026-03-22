@@ -17,7 +17,7 @@ export async function listRecords(req: Request, res: Response, next: NextFunctio
     res.json(await db.financeRecord.findMany({
       where,
       include: { category: true },
-      orderBy: { timestamp: 'desc' },
+      orderBy: [{ timestamp: 'desc' }, { id: 'asc' }],
     }));
   } catch (e) { next(e); }
 }
@@ -37,7 +37,7 @@ export async function createRecord(req: Request, res: Response, next: NextFuncti
   try {
     const db = getTenantPrisma(req.tenantId!);
     const data = sanitizeCreate(req.body);
-    if (!data.id) data.id = `fin-${Date.now()}`;
+    if (!data.id) data.id = `fin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     normalizeDates(data);
     if (!data.timestamp) data.timestamp = new Date();
 
@@ -46,6 +46,7 @@ export async function createRecord(req: Request, res: Response, next: NextFuncti
         FINANCE_DOC_NO_PREFIX[data.type as FinanceOpType],
         'finance_records',
         'doc_no',
+        req.tenantId,
       );
     }
 

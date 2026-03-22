@@ -45,6 +45,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product, Warehouse, ProductCategory, Partner, PartnerCategory, AppDictionaries, ProductVariant, PurchaseOrderFormSettings, PurchaseBillFormSettings } from '../types';
+import { sortedVariantColorEntries, sortedColorEntries } from '../utils/sortVariantsByProduct';
 
 interface PSIOpsViewProps {
   type: string;
@@ -100,7 +101,7 @@ const ProductSelector = ({
       const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase());
       const matchesCategory = activeTab === 'all' || p.categoryId === activeTab;
       return matchesSearch && matchesCategory;
-    });
+    }).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id));
   }, [options, search, activeTab]);
 
   const updateDropdownPosition = useCallback(() => {
@@ -1079,7 +1080,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
     );
 
     const newRec = {
-      id: `psi-${Date.now()}`,
+      id: `psi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       type: submitType,
       timestamp: new Date().toLocaleString(),
       _savedAtMs: Date.now(),
@@ -2452,7 +2453,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                     {hasVariants && line.productId && (
                       <div className="pt-2 border-t border-slate-100 space-y-3">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">颜色尺码数量</label>
-                        {(Object.entries(groupedByColor) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                        {sortedVariantColorEntries(groupedByColor, prod?.colorIds, prod?.sizeIds).map(([colorId, colorVariants]) => {
                           const color = dictionaries.colors.find(c => c.id === colorId);
                           return (
                             <div key={colorId} className="flex flex-wrap items-center gap-4 bg-white/80 p-3 rounded-xl border border-slate-100">
@@ -2678,7 +2679,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                     {hasVariants && line.productId && (
                       <div className="pt-4 border-t border-slate-100 space-y-4">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">数量明细（有颜色尺码）</p>
-                        {(Object.entries(groupedByColor) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                        {sortedVariantColorEntries(groupedByColor, prod?.colorIds, prod?.sizeIds).map(([colorId, colorVariants]) => {
                           const color = dictionaries.colors.find(c => c.id === colorId);
                           return (
                             <div key={colorId} className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-[20px] border border-slate-100 shadow-sm">
@@ -2907,7 +2908,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                     {hasVariants && line.productId && (
                       <div className="pt-4 border-t border-slate-100 space-y-4">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">数量明细（有颜色尺码）</p>
-                        {(Object.entries(groupedByColor) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                        {sortedVariantColorEntries(groupedByColor, prod?.colorIds, prod?.sizeIds).map(([colorId, colorVariants]) => {
                           const color = dictionaries.colors.find(c => c.id === colorId);
                           return (
                             <div key={colorId} className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-[20px] border border-slate-100 shadow-sm">
@@ -3188,7 +3189,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                         {pbHasVariants && line.productId && (
                           <div className="pt-2 border-t border-slate-100 space-y-3">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">颜色尺码数量</label>
-                            {(Object.entries(pbGroupedByColor) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                            {sortedVariantColorEntries(pbGroupedByColor, pbProd?.colorIds, pbProd?.sizeIds).map(([colorId, colorVariants]) => {
                               const color = dictionaries.colors.find(c => c.id === colorId);
                               return (
                                 <div key={colorId} className="flex flex-wrap items-center gap-4 bg-white/80 p-3 rounded-xl border border-slate-100">
@@ -3638,7 +3639,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                           <tr>
                                             <td colSpan={6} className="px-4 py-3 bg-slate-50/60 border-b border-slate-100">
                                               <div className="space-y-3 pl-4">
-                                                {(Object.entries(groupedByColor) as [string, { colorName: string; items: { sizeName: string; qty: number }[] }][]).map(([colorId, { colorName, items }]) => {
+                                                {sortedColorEntries(groupedByColor, products.find(p => p.id === line.productId)?.colorIds).map(([colorId, { colorName, items }]) => {
                                                   const color = dictionaries?.colors?.find(c => c.id === colorId);
                                                   return (
                                                   <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white rounded-xl border border-slate-100">
@@ -3771,7 +3772,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                   <tr>
                                     <td colSpan={colSpan} className="px-4 py-3 bg-slate-50/60 border-b border-slate-100">
                                       <div className="space-y-3 pl-4">
-                                        {(Object.entries(groupedByColor) as [string, { colorName: string; items: { sizeName: string; totalQty: number }[] }][]).map(([colorId, { colorName, items }]) => {
+                                        {sortedColorEntries(groupedByColor, products.find(p => p.id === ps.id)?.colorIds).map(([colorId, { colorName, items }]) => {
                                           const color = dictionaries?.colors?.find(c => c.id === colorId);
                                           return (
                                             <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white rounded-xl border border-slate-100">
@@ -3966,7 +3967,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                                <tr className="border-b border-slate-100 last:border-0 bg-slate-50/60">
                                                  <td colSpan={3} className="px-4 py-3">
                                                    <div className="space-y-3">
-                                                     {(Object.entries(stGroupedByColor) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                                                     {sortedVariantColorEntries(stGroupedByColor, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
                                                        const color = dictionaries?.colors?.find(c => c.id === colorId);
                                                        return (
                                                          <div key={colorId} className="flex flex-wrap items-center gap-4 bg-white p-3 rounded-xl border border-slate-100">
@@ -4279,7 +4280,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                  {trHasVariants && line.productId && (
                                    <div className="pt-3 border-t border-slate-100 space-y-3">
                                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">颜色尺码数量</label>
-                                     {(Object.entries(trGroupedByColor) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                                     {sortedVariantColorEntries(trGroupedByColor, trProd?.colorIds, trProd?.sizeIds).map(([colorId, colorVariants]) => {
                                        const color = dictionaries.colors.find(c => c.id === colorId);
                                        return (
                                          <div key={colorId} className="flex flex-wrap items-center gap-4 bg-slate-50/80 p-3 rounded-xl border border-slate-100">
@@ -4455,7 +4456,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                  {stHasVariants && line.productId && (
                                    <div className="pt-3 border-t border-slate-100 space-y-3">
                                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">颜色尺码（{stocktakeForm.warehouseId ? '系统数量供参考，请录入实盘数量' : '请先选择盘点仓库后可显示系统数量' }）</label>
-                                     {(Object.entries(stGroupedByColor) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                                     {sortedVariantColorEntries(stGroupedByColor, stProd?.colorIds, stProd?.sizeIds).map(([colorId, colorVariants]) => {
                                        const color = dictionaries.colors.find(c => c.id === colorId);
                                        return (
                                          <div key={colorId} className="flex flex-wrap items-center gap-4 bg-slate-50/80 p-3 rounded-xl border border-slate-100">
@@ -5549,7 +5550,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                           setForm({...form, productId: pid, purchasePrice: prod?.purchasePrice ?? 0});
                         }} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none">
                           <option value="">点击选择产品...</option>
-                          {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          {[...products].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                     </div>
                     {showModal === 'PURCHASE_BILL' && (
@@ -5865,7 +5866,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                         allocatedByVariant[i.variantId] = (allocatedByVariant[i.variantId] ?? 0) + (i.allocatedQuantity ?? 0);
                       }
                     });
-                    return (Object.entries(groupedByColor) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                    return sortedVariantColorEntries(groupedByColor, allocationModal.product?.colorIds, allocationModal.product?.sizeIds).map(([colorId, colorVariants]) => {
                       const color = dictionaries.colors.find(c => c.id === colorId);
                       const orderSum = (colorVariants as ProductVariant[]).reduce((s, v) => s + (orderByVariant[v.id] ?? 0), 0);
                       const allocatedSum = (colorVariants as ProductVariant[]).reduce((s, v) => s + (allocatedByVariant[v.id] ?? 0), 0);

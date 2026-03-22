@@ -6,9 +6,14 @@ import type { JwtPayload } from '../types/index.js';
 import { ALL_PERMISSIONS } from '../types/index.js';
 import { prisma } from '../lib/prisma.js';
 
-function assertAccountNotExpired(accountExpiresAt: Date | null) {
-  if (accountExpiresAt && accountExpiresAt < new Date()) {
-    throw new AppError(403, '账号已过期，请联系管理员续期');
+async function assertTenantActive(tenantId: string) {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { status: true, expiresAt: true } });
+  if (!tenant) throw new AppError(404, '企业不存在');
+  if (tenant.status === 'pending') throw new AppError(403, '该企业正在审核中，请等待管理员通过');
+  if (tenant.status === 'rejected') throw new AppError(403, '该企业创建申请已被拒绝');
+  if (tenant.status !== 'active') throw new AppError(403, '该企业状态异常');
+  if (tenant.expiresAt && tenant.expiresAt < new Date()) {
+    throw new AppError(403, '该企业账号已到期，请联系管理员续期');
   }
 }
 
@@ -47,7 +52,7 @@ async function buildTenantPayload(userId: string, tenantId?: string) {
   const memberships = await prisma.tenantMembership.findMany({
     where: { userId },
     include: {
-      tenant: { select: { id: true, name: true } },
+      tenant: { select: { id: true, name: true, status: true, expiresAt: true } },
       customRole: { select: { permissions: true } },
     },
   });
@@ -61,11 +66,15 @@ async function buildTenantPayload(userId: string, tenantId?: string) {
     name: m.tenant.name,
     role: m.role,
     permissions: resolveMemberPermissions(m),
+    status: m.tenant.status,
+    expiresAt: m.tenant.expiresAt?.toISOString() ?? null,
   }));
 
+  const activeMemberships = memberships.filter(m => m.tenant.status === 'active');
+
   let selected = tenantId
-    ? memberships.find(m => m.tenantId === tenantId)
-    : memberships.length === 1 ? memberships[0] : undefined;
+    ? memberships.find(m => m.tenantId === tenantId && m.tenant.status === 'active')
+    : activeMemberships.length === 1 ? activeMemberships[0] : undefined;
 
   if (selected) {
     return {
@@ -139,12 +148,15 @@ export async function login(username: string, password: string) {
   });
   if (!user) throw new AppError(401, '账号或密码错误');
   if (user.status !== 'active') throw new AppError(403, '账号已被禁用');
-  assertAccountNotExpired(user.accountExpiresAt);
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) throw new AppError(401, '账号或密码错误');
 
   const tenantInfo = await buildTenantPayload(user.id);
+
+  if (tenantInfo.tenantId) {
+    await assertTenantActive(tenantInfo.tenantId);
+  }
 
   const payload: JwtPayload = {
     userId: user.id,
@@ -184,11 +196,12 @@ export async function selectTenant(userId: string, tenantId: string) {
   const membership = await prisma.tenantMembership.findUnique({
     where: { userId_tenantId: { userId, tenantId } },
     include: {
-      tenant: { select: { id: true, name: true } },
+      tenant: { select: { id: true, name: true, status: true, expiresAt: true } },
       customRole: { select: { permissions: true } },
     },
   });
   if (!membership) throw new AppError(403, '您不是该企业的成员');
+  await assertTenantActive(tenantId);
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new AppError(404, '用户不存在');
@@ -217,6 +230,7 @@ export async function selectTenant(userId: string, tenantId: string) {
     tenantName: membership.tenant.name,
     tenantRole: membership.role,
     permissions,
+    expiresAt: membership.tenant.expiresAt?.toISOString() ?? null,
     ...tokens,
   };
 }
@@ -231,7 +245,6 @@ export async function refresh(oldRefreshToken: string) {
   const user = await prisma.user.findUnique({ where: { id: stored.userId } });
   if (!user) throw new AppError(401, '用户不存在');
   if (user.status !== 'active') throw new AppError(403, '账号已被禁用');
-  assertAccountNotExpired(user.accountExpiresAt);
 
   await prisma.refreshToken.delete({ where: { id: stored.id } });
 
@@ -239,6 +252,10 @@ export async function refresh(oldRefreshToken: string) {
   try {
     decoded = jwt.verify(oldRefreshToken, env.JWT_REFRESH_SECRET);
   } catch { decoded = {}; }
+
+  if (decoded.tenantId) {
+    await assertTenantActive(decoded.tenantId);
+  }
 
   const tenantInfo = decoded.tenantId
     ? await buildTenantPayload(user.id, decoded.tenantId)
@@ -273,7 +290,7 @@ export async function getMe(userId: string) {
 
   const memberships = await prisma.tenantMembership.findMany({
     where: { userId },
-    include: { tenant: { select: { id: true, name: true } } },
+    include: { tenant: { select: { id: true, name: true, status: true, expiresAt: true } } },
   });
 
   return {
@@ -291,6 +308,8 @@ export async function getMe(userId: string) {
       name: m.tenant.name,
       role: m.role,
       permissions: m.permissions,
+      status: m.tenant.status,
+      expiresAt: m.tenant.expiresAt?.toISOString() ?? null,
     })),
   };
 }

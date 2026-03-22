@@ -16,7 +16,7 @@ export async function createTenant(req: Request, res: Response, next: NextFuncti
     const userId = req.user!.userId;
 
     const tenant = await prisma.tenant.create({
-      data: { name, logo, inviteCode: generateInviteCode() },
+      data: { name, logo, inviteCode: generateInviteCode(), status: 'pending' },
     });
 
     await prisma.tenantMembership.create({
@@ -33,8 +33,10 @@ export async function createTenant(req: Request, res: Response, next: NextFuncti
       data: { isEnterprise: true },
     });
 
-    const result = await authService.selectTenant(userId, tenant.id);
-    res.status(201).json({ tenant: { id: tenant.id, name: tenant.name, inviteCode: tenant.inviteCode }, ...result });
+    res.status(201).json({
+      tenant: { id: tenant.id, name: tenant.name, status: 'pending' },
+      message: '企业已提交审核，请等待管理员通过',
+    });
   } catch (e) { next(e); }
 }
 
@@ -56,6 +58,8 @@ export async function listTenants(req: Request, res: Response, next: NextFunctio
         name: m.tenant.name,
         logo: m.tenant.logo,
         inviteCode: m.tenant.inviteCode,
+        status: m.tenant.status,
+        expiresAt: m.tenant.expiresAt?.toISOString() ?? null,
         role: m.role,
         permissions: perms,
         joinedAt: m.createdAt,
@@ -84,6 +88,7 @@ export async function getTenant(req: Request, res: Response, next: NextFunction)
       name: membership.tenant.name,
       logo: membership.tenant.logo,
       inviteCode: membership.tenant.inviteCode,
+      expiresAt: membership.tenant.expiresAt?.toISOString() ?? null,
       createdAt: membership.tenant.createdAt,
     });
   } catch (e) { next(e); }

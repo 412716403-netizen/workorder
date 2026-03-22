@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { Plus, X, Clock, DollarSign, Search, ChevronDown, Building2, Package, User, FileText, Pencil, Trash2 } from 'lucide-react';
-import { FinanceRecord, FinanceOpType, ProductionOrder, FinanceCategory, FinanceAccountType, Partner, Worker, Product, ReportFieldDefinition, PartnerCategory, ProductCategory, GlobalNodeTemplate, FINANCE_DOC_NO_PREFIX } from '../types';
+import { FinanceRecord, FinanceOpType, ProductionOrder, FinanceCategory, FinanceAccountType, Partner, Worker, Product, ReportFieldDefinition, PartnerCategory, ProductCategory, GlobalNodeTemplate, AppDictionaries, FINANCE_DOC_NO_PREFIX } from '../types';
 import type { ProductionOpRecord } from '../types';
 
 function CustomFieldInput({ field, value, onChange }: { field: ReportFieldDefinition; value: any; onChange: (v: any) => void }) {
@@ -121,7 +121,7 @@ function PartnerSelectWithCategories({
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || (p.contact || '').toLowerCase().includes(search.toLowerCase());
     const matchCat = activeTab === 'all' || p.categoryId === activeTab;
     return matchSearch && matchCat;
-  }), [partners, search, activeTab]);
+  }).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id)), [partners, search, activeTab]);
   const displayText = valueIsId ? (partners.find(p => p.id === value)?.name ?? '') : value;
   const isSelected = valueIsId ? (p: Partner) => p.id === value : (p: Partner) => p.name === value;
   const updatePos = useCallback(() => {
@@ -232,7 +232,7 @@ function WorkerSelectWithTabs({ workers, processNodes, value, onChange, label, c
     if (activeTab === UNASSIGNED) return workers.filter(w => !w.assignedMilestoneIds?.length);
     return workers.filter(w => w.assignedMilestoneIds?.includes(activeTab));
   }, [workers, activeTab]);
-  const filtered = useMemo(() => filteredByTab.filter(w => w.name.toLowerCase().includes(search.toLowerCase()) || (w.groupName || '').toLowerCase().includes(search.toLowerCase())), [filteredByTab, search]);
+  const filtered = useMemo(() => filteredByTab.filter(w => w.name.toLowerCase().includes(search.toLowerCase()) || (w.groupName || '').toLowerCase().includes(search.toLowerCase())).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id)), [filteredByTab, search]);
   const selected = workers.find(w => w.id === value);
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -314,7 +314,7 @@ function ProductSelectWithCategories({ products, categories, value, onChange, la
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase());
     const matchCat = activeTab === 'all' || p.categoryId === activeTab;
     return matchSearch && matchCat;
-  }), [products, search, activeTab]);
+  }).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id)), [products, search, activeTab]);
   const updatePos = useCallback(() => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
@@ -402,6 +402,7 @@ interface FinanceOpsViewProps {
   partnerCategories: PartnerCategory[];
   categories: ProductCategory[];
   globalNodes: GlobalNodeTemplate[];
+  dictionaries?: AppDictionaries;
   userPermissions?: string[];
   tenantRole?: string;
 }
@@ -448,7 +449,7 @@ function getFinanceRecordFromDetail(d: DetailTarget): FinanceRecord | null {
   return null;
 }
 
-const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, allRecords, psiRecords = [], prodRecords = [], onAddRecord, onUpdateRecord, onDeleteRecord, financeCategories, financeAccountTypes, partners, workers, products, partnerCategories, categories, globalNodes, userPermissions, tenantRole }) => {
+const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, allRecords, psiRecords = [], prodRecords = [], onAddRecord, onUpdateRecord, onDeleteRecord, financeCategories, financeAccountTypes, partners, workers, products, partnerCategories, categories, globalNodes, dictionaries, userPermissions, tenantRole }) => {
   const _isOwner = tenantRole === 'owner';
   const hasFinancePerm = (permKey: string): boolean => {
     if (_isOwner) return true;
@@ -564,7 +565,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
       return;
     }
     const newRec: FinanceRecord = {
-      id: `fin-${Date.now()}`,
+      id: `fin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       type: type,
       docNo: getNextDocNo(),
       timestamp: new Date().toLocaleString(),
@@ -632,14 +633,29 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
       const docType = (v.type === 'SALES_BILL' && v.amount < 0) ? '销售退货' : (psiLabel[v.type] || v.type);
       rows.push({ source: 'psi', docType, docNo, timestamp: v.timestamp, partner: v.partner, amount: v.amount, operator: v.operator, note: v.note });
     });
-    (prodRecords as ProductionOpRecord[]).filter(r => r.type === 'OUTSOURCE' && r.partner === partnerName).forEach(rec => {
+    const prodByDoc = new Map<string, { status: string; timestamp: string; partner: string; amount: number; operator?: string; count: number }>();
+    (prodRecords as ProductionOpRecord[]).filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && r.partner === partnerName).forEach(rec => {
       const d = rec.timestamp ? new Date(rec.timestamp).toISOString().split('T')[0] : '';
       if (from && d < from) return;
       if (to && d > to) return;
-      rows.push({ source: 'prod', rec });
+      const docKey = rec.docNo || rec.id;
+      const cur = prodByDoc.get(docKey);
+      const amt = Number(rec.amount) || 0;
+      if (!cur) prodByDoc.set(docKey, { status: rec.status || '', timestamp: rec.timestamp || '', partner: rec.partner || '', amount: amt, operator: rec.operator ?? undefined, count: 1 });
+      else { cur.amount += amt; cur.count += 1; }
     });
+    prodByDoc.forEach((v, docNo) => {
+      rows.push({ source: 'psi', docType: '外协收回', docNo, timestamp: v.timestamp, partner: v.partner, amount: v.amount, operator: v.operator });
+    });
+    const finByDoc = new Map<string, { rec: FinanceRecord; amount: number; count: number }>();
     allRecords.filter(rec => (rec.type === 'RECEIPT' || rec.type === 'PAYMENT') && rec.partner === partnerName && inFinanceDateRangeQuery(rec.timestamp, from, to)).forEach(rec => {
-      rows.push({ source: 'finance', rec });
+      const docKey = rec.docNo || rec.id;
+      const cur = finByDoc.get(docKey);
+      if (!cur) finByDoc.set(docKey, { rec: { ...rec }, amount: rec.amount, count: 1 });
+      else { cur.amount += rec.amount; cur.count += 1; cur.rec = { ...cur.rec, amount: cur.amount }; }
+    });
+    finByDoc.forEach(v => {
+      rows.push({ source: 'finance', rec: v.rec });
     });
     rows.sort((a, b) => {
       const ta = a.source === 'finance' ? a.rec.timestamp : a.source === 'psi' ? a.timestamp : a.rec.timestamp;
@@ -748,6 +764,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
         else if (row.rec.type === 'PAYMENT') inc = row.rec.amount;
       } else if (row.source === 'psi') {
         if (row.docType === '采购单') dec = Math.abs(row.amount);
+        else if (row.docType === '外协收回') dec = Math.abs(row.amount);
         else if (row.docType === '销售单') {
           if (row.amount >= 0) inc = row.amount;
           else dec = Math.abs(row.amount);
@@ -1166,39 +1183,83 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                         {row.operator != null && row.operator !== '' && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">经办人</span><p className="text-sm font-bold text-slate-800 mt-0.5">{row.operator}</p></div>}
                         {(row.note != null && row.note !== '') && <div className="col-span-2"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">备注</span><p className="text-sm text-slate-600 mt-0.5 whitespace-pre-wrap">{row.note}</p></div>}
                       </div>
-                      {lineRecords.length > 0 && (
-                        <div>
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">明细（产品、数量、单价）</span>
-                          <div className="mt-2 border border-slate-100 rounded-xl overflow-hidden">
-                            <table className="w-full text-left text-sm">
-                              <thead className="bg-slate-50">
-                                <tr>
-                                  <th className="px-4 py-2 font-black text-slate-500">产品</th>
-                                  <th className="px-4 py-2 font-black text-slate-500 text-right">数量</th>
-                                  <th className="px-4 py-2 font-black text-slate-500 text-right">单价</th>
-                                  <th className="px-4 py-2 font-black text-slate-500 text-right">金额</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-50">
-                                {lineRecords.map((r: any, i: number) => {
-                                  const productName = products.find(p => p.id === r.productId)?.name ?? r.productName ?? r.productId ?? '—';
-                                  const qty = Number(r.quantity) || 0;
-                                  const unitPrice = Number(r.purchasePrice ?? r.salesPrice ?? 0);
-                                  const amt = Number(r.amount) || (qty * unitPrice);
-                                  return (
-                                    <tr key={r.id || i}>
-                                      <td className="px-4 py-2 font-bold text-slate-800">{productName}</td>
-                                      <td className="px-4 py-2 text-right font-bold text-slate-800">{qty.toLocaleString()}</td>
-                                      <td className="px-4 py-2 text-right font-bold text-slate-800">¥ {unitPrice.toLocaleString()}</td>
-                                      <td className="px-4 py-2 text-right font-black text-slate-800">¥ {amt.toLocaleString()}</td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
+                      {lineRecords.length > 0 && (() => {
+                        const byProduct = new Map<string, { product: Product | undefined; lines: any[] }>();
+                        lineRecords.forEach((r: any) => {
+                          const pid = r.productId || 'unknown';
+                          if (!byProduct.has(pid)) byProduct.set(pid, { product: products.find(p => p.id === pid), lines: [] });
+                          byProduct.get(pid)!.lines.push(r);
+                        });
+                        return (
+                          <div>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">明细（产品、数量、单价）</span>
+                            <div className="mt-2 space-y-3">
+                              {Array.from(byProduct.entries()).map(([pid, { product: prod, lines }]) => {
+                                const productName = prod?.name ?? lines[0]?.productName ?? pid;
+                                const category = prod ? categories.find(c => c.id === prod.categoryId) : null;
+                                const hasColorSize = !!(category?.hasColorSize && prod?.variants?.length && prod.variants.length > 1);
+                                const totalQty = lines.reduce((s: number, r: any) => s + (Number(r.quantity) || 0), 0);
+                                const unitPrice = Number(lines[0]?.purchasePrice ?? lines[0]?.salesPrice ?? 0);
+                                const totalAmt = lines.reduce((s: number, r: any) => s + (Number(r.amount) || (Number(r.quantity) || 0) * Number(r.purchasePrice ?? r.salesPrice ?? 0)), 0);
+                                return (
+                                  <div key={pid} className="border border-slate-100 rounded-xl overflow-hidden">
+                                    <div className="px-4 py-2.5 bg-slate-50 flex items-center justify-between">
+                                      <span className="text-sm font-bold text-slate-800">{productName}</span>
+                                      <div className="flex items-center gap-4 text-sm">
+                                        <span className="font-bold text-slate-600">数量: {totalQty.toLocaleString()}</span>
+                                        <span className="font-bold text-slate-600">单价: ¥ {unitPrice.toLocaleString()}</span>
+                                        <span className="font-black text-slate-800">金额: ¥ {totalAmt.toLocaleString()}</span>
+                                      </div>
+                                    </div>
+                                    {hasColorSize && (
+                                      <div className="px-4 py-2 space-y-1.5">
+                                        {(() => {
+                                          const colorGroups = new Map<string, { colorName: string; items: { sizeName: string; qty: number }[] }>();
+                                          const colorOrder = prod!.colorIds || [];
+                                          lines.forEach((r: any) => {
+                                            if (!r.variantId) return;
+                                            const v = prod!.variants.find(vx => vx.id === r.variantId);
+                                            if (!v) return;
+                                            const cid = v.colorId;
+                                            if (!colorGroups.has(cid)) {
+                                              const cName = dictionaries?.colors?.find(c => c.id === cid)?.name ?? cid;
+                                              colorGroups.set(cid, { colorName: cName, items: [] });
+                                            }
+                                            const sName = dictionaries?.sizes?.find(s => s.id === v.sizeId)?.name ?? v.sizeId;
+                                            colorGroups.get(cid)!.items.push({ sizeName: sName, qty: Number(r.quantity) || 0 });
+                                          });
+                                          const sortedEntries = Array.from(colorGroups.entries()).sort(([a], [b]) => {
+                                            const ia = colorOrder.indexOf(a);
+                                            const ib = colorOrder.indexOf(b);
+                                            return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+                                          });
+                                          if (sortedEntries.length === 0) return null;
+                                          return sortedEntries.map(([cid, { colorName, items }]) => {
+                                            const color = dictionaries?.colors?.find(c => c.id === cid);
+                                            return (
+                                              <div key={cid} className="flex items-center gap-3 py-1">
+                                                <div className="flex items-center gap-1.5 w-20 shrink-0">
+                                                  {color && <div className="w-3.5 h-3.5 rounded-full border border-slate-200" style={{ backgroundColor: color.value }} />}
+                                                  <span className="text-xs font-bold text-slate-700">{colorName}</span>
+                                                </div>
+                                                <div className="flex flex-wrap gap-3">
+                                                  {items.map((it, idx) => (
+                                                    <span key={idx} className="text-xs text-slate-600"><span className="font-bold">{it.sizeName}</span> <span className="text-indigo-600 font-black">{it.qty}</span></span>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            );
+                                          });
+                                        })()}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   );
                 })()}
@@ -1211,6 +1272,14 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                   const node = rec.nodeId ? globalNodes.find(n => n.id === rec.nodeId) : null;
                   const unitPrice = rec.unitPrice != null && rec.unitPrice !== undefined ? Number(rec.unitPrice) : null;
                   const amount = Number(rec.amount) || 0;
+                  const relatedRecs = (prodRecords as ProductionOpRecord[]).filter(r =>
+                    r.type === 'OUTSOURCE' && r.status === '已收回' && r.docNo === rec.docNo
+                  );
+                  const category = product ? categories.find(c => c.id === product.categoryId) : null;
+                  const hasColorSize = !!(category?.hasColorSize && product?.variants?.length && product.variants.length > 1);
+                  const totalQty = relatedRecs.length > 1
+                    ? relatedRecs.reduce((s, r) => s + Number(r.quantity), 0)
+                    : Number(rec.quantity);
                   return (
                     <div className="space-y-5">
                       <div className="grid grid-cols-2 gap-x-8 gap-y-4">
@@ -1218,7 +1287,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                         <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">单据编号</span><p className="text-sm font-bold text-slate-800 mt-0.5">{rec.docNo || rec.id}</p></div>
                         <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">业务时间</span><p className="text-sm font-bold text-slate-800 mt-0.5">{fmtDT(rec.timestamp)}</p></div>
                         <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">合作单位</span><p className="text-sm font-bold text-slate-800 mt-0.5">{rec.partner || '-'}</p></div>
-                        <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">生产订单</span><p className="text-sm font-bold text-slate-800 mt-0.5">{order?.orderNumber ?? rec.orderId ?? '-'}</p></div>
+                        {order && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">生产订单</span><p className="text-sm font-bold text-slate-800 mt-0.5">{order.orderNumber}</p></div>}
                         {node && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">工序节点</span><p className="text-sm font-bold text-slate-800 mt-0.5">{node.name}</p></div>}
                         {rec.status != null && rec.status !== '' && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">状态</span><p className="text-sm font-bold text-slate-800 mt-0.5">{rec.status}</p></div>}
                         <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">经办人</span><p className="text-sm font-bold text-slate-800 mt-0.5">{rec.operator}</p></div>
@@ -1226,24 +1295,57 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                       <div>
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">产品、数量、单价</span>
                         <div className="mt-2 border border-slate-100 rounded-xl overflow-hidden">
-                          <table className="w-full text-left text-sm">
-                            <thead className="bg-slate-50">
-                              <tr>
-                                <th className="px-4 py-2 font-black text-slate-500">产品</th>
-                                <th className="px-4 py-2 font-black text-slate-500 text-right">数量</th>
-                                <th className="px-4 py-2 font-black text-slate-500 text-right">单价</th>
-                                <th className="px-4 py-2 font-black text-slate-500 text-right">金额</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr>
-                                <td className="px-4 py-2 font-bold text-slate-800">{product?.name ?? rec.productId ?? '—'}</td>
-                                <td className="px-4 py-2 text-right font-bold text-slate-800">{rec.quantity}</td>
-                                <td className="px-4 py-2 text-right font-bold text-slate-800">{unitPrice != null ? `¥ ${unitPrice.toLocaleString()}` : '—'}</td>
-                                <td className="px-4 py-2 text-right font-black text-slate-800">¥ {amount.toLocaleString()}</td>
-                              </tr>
-                            </tbody>
-                          </table>
+                          <div className="px-4 py-2.5 bg-slate-50 flex items-center justify-between">
+                            <span className="text-sm font-bold text-slate-800">{product?.name ?? rec.productId ?? '—'}</span>
+                            <div className="flex items-center gap-4 text-sm">
+                              <span className="font-bold text-slate-600">数量: {totalQty}</span>
+                              <span className="font-bold text-slate-600">单价: {unitPrice != null ? `¥ ${unitPrice.toLocaleString()}` : '—'}</span>
+                              <span className="font-black text-slate-800">金额: ¥ {amount.toLocaleString()}</span>
+                            </div>
+                          </div>
+                          {hasColorSize && (() => {
+                            const colorGroups = new Map<string, { colorName: string; items: { sizeName: string; qty: number }[] }>();
+                            const colorOrder = product!.colorIds || [];
+                            const recsToShow = relatedRecs.length > 1 ? relatedRecs : [rec];
+                            recsToShow.forEach(r => {
+                              if (!r.variantId) return;
+                              const v = product!.variants.find(vx => vx.id === r.variantId);
+                              if (!v) return;
+                              const cid = v.colorId;
+                              if (!colorGroups.has(cid)) {
+                                const cName = dictionaries?.colors?.find(c => c.id === cid)?.name ?? cid;
+                                colorGroups.set(cid, { colorName: cName, items: [] });
+                              }
+                              const sName = dictionaries?.sizes?.find(s => s.id === v.sizeId)?.name ?? v.sizeId;
+                              colorGroups.get(cid)!.items.push({ sizeName: sName, qty: Number(r.quantity) || 0 });
+                            });
+                            const sortedEntries = Array.from(colorGroups.entries()).sort(([a], [b]) => {
+                              const ia = colorOrder.indexOf(a);
+                              const ib = colorOrder.indexOf(b);
+                              return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+                            });
+                            if (sortedEntries.length === 0) return null;
+                            return (
+                              <div className="px-4 py-2 space-y-1.5">
+                                {sortedEntries.map(([cid, { colorName, items }]) => {
+                                  const color = dictionaries?.colors?.find(c => c.id === cid);
+                                  return (
+                                    <div key={cid} className="flex items-center gap-3 py-1">
+                                      <div className="flex items-center gap-1.5 w-20 shrink-0">
+                                        {color && <div className="w-3.5 h-3.5 rounded-full border border-slate-200" style={{ backgroundColor: color.value }} />}
+                                        <span className="text-xs font-bold text-slate-700">{colorName}</span>
+                                      </div>
+                                      <div className="flex flex-wrap gap-3">
+                                        {items.map((it, idx) => (
+                                          <span key={idx} className="text-xs text-slate-600"><span className="font-bold">{it.sizeName}</span> <span className="text-indigo-600 font-black">{it.qty}</span></span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>

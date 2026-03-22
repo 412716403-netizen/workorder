@@ -14,6 +14,14 @@ import {
   variantMaxGoodProductMode
 } from '../utils/productReportAggregates';
 import { buildDefectiveReworkByOrderMilestone } from '../utils/defectiveReworkByOrderMilestone';
+import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
+
+function fmtDT(ts: string | Date | undefined | null): string {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return String(ts);
+  return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+}
 
 interface OrderListViewProps {
   productionLinkMode?: 'order' | 'product';
@@ -2088,7 +2096,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                           const reportNo = reportNoRaw.startsWith('外协收回·') ? reportNoRaw.slice(5) : reportNoRaw;
                           return (
                           <tr key={batch.key} className="border-b border-slate-100 hover:bg-slate-50/50">
-                            <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{batch.first.report.timestamp}</td>
+                            <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{fmtDT(batch.first.report.timestamp)}</td>
                             {productionLinkMode !== 'product' && (
                               <td className="px-4 py-3 font-bold text-slate-800 whitespace-nowrap">
                                 {batch.source === 'order' ? batch.first.order.orderNumber : '—'}
@@ -2182,7 +2190,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                   {hasColorSize && product?.variants?.length ? (
                     <div className="space-y-6">
                       <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider">入库数量明细（颜色尺码）</h4>
-                      {(Object.entries(groupedVariantsForStock) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                      {sortedVariantColorEntries(groupedVariantsForStock, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
                         const color = (dictionaries.colors as { id: string; name: string; value: string }[] | undefined)?.find(c => c.id === colorId);
                         return (
                           <div key={colorId} className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 flex flex-col md:flex-row md:items-center gap-4">
@@ -2285,7 +2293,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         const qty = stockInForm.singleQuantity || 0;
                         if (qty <= 0) return;
                         await onAddRecord!({
-                          id: `rec-${Date.now()}`,
+                          id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                           type: 'STOCK_IN',
                           orderId: order.id,
                           productId: order.productId,
@@ -2557,7 +2565,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                             const batchUnit = (batchProduct?.unitId && dictionaries?.units?.find(u => u.id === batchProduct.unitId)?.name) || '件';
                             return (
                               <tr key={batch.docNo} className="border-b border-slate-100 hover:bg-slate-50/50">
-                                <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{batch.first.timestamp}</td>
+                                <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{fmtDT(batch.first.timestamp)}</td>
                                 <td className="px-4 py-3 font-bold text-slate-800 whitespace-nowrap">{batch.docNo}</td>
                                 <td className="px-4 py-3 text-slate-800 whitespace-nowrap">{batch.productName}</td>
                                 <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{batch.orderNumber}</td>
@@ -2759,7 +2767,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                             </div>
                             <div className="bg-slate-50 rounded-xl px-4 py-2">
                               <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">入库时间</p>
-                              <p className="text-sm font-bold text-slate-800">{detailBatch.first.timestamp}</p>
+                              <p className="text-sm font-bold text-slate-800">{fmtDT(detailBatch.first.timestamp)}</p>
                             </div>
                             <div className="bg-slate-50 rounded-xl px-4 py-2">
                               <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">经办人</p>
@@ -3315,7 +3323,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                           </div>
                           <div className="bg-slate-50 rounded-xl px-4 py-2">
                             <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">报工时间</p>
-                            <p className="text-sm font-bold text-slate-800">{reportDetailBatch.first.report.timestamp}</p>
+                            <p className="text-sm font-bold text-slate-800">{fmtDT(reportDetailBatch.first.report.timestamp)}</p>
                           </div>
                           <div className="bg-slate-50 rounded-xl px-4 py-2">
                             <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">操作人</p>
@@ -3563,7 +3571,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         <thead><tr className="bg-slate-50 border-b border-slate-200"><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">单号</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">类型</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">来源工序</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">数量</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">返工目标工序</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">时间</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">操作人</th></tr></thead>
                         <tbody>
                           {defectRecordsList.map(r => (
-                            <tr key={r.id} className="border-b border-slate-100"><td className="px-4 py-3 text-slate-700 font-mono text-xs">{r.docNo ?? '—'}</td><td className="px-4 py-3"><span className={r.type === 'REWORK' ? 'text-indigo-600 font-bold' : 'text-rose-600 font-bold'}>{r.type === 'REWORK' ? '返工' : '报损'}</span></td><td className="px-4 py-3 text-slate-700">{getSourceNodeName(r)}</td><td className="px-4 py-3 text-right font-bold text-slate-800">{r.quantity ?? 0}</td><td className="px-4 py-3 text-slate-600">{r.type === 'REWORK' ? getReworkTargetNodes(r) : '—'}</td><td className="px-4 py-3 text-slate-500 text-xs">{r.timestamp || '—'}</td><td className="px-4 py-3 text-slate-600">{r.operator ?? '—'}</td></tr>
+                            <tr key={r.id} className="border-b border-slate-100"><td className="px-4 py-3 text-slate-700 font-mono text-xs">{r.docNo ?? '—'}</td><td className="px-4 py-3"><span className={r.type === 'REWORK' ? 'text-indigo-600 font-bold' : 'text-rose-600 font-bold'}>{r.type === 'REWORK' ? '返工' : '报损'}</span></td><td className="px-4 py-3 text-slate-700">{getSourceNodeName(r)}</td><td className="px-4 py-3 text-right font-bold text-slate-800">{r.quantity ?? 0}</td><td className="px-4 py-3 text-slate-600">{r.type === 'REWORK' ? getReworkTargetNodes(r) : '—'}</td><td className="px-4 py-3 text-slate-500 text-xs">{fmtDT(r.timestamp)}</td><td className="px-4 py-3 text-slate-600">{r.operator ?? '—'}</td></tr>
                           ))}
                         </tbody>
                       </table>
@@ -3578,7 +3586,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         <thead><tr className="bg-slate-50 border-b border-slate-200"><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">单号</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">工序</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">报工数量</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">规格</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">时间</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">操作人</th></tr></thead>
                         <tbody>
                           {reworkReportList.map(r => (
-                            <tr key={r.id} className="border-b border-slate-100"><td className="px-4 py-3 text-slate-700 font-mono text-xs">{r.docNo ?? '—'}</td><td className="px-4 py-3 text-slate-700">{globalNodes.find(n => n.id === r.nodeId)?.name ?? r.nodeId ?? '—'}</td><td className="px-4 py-3 text-right font-bold text-indigo-600">{r.quantity ?? 0}</td><td className="px-4 py-3 text-slate-600">{r.variantId ? (product?.variants?.find(v => v.id === r.variantId) as { skuSuffix?: string } | undefined)?.skuSuffix ?? r.variantId : '—'}</td><td className="px-4 py-3 text-slate-500 text-xs">{r.timestamp || '—'}</td><td className="px-4 py-3 text-slate-600">{r.operator ?? '—'}</td></tr>
+                            <tr key={r.id} className="border-b border-slate-100"><td className="px-4 py-3 text-slate-700 font-mono text-xs">{r.docNo ?? '—'}</td><td className="px-4 py-3 text-slate-700">{globalNodes.find(n => n.id === r.nodeId)?.name ?? r.nodeId ?? '—'}</td><td className="px-4 py-3 text-right font-bold text-indigo-600">{r.quantity ?? 0}</td><td className="px-4 py-3 text-slate-600">{r.variantId ? (product?.variants?.find(v => v.id === r.variantId) as { skuSuffix?: string } | undefined)?.skuSuffix ?? r.variantId : '—'}</td><td className="px-4 py-3 text-slate-500 text-xs">{fmtDT(r.timestamp)}</td><td className="px-4 py-3 text-slate-600">{r.operator ?? '—'}</td></tr>
                           ))}
                         </tbody>
                       </table>
@@ -3722,7 +3730,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         <thead><tr className="bg-slate-50 border-b border-slate-200"><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">单号</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">类型</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">来源工序</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">数量</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">返工目标工序</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">时间</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">操作人</th></tr></thead>
                         <tbody>
                           {defectRecordsList.map(r => (
-                            <tr key={r.id} className="border-b border-slate-100"><td className="px-4 py-3 text-slate-700 font-mono text-xs">{r.docNo ?? '—'}</td><td className="px-4 py-3"><span className={r.type === 'REWORK' ? 'text-indigo-600 font-bold' : 'text-rose-600 font-bold'}>{r.type === 'REWORK' ? '返工' : '报损'}</span></td><td className="px-4 py-3 text-slate-700">{getSourceNodeName(r)}</td><td className="px-4 py-3 text-right font-bold text-slate-800">{r.quantity ?? 0}</td><td className="px-4 py-3 text-slate-600">{r.type === 'REWORK' ? getReworkTargetNodes(r) : '—'}</td><td className="px-4 py-3 text-slate-500 text-xs">{r.timestamp || '—'}</td><td className="px-4 py-3 text-slate-600">{r.operator ?? '—'}</td></tr>
+                            <tr key={r.id} className="border-b border-slate-100"><td className="px-4 py-3 text-slate-700 font-mono text-xs">{r.docNo ?? '—'}</td><td className="px-4 py-3"><span className={r.type === 'REWORK' ? 'text-indigo-600 font-bold' : 'text-rose-600 font-bold'}>{r.type === 'REWORK' ? '返工' : '报损'}</span></td><td className="px-4 py-3 text-slate-700">{getSourceNodeName(r)}</td><td className="px-4 py-3 text-right font-bold text-slate-800">{r.quantity ?? 0}</td><td className="px-4 py-3 text-slate-600">{r.type === 'REWORK' ? getReworkTargetNodes(r) : '—'}</td><td className="px-4 py-3 text-slate-500 text-xs">{fmtDT(r.timestamp)}</td><td className="px-4 py-3 text-slate-600">{r.operator ?? '—'}</td></tr>
                           ))}
                         </tbody>
                       </table>
@@ -3737,7 +3745,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         <thead><tr className="bg-slate-50 border-b border-slate-200"><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">单号</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">工序</th><th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">报工数量</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">规格</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">时间</th><th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">操作人</th></tr></thead>
                         <tbody>
                           {reworkReportList.map(r => (
-                            <tr key={r.id} className="border-b border-slate-100"><td className="px-4 py-3 text-slate-700 font-mono text-xs">{r.docNo ?? '—'}</td><td className="px-4 py-3 text-slate-700">{globalNodes.find(n => n.id === r.nodeId)?.name ?? r.nodeId ?? '—'}</td><td className="px-4 py-3 text-right font-bold text-indigo-600">{r.quantity ?? 0}</td><td className="px-4 py-3 text-slate-600">{r.variantId ? (product.variants?.find(v => v.id === r.variantId) as { skuSuffix?: string } | undefined)?.skuSuffix ?? r.variantId : '—'}</td><td className="px-4 py-3 text-slate-500 text-xs">{r.timestamp || '—'}</td><td className="px-4 py-3 text-slate-600">{r.operator ?? '—'}</td></tr>
+                            <tr key={r.id} className="border-b border-slate-100"><td className="px-4 py-3 text-slate-700 font-mono text-xs">{r.docNo ?? '—'}</td><td className="px-4 py-3 text-slate-700">{globalNodes.find(n => n.id === r.nodeId)?.name ?? r.nodeId ?? '—'}</td><td className="px-4 py-3 text-right font-bold text-indigo-600">{r.quantity ?? 0}</td><td className="px-4 py-3 text-slate-600">{r.variantId ? (product.variants?.find(v => v.id === r.variantId) as { skuSuffix?: string } | undefined)?.skuSuffix ?? r.variantId : '—'}</td><td className="px-4 py-3 text-slate-500 text-xs">{fmtDT(r.timestamp)}</td><td className="px-4 py-3 text-slate-600">{r.operator ?? '—'}</td></tr>
                           ))}
                         </tbody>
                       </table>

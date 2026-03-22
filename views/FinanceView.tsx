@@ -4,7 +4,7 @@ import {
   ArrowUpCircle, 
   Scale
 } from 'lucide-react';
-import { ProductionOrder, FinanceRecord, FinanceOpType, FinanceCategory, FinanceAccountType, Partner, Worker, Product } from '../types';
+import { ProductionOrder, FinanceRecord, FinanceOpType, FinanceCategory, FinanceAccountType, Partner, Worker, Product, AppDictionaries } from '../types';
 import { PartnerCategory, ProductCategory, GlobalNodeTemplate } from '../types';
 import FinanceOpsView from './FinanceOpsView';
 
@@ -24,11 +24,12 @@ interface FinanceViewProps {
   partnerCategories: PartnerCategory[];
   categories: ProductCategory[];
   globalNodes: GlobalNodeTemplate[];
+  dictionaries?: AppDictionaries;
   userPermissions?: string[];
   tenantRole?: string;
 }
 
-const FinanceView: React.FC<FinanceViewProps> = ({ orders, records, psiRecords = [], prodRecords = [], onAddRecord, onUpdateRecord, onDeleteRecord, financeCategories, financeAccountTypes, partners, workers, products, partnerCategories, categories, globalNodes, userPermissions, tenantRole }) => {
+const FinanceView: React.FC<FinanceViewProps> = ({ orders, records, psiRecords = [], prodRecords = [], onAddRecord, onUpdateRecord, onDeleteRecord, financeCategories, financeAccountTypes, partners, workers, products, partnerCategories, categories, globalNodes, dictionaries, userPermissions, tenantRole }) => {
   const [activeTab, setActiveTab] = useState<FinanceOpType>('RECEIPT');
   const sentinelRef = useRef<HTMLDivElement>(null);
   const tabsWrapRef = useRef<HTMLDivElement>(null);
@@ -148,6 +149,7 @@ const FinanceView: React.FC<FinanceViewProps> = ({ orders, records, psiRecords =
           partnerCategories={partnerCategories}
           categories={categories}
           globalNodes={globalNodes}
+          dictionaries={dictionaries}
           userPermissions={userPermissions}
           tenantRole={tenantRole}
         />

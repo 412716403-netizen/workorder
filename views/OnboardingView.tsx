@@ -38,18 +38,14 @@ export default function OnboardingView({ onTenantReady, onBack, onBackToLogin }:
     } catch {}
   }
 
+  const [createSubmitted, setCreateSubmitted] = useState(false);
+
   async function handleCreate() {
     if (!name.trim()) { toast.warning('请输入企业名称'); return; }
     setLoading(true);
     try {
-      const res = await api.tenants.create({ name: name.trim() });
-      api.setTokens(res.accessToken, res.refreshToken);
-      onTenantReady({
-        tenantId: res.tenant.id,
-        tenantName: res.tenant.name,
-        tenantRole: 'owner',
-        permissions: ['dashboard', 'production', 'psi', 'finance', 'basic', 'settings', 'members'],
-      });
+      await api.tenants.create({ name: name.trim() });
+      setCreateSubmitted(true);
     } catch (err: any) { toast.error(err.message || '创建失败'); }
     finally { setLoading(false); }
   }
@@ -119,6 +115,22 @@ export default function OnboardingView({ onTenantReady, onBack, onBackToLogin }:
   }
 
   if (mode === 'create') {
+    if (createSubmitted) {
+      return (
+        <div className="relative min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center p-4">
+          {backToLoginBtn}
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-100 p-8 text-center">
+            <Clock className="w-12 h-12 text-amber-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-gray-800">企业已提交审核</h2>
+            <p className="text-gray-500 mt-2 text-sm">您的企业创建申请已提交，平台管理员审核通过后即可使用</p>
+            <button onClick={() => { setCreateSubmitted(false); setName(''); setMode('choose'); }}
+              className="mt-6 w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors">
+              <ArrowLeft className="w-4 h-4" /> 返回
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="relative min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center p-4">
         {backToLoginBtn}
@@ -132,7 +144,7 @@ export default function OnboardingView({ onTenantReady, onBack, onBackToLogin }:
             </div>
             <button onClick={handleCreate} disabled={loading}
               className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg flex items-center justify-center gap-2">
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Building2 className="w-4 h-4" />} 创建企业
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Building2 className="w-4 h-4" />} 提交创建申请
             </button>
           </div>
           <button onClick={() => setMode('choose')} className="mt-4 w-full flex items-center justify-center gap-2 py-2 text-sm text-gray-500 hover:text-gray-700">

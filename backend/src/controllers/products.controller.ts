@@ -15,8 +15,8 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
     if (search) where.name = { contains: search, mode: 'insensitive' };
     res.json(await db.product.findMany({
       where,
-      include: { category: true, variants: true },
-      orderBy: { createdAt: 'desc' },
+      include: { category: true, variants: { orderBy: { id: 'asc' } } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
     }));
   } catch (e) { next(e); }
 }
@@ -93,7 +93,7 @@ export async function deleteProduct(req: Request, res: Response, next: NextFunct
 // ── 产品变体 ──
 export async function listVariants(req: Request, res: Response, next: NextFunction) {
   try {
-    res.json(await basePrisma.productVariant.findMany({ where: { productId: str(req.params.id) } }));
+    res.json(await basePrisma.productVariant.findMany({ where: { productId: str(req.params.id) }, orderBy: { id: 'asc' } }));
   } catch (e) { next(e); }
 }
 
@@ -114,7 +114,7 @@ export async function syncVariants(req: Request, res: Response, next: NextFuncti
       }
     });
 
-    res.json(await basePrisma.productVariant.findMany({ where: { productId } }));
+    res.json(await basePrisma.productVariant.findMany({ where: { productId }, orderBy: { id: 'asc' } }));
   } catch (e) { next(e); }
 }
 
@@ -125,7 +125,7 @@ export async function listBoms(req: Request, res: Response, next: NextFunction) 
     const parentProductId = optStr(req.query.parentProductId);
     const where: Record<string, unknown> = {};
     if (parentProductId) where.parentProductId = parentProductId;
-    res.json(await db.bom.findMany({ where, include: { items: { orderBy: { sortOrder: 'asc' } } } }));
+    res.json(await db.bom.findMany({ where, include: { items: { orderBy: { sortOrder: 'asc' } } }, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }));
   } catch (e) { next(e); }
 }
 

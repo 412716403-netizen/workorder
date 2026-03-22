@@ -26,7 +26,7 @@ export async function listRecords(req: Request, res: Response, next: NextFunctio
     if (productId) where.productId = productId;
     if (docNumber) where.docNumber = docNumber;
     if (partnerId) where.partnerId = partnerId;
-    res.json(await db.psiRecord.findMany({ where, orderBy: { createdAt: 'desc' } }));
+    res.json(await db.psiRecord.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }));
   } catch (e) { next(e); }
 }
 
@@ -34,7 +34,7 @@ export async function createRecord(req: Request, res: Response, next: NextFuncti
   try {
     const db = getTenantPrisma(req.tenantId!);
     const data = cleanPsi(sanitizeCreate(req.body));
-    if (!data.id) data.id = `psi-${Date.now()}`;
+    if (!data.id) data.id = `psi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     normalizeDates(data);
     const record = await db.psiRecord.create({ data });
     res.status(201).json(record);

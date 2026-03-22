@@ -20,7 +20,7 @@ export async function listPlans(req: Request, res: Response, next: NextFunction)
     res.json(await db.planOrder.findMany({
       where,
       include: { items: true, childPlans: { include: { items: true } } },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
     }));
   } catch (e) { next(e); }
 }
@@ -43,9 +43,7 @@ export async function createPlan(req: Request, res: Response, next: NextFunction
     const data = sanitizeCreate(rest);
 
     if (!data.id) data.id = genId('plan');
-    if (!data.planNumber) {
-      data.planNumber = await getNextPlanNumber();
-    }
+    data.planNumber = await getNextPlanNumber(tenantId);
     normalizeDates(data);
 
     const cleanItems = items ? sanitizeItems(items) : undefined;
@@ -92,11 +90,11 @@ export async function splitPlan(req: Request, res: Response, next: NextFunction)
     if (!sourcePlan) throw new AppError(404, '计划单不存在');
 
     const { splitItems } = req.body;
-    const planNumber = await getNextPlanNumber();
+    const planNumber = await getNextPlanNumber(tenantId);
 
     const newPlan = await basePrisma.planOrder.create({
       data: {
-        id: `plan-${Date.now()}`,
+        id: genId('plan'),
         tenantId,
         planNumber,
         productId: sourcePlan.productId,
@@ -131,7 +129,7 @@ export async function convertToOrder(req: Request, res: Response, next: NextFunc
     const allDescendants = await getAllDescendantPlans(plan.id);
     const plansToConvert: PlanWithItems[] = [plan, ...allDescendants].filter((p): p is PlanWithItems => p.status !== 'CONVERTED');
 
-    const existingOrders = await basePrisma.productionOrder.findMany({ select: { orderNumber: true } });
+    const existingOrders = await basePrisma.productionOrder.findMany({ where: { tenantId }, select: { orderNumber: true } });
     let maxNum = 0;
     for (const o of existingOrders) {
       const m = o.orderNumber.match(/^WO-?(\d+)/);

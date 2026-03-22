@@ -31,4 +31,12 @@ router.post('/users', validate(createSchema), adminUsersCtrl.create);
 router.put('/users/:id', validate(updateSchema), adminUsersCtrl.update);
 router.delete('/users/:id', adminUsersCtrl.remove);
 
+const tenantUpdateSchema = z.object({
+  expiresAt: z.union([z.string().min(1), z.null()]).optional(),
+  status: z.enum(['active', 'rejected', 'pending']).optional(),
+});
+
+router.get('/tenants', adminUsersCtrl.listTenants);
+router.put('/tenants/:id', validate(tenantUpdateSchema), adminUsersCtrl.updateTenant);
+
 export default router;

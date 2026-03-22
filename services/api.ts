@@ -88,6 +88,8 @@ export type TenantInfo = {
   name: string;
   role: string;
   permissions: string[];
+  status?: string;
+  expiresAt?: string | null;
 };
 
 export type LoginResult = {
@@ -239,6 +241,28 @@ export const adminUsers = {
   delete: (id: string) => request<void>(`/admin/users/${id}`, { method: 'DELETE' }),
 };
 
+export type AdminTenantRow = {
+  id: string;
+  name: string;
+  status: string;
+  expiresAt: string | null;
+  memberCount: number;
+  owner: { id: string; username: string; displayName: string | null; phone: string | null } | null;
+  createdAt: string;
+};
+
+export const adminTenants = {
+  list: (params?: { status?: string }) => {
+    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : '';
+    return request<AdminTenantRow[]>(`/admin/tenants${qs}`);
+  },
+  update: (id: string, data: { expiresAt?: string | null; status?: string }) =>
+    request<{ id: string; name: string; status: string; expiresAt: string | null }>(`/admin/tenants/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+};
+
 // ── Generic CRUD helpers ──
 function crud<T = unknown>(base: string) {
   return {
@@ -380,15 +404,15 @@ export const roles = {
 
 // ── Tenants ──
 export const tenants = {
-  list: () => request<Array<{ id: string; name: string; logo?: string; inviteCode: string; role: string; permissions: unknown; joinedAt: string }>>('/tenants'),
+  list: () => request<Array<{ id: string; name: string; logo?: string; inviteCode: string; status?: string; expiresAt?: string | null; role: string; permissions: unknown; joinedAt: string }>>('/tenants'),
   create: (data: { name: string; logo?: string }) =>
-    request<{ tenant: { id: string; name: string; inviteCode: string }; accessToken: string; refreshToken: string }>('/tenants', { method: 'POST', body: JSON.stringify(data) }),
+    request<{ tenant: { id: string; name: string; status: string }; message: string }>('/tenants', { method: 'POST', body: JSON.stringify(data) }),
   select: async (id: string) => {
-    const result = await request<{ tenantId: string; tenantName: string; tenantRole: string; permissions: string[]; accessToken: string; refreshToken: string }>(`/tenants/${id}/select`, { method: 'POST' });
+    const result = await request<{ tenantId: string; tenantName: string; tenantRole: string; permissions: string[]; expiresAt?: string | null; accessToken: string; refreshToken: string }>(`/tenants/${id}/select`, { method: 'POST' });
     setTokens(result.accessToken, result.refreshToken);
     return result;
   },
-  get: (id: string) => request<{ id: string; name: string; logo?: string; inviteCode: string }>(`/tenants/${id}`),
+  get: (id: string) => request<{ id: string; name: string; logo?: string; inviteCode: string; expiresAt?: string | null }>(`/tenants/${id}`),
   update: (id: string, data: { name?: string; logo?: string }) =>
     request(`/tenants/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   lookup: (code: string) => request<{ id: string; name: string; logo?: string; memberCount: number }>(`/tenants/lookup?code=${encodeURIComponent(code)}`),

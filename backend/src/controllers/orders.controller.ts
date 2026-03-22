@@ -21,7 +21,7 @@ export async function listOrders(req: Request, res: Response, next: NextFunction
         milestones: { include: { reports: true }, orderBy: { sortOrder: 'asc' } },
         childOrders: { include: { items: true } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
     }));
   } catch (e) { next(e); }
 }
@@ -94,7 +94,7 @@ export async function createReport(req: Request, res: Response, next: NextFuncti
     const milestone = await basePrisma.milestone.findUnique({ where: { id: milestoneId } });
     if (!milestone) throw new AppError(404, '工序不存在');
 
-    const reportNo = await generateReportNo('BG');
+    const reportNo = await generateReportNo('BG', req.tenantId);
     const reportData = {
       id: req.body.id || `rpt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       milestoneId,
@@ -234,7 +234,7 @@ export async function createProductReport(req: Request, res: Response, next: Nex
       });
     }
 
-    const reportNo = await generateReportNo('BG');
+    const reportNo = await generateReportNo('BG', tenantId);
     const report = await basePrisma.productProgressReport.create({
       data: {
         id: reportData.id || `ppr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,

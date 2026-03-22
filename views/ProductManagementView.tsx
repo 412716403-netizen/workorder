@@ -35,6 +35,7 @@ import {
   Download
 } from 'lucide-react';
 import { Product, GlobalNodeTemplate, ProductCategory, BOM, BOMItem, AppDictionaries, ProductVariant, DictionaryItem, Partner } from '../types';
+import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
 import { toast } from 'sonner';
 import * as api from '../services/api';
 
@@ -194,7 +195,7 @@ const SearchableProductSelect = ({
       const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || (p.sku && p.sku.toLowerCase().includes(search.toLowerCase()));
       const matchesCategory = activeTab === 'all' || p.categoryId === activeTab;
       return matchesSearch && matchesCategory;
-    });
+    }).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id));
   }, [options, search, activeTab]);
 
   const updatePanelPosition = useCallback(() => {
@@ -578,7 +579,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   };
 
   const handleStartCreateProduct = () => {
-    const newId = `p-${Date.now()}`;
+    const newId = `p-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setEditingProductId(newId);
     setWorkingProduct({
       id: newId, sku: '', name: '',
@@ -636,7 +637,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     } else {
       const nodeName = globalNodes.find(n => n.id === nodeId)?.name;
       setWorkingBOM({
-        id: `bom-${Date.now()}`,
+        id: `bom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         name: `${workingProduct?.name} [${nodeName}]`,
         parentProductId: workingProduct!.id,
         variantId: variant.id,
@@ -695,7 +696,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   };
 
   const filteredProducts = useMemo(() => {
-    return products.filter(p => p.categoryId === activeCategoryFilter);
+    return products.filter(p => p.categoryId === activeCategoryFilter).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id));
   }, [products, activeCategoryFilter]);
 
   // 分组变体：按颜色分组
@@ -1170,7 +1171,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                  </div>
 
                  <div className="space-y-12">
-                    {(Object.entries(groupedVariants) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                    {sortedVariantColorEntries(groupedVariants, workingProduct?.colorIds, workingProduct?.sizeIds).map(([colorId, colorVariants]) => {
                       const color = dictionaries.colors.find(c => c.id === colorId);
                       return (
                         <div key={colorId} className="space-y-4">

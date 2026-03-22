@@ -31,6 +31,7 @@ import { ProductionOpRecord, ProductionOrder, Product, ProdOpType, Warehouse, BO
 import { productGroupMaxReportableSum, pmpCompletedAtTemplate, variantMaxGoodProductMode } from '../utils/productReportAggregates';
 import { buildDefectiveReworkByOrderMilestone } from '../utils/defectiveReworkByOrderMilestone';
 import { splitQtyBySourceDefectiveAcrossParentOrders } from '../utils/reworkSplitByProductOrders';
+import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
 import WorkerSelector from '../components/WorkerSelector';
 import EquipmentSelector from '../components/EquipmentSelector';
 
@@ -1781,7 +1782,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
     }
     const receiveDocNo = getNextReceiveDocNo(receiveModal.partner);
     onAddRecord({
-      id: `rec-${Date.now()}-receive`,
+      id: `rec-${Date.now()}-recv-${Math.random().toString(36).slice(2, 8)}`,
       type: 'OUTSOURCE',
       orderId: receiveModal.orderId,
       productId: receiveModal.productId,
@@ -2093,7 +2094,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
     const recordType: ProdOpType = isStockReturn ? 'STOCK_RETURN' : (stockModalMode === 'stock_out' ? 'STOCK_OUT' : limitType);
     const docNo = (recordType === 'STOCK_OUT' || recordType === 'STOCK_RETURN') ? getNextStockDocNo(recordType) : undefined;
     const newRecord: ProductionOpRecord = {
-      id: `rec-${Date.now()}`,
+      id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       type: recordType,
       orderId: productionLinkMode === 'product' ? undefined : (form.orderId || undefined),
       productId: form.productId,
@@ -2669,7 +2670,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                 return (
                   <div
                     key={`rework-prod-${block.productId}`}
-                    className="bg-white p-6 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6 lg:gap-10 items-center"
+                    className="bg-white p-6 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group grid grid-cols-1 lg:grid-cols-[360px_1fr_auto] gap-6 lg:gap-10 items-center"
                   >
                     <div className="flex items-center gap-6 min-w-0">
                       {fp?.imageUrl ? (
@@ -2734,6 +2735,28 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         <div className="flex-1 min-w-0 text-slate-400 text-sm italic">暂无返工工序</div>
                       )}
                     </div>
+                    {(hasOpsPerm('production:rework_detail:allow') || hasOpsPerm('production:rework_material:allow')) && (
+                      <div className="flex flex-col gap-2 shrink-0">
+                        {hasOpsPerm('production:rework_detail:allow') && (
+                        <button
+                          type="button"
+                          onClick={() => setReworkDetailOrderId(repOrder.id)}
+                          className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all w-full justify-center"
+                        >
+                          <FileText className="w-3.5 h-3.5" /> 详情
+                        </button>
+                        )}
+                        {hasOpsPerm('production:rework_material:allow') && (
+                        <button
+                          type="button"
+                          onClick={() => { setReworkMaterialOrderId(repOrder.id); setReworkMaterialQty({}); setReworkMaterialWarehouseId(warehouses[0]?.id ?? ''); }}
+                          className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all w-full justify-center"
+                        >
+                          <Package className="w-3.5 h-3.5" /> 物料
+                        </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               }
@@ -4969,7 +4992,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         <span className="text-sm font-bold text-rose-600">合计 {reworkActionVariantTotal} 件</span>
                       </div>
                       <div className="space-y-3 bg-slate-50/50 rounded-2xl p-3">
-                        {(Object.entries(reworkActionGroupedVariants) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                        {sortedVariantColorEntries(reworkActionGroupedVariants, reworkActionProduct?.colorIds, reworkActionProduct?.sizeIds).map(([colorId, colorVariants]) => {
                           const color = dictionaries?.colors?.find((c: { id: string; name: string; value?: string }) => c.id === colorId);
                           return (
                             <div key={colorId} className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex items-center gap-4 flex-wrap">
@@ -5096,7 +5119,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                             if (splits.length === 0) return;
                             splits.forEach((sp, i) => pushScrap(sp.orderId, sp.variantId, sp.quantity, `rec-${Date.now()}-sc-${i}`));
                           } else {
-                            pushScrap(reworkActionRow.orderId, undefined, reworkActionQty, `rec-${Date.now()}`);
+                            pushScrap(reworkActionRow.orderId, undefined, reworkActionQty, `rec-${Date.now()}-sc-${Math.random().toString(36).slice(2, 8)}`);
                           }
                         }
                         setReworkActionRow(null); setReworkActionMode(null); setReworkActionQty(0); setReworkActionReason(''); setReworkActionVariantQuantities({});
@@ -5173,7 +5196,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         <span className="text-sm font-bold text-indigo-600">合计 {reworkActionVariantTotal} 件</span>
                       </div>
                       <div className="space-y-3 bg-slate-50/50 rounded-2xl p-3">
-                        {(Object.entries(reworkActionGroupedVariants) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                        {sortedVariantColorEntries(reworkActionGroupedVariants, reworkActionProduct?.colorIds, reworkActionProduct?.sizeIds).map(([colorId, colorVariants]) => {
                           const color = dictionaries?.colors?.find((c: { id: string; name: string; value?: string }) => c.id === colorId);
                           return (
                             <div key={colorId} className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex items-center gap-4 flex-wrap">
@@ -5324,7 +5347,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                               pushRework(sp.orderId, sp.variantId, sp.quantity, `rec-${Date.now()}-rw-${i}-${sp.orderId}`)
                             );
                           } else {
-                            pushRework(reworkActionRow.orderId, undefined, reworkActionQty, `rec-${Date.now()}`);
+                            pushRework(reworkActionRow.orderId, undefined, reworkActionQty, `rec-${Date.now()}-rw-${Math.random().toString(36).slice(2, 8)}`);
                           }
                         }
                         setReworkActionRow(null); setReworkActionMode(null); setReworkActionQty(0); setReworkActionReason(''); setReworkActionNodeIds([]); setReworkActionVariantQuantities({});
@@ -5445,7 +5468,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                             <span className="text-xs font-bold text-indigo-600">待返工合计 {totalPending} 件</span>
                           </div>
                           <div className="space-y-3 bg-white rounded-xl shadow-sm border border-slate-100 p-4">
-                            {(Object.entries(reworkReportGroupedVariants) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                            {sortedVariantColorEntries(reworkReportGroupedVariants, reworkReportProduct?.colorIds, reworkReportProduct?.sizeIds).map(([colorId, colorVariants]) => {
                               const color = dictionaries?.colors?.find((c: { id: string; name: string; value?: string }) => c.id === colorId);
                               return (
                                 <div key={colorId} className="flex items-center gap-4 flex-wrap">
@@ -5898,7 +5921,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         <span className="text-sm font-bold text-indigo-600">{row.milestoneName}</span>
                       </div>
                       <div className="space-y-4">
-                        {(Object.entries(groupedByColor) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                        {sortedVariantColorEntries(groupedByColor, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
                           const color = dictionaries?.colors?.find(c => c.id === colorId);
                           return (
                             <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-6 p-4 bg-white rounded-xl border border-slate-100">
@@ -5986,7 +6009,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         <span className="text-xs text-slate-500">（合计可委外 {row.availableQty}，按规格之和填写）</span>
                       </div>
                       <div className="space-y-4">
-                        {(Object.entries(groupedByColor) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                        {sortedVariantColorEntries(groupedByColor, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
                           const color = dictionaries?.colors?.find(c => c.id === colorId);
                           return (
                             <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-6 p-4 bg-white rounded-xl border border-slate-100">
@@ -6323,7 +6346,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         <span className="text-xs text-slate-500">待收回合计 {row.pending} 件</span>
                       </div>
                       <div className="space-y-4">
-                        {(Object.entries(groupedPb) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                        {sortedVariantColorEntries(groupedPb, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
                           const color = dictionaries?.colors?.find(c => c.id === colorId);
                           return (
                             <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-6 p-4 bg-white rounded-xl border border-slate-100">
@@ -6421,7 +6444,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         <span className="text-sm font-bold text-indigo-600">{row.milestoneName}</span>
                       </div>
                       <div className="space-y-4">
-                        {(Object.entries(groupedByColor) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                        {sortedVariantColorEntries(groupedByColor, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
                           const color = dictionaries?.colors?.find(c => c.id === colorId);
                           return (
                             <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-6 p-4 bg-white rounded-xl border border-slate-100">
@@ -7036,7 +7059,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                             <span className="text-sm font-bold text-indigo-600">{nodeName}</span>
                           </div>
                           <div className="space-y-4">
-                            {(Object.entries(groupedByColor) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                            {sortedVariantColorEntries(groupedByColor, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
                               const color = dictionaries?.colors?.find(c => c.id === colorId);
                               return (
                                 <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-6 p-4 bg-white rounded-xl border border-slate-100">
@@ -7253,7 +7276,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                 className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
               >
                 <option value="">请选择物料</option>
-                {products.map(p => (
+                {[...products].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id)).map(p => (
                   <option key={p.id} value={p.id}>{p.name} {p.sku ? `(${p.sku})` : ''}</option>
                 ))}
               </select>

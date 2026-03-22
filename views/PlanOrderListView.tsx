@@ -45,6 +45,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PlanOrder, Product, PlanStatus, ProductCategory, AppDictionaries, ProductVariant, PlanItem, Worker, Equipment, NodeAssignment, GlobalNodeTemplate, BOM, PlanFormSettings, Partner, PartnerCategory } from '../types';
+import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
 
 function getFileExtFromDataUrl(dataUrl: string): string {
   const m = dataUrl.match(/^data:([^;]+);/);
@@ -140,6 +141,7 @@ const SearchableMultiSelect = ({
 
   const filtered = useMemo(() => 
     options.filter(o => o.name.toLowerCase().includes(search.toLowerCase()) || o.sub?.toLowerCase().includes(search.toLowerCase()))
+      .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id))
   , [options, search]);
 
   const toggle = (id: string) => {
@@ -260,6 +262,7 @@ const SearchableMultiSelectWithProcessTabs = ({
 
   const filtered = useMemo(() =>
     filteredByTab.filter(o => o.name.toLowerCase().includes(search.toLowerCase()) || o.sub?.toLowerCase().includes(search.toLowerCase()))
+      .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id))
   , [filteredByTab, search]);
 
   const toggle = (id: string) => {
@@ -412,7 +415,7 @@ const EnhancedProductSelector = ({
       const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase());
       const matchesCategory = activeTab === 'all' || p.categoryId === activeTab;
       return matchesSearch && matchesCategory;
-    });
+    }).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id));
   }, [options, search, activeTab]);
 
   useEffect(() => {
@@ -571,7 +574,7 @@ const PartnerCustomerSelector = ({
       const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || (p.contact || '').toLowerCase().includes(search.toLowerCase());
       const matchesCategory = activeTab === 'all' || p.categoryId === activeTab;
       return matchesSearch && matchesCategory;
-    });
+    }).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id));
   }, [partners, search, activeTab]);
 
   useEffect(() => {
@@ -1271,7 +1274,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
     if (items.length === 0) return;
 
     const newPlan: PlanOrder = {
-      id: `plan-${Date.now()}`,
+      id: `plan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       planNumber: getNextPlanNumber(),
       productId: form.productId,
       items,
@@ -1879,7 +1882,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
 
                 {activeCategory?.hasColorSize && selectedProduct.variants && selectedProduct.variants.length > 0 ? (
                   <div className="space-y-6">
-                    {(Object.entries(groupedVariants) as [string, ProductVariant[]][]).map(([colorId, colorVariants]) => {
+                    {sortedVariantColorEntries(groupedVariants, (viewProduct || selectedProduct)?.colorIds, (viewProduct || selectedProduct)?.sizeIds).map(([colorId, colorVariants]) => {
                       const color = dictionaries.colors.find(c => c.id === colorId);
                       return (
                         <div key={colorId} className="bg-slate-50/50 p-6 rounded-[32px] border border-slate-100 flex flex-col md:flex-row md:items-center gap-8 group hover:border-indigo-200 transition-all overflow-hidden">

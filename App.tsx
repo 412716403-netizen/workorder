@@ -148,6 +148,8 @@ type TenantContext = {
   tenantName: string;
   tenantRole: string;
   permissions: string[];
+  status?: string;
+  expiresAt?: string | null;
 };
 
 function AppInner() {
@@ -175,12 +177,14 @@ function AppInner() {
 
     if (loginData.tenantId && loginData.tenants?.length) {
       const matched = loginData.tenants.find(t => t.id === loginData.tenantId);
-      if (matched) {
+      if (matched && matched.status !== 'pending' && matched.status !== 'rejected') {
         const ctx: TenantContext = {
           tenantId: matched.id,
           tenantName: matched.name,
           tenantRole: matched.role,
           permissions: matched.permissions,
+          status: matched.status,
+          expiresAt: matched.expiresAt ?? null,
         };
         setTenantCtx(ctx);
         localStorage.setItem('tenantCtx', JSON.stringify(ctx));
@@ -192,13 +196,20 @@ function AppInner() {
     navigate('/', { replace: true });
   };
 
-  const handleTenantReady = (result: { tenantId: string; tenantName: string; tenantRole: string; permissions: string[] }) => {
-    const ctx: TenantContext = result;
+  const handleTenantReady = (result: { tenantId: string; tenantName: string; tenantRole: string; permissions: string[]; status?: string; expiresAt?: string | null }) => {
+    const ctx: TenantContext = {
+      tenantId: result.tenantId,
+      tenantName: result.tenantName,
+      tenantRole: result.tenantRole,
+      permissions: result.permissions,
+      status: result.status,
+      expiresAt: result.expiresAt ?? null,
+    };
     setTenantCtx(ctx);
     localStorage.setItem('tenantCtx', JSON.stringify(ctx));
     setShowOnboarding(false);
     api.tenants.list().then(list => {
-      const infos: TenantInfo[] = list.map((t: any) => ({ id: t.id, name: t.name, role: t.role, permissions: typeof t.permissions === 'string' ? JSON.parse(t.permissions) : (t.permissions || []) }));
+      const infos: TenantInfo[] = list.map((t: any) => ({ id: t.id, name: t.name, role: t.role, permissions: typeof t.permissions === 'string' ? JSON.parse(t.permissions) : (t.permissions || []), status: t.status, expiresAt: t.expiresAt ?? null }));
       setUserTenants(infos);
       localStorage.setItem('userTenants', JSON.stringify(infos));
     }).catch(() => {});
@@ -236,7 +247,7 @@ function AppInner() {
     let cancelled = false;
     api.tenants.list().then(list => {
       if (cancelled) return;
-      const infos: TenantInfo[] = list.map((t: any) => ({ id: t.id, name: t.name, role: t.role, permissions: typeof t.permissions === 'string' ? JSON.parse(t.permissions) : (t.permissions || []) }));
+      const infos: TenantInfo[] = list.map((t: any) => ({ id: t.id, name: t.name, role: t.role, permissions: typeof t.permissions === 'string' ? JSON.parse(t.permissions) : (t.permissions || []), status: t.status, expiresAt: t.expiresAt ?? null }));
       setUserTenants(infos);
       localStorage.setItem('userTenants', JSON.stringify(infos));
       const matched = infos.find(t => t.id === tenantCtx.tenantId);
@@ -246,6 +257,8 @@ function AppInner() {
           tenantName: matched.name,
           tenantRole: matched.role,
           permissions: matched.permissions,
+          status: matched.status,
+          expiresAt: matched.expiresAt ?? null,
         };
         const prev = JSON.stringify(tenantCtx);
         if (JSON.stringify(next) !== prev) {
@@ -276,7 +289,7 @@ function AppInner() {
   }
 
   if (userTenants.length > 0 && !tenantCtx) {
-    return <TenantSelectView tenants={userTenants} onSelect={handleTenantReady} onCreateOrJoin={() => setShowOnboarding(true)} />;
+    return <TenantSelectView tenants={userTenants} onSelect={handleTenantReady} onCreateOrJoin={() => setShowOnboarding(true)} onLogout={handleLogout} />;
   }
 
   return (
@@ -289,6 +302,10 @@ function AppInner() {
       onProfileUpdate={(user) => {
         setCurrentUser(user);
         localStorage.setItem('currentUser', JSON.stringify(user));
+      }}
+      onTenantCtxUpdate={(ctx) => {
+        setTenantCtx(ctx);
+        localStorage.setItem('tenantCtx', JSON.stringify(ctx));
       }}
     />
   );
@@ -308,9 +325,10 @@ type AuthenticatedAppProps = {
   onLogout: () => void;
   onSwitchTenant: () => void;
   onProfileUpdate: (user: Record<string, unknown>) => void;
+  onTenantCtxUpdate: (ctx: TenantContext) => void;
 };
 
-function AuthenticatedApp({ currentUser, tenantCtx, onLogout, onSwitchTenant, onProfileUpdate }: AuthenticatedAppProps) {
+function AuthenticatedApp({ currentUser, tenantCtx, onLogout, onSwitchTenant, onProfileUpdate, onTenantCtxUpdate }: AuthenticatedAppProps) {
   const [profileOpen, setProfileOpen] = React.useState(false);
   const userId = String(currentUser.id ?? '');
   const hasPerm = (mod: string) => tenantCtx.tenantRole === 'owner' || tenantCtx.permissions.includes(mod) || tenantCtx.permissions.some(p => p.startsWith(`${mod}:`));
@@ -784,6 +802,13 @@ function AuthenticatedApp({ currentUser, tenantCtx, onLogout, onSwitchTenant, on
               open={profileOpen}
               onClose={() => setProfileOpen(false)}
               onUpdated={onProfileUpdate}
+              tenantId={tenantCtx.tenantId}
+              tenantName={tenantCtx.tenantName}
+              tenantRole={tenantCtx.tenantRole}
+              tenantExpiresAt={tenantCtx.expiresAt ?? null}
+              onTenantNameChanged={(name) => {
+                onTenantCtxUpdate({ ...tenantCtx, tenantName: name });
+              }}
             />
             <button
               onClick={onLogout}
@@ -888,6 +913,7 @@ function AuthenticatedApp({ currentUser, tenantCtx, onLogout, onSwitchTenant, on
                 partnerCategories={partnerCategories}
                 categories={categories}
                 globalNodes={globalNodes}
+                dictionaries={dictionaries}
                 userPermissions={tenantCtx?.permissions}
                 tenantRole={tenantCtx?.tenantRole}
               />

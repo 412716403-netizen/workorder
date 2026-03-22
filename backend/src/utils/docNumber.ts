@@ -5,16 +5,27 @@ function todayStr() {
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export async function generateReportNo(prefix: string): Promise<string> {
+export async function generateReportNo(prefix: string, tenantId?: string): Promise<string> {
   const dateStr = todayStr();
   const pattern = `${prefix}${dateStr}-%`;
 
-  const latest = await prisma.$queryRaw<Array<{ doc: string }>>`
-    SELECT COALESCE(
-      (SELECT report_no FROM milestone_reports WHERE report_no LIKE ${pattern} ORDER BY report_no DESC LIMIT 1),
-      (SELECT report_no FROM product_progress_reports WHERE report_no LIKE ${pattern} ORDER BY report_no DESC LIMIT 1)
-    ) as doc
-  `;
+  const params: string[] = [pattern];
+  if (tenantId) params.push(tenantId);
+
+  const msFilter = tenantId
+    ? ` AND mr.milestone_id IN (SELECT m.id FROM milestones m JOIN production_orders po ON m.production_order_id = po.id WHERE po.tenant_id = $2::uuid)`
+    : '';
+  const pprFilter = tenantId
+    ? ` AND ppr.progress_id IN (SELECT pmp.id FROM product_milestone_progresses pmp WHERE pmp.tenant_id = $2::uuid)`
+    : '';
+
+  const latest = await prisma.$queryRawUnsafe<Array<{ doc: string }>>(
+    `SELECT COALESCE(
+      (SELECT mr.report_no FROM milestone_reports mr WHERE mr.report_no LIKE $1${msFilter} ORDER BY mr.report_no DESC LIMIT 1),
+      (SELECT ppr.report_no FROM product_progress_reports ppr WHERE ppr.report_no LIKE $1${pprFilter} ORDER BY ppr.report_no DESC LIMIT 1)
+    ) as doc`,
+    ...params,
+  );
 
   let seq = 1;
   const latestDoc = latest?.[0]?.doc;
@@ -26,13 +37,17 @@ export async function generateReportNo(prefix: string): Promise<string> {
   return `${prefix}${dateStr}-${String(seq).padStart(4, '0')}`;
 }
 
-export async function generateDocNo(prefix: string, tableName: 'production_op_records' | 'finance_records' | 'psi_records', column: string): Promise<string> {
+export async function generateDocNo(prefix: string, tableName: 'production_op_records' | 'finance_records' | 'psi_records', column: string, tenantId?: string): Promise<string> {
   const dateStr = todayStr();
   const pattern = `${prefix}${dateStr}-%`;
+  const tenantFilter = tenantId ? ` AND tenant_id = $2::uuid` : '';
+
+  const params: string[] = [pattern];
+  if (tenantId) params.push(tenantId);
 
   const result = await prisma.$queryRawUnsafe<Array<{ doc: string }>>(
-    `SELECT ${column} as doc FROM ${tableName} WHERE ${column} LIKE $1 ORDER BY ${column} DESC LIMIT 1`,
-    pattern,
+    `SELECT ${column} as doc FROM ${tableName} WHERE ${column} LIKE $1${tenantFilter} ORDER BY ${column} DESC LIMIT 1`,
+    ...params,
   );
 
   let seq = 1;
@@ -45,11 +60,9 @@ export async function generateDocNo(prefix: string, tableName: 'production_op_re
   return `${prefix}${dateStr}-${String(seq).padStart(4, '0')}`;
 }
 
-export async function getNextPlanNumber(plans?: Array<{ planNumber: string }>): Promise<string> {
-  if (!plans) {
-    const allPlans = await prisma.planOrder.findMany({ select: { planNumber: true } });
-    plans = allPlans;
-  }
+export async function getNextPlanNumber(tenantId?: string): Promise<string> {
+  const where = tenantId ? { tenantId } : {};
+  const plans = await prisma.planOrder.findMany({ where, select: { planNumber: true } });
   let maxNum = 0;
   for (const p of plans) {
     const m = p.planNumber.match(/^PLN-?(\d+)/);
@@ -58,14 +71,12 @@ export async function getNextPlanNumber(plans?: Array<{ planNumber: string }>): 
   return `PLN${maxNum + 1}`;
 }
 
-export async function getNextOrderNumber(plans?: Array<{ orderNumber: string }>): Promise<string> {
-  if (!plans) {
-    const allOrders = await prisma.productionOrder.findMany({ select: { orderNumber: true } });
-    plans = allOrders;
-  }
+export async function getNextOrderNumber(tenantId?: string): Promise<string> {
+  const where = tenantId ? { tenantId } : {};
+  const orders = await prisma.productionOrder.findMany({ where, select: { orderNumber: true } });
   let maxNum = 0;
-  for (const p of plans) {
-    const m = p.orderNumber.match(/^WO-?(\d+)/);
+  for (const o of orders) {
+    const m = o.orderNumber.match(/^WO-?(\d+)/);
     if (m) maxNum = Math.max(maxNum, parseInt(m[1]));
   }
   return `WO${maxNum + 1}`;

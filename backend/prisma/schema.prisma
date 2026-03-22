@@ -49,12 +49,14 @@ model RefreshToken {
 // ============================================================
 
 model Tenant {
-  id         String   @id @default(uuid()) @db.Uuid
-  name       String   @db.VarChar(200)
-  logo       String?  @db.Text
-  inviteCode String   @unique @map("invite_code") @db.VarChar(50)
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+  id         String    @id @default(uuid()) @db.Uuid
+  name       String    @db.VarChar(200)
+  logo       String?   @db.Text
+  inviteCode String    @unique @map("invite_code") @db.VarChar(50)
+  status     String    @default("active") @db.VarChar(20)
+  expiresAt  DateTime? @map("expires_at") @db.Timestamptz()
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
   memberships      TenantMembership[]
   joinApplications JoinApplication[]
@@ -380,7 +382,7 @@ model BomItem {
 model PlanOrder {
   id               String    @id @db.VarChar(50)
   tenantId         String    @map("tenant_id") @db.Uuid
-  planNumber       String    @unique @map("plan_number") @db.VarChar(50)
+  planNumber       String    @map("plan_number") @db.VarChar(50)
   parentPlanId     String?   @map("parent_plan_id") @db.VarChar(50)
   bomNodeId        String?   @map("bom_node_id") @db.VarChar(50)
   productId        String    @map("product_id") @db.VarChar(50)
@@ -400,6 +402,7 @@ model PlanOrder {
   items            PlanItem[]
   productionOrders ProductionOrder[]
 
+  @@unique([tenantId, planNumber])
   @@index([tenantId])
   @@index([parentPlanId])
   @@index([productId])
@@ -426,7 +429,7 @@ model PlanItem {
 model ProductionOrder {
   id            String    @id @db.VarChar(50)
   tenantId      String    @map("tenant_id") @db.Uuid
-  orderNumber   String    @unique @map("order_number") @db.VarChar(50)
+  orderNumber   String    @map("order_number") @db.VarChar(50)
   planOrderId   String?   @map("plan_order_id") @db.VarChar(50)
   parentOrderId String?   @map("parent_order_id") @db.VarChar(50)
   bomNodeId     String?   @map("bom_node_id") @db.VarChar(50)
@@ -449,6 +452,7 @@ model ProductionOrder {
   milestones   Milestone[]
   opRecords    ProductionOpRecord[]
 
+  @@unique([tenantId, orderNumber])
   @@index([tenantId])
   @@index([parentOrderId])
   @@index([productId])

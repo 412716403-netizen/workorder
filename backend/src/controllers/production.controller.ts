@@ -23,7 +23,7 @@ export async function listRecords(req: Request, res: Response, next: NextFunctio
     if (type) where.type = type;
     if (orderId) where.orderId = orderId;
     if (productId) where.productId = productId;
-    res.json(await db.productionOpRecord.findMany({ where, orderBy: { timestamp: 'desc' } }));
+    res.json(await db.productionOpRecord.findMany({ where, orderBy: [{ timestamp: 'desc' }, { id: 'asc' }] }));
   } catch (e) { next(e); }
 }
 
@@ -39,18 +39,18 @@ export async function createRecord(req: Request, res: Response, next: NextFuncti
   try {
     const db = getTenantPrisma(req.tenantId!);
     const data = sanitizeCreate(req.body);
-    if (!data.id) data.id = `prodop-${Date.now()}`;
+    if (!data.id) data.id = `prodop-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     normalizeDates(data);
     if (!data.timestamp) data.timestamp = new Date();
 
     if (!data.docNo && DOC_PREFIX[data.type]) {
-      data.docNo = await generateDocNo(DOC_PREFIX[data.type], 'production_op_records', 'doc_no');
+      data.docNo = await generateDocNo(DOC_PREFIX[data.type], 'production_op_records', 'doc_no', req.tenantId);
     }
 
     const record = await db.productionOpRecord.create({ data });
 
     if (data.type === 'OUTSOURCE' && data.status === '已收回') {
-      await applyOutsourceProgress(record);
+      await applyOutsourceProgress({ ...record, tenantId: req.tenantId ?? null });
     }
 
     res.status(201).json(record);
@@ -59,55 +59,216 @@ export async function createRecord(req: Request, res: Response, next: NextFuncti
 
 export async function updateRecord(req: Request, res: Response, next: NextFunction) {
   try {
+    const id = str(req.params.id);
+    const oldRecord = await basePrisma.productionOpRecord.findUnique({ where: { id } });
     const data = sanitizeUpdate(req.body);
     normalizeDates(data);
-    const record = await basePrisma.productionOpRecord.update({ where: { id: str(req.params.id) }, data });
+    const record = await basePrisma.productionOpRecord.update({ where: { id }, data });
+
+    if (oldRecord && oldRecord.type === 'OUTSOURCE' && oldRecord.status === '已收回' && oldRecord.docNo) {
+      await syncOutsourceReportOnUpdate(oldRecord, record);
+    }
+
     res.json(record);
   } catch (e) { next(e); }
 }
 
 export async function deleteRecord(req: Request, res: Response, next: NextFunction) {
   try {
-    await basePrisma.productionOpRecord.delete({ where: { id: str(req.params.id) } });
+    const id = str(req.params.id);
+    const record = await basePrisma.productionOpRecord.findUnique({ where: { id } });
+
+    await basePrisma.productionOpRecord.delete({ where: { id } });
+
+    if (record && record.type === 'OUTSOURCE' && record.status === '已收回' && record.docNo) {
+      await removeOutsourceProgress(record);
+    }
+
     res.json({ message: '已删除' });
   } catch (e) { next(e); }
 }
 
 async function applyOutsourceProgress(record: {
-  id?: string; orderId: string | null; nodeId: string | null;
+  id?: string; orderId: string | null; productId?: string | null; nodeId: string | null;
   quantity: unknown; variantId?: string | null;
   timestamp?: Date | string | null; docNo?: string | null;
+  tenantId?: string | null;
 }) {
-  if (!record.orderId || !record.nodeId) return;
-
-  const milestone = await basePrisma.milestone.findFirst({
-    where: { productionOrderId: record.orderId, templateId: record.nodeId },
-  });
-  if (!milestone) return;
+  if (!record.nodeId) return;
 
   const qty = Number(record.quantity);
-  const newQty = Number(milestone.completedQuantity) + qty;
+  if (!qty || qty <= 0) return;
+  const ts = record.timestamp ? new Date(record.timestamp as string) : new Date();
+  const reportData = {
+    operator: '外协收回',
+    quantity: qty,
+    defectiveQuantity: 0,
+    variantId: record.variantId || null,
+    reportNo: record.docNo ?? null,
+    customData: { source: 'outsourceReceive', docNo: record.docNo ?? '' },
+  };
 
+  if (record.orderId) {
+    const milestone = await basePrisma.milestone.findFirst({
+      where: { productionOrderId: record.orderId, templateId: record.nodeId },
+    });
+    if (!milestone) return;
+    const newQty = Number(milestone.completedQuantity) + qty;
+    const reportId = `rpt-wxrecv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    await basePrisma.$transaction([
+      basePrisma.milestoneReport.create({
+        data: { id: reportId, milestoneId: milestone.id, timestamp: ts, ...reportData },
+      }),
+      basePrisma.milestone.update({
+        where: { id: milestone.id },
+        data: { completedQuantity: newQty, status: 'IN_PROGRESS' },
+      }),
+    ]);
+    return;
+  }
+
+  if (!record.productId || !record.tenantId) return;
+  const vid = record.variantId || null;
+  let pmp = await basePrisma.productMilestoneProgress.findFirst({
+    where: { productId: record.productId, variantId: vid, milestoneTemplateId: record.nodeId, tenantId: record.tenantId },
+  });
+  if (!pmp) {
+    pmp = await basePrisma.productMilestoneProgress.create({
+      data: {
+        id: `pmp-wxrecv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        tenantId: record.tenantId,
+        productId: record.productId,
+        variantId: vid,
+        milestoneTemplateId: record.nodeId,
+        completedQuantity: 0,
+      },
+    });
+  }
+  const newQty = Number(pmp.completedQuantity) + qty;
   const reportId = `rpt-wxrecv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   await basePrisma.$transaction([
-    basePrisma.milestoneReport.create({
-      data: {
-        id: reportId,
-        milestoneId: milestone.id,
-        timestamp: record.timestamp ? new Date(record.timestamp as string) : new Date(),
-        operator: '外协收回',
-        quantity: qty,
-        defectiveQuantity: 0,
-        variantId: record.variantId || null,
-        reportNo: record.docNo ? `外协收回·${record.docNo}` : null,
-        customData: { source: 'outsourceReceive', docNo: record.docNo ?? '' },
-      },
+    basePrisma.productProgressReport.create({
+      data: { id: reportId, progressId: pmp.id, timestamp: ts, ...reportData },
     }),
-    basePrisma.milestone.update({
-      where: { id: milestone.id },
-      data: { completedQuantity: newQty, status: 'IN_PROGRESS' },
+    basePrisma.productMilestoneProgress.update({
+      where: { id: pmp.id },
+      data: { completedQuantity: newQty },
     }),
   ]);
+}
+
+async function removeOutsourceProgress(record: {
+  orderId: string | null; productId?: string | null; nodeId: string | null;
+  docNo?: string | null; variantId?: string | null;
+}) {
+  if (!record.docNo) return;
+
+  if (record.orderId && record.nodeId) {
+    const milestone = await basePrisma.milestone.findFirst({
+      where: { productionOrderId: record.orderId, templateId: record.nodeId },
+    });
+    if (!milestone) return;
+    const reports = await basePrisma.milestoneReport.findMany({
+      where: { milestoneId: milestone.id, reportNo: record.docNo },
+    });
+    if (reports.length === 0) return;
+    const totalQty = reports.reduce((s, r) => s + Number(r.quantity), 0);
+    await basePrisma.$transaction([
+      basePrisma.milestoneReport.deleteMany({
+        where: { milestoneId: milestone.id, reportNo: record.docNo },
+      }),
+      basePrisma.milestone.update({
+        where: { id: milestone.id },
+        data: { completedQuantity: Math.max(0, Number(milestone.completedQuantity) - totalQty) },
+      }),
+    ]);
+    return;
+  }
+
+  if (record.productId) {
+    const vid = record.variantId || null;
+    const pmps = await basePrisma.productMilestoneProgress.findMany({
+      where: { productId: record.productId, milestoneTemplateId: record.nodeId, ...(vid ? { variantId: vid } : {}) },
+      include: { reports: { where: { reportNo: record.docNo } } },
+    });
+    for (const pmp of pmps) {
+      if (pmp.reports.length === 0) continue;
+      const totalQty = pmp.reports.reduce((s, r) => s + Number(r.quantity), 0);
+      await basePrisma.$transaction([
+        basePrisma.productProgressReport.deleteMany({
+          where: { progressId: pmp.id, reportNo: record.docNo },
+        }),
+        basePrisma.productMilestoneProgress.update({
+          where: { id: pmp.id },
+          data: { completedQuantity: Math.max(0, Number(pmp.completedQuantity) - totalQty) },
+        }),
+      ]);
+    }
+  }
+}
+
+async function syncOutsourceReportOnUpdate(
+  oldRecord: { orderId: string | null; productId?: string | null; nodeId: string | null; docNo?: string | null; quantity: unknown; variantId?: string | null; timestamp?: Date | string | null },
+  newRecord: { orderId: string | null; productId?: string | null; nodeId: string | null; docNo?: string | null; quantity: unknown; variantId?: string | null; timestamp?: Date | string | null }
+) {
+  const oldDocNo = oldRecord.docNo;
+  if (!oldDocNo) return;
+
+  const newQtyVal = Number(newRecord.quantity);
+  const oldQtyVal = Number(oldRecord.quantity);
+  const qtyDelta = newQtyVal - oldQtyVal;
+  const newTs = newRecord.timestamp ? new Date(newRecord.timestamp as string) : undefined;
+
+  if (oldRecord.orderId && oldRecord.nodeId) {
+    const milestone = await basePrisma.milestone.findFirst({
+      where: { productionOrderId: oldRecord.orderId, templateId: oldRecord.nodeId },
+    });
+    if (!milestone) return;
+    const reports = await basePrisma.milestoneReport.findMany({
+      where: { milestoneId: milestone.id, reportNo: oldDocNo },
+    });
+    if (reports.length === 0) return;
+    const ops: any[] = [];
+    for (const rpt of reports) {
+      const updateData: Record<string, unknown> = { quantity: newQtyVal };
+      if (newTs) updateData.timestamp = newTs;
+      if (newRecord.docNo && newRecord.docNo !== oldDocNo) updateData.reportNo = newRecord.docNo;
+      ops.push(basePrisma.milestoneReport.update({ where: { id: rpt.id }, data: updateData }));
+    }
+    if (qtyDelta !== 0) {
+      ops.push(basePrisma.milestone.update({
+        where: { id: milestone.id },
+        data: { completedQuantity: Math.max(0, Number(milestone.completedQuantity) + qtyDelta) },
+      }));
+    }
+    await basePrisma.$transaction(ops);
+    return;
+  }
+
+  if (oldRecord.productId) {
+    const vid = oldRecord.variantId || null;
+    const pmps = await basePrisma.productMilestoneProgress.findMany({
+      where: { productId: oldRecord.productId, milestoneTemplateId: oldRecord.nodeId, ...(vid ? { variantId: vid } : {}) },
+      include: { reports: { where: { reportNo: oldDocNo } } },
+    });
+    for (const pmp of pmps) {
+      if (pmp.reports.length === 0) continue;
+      const ops: any[] = [];
+      for (const rpt of pmp.reports) {
+        const updateData: Record<string, unknown> = { quantity: newQtyVal };
+        if (newTs) updateData.timestamp = newTs;
+        if (newRecord.docNo && newRecord.docNo !== oldDocNo) updateData.reportNo = newRecord.docNo;
+        ops.push(basePrisma.productProgressReport.update({ where: { id: rpt.id }, data: updateData }));
+      }
+      if (qtyDelta !== 0) {
+        ops.push(basePrisma.productMilestoneProgress.update({
+          where: { id: pmp.id },
+          data: { completedQuantity: Math.max(0, Number(pmp.completedQuantity) + qtyDelta) },
+        }));
+      }
+      await basePrisma.$transaction(ops);
+    }
+  }
 }
 
 export async function getDefectiveRework(req: Request, res: Response, next: NextFunction) {

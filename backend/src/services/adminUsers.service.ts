@@ -31,6 +31,7 @@ async function otherAdminCount(excludeUserId: string) {
 
 export async function listAdminUsers() {
   const rows = await prisma.user.findMany({
+    where: { OR: [{ isEnterprise: true }, { role: 'admin' }] },
     select: userPublicSelect,
     orderBy: [{ role: 'desc' }, { createdAt: 'asc' }],
   });

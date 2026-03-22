@@ -13,7 +13,7 @@ export async function listPartners(req: Request, res: Response, next: NextFuncti
     const where: Record<string, unknown> = {};
     if (categoryId) where.categoryId = categoryId;
     if (search) where.name = { contains: search, mode: 'insensitive' };
-    res.json(await db.partner.findMany({ where, include: { category: true }, orderBy: { createdAt: 'desc' } }));
+    res.json(await db.partner.findMany({ where, include: { category: true }, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }));
   } catch (e) { next(e); }
 }
 export async function createPartner(req: Request, res: Response, next: NextFunction) {
@@ -40,7 +40,7 @@ export async function listWorkers(req: Request, res: Response, next: NextFunctio
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
     if (search) where.name = { contains: search, mode: 'insensitive' };
-    res.json(await db.worker.findMany({ where, orderBy: { createdAt: 'desc' } }));
+    res.json(await db.worker.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }));
   } catch (e) { next(e); }
 }
 export async function createWorker(req: Request, res: Response, next: NextFunction) {
@@ -65,7 +65,7 @@ export async function listEquipment(req: Request, res: Response, next: NextFunct
     const search = optStr(req.query.search);
     const where: Record<string, unknown> = {};
     if (search) where.name = { contains: search, mode: 'insensitive' };
-    res.json(await db.equipment.findMany({ where, orderBy: { createdAt: 'desc' } }));
+    res.json(await db.equipment.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }));
   } catch (e) { next(e); }
 }
 export async function createEquipment(req: Request, res: Response, next: NextFunction) {

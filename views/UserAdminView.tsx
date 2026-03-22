@@ -12,8 +12,14 @@ import {
   Ban,
   CheckCircle,
   CalendarClock,
+  Building2,
+  Users,
+  Clock,
+  XCircle,
+  Check,
+  X,
 } from 'lucide-react';
-import { adminUsers, type AdminUserRow } from '../services/api';
+import { adminUsers, adminTenants, type AdminUserRow, type AdminTenantRow } from '../services/api';
 
 interface UserAdminViewProps {
   currentUserId: string;
@@ -50,9 +56,79 @@ function isExpiredAt(iso: string | null) {
 }
 
 export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
+  const [tab, setTab] = useState<'users' | 'tenants'>('users');
+
   const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const [tenantList, setTenantList] = useState<AdminTenantRow[]>([]);
+  const [tenantLoading, setTenantLoading] = useState(false);
+  const [tenantFilter, setTenantFilter] = useState<'all' | 'pending' | 'active' | 'rejected'>('all');
+  const [tenantModal, setTenantModal] = useState<{ tenant: AdminTenantRow; action: 'approve' | 'edit' | 'reject' } | null>(null);
+  const [tenantNoExpiry, setTenantNoExpiry] = useState(true);
+  const [tenantExpiresAtInput, setTenantExpiresAtInput] = useState('');
+  const [tenantSaving, setTenantSaving] = useState(false);
+  const [tenantError, setTenantError] = useState('');
+
+  const loadTenants = useCallback(async () => {
+    setTenantLoading(true);
+    try {
+      setTenantList(await adminTenants.list());
+    } catch (e) {
+      setTenantError(e instanceof Error ? e.message : '加载失败');
+    } finally {
+      setTenantLoading(false);
+    }
+  }, []);
+
+  const pendingCount = tenantList.filter(t => t.status === 'pending').length;
+  const filteredTenants = tenantFilter === 'all' ? tenantList : tenantList.filter(t => t.status === tenantFilter);
+
+  function openTenantModal(t: AdminTenantRow, action: 'approve' | 'edit' | 'reject') {
+    setTenantModal({ tenant: t, action });
+    setTenantError('');
+    if (action === 'approve') {
+      setTenantNoExpiry(true);
+      setTenantExpiresAtInput('');
+    } else if (action === 'edit') {
+      if (t.expiresAt) {
+        setTenantNoExpiry(false);
+        setTenantExpiresAtInput(toDatetimeLocalValue(t.expiresAt));
+      } else {
+        setTenantNoExpiry(true);
+        setTenantExpiresAtInput('');
+      }
+    }
+  }
+
+  async function handleTenantAction() {
+    if (!tenantModal) return;
+    setTenantSaving(true);
+    setTenantError('');
+    try {
+      const { tenant, action } = tenantModal;
+      if (action === 'reject') {
+        await adminTenants.update(tenant.id, { status: 'rejected' });
+      } else {
+        const expiresAt = tenantNoExpiry ? null : (tenantExpiresAtInput.trim() ? new Date(tenantExpiresAtInput).toISOString() : null);
+        await adminTenants.update(tenant.id, {
+          ...(action === 'approve' ? { status: 'active' } : {}),
+          expiresAt,
+        });
+      }
+      setTenantModal(null);
+      await loadTenants();
+    } catch (e) {
+      setTenantError(e instanceof Error ? e.message : '操作失败');
+    } finally {
+      setTenantSaving(false);
+    }
+  }
+
+  useEffect(() => {
+    if (tab === 'tenants' && tenantList.length === 0) loadTenants();
+  }, [tab]);
   const [modal, setModal] = useState<'create' | 'edit' | null>(null);
   const [editing, setEditing] = useState<AdminUserRow | null>(null);
   const [saving, setSaving] = useState(false);
@@ -205,28 +281,216 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
               <UserCog className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">账号管理</h1>
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">平台管理</h1>
               <p className="text-xs sm:text-sm text-slate-500 mt-1 leading-relaxed max-w-2xl">
-                管理员可新增用户、设置到期时间、编辑角色与状态、重置密码或删除用户
+                管理平台用户与企业
               </p>
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="shrink-0 flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 shadow-md shadow-indigo-100 transition-colors sm:self-start"
-        >
-          <Plus className="w-4 h-4" />
-          新建用户
-        </button>
+        {tab === 'users' && (
+          <button
+            type="button"
+            onClick={openCreate}
+            className="shrink-0 flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 shadow-md shadow-indigo-100 transition-colors sm:self-start"
+          >
+            <Plus className="w-4 h-4" />
+            新建用户
+          </button>
+        )}
       </div>
 
-      {error && !modal && (
+      <div className="flex gap-2 mb-6">
+        {([
+          { key: 'users' as const, label: '用户管理', icon: Users, badge: 0 },
+          { key: 'tenants' as const, label: '企业管理', icon: Building2, badge: pendingCount },
+        ]).map(t => (
+          <button key={t.key} type="button" onClick={() => setTab(t.key)}
+            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${tab === t.key ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+            <t.icon className="w-4 h-4" /> {t.label}
+            {t.badge > 0 && (
+              <span className={`min-w-[18px] h-[18px] rounded-full text-[10px] font-black flex items-center justify-center px-1 ${
+                tab === t.key ? 'bg-white text-indigo-600' : 'bg-red-500 text-white'
+              }`}>{t.badge}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'tenants' && (
+        <div className="space-y-4">
+          {tenantError && !tenantModal && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{tenantError}</div>
+          )}
+
+          <div className="flex gap-2 flex-wrap">
+            {([
+              { key: 'all' as const, label: '全部' },
+              { key: 'pending' as const, label: '待审核' },
+              { key: 'active' as const, label: '已通过' },
+              { key: 'rejected' as const, label: '已拒绝' },
+            ]).map(f => {
+              const count = f.key === 'all' ? tenantList.length : tenantList.filter(t => t.status === f.key).length;
+              return (
+                <button key={f.key} type="button" onClick={() => setTenantFilter(f.key)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${tenantFilter === f.key ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>
+                  {f.label} ({count})
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            {tenantLoading ? (
+              <div className="flex items-center justify-center py-24 text-slate-400"><Loader2 className="w-8 h-8 animate-spin" /></div>
+            ) : filteredTenants.length === 0 ? (
+              <div className="py-16 text-center text-slate-400 text-sm">暂无数据</div>
+            ) : (
+              <div className="overflow-x-auto -mx-px">
+                <table className="w-full min-w-[700px] text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-left text-slate-600">
+                      <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">企业名称</th>
+                      <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">创建者</th>
+                      <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500 text-center">成员数</th>
+                      <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">状态</th>
+                      <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">到期时间</th>
+                      <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">创建时间</th>
+                      <th className="px-3 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500 text-center w-28">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredTenants.map(t => (
+                      <tr key={t.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors align-middle">
+                        <td className="px-4 py-3.5 font-semibold text-slate-800">{t.name}</td>
+                        <td className="px-4 py-3.5 text-slate-600 text-[13px]">
+                          {t.owner ? (t.owner.displayName || t.owner.username) : <span className="text-slate-400">—</span>}
+                        </td>
+                        <td className="px-4 py-3.5 text-center text-slate-600">{t.memberCount}</td>
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          {t.status === 'pending' ? (
+                            <span className="inline-flex items-center gap-1 text-amber-700 bg-amber-50 px-2 py-0.5 rounded-lg text-xs font-bold">
+                              <Clock className="w-3 h-3" /> 待审核
+                            </span>
+                          ) : t.status === 'rejected' ? (
+                            <span className="inline-flex items-center gap-1 text-red-600 bg-red-50 px-2 py-0.5 rounded-lg text-xs font-bold">
+                              <XCircle className="w-3 h-3" /> 已拒绝
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg text-xs font-bold">
+                              <CheckCircle className="w-3 h-3" /> 正常
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap text-[13px]">
+                          {t.status !== 'active' ? (
+                            <span className="text-slate-300 text-xs">—</span>
+                          ) : !t.expiresAt ? (
+                            <span className="text-slate-400 text-xs">永不到期</span>
+                          ) : isExpiredAt(t.expiresAt) ? (
+                            <span className="inline-flex items-center gap-1 text-red-600 bg-red-50 px-2 py-0.5 rounded-lg text-xs font-bold">
+                              <CalendarClock className="w-3 h-3" /> 已过期 · {formatDate(t.expiresAt)}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-slate-600 text-xs">
+                              <CalendarClock className="w-3 h-3 text-indigo-400" /> {formatDate(t.expiresAt)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5 text-slate-500 whitespace-nowrap text-[13px]">{formatDate(t.createdAt)}</td>
+                        <td className="px-2 py-3.5 text-center">
+                          <div className="flex items-center justify-center gap-0.5">
+                            {t.status === 'pending' && (
+                              <>
+                                <button type="button" onClick={() => openTenantModal(t, 'approve')} className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition-colors" title="通过">
+                                  <Check className="w-4 h-4" />
+                                </button>
+                                <button type="button" onClick={() => openTenantModal(t, 'reject')} className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 transition-colors" title="拒绝">
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
+                            {t.status === 'active' && (
+                              <button type="button" onClick={() => openTenantModal(t, 'edit')} className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 transition-colors" title="设置到期时间">
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {tenantModal && tenantModal.action !== 'reject' && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+              <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-y-auto">
+                <div className="p-6 border-b border-slate-100">
+                  <h2 className="text-lg font-black text-slate-900">
+                    {tenantModal.action === 'approve' ? '审核通过' : '设置到期时间'}：{tenantModal.tenant.name}
+                  </h2>
+                </div>
+                <div className="p-6 space-y-4">
+                  {tenantError && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{tenantError}</div>}
+                  {tenantModal.tenant.owner && (
+                    <div className="text-sm text-slate-500">
+                      创建者：<span className="font-medium text-slate-700">{tenantModal.tenant.owner.displayName || tenantModal.tenant.owner.username}</span>
+                      {tenantModal.tenant.owner.phone && <span className="ml-2 text-slate-400">{tenantModal.tenant.owner.phone}</span>}
+                    </div>
+                  )}
+                  <div className="border border-slate-100 rounded-xl p-3 bg-slate-50/80">
+                    <label className="flex items-center gap-2 cursor-pointer mb-2">
+                      <input type="checkbox" checked={tenantNoExpiry} onChange={e => setTenantNoExpiry(e.target.checked)} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                      <span className="text-sm font-bold text-slate-700">永不到期</span>
+                    </label>
+                    {!tenantNoExpiry && (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">到期时间（到期后企业所有成员无法进入）</label>
+                        <input type="datetime-local" className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white" value={tenantExpiresAtInput} onChange={e => setTenantExpiresAtInput(e.target.value)} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <button type="button" onClick={() => { setTenantModal(null); setTenantError(''); }} className="flex-1 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-slate-50">取消</button>
+                    <button type="button" onClick={handleTenantAction} disabled={tenantSaving} className={`flex-1 py-2.5 rounded-xl text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2 ${tenantModal.action === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
+                      {tenantSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                      {tenantModal.action === 'approve' ? '审核通过' : '保存'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {tenantModal && tenantModal.action === 'reject' && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+              <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-y-auto">
+                <div className="p-6 text-center space-y-4">
+                  <XCircle className="w-12 h-12 text-red-400 mx-auto" />
+                  <h2 className="text-lg font-black text-slate-900">确认拒绝</h2>
+                  <p className="text-sm text-slate-500">确定拒绝 <span className="font-bold text-slate-700">{tenantModal.tenant.name}</span> 的企业创建申请？</p>
+                  {tenantError && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{tenantError}</div>}
+                  <div className="flex gap-3 pt-2">
+                    <button type="button" onClick={() => { setTenantModal(null); setTenantError(''); }} className="flex-1 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-slate-50">取消</button>
+                    <button type="button" onClick={handleTenantAction} disabled={tenantSaving} className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                      {tenantSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null} 拒绝
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'users' && error && !modal && (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{error}</div>
       )}
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      {tab === 'users' && <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-24 text-slate-400">
             <Loader2 className="w-8 h-8 animate-spin" />
@@ -260,9 +524,6 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
                   </th>
                   <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">
                     状态
-                  </th>
-                  <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500 whitespace-nowrap">
-                    到期时间
                   </th>
                   <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500 whitespace-nowrap">
                     创建时间
@@ -320,21 +581,6 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-[13px]">
-                      {!u.accountExpiresAt ? (
-                        <span className="text-slate-400 text-xs">永不到期</span>
-                      ) : isExpiredAt(u.accountExpiresAt) ? (
-                        <span className="inline-flex items-center gap-1 text-red-600 bg-red-50 px-2 py-0.5 rounded-lg text-xs font-bold">
-                          <CalendarClock className="w-3 h-3" />
-                          已过期
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-slate-600 text-xs">
-                          <CalendarClock className="w-3 h-3 text-indigo-400" />
-                          {formatDate(u.accountExpiresAt)}
-                        </span>
-                      )}
-                    </td>
                     <td className="px-4 py-3.5 text-slate-500 whitespace-nowrap text-[13px]">
                       {formatDate(u.createdAt)}
                     </td>
@@ -365,7 +611,7 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
             </table>
           </div>
         )}
-      </div>
+      </div>}
 
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
@@ -483,28 +729,6 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
                   </select>
                 </div>
               )}
-              <div className="border border-slate-100 rounded-xl p-3 bg-slate-50/80">
-                <label className="flex items-center gap-2 cursor-pointer mb-2">
-                  <input
-                    type="checkbox"
-                    checked={formNoExpiry}
-                    onChange={(e) => setFormNoExpiry(e.target.checked)}
-                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span className="text-sm font-bold text-slate-700">账号永不到期</span>
-                </label>
-                {!formNoExpiry && (
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">到期时间（到期后无法登录）</label>
-                    <input
-                      type="datetime-local"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
-                      value={formAccountExpiresAt}
-                      onChange={(e) => setFormAccountExpiresAt(e.target.value)}
-                    />
-                  </div>
-                )}
-              </div>
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
