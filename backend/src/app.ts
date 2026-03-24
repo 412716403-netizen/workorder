@@ -26,6 +26,7 @@ import rolesRoutes from './routes/roles.js';
 import collaborationRoutes from './routes/collaboration.js';
 
 const app = express();
+app.set('trust proxy', 1);
 
 function convertDecimals(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj;
