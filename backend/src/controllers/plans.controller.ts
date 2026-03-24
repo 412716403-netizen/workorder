@@ -3,9 +3,8 @@ import { type PlanOrder, type PlanItem, type Prisma } from '@prisma/client';
 import { getTenantPrisma, prisma as basePrisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { getNextPlanNumber } from '../utils/docNumber.js';
+import { genId } from '../utils/genId.js';
 import { str, optStr, sanitizeUpdate, sanitizeCreate, sanitizeItems, normalizeDates } from '../utils/request.js';
-
-function genId(prefix: string) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; }
 
 type PlanWithItems = PlanOrder & { items: PlanItem[] };
 
@@ -27,7 +26,8 @@ export async function listPlans(req: Request, res: Response, next: NextFunction)
 
 export async function getPlan(req: Request, res: Response, next: NextFunction) {
   try {
-    const plan = await basePrisma.planOrder.findUnique({
+    const db = getTenantPrisma(req.tenantId!);
+    const plan = await db.planOrder.findUnique({
       where: { id: str(req.params.id) },
       include: { items: true, childPlans: { include: { items: true } }, parentPlan: true },
     });
@@ -39,6 +39,7 @@ export async function getPlan(req: Request, res: Response, next: NextFunction) {
 export async function createPlan(req: Request, res: Response, next: NextFunction) {
   try {
     const tenantId = req.tenantId!;
+    const db = getTenantPrisma(tenantId);
     const { items, childPlans, parentPlan, productionOrders, ...rest } = req.body;
     const data = sanitizeCreate(rest);
 
@@ -47,8 +48,8 @@ export async function createPlan(req: Request, res: Response, next: NextFunction
     normalizeDates(data);
 
     const cleanItems = items ? sanitizeItems(items) : undefined;
-    const plan = await basePrisma.planOrder.create({
-      data: { ...data, tenantId, items: cleanItems ? { create: cleanItems } : undefined },
+    const plan = await db.planOrder.create({
+      data: { ...data, items: cleanItems ? { create: cleanItems } : undefined },
       include: { items: true },
     });
     res.status(201).json(plan);
@@ -57,28 +58,37 @@ export async function createPlan(req: Request, res: Response, next: NextFunction
 
 export async function updatePlan(req: Request, res: Response, next: NextFunction) {
   try {
+    const db = getTenantPrisma(req.tenantId!);
+    const planId = str(req.params.id);
+    const existing = await db.planOrder.findUnique({ where: { id: planId } });
+    if (!existing) throw new AppError(404, '计划单不存在');
+
     const { items, childPlans, parentPlan, productionOrders, ...rest } = req.body;
     const data = sanitizeUpdate(rest);
     normalizeDates(data);
     await basePrisma.$transaction(async (tx) => {
-      await tx.planOrder.update({ where: { id: str(req.params.id) }, data });
+      await tx.planOrder.update({ where: { id: planId }, data });
       if (items) {
-        const planOrderId = str(req.params.id);
-        await tx.planItem.deleteMany({ where: { planOrderId } });
-        const cleanItems = sanitizeItems(items).map(i => ({ ...i, planOrderId }));
+        await tx.planItem.deleteMany({ where: { planOrderId: planId } });
+        const cleanItems = sanitizeItems(items).map(i => ({ ...i, planOrderId: planId }));
         await tx.planItem.createMany({ data: cleanItems });
       }
     });
-    const plan = await basePrisma.planOrder.findUnique({ where: { id: str(req.params.id) }, include: { items: true } });
+    const plan = await basePrisma.planOrder.findUnique({ where: { id: planId }, include: { items: true } });
     res.json(plan);
   } catch (e) { next(e); }
 }
 
 export async function deletePlan(req: Request, res: Response, next: NextFunction) {
   try {
-    const childCount = await basePrisma.planOrder.count({ where: { parentPlanId: str(req.params.id) } });
+    const db = getTenantPrisma(req.tenantId!);
+    const planId = str(req.params.id);
+    const existing = await db.planOrder.findUnique({ where: { id: planId } });
+    if (!existing) throw new AppError(404, '计划单不存在');
+
+    const childCount = await db.planOrder.count({ where: { parentPlanId: planId } });
     if (childCount > 0) throw new AppError(400, `该计划存在 ${childCount} 条子计划，请先删除子计划`);
-    await basePrisma.planOrder.delete({ where: { id: str(req.params.id) } });
+    await db.planOrder.delete({ where: { id: planId } });
     res.json({ message: '已删除' });
   } catch (e) { next(e); }
 }
@@ -86,56 +96,72 @@ export async function deletePlan(req: Request, res: Response, next: NextFunction
 export async function splitPlan(req: Request, res: Response, next: NextFunction) {
   try {
     const tenantId = req.tenantId!;
-    const sourcePlan = await basePrisma.planOrder.findUnique({ where: { id: str(req.params.id) }, include: { items: true } });
+    const db = getTenantPrisma(tenantId);
+    const sourcePlan = await db.planOrder.findUnique({ where: { id: str(req.params.id) }, include: { items: true } });
     if (!sourcePlan) throw new AppError(404, '计划单不存在');
 
-    const { splitItems } = req.body;
-    const planNumber = await getNextPlanNumber(tenantId);
+    const { newPlans, splitItems } = req.body;
+    const planDataList: Array<{ items: any[] }> = Array.isArray(newPlans)
+      ? newPlans
+      : splitItems ? [{ items: splitItems }] : [];
+    if (planDataList.length === 0) throw new AppError(400, '请提供拆分后的计划数据');
 
-    const newPlan = await basePrisma.planOrder.create({
-      data: {
-        id: genId('plan'),
-        tenantId,
-        planNumber,
-        productId: sourcePlan.productId,
-        startDate: sourcePlan.startDate,
-        dueDate: sourcePlan.dueDate,
-        status: sourcePlan.status,
-        customer: sourcePlan.customer,
-        priority: sourcePlan.priority,
-        parentPlanId: sourcePlan.parentPlanId,
-        items: { create: sanitizeItems(splitItems) },
-      },
-      include: { items: true },
+    const results = await basePrisma.$transaction(async (tx) => {
+      const created = [];
+      for (const plan of planDataList) {
+        const planNumber = await getNextPlanNumber(tenantId);
+        const p = await tx.planOrder.create({
+          data: {
+            id: genId('plan'),
+            tenantId,
+            planNumber,
+            productId: sourcePlan.productId,
+            startDate: sourcePlan.startDate,
+            dueDate: sourcePlan.dueDate,
+            status: sourcePlan.status,
+            customer: sourcePlan.customer,
+            priority: sourcePlan.priority,
+            parentPlanId: sourcePlan.parentPlanId,
+            items: { create: sanitizeItems(plan.items) },
+          } as any,
+          include: { items: true },
+        });
+        created.push(p);
+      }
+      await tx.planItem.deleteMany({ where: { planOrderId: sourcePlan.id } });
+      await tx.planOrder.delete({ where: { id: sourcePlan.id } });
+      return created;
     });
 
-    res.status(201).json(newPlan);
+    res.status(201).json(results);
   } catch (e) { next(e); }
 }
 
 export async function convertToOrder(req: Request, res: Response, next: NextFunction) {
   try {
     const tenantId = req.tenantId!;
-    const plan = await basePrisma.planOrder.findUnique({
+    const db = getTenantPrisma(tenantId);
+    const plan = await db.planOrder.findUnique({
       where: { id: str(req.params.id) },
       include: { items: true },
     });
     if (!plan) throw new AppError(404, '计划单不存在');
     if (plan.status === 'CONVERTED') throw new AppError(400, '该计划单已下达工单');
 
-    const product = await basePrisma.product.findUnique({ where: { id: plan.productId } });
+    const product = await db.product.findUnique({ where: { id: plan.productId } });
     if (!product) throw new AppError(400, '关联产品不存在');
 
-    const allDescendants = await getAllDescendantPlans(plan.id);
+    const allDescendants = await getAllDescendantPlans(plan.id, tenantId);
     const plansToConvert: PlanWithItems[] = [plan, ...allDescendants].filter((p): p is PlanWithItems => p.status !== 'CONVERTED');
 
-    const existingOrders = await basePrisma.productionOrder.findMany({ where: { tenantId }, select: { orderNumber: true } });
+    const existingOrders = await db.productionOrder.findMany({ select: { orderNumber: true } });
     let maxNum = 0;
     for (const o of existingOrders) {
       const m = o.orderNumber.match(/^WO-?(\d+)/);
       if (m) maxNum = Math.max(maxNum, parseInt(m[1]));
     }
 
+    const nodes = await db.globalNodeTemplate.findMany({});
     const planToOrderMap = new Map<string, string>();
     const orders: Array<{
       id: string;
@@ -160,17 +186,16 @@ export async function convertToOrder(req: Request, res: Response, next: NextFunc
     for (const p of plansToConvert) {
       maxNum++;
       const orderNumber = p.planNumber.replace(/^PLN/, 'WO');
-      const orderId = `order-${Date.now()}-${maxNum}`;
+      const orderId = genId('order');
       planToOrderMap.set(p.id, orderId);
 
-      const prod = p.id === plan.id ? product : await basePrisma.product.findUnique({ where: { id: p.productId } });
-      const nodes = await basePrisma.globalNodeTemplate.findMany({ where: { tenantId } });
+      const prod = p.id === plan.id ? product : await db.product.findUnique({ where: { id: p.productId } });
 
       const milestoneNodeIds = (prod?.milestoneNodeIds as string[]) || [];
       const milestones = milestoneNodeIds.map((nodeId, idx) => {
         const node = nodes.find(n => n.id === nodeId);
         return {
-          id: `ms-${Date.now()}-${maxNum}-${idx}`,
+          id: genId('ms'),
           templateId: nodeId,
           name: node?.name || nodeId,
           status: 'PENDING',
@@ -187,7 +212,7 @@ export async function convertToOrder(req: Request, res: Response, next: NextFunc
       if (p.parentPlanId) {
         parentOrderId = planToOrderMap.get(p.parentPlanId) || null;
         if (!parentOrderId) {
-          const existingParentOrder = await basePrisma.productionOrder.findFirst({ where: { planOrderId: p.parentPlanId } });
+          const existingParentOrder = await basePrisma.productionOrder.findFirst({ where: { planOrderId: p.parentPlanId, tenantId } });
           parentOrderId = existingParentOrder?.id || null;
         }
       }
@@ -229,7 +254,7 @@ export async function convertToOrder(req: Request, res: Response, next: NextFunc
         });
       }
       await tx.planOrder.updateMany({
-        where: { id: { in: plansToConvert.map((p: PlanWithItems) => p.id) } },
+        where: { id: { in: plansToConvert.map((p: PlanWithItems) => p.id) }, tenantId },
         data: { status: 'CONVERTED' },
       });
     });
@@ -238,14 +263,17 @@ export async function convertToOrder(req: Request, res: Response, next: NextFunc
   } catch (e) { next(e); }
 }
 
-async function getAllDescendantPlans(planId: string): Promise<PlanWithItems[]> {
+const MAX_PLAN_DEPTH = 10;
+
+async function getAllDescendantPlans(planId: string, tenantId: string, depth = 0): Promise<PlanWithItems[]> {
+  if (depth >= MAX_PLAN_DEPTH) return [];
   const children = await basePrisma.planOrder.findMany({
-    where: { parentPlanId: planId },
+    where: { parentPlanId: planId, tenantId },
     include: { items: true },
   });
   const result: PlanWithItems[] = [...children];
   for (const child of children) {
-    const descendants = await getAllDescendantPlans(child.id);
+    const descendants = await getAllDescendantPlans(child.id, tenantId, depth + 1);
     result.push(...descendants);
   }
   return result;
@@ -254,20 +282,21 @@ async function getAllDescendantPlans(planId: string): Promise<PlanWithItems[]> {
 export async function createSubPlans(req: Request, res: Response, next: NextFunction) {
   try {
     const tenantId = req.tenantId!;
-    const parentPlan = await basePrisma.planOrder.findUnique({ where: { id: str(req.params.id) } });
+    const db = getTenantPrisma(tenantId);
+    const parentPlan = await db.planOrder.findUnique({ where: { id: str(req.params.id) } });
     if (!parentPlan) throw new AppError(404, '父计划单不存在');
 
     const { subPlans } = req.body;
+    const existingSubs = await db.planOrder.count({ where: { parentPlanId: str(req.params.id) } });
     const created = [];
 
     for (let i = 0; i < subPlans.length; i++) {
       const sp = subPlans[i];
-      const existingSubs = await basePrisma.planOrder.count({ where: { parentPlanId: str(req.params.id) } });
-      const subNumber = `${parentPlan.planNumber}-S${existingSubs + 1}`;
+      const subNumber = `${parentPlan.planNumber}-S${existingSubs + i + 1}`;
 
-      const plan = await basePrisma.planOrder.create({
+      const plan = await db.planOrder.create({
         data: {
-          id: sp.id || `plan-${Date.now()}-${i}`,
+          id: sp.id || genId('plan'),
           tenantId,
           planNumber: subNumber,
           parentPlanId: str(req.params.id),

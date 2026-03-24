@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { LogIn, UserPlus, Factory } from 'lucide-react';
-import { setTokens } from '../services/api';
+import { auth as authApi } from '../services/api';
 
 const CN_PHONE_RE = /^1[3-9]\d{9}$/;
 
@@ -19,8 +19,6 @@ export default function LoginView({ onLogin }: LoginViewProps) {
   const [error, setError] = useState('');
   const [successHint, setSuccessHint] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const API_BASE = (import.meta as Record<string, Record<string, string>>).env?.VITE_API_BASE || 'http://localhost:3001/api';
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -54,25 +52,12 @@ export default function LoginView({ onLogin }: LoginViewProps) {
 
     setLoading(true);
     try {
-      const endpoint = isRegister ? '/auth/register' : '/auth/login';
-      const body = isRegister
-        ? {
-            phone: phone.trim(),
-            password,
-            displayName: displayName.trim() || undefined,
-          }
-        : { username: account.trim(), password };
-
-      const res = await fetch(`${API_BASE}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '操作失败');
-
       if (isRegister) {
+        await authApi.register({
+          phone: phone.trim(),
+          password,
+          displayName: displayName.trim() || undefined,
+        });
         const registeredPhone = phone.trim();
         setPhone('');
         setDisplayName('');
@@ -84,7 +69,7 @@ export default function LoginView({ onLogin }: LoginViewProps) {
         return;
       }
 
-      setTokens(data.accessToken, data.refreshToken);
+      const data = await authApi.login(account.trim(), password);
       onLogin({
         user: data.user,
         tenants: data.tenants || [],

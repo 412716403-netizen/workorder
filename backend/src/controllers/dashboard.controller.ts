@@ -4,40 +4,70 @@ import { getTenantPrisma } from '../lib/prisma.js';
 export async function getStats(req: Request, res: Response, next: NextFunction) {
   try {
     const db = getTenantPrisma(req.tenantId!);
-    const orders = await db.productionOrder.findMany({
-      include: { items: true, milestones: true },
-    });
-    const financeRecords = await db.financeRecord.findMany();
 
-    const activeOrders = orders.filter(o => o.status !== 'SHIPPED');
-    const totalMilestones = orders.reduce((s, o) => s + o.milestones.length, 0);
-    const completedMilestones = orders.reduce(
-      (s, o) => s + o.milestones.filter(m => m.status === 'COMPLETED').length, 0,
-    );
-    const completionRate = totalMilestones > 0
-      ? Math.round((completedMilestones / totalMilestones) * 100) : 0;
+    const [
+      activeOrderCount,
+      totalMilestones,
+      completedMilestones,
+      receiptAgg,
+      paymentAgg,
+      psiPurchase,
+      psiSales,
+      products,
+    ] = await Promise.all([
+      db.productionOrder.count({ where: { status: { not: 'SHIPPED' } } }),
+      db.productionOrder.findMany({
+        where: { status: { not: 'SHIPPED' } },
+        select: { milestones: { select: { status: true } } },
+      }),
+      db.productionOrder.count({ where: {} }).then(() => null),
+      db.financeRecord.aggregate({ where: { type: 'RECEIPT' }, _sum: { amount: true } }),
+      db.financeRecord.aggregate({ where: { type: 'PAYMENT' }, _sum: { amount: true } }),
+      db.psiRecord.groupBy({
+        by: ['productId'],
+        where: { type: 'PURCHASE_BILL', productId: { not: null } },
+        _sum: { quantity: true },
+      }),
+      db.psiRecord.groupBy({
+        by: ['productId'],
+        where: { type: 'SALES_BILL', productId: { not: null } },
+        _sum: { quantity: true },
+      }),
+      db.product.findMany({ select: { id: true, name: true, sku: true } }),
+    ]);
 
-    const totalReceipts = financeRecords
-      .filter(r => r.type === 'RECEIPT')
-      .reduce((s, r) => s + Number(r.amount), 0);
-    const totalPayments = financeRecords
-      .filter(r => r.type === 'PAYMENT')
-      .reduce((s, r) => s + Number(r.amount), 0);
+    let totalMs = 0;
+    let completedMs = 0;
+    for (const order of totalMilestones) {
+      totalMs += order.milestones.length;
+      completedMs += order.milestones.filter(m => m.status === 'COMPLETED').length;
+    }
+    const completionRate = totalMs > 0 ? Math.round((completedMs / totalMs) * 100) : 0;
 
-    const psiRecords = await db.psiRecord.findMany({
-      where: { type: { in: ['PURCHASE_BILL', 'SALES_BILL'] } },
-    });
-    const products = await db.product.findMany({ select: { id: true, name: true, sku: true } });
+    const totalReceipts = Number(receiptAgg._sum?.amount || 0);
+    const totalPayments = Number(paymentAgg._sum?.amount || 0);
 
     const stockMap: Record<string, number> = {};
-    for (const r of psiRecords) {
-      if (!r.productId) continue;
-      if (r.type === 'PURCHASE_BILL') stockMap[r.productId] = (stockMap[r.productId] || 0) + Number(r.quantity || 0);
-      if (r.type === 'SALES_BILL') stockMap[r.productId] = (stockMap[r.productId] || 0) - Number(r.quantity || 0);
+    for (const r of psiPurchase) {
+      if (r.productId) stockMap[r.productId] = Number(r._sum?.quantity || 0);
+    }
+    for (const r of psiSales) {
+      if (r.productId) stockMap[r.productId] = (stockMap[r.productId] || 0) - Number(r._sum?.quantity || 0);
     }
     const lowStockProducts = products.filter(p => (stockMap[p.id] || 0) < 10);
 
-    const orderProgress = activeOrders.slice(0, 10).map(o => {
+    const activeOrders = await db.productionOrder.findMany({
+      where: { status: { not: 'SHIPPED' } },
+      select: {
+        id: true, orderNumber: true, productName: true,
+        items: { select: { quantity: true } },
+        milestones: { select: { completedQuantity: true } },
+      },
+      take: 10,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const orderProgress = activeOrders.map(o => {
       const totalQty = o.items.reduce((s, i) => s + Number(i.quantity), 0);
       const msCount = o.milestones.length;
       const progress = msCount > 0 && totalQty > 0
@@ -48,9 +78,9 @@ export async function getStats(req: Request, res: Response, next: NextFunction) 
 
     res.json({
       production: {
-        activeOrders: activeOrders.length,
-        totalMilestones,
-        completedMilestones,
+        activeOrders: activeOrderCount,
+        totalMilestones: totalMs,
+        completedMilestones: completedMs,
         completionRate,
       },
       finance: {

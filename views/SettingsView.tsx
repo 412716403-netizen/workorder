@@ -308,7 +308,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const addPCustomField = (catId: string) => {
-    const newField: ReportFieldDefinition = { id: `pcf-${Date.now()}`, label: '新扩展项', type: 'text', required: false };
+    const newField: ReportFieldDefinition = { id: `pcf-${crypto.randomUUID().slice(0, 8)}`, label: '新扩展项', type: 'text', required: false };
     const cat = partnerCategories.find(c => c.id === catId);
     if (cat) {
       updatePCategoryConfig(catId, { customFields: [...cat.customFields, newField] });
@@ -390,7 +390,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const addFieldToNode = (nodeId: string) => {
     const node = globalNodes.find(n => n.id === nodeId);
     if (node) {
-      const newField: ReportFieldDefinition = { id: `f-${Date.now()}`, label: '新填报项', type: 'text' };
+      const newField: ReportFieldDefinition = { id: `f-${crypto.randomUUID().slice(0, 8)}`, label: '新填报项', type: 'text' };
       updateNodeConfig(nodeId, { reportTemplate: [...node.reportTemplate, newField] });
     }
   };
@@ -442,7 +442,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const addCustomField = (catId: string) => {
-    const newField: ReportFieldDefinition = { id: `cf-${Date.now()}`, label: '新属性名称', type: 'text', required: false };
+    const newField: ReportFieldDefinition = { id: `cf-${crypto.randomUUID().slice(0, 8)}`, label: '新属性名称', type: 'text', required: false };
     const cat = categories.find(c => c.id === catId);
     if (cat) {
       updateCategoryConfig(catId, { customFields: [...cat.customFields, newField] });
@@ -495,7 +495,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const addFinanceCustomField = (catId: string) => {
-    const newField: ReportFieldDefinition = { id: `fcf-${Date.now()}`, label: '新扩展项', type: 'text', required: false };
+    const newField: ReportFieldDefinition = { id: `fcf-${crypto.randomUUID().slice(0, 8)}`, label: '新扩展项', type: 'text', required: false };
     const cat = financeCategories.find(c => c.id === catId);
     if (cat) {
       updateFinanceCategoryConfig(catId, { customFields: [...cat.customFields, newField] });

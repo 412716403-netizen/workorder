@@ -34,6 +34,7 @@ import { splitQtyBySourceDefectiveAcrossParentOrders } from '../utils/reworkSpli
 import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
 import WorkerSelector from '../components/WorkerSelector';
 import EquipmentSelector from '../components/EquipmentSelector';
+import * as api from '../services/api';
 
 /** 待处理不良「单号」筛选：支持报工单号 BG…、批次 id */
 function reworkReportsMatchDocSearch(
@@ -204,6 +205,14 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
   const [dispatchFormQuantities, setDispatchFormQuantities] = useState<Record<string, number>>({});
   /** 待发清单第二步：备注说明 */
   const [dispatchRemark, setDispatchRemark] = useState('');
+  /** 协作同步：发出成功后弹窗确认是否同步给协作企业 */
+  const [collabSyncConfirm, setCollabSyncConfirm] = useState<{
+    partnerName: string;
+    collaborationTenantId: string;
+    recordIds: string[];
+  } | null>(null);
+  const [collabSyncing, setCollabSyncing] = useState(false);
+
   /** 待收回清单：工单号模糊搜索 */
   const [receiveListSearchOrder, setReceiveListSearchOrder] = useState('');
   /** 待收回清单：货号模糊搜索（产品名称或 SKU） */
@@ -1762,6 +1771,10 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
     } else {
       for (const rec of batch) await onAddRecord(rec);
     }
+
+    const matchedPartner = partners.find(p => p.name === partnerName);
+    const collabTenantId = matchedPartner?.collaborationTenantId;
+
     setDispatchFormQuantities({});
     setDispatchRemark('');
     setDispatchPartnerName('');
@@ -1771,6 +1784,14 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
     setDispatchFormModalOpen(false);
     setOutsourceModal(null);
     setDispatchSelectedKeys(new Set());
+
+    if (collabTenantId) {
+      setCollabSyncConfirm({
+        partnerName,
+        collaborationTenantId: collabTenantId,
+        recordIds: batch.map(r => r.id),
+      });
+    }
   };
 
   /** 待收回：确认收回（使用 WX-R 开头的收回单号，与发出单号区分） */
@@ -6216,7 +6237,12 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                           {productionLinkMode !== 'product' && <td className="px-6 py-3 text-sm font-bold text-slate-800 align-middle truncate" title={row.orderNumber}>{row.orderNumber}</td>}
                           <td className="px-6 py-3 text-sm font-bold text-slate-800 align-middle truncate" title={row.productName}>{row.productName}</td>
                           <td className="px-6 py-3 text-sm font-bold text-indigo-600 align-middle truncate" title={row.milestoneName}>{row.milestoneName}</td>
-                          <td className="px-6 py-3 text-sm font-bold text-slate-700 align-middle truncate" title={row.partner || '—'}>{row.partner || '—'}</td>
+                          <td className="px-6 py-3 text-sm font-bold text-slate-700 align-middle truncate" title={row.partner || '—'}>
+                            {row.partner || '—'}
+                            {partners.find(p => p.name === row.partner)?.collaborationTenantId && (
+                              <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-indigo-50 text-indigo-600 uppercase">协作</span>
+                            )}
+                          </td>
                           <td className="px-6 py-3 text-right text-sm font-bold text-slate-700 align-middle">{row.dispatched}</td>
                           <td className="px-6 py-3 text-right text-sm font-bold text-emerald-600 align-middle">{row.received}</td>
                           <td className="px-6 py-3 text-right text-sm font-black text-amber-600 align-middle">{row.pending}</td>
@@ -7318,6 +7344,50 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                 className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-colors"
               >
                 确认
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {collabSyncConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/50" onClick={() => setCollabSyncConfirm(null)} aria-hidden />
+          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-indigo-600" /> 同步到协作企业
+            </h3>
+            <p className="text-sm text-slate-600">
+              外协工厂「<span className="font-bold text-slate-800">{collabSyncConfirm.partnerName}</span>」已绑定协作企业，是否将本次发出的 {collabSyncConfirm.recordIds.length} 条记录同步？
+            </p>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setCollabSyncConfirm(null)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+              >
+                暂不发送
+              </button>
+              <button
+                type="button"
+                disabled={collabSyncing}
+                onClick={async () => {
+                  setCollabSyncing(true);
+                  try {
+                    const res = await api.collaboration.syncDispatch({
+                      recordIds: collabSyncConfirm.recordIds,
+                      collaborationTenantId: collabSyncConfirm.collaborationTenantId,
+                    });
+                    toast.success(`已同步 ${res.dispatches?.length ?? 0} 条到协作企业`);
+                    setCollabSyncConfirm(null);
+                  } catch (err: any) {
+                    toast.error(err.message || '同步失败');
+                  } finally {
+                    setCollabSyncing(false);
+                  }
+                }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+              >
+                {collabSyncing ? '同步中...' : '确认发送'}
               </button>
             </div>
           </div>

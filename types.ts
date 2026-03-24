@@ -205,7 +205,8 @@ export interface Partner {
   name: string;
   categoryId?: string;
   contact: string;
-  customData?: Record<string, any>; 
+  customData?: Record<string, any>;
+  collaborationTenantId?: string;
 }
 
 export interface PlanItem {

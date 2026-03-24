@@ -53,8 +53,8 @@ const phoneCompleteSchema = z.object({
 
 router.post('/register', validate(registerSchema), authCtrl.register);
 router.post('/login', validate(loginSchema), authCtrl.login);
-router.post('/refresh', validate(refreshSchema), authCtrl.refresh);
-router.post('/logout', validate(refreshSchema), authCtrl.logout);
+router.post('/refresh', authCtrl.refresh);
+router.post('/logout', authCtrl.logout);
 router.get('/me', authMiddleware, authCtrl.getMe);
 router.put('/me', authMiddleware, validate(updateMeSchema), authCtrl.updateMe);
 router.post('/phone-change/send-code-old', authMiddleware, validate(phoneSendOldSchema), authCtrl.phoneChangeSendOld);

@@ -1,8 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { getTenantPrisma, prisma as basePrisma } from '../lib/prisma.js';
+import { genId } from '../utils/genId.js';
 import { str, sanitizeUpdate, sanitizeCreate } from '../utils/request.js';
-
-function genId(prefix: string) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; }
 
 // ── 产品分类 ──
 export async function listCategories(req: Request, res: Response, next: NextFunction) {
@@ -28,13 +27,18 @@ export async function createCategory(req: Request, res: Response, next: NextFunc
 }
 export async function updateCategory(req: Request, res: Response, next: NextFunction) {
   try {
+    const db = getTenantPrisma(req.tenantId!);
     const data = sanitizeUpdate(req.body);
     delete data.sortOrder;
-    res.json(await basePrisma.productCategory.update({ where: { id: str(req.params.id) }, data }));
+    res.json(await db.productCategory.update({ where: { id: str(req.params.id) }, data }));
   } catch (e) { next(e); }
 }
 export async function deleteCategory(req: Request, res: Response, next: NextFunction) {
-  try { await basePrisma.productCategory.delete({ where: { id: str(req.params.id) } }); res.json({ message: '已删除' }); } catch (e) { next(e); }
+  try {
+    const db = getTenantPrisma(req.tenantId!);
+    await db.productCategory.delete({ where: { id: str(req.params.id) } });
+    res.json({ message: '已删除' });
+  } catch (e) { next(e); }
 }
 
 // ── 合作单位分类 ──
@@ -53,10 +57,17 @@ export async function createPartnerCategory(req: Request, res: Response, next: N
   } catch (e) { next(e); }
 }
 export async function updatePartnerCategory(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await basePrisma.partnerCategory.update({ where: { id: str(req.params.id) }, data: sanitizeUpdate(req.body) })); } catch (e) { next(e); }
+  try {
+    const db = getTenantPrisma(req.tenantId!);
+    res.json(await db.partnerCategory.update({ where: { id: str(req.params.id) }, data: sanitizeUpdate(req.body) }));
+  } catch (e) { next(e); }
 }
 export async function deletePartnerCategory(req: Request, res: Response, next: NextFunction) {
-  try { await basePrisma.partnerCategory.delete({ where: { id: str(req.params.id) } }); res.json({ message: '已删除' }); } catch (e) { next(e); }
+  try {
+    const db = getTenantPrisma(req.tenantId!);
+    await db.partnerCategory.delete({ where: { id: str(req.params.id) } });
+    res.json({ message: '已删除' });
+  } catch (e) { next(e); }
 }
 
 // ── 工序节点 ──
@@ -91,13 +102,18 @@ export async function createNode(req: Request, res: Response, next: NextFunction
 }
 export async function updateNode(req: Request, res: Response, next: NextFunction) {
   try {
+    const db = getTenantPrisma(req.tenantId!);
     const data = sanitizeUpdate(normalizeNodeData(req.body) as Record<string, unknown>);
     delete data.sortOrder;
-    res.json(await basePrisma.globalNodeTemplate.update({ where: { id: str(req.params.id) }, data: data as any }));
+    res.json(await db.globalNodeTemplate.update({ where: { id: str(req.params.id) }, data: data as any }));
   } catch (e) { next(e); }
 }
 export async function deleteNode(req: Request, res: Response, next: NextFunction) {
-  try { await basePrisma.globalNodeTemplate.delete({ where: { id: str(req.params.id) } }); res.json({ message: '已删除' }); } catch (e) { next(e); }
+  try {
+    const db = getTenantPrisma(req.tenantId!);
+    await db.globalNodeTemplate.delete({ where: { id: str(req.params.id) } });
+    res.json({ message: '已删除' });
+  } catch (e) { next(e); }
 }
 
 // ── 仓库 ──
@@ -116,10 +132,17 @@ export async function createWarehouse(req: Request, res: Response, next: NextFun
   } catch (e) { next(e); }
 }
 export async function updateWarehouse(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await basePrisma.warehouse.update({ where: { id: str(req.params.id) }, data: sanitizeUpdate(req.body) })); } catch (e) { next(e); }
+  try {
+    const db = getTenantPrisma(req.tenantId!);
+    res.json(await db.warehouse.update({ where: { id: str(req.params.id) }, data: sanitizeUpdate(req.body) }));
+  } catch (e) { next(e); }
 }
 export async function deleteWarehouse(req: Request, res: Response, next: NextFunction) {
-  try { await basePrisma.warehouse.delete({ where: { id: str(req.params.id) } }); res.json({ message: '已删除' }); } catch (e) { next(e); }
+  try {
+    const db = getTenantPrisma(req.tenantId!);
+    await db.warehouse.delete({ where: { id: str(req.params.id) } });
+    res.json({ message: '已删除' });
+  } catch (e) { next(e); }
 }
 
 // ── 收付款类型 ──
@@ -138,10 +161,17 @@ export async function createFinanceCategory(req: Request, res: Response, next: N
   } catch (e) { next(e); }
 }
 export async function updateFinanceCategory(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await basePrisma.financeCategory.update({ where: { id: str(req.params.id) }, data: sanitizeUpdate(req.body) })); } catch (e) { next(e); }
+  try {
+    const db = getTenantPrisma(req.tenantId!);
+    res.json(await db.financeCategory.update({ where: { id: str(req.params.id) }, data: sanitizeUpdate(req.body) }));
+  } catch (e) { next(e); }
 }
 export async function deleteFinanceCategory(req: Request, res: Response, next: NextFunction) {
-  try { await basePrisma.financeCategory.delete({ where: { id: str(req.params.id) } }); res.json({ message: '已删除' }); } catch (e) { next(e); }
+  try {
+    const db = getTenantPrisma(req.tenantId!);
+    await db.financeCategory.delete({ where: { id: str(req.params.id) } });
+    res.json({ message: '已删除' });
+  } catch (e) { next(e); }
 }
 
 // ── 收支账户类型 ──
@@ -160,10 +190,17 @@ export async function createFinanceAccountType(req: Request, res: Response, next
   } catch (e) { next(e); }
 }
 export async function updateFinanceAccountType(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await basePrisma.financeAccountType.update({ where: { id: str(req.params.id) }, data: sanitizeUpdate(req.body) })); } catch (e) { next(e); }
+  try {
+    const db = getTenantPrisma(req.tenantId!);
+    res.json(await db.financeAccountType.update({ where: { id: str(req.params.id) }, data: sanitizeUpdate(req.body) }));
+  } catch (e) { next(e); }
 }
 export async function deleteFinanceAccountType(req: Request, res: Response, next: NextFunction) {
-  try { await basePrisma.financeAccountType.delete({ where: { id: str(req.params.id) } }); res.json({ message: '已删除' }); } catch (e) { next(e); }
+  try {
+    const db = getTenantPrisma(req.tenantId!);
+    await db.financeAccountType.delete({ where: { id: str(req.params.id) } });
+    res.json({ message: '已删除' });
+  } catch (e) { next(e); }
 }
 
 // ── 系统配置 ──

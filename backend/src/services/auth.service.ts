@@ -5,6 +5,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import type { JwtPayload } from '../types/index.js';
 import { ALL_PERMISSIONS } from '../types/index.js';
 import { prisma } from '../lib/prisma.js';
+import { hashToken } from '../utils/cookies.js';
 
 async function assertTenantActive(tenantId: string) {
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { status: true, expiresAt: true } });
@@ -121,7 +122,7 @@ export async function registerByPhone(phone: string, password: string, displayNa
   const tokens = generateTokens(payload);
 
   await prisma.refreshToken.create({
-    data: { userId: user.id, token: tokens.refreshToken, expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
+    data: { userId: user.id, token: hashToken(tokens.refreshToken), expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
   });
 
   return {
@@ -171,7 +172,7 @@ export async function login(username: string, password: string) {
   const tokens = generateTokens(payload);
 
   await prisma.refreshToken.create({
-    data: { userId: user.id, token: tokens.refreshToken, expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
+    data: { userId: user.id, token: hashToken(tokens.refreshToken), expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
   });
 
   return {
@@ -222,7 +223,7 @@ export async function selectTenant(userId: string, tenantId: string) {
   await prisma.refreshToken.deleteMany({ where: { userId } });
   const tokens = generateTokens(payload);
   await prisma.refreshToken.create({
-    data: { userId: user.id, token: tokens.refreshToken, expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
+    data: { userId: user.id, token: hashToken(tokens.refreshToken), expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
   });
 
   return {
@@ -236,7 +237,8 @@ export async function selectTenant(userId: string, tenantId: string) {
 }
 
 export async function refresh(oldRefreshToken: string) {
-  const stored = await prisma.refreshToken.findUnique({ where: { token: oldRefreshToken } });
+  const tokenHash = hashToken(oldRefreshToken);
+  const stored = await prisma.refreshToken.findUnique({ where: { token: tokenHash } });
   if (!stored || stored.expiresAt < new Date()) {
     if (stored) await prisma.refreshToken.delete({ where: { id: stored.id } });
     throw new AppError(401, 'Refresh token 无效或已过期');
@@ -274,14 +276,15 @@ export async function refresh(oldRefreshToken: string) {
   const tokens = generateTokens(payload);
 
   await prisma.refreshToken.create({
-    data: { userId: user.id, token: tokens.refreshToken, expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
+    data: { userId: user.id, token: hashToken(tokens.refreshToken), expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
   });
 
   return { ...tokens };
 }
 
 export async function logout(refreshToken: string) {
-  await prisma.refreshToken.deleteMany({ where: { token: refreshToken } });
+  if (!refreshToken) return;
+  await prisma.refreshToken.deleteMany({ where: { token: hashToken(refreshToken) } });
 }
 
 export async function getMe(userId: string) {
@@ -400,7 +403,7 @@ export async function updateProfile(
     };
     const tokens = generateTokens(payload);
     await prisma.refreshToken.create({
-      data: { userId: updated.id, token: tokens.refreshToken, expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
+      data: { userId: updated.id, token: hashToken(tokens.refreshToken), expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
     });
     return { user: userOut, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken };
   }
@@ -545,7 +548,7 @@ export async function phoneChangeComplete(
   };
   const tokens = generateTokens(payload);
   await prisma.refreshToken.create({
-    data: { userId: updated.id, token: tokens.refreshToken, expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
+    data: { userId: updated.id, token: hashToken(tokens.refreshToken), expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
   });
   return { user: userOut, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken };
 }

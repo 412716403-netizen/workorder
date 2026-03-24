@@ -12,6 +12,7 @@ const ALL_PERMISSIONS = [
   { id: 'psi', label: '进销存' },
   { id: 'finance', label: '财务结算' },
   { id: 'basic', label: '基础信息' },
+  { id: 'collaboration', label: '协作管理' },
   { id: 'settings', label: '系统设置' },
 ];
 

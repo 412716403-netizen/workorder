@@ -37,7 +37,19 @@ export async function generateReportNo(prefix: string, tenantId?: string): Promi
   return `${prefix}${dateStr}-${String(seq).padStart(4, '0')}`;
 }
 
-export async function generateDocNo(prefix: string, tableName: 'production_op_records' | 'finance_records' | 'psi_records', column: string, tenantId?: string): Promise<string> {
+const ALLOWED_TABLES = new Set(['production_op_records', 'finance_records', 'psi_records']);
+const ALLOWED_COLUMNS = new Set(['doc_no']);
+
+export async function generateDocNo(
+  prefix: string,
+  tableName: 'production_op_records' | 'finance_records' | 'psi_records',
+  column: 'doc_no',
+  tenantId?: string,
+): Promise<string> {
+  if (!ALLOWED_TABLES.has(tableName) || !ALLOWED_COLUMNS.has(column)) {
+    throw new Error('Invalid table/column');
+  }
+
   const dateStr = todayStr();
   const pattern = `${prefix}${dateStr}-%`;
   const tenantFilter = tenantId ? ` AND tenant_id = $2::uuid` : '';
@@ -62,22 +74,46 @@ export async function generateDocNo(prefix: string, tableName: 'production_op_re
 
 export async function getNextPlanNumber(tenantId?: string): Promise<string> {
   const where = tenantId ? { tenantId } : {};
-  const plans = await prisma.planOrder.findMany({ where, select: { planNumber: true } });
+  const latest = await prisma.planOrder.findFirst({
+    where,
+    select: { planNumber: true },
+    orderBy: { planNumber: 'desc' },
+  });
   let maxNum = 0;
-  for (const p of plans) {
-    const m = p.planNumber.match(/^PLN-?(\d+)/);
-    if (m) maxNum = Math.max(maxNum, parseInt(m[1]));
+  if (latest) {
+    const m = latest.planNumber.match(/^PLN-?(\d+)/);
+    if (m) maxNum = parseInt(m[1]);
   }
   return `PLN${maxNum + 1}`;
 }
 
 export async function getNextOrderNumber(tenantId?: string): Promise<string> {
   const where = tenantId ? { tenantId } : {};
-  const orders = await prisma.productionOrder.findMany({ where, select: { orderNumber: true } });
+  const latest = await prisma.productionOrder.findFirst({
+    where,
+    select: { orderNumber: true },
+    orderBy: { orderNumber: 'desc' },
+  });
   let maxNum = 0;
-  for (const o of orders) {
-    const m = o.orderNumber.match(/^WO-?(\d+)/);
-    if (m) maxNum = Math.max(maxNum, parseInt(m[1]));
+  if (latest) {
+    const m = latest.orderNumber.match(/^WO-?(\d+)/);
+    if (m) maxNum = parseInt(m[1]);
+  }
+  return `WO${maxNum + 1}`;
+}
+
+/**
+ * 扫描租户下全部工单号，取 WO 后第一段数字的最大值 +1（与计划转工单 WO2-1-2 等规则一致，忽略 CO- 等前缀）
+ */
+export async function getNextWorkOrderNumber(tenantId: string): Promise<string> {
+  const rows = await prisma.productionOrder.findMany({
+    where: { tenantId },
+    select: { orderNumber: true },
+  });
+  let maxNum = 0;
+  for (const o of rows) {
+    const m = o.orderNumber.match(/^WO(\d+)/);
+    if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
   }
   return `WO${maxNum + 1}`;
 }

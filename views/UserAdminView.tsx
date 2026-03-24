@@ -254,11 +254,14 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
     }
   }
 
-  async function handleDelete(u: AdminUserRow) {
-    if (!confirm(`确定删除用户「${u.username}」？此操作不可恢复。`)) return;
+  const [deleteTarget, setDeleteTarget] = useState<AdminUserRow | null>(null);
+
+  async function handleDeleteConfirmed() {
+    if (!deleteTarget) return;
     setError('');
     try {
-      await adminUsers.delete(u.id);
+      await adminUsers.delete(deleteTarget.id);
+      setDeleteTarget(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : '删除失败');
@@ -596,7 +599,7 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDelete(u)}
+                          onClick={() => setDeleteTarget(u)}
                           disabled={u.id === currentUserId}
                           className="p-2 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:pointer-events-none transition-colors"
                           title={u.id === currentUserId ? '不可删除当前账号' : '删除'}
@@ -750,6 +753,34 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation dialog */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[300]" onClick={() => setDeleteTarget(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-slate-800 mb-2">确认删除</h3>
+            <p className="text-sm text-slate-600 mb-6">
+              确定删除用户「<span className="font-bold">{deleteTarget.username}</span>」？此操作不可恢复。
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-slate-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteConfirmed}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700"
+              >
+                删除
+              </button>
+            </div>
           </div>
         </div>
       )}

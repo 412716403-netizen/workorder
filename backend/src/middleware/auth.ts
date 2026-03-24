@@ -13,13 +13,22 @@ declare global {
 }
 
 export function authMiddleware(req: Request, res: Response, next: NextFunction) {
+  let token: string | undefined;
+
   const header = req.headers.authorization;
-  if (!header?.startsWith('Bearer ')) {
+  if (header?.startsWith('Bearer ')) {
+    token = header.slice(7);
+  }
+
+  if (!token && req.cookies?.accessToken) {
+    token = req.cookies.accessToken;
+  }
+
+  if (!token) {
     res.status(401).json({ error: '未提供认证令牌' });
     return;
   }
 
-  const token = header.slice(7);
   try {
     const payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
     req.user = payload;

@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { getTenantPrisma, prisma as basePrisma } from '../lib/prisma.js';
 import { generateDocNo } from '../utils/docNumber.js';
+import { genId } from '../utils/genId.js';
 import { str, optStr, sanitizeUpdate, sanitizeCreate, normalizeDates } from '../utils/request.js';
 
 const DOC_PREFIX: Record<string, string> = {
@@ -29,7 +30,8 @@ export async function listRecords(req: Request, res: Response, next: NextFunctio
 
 export async function getRecord(req: Request, res: Response, next: NextFunction) {
   try {
-    const record = await basePrisma.productionOpRecord.findUnique({ where: { id: str(req.params.id) } });
+    const db = getTenantPrisma(req.tenantId!);
+    const record = await db.productionOpRecord.findUnique({ where: { id: str(req.params.id) } });
     if (!record) { res.status(404).json({ error: '记录不存在' }); return; }
     res.json(record);
   } catch (e) { next(e); }
@@ -39,7 +41,7 @@ export async function createRecord(req: Request, res: Response, next: NextFuncti
   try {
     const db = getTenantPrisma(req.tenantId!);
     const data = sanitizeCreate(req.body);
-    if (!data.id) data.id = `prodop-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    if (!data.id) data.id = genId('prodop');
     normalizeDates(data);
     if (!data.timestamp) data.timestamp = new Date();
 
@@ -59,13 +61,15 @@ export async function createRecord(req: Request, res: Response, next: NextFuncti
 
 export async function updateRecord(req: Request, res: Response, next: NextFunction) {
   try {
+    const db = getTenantPrisma(req.tenantId!);
     const id = str(req.params.id);
-    const oldRecord = await basePrisma.productionOpRecord.findUnique({ where: { id } });
+    const oldRecord = await db.productionOpRecord.findUnique({ where: { id } });
+    if (!oldRecord) { res.status(404).json({ error: '记录不存在' }); return; }
     const data = sanitizeUpdate(req.body);
     normalizeDates(data);
-    const record = await basePrisma.productionOpRecord.update({ where: { id }, data });
+    const record = await db.productionOpRecord.update({ where: { id }, data });
 
-    if (oldRecord && oldRecord.type === 'OUTSOURCE' && oldRecord.status === '已收回' && oldRecord.docNo) {
+    if (oldRecord.type === 'OUTSOURCE' && oldRecord.status === '已收回' && oldRecord.docNo) {
       await syncOutsourceReportOnUpdate(oldRecord, record);
     }
 
@@ -75,12 +79,14 @@ export async function updateRecord(req: Request, res: Response, next: NextFuncti
 
 export async function deleteRecord(req: Request, res: Response, next: NextFunction) {
   try {
+    const db = getTenantPrisma(req.tenantId!);
     const id = str(req.params.id);
-    const record = await basePrisma.productionOpRecord.findUnique({ where: { id } });
+    const record = await db.productionOpRecord.findUnique({ where: { id } });
+    if (!record) { res.status(404).json({ error: '记录不存在' }); return; }
 
-    await basePrisma.productionOpRecord.delete({ where: { id } });
+    await db.productionOpRecord.delete({ where: { id } });
 
-    if (record && record.type === 'OUTSOURCE' && record.status === '已收回' && record.docNo) {
+    if (record.type === 'OUTSOURCE' && record.status === '已收回' && record.docNo) {
       await removeOutsourceProgress(record);
     }
 
@@ -88,7 +94,7 @@ export async function deleteRecord(req: Request, res: Response, next: NextFuncti
   } catch (e) { next(e); }
 }
 
-async function applyOutsourceProgress(record: {
+export async function applyOutsourceProgress(record: {
   id?: string; orderId: string | null; productId?: string | null; nodeId: string | null;
   quantity: unknown; variantId?: string | null;
   timestamp?: Date | string | null; docNo?: string | null;
@@ -114,7 +120,7 @@ async function applyOutsourceProgress(record: {
     });
     if (!milestone) return;
     const newQty = Number(milestone.completedQuantity) + qty;
-    const reportId = `rpt-wxrecv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const reportId = genId('rpt-wxrecv');
     await basePrisma.$transaction([
       basePrisma.milestoneReport.create({
         data: { id: reportId, milestoneId: milestone.id, timestamp: ts, ...reportData },
@@ -135,7 +141,7 @@ async function applyOutsourceProgress(record: {
   if (!pmp) {
     pmp = await basePrisma.productMilestoneProgress.create({
       data: {
-        id: `pmp-wxrecv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: genId('pmp-wxrecv'),
         tenantId: record.tenantId,
         productId: record.productId,
         variantId: vid,
@@ -145,7 +151,7 @@ async function applyOutsourceProgress(record: {
     });
   }
   const newQty = Number(pmp.completedQuantity) + qty;
-  const reportId = `rpt-wxrecv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const reportId = genId('rpt-wxrecv');
   await basePrisma.$transaction([
     basePrisma.productProgressReport.create({
       data: { id: reportId, progressId: pmp.id, timestamp: ts, ...reportData },
@@ -185,15 +191,15 @@ async function removeOutsourceProgress(record: {
     return;
   }
 
-  if (record.productId) {
-    const vid = record.variantId || null;
-    const pmps = await basePrisma.productMilestoneProgress.findMany({
-      where: { productId: record.productId, milestoneTemplateId: record.nodeId, ...(vid ? { variantId: vid } : {}) },
+  if (record.productId && record.nodeId) {
+    const vid = record.variantId || undefined;
+    const pmps: any[] = await basePrisma.productMilestoneProgress.findMany({
+      where: { productId: record.productId, milestoneTemplateId: record.nodeId!, ...(vid ? { variantId: vid } : {}) },
       include: { reports: { where: { reportNo: record.docNo } } },
     });
     for (const pmp of pmps) {
-      if (pmp.reports.length === 0) continue;
-      const totalQty = pmp.reports.reduce((s, r) => s + Number(r.quantity), 0);
+      if (!pmp.reports?.length) continue;
+      const totalQty = pmp.reports.reduce((s: number, r: any) => s + Number(r.quantity), 0);
       await basePrisma.$transaction([
         basePrisma.productProgressReport.deleteMany({
           where: { progressId: pmp.id, reportNo: record.docNo },
@@ -245,14 +251,14 @@ async function syncOutsourceReportOnUpdate(
     return;
   }
 
-  if (oldRecord.productId) {
-    const vid = oldRecord.variantId || null;
-    const pmps = await basePrisma.productMilestoneProgress.findMany({
-      where: { productId: oldRecord.productId, milestoneTemplateId: oldRecord.nodeId, ...(vid ? { variantId: vid } : {}) },
+  if (oldRecord.productId && oldRecord.nodeId) {
+    const vid = oldRecord.variantId || undefined;
+    const pmps: any[] = await basePrisma.productMilestoneProgress.findMany({
+      where: { productId: oldRecord.productId, milestoneTemplateId: oldRecord.nodeId!, ...(vid ? { variantId: vid } : {}) },
       include: { reports: { where: { reportNo: oldDocNo } } },
     });
     for (const pmp of pmps) {
-      if (pmp.reports.length === 0) continue;
+      if (!pmp.reports?.length) continue;
       const ops: any[] = [];
       for (const rpt of pmp.reports) {
         const updateData: Record<string, unknown> = { quantity: newQtyVal };

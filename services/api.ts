@@ -1,25 +1,22 @@
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api';
 
-let accessToken: string | null = localStorage.getItem('accessToken');
-let refreshToken: string | null = localStorage.getItem('refreshToken');
+/**
+ * Token 存储在 httpOnly Cookie 中由服务端管理。
+ * 内存变量仅作为兼容回退（例如 SSR 或无 Cookie 环境）。
+ */
+let memoryAccessToken: string | null = null;
 
-/** 登录成功后必须调用，否则 api 模块仍携带上一账号的 token */
-export function setTokens(access: string, refresh: string) {
-  accessToken = access;
-  refreshToken = refresh;
-  localStorage.setItem('accessToken', access);
-  localStorage.setItem('refreshToken', refresh);
+export function setTokens(access: string, _refresh?: string) {
+  memoryAccessToken = access;
 }
 
 export function clearTokens() {
-  accessToken = null;
-  refreshToken = null;
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('refreshToken');
+  memoryAccessToken = null;
+  localStorage.removeItem('isLoggedIn');
 }
 
 export function isAuthenticated(): boolean {
-  return !!accessToken;
+  return !!localStorage.getItem('isLoggedIn');
 }
 
 let refreshPromise: Promise<boolean> | null = null;
@@ -27,19 +24,17 @@ let refreshPromise: Promise<boolean> | null = null;
 async function tryRefresh(): Promise<boolean> {
   if (refreshPromise) return refreshPromise;
 
-  const rt = refreshToken || localStorage.getItem('refreshToken');
-  if (!rt) return false;
-
   refreshPromise = (async () => {
     try {
       const res = await fetch(`${API_BASE}/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: rt }),
+        credentials: 'include',
+        body: JSON.stringify({}),
       });
       if (!res.ok) return false;
       const data = await res.json();
-      setTokens(data.accessToken, data.refreshToken);
+      if (data.accessToken) memoryAccessToken = data.accessToken;
       return true;
     } catch {
       return false;
@@ -57,19 +52,20 @@ async function request<T = unknown>(path: string, options: RequestInit = {}): Pr
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> || {}),
   };
-  const token = accessToken || localStorage.getItem('accessToken');
-  if (token) {
-    accessToken = token;
-    headers['Authorization'] = `Bearer ${token}`;
+
+  if (memoryAccessToken) {
+    headers['Authorization'] = `Bearer ${memoryAccessToken}`;
   }
 
-  let res = await fetch(url, { ...options, headers });
+  let res = await fetch(url, { ...options, headers, credentials: 'include' });
 
   if (res.status === 401 || res.status === 403) {
     const refreshed = await tryRefresh();
     if (refreshed) {
-      headers['Authorization'] = `Bearer ${accessToken}`;
-      res = await fetch(url, { ...options, headers });
+      if (memoryAccessToken) {
+        headers['Authorization'] = `Bearer ${memoryAccessToken}`;
+      }
+      res = await fetch(url, { ...options, headers, credentials: 'include' });
     }
   }
 
@@ -121,7 +117,7 @@ export const auth = {
       method: 'POST',
       body: JSON.stringify(data),
     });
-    setTokens(result.accessToken, result.refreshToken);
+    if (result.accessToken) memoryAccessToken = result.accessToken;
     return result;
   },
 
@@ -129,15 +125,13 @@ export const auth = {
     const result = await request<LoginResult>('/auth/login', {
       method: 'POST', body: JSON.stringify({ username, password }),
     });
-    setTokens(result.accessToken, result.refreshToken);
+    if (result.accessToken) memoryAccessToken = result.accessToken;
     return result;
   },
 
   async logout() {
-    if (refreshToken) {
-      await request('/auth/logout', { method: 'POST', body: JSON.stringify({ refreshToken }) }).catch(() => {});
-    }
-    clearTokens();
+    await request('/auth/logout', { method: 'POST', body: JSON.stringify({}) }).catch(() => {});
+    memoryAccessToken = null;
   },
 
   async me() {
@@ -154,9 +148,7 @@ export const auth = {
       accessToken?: string;
       refreshToken?: string;
     }>('/auth/me', { method: 'PUT', body: JSON.stringify(data) });
-    if (result.accessToken && result.refreshToken) {
-      setTokens(result.accessToken, result.refreshToken);
-    }
+    if (result.accessToken) memoryAccessToken = result.accessToken;
     return result;
   },
 
@@ -190,7 +182,7 @@ export const auth = {
       method: 'POST',
       body: JSON.stringify({ phaseToken, newPhone, code }),
     });
-    setTokens(result.accessToken, result.refreshToken);
+    if (result.accessToken) memoryAccessToken = result.accessToken;
     return result;
   },
 };
@@ -202,13 +194,11 @@ export type AdminUserRow = {
   displayName: string | null;
   role: string;
   status: string;
-  /** null 表示永不到期 */
   accountExpiresAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
-/** 仅 role=admin 可调用 */
 export const adminUsers = {
   list: () => request<AdminUserRow[]>('/admin/users'),
   create: (data: {
@@ -409,7 +399,7 @@ export const tenants = {
     request<{ tenant: { id: string; name: string; status: string }; message: string }>('/tenants', { method: 'POST', body: JSON.stringify(data) }),
   select: async (id: string) => {
     const result = await request<{ tenantId: string; tenantName: string; tenantRole: string; permissions: string[]; expiresAt?: string | null; accessToken: string; refreshToken: string }>(`/tenants/${id}/select`, { method: 'POST' });
-    setTokens(result.accessToken, result.refreshToken);
+    if (result.accessToken) memoryAccessToken = result.accessToken;
     return result;
   },
   get: (id: string) => request<{ id: string; name: string; logo?: string; inviteCode: string; expiresAt?: string | null }>(`/tenants/${id}`),
@@ -435,4 +425,40 @@ export const tenants = {
     request<Array<{ id: string; userId: string; status: string; message?: string; user: { id: string; username: string; phone?: string; displayName?: string }; createdAt: string }>>(`/tenants/${id}/applications`),
   reviewApplication: (id: string, appId: string, data: { action: 'APPROVED' | 'REJECTED'; role?: string; permissions?: string[] }) =>
     request(`/tenants/${id}/applications/${appId}`, { method: 'PUT', body: JSON.stringify(data) }),
+};
+
+// ── Collaboration (企业间协作) ──
+export const collaboration = {
+  createCollaboration: (data: { inviteCode: string }) =>
+    request<any>('/collaboration/collaborations', { method: 'POST', body: JSON.stringify(data) }),
+  listCollaborations: () =>
+    request<any[]>('/collaboration/collaborations'),
+
+  syncDispatch: (data: { recordIds: string[]; collaborationTenantId: string }) =>
+    request<{ dispatches: { transferId: string; dispatchId: string; productName: string }[] }>(
+      '/collaboration/subcontract-transfers/sync-dispatch',
+      { method: 'POST', body: JSON.stringify(data) },
+    ),
+  listTransfers: (params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return request<any[]>(`/collaboration/subcontract-transfers${qs}`);
+  },
+  getTransfer: (id: string) =>
+    request<any>(`/collaboration/subcontract-transfers/${id}`),
+
+  acceptTransfer: (id: string, data: any) =>
+    request<any>(`/collaboration/subcontract-transfers/${id}/accept`, { method: 'POST', body: JSON.stringify(data) }),
+  createReturn: (id: string, data: any) =>
+    request<any>(`/collaboration/subcontract-transfers/${id}/returns`, { method: 'POST', body: JSON.stringify(data) }),
+  receiveReturn: (id: string) =>
+    request<any>(`/collaboration/subcontract-returns/${id}/receive`, { method: 'PATCH' }),
+
+  listProductMaps: (collaborationId?: string) => {
+    const qs = collaborationId ? `?collaborationId=${collaborationId}` : '';
+    return request<any[]>(`/collaboration/collaboration-product-maps${qs}`);
+  },
+  updateProductMap: (id: string, data: any) =>
+    request<any>(`/collaboration/collaboration-product-maps/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteProductMap: (id: string) =>
+    request(`/collaboration/collaboration-product-maps/${id}`, { method: 'DELETE' }),
 };

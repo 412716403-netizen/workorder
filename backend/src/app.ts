@@ -1,5 +1,9 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import compression from 'compression';
+import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
 import { env } from './config/env.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
@@ -19,6 +23,7 @@ import psiRoutes from './routes/psi.js';
 import financeRoutes from './routes/finance.js';
 import dashboardRoutes from './routes/dashboard.js';
 import rolesRoutes from './routes/roles.js';
+import collaborationRoutes from './routes/collaboration.js';
 
 const app = express();
 
@@ -47,8 +52,27 @@ app.use((_req, res, next) => {
   next();
 });
 
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(compression());
 app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: { error: '请求过于频繁，请 15 分钟后再试' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 200,
+  message: { error: '请求过于频繁，请稍后再试' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 app.get('/', (_req, res) => {
   res.type('html').send(
@@ -63,24 +87,23 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Auth & tenants: no tenant required
-app.use('/api/auth', authRoutes);
-app.use('/api/tenants', authMiddleware, tenantsRoutes);
-app.use('/api/admin', authMiddleware, requireAdmin, adminRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/tenants', authMiddleware, apiLimiter, tenantsRoutes);
+app.use('/api/admin', authMiddleware, requireAdmin, apiLimiter, adminRoutes);
 
-// Roles: tenant required, owner/admin only
-app.use('/api/roles',      authMiddleware, requireTenant, rolesRoutes);
+app.use('/api/roles',      authMiddleware, requireTenant, apiLimiter, rolesRoutes);
 
-// Business routes: tenant required + permission check
-app.use('/api/settings',   authMiddleware, requireTenant, settingsRoutes);
-app.use('/api/master',     authMiddleware, requireTenant, masterDataRoutes);
-app.use('/api/products',   authMiddleware, requireTenant, productsRoutes);
-app.use('/api/plans',      authMiddleware, requireTenant, requirePermission('production'), plansRoutes);
-app.use('/api/orders',     authMiddleware, requireTenant, requirePermission('production'), ordersRoutes);
-app.use('/api/production', authMiddleware, requireTenant, requirePermission('production'), productionRoutes);
-app.use('/api/psi',        authMiddleware, requireTenant, requirePermission('psi'),        psiRoutes);
-app.use('/api/finance',    authMiddleware, requireTenant, requirePermission('finance'),    financeRoutes);
-app.use('/api/dashboard',  authMiddleware, requireTenant, requirePermission('dashboard'),  dashboardRoutes);
+app.use('/api/settings',   authMiddleware, requireTenant, apiLimiter, settingsRoutes);
+app.use('/api/master',     authMiddleware, requireTenant, apiLimiter, masterDataRoutes);
+app.use('/api/products',   authMiddleware, requireTenant, apiLimiter, productsRoutes);
+app.use('/api/plans',      authMiddleware, requireTenant, requirePermission('production'), apiLimiter, plansRoutes);
+app.use('/api/orders',     authMiddleware, requireTenant, requirePermission('production'), apiLimiter, ordersRoutes);
+app.use('/api/production', authMiddleware, requireTenant, requirePermission('production'), apiLimiter, productionRoutes);
+app.use('/api/psi',        authMiddleware, requireTenant, requirePermission('psi'),        apiLimiter, psiRoutes);
+app.use('/api/finance',    authMiddleware, requireTenant, requirePermission('finance'),    apiLimiter, financeRoutes);
+app.use('/api/dashboard',  authMiddleware, requireTenant, requirePermission('dashboard'),  apiLimiter, dashboardRoutes);
+
+app.use('/api/collaboration', authMiddleware, requireTenant, apiLimiter, collaborationRoutes);
 
 app.use(errorHandler);
 

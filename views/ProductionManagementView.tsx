@@ -273,6 +273,7 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
             onReportSubmitProduct={onReportSubmitProduct}
             onUpdateReportProduct={onUpdateReportProduct}
             onDeleteReportProduct={onDeleteReportProduct}
+            onNavigateToProductEdit={(productId: string) => navigate('/basic', { state: { editProductId: productId } })}
             userPermissions={userPermissions}
             tenantRole={tenantRole}
           />

@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
-import { getTenantPrisma, prisma as basePrisma } from '../lib/prisma.js';
+import { getTenantPrisma } from '../lib/prisma.js';
+import { genId } from '../utils/genId.js';
 import { str, optStr, sanitizeUpdate, sanitizeCreate, normalizeDates } from '../utils/request.js';
 
 const PSI_STRIP_KEYS = new Set([
@@ -34,24 +35,23 @@ export async function createRecord(req: Request, res: Response, next: NextFuncti
   try {
     const db = getTenantPrisma(req.tenantId!);
     const data = cleanPsi(sanitizeCreate(req.body));
-    if (!data.id) data.id = `psi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    if (!data.id) data.id = genId('psi');
     normalizeDates(data);
-    const record = await db.psiRecord.create({ data });
+    const record = await db.psiRecord.create({ data: data as any });
     res.status(201).json(record);
   } catch (e) { next(e); }
 }
 
 export async function createBatchRecords(req: Request, res: Response, next: NextFunction) {
   try {
-    const tenantId = req.tenantId!;
+    const db = getTenantPrisma(req.tenantId!);
     const { records } = req.body;
     const created = [];
     for (const r of records) {
       const data = cleanPsi(sanitizeCreate(r));
-      if (!data.id) data.id = `psi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      if (!data.id) data.id = genId('psi');
       normalizeDates(data);
-      data.tenantId = tenantId;
-      created.push(await basePrisma.psiRecord.create({ data }));
+      created.push(await db.psiRecord.create({ data: data as any }));
     }
     res.status(201).json(created);
   } catch (e) { next(e); }
@@ -59,44 +59,44 @@ export async function createBatchRecords(req: Request, res: Response, next: Next
 
 export async function updateRecord(req: Request, res: Response, next: NextFunction) {
   try {
+    const db = getTenantPrisma(req.tenantId!);
     const data = cleanPsi(sanitizeUpdate(req.body));
     normalizeDates(data);
-    const record = await basePrisma.psiRecord.update({ where: { id: str(req.params.id) }, data });
+    const record = await db.psiRecord.update({ where: { id: str(req.params.id) }, data });
     res.json(record);
   } catch (e) { next(e); }
 }
 
 export async function replaceRecords(req: Request, res: Response, next: NextFunction) {
   try {
-    const tenantId = req.tenantId!;
+    const db = getTenantPrisma(req.tenantId!);
     const { deleteIds, newRecords } = req.body;
-    await basePrisma.$transaction(async (tx) => {
-      if (deleteIds?.length) {
-        await tx.psiRecord.deleteMany({ where: { id: { in: deleteIds } } });
-      }
-      for (const r of newRecords || []) {
-        const data = cleanPsi(sanitizeCreate(r));
-        if (!data.id) data.id = `psi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        normalizeDates(data);
-        data.tenantId = tenantId;
-        await tx.psiRecord.create({ data });
-      }
-    });
+    if (deleteIds?.length) {
+      await db.psiRecord.deleteMany({ where: { id: { in: deleteIds } } });
+    }
+    for (const r of newRecords || []) {
+      const data = cleanPsi(sanitizeCreate(r));
+      if (!data.id) data.id = genId('psi');
+      normalizeDates(data);
+      await db.psiRecord.create({ data: data as any });
+    }
     res.json({ message: '已替换' });
   } catch (e) { next(e); }
 }
 
 export async function deleteRecord(req: Request, res: Response, next: NextFunction) {
   try {
-    await basePrisma.psiRecord.delete({ where: { id: str(req.params.id) } });
+    const db = getTenantPrisma(req.tenantId!);
+    await db.psiRecord.delete({ where: { id: str(req.params.id) } });
     res.json({ message: '已删除' });
   } catch (e) { next(e); }
 }
 
 export async function deleteBatchRecords(req: Request, res: Response, next: NextFunction) {
   try {
+    const db = getTenantPrisma(req.tenantId!);
     const { ids } = req.body;
-    await basePrisma.psiRecord.deleteMany({ where: { id: { in: ids } } });
+    await db.psiRecord.deleteMany({ where: { id: { in: ids } } });
     res.json({ message: '已删除' });
   } catch (e) { next(e); }
 }
@@ -132,6 +132,10 @@ export async function getStock(req: Request, res: Response, next: NextFunction) 
         if (warehouseId) {
           if (r.toWarehouseId === warehouseId) stockMap[pid] = (stockMap[pid] || 0) + Number(r.quantity || 0);
           if (r.fromWarehouseId === warehouseId) stockMap[pid] = (stockMap[pid] || 0) - Number(r.quantity || 0);
+        }
+      } else if (r.type === 'STOCKTAKE') {
+        if (!warehouseId || r.warehouseId === warehouseId) {
+          stockMap[pid] = Number(r.quantity || 0);
         }
       }
     }

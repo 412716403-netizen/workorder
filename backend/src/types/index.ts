@@ -45,7 +45,7 @@ export interface JwtPayload {
 }
 
 export const ALL_PERMISSIONS = [
-  'dashboard', 'production', 'process_report', 'psi', 'finance', 'basic', 'settings', 'members',
+  'dashboard', 'production', 'process_report', 'psi', 'finance', 'basic', 'settings', 'members', 'collaboration',
 ] as const;
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];

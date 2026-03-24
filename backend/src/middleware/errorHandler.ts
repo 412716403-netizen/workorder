@@ -11,9 +11,14 @@ export class AppError extends Error {
   }
 }
 
-export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction) {
+export function errorHandler(err: Error, req: Request, res: Response, _next: NextFunction) {
   if (err instanceof AppError) {
     res.status(err.statusCode).json({ error: err.message });
+    return;
+  }
+
+  if ((err as any).name === 'TenantAccessError') {
+    res.status((err as any).statusCode || 404).json({ error: err.message });
     return;
   }
 
@@ -31,6 +36,8 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
     }
   }
 
-  console.error(`[${_req.method} ${_req.originalUrl}] Unhandled error:`, err.message, err.stack?.split('\n').slice(0, 5).join('\n'));
-  res.status(500).json({ error: err.message || 'Internal server error' });
+  console.error(`[${req.method} ${req.originalUrl}] Unhandled error:`, err.message, err.stack?.split('\n').slice(0, 5).join('\n'));
+
+  const isProduction = process.env.NODE_ENV === 'production';
+  res.status(500).json({ error: isProduction ? '服务器内部错误，请稍后重试' : err.message || '服务器内部错误' });
 }

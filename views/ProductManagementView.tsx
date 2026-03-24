@@ -63,6 +63,8 @@ interface ProductManagementViewProps {
   permCanCreate?: boolean;
   permCanEdit?: boolean;
   permCanDelete?: boolean;
+  initialProductId?: string | null;
+  onClearInitialProductId?: () => void;
 }
 
 const SpecSelectorModal = ({ 
@@ -471,6 +473,8 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   permCanCreate = true,
   permCanEdit = true,
   permCanDelete = true,
+  initialProductId,
+  onClearInitialProductId,
 }) => {
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>(categories[0]?.id || 'cat-material');
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
@@ -498,6 +502,16 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   useEffect(() => {
     if (!activeVariantIdForBOM || !activeNodeIdForBOM) setCopyBOMDropdownOpen(false);
   }, [activeVariantIdForBOM, activeNodeIdForBOM]);
+
+  useEffect(() => {
+    if (initialProductId && !editingProductId) {
+      const p = products.find(x => x.id === initialProductId);
+      if (p) {
+        handleStartEditProduct(p);
+        onClearInitialProductId?.();
+      }
+    }
+  }, [initialProductId, products]);
 
   useEffect(() => {
     onDetailViewChange?.(!!(editingProductId && workingProduct));
@@ -1028,10 +1042,11 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                   <div className="flex flex-wrap gap-2">
                     {workingProduct.colorIds.map(id => {
                       const c = dictionaries.colors.find(i => i.id === id);
+                      const label = (c?.name != null && String(c.name).trim() !== '') ? String(c.name).trim() : '（未命名颜色）';
                       return (
                         <span key={id} className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-600 flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full" style={{backgroundColor: c?.value}}></div>
-                          {c?.name}
+                          {label}
                         </span>
                       );
                     })}
@@ -1050,9 +1065,10 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                   </button>
                   <div className="flex flex-wrap gap-2">
                     {workingProduct.sizeIds.map(id => {
-                      const s = dictionaries.sizes.find(s => s.id === id);
+                      const s = dictionaries.sizes.find(sz => sz.id === id);
+                      const label = (s?.name != null && String(s.name).trim() !== '') ? String(s.name).trim() : '（未命名尺码）';
                       return (
-                        <span key={id} className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-600">{s?.name}</span>
+                        <span key={id} className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-600">{label}</span>
                       );
                     })}
                     {workingProduct.sizeIds.length === 0 && <span className="text-slate-300 text-sm font-medium italic">点击图标开启尺寸选择器</span>}
@@ -1173,17 +1189,19 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                  <div className="space-y-12">
                     {sortedVariantColorEntries(groupedVariants, workingProduct?.colorIds, workingProduct?.sizeIds).map(([colorId, colorVariants]) => {
                       const color = dictionaries.colors.find(c => c.id === colorId);
+                      const colorTitle = (color?.name != null && String(color.name).trim() !== '') ? String(color.name).trim() : '（未命名颜色）';
                       return (
-                        <div key={colorId} className="space-y-4">
+                        <div key={String(colorId)} className="space-y-4">
                            <div className="flex items-center gap-3 ml-2">
                               <div className="w-4 h-4 rounded-full border border-slate-200" style={{backgroundColor: color?.value}}></div>
-                              <h5 className="text-sm font-black text-slate-800 uppercase tracking-widest">颜色: {color?.name}</h5>
+                              <h5 className="text-sm font-black text-slate-800 uppercase tracking-widest">颜色: {colorTitle}</h5>
                               <span className="text-[10px] text-slate-400 font-bold">({colorVariants.length} 个尺码变体)</span>
                            </div>
                            
                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                               {colorVariants.map(v => {
                                  const size = dictionaries.sizes.find(s => s.id === v.sizeId);
+                                 const sizeTitle = (size?.name != null && String(size.name).trim() !== '') ? String(size.name).trim() : '（未命名尺码）';
                                  const nodeBoms = Object.fromEntries(
                                    boms.filter(b => b.parentProductId === workingProduct.id && b.variantId === v.id && b.nodeId).map(b => [b.nodeId!, b.id])
                                  );
@@ -1192,7 +1210,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                                    <div key={v.id} className={`p-5 rounded-3xl border transition-all ${isActiveVar ? 'border-indigo-600 bg-indigo-50/40 shadow-xl ring-2 ring-indigo-500/10' : 'bg-slate-50/50 border-slate-100 hover:border-slate-200 hover:bg-white'}`}>
                                       <div className="flex justify-between items-start mb-4 pb-3 border-b border-slate-200/50">
                                          <div>
-                                            <p className="text-xs font-black text-slate-800">尺码: {size?.name}</p>
+                                            <p className="text-xs font-black text-slate-800">尺码: {sizeTitle}</p>
                                             <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">SKU: {workingProduct.sku}-{v.skuSuffix}</p>
                                          </div>
                                       </div>

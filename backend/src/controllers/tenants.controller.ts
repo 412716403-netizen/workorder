@@ -71,6 +71,8 @@ export async function listTenants(req: Request, res: Response, next: NextFunctio
 export async function selectTenant(req: Request, res: Response, next: NextFunction) {
   try {
     const result = await authService.selectTenant(req.user!.userId, str(req.params.id));
+    const { setAuthCookies } = await import('../utils/cookies.js');
+    setAuthCookies(res, result.accessToken, result.refreshToken);
     res.json(result);
   } catch (e) { next(e); }
 }

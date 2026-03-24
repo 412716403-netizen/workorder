@@ -263,7 +263,7 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             {filePreviewType === 'image' ? (
               <img src={filePreviewUrl} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
             ) : (
-              <iframe src={filePreviewUrl} title="PDF 预览" className="w-full h-[85vh] border-0" />
+              <iframe src={filePreviewUrl} title="PDF 预览" className="w-full h-[85vh] border-0" sandbox="allow-same-origin" />
             )}
           </div>
         </div>

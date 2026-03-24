@@ -72,6 +72,7 @@ interface OrderListViewExtendedProps extends OrderListViewProps {
   onReportSubmitProduct?: (productId: string, milestoneTemplateId: string, quantity: number, customData: any, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string) => void;
   onUpdateReportProduct?: (params: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string }) => void;
   onDeleteReportProduct?: (params: { progressId: string; reportId: string }) => void;
+  onNavigateToProductEdit?: (productId: string) => void;
   userPermissions?: string[];
   tenantRole?: string;
 }
@@ -109,6 +110,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   onReportSubmitProduct,
   onUpdateReportProduct,
   onDeleteReportProduct,
+  onNavigateToProductEdit,
   userPermissions,
   tenantRole
 }) => {
@@ -303,10 +305,35 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
   const showInList = (id: string) => orderFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
 
-  /** 列表排序：最新添加的工单排在前面（按 id 内时间戳倒序） */
+  /** 列表排序：新建工单在前（优先 createdAt，与后端 list 一致；无则按 genId 的 base36 时间片、工单号） */
   const sortedOrdersForList = useMemo(() => {
-    const ts = (o: ProductionOrder) => parseInt(o.id.match(/(\d+)/)?.[1] ?? '0', 10) || 0;
-    return [...orders].sort((a, b) => ts(b) - ts(a));
+    const createdMs = (o: ProductionOrder) => {
+      if (!o.createdAt) return 0;
+      const t = new Date(o.createdAt).getTime();
+      return Number.isNaN(t) ? 0 : t;
+    };
+    /** genId: `${prefix}-${Date.now().toString(36)}-${rand}` */
+    const idTimeSlice = (id: string) => {
+      const parts = id.split('-');
+      if (parts.length >= 2) {
+        const n = parseInt(parts[1], 36);
+        if (!Number.isNaN(n)) return n;
+      }
+      return 0;
+    };
+    const woSeq = (n: string) => {
+      const m = (n || '').match(/^WO(\d+)/i);
+      return m ? parseInt(m[1], 10) : 0;
+    };
+    return [...orders].sort((a, b) => {
+      const ca = createdMs(a);
+      const cb = createdMs(b);
+      if (cb !== ca) return cb - ca;
+      const ia = idTimeSlice(a.id);
+      const ib = idTimeSlice(b.id);
+      if (ib !== ia) return ib - ia;
+      return woSeq(b.orderNumber) - woSeq(a.orderNumber);
+    });
   }, [orders]);
 
   /** 顶部搜索：按产品、工单号、SKU、客户过滤列表 */
@@ -977,7 +1004,22 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                       </div>
                     </div>
                     <div className="flex items-center gap-4 flex-1 min-w-0">
-                      {order.milestones.length > 0 ? (
+                      {order.status === 'PENDING_PROCESS' ? (
+                        <div className="flex items-center gap-3 flex-1">
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-black bg-amber-50 text-amber-600 border border-amber-200">
+                            待配工序
+                          </span>
+                          {onNavigateToProductEdit && (
+                            <button
+                              type="button"
+                              onClick={e => { e.stopPropagation(); onNavigateToProductEdit(order.productId); }}
+                              className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-[11px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition-colors"
+                            >
+                              <Pencil className="w-3 h-3" /> 去配置工序
+                            </button>
+                          )}
+                        </div>
+                      ) : order.milestones.length > 0 ? (
                         <div className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden scroll-smooth custom-scrollbar touch-pan-x">
                           <div className="flex items-stretch gap-2 flex-nowrap py-1 w-max">
                             {order.milestones.map((ms) => {
@@ -1869,6 +1911,15 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         type ProductBatchItem = { progress: ProductMilestoneProgress; report: typeof allRows[0]['report'] };
         type ProductBatch = { source: 'product'; key: string; progressId: string; productId: string; productName: string; milestoneName: string; milestoneTemplateId: string; rows: ProductBatchItem[]; first: ProductBatchItem; totalGood: number; totalDefective: number; totalAmount: number; reportNo?: string };
         const f = reportHistoryFilter;
+        const isOutsourceReceiveReport = (report: ReportRow['report']) =>
+          report.customData?.source === 'outsourceReceive' ||
+          report.operator === '外协收回' ||
+          (typeof report.reportNo === 'string' && report.reportNo.startsWith('外协收回·'));
+        const outsourceReceiveDocKey = (report: ReportRow['report']) => {
+          const rn = report.reportNo || '';
+          if (rn.startsWith('外协收回·')) return rn.slice(5);
+          return (report.customData?.docNo as string) || rn || report.id;
+        };
         const filteredOrderRows = allRows.filter(({ order, milestone, report }) => {
           if (f.productId) {
             const p = products.find(px => px.id === order.productId);
@@ -1892,7 +1943,12 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           }
           return true;
         });
-        const groupKeyOrder = (r: ReportRow) => r.report.reportBatchId || r.report.id;
+        const groupKeyOrder = (r: ReportRow) => {
+          if (isOutsourceReceiveReport(r.report)) {
+            return `wxrecv:${r.order.id}:${r.order.productId}:${outsourceReceiveDocKey(r.report)}`;
+          }
+          return r.report.reportBatchId || r.report.id;
+        };
         const orderGroups = new Map<string, ReportRow[]>();
         filteredOrderRows.forEach(r => {
           const k = groupKeyOrder(r);
@@ -1944,7 +2000,13 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
             }
             return true;
           });
-          const productGroupKey = (item: ProductBatchItem) => item.report.reportBatchId || item.report.id;
+          const productGroupKey = (item: ProductBatchItem) => {
+            const r = item.report;
+            if (isOutsourceReceiveReport(r)) {
+              return `wxrecv:${item.progress.productId}:${outsourceReceiveDocKey(r)}`;
+            }
+            return r.reportBatchId || r.id;
+          };
           const productGroups = new Map<string, ProductBatchItem[]>();
           filteredProductRows.forEach(item => {
             const k = productGroupKey(item);
@@ -2104,7 +2166,11 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                             )}
                             <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{reportNo}</td>
                             <td className="px-4 py-3 text-slate-800 whitespace-nowrap">{batch.source === 'order' ? batch.first.order.productName : batch.productName}</td>
-                            <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{batch.source === 'order' ? batch.first.milestone.name : batch.milestoneName}</td>
+                            <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
+                              {batch.source === 'order'
+                                ? (batch.key.startsWith('wxrecv:') ? '外协收回' : batch.first.milestone.name)
+                                : (batch.key.startsWith('product-wxrecv:') ? '外协收回' : batch.milestoneName)}
+                            </td>
                             <td className="px-4 py-3 font-bold text-emerald-600 text-right whitespace-nowrap">{batch.totalGood} {batchUnit}</td>
                             <td className="px-4 py-3 font-bold text-amber-600 text-right whitespace-nowrap">{batch.totalDefective > 0 ? `${batch.totalDefective} ${batchUnit}` : '—'}</td>
                             <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{batch.first.report.operator}</td>

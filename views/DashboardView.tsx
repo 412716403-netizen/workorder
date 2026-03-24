@@ -68,9 +68,9 @@ const DashboardView: React.FC<DashboardViewProps> = ({ orders, financeRecords, p
 
   // 3. 库存预警
   const lowStockCount = products.filter(p => {
-    const ins = psiRecords.filter(r => r.type === 'PURCHASE_BILL' && r.productId === p.id).reduce((s, r) => s + r.quantity, 0);
-    const outs = psiRecords.filter(r => r.type === 'SALES_BILL' && r.productId === p.id).reduce((s, r) => s + r.quantity, 0);
-    return (100 + ins - outs) < 10;
+    const ins = psiRecords.filter(r => r.type === 'PURCHASE_BILL' && r.productId === p.id).reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+    const outs = psiRecords.filter(r => r.type === 'SALES_BILL' && r.productId === p.id).reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+    return (ins - outs) < 10;
   }).length;
 
   // 4. 图表数据
@@ -107,14 +107,12 @@ const DashboardView: React.FC<DashboardViewProps> = ({ orders, financeRecords, p
           value={activeOrders.length} 
           subValue="WO"
           icon={Activity} 
-          trend={12} 
           color="bg-indigo-600" 
         />
         <StatCard 
           title="累计财务收入" 
           value={`￥${totalReceipts.toLocaleString()}`} 
           icon={Receipt} 
-          trend={5.4} 
           color="bg-emerald-500" 
         />
         <StatCard 
@@ -122,14 +120,12 @@ const DashboardView: React.FC<DashboardViewProps> = ({ orders, financeRecords, p
           value={lowStockCount} 
           subValue="项物料"
           icon={Warehouse} 
-          trend={-2} 
           color="bg-rose-500" 
         />
         <StatCard 
           title="节点完成率" 
           value={`${completionRate}%`} 
           icon={TrendingUp} 
-          trend={8.2} 
           color="bg-amber-500" 
         />
       </div>

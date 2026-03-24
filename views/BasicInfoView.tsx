@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Boxes, 
   Building2, 
@@ -96,7 +97,17 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
     return base ? hasPerm(`${base}:delete`) : true;
   };
 
-  const [activeTab, setActiveTab] = useState<BasicTab>('PRODUCTS');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const locState = location.state as { editProductId?: string } | null;
+
+  const [activeTab, setActiveTab] = useState<BasicTab>(locState?.editProductId ? 'PRODUCTS' : 'PRODUCTS');
+  const [initialProductId, setInitialProductId] = useState<string | null>(locState?.editProductId ?? null);
+  const clearInitialProductId = useCallback(() => {
+    setInitialProductId(null);
+    if (locState?.editProductId) navigate(location.pathname, { replace: true, state: {} });
+  }, [locState?.editProductId, navigate, location.pathname]);
+
   /** 设备管理：按工序分类，null = 全部，'UNASSIGNED' = 未分配 */
   const [equipmentNodeId, setEquipmentNodeId] = useState<string | null>(null);
   const EQUIPMENT_UNASSIGNED = 'UNASSIGNED';
@@ -168,6 +179,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
     return () => cancelAnimationFrame(id);
   }, []);
 
+
   const handleAddColor = async () => {
     const val = newColorName.trim();
     if (!val) return;
@@ -234,7 +246,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
       name: '', 
       categoryId: activePartnerCategoryId !== 'all' ? activePartnerCategoryId : '', 
       contact: '', 
-      customData: {} 
+      customData: {},
     });
     setEditingId(p?.id || null);
     setShowModal('PARTNERS');
@@ -338,7 +350,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
       )}
       <div>
         {activeTab === 'PRODUCTS' && (
-          <ProductManagementView products={products} globalNodes={globalNodes} categories={categories} boms={boms} dictionaries={dictionaries} partners={partners} onUpdateProduct={onUpdateProduct} onUpdateBOM={onUpdateBOM} onRefreshDictionaries={onRefreshDictionaries} onDetailViewChange={setProductDetailVisible} permCanCreate={canCreate('PRODUCTS')} permCanEdit={canEdit('PRODUCTS')} permCanDelete={canDelete('PRODUCTS')} />
+          <ProductManagementView products={products} globalNodes={globalNodes} categories={categories} boms={boms} dictionaries={dictionaries} partners={partners} onUpdateProduct={onUpdateProduct} onUpdateBOM={onUpdateBOM} onRefreshDictionaries={onRefreshDictionaries} onDetailViewChange={setProductDetailVisible} permCanCreate={canCreate('PRODUCTS')} permCanEdit={canEdit('PRODUCTS')} permCanDelete={canDelete('PRODUCTS')} initialProductId={initialProductId} onClearInitialProductId={clearInitialProductId} />
         )}
 
         {activeTab === 'PARTNERS' && !showModal && (
