@@ -1,5 +1,23 @@
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api';
 
+/** 避免防火墙丢包或地址错误时 fetch 长期挂起，登录按钮一直转圈 */
+const REQUEST_TIMEOUT_MS = 25_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new Error('请求超时或无法连接服务器，请检查 API 地址、安全组是否放行端口、后端是否已启动');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Token 存储在 httpOnly Cookie 中由服务端管理。
  * 内存变量仅作为兼容回退（例如 SSR 或无 Cookie 环境）。
@@ -26,7 +44,7 @@ async function tryRefresh(): Promise<boolean> {
 
   refreshPromise = (async () => {
     try {
-      const res = await fetch(`${API_BASE}/auth/refresh`, {
+      const res = await fetchWithTimeout(`${API_BASE}/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -62,7 +80,7 @@ async function request<T = unknown>(path: string, options: RequestInit = {}): Pr
     headers['Authorization'] = `Bearer ${memoryAccessToken}`;
   }
 
-  let res = await fetch(url, { ...options, headers, credentials: 'include' });
+  let res = await fetchWithTimeout(url, { ...options, headers, credentials: 'include' });
 
   if (res.status === 401 || res.status === 403) {
     const refreshed = await tryRefresh();
@@ -70,7 +88,7 @@ async function request<T = unknown>(path: string, options: RequestInit = {}): Pr
       if (memoryAccessToken) {
         headers['Authorization'] = `Bearer ${memoryAccessToken}`;
       }
-      res = await fetch(url, { ...options, headers, credentials: 'include' });
+      res = await fetchWithTimeout(url, { ...options, headers, credentials: 'include' });
     }
   }
 
