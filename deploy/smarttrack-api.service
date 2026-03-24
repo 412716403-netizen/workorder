@@ -1,0 +1,15 @@
+[Unit]
+Description=SmartTrack Pro API
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/smarttrack-pro/backend
+Environment=NODE_ENV=production
+# 仅用 HTTP（无 HTTPS）时，在 backend/.env 增加 COOKIE_SECURE=false，否则登录后约 15 分钟令牌无法刷新
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as api from '../services/api';
-import { clearTokens } from '../services/api';
+import { clearTokens, refreshSessionSilently } from '../services/api';
 import type { TenantInfo } from '../services/api';
 
 export type TenantContext = {
@@ -172,6 +172,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setTenantCtx(ctx);
     localStorage.setItem('tenantCtx', JSON.stringify(ctx));
   }, []);
+
+  // 长时间空闲后 access 会过期；进页/回前台/定时静默刷新，避免一点击就大量 401
+  useEffect(() => {
+    if (!localStorage.getItem('isLoggedIn')) return;
+    void refreshSessionSilently();
+  }, []);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refreshSessionSilently();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const t = window.setInterval(() => void refreshSessionSilently(), 8 * 60 * 1000);
+    return () => window.clearInterval(t);
+  }, [isLoggedIn]);
 
   useEffect(() => {
     if (!isLoggedIn || !tenantCtx) return;

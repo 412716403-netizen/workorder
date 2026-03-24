@@ -46,6 +46,11 @@ async function tryRefresh(): Promise<boolean> {
   return refreshPromise;
 }
 
+/** 依赖 httpOnly refresh Cookie 换新 access（与 401 触发的刷新共用去重逻辑）。用于长时间空闲、切回页签后避免首请求失败。 */
+export async function refreshSessionSilently(): Promise<boolean> {
+  return tryRefresh();
+}
+
 async function request<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE}${path}`;
   const headers: Record<string, string> = {

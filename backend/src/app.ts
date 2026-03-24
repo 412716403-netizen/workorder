@@ -58,14 +58,6 @@ app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
 app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 30,
-  message: { error: '请求过于频繁，请 15 分钟后再试' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 200,
@@ -87,7 +79,7 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/tenants', authMiddleware, apiLimiter, tenantsRoutes);
 app.use('/api/admin', authMiddleware, requireAdmin, apiLimiter, adminRoutes);
 

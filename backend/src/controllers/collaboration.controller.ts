@@ -275,12 +275,12 @@ function buildDispatchPayload(product: any, records: any[], aLinkMode: string, d
     };
   });
 
-  const colorNames: string[] = [...new Set(
+  const colorNames = [...new Set<string>(
     (product.colorIds ?? [])
       .map((id: string) => normalizeSpecLabel(dictById[id]))
       .filter((n: string | null): n is string => n != null),
   )];
-  const sizeNames: string[] = [...new Set(
+  const sizeNames = [...new Set<string>(
     (product.sizeIds ?? [])
       .map((id: string) => normalizeSpecLabel(dictById[id]))
       .filter((n: string | null): n is string => n != null),

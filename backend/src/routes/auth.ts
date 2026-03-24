@@ -1,10 +1,19 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import * as authCtrl from '../controllers/auth.controller.js';
 import { validate } from '../middleware/validate.js';
 import { authMiddleware } from '../middleware/auth.js';
 
 const router = Router();
+
+const loginRegisterLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: { error: '请求过于频繁，请 15 分钟后再试' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const registerSchema = z.object({
   phone: z.string().regex(/^1[3-9]\d{9}$/, '请输入正确的11位中国大陆手机号'),
@@ -51,8 +60,8 @@ const phoneCompleteSchema = z.object({
   code: z.string().min(4).max(8),
 });
 
-router.post('/register', validate(registerSchema), authCtrl.register);
-router.post('/login', validate(loginSchema), authCtrl.login);
+router.post('/register', loginRegisterLimiter, validate(registerSchema), authCtrl.register);
+router.post('/login', loginRegisterLimiter, validate(loginSchema), authCtrl.login);
 router.post('/refresh', authCtrl.refresh);
 router.post('/logout', authCtrl.logout);
 router.get('/me', authMiddleware, authCtrl.getMe);
