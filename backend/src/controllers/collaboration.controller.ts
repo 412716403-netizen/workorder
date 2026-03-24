@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import type { Prisma } from '@prisma/client';
 import { prisma as basePrisma } from '../lib/prisma.js';
 import { str, optStr } from '../utils/request.js';
 import { genId } from '../utils/genId.js';
@@ -235,7 +236,7 @@ export async function syncDispatch(req: Request, res: Response, next: NextFuncti
       const dispatch = await basePrisma.subcontractCollaborationDispatch.create({
         data: {
           transferId: transfer.id,
-          payload,
+          payload: payload as Prisma.InputJsonValue,
           senderDispatchRecordIds: recs.map(r => r.id),
         },
       });
@@ -261,6 +262,11 @@ function normalizeSpecLabel(v: unknown): string | null {
   return s.length > 0 ? s : null;
 }
 
+function jsonToStringIds(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((x): x is string => typeof x === 'string');
+}
+
 function buildDispatchPayload(product: any, records: any[], aLinkMode: string, dictById: Record<string, string>) {
   const items = records.map(r => {
     const variant = product.variants?.find((v: any) => v.id === r.variantId);
@@ -275,16 +281,20 @@ function buildDispatchPayload(product: any, records: any[], aLinkMode: string, d
     };
   });
 
-  const colorNames = [...new Set<string>(
-    (product.colorIds ?? [])
-      .map((id: string) => normalizeSpecLabel(dictById[id]))
-      .filter((n: string | null): n is string => n != null),
-  )];
-  const sizeNames = [...new Set<string>(
-    (product.sizeIds ?? [])
-      .map((id: string) => normalizeSpecLabel(dictById[id]))
-      .filter((n: string | null): n is string => n != null),
-  )];
+  const colorNames = [
+    ...new Set(
+      jsonToStringIds(product.colorIds)
+        .map(id => normalizeSpecLabel(dictById[id]))
+        .filter((n): n is string => n != null),
+    ),
+  ];
+  const sizeNames = [
+    ...new Set(
+      jsonToStringIds(product.sizeIds)
+        .map(id => normalizeSpecLabel(dictById[id]))
+        .filter((n): n is string => n != null),
+    ),
+  ];
 
   return {
     productName: product.name,
