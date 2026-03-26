@@ -74,55 +74,44 @@ type CollabReturnRow = {
 };
 
 /**
- * 可回传 = 所选仓库内 (STOCK_IN − 协作回传产生的 STOCK_OUT)，按颜色尺码合并。
+ * 可回传 = 甲方已接受发出总量 − 已回传总量，按颜色/尺码合并（与后端校验口径一致）。
  */
 function computeCollaborationReturnableRows(
   transfer: any,
-  warehouseId: string | undefined,
-  products: Product[],
-  prodRecords: ProductionOpRecord[],
-  dict: AppDictionaries,
-  /** 租户已配置仓库时，必须选仓才计算；未配置仓库则按全仓汇总 */
-  requireWarehouse: boolean,
+  _warehouseId: string | undefined,
+  _products: Product[],
+  _prodRecords: ProductionOpRecord[],
+  _dict: AppDictionaries,
+  _requireWarehouse: boolean,
 ): CollabReturnRow[] {
-  const receiverProductId = transfer?.receiverProductId;
-  if (!receiverProductId) return [];
-  if (requireWarehouse && !warehouseId) return [];
+  if (!transfer) return [];
 
-  const product = products.find(p => p.id === receiverProductId);
-
-  const orderIds = new Set<string>();
+  const dispatchedBySpec = new Map<string, { colorName: string | null; sizeName: string | null; qty: number }>();
   for (const d of transfer.dispatches || []) {
-    if (d.receiverProductionOrderId) orderIds.add(d.receiverProductionOrderId);
-  }
-
-  const availByVariant = new Map<string, number>();
-  for (const r of prodRecords) {
-    if (r.productId !== receiverProductId) continue;
-    if (requireWarehouse && r.warehouseId !== warehouseId) continue;
-    if (orderIds.size > 0 && r.orderId && !orderIds.has(r.orderId)) continue;
-    const vid = r.variantId ?? '';
-    if (r.type === 'STOCK_IN') {
-      availByVariant.set(vid, (availByVariant.get(vid) || 0) + (Number(r.quantity) || 0));
-    }
-    if (r.type === 'STOCK_OUT' && r.operator === COLLAB_RETURN_STOCK_OUT_OP) {
-      availByVariant.set(vid, (availByVariant.get(vid) || 0) - (Number(r.quantity) || 0));
+    if (d.status !== 'ACCEPTED') continue;
+    for (const it of d.payload?.items ?? []) {
+      const k = collabVariantKey(it);
+      const prev = dispatchedBySpec.get(k);
+      const q = Number(it.quantity) || 0;
+      if (prev) prev.qty += q;
+      else dispatchedBySpec.set(k, { colorName: it.colorName ?? null, sizeName: it.sizeName ?? null, qty: q });
     }
   }
 
-  const bySpec = new Map<string, { colorName: string | null; sizeName: string | null; qty: number }>();
-  for (const [vid, q] of availByVariant) {
-    if (q <= 0) continue;
-    const { colorName, sizeName } = specNamesForVariant(product, vid, dict);
-    const k = collabVariantKey({ colorName, sizeName });
-    const prev = bySpec.get(k);
-    if (prev) prev.qty += q;
-    else bySpec.set(k, { colorName, sizeName, qty: q });
+  const returnedBySpec = new Map<string, number>();
+  for (const r of transfer.returns || []) {
+    for (const it of r.payload?.items ?? []) {
+      const k = collabVariantKey(it);
+      returnedBySpec.set(k, (returnedBySpec.get(k) || 0) + (Number(it.quantity) || 0));
+    }
   }
 
   const rows: CollabReturnRow[] = [];
-  for (const { colorName, sizeName, qty } of bySpec.values()) {
-    rows.push({ colorName, sizeName, maxReturnable: qty, qty: '' });
+  for (const [k, { colorName, sizeName, qty: dispatched }] of dispatchedBySpec) {
+    const returned = returnedBySpec.get(k) || 0;
+    const remaining = dispatched - returned;
+    if (remaining <= 0) continue;
+    rows.push({ colorName, sizeName, maxReturnable: remaining, qty: '' });
   }
   rows.sort((a, b) => {
     const la = [a.colorName || '', a.sizeName || ''].join('\t');
@@ -294,23 +283,18 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
     }
   };
 
-  /** 出库仓库或库存变化时，按仓库重算可回传行（含颜色尺码、合并同规格） */
+  /** 回传弹窗打开时，按甲方发出 − 已回传计算可回行 */
   useEffect(() => {
     if (!returnOpen) return;
     const transfer = returnModalTransferRef.current;
     if (!transfer) return;
-    const requireWh = warehouses.length > 0;
-    if (requireWh && !returnWarehouseId) {
-      setReturnRows([]);
-      return;
-    }
     const rows = computeCollaborationReturnableRows(
       transfer,
       returnWarehouseId || undefined,
       products,
       prodRecords,
       dictionaries,
-      requireWh,
+      warehouses.length > 0,
     );
     setReturnRows(rows.map(r => ({ ...r, qty: '' })));
   }, [returnOpen, returnWarehouseId, products, prodRecords, dictionaries, warehouses.length]);
@@ -334,7 +318,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
       return;
     }
     if (returnRows.length === 0) {
-      toast.warning('当前仓库无可回传库存，请切换仓库或先在该仓库完成生产入库');
+      toast.warning('所有规格已全部回传完毕，无剩余可回传数量');
       return;
     }
     for (const r of returnRows) {
@@ -975,7 +959,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
             <div className="relative bg-white w-full max-w-lg rounded-2xl shadow-xl border border-slate-200 p-6 space-y-4 max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
               <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><Truck className="w-5 h-5 text-emerald-600" /> 提交回传</h3>
               <p className="text-xs text-slate-500">
-                请先选择<strong>出库仓库</strong>。可回传 = 该仓库内「生产入库 − 协作回传出库」，按颜色/尺码汇总（与甲方发出明细一致方可提交）。
+                请先选择<strong>出库仓库</strong>，可回传 = 甲方发出总量 − 已回传总量，按颜色/尺码汇总。
               </p>
               {warehouses.length > 0 && (
                 <div className="space-y-1">
@@ -1008,7 +992,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
                         <td colSpan={4} className="px-3 py-6 text-center text-sm text-amber-700 bg-amber-50/50 font-medium">
                           {!returnWarehouseId && warehouses.length > 0
                             ? '请先选择出库仓库'
-                            : '当前仓库无可用库存。请切换仓库，或先在工单中心「待入库清单」将成品入到该仓库。'}
+                            : '所有规格已全部回传完毕，无剩余可回传数量。'}
                         </td>
                       </tr>
                     ) : (

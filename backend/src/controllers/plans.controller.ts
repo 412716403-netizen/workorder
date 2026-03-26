@@ -155,6 +155,7 @@ export async function convertToOrder(req: Request, res: Response, next: NextFunc
     const plansToConvert: PlanWithItems[] = [plan, ...allDescendants].filter((p): p is PlanWithItems => p.status !== 'CONVERTED');
 
     const existingOrders = await db.productionOrder.findMany({ select: { orderNumber: true } });
+    const existingOrderNumbers = new Set(existingOrders.map(o => o.orderNumber));
     let maxNum = 0;
     for (const o of existingOrders) {
       const m = o.orderNumber.match(/^WO-?(\d+)/);
@@ -184,8 +185,12 @@ export async function convertToOrder(req: Request, res: Response, next: NextFunc
     }> = [];
 
     for (const p of plansToConvert) {
-      maxNum++;
-      const orderNumber = p.planNumber.replace(/^PLN/, 'WO');
+      let orderNumber = p.planNumber.replace(/^PLN/, 'WO');
+      if (existingOrderNumbers.has(orderNumber)) {
+        maxNum++;
+        orderNumber = `WO${maxNum}`;
+      }
+      existingOrderNumbers.add(orderNumber);
       const orderId = genId('order');
       planToOrderMap.set(p.id, orderId);
 
