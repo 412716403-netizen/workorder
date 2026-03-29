@@ -534,6 +534,12 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
     return base + ins - outs + stocktakeAdjust;
   };
 
+  const getNullVariantProdStock = useCallback((pId: string, whId?: string) => {
+    const ins = (prodRecords || []).filter((r: any) => (r.type === 'STOCK_IN' || r.type === 'STOCK_RETURN') && r.productId === pId && !r.variantId && (!whId || r.warehouseId === whId)).reduce((s: number, r: any) => s + (r.quantity ?? 0), 0);
+    const outs = (prodRecords || []).filter((r: any) => r.type === 'STOCK_OUT' && r.productId === pId && !r.variantId && (!whId || r.warehouseId === whId)).reduce((s: number, r: any) => s + (r.quantity ?? 0), 0);
+    return Math.max(0, ins - outs);
+  }, [prodRecords]);
+
   // 按规格（颜色尺码）的库存，仅统计带该 variantId 的出入库与调拨；含生产入库/退料/领料（prodRecords）
   const getStockVariant = useCallback((pId: string, whId: string | undefined, variantId: string) => {
     const insPsi = recordsList.filter(r => (r.type === 'PURCHASE_BILL' || (r.type === 'TRANSFER' && r.toWarehouseId === whId)) && r.productId === pId && (r as any).variantId === variantId && (!whId || r.warehouseId === whId || (r as any).toWarehouseId === whId)).reduce((s, r) => s + r.quantity, 0);
@@ -1566,7 +1572,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
         warehouseName: wh.name,
         category: wh.category,
         qty: hasVariants
-          ? (p.variants ?? []).reduce((s, v) => s + getVariantDisplayQty(p.id, wh.id, v.id), 0)
+          ? (p.variants ?? []).reduce((s, v) => s + getVariantDisplayQty(p.id, wh.id, v.id), 0) + getNullVariantProdStock(p.id, wh.id)
           : getStock(p.id, wh.id)
       }));
       // 总库存 = 各仓数量之和
@@ -1591,7 +1597,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
     if (!searchTerm.trim()) return allStocks;
     const term = searchTerm.toLowerCase();
     return allStocks.filter(ps => ps.name.toLowerCase().includes(term) || ps.sku.toLowerCase().includes(term) || ps.categoryName.toLowerCase().includes(term));
-  }, [products, warehouses, recordsList, categories, searchTerm, getStockVariant, getVariantDisplayQty, dictionaries]);
+  }, [products, warehouses, recordsList, categories, searchTerm, getStockVariant, getVariantDisplayQty, getNullVariantProdStock, dictionaries]);
 
   // 仓库流水：与仓库相关的单据类型（STOCK_IN、STOCK_RETURN、STOCK_OUT 来自 prodRecords，其余来自 records）
   const WAREHOUSE_FLOW_TYPES = ['PURCHASE_BILL', 'SALES_BILL', 'TRANSFER', 'STOCKTAKE', 'STOCK_IN', 'STOCK_RETURN', 'STOCK_OUT'] as const;

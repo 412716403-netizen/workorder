@@ -151,8 +151,12 @@ export interface AppDataContextValue {
   onUpdatePurchaseOrderFormSettings: (v: PurchaseOrderFormSettings) => Promise<void>;
   onUpdatePurchaseBillFormSettings: (v: PurchaseBillFormSettings) => Promise<void>;
   // Product / BOM
-  onUpdateProduct: (p: Product) => Promise<void>;
-  onUpdateBOM: (b: BOM) => Promise<void>;
+  /** 成功返回 true，失败已 toast 并返回 false */
+  onUpdateProduct: (p: Product) => Promise<boolean>;
+  /** 成功返回 true，失败已 toast 并返回 false */
+  onDeleteProduct: (id: string) => Promise<boolean>;
+  /** 成功返回 true，失败已 toast 并返回 false */
+  onUpdateBOM: (b: BOM) => Promise<boolean>;
   // Plans
   onCreatePlan: (p: PlanOrder) => Promise<void>;
   onUpdatePlan: (id: string, updates: Partial<PlanOrder>) => Promise<void>;
@@ -264,6 +268,22 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         const v = (i: number) => results[i].status === 'fulfilled' ? (results[i] as PromiseFulfilledResult<unknown>).value : undefined;
         const failed = results.filter(r => r.status === 'rejected');
         if (failed.length) console.warn(`数据加载: ${failed.length}/${results.length} 个请求失败`, failed.map(r => (r as PromiseRejectedResult).reason?.message));
+        if (results[11]?.status === 'rejected') {
+          const msg = (results[11] as PromiseRejectedResult).reason?.message || '未知错误';
+          const isForbidden =
+            /无权|403|Forbidden/i.test(msg) || msg.includes('请先选择或创建企业');
+          if (isForbidden) {
+            toast.error(
+              `产品列表加载失败：${msg}。请在「成员管理」中为当前账号勾选「基础信息 → 产品档案」的查看权限（basic:products:view），或由企业管理员调整角色。`,
+            );
+          } else {
+            const migrateHint =
+              /数据库|route_report|migration|P20|column|schema|Prisma/i.test(msg)
+                ? ' 若为数据库升级后首次使用，请在服务器执行 prisma migrate deploy 并重启后端。'
+                : '';
+            toast.error(`产品列表加载失败：${msg}。${migrateHint}`.trim());
+          }
+        }
 
         const cfg = (v(0) || {}) as Record<string, unknown>;
         setProductionLinkMode((cfg.productionLinkMode as ProductionLinkMode) ?? 'order');
@@ -331,21 +351,41 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const onUpdatePurchaseBillFormSettings = useCallback(async (v: PurchaseBillFormSettings) => { await api.settings.updateConfig('purchaseBillFormSettings', v); setPurchaseBillFormSettings(v); }, []);
 
   // ── Product / BOM handlers ──
-  const onUpdateProduct = useCallback(async (p: Product) => {
+  const onUpdateProduct = useCallback(async (p: Product): Promise<boolean> => {
     try {
       const exists = products.some(px => px.id === p.id);
       if (exists) { await api.products.update(p.id, p); } else { await api.products.create(p); }
       // 工序变更会触发后端回填工单 milestones / 状态；工单中心与关联产品进度须同步刷新
       await Promise.allSettled([refreshProducts(), refreshOrders(), refreshPMP()]);
-    } catch (err: any) { toast.error(err.message || '操作失败'); }
+      return true;
+    } catch (err: any) {
+      toast.error(err.message || '操作失败');
+      return false;
+    }
   }, [products, refreshProducts, refreshOrders, refreshPMP]);
 
-  const onUpdateBOM = useCallback(async (b: BOM) => {
+  const onDeleteProduct = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      await api.products.delete(id);
+      await Promise.allSettled([refreshProducts(), refreshBoms(), refreshOrders(), refreshPMP()]);
+      toast.success('已删除产品');
+      return true;
+    } catch (err: any) {
+      toast.error(err.message || '删除失败');
+      return false;
+    }
+  }, [refreshProducts, refreshBoms, refreshOrders, refreshPMP]);
+
+  const onUpdateBOM = useCallback(async (b: BOM): Promise<boolean> => {
     try {
       const exists = boms.some(bx => bx.id === b.id);
       if (exists) { await api.boms.update(b.id, b); } else { await api.boms.create(b); }
       await refreshBoms();
-    } catch (err: any) { toast.error(err.message || '操作失败'); }
+      return true;
+    } catch (err: any) {
+      toast.error(err.message || '操作失败');
+      return false;
+    }
   }, [boms, refreshBoms]);
 
   // ── Plan handlers ──
@@ -546,7 +586,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     onUpdateProductionLinkMode, onUpdateProcessSequenceMode, onUpdateAllowExceedMaxReportQty,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
     onUpdatePurchaseOrderFormSettings, onUpdatePurchaseBillFormSettings,
-    onUpdateProduct, onUpdateBOM,
+    onUpdateProduct, onDeleteProduct, onUpdateBOM,
     onCreatePlan, onUpdatePlan, onSplitPlan, onDeletePlan, onConvertToOrder,
     onCreateSubPlan, onCreateSubPlans,
     onReportSubmit, onReportSubmitProduct,

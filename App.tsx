@@ -331,6 +331,7 @@ function AppRoutes() {
           prodRecords={d.prodRecords}
           warehouses={d.warehouses}
           dictionaries={d.dictionaries}
+          nodeTemplates={d.globalNodes}
           onRefreshPartners={d.refreshPartners}
           onRefreshProducts={d.refreshProducts}
           onRefreshOrders={d.refreshOrders}
@@ -351,6 +352,7 @@ function AppRoutes() {
           dictionaries={d.dictionaries}
           partners={d.partners}
           onUpdateProduct={d.onUpdateProduct}
+          onDeleteProduct={d.onDeleteProduct}
           onUpdateBOM={d.onUpdateBOM}
           onRefreshDictionaries={d.refreshDictionaries}
           onRefreshWorkers={d.refreshWorkers}

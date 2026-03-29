@@ -212,6 +212,8 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
     recordIds: string[];
   } | null>(null);
   const [collabSyncing, setCollabSyncing] = useState(false);
+  const [collabRoutes, setCollabRoutes] = useState<any[]>([]);
+  const [selectedRouteId, setSelectedRouteId] = useState<string>('');
 
   /** 待收回清单：工单号模糊搜索 */
   const [receiveListSearchOrder, setReceiveListSearchOrder] = useState('');
@@ -1695,18 +1697,6 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
     return `WX-R-${String(code).padStart(4, '0')}-${String(seq).padStart(4, '0')}`;
   };
 
-  /** 旧规则生成的外协记录（无 docNo 或既非 WX- 发出格式也非 WX-R- 收回格式），用于一键清除 */
-  const oldFormatOutsourceRecords = useMemo(() =>
-    records.filter(r => {
-      if (r.type !== 'OUTSOURCE') return false;
-      if (!r.docNo) return true;
-      if (OUTSOURCE_DOCNO_REGEX.test(r.docNo)) return false;
-      if (OUTSOURCE_RECEIVE_DOCNO_REGEX.test(r.docNo)) return false;
-      return true;
-    }),
-    [records]
-  );
-
   /** 待发清单第二步：从表单弹窗确认发出 */
   const handleDispatchFormSubmit = async () => {
     const partnerName = (dispatchPartnerName || '').trim();
@@ -1791,6 +1781,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
         collaborationTenantId: collabTenantId,
         recordIds: batch.map(r => r.id),
       });
+      api.collaboration.listOutsourceRoutes().then(setCollabRoutes).catch(() => setCollabRoutes([]));
     }
   };
 
@@ -6590,18 +6581,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setOutsourceModal(null); setFlowDetailKey(null); }} aria-hidden />
           <div className="relative bg-white w-full max-w-6xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2"><ScrollText className="w-5 h-5 text-indigo-600" /> 外协流水</h3>
-                {onDeleteRecord && oldFormatOutsourceRecords.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => { if (window.confirm(`确定删除全部 ${oldFormatOutsourceRecords.length} 条旧格式外协单据吗？`)) oldFormatOutsourceRecords.forEach(r => onDeleteRecord(r.id)); }}
-                    className="px-3 py-1.5 text-xs font-bold text-amber-700 bg-amber-100 rounded-lg hover:bg-amber-200"
-                  >
-                    清除旧格式单据（{oldFormatOutsourceRecords.length}）
-                  </button>
-                )}
-              </div>
+              <h3 className="font-bold text-slate-800 flex items-center gap-2"><ScrollText className="w-5 h-5 text-indigo-600" /> 外协流水</h3>
               <button type="button" onClick={() => { setOutsourceModal(null); setFlowDetailKey(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
             </div>
             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
@@ -7066,14 +7046,27 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                 <div className="space-y-8">
                   {detailLines.map(({ key, order, product, orderNumber, productName, nodeName, records: lineRecords, variantQty }) => {
                     const category = categories.find(c => c.id === product?.categoryId);
-                    const hasColorSize = category?.hasColorSize && (product?.variants?.length ?? 0) > 1;
+                    const hasColorSizeCategory = !!category?.hasColorSize;
+                    const allProductVariants = (product?.variants as ProductVariant[]) ?? [];
                     const variantIdsInOrder = new Set((order?.items ?? []).map(i => i.variantId).filter(Boolean));
-                    const variantsInOrder = hasColorSize && product?.variants
-                      ? (product.variants as ProductVariant[]).filter(v => variantIdsInOrder.has(v.id))
-                      : [];
-                    if (variantsInOrder.length > 0) {
+                    const variantIdsFromRecords = new Set(
+                      Object.entries(variantQty)
+                        .filter(([vid, q]) => vid !== '' && (Number(q) || 0) !== 0)
+                        .map(([vid]) => vid),
+                    );
+                    let variantsForDetail: ProductVariant[] = [];
+                    if (hasColorSizeCategory && allProductVariants.length > 0) {
+                      if (variantIdsInOrder.size > 0) {
+                        variantsForDetail = allProductVariants.filter(v => variantIdsInOrder.has(v.id));
+                      }
+                      if (variantsForDetail.length === 0 && variantIdsFromRecords.size > 0) {
+                        variantsForDetail = allProductVariants.filter(v => variantIdsFromRecords.has(v.id));
+                      }
+                    }
+                    const showVariantQtyGrid = hasColorSizeCategory && variantsForDetail.length > 0;
+                    if (showVariantQtyGrid) {
                       const groupedByColor: Record<string, ProductVariant[]> = {};
-                      variantsInOrder.forEach(v => {
+                      variantsForDetail.forEach(v => {
                         if (!groupedByColor[v.colorId]) groupedByColor[v.colorId] = [];
                         groupedByColor[v.colorId].push(v);
                       });
@@ -7144,7 +7137,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                                 <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">本行金额（元）</label>
                                 <div className="w-28 rounded-xl border border-slate-100 bg-slate-50 py-2 px-3 text-sm font-bold text-slate-700 text-center min-h-[40px] flex items-center justify-center">
                                   {flowDetailEditMode
-                                    ? variantsInOrder.reduce((sum, v) => {
+                                    ? variantsForDetail.reduce((sum, v) => {
                                         const qtyKey = `${key}|${v.id}`;
                                         const q = flowDetailQuantities[qtyKey] ?? variantQty[v.id] ?? 0;
                                         const up = flowDetailUnitPrices[qtyKey] ?? flowDetailUnitPrices[key] ?? lineRecords.find(r => (r.variantId || '') === v.id)?.unitPrice ?? 0;
@@ -7351,7 +7344,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
       )}
       {collabSyncConfirm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/50" onClick={() => setCollabSyncConfirm(null)} aria-hidden />
+          <div className="absolute inset-0 bg-slate-900/50" onClick={() => { setCollabSyncConfirm(null); setSelectedRouteId(''); }} aria-hidden />
           <div className="relative bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 p-6 space-y-4" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
               <Building2 className="w-5 h-5 text-indigo-600" /> 同步到协作企业
@@ -7359,10 +7352,50 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
             <p className="text-sm text-slate-600">
               外协工厂「<span className="font-bold text-slate-800">{collabSyncConfirm.partnerName}</span>」已绑定协作企业，是否将本次发出的 {collabSyncConfirm.recordIds.length} 条记录同步？
             </p>
+            {(() => {
+              const matchingRoutes = collabRoutes.filter((r: any) => {
+                const sorted = [...(r.steps || [])].sort((a: any, b: any) => a.stepOrder - b.stepOrder);
+                return sorted.length > 0 && sorted[0].receiverTenantId === collabSyncConfirm.collaborationTenantId;
+              });
+              if (matchingRoutes.length === 0) return null;
+              return (
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase block ml-1">外协路线（可选）</label>
+                <select
+                  value={selectedRouteId}
+                  onChange={e => setSelectedRouteId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold text-slate-800"
+                >
+                  <option value="">不使用路线（单步外协）</option>
+                  {matchingRoutes.map((r: any) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name} ({(r.steps || []).length} 步)
+                    </option>
+                  ))}
+                </select>
+                {selectedRouteId && (() => {
+                  const route = collabRoutes.find((r: any) => r.id === selectedRouteId);
+                  if (!route) return null;
+                  return (
+                    <div className="flex items-center gap-1 flex-wrap pt-1">
+                      {(route.steps || []).sort((a: any, b: any) => a.stepOrder - b.stepOrder).map((s: any, i: number) => (
+                        <React.Fragment key={i}>
+                          {i > 0 && <span className="text-slate-400 text-xs">→</span>}
+                          <span className="text-xs font-bold text-indigo-600">{s.nodeName}·{s.receiverTenantName}</span>
+                        </React.Fragment>
+                      ))}
+                      <span className="text-slate-400 text-xs">→</span>
+                      <span className="text-xs font-bold text-emerald-600">回传</span>
+                    </div>
+                  );
+                })()}
+              </div>
+              );
+            })()}
             <div className="flex gap-3 pt-2">
               <button
                 type="button"
-                onClick={() => setCollabSyncConfirm(null)}
+                onClick={() => { setCollabSyncConfirm(null); setSelectedRouteId(''); }}
                 className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
               >
                 暂不发送
@@ -7376,9 +7409,11 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                     const res = await api.collaboration.syncDispatch({
                       recordIds: collabSyncConfirm.recordIds,
                       collaborationTenantId: collabSyncConfirm.collaborationTenantId,
+                      ...(selectedRouteId ? { outsourceRouteId: selectedRouteId } : {}),
                     });
                     toast.success(`已同步 ${res.dispatches?.length ?? 0} 条到协作企业`);
                     setCollabSyncConfirm(null);
+                    setSelectedRouteId('');
                   } catch (err: any) {
                     toast.error(err.message || '同步失败');
                   } finally {

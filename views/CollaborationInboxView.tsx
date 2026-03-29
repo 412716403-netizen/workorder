@@ -2,12 +2,12 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   Inbox, Package, Check, X, ArrowLeft, Truck, RotateCcw,
   Search, Building2, Layers, ChevronDown, ChevronRight, RefreshCw,
-  Link2, Settings2, Trash2, Edit2, Save, Plus, UserPlus
+  Link2, Settings2, Trash2, Edit2, Save, Plus, UserPlus, Route, Forward, CheckCircle2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import * as api from '../services/api';
-import type { Product, Partner, ProductionOpRecord, Warehouse, ProductionOrder, AppDictionaries } from '../types';
+import type { Product, Partner, ProductionOpRecord, Warehouse, ProductionOrder, AppDictionaries, GlobalNodeTemplate, OutsourceRoute, OutsourceRouteStep } from '../types';
 
 const COLLAB_RETURN_STOCK_OUT_OP = '协作回传出库';
 
@@ -18,6 +18,7 @@ interface CollaborationInboxViewProps {
   prodRecords: ProductionOpRecord[];
   warehouses: Warehouse[];
   dictionaries: AppDictionaries;
+  nodeTemplates?: GlobalNodeTemplate[];
   onRefreshPartners: () => Promise<void>;
   onRefreshProducts?: () => Promise<void>;
   onRefreshOrders?: () => Promise<void>;
@@ -27,7 +28,7 @@ interface CollaborationInboxViewProps {
   userPermissions?: string[];
 }
 
-type ViewMode = 'inbox' | 'detail' | 'maps' | 'settings';
+type ViewMode = 'inbox' | 'detail' | 'maps' | 'settings' | 'routes';
 
 /** 协作接受预填：去掉空白项，避免乙方出现无文字的颜色/尺码标签 */
 function normalizeAcceptSpecList(arr: unknown): string[] {
@@ -74,18 +75,21 @@ type CollabReturnRow = {
 };
 
 /**
- * 可回传 = 甲方已接受发出总量 − 已回传总量，按颜色/尺码合并（与后端校验口径一致）。
+ * 可回传 = min(仓库库存, 发出明细剩余可回)，按颜色/尺码合并。
+ * 使用发出明细中的颜色/尺码名称（与甲方一致），保证后端校验通过。
  */
 function computeCollaborationReturnableRows(
   transfer: any,
-  _warehouseId: string | undefined,
-  _products: Product[],
-  _prodRecords: ProductionOpRecord[],
-  _dict: AppDictionaries,
-  _requireWarehouse: boolean,
+  warehouseId: string | undefined,
+  products: Product[],
+  prodRecords: ProductionOpRecord[],
+  dict: AppDictionaries,
+  requireWarehouse: boolean,
 ): CollabReturnRow[] {
   if (!transfer) return [];
+  if (requireWarehouse && !warehouseId) return [];
 
+  // 1. 按发出明细统计各规格已发数量（使用甲方名称）
   const dispatchedBySpec = new Map<string, { colorName: string | null; sizeName: string | null; qty: number }>();
   for (const d of transfer.dispatches || []) {
     if (d.status !== 'ACCEPTED') continue;
@@ -98,20 +102,63 @@ function computeCollaborationReturnableRows(
     }
   }
 
+  // 2. 统计已回传数量
   const returnedBySpec = new Map<string, number>();
   for (const r of transfer.returns || []) {
+    if (r.status === 'WITHDRAWN') continue;
     for (const it of r.payload?.items ?? []) {
       const k = collabVariantKey(it);
       returnedBySpec.set(k, (returnedBySpec.get(k) || 0) + (Number(it.quantity) || 0));
     }
   }
 
+  // 3. 统计仓库库存
+  const productId = transfer.receiverProductId;
+  let stockBySpec = new Map<string, number>();
+  let nullVariantStock = 0;
+  if (productId) {
+    const product = products.find(p => p.id === productId);
+    const colorNameById = Object.fromEntries(dict.colors.map(c => [c.id, c.name]));
+    const sizeNameById = Object.fromEntries(dict.sizes.map(s => [s.id, s.name]));
+    const variantLabel = (vid: string) => {
+      const v = product?.variants.find(x => x.id === vid);
+      if (!v) return { colorName: null as string | null, sizeName: null as string | null };
+      return {
+        colorName: v.colorId ? (colorNameById[v.colorId] ?? null) : null,
+        sizeName: v.sizeId ? (sizeNameById[v.sizeId] ?? null) : null,
+      };
+    };
+    for (const r of prodRecords) {
+      if (r.productId !== productId) continue;
+      if (warehouseId && r.warehouseId !== warehouseId) continue;
+      const vid = r.variantId || '';
+      const qty = Number(r.quantity) || 0;
+      const delta = (r.type === 'STOCK_IN' || r.type === 'STOCK_RETURN') ? qty
+        : r.type === 'STOCK_OUT' ? -qty
+        : 0;
+      if (delta === 0) continue;
+      if (!vid) {
+        nullVariantStock += delta;
+      } else {
+        const { colorName, sizeName } = variantLabel(vid);
+        const k = collabVariantKey({ colorName, sizeName });
+        stockBySpec.set(k, (stockBySpec.get(k) || 0) + delta);
+      }
+    }
+  }
+  const effectiveNullStock = Math.max(0, nullVariantStock);
+
+  // 4. 可回 = min(发出剩余, 仓库库存)
   const rows: CollabReturnRow[] = [];
   for (const [k, { colorName, sizeName, qty: dispatched }] of dispatchedBySpec) {
     const returned = returnedBySpec.get(k) || 0;
     const remaining = dispatched - returned;
     if (remaining <= 0) continue;
-    rows.push({ colorName, sizeName, maxReturnable: remaining, qty: '' });
+    const variantStock = Math.max(0, stockBySpec.get(k) || 0);
+    const stock = variantStock + effectiveNullStock;
+    const maxReturnable = Math.min(remaining, stock);
+    if (maxReturnable <= 0) continue;
+    rows.push({ colorName, sizeName, maxReturnable, qty: '' });
   }
   rows.sort((a, b) => {
     const la = [a.colorName || '', a.sizeName || ''].join('\t');
@@ -121,7 +168,7 @@ function computeCollaborationReturnableRows(
   return rows;
 }
 
-const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ products, partners, orders, prodRecords, warehouses, dictionaries, onRefreshPartners, onRefreshProducts, onRefreshOrders, onRefreshProdRecords, onRefreshPMP, tenantRole, userPermissions }) => {
+const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ products, partners, orders, prodRecords, warehouses, dictionaries, nodeTemplates, onRefreshPartners, onRefreshProducts, onRefreshOrders, onRefreshProdRecords, onRefreshPMP, tenantRole, userPermissions }) => {
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<ViewMode>('inbox');
   /** 对照表行：全局 products 未命中时按 id 拉取补全名称 */
@@ -168,6 +215,24 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
   // Role filter
   const [roleFilter, setRoleFilter] = useState<'all' | 'sender' | 'receiver'>('all');
 
+  // Outsource routes state
+  const [outsourceRoutes, setOutsourceRoutes] = useState<OutsourceRoute[]>([]);
+  const [routesLoading, setRoutesLoading] = useState(false);
+  const [routeEditOpen, setRouteEditOpen] = useState(false);
+  const [editingRoute, setEditingRoute] = useState<OutsourceRoute | null>(null);
+  const [routeName, setRouteName] = useState('');
+  const [routeSteps, setRouteSteps] = useState<OutsourceRouteStep[]>([]);
+  const [savingRoute, setSavingRoute] = useState(false);
+
+  // Chain forward state
+  const [forwarding, setForwarding] = useState(false);
+  const [confirmingForward, setConfirmingForward] = useState(false);
+  const [forwardOpen, setForwardOpen] = useState(false);
+  const [forwardRows, setForwardRows] = useState<ReturnRow[]>([]);
+  const [forwardNote, setForwardNote] = useState('');
+  const [forwardWarehouseId, setForwardWarehouseId] = useState('');
+  const forwardModalTransferRef = useRef<any>(null);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
@@ -183,6 +248,315 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
   }, [roleFilter]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  const loadRoutes = useCallback(async () => {
+    setRoutesLoading(true);
+    try {
+      const data = await api.collaboration.listOutsourceRoutes();
+      setOutsourceRoutes(data);
+    } catch (err: any) {
+      toast.error(err.message || '加载路线失败');
+    } finally {
+      setRoutesLoading(false);
+    }
+  }, []);
+
+  const startEditRoute = (route?: OutsourceRoute) => {
+    setEditingRoute(route ?? null);
+    setRouteName(route?.name ?? '');
+    setRouteSteps(route?.steps ?? []);
+    setRouteEditOpen(true);
+  };
+
+  const addRouteStep = () => {
+    setRouteSteps(prev => [...prev, { stepOrder: prev.length, nodeId: '', nodeName: '', receiverTenantId: '', receiverTenantName: '' }]);
+  };
+
+  const removeRouteStep = (idx: number) => {
+    setRouteSteps(prev => prev.filter((_, i) => i !== idx).map((s, i) => ({ ...s, stepOrder: i })));
+  };
+
+  const updateRouteStep = (idx: number, patch: Partial<OutsourceRouteStep>) => {
+    setRouteSteps(prev => prev.map((s, i) => i === idx ? { ...s, ...patch } : s));
+  };
+
+  const saveRoute = async () => {
+    if (!routeName.trim()) { toast.warning('请输入路线名称'); return; }
+    if (routeSteps.length === 0) { toast.warning('请至少添加一个步骤'); return; }
+    for (const s of routeSteps) {
+      if (!s.receiverTenantId || !s.nodeId) { toast.warning('每一步须选择工序和协作企业'); return; }
+    }
+    setSavingRoute(true);
+    try {
+      const payload = { name: routeName.trim(), steps: routeSteps };
+      if (editingRoute) {
+        await api.collaboration.updateOutsourceRoute(editingRoute.id, payload);
+        toast.success('路线已更新');
+      } else {
+        await api.collaboration.createOutsourceRoute(payload);
+        toast.success('路线已创建');
+      }
+      setRouteEditOpen(false);
+      loadRoutes();
+    } catch (err: any) {
+      toast.error(err.message || '保存失败');
+    } finally {
+      setSavingRoute(false);
+    }
+  };
+
+  const deleteRoute = async (id: string) => {
+    if (!confirm('确认删除该路线？')) return;
+    try {
+      await api.collaboration.deleteOutsourceRoute(id);
+      toast.success('已删除');
+      loadRoutes();
+    } catch (err: any) {
+      toast.error(err.message || '删除失败');
+    }
+  };
+
+  const openForwardModal = (transfer: any) => {
+    forwardModalTransferRef.current = transfer;
+    setForwardNote('');
+    setForwardWarehouseId(warehouses[0]?.id ?? '');
+    setForwardOpen(true);
+  };
+
+  useEffect(() => {
+    if (!forwardOpen) return;
+    const transfer = forwardModalTransferRef.current;
+    if (!transfer) return;
+    const productId = transfer.receiverProductId;
+    if (!productId) { setForwardRows([]); return; }
+
+    const product = products.find(p => p.id === productId);
+    const colorNameById = Object.fromEntries(dictionaries.colors.map(c => [c.id, c.name]));
+    const sizeNameById = Object.fromEntries(dictionaries.sizes.map(s => [s.id, s.name]));
+    const variantLabel = (vid: string) => {
+      const v = product?.variants.find(x => x.id === vid);
+      if (!v) return { colorName: null as string | null, sizeName: null as string | null };
+      return {
+        colorName: v.colorId ? (colorNameById[v.colorId] ?? null) : null,
+        sizeName: v.sizeId ? (sizeNameById[v.sizeId] ?? null) : null,
+      };
+    };
+
+    const stockByVariant = new Map<string, { colorName: string | null; sizeName: string | null; qty: number }>();
+    let fwdNullVariantStock = 0;
+    for (const r of prodRecords) {
+      if (r.productId !== productId) continue;
+      if (forwardWarehouseId && r.warehouseId !== forwardWarehouseId) continue;
+      const vid = r.variantId || '';
+      const qty = Number(r.quantity) || 0;
+      const delta = (r.type === 'STOCK_IN' || r.type === 'STOCK_RETURN') ? qty
+        : r.type === 'STOCK_OUT' ? -qty
+        : 0;
+      if (delta === 0) continue;
+      if (!vid) {
+        fwdNullVariantStock += delta;
+      } else {
+        const { colorName, sizeName } = variantLabel(vid);
+        const k = collabVariantKey({ colorName, sizeName });
+        const prev = stockByVariant.get(k);
+        if (prev) prev.qty += delta;
+        else stockByVariant.set(k, { colorName, sizeName, qty: delta });
+      }
+    }
+
+    const effNullStock = Math.max(0, fwdNullVariantStock);
+    if (effNullStock > 0) {
+      const pvariants = product?.variants || [];
+      if (pvariants.length > 0) {
+        for (const v of pvariants) {
+          const cn = v.colorId ? (colorNameById[v.colorId] ?? null) : null;
+          const sn = v.sizeId ? (sizeNameById[v.sizeId] ?? null) : null;
+          const k = collabVariantKey({ colorName: cn, sizeName: sn });
+          const prev = stockByVariant.get(k);
+          if (prev) prev.qty += effNullStock;
+          else stockByVariant.set(k, { colorName: cn, sizeName: sn, qty: effNullStock });
+        }
+      } else {
+        const k = collabVariantKey({ colorName: null, sizeName: null });
+        const prev = stockByVariant.get(k);
+        if (prev) prev.qty += effNullStock;
+        else stockByVariant.set(k, { colorName: null, sizeName: null, qty: effNullStock });
+      }
+    }
+
+    const rows: CollabReturnRow[] = [];
+    for (const [, { colorName, sizeName, qty }] of stockByVariant) {
+      const stock = Math.max(0, qty);
+      if (stock <= 0) continue;
+      rows.push({ colorName, sizeName, maxReturnable: stock, qty: '' });
+    }
+    rows.sort((a, b) => {
+      const la = [a.colorName || '', a.sizeName || ''].join('\t');
+      const lb = [b.colorName || '', b.sizeName || ''].join('\t');
+      return la.localeCompare(lb, 'zh-CN');
+    });
+    setForwardRows(rows);
+  }, [forwardOpen, forwardWarehouseId, products, prodRecords, dictionaries]);
+
+  const submitForward = async () => {
+    const transfer = forwardModalTransferRef.current;
+    if (!transfer) return;
+    if (warehouses.length > 0 && !forwardWarehouseId) {
+      toast.warning('请选择出库仓库');
+      return;
+    }
+    if (forwardRows.length === 0) {
+      toast.warning('所有规格已全部转发完毕，无剩余可转发数量');
+      return;
+    }
+    for (const r of forwardRows) {
+      const q = Number(r.qty) || 0;
+      if (q > r.maxReturnable) {
+        toast.error(`「${[r.colorName, r.sizeName].filter(Boolean).join('/') || '无规格'}」超过可转发上限 ${r.maxReturnable}`);
+        return;
+      }
+    }
+    const items = forwardRows
+      .map(r => ({ colorName: r.colorName, sizeName: r.sizeName, quantity: Number(r.qty) || 0 }))
+      .filter(i => i.quantity > 0);
+    if (items.length === 0) {
+      toast.warning('请至少填写一行转发数量');
+      return;
+    }
+    setForwarding(true);
+    try {
+      const res = await api.collaboration.forwardTransfer(transfer.id, { items, note: forwardNote || undefined, warehouseId: forwardWarehouseId || undefined });
+      toast.success(`已转发到下一站: ${res.nextStep?.receiverTenantName ?? ''}`);
+      setForwardOpen(false);
+      setForwardRows([]);
+      setForwardNote('');
+      setForwardWarehouseId('');
+      refreshDetail();
+      refresh();
+      onRefreshProdRecords?.();
+    } catch (err: any) {
+      toast.error(err.message || '转发失败');
+    } finally {
+      setForwarding(false);
+    }
+  };
+
+  const handleConfirmForward = async (transferId: string) => {
+    if (!confirm('确认该转发？确认后将自动生成外协收回/发出流水和报工记录。')) return;
+    setConfirmingForward(true);
+    try {
+      const res = await api.collaboration.confirmForward(transferId);
+      toast.success(`已确认转发，收回单号: ${res.receiveDocNo}，发出单号: ${res.dispatchDocNo}`);
+      refreshDetail();
+      refresh();
+      onRefreshProdRecords?.();
+      onRefreshOrders?.();
+      onRefreshPMP?.();
+    } catch (err: any) {
+      toast.error(err.message || '确认失败');
+    } finally {
+      setConfirmingForward(false);
+    }
+  };
+
+  const [withdrawing, setWithdrawing] = useState(false);
+
+  const handleWithdrawDispatch = async (dispatchId: string) => {
+    if (!confirm('确认撤回该发出批次？撤回后对方将无法看到此批次。')) return;
+    setWithdrawing(true);
+    try {
+      await api.collaboration.withdrawDispatch(dispatchId);
+      toast.success('已撤回发出');
+      refreshDetail();
+      refresh();
+      onRefreshProdRecords?.();
+    } catch (err: any) {
+      toast.error(err.message || '撤回失败');
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
+  const handleWithdrawReturn = async (returnId: string) => {
+    if (!confirm('确认撤回该回传？撤回后出库记录将被还原。')) return;
+    setWithdrawing(true);
+    try {
+      await api.collaboration.withdrawReturn(returnId);
+      toast.success('已撤回回传');
+      refreshDetail();
+      refresh();
+      onRefreshProdRecords?.();
+    } catch (err: any) {
+      toast.error(err.message || '撤回失败');
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
+  const handleWithdrawForward = async (transferId: string) => {
+    if (!confirm('确认撤回该转发？撤回后将恢复到转发前的状态，出库记录将被还原。')) return;
+    setWithdrawing(true);
+    try {
+      await api.collaboration.withdrawForward(transferId);
+      toast.success('已撤回转发');
+      refreshDetail();
+      refresh();
+      onRefreshProdRecords?.();
+    } catch (err: any) {
+      toast.error(err.message || '撤回失败');
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
+  const handleDeleteDispatch = async (dispatchId: string) => {
+    if (!confirm('确认删除该发出记录？删除后不可恢复。')) return;
+    try {
+      await api.collaboration.deleteDispatch(dispatchId);
+      toast.success('已删除');
+      refreshDetail();
+      refresh();
+    } catch (err: any) {
+      toast.error(err.message || '删除失败');
+    }
+  };
+
+  const handleDeleteReturn = async (returnId: string) => {
+    if (!confirm('确认删除该回传记录？删除后不可恢复。')) return;
+    try {
+      await api.collaboration.deleteReturn(returnId);
+      toast.success('已删除');
+      refreshDetail();
+      refresh();
+    } catch (err: any) {
+      toast.error(err.message || '删除失败');
+    }
+  };
+
+  const outsourceNodes = useMemo(() =>
+    (nodeTemplates ?? []).filter(n => n.allowOutsource),
+  [nodeTemplates]);
+
+  const activeCollabsForRoutes = useMemo(() =>
+    collabs.filter((c: any) => c.status === 'ACTIVE'),
+  [collabs]);
+
+  const collabTenantPartnerMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const p of partners) {
+      if (p.collaborationTenantId) map[p.collaborationTenantId] = p.name;
+    }
+    return map;
+  }, [partners]);
+
+  const collabDisplayName = useCallback((tenantId: string, tenantName: string) => {
+    const partnerName = collabTenantPartnerMap[tenantId];
+    return partnerName ? `${partnerName}（${tenantName}）` : tenantName;
+  }, [collabTenantPartnerMap]);
+
+  const pendingForwardCount = useMemo(() =>
+    transfers.filter(t => t.originTenantId && t.chainStep > 0 && !t.originConfirmedAt && t.senderTenantName === '本企业').length,
+  [transfers]);
 
   const openDetail = async (t: any) => {
     try {
@@ -207,12 +581,20 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
     setAcceptOpen(true);
     setAcceptNewName(transfer.senderProductName || '');
     setAcceptNewSku(transfer.senderProductSku || '');
-    const firstPayload = (transfer.dispatches || []).find((d: any) => d.status === 'PENDING')?.payload;
+    const pendingDispatches = (transfer.dispatches || []).filter((d: any) => d.status === 'PENDING');
+    const firstPayload = pendingDispatches[0]?.payload;
     setAcceptNewDesc(firstPayload?.description || '');
-    setAcceptNewColors(normalizeAcceptSpecList(firstPayload?.colorNames));
-    setAcceptNewSizes(normalizeAcceptSpecList(firstPayload?.sizeNames));
-    const pending = (transfer.dispatches || []).filter((d: any) => d.status === 'PENDING');
-    setAcceptDispatchIds(new Set(pending.map((d: any) => d.id)));
+    // 优先从 payload.colorNames/sizeNames 取，fallback 从 items 中提取
+    let colors = normalizeAcceptSpecList(firstPayload?.colorNames);
+    let sizes = normalizeAcceptSpecList(firstPayload?.sizeNames);
+    if (!colors.length || !sizes.length) {
+      const allItems = pendingDispatches.flatMap((d: any) => d.payload?.items ?? []);
+      if (!colors.length) colors = [...new Set(allItems.map((i: any) => i.colorName).filter(Boolean))] as string[];
+      if (!sizes.length) sizes = [...new Set(allItems.map((i: any) => i.sizeName).filter(Boolean))] as string[];
+    }
+    setAcceptNewColors(colors);
+    setAcceptNewSizes(sizes);
+    setAcceptDispatchIds(new Set(pendingDispatches.map((d: any) => d.id)));
   };
 
   const submitAccept = async () => {
@@ -483,6 +865,13 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
     ).length;
   }, [transfers]);
 
+  const pendingReturnCount = useMemo(() => {
+    return transfers.filter(t =>
+      t.senderTenantName === '本企业' &&
+      (t.returns || []).some((r: any) => r.status === 'PENDING_A_RECEIVE')
+    ).length;
+  }, [transfers]);
+
   const statusLabel = (s: string) => {
     const map: Record<string, { text: string; cls: string }> = {
       OPEN: { text: '进行中', cls: 'bg-blue-50 text-blue-600' },
@@ -496,11 +885,14 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
 
   const dispatchStatusLabel = (s: string) => {
     if (s === 'PENDING') return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-50 text-amber-600">待接受</span>;
+    if (s === 'FORWARDED') return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-blue-50 text-blue-600">已转发</span>;
+    if (s === 'WITHDRAWN') return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-slate-100 text-slate-500">已撤回</span>;
     return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-50 text-emerald-600">已接受</span>;
   };
 
   const returnStatusLabel = (s: string) => {
     if (s === 'PENDING_A_RECEIVE') return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-50 text-amber-600">待甲方收回</span>;
+    if (s === 'WITHDRAWN') return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-slate-100 text-slate-500">已撤回</span>;
     return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-50 text-emerald-600">已收回</span>;
   };
 
@@ -645,6 +1037,143 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
     );
   }
 
+  if (viewMode === 'routes') {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6 animate-in slide-in-from-bottom-4">
+        <div className="flex items-center justify-between">
+          <button onClick={() => setViewMode('inbox')} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
+            <ArrowLeft className="w-4 h-4" /> 返回收件箱
+          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => startEditRoute()} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all">
+              <Plus className="w-4 h-4" /> 新建路线
+            </button>
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+            <Route className="w-5 h-5 text-indigo-600" />
+            <div>
+              <h3 className="text-lg font-black text-slate-900">外协路线</h3>
+              <p className="text-xs text-slate-500">配置多步外协传递路线，在外协发出时可选择路线实现链式转发</p>
+            </div>
+          </div>
+          {routesLoading ? (
+            <div className="px-6 py-12 text-center text-slate-400 text-sm">加载中...</div>
+          ) : outsourceRoutes.length === 0 ? (
+            <div className="px-6 py-12 text-center text-slate-400 text-sm">暂无外协路线，点击右上角新建</div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {outsourceRoutes.map(r => (
+                <div key={r.id} className="px-6 py-4 hover:bg-slate-50/50 transition-all">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-black text-slate-900">{r.name}</span>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => startEditRoute(r)} className="text-indigo-600 hover:text-indigo-800"><Edit2 className="w-4 h-4" /></button>
+                      <button onClick={() => deleteRoute(r.id)} className="text-rose-500 hover:text-rose-700"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {(r.steps || []).sort((a: any, b: any) => a.stepOrder - b.stepOrder).map((s: any, i: number) => (
+                      <React.Fragment key={i}>
+                        {i > 0 && <ChevronRight className="w-3 h-3 text-slate-400" />}
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold">
+                          {s.nodeName || '工序'} · {s.receiverTenantId ? collabDisplayName(s.receiverTenantId, s.receiverTenantName || '企业') : (s.receiverTenantName || '企业')}
+                        </span>
+                      </React.Fragment>
+                    ))}
+                    <ChevronRight className="w-3 h-3 text-slate-400" />
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold">
+                      回传甲方
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">{new Date(r.createdAt).toLocaleDateString()} · {r.steps.length} 步</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 路线编辑弹窗 */}
+        {routeEditOpen && (
+          <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4" onClick={() => setRouteEditOpen(false)}>
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-lg font-black text-slate-900">{editingRoute ? '编辑路线' : '新建路线'}</h3>
+                <button onClick={() => setRouteEditOpen(false)}><X className="w-5 h-5 text-slate-400 hover:text-slate-600" /></button>
+              </div>
+              <div className="px-6 py-5 space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase block ml-1">路线名称</label>
+                  <input
+                    value={routeName}
+                    onChange={e => setRouteName(e.target.value)}
+                    placeholder="例如：裁剪-缝制-后整"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">步骤 ({routeSteps.length})</label>
+                    <button onClick={addRouteStep} className="text-indigo-600 hover:text-indigo-800 text-xs font-bold flex items-center gap-1">
+                      <Plus className="w-3 h-3" /> 添加步骤
+                    </button>
+                  </div>
+                  {routeSteps.map((step, idx) => (
+                    <div key={idx} className="flex items-center gap-2 bg-slate-50 rounded-xl p-3">
+                      <span className="text-xs font-black text-slate-400 w-6 text-center shrink-0">{idx + 1}</span>
+                      <select
+                        value={step.nodeId}
+                        onChange={e => {
+                          const node = outsourceNodes.find(n => n.id === e.target.value);
+                          updateRouteStep(idx, { nodeId: e.target.value, nodeName: node?.name ?? '' });
+                        }}
+                        className="flex-1 bg-white border border-slate-200 rounded-lg py-2 px-3 text-xs font-bold text-slate-800"
+                      >
+                        <option value="">选择工序</option>
+                        {outsourceNodes.map(n => (
+                          <option key={n.id} value={n.id}>{n.name}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={step.receiverTenantId}
+                        onChange={e => {
+                          const c = activeCollabsForRoutes.find((c: any) => c.otherTenantId === e.target.value);
+                          updateRouteStep(idx, { receiverTenantId: e.target.value, receiverTenantName: c?.otherTenantName ?? '' });
+                        }}
+                        className="flex-1 bg-white border border-slate-200 rounded-lg py-2 px-3 text-xs font-bold text-slate-800"
+                      >
+                        <option value="">选择协作企业</option>
+                        {activeCollabsForRoutes.filter((c: any) => {
+                          const usedIds = routeSteps.filter((_, si) => si !== idx).map(s => s.receiverTenantId);
+                          return !usedIds.includes(c.otherTenantId);
+                        }).map((c: any) => (
+                          <option key={c.otherTenantId} value={c.otherTenantId}>{collabDisplayName(c.otherTenantId, c.otherTenantName)}</option>
+                        ))}
+                      </select>
+                      <button onClick={() => removeRouteStep(idx)} className="text-rose-400 hover:text-rose-600 shrink-0">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  {routeSteps.length === 0 && (
+                    <div className="text-center text-slate-400 text-xs py-4">点击上方「添加步骤」开始配置路线</div>
+                  )}
+                </div>
+              </div>
+              <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button onClick={() => setRouteEditOpen(false)} className="px-4 py-2 text-sm font-bold text-slate-600 hover:text-slate-800">取消</button>
+                <button onClick={saveRoute} disabled={savingRoute} className="px-5 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all">
+                  {savingRoute ? '保存中...' : '保存'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (viewMode === 'maps') {
     return (
       <div className="max-w-4xl mx-auto space-y-6 animate-in slide-in-from-bottom-4">
@@ -652,7 +1181,6 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
           <button onClick={() => setViewMode('inbox')} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
             <ArrowLeft className="w-4 h-4" /> 返回收件箱
           </button>
-          <button onClick={loadMaps} className="flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-indigo-800"><RefreshCw className="w-4 h-4" /> 刷新</button>
         </div>
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
@@ -758,6 +1286,39 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
             <p className="text-xs text-slate-500">乙方接收模式：{t.bReceiveMode === 'product' ? '关联产品' : '关联工单'}</p>
           )}
 
+          {/* 链式外协路线进度 */}
+          {t.outsourceRouteSnapshot && Array.isArray(t.outsourceRouteSnapshot) && (
+            <div className="pt-2">
+              <p className="text-[10px] font-black text-slate-400 uppercase mb-2">外协路线进度</p>
+              <div className="flex items-center gap-1 flex-wrap">
+                {(t.outsourceRouteSnapshot as any[]).sort((a: any, b: any) => a.stepOrder - b.stepOrder).map((step: any, i: number) => {
+                  const isComplete = i < t.chainStep;
+                  const isCurrent = i === t.chainStep;
+                  return (
+                    <React.Fragment key={i}>
+                      {i > 0 && <ChevronRight className="w-3 h-3 text-slate-400" />}
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold ${
+                        isComplete ? 'bg-emerald-50 text-emerald-700' :
+                        isCurrent ? 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-300' :
+                        'bg-slate-100 text-slate-500'
+                      }`}>
+                        {isComplete && <Check className="w-3 h-3" />}
+                        {step.nodeName} · {step.receiverTenantName}
+                      </span>
+                    </React.Fragment>
+                  );
+                })}
+                <ChevronRight className="w-3 h-3 text-slate-400" />
+                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold ${
+                  t.status === 'CLOSED' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  {t.status === 'CLOSED' && <Check className="w-3 h-3" />}
+                  回传甲方
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Action buttons */}
           <div className="flex flex-wrap gap-3 pt-2">
             {!isSender && pendingDispatches.length > 0 && (
@@ -765,9 +1326,32 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
                 <Check className="w-4 h-4" /> 接受 ({pendingDispatches.length} 待处理)
               </button>
             )}
-            {!isSender && t.status !== 'CLOSED' && t.status !== 'CANCELLED' && (t.dispatches || []).some((d: any) => d.status === 'ACCEPTED') && (
+            {/* 乙方：转发到下一站（有路线且不是最后一站） */}
+            {!isSender && t.outsourceRouteSnapshot && Array.isArray(t.outsourceRouteSnapshot) &&
+              (t.outsourceRouteSnapshot as any[]).some((s: any) => s.stepOrder > t.chainStep) &&
+              t.status !== 'CLOSED' && (t.dispatches || []).some((d: any) => d.status === 'ACCEPTED') && (
+              <button onClick={() => openForwardModal(t)} className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-600 transition-all">
+                <Forward className="w-4 h-4" /> 转发到下一站
+              </button>
+            )}
+            {/* 乙方：回传（无路线，或是路线最后一站） */}
+            {!isSender && t.status !== 'CLOSED' && t.status !== 'CANCELLED' && (t.dispatches || []).some((d: any) => d.status === 'ACCEPTED') &&
+              (!t.outsourceRouteSnapshot || !Array.isArray(t.outsourceRouteSnapshot) ||
+                !(t.outsourceRouteSnapshot as any[]).some((s: any) => s.stepOrder > t.chainStep)) && (
               <button onClick={() => openReturnModal(t)} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all">
-                <Truck className="w-4 h-4" /> 回传
+                <Truck className="w-4 h-4" /> 回传给甲方
+              </button>
+            )}
+            {/* 甲方：确认转发 */}
+            {isSender && t.chainStep > 0 && !t.originConfirmedAt && (
+              <button onClick={() => handleConfirmForward(t.id)} disabled={confirmingForward} className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-xl text-sm font-bold hover:bg-amber-600 disabled:opacity-50 transition-all">
+                <CheckCircle2 className="w-4 h-4" /> {confirmingForward ? '确认中...' : '确认转发'}
+              </button>
+            )}
+            {/* 乙方：撤回转发（有子单且未被甲方确认） */}
+            {!isSender && t.childTransferId && !t.childConfirmed && (
+              <button onClick={() => handleWithdrawForward(t.childTransferId)} disabled={withdrawing} className="flex items-center gap-2 px-4 py-2 bg-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-300 disabled:opacity-50 transition-all">
+                <RotateCcw className="w-4 h-4" /> {withdrawing ? '撤回中...' : '撤回转发'}
               </button>
             )}
           </div>
@@ -797,9 +1381,28 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
                     </p>
                     <p className="text-[10px] text-slate-400">{new Date(d.createdAt).toLocaleString()}</p>
                   </div>
-                  {d.receiverProductionOrderId && (
-                    <span className="text-xs text-indigo-600 font-bold">工单: {d.receiverProductionOrderId.slice(0, 16)}...</span>
-                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {d.receiverProductionOrderId && (
+                      <span className="text-xs text-indigo-600 font-bold">工单: {d.receiverProductionOrderId.slice(0, 16)}...</span>
+                    )}
+                    {isSender && d.status === 'PENDING' && !(t._chainTransfers && d.transferId && (t._chainTransfers as any[]).some((ct: any) => ct.id === d.transferId && ct.chainStep > 0)) && (
+                      <button
+                        disabled={withdrawing}
+                        onClick={e => { e.stopPropagation(); handleWithdrawDispatch(d.id); }}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold hover:bg-slate-200 disabled:opacity-50 transition-all"
+                      >
+                        <RotateCcw className="w-3 h-3" /> 撤回
+                      </button>
+                    )}
+                    {isSender && d.status === 'WITHDRAWN' && !(t._chainTransfers && d.transferId && (t._chainTransfers as any[]).some((ct: any) => ct.id === d.transferId && ct.chainStep > 0)) && (
+                      <button
+                        onClick={e => { e.stopPropagation(); handleDeleteDispatch(d.id); }}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-rose-50 text-rose-500 rounded-lg text-[10px] font-bold hover:bg-rose-100 transition-all"
+                      >
+                        <Trash2 className="w-3 h-3" /> 删除
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -840,15 +1443,34 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
                       )}
                       <p className="text-[10px] text-slate-400">{new Date(r.createdAt).toLocaleString()}</p>
                     </div>
-                    {isSender && r.status === 'PENDING_A_RECEIVE' && (
-                      <button
-                        disabled={receiving}
-                        onClick={() => handleReceive(r.id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all"
-                      >
-                        <Check className="w-3.5 h-3.5" /> 确认收回
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {isSender && r.status === 'PENDING_A_RECEIVE' && (
+                        <button
+                          disabled={receiving}
+                          onClick={() => handleReceive(r.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all"
+                        >
+                          <Check className="w-3.5 h-3.5" /> 确认收回
+                        </button>
+                      )}
+                      {!isSender && r.status === 'PENDING_A_RECEIVE' && (
+                        <button
+                          disabled={withdrawing}
+                          onClick={e => { e.stopPropagation(); handleWithdrawReturn(r.id); }}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold hover:bg-slate-200 disabled:opacity-50 transition-all"
+                        >
+                          <RotateCcw className="w-3 h-3" /> 撤回
+                        </button>
+                      )}
+                      {!isSender && r.status === 'WITHDRAWN' && (
+                        <button
+                          onClick={e => { e.stopPropagation(); handleDeleteReturn(r.id); }}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-rose-50 text-rose-500 rounded-lg text-[10px] font-bold hover:bg-rose-100 transition-all"
+                        >
+                          <Trash2 className="w-3 h-3" /> 删除
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -992,7 +1614,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
                         <td colSpan={4} className="px-3 py-6 text-center text-sm text-amber-700 bg-amber-50/50 font-medium">
                           {!returnWarehouseId && warehouses.length > 0
                             ? '请先选择出库仓库'
-                            : '所有规格已全部回传完毕，无剩余可回传数量。'}
+                            : '无可回传数量（库存不足或已全部回传）。'}
                         </td>
                       </tr>
                     ) : (
@@ -1044,6 +1666,106 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
             </div>
           </div>
         )}
+
+        {/* 转发弹窗 */}
+        {forwardOpen && (
+          <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4" onClick={() => setForwardOpen(false)}>
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] overflow-y-auto space-y-4 p-6" onClick={e => e.stopPropagation()}>
+              <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><Forward className="w-5 h-5 text-orange-500" /> 转发到下一站</h3>
+              {(() => {
+                const transfer = forwardModalTransferRef.current;
+                const route = transfer?.outsourceRouteSnapshot as any[] | undefined;
+                const nextStep = route?.find((s: any) => s.stepOrder === (transfer?.chainStep ?? 0) + 1);
+                return nextStep ? (
+                  <p className="text-xs text-slate-500">
+                    下一站：<span className="font-bold text-slate-800">{nextStep.nodeName}</span> · <span className="font-bold text-orange-600">{nextStep.receiverTenantName}</span>
+                    ，请先选择<strong>出库仓库</strong>，可转发数量为该仓库中对应规格的库存数量。
+                  </p>
+                ) : null;
+              })()}
+              {warehouses.length > 0 && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase block">出库仓库</label>
+                  <select
+                    value={forwardWarehouseId}
+                    onChange={e => setForwardWarehouseId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-orange-500 outline-none"
+                  >
+                    <option value="">请选择仓库</option>
+                    {warehouses.map(w => (
+                      <option key={w.id} value={w.id}>{w.name}{w.code ? ` (${w.code})` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase">颜色</th>
+                      <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase">尺码</th>
+                      <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase text-right">可转</th>
+                      <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase w-24">本次</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {forwardRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-3 py-6 text-center text-sm text-amber-700 bg-amber-50/50 font-medium">
+                          {!forwardWarehouseId && warehouses.length > 0
+                            ? '请先选择出库仓库'
+                            : '该仓库中无可转发库存。'}
+                        </td>
+                      </tr>
+                    ) : (
+                      forwardRows.map((row, idx) => (
+                        <tr key={collabVariantKey(row)}>
+                          <td className="px-3 py-2 font-bold text-slate-800">{row.colorName || '—'}</td>
+                          <td className="px-3 py-2 font-bold text-slate-800">{row.sizeName || '—'}</td>
+                          <td className="px-3 py-2 text-right text-slate-600">{row.maxReturnable}</td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              min={0}
+                              max={row.maxReturnable}
+                              value={row.qty}
+                              onChange={e => {
+                                const v = e.target.value;
+                                setForwardRows(prev => prev.map((r, i) => (i === idx ? { ...r, qty: v } : r)));
+                              }}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-orange-500 outline-none"
+                              placeholder="0"
+                            />
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase block">备注（可选）</label>
+                <input
+                  type="text"
+                  value={forwardNote}
+                  onChange={e => setForwardNote(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-orange-500 outline-none"
+                  placeholder="选填"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setForwardOpen(false)} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">取消</button>
+                <button
+                  disabled={forwarding || forwardRows.length === 0 || (warehouses.length > 0 && !forwardWarehouseId)}
+                  onClick={submitForward}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-50 transition-colors"
+                >
+                  {forwarding ? '转发中...' : '确认转发'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1058,6 +1780,12 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
           {pendingCount > 0 && (
             <span className="px-2.5 py-0.5 bg-rose-500 text-white text-xs font-black rounded-full">{pendingCount}</span>
           )}
+          {pendingForwardCount > 0 && (
+            <span className="px-2.5 py-0.5 bg-orange-500 text-white text-xs font-black rounded-full" title="待确认转发">{pendingForwardCount}</span>
+          )}
+          {pendingReturnCount > 0 && (
+            <span className="px-2.5 py-0.5 bg-indigo-500 text-white text-xs font-black rounded-full" title="待确认收回">{pendingReturnCount}</span>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -1067,13 +1795,16 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
             <Settings2 className="w-4 h-4" /> 协作设置
           </button>
           <button
+            onClick={() => { setViewMode('routes'); loadRoutes(); api.collaboration.listCollaborations().then(setCollabs).catch(() => {}); }}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all"
+          >
+            <Route className="w-4 h-4" /> 外协路线
+          </button>
+          <button
             onClick={() => { setViewMode('maps'); loadMaps(); }}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all"
           >
             <Link2 className="w-4 h-4" /> 对照表
-          </button>
-          <button onClick={refresh} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all">
-            <RefreshCw className="w-4 h-4" /> 刷新
           </button>
         </div>
       </div>
@@ -1102,6 +1833,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
             const totalD = (t.dispatches || []).length;
             const totalR = (t.returns || []).length;
             const isSender = t.senderTenantName === '本企业';
+            const pendingR = isSender ? (t.returns || []).filter((r: any) => r.status === 'PENDING_A_RECEIVE').length : 0;
             return (
               <div
                 key={t.id}
@@ -1120,9 +1852,28 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
                     {pendingD > 0 && (
                       <span className="px-2 py-0.5 bg-amber-50 text-amber-600 text-[10px] font-black rounded">{pendingD} 待接受</span>
                     )}
+                    {t.chainStep > 0 && !t.originConfirmedAt && isSender && (
+                      <span className="px-2 py-0.5 bg-orange-50 text-orange-600 text-[10px] font-black rounded">待确认转发</span>
+                    )}
+                    {pendingR > 0 && (
+                      <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-[10px] font-black rounded">{pendingR} 待确认收回</span>
+                    )}
                     {statusLabel(t.status)}
                   </div>
                 </div>
+                {t.outsourceRouteSnapshot && Array.isArray(t.outsourceRouteSnapshot) && (
+                  <div className="flex items-center gap-1 flex-wrap mb-2">
+                    <Route className="w-3 h-3 text-orange-400 shrink-0" />
+                    {[...(t.outsourceRouteSnapshot as any[])].sort((a: any, b: any) => a.stepOrder - b.stepOrder).map((s: any, i: number) => (
+                      <React.Fragment key={i}>
+                        {i > 0 && <ChevronRight className="w-3 h-3 text-slate-300" />}
+                        <span className={`text-[10px] font-bold ${s.stepOrder === t.chainStep ? 'text-orange-600' : 'text-slate-400'}`}>{s.nodeName}·{s.receiverTenantName}</span>
+                      </React.Fragment>
+                    ))}
+                    <ChevronRight className="w-3 h-3 text-slate-300" />
+                    <span className="text-[10px] font-bold text-emerald-500">回传</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-6 text-xs text-slate-500">
                   <span>{isSender ? '→' : '←'} {isSender ? t.receiverTenantName : t.senderTenantName}</span>
                   <span>Dispatch: {totalD}</span>

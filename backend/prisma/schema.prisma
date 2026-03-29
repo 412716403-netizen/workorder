@@ -315,6 +315,8 @@ model Product {
   sizeIds            Json     @default("[]") @map("size_ids")
   categoryCustomData Json     @default("{}") @map("category_custom_data")
   milestoneNodeIds   Json     @default("[]") @map("milestone_node_ids")
+  /** 标准生产路线报工填报项：nodeId -> fieldId -> 值（文本/JSON 数组多附件等） */
+  routeReportValues  Json     @default("{}") @map("route_report_values")
   nodeRates          Json     @default("{}") @map("node_rates")
   nodePricingModes   Json     @default("{}") @map("node_pricing_modes")
   createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz()
@@ -324,9 +326,10 @@ model Product {
   variants ProductVariant[]
   boms     Bom[]
 
+  @@unique([tenantId, sku])
+  @@unique([tenantId, name])
   @@index([tenantId])
   @@index([categoryId])
-  @@index([sku])
   @@map("products")
 }
 
@@ -731,19 +734,25 @@ model TenantCollaboration {
 }
 
 model InterTenantSubcontractTransfer {
-  id                String   @id @default(uuid()) @db.Uuid
-  collaborationId   String   @map("collaboration_id") @db.Uuid
-  senderTenantId    String   @map("sender_tenant_id") @db.Uuid
-  receiverTenantId  String   @map("receiver_tenant_id") @db.Uuid
-  senderProductId   String   @map("sender_product_id") @db.VarChar(50)
-  senderProductSku  String   @map("sender_product_sku") @db.VarChar(100)
-  senderProductName String   @map("sender_product_name") @db.VarChar(200)
-  status            String   @default("OPEN") @db.VarChar(20)
-  aLinkMode         String   @map("a_link_mode") @db.VarChar(20)
-  bReceiveMode      String?  @map("b_receive_mode") @db.VarChar(20)
-  receiverProductId String?  @map("receiver_product_id") @db.VarChar(50)
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+  id                     String    @id @default(uuid()) @db.Uuid
+  collaborationId        String    @map("collaboration_id") @db.Uuid
+  senderTenantId         String    @map("sender_tenant_id") @db.Uuid
+  receiverTenantId       String    @map("receiver_tenant_id") @db.Uuid
+  senderProductId        String    @map("sender_product_id") @db.VarChar(50)
+  senderProductSku       String    @map("sender_product_sku") @db.VarChar(100)
+  senderProductName      String    @map("sender_product_name") @db.VarChar(200)
+  status                 String    @default("OPEN") @db.VarChar(20)
+  aLinkMode              String    @map("a_link_mode") @db.VarChar(20)
+  bReceiveMode           String?   @map("b_receive_mode") @db.VarChar(20)
+  receiverProductId      String?   @map("receiver_product_id") @db.VarChar(50)
+  originTransferId       String?   @map("origin_transfer_id") @db.Uuid
+  parentTransferId       String?   @map("parent_transfer_id") @db.Uuid
+  chainStep              Int       @default(0) @map("chain_step")
+  originTenantId         String?   @map("origin_tenant_id") @db.Uuid
+  outsourceRouteSnapshot Json?     @map("outsource_route_snapshot")
+  originConfirmedAt      DateTime? @map("origin_confirmed_at") @db.Timestamptz()
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
   collaboration TenantCollaboration              @relation(fields: [collaborationId], references: [id])
   dispatches    SubcontractCollaborationDispatch[]
@@ -753,6 +762,8 @@ model InterTenantSubcontractTransfer {
   @@index([receiverTenantId])
   @@index([senderProductId])
   @@index([status])
+  @@index([originTenantId])
+  @@index([originTransferId])
   @@map("inter_tenant_subcontract_transfers")
 }
 
@@ -804,4 +815,16 @@ model CollaborationProductMap {
   @@unique([collaborationId, senderSku])
   @@index([collaborationId])
   @@map("collaboration_product_maps")
+}
+
+model OutsourceRoute {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String   @db.VarChar(200)
+  steps     Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@index([tenantId])
+  @@map("outsource_routes")
 }

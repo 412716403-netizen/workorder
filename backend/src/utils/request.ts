@@ -17,6 +17,7 @@ const CREATE_EXCLUDE = new Set(['tenantId', 'updatedAt']);
 const JSON_FIELD_KEYS = new Set([
   'customData', 'customFields', 'assignments', 'reportTemplate',
   'colorIds', 'sizeIds', 'categoryCustomData', 'milestoneNodeIds',
+  'routeReportValues',
   'nodeRates', 'nodePricingModes', 'nodeBoms', 'permissions',
   'standardFields', 'assignedWorkerIds', 'assignedEquipmentIds',
 ]);

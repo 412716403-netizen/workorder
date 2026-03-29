@@ -1,8 +1,73 @@
 import type { Request, Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { getTenantPrisma, prisma as basePrisma } from '../lib/prisma.js';
 import { genId } from '../utils/genId.js';
 import { str, optStr, sanitizeUpdate, sanitizeCreate, sanitizeItems } from '../utils/request.js';
 import { AppError } from '../middleware/errorHandler.js';
+
+/** 与 Prisma Product 中 Json 列对应；写入前统一序列化，避免校验失败或双编码字符串 */
+const PRODUCT_JSON_FIELDS = [
+  'colorIds',
+  'sizeIds',
+  'categoryCustomData',
+  'milestoneNodeIds',
+  'routeReportValues',
+  'nodeRates',
+  'nodePricingModes',
+] as const;
+
+function coerceProductJsonFields(data: Record<string, unknown>): void {
+  for (const key of PRODUCT_JSON_FIELDS) {
+    if (!(key in data)) continue;
+    let v = data[key];
+    if (v === undefined) {
+      delete data[key];
+      continue;
+    }
+    if (typeof v === 'string') {
+      const t = v.trim();
+      if (t === '') {
+        data[key] =
+          key === 'colorIds' || key === 'sizeIds' || key === 'milestoneNodeIds'
+            ? ([] as Prisma.InputJsonValue)
+            : ({} as Prisma.InputJsonValue);
+        continue;
+      }
+      try {
+        v = JSON.parse(t) as unknown;
+      } catch {
+        delete data[key];
+        continue;
+      }
+    }
+    try {
+      data[key] = JSON.parse(JSON.stringify(v)) as Prisma.InputJsonValue;
+    } catch {
+      delete data[key];
+    }
+  }
+}
+
+function omitUndefinedValues(data: Record<string, unknown>): void {
+  for (const k of Object.keys(data)) {
+    if (data[k] === undefined) delete data[k];
+  }
+}
+
+function normalizeProductNameSku(
+  data: Record<string, unknown>,
+  existing?: { name: string; sku: string },
+): { name: string; sku: string } {
+  const name =
+    data.name !== undefined && typeof data.name === 'string'
+      ? data.name.trim()
+      : (existing ? String(existing.name ?? '').trim() : '');
+  const sku =
+    data.sku !== undefined && typeof data.sku === 'string'
+      ? data.sku.trim()
+      : (existing ? String(existing.sku ?? '').trim() : '');
+  return { name, sku };
+}
 
 // ── 产品 ──
 export async function listProducts(req: Request, res: Response, next: NextFunction) {
@@ -35,10 +100,25 @@ export async function getProduct(req: Request, res: Response, next: NextFunction
 
 export async function createProduct(req: Request, res: Response, next: NextFunction) {
   try {
-    const db = getTenantPrisma(req.tenantId!);
+    const tenantId = req.tenantId!;
+    const db = getTenantPrisma(tenantId);
     const { variants, category, boms: _boms, ...rest } = req.body;
     const data = sanitizeCreate(rest);
     if (!data.id) data.id = genId('prod');
+
+    const { name, sku } = normalizeProductNameSku(data);
+    if (!name) throw new AppError(400, '产品名称不能为空');
+    if (!sku) throw new AppError(400, '产品编号不能为空');
+    data.name = name;
+    data.sku = sku;
+    coerceProductJsonFields(data);
+    omitUndefinedValues(data);
+
+    const dupSku = await basePrisma.product.findFirst({ where: { tenantId, sku } });
+    if (dupSku) throw new AppError(409, '产品编号已存在');
+    const dupName = await basePrisma.product.findFirst({ where: { tenantId, name } });
+    if (dupName) throw new AppError(409, '产品名称已存在');
+
     let cleanVariants: any[] | undefined;
     if (variants && Array.isArray(variants) && variants.length > 0) {
       cleanVariants = variants.map((v: any) => {
@@ -59,17 +139,35 @@ export async function createProduct(req: Request, res: Response, next: NextFunct
 
 export async function updateProduct(req: Request, res: Response, next: NextFunction) {
   try {
-    const db = getTenantPrisma(req.tenantId!);
+    const tenantId = req.tenantId!;
+    const db = getTenantPrisma(tenantId);
     const { variants, category, boms: _boms, ...rest } = req.body;
     const data = sanitizeUpdate(rest);
     const productId = str(req.params.id);
     const existing = await db.product.findUnique({ where: { id: productId } });
     if (!existing) throw new AppError(404, '产品不存在');
 
+    const { name, sku } = normalizeProductNameSku(data, { name: existing.name, sku: existing.sku });
+    if (!name) throw new AppError(400, '产品名称不能为空');
+    if (!sku) throw new AppError(400, '产品编号不能为空');
+    data.name = name;
+    data.sku = sku;
+    coerceProductJsonFields(data);
+    omitUndefinedValues(data);
+
+    const dupSku = await basePrisma.product.findFirst({
+      where: { tenantId, sku, id: { not: productId } },
+    });
+    if (dupSku) throw new AppError(409, '产品编号已存在');
+    const dupName = await basePrisma.product.findFirst({
+      where: { tenantId, name, id: { not: productId } },
+    });
+    if (dupName) throw new AppError(409, '产品名称已存在');
+
     const oldNodeIds = (existing.milestoneNodeIds as string[]) || [];
 
-    await basePrisma.$transaction(async (tx) => {
-      await tx.product.update({ where: { id: productId }, data });
+    await db.$transaction(async (tx) => {
+      await tx.product.update({ where: { id: productId }, data: data as Prisma.ProductUpdateInput });
       if (variants && Array.isArray(variants)) {
         await tx.productVariant.deleteMany({ where: { productId } });
         if (variants.length > 0) {
@@ -89,7 +187,7 @@ export async function updateProduct(req: Request, res: Response, next: NextFunct
       await backfillPendingProcessOrders(productId, req.tenantId!, newNodeIds);
     }
 
-    const product = await basePrisma.product.findUnique({
+    const product = await db.product.findUnique({
       where: { id: productId },
       include: { variants: true },
     });
@@ -99,8 +197,66 @@ export async function updateProduct(req: Request, res: Response, next: NextFunct
 
 export async function deleteProduct(req: Request, res: Response, next: NextFunction) {
   try {
-    const db = getTenantPrisma(req.tenantId!);
-    await db.product.delete({ where: { id: str(req.params.id) } });
+    const tenantId = req.tenantId!;
+    const productId = str(req.params.id);
+    const db = getTenantPrisma(tenantId);
+
+    const existing = await db.product.findUnique({ where: { id: productId }, select: { id: true } });
+    if (!existing) throw new AppError(404, '产品不存在');
+
+    const blockers: string[] = [];
+
+    const bomParent = await db.bom.count({ where: { parentProductId: productId } });
+    if (bomParent > 0) blockers.push(`有 ${bomParent} 条 BOM 以该产品为父产品`);
+
+    const bomItem = await basePrisma.bomItem.count({
+      where: { productId, bom: { tenantId } },
+    });
+    if (bomItem > 0) blockers.push(`有 ${bomItem} 条 BOM 子件引用该产品`);
+
+    const plans = await db.planOrder.count({ where: { productId } });
+    if (plans > 0) blockers.push(`有 ${plans} 条生产计划`);
+
+    const orders = await db.productionOrder.count({ where: { productId } });
+    if (orders > 0) blockers.push(`有 ${orders} 条生产工单`);
+
+    const pmp = await db.productMilestoneProgress.count({ where: { productId } });
+    if (pmp > 0) blockers.push(`有 ${pmp} 条产品工序进度`);
+
+    const opRec = await db.productionOpRecord.count({
+      where: { OR: [{ productId }, { sourceProductId: productId }] },
+    });
+    if (opRec > 0) blockers.push(`有 ${opRec} 条生产操作记录`);
+
+    const psi = await db.psiRecord.count({ where: { productId } });
+    if (psi > 0) blockers.push(`有 ${psi} 条进销存记录`);
+
+    const fin = await db.financeRecord.count({ where: { productId } });
+    if (fin > 0) blockers.push(`有 ${fin} 条财务记录`);
+
+    const transfers = await basePrisma.interTenantSubcontractTransfer.count({
+      where: {
+        OR: [
+          { senderTenantId: tenantId, senderProductId: productId },
+          { receiverTenantId: tenantId, receiverProductId: productId },
+        ],
+      },
+    });
+    if (transfers > 0) blockers.push(`有 ${transfers} 条协作外发/接收关联`);
+
+    const collabMaps = await basePrisma.collaborationProductMap.count({
+      where: {
+        receiverProductId: productId,
+        collaboration: { OR: [{ tenantAId: tenantId }, { tenantBId: tenantId }] },
+      },
+    });
+    if (collabMaps > 0) blockers.push(`有 ${collabMaps} 条协作产品映射`);
+
+    if (blockers.length > 0) {
+      throw new AppError(409, `无法删除产品：${blockers.join('；')}`);
+    }
+
+    await db.product.delete({ where: { id: productId } });
     res.json({ message: '已删除' });
   } catch (e) { next(e); }
 }
@@ -214,22 +370,24 @@ async function backfillPendingProcessOrders(productId: string, tenantId: string,
   if (pendingOrders.length === 0) return;
 
   const nodes = await basePrisma.globalNodeTemplate.findMany({ where: { tenantId } });
-
   for (const order of pendingOrders) {
     if (order.milestones.length > 0) continue;
-    const milestones = milestoneNodeIds.map((nodeId, idx) => ({
-      id: genId('ms'),
-      templateId: nodeId,
-      name: nodes.find(n => n.id === nodeId)?.name || nodeId,
-      status: 'PENDING',
-      completedQuantity: 0,
-      reportTemplate: (nodes.find(n => n.id === nodeId) as any)?.reportTemplate || [],
-      weight: 1,
-      assignedWorkerIds: [],
-      assignedEquipmentIds: [],
-      sortOrder: idx,
-      productionOrderId: order.id,
-    }));
+    const milestones = milestoneNodeIds.map((nodeId, idx) => {
+      const node = nodes.find(n => n.id === nodeId);
+      return {
+        id: genId('ms'),
+        templateId: nodeId,
+        name: node?.name || nodeId,
+        status: 'PENDING',
+        completedQuantity: 0,
+        reportTemplate: (node as any)?.reportTemplate || [],
+        weight: 1,
+        assignedWorkerIds: [],
+        assignedEquipmentIds: [],
+        sortOrder: idx,
+        productionOrderId: order.id,
+      };
+    });
     await basePrisma.$transaction(async (tx) => {
       await tx.milestone.createMany({ data: milestones });
       await tx.productionOrder.update({

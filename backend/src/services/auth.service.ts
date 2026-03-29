@@ -248,8 +248,6 @@ export async function refresh(oldRefreshToken: string) {
   if (!user) throw new AppError(401, '用户不存在');
   if (user.status !== 'active') throw new AppError(403, '账号已被禁用');
 
-  await prisma.refreshToken.delete({ where: { id: stored.id } });
-
   let decoded: any;
   try {
     decoded = jwt.verify(oldRefreshToken, env.JWT_REFRESH_SECRET);
@@ -273,13 +271,13 @@ export async function refresh(oldRefreshToken: string) {
     tenantRole: tenantInfo.tenantRole,
     permissions: tenantInfo.permissions,
   };
-  const tokens = generateTokens(payload);
 
-  await prisma.refreshToken.create({
-    data: { userId: user.id, token: hashToken(tokens.refreshToken), expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
-  });
+  // Only issue a new access token; keep the same refresh token to avoid
+  // the race where the client misses the rotation response (browser close,
+  // network drop, etc.) and gets permanently locked out.
+  const accessToken = jwt.sign(payload, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN } as jwt.SignOptions);
 
-  return { ...tokens };
+  return { accessToken, refreshToken: oldRefreshToken };
 }
 
 export async function logout(refreshToken: string) {

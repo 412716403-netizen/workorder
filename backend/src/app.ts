@@ -57,7 +57,7 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
 app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
 app.use(cookieParser());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: env.JSON_BODY_LIMIT }));
 
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,

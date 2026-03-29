@@ -89,6 +89,13 @@ async function request<T = unknown>(path: string, options: RequestInit = {}): Pr
         headers['Authorization'] = `Bearer ${memoryAccessToken}`;
       }
       res = await fetchWithTimeout(url, { ...options, headers, credentials: 'include' });
+    } else if (localStorage.getItem('isLoggedIn')) {
+      clearTokens();
+      localStorage.removeItem('currentUser');
+      localStorage.removeItem('tenantCtx');
+      localStorage.removeItem('userTenants');
+      window.location.replace('/');
+      return new Promise<T>(() => {});
     }
   }
 
@@ -457,7 +464,7 @@ export const collaboration = {
   listCollaborations: () =>
     request<any[]>('/collaboration/collaborations'),
 
-  syncDispatch: (data: { recordIds: string[]; collaborationTenantId: string }) =>
+  syncDispatch: (data: { recordIds: string[]; collaborationTenantId: string; outsourceRouteId?: string }) =>
     request<{ dispatches: { transferId: string; dispatchId: string; productName: string }[] }>(
       '/collaboration/subcontract-transfers/sync-dispatch',
       { method: 'POST', body: JSON.stringify(data) },
@@ -471,10 +478,34 @@ export const collaboration = {
 
   acceptTransfer: (id: string, data: any) =>
     request<any>(`/collaboration/subcontract-transfers/${id}/accept`, { method: 'POST', body: JSON.stringify(data) }),
+  forwardTransfer: (id: string, data: { items: Array<{ colorName: string | null; sizeName: string | null; quantity: number }>; note?: string; warehouseId?: string }) =>
+    request<any>(`/collaboration/subcontract-transfers/${id}/forward`, { method: 'POST', body: JSON.stringify(data) }),
+  confirmForward: (id: string) =>
+    request<any>(`/collaboration/subcontract-transfers/${id}/confirm-forward`, { method: 'PATCH' }),
   createReturn: (id: string, data: any) =>
     request<any>(`/collaboration/subcontract-transfers/${id}/returns`, { method: 'POST', body: JSON.stringify(data) }),
   receiveReturn: (id: string) =>
     request<any>(`/collaboration/subcontract-returns/${id}/receive`, { method: 'PATCH' }),
+
+  withdrawDispatch: (id: string) =>
+    request<any>(`/collaboration/subcontract-dispatches/${id}/withdraw`, { method: 'PATCH' }),
+  withdrawReturn: (id: string) =>
+    request<any>(`/collaboration/subcontract-returns/${id}/withdraw`, { method: 'PATCH' }),
+  withdrawForward: (id: string) =>
+    request<any>(`/collaboration/subcontract-transfers/${id}/withdraw-forward`, { method: 'PATCH' }),
+  deleteDispatch: (id: string) =>
+    request<any>(`/collaboration/subcontract-dispatches/${id}`, { method: 'DELETE' }),
+  deleteReturn: (id: string) =>
+    request<any>(`/collaboration/subcontract-returns/${id}`, { method: 'DELETE' }),
+
+  listOutsourceRoutes: () =>
+    request<any[]>('/collaboration/outsource-routes'),
+  createOutsourceRoute: (data: { name: string; steps: any[] }) =>
+    request<any>('/collaboration/outsource-routes', { method: 'POST', body: JSON.stringify(data) }),
+  updateOutsourceRoute: (id: string, data: { name?: string; steps?: any[] }) =>
+    request<any>(`/collaboration/outsource-routes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteOutsourceRoute: (id: string) =>
+    request(`/collaboration/outsource-routes/${id}`, { method: 'DELETE' }),
 
   listProductMaps: (collaborationId?: string) => {
     const qs = collaborationId ? `?collaborationId=${collaborationId}` : '';

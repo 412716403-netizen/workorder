@@ -43,8 +43,9 @@ interface BasicInfoViewProps {
   equipment: Equipment[];
   dictionaries: AppDictionaries;
   partners: Partner[];
-  onUpdateProduct: (product: Product) => void;
-  onUpdateBOM: (bom: BOM) => void;
+  onUpdateProduct: (product: Product) => Promise<boolean>;
+  onDeleteProduct: (id: string) => Promise<boolean>;
+  onUpdateBOM: (bom: BOM) => Promise<boolean>;
   onRefreshDictionaries: () => Promise<void>;
   onRefreshWorkers: () => Promise<void>;
   onRefreshEquipment: () => Promise<void>;
@@ -68,7 +69,7 @@ type BasicTab = 'PRODUCTS' | 'PARTNERS' | 'MEMBERS' | 'EQUIPMENT' | 'DICTIONARIE
 
 const BasicInfoView: React.FC<BasicInfoViewProps> = ({
   products, globalNodes, categories, partnerCategories, boms, equipment, dictionaries, partners,
-  onUpdateProduct, onUpdateBOM, onRefreshDictionaries, onRefreshWorkers, onRefreshEquipment, onRefreshPartners,
+  onUpdateProduct, onDeleteProduct, onUpdateBOM, onRefreshDictionaries, onRefreshWorkers, onRefreshEquipment, onRefreshPartners,
   tenantId, tenantRole, currentUserId, userPermissions
 }) => {
   const isOwner = tenantRole === 'owner';
@@ -350,7 +351,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
       )}
       <div>
         {activeTab === 'PRODUCTS' && (
-          <ProductManagementView products={products} globalNodes={globalNodes} categories={categories} boms={boms} dictionaries={dictionaries} partners={partners} onUpdateProduct={onUpdateProduct} onUpdateBOM={onUpdateBOM} onRefreshDictionaries={onRefreshDictionaries} onDetailViewChange={setProductDetailVisible} permCanCreate={canCreate('PRODUCTS')} permCanEdit={canEdit('PRODUCTS')} permCanDelete={canDelete('PRODUCTS')} initialProductId={initialProductId} onClearInitialProductId={clearInitialProductId} />
+          <ProductManagementView products={products} globalNodes={globalNodes} categories={categories} boms={boms} dictionaries={dictionaries} partners={partners} onUpdateProduct={onUpdateProduct} onDeleteProduct={onDeleteProduct} onUpdateBOM={onUpdateBOM} onRefreshDictionaries={onRefreshDictionaries} onDetailViewChange={setProductDetailVisible} permCanCreate={canCreate('PRODUCTS')} permCanEdit={canEdit('PRODUCTS')} permCanDelete={canDelete('PRODUCTS')} initialProductId={initialProductId} onClearInitialProductId={clearInitialProductId} />
         )}
 
         {activeTab === 'PARTNERS' && !showModal && (

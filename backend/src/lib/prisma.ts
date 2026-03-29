@@ -51,8 +51,10 @@ export function getTenantPrisma(tenantId: string) {
         },
         async findUnique({ model, args, query }: any) {
           const result = await query(args);
-          if (TENANT_MODELS.has(model) && result && (result as any).tenantId !== tenantId) {
-            return null;
+          // select 未包含 tenantId 时结果为 undefined，不可误判为跨租户
+          if (TENANT_MODELS.has(model) && result) {
+            const tid = (result as any).tenantId;
+            if (tid !== undefined && tid !== tenantId) return null;
           }
           return result;
         },

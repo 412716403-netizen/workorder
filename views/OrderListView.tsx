@@ -15,6 +15,7 @@ import {
 } from '../utils/productReportAggregates';
 import { buildDefectiveReworkByOrderMilestone } from '../utils/defectiveReworkByOrderMilestone';
 import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
+import { toast } from 'sonner';
 
 function fmtDT(ts: string | Date | undefined | null): string {
   if (!ts) return '—';
@@ -63,7 +64,7 @@ interface OrderListViewExtendedProps extends OrderListViewProps {
   onClearDetailOrderIdFromState?: () => void;
   onUpdateReport?: (params: ReportUpdateParams) => void;
   onDeleteReport?: (params: { orderId: string; milestoneId: string; reportId: string }) => void;
-  onUpdateProduct?: (product: Product) => void;
+  onUpdateProduct?: (product: Product) => Promise<boolean>;
   onAddRecord?: (record: ProductionOpRecord) => void;
   onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
   onUpdateRecord?: (record: ProductionOpRecord) => void;
@@ -759,6 +760,21 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
   const submitReport = async () => {
     if (!reportModal) return;
+    const tmpl = reportModal.milestone.reportTemplate || [];
+    for (const f of tmpl) {
+      if (!f.required) continue;
+      const v = reportForm.customData[f.id];
+      if (f.type === 'boolean') continue;
+      if (f.type === 'file') {
+        if (v == null || (typeof v === 'string' && v.trim() === '')) {
+          toast.error(`请上传或选择：${f.label}`);
+          return;
+        }
+      } else if (v == null || (typeof v === 'string' && v.trim() === '')) {
+        toast.error(`请填写：${f.label}`);
+        return;
+      }
+    }
     const productId = reportModal.order.productId;
     const milestoneTemplateId = reportModal.milestone.templateId;
     const product = products.find(p => p.id === productId);
@@ -1871,6 +1887,44 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                       <span className="text-[10px] font-bold text-slate-500">{reportForm.customData[field.id] ? '是' : '否'}</span>
                     </div>
                   )}
+                  {field.type === 'date' && (
+                    <input
+                      tabIndex={-1}
+                      type="date"
+                      value={reportForm.customData[field.id] || ''}
+                      onChange={(e) => handleReportFieldChange(field.id, e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm outline-none"
+                    />
+                  )}
+                  {field.type === 'file' && (
+                    <div className="space-y-2">
+                      <input
+                        tabIndex={-1}
+                        type="file"
+                        accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) {
+                            handleReportFieldChange(field.id, '');
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onload = () => handleReportFieldChange(field.id, reader.result as string);
+                          reader.readAsDataURL(file);
+                        }}
+                        className="w-full text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-indigo-700"
+                      />
+                      {typeof reportForm.customData[field.id] === 'string' &&
+                        String(reportForm.customData[field.id]).startsWith('data:image') && (
+                          <img src={reportForm.customData[field.id]} alt="" className="max-h-28 rounded-lg border border-slate-200 object-contain" />
+                        )}
+                      {typeof reportForm.customData[field.id] === 'string' &&
+                        String(reportForm.customData[field.id]).startsWith('data:') &&
+                        !String(reportForm.customData[field.id]).startsWith('data:image') && (
+                          <p className="text-[10px] text-slate-500">已选择文件，将随报工一并提交</p>
+                        )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -2167,9 +2221,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                             <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{reportNo}</td>
                             <td className="px-4 py-3 text-slate-800 whitespace-nowrap">{batch.source === 'order' ? batch.first.order.productName : batch.productName}</td>
                             <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
-                              {batch.source === 'order'
-                                ? (batch.key.startsWith('wxrecv:') ? '外协收回' : batch.first.milestone.name)
-                                : (batch.key.startsWith('product-wxrecv:') ? '外协收回' : batch.milestoneName)}
+                              {batch.source === 'order' ? batch.first.milestone.name : batch.milestoneName}
                             </td>
                             <td className="px-4 py-3 font-bold text-emerald-600 text-right whitespace-nowrap">{batch.totalGood} {batchUnit}</td>
                             <td className="px-4 py-3 font-bold text-amber-600 text-right whitespace-nowrap">{batch.totalDefective > 0 ? `${batch.totalDefective} ${batchUnit}` : '—'}</td>
@@ -2206,7 +2258,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
       {showPendingStockModal && (() => {
         const product = stockInOrder ? products.find(p => p.id === stockInOrder.order.productId) : null;
         const category = product ? categories.find(c => c.id === product.categoryId) : null;
-        const hasColorSize = !!(category?.hasColorSize && product?.variants?.length);
+        const hasColorSize = !!(product?.variants?.length && (Boolean(product?.colorIds?.length && product?.sizeIds?.length) || category?.hasColorSize));
         const groupedVariantsForStock: Record<string, ProductVariant[]> = (() => {
           if (!product?.variants?.length) return {};
           const groups: Record<string, ProductVariant[]> = {};
@@ -2219,7 +2271,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         const totalStockInQty = hasColorSize
           ? (Object.values(stockInForm.variantQuantities) as number[]).reduce((s, q) => s + (q || 0), 0)
           : stockInForm.singleQuantity;
-        const canSubmitStockIn = onAddRecord && totalStockInQty > 0 && totalStockInQty <= stockInOrder.pendingTotal && (warehouses.length === 0 || !!stockInForm.warehouseId);
+        const canSubmitStockIn = onAddRecord && totalStockInQty > 0 && totalStockInQty <= stockInOrder.pendingTotal && !!stockInForm.warehouseId;
 
         if (stockInOrder) {
           // 选择入库表单（含颜色尺码明细）
@@ -2238,9 +2290,9 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                   <p className="text-xs text-slate-500 mt-0.5">工单总量 {stockInOrder.orderTotal} {unitName}，已入库 {stockInOrder.alreadyIn} {unitName}，待入库 {stockInOrder.pendingTotal} {unitName}</p>
                 </div>
                 <div className="flex-1 overflow-auto p-6 space-y-6">
-                  {warehouses.length > 0 && (
-                    <div>
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">入库仓库</label>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">入库仓库</label>
+                    {warehouses.length > 0 ? (
                       <select
                         value={stockInForm.warehouseId}
                         onChange={e => setStockInForm(f => ({ ...f, warehouseId: e.target.value }))}
@@ -2251,8 +2303,13 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                           <option key={w.id} value={w.id}>{w.name}{w.code ? ` (${w.code})` : ''}</option>
                         ))}
                       </select>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                        <span className="text-amber-500 text-lg">⚠</span>
+                        <p className="text-sm font-bold text-amber-700">请先在「进销存」中设置仓库后再进行入库操作</p>
+                      </div>
+                    )}
+                  </div>
                   {hasColorSize && product?.variants?.length ? (
                     <div className="space-y-6">
                       <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider">入库数量明细（颜色尺码）</h4>

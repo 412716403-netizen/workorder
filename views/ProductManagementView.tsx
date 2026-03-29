@@ -25,7 +25,6 @@ import {
   Hash,
   Search,
   Filter,
-  PlusCircle,
   Settings,
   ArrowRight,
   GripVertical,
@@ -39,6 +38,9 @@ import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
 import { toast } from 'sonner';
 import * as api from '../services/api';
 
+/** 档案中心分类筛选：「全部」避免默认 cat-material 与租户真实分类 id 不一致导致列表空白 */
+const PRODUCT_ARCHIVE_ALL = '__all__';
+
 function getFileExtFromDataUrl(dataUrl: string): string {
   const m = dataUrl.match(/^data:([^;]+);/);
   if (!m) return 'bin';
@@ -49,6 +51,99 @@ function getFileExtFromDataUrl(dataUrl: string): string {
   return map[m[1]] || 'bin';
 }
 
+/** 标准生产路线试填：多附件存 JSON 数组，兼容历史单条 data URL */
+function parseRouteReportFileUrls(val: string): string[] {
+  if (!val) return [];
+  const s = val.trim();
+  if (s.startsWith('[')) {
+    try {
+      const arr = JSON.parse(s) as unknown;
+      if (Array.isArray(arr)) return arr.filter((x): x is string => typeof x === 'string' && x.startsWith('data:'));
+    } catch {
+      return [];
+    }
+  }
+  if (s.startsWith('data:')) return [val];
+  return [];
+}
+
+function stringifyRouteReportFileUrls(urls: string[]): string {
+  return urls.length === 0 ? '' : JSON.stringify(urls);
+}
+
+/** 将 data URL 转为 Blob URL，便于在 iframe 中预览 PDF（部分浏览器禁止 data: PDF） */
+function dataUrlToBlobUrl(dataUrl: string): { url: string; revoke: () => void } | null {
+  try {
+    const comma = dataUrl.indexOf(',');
+    if (comma < 0 || !dataUrl.startsWith('data:')) return null;
+    const header = dataUrl.slice(0, comma);
+    const body = dataUrl.slice(comma + 1);
+    const isBase64 = /;base64/i.test(header);
+    const mimeMatch = header.match(/data:([^;,]+)/);
+    const mime = mimeMatch?.[1] || 'application/octet-stream';
+    let bytes: Uint8Array;
+    if (isBase64) {
+      const binary = atob(body);
+      bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    } else {
+      bytes = new TextEncoder().encode(decodeURIComponent(body));
+    }
+    const blob = new Blob([bytes], { type: mime });
+    const url = URL.createObjectURL(blob);
+    return { url, revoke: () => URL.revokeObjectURL(url) };
+  } catch {
+    return null;
+  }
+}
+
+function normalizeRouteReportValuesFromApi(raw: unknown): Record<string, Record<string, string>> {
+  const out: Record<string, Record<string, string>> = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const [nodeId, fields] of Object.entries(raw as Record<string, unknown>)) {
+    if (!fields || typeof fields !== 'object' || Array.isArray(fields)) continue;
+    out[nodeId] = {};
+    for (const [fieldId, v] of Object.entries(fields as Record<string, unknown>)) {
+      if (v == null) continue;
+      out[nodeId][fieldId] = typeof v === 'string' ? v : JSON.stringify(v);
+    }
+  }
+  return out;
+}
+
+/** 附件预览挂到 document.body，且 z-index 极高，避免产品详情页（另一路 return）未渲染或 stacking 盖住 */
+function FilePreviewPortal({
+  preview,
+  onClose,
+}: {
+  preview: { src: string; kind: 'image' | 'pdf' } | null;
+  onClose: () => void;
+}) {
+  if (!preview || typeof document === 'undefined') return null;
+  return createPortal(
+    <div
+      className="fixed inset-0 flex items-center justify-center p-8 bg-slate-900/80 backdrop-blur-sm"
+      style={{ zIndex: 2147483000 }}
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="附件预览"
+    >
+      <button type="button" onClick={onClose} className="absolute top-6 right-6 z-10 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-all">
+        <X className="w-8 h-8" />
+      </button>
+      <div className="relative z-10 w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        {preview.kind === 'image' ? (
+          <img src={preview.src} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
+        ) : (
+          <iframe src={preview.src} title="PDF 预览" className="w-full h-[85vh] border-0" />
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 interface ProductManagementViewProps {
   products: Product[];
   globalNodes: GlobalNodeTemplate[];
@@ -56,8 +151,9 @@ interface ProductManagementViewProps {
   boms: BOM[];
   dictionaries: AppDictionaries;
   partners: Partner[];
-  onUpdateProduct: (product: Product) => void;
-  onUpdateBOM: (bom: BOM) => void;
+  onUpdateProduct: (product: Product) => Promise<boolean>;
+  onDeleteProduct?: (id: string) => Promise<boolean>;
+  onUpdateBOM: (bom: BOM) => Promise<boolean>;
   onRefreshDictionaries: () => Promise<void>;
   onDetailViewChange?: (inDetail: boolean) => void;
   permCanCreate?: boolean;
@@ -174,6 +270,8 @@ const SearchableProductSelect = ({
   placeholder,
   categories = [],
   compact = false,
+  /** 已在其他 BOM 行选用的产品 id；当前行已选值仍可显示，但其他行已占用的选项置灰不可点 */
+  unavailableProductIds = [],
 }: {
   options: Product[];
   value: string;
@@ -183,6 +281,7 @@ const SearchableProductSelect = ({
   categories?: ProductCategory[];
   /** BOM 等场景：更小的触发器与选项行，一屏展示更多 */
   compact?: boolean;
+  unavailableProductIds?: string[];
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -280,8 +379,13 @@ const SearchableProductSelect = ({
       ? `px-2 py-1 rounded-md text-[9px] font-black uppercase transition-all whitespace-nowrap ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`
       : `px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`;
 
-  const rowBtnCls = (selected: boolean) => {
+  const unavailableSet = useMemo(() => new Set(unavailableProductIds.filter(Boolean)), [unavailableProductIds]);
+
+  const rowBtnCls = (selected: boolean, unavailable: boolean) => {
     const pad = compact ? 'py-2 px-2.5 rounded-xl' : 'p-3 rounded-2xl';
+    if (unavailable) {
+      return `w-full text-left ${pad} transition-all border-2 opacity-50 cursor-not-allowed bg-slate-100 border-slate-100 text-slate-400`;
+    }
     return `w-full text-left ${pad} transition-all border-2 ${
       selected ? 'bg-indigo-50 border-indigo-600/20 text-indigo-700' : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'
     }`;
@@ -320,16 +424,20 @@ const SearchableProductSelect = ({
       <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar space-y-0.5">
         {filteredOptions.map(p => {
           const cat = categories.find(c => c.id === p.categoryId);
+          const unavailable = unavailableSet.has(p.id) && p.id !== value;
           return (
             <button
               key={p.id}
               type="button"
+              disabled={unavailable}
+              title={unavailable ? '已在其他行添加，不可重复选择' : undefined}
               onClick={() => {
+                if (unavailable) return;
                 onChange(p.id);
                 setIsOpen(false);
                 setSearch('');
               }}
-              className={rowBtnCls(p.id === value)}
+              className={rowBtnCls(p.id === value, unavailable)}
             >
               <div className={`flex justify-between items-start ${compact ? 'mb-0' : 'mb-0.5'}`}>
                 <p className={`font-black truncate ${compact ? 'text-xs' : 'text-sm'}`}>{p.name}</p>
@@ -459,6 +567,69 @@ const PortalSelect = ({ value, onChange, options, optionPairs, placeholder = '�
   );
 };
 
+/** 标准生产路线报工项：内联展开选项（占文档流），避免系统原生 select 浮层盖住下方工序卡片 */
+const RouteReportInlineSelect = ({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder: string;
+}) => {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (rootRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const shown = value || placeholder;
+  return (
+    <div ref={rootRef} className="w-full">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="route-report-control w-full h-9 box-border bg-slate-50 border border-slate-200 rounded-lg pl-2 pr-8 text-xs font-medium text-left focus:ring-2 focus:ring-indigo-500 outline-none flex items-center relative cursor-pointer"
+      >
+        <span className={`truncate ${value ? 'text-slate-800' : 'text-slate-400'}`}>{shown}</span>
+        <ChevronRight className={`pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden />
+      </button>
+      {open && (
+        <div className="mt-1 rounded-lg border border-slate-200 bg-white shadow-sm max-h-40 overflow-y-auto divide-y divide-slate-100" role="listbox">
+          <button
+            type="button"
+            role="option"
+            className={`w-full text-left px-2 py-2 text-xs font-medium hover:bg-slate-50 ${!value ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500'}`}
+            onClick={() => { onChange(''); setOpen(false); }}
+          >
+            {placeholder}
+          </button>
+          {options.map((opt, i) => (
+            <button
+              key={`${opt}-${i}`}
+              type="button"
+              role="option"
+              className={`w-full text-left px-2 py-2 text-xs font-medium hover:bg-slate-50 ${value === opt ? 'bg-indigo-50 text-indigo-700' : 'text-slate-800'}`}
+              onClick={() => { onChange(opt); setOpen(false); }}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ProductManagementView: React.FC<ProductManagementViewProps> = ({ 
   products, 
   globalNodes, 
@@ -466,7 +637,8 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   boms,
   dictionaries,
   partners,
-  onUpdateProduct, 
+  onUpdateProduct,
+  onDeleteProduct,
   onUpdateBOM,
   onRefreshDictionaries,
   onDetailViewChange,
@@ -476,21 +648,50 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   initialProductId,
   onClearInitialProductId,
 }) => {
-  const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>(categories[0]?.id || 'cat-material');
+  const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>(PRODUCT_ARCHIVE_ALL);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [workingProduct, setWorkingProduct] = useState<Product | null>(null);
   
   const [modalType, setModalType] = useState<'color' | 'size' | null>(null);
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
-  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
-  const [filePreviewType, setFilePreviewType] = useState<'image' | 'pdf'>('image');
+  const [filePreview, setFilePreview] = useState<{ src: string; kind: 'image' | 'pdf' } | null>(null);
+  const filePreviewRevokeRef = useRef<(() => void) | undefined>(undefined);
+
+  const openFilePreview = useCallback((rawUrl: string, kind: 'image' | 'pdf') => {
+    filePreviewRevokeRef.current?.();
+    filePreviewRevokeRef.current = undefined;
+    if (kind === 'pdf' && rawUrl.startsWith('data:')) {
+      const conv = dataUrlToBlobUrl(rawUrl);
+      if (conv) {
+        filePreviewRevokeRef.current = conv.revoke;
+        setFilePreview({ src: conv.url, kind: 'pdf' });
+        return;
+      }
+    }
+    setFilePreview({ src: rawUrl, kind });
+  }, []);
+
+  const closeFilePreview = useCallback(() => {
+    filePreviewRevokeRef.current?.();
+    filePreviewRevokeRef.current = undefined;
+    setFilePreview(null);
+  }, []);
+
+  useEffect(() => () => {
+    filePreviewRevokeRef.current?.();
+  }, []);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  /** 标准生产路线内报工填报项预览/试填（不落库，切换产品时清空） */
+  const routeReportFileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [routeReportFieldValues, setRouteReportFieldValues] = useState<Record<string, Record<string, string>>>({});
   const [activeVariantIdForBOM, setActiveVariantIdForBOM] = useState<string | null>(null);
   const [activeNodeIdForBOM, setActiveNodeIdForBOM] = useState<string | null>(null);
   const [workingBOM, setWorkingBOM] = useState<BOM | null>(null);
   const [copyBOMDropdownOpen, setCopyBOMDropdownOpen] = useState(false);
   const [copyBOMDropdownStyle, setCopyBOMDropdownStyle] = useState<React.CSSProperties>({});
   const copyBOMTriggerRef = useRef<HTMLButtonElement>(null);
+  /** 档案中心列表搜索（名称、编号、备注） */
+  const [productArchiveSearch, setProductArchiveSearch] = useState('');
 
   useEffect(() => {
     if (copyBOMDropdownOpen && copyBOMTriggerRef.current) {
@@ -527,7 +728,16 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [copyBOMDropdownOpen]);
 
-  const activeCategory = categories.find(c => c.id === (workingProduct?.categoryId || activeCategoryFilter));
+  const activeCategory = categories.find(
+    c => c.id === (workingProduct?.categoryId || (activeCategoryFilter === PRODUCT_ARCHIVE_ALL ? categories[0]?.id : activeCategoryFilter)),
+  );
+
+  useEffect(() => {
+    if (activeCategoryFilter === PRODUCT_ARCHIVE_ALL) return;
+    if (categories.length > 0 && !categories.some(c => c.id === activeCategoryFilter)) {
+      setActiveCategoryFilter(PRODUCT_ARCHIVE_ALL);
+    }
+  }, [categories, activeCategoryFilter]);
 
   const generateVariants = (colorIds: string[], sizeIds: string[], existingVariants: ProductVariant[]): ProductVariant[] => {
     if (colorIds.length === 0 && sizeIds.length === 0) return [];
@@ -588,6 +798,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   const handleStartEditProduct = (p: Product) => {
     setEditingProductId(p.id);
     setWorkingProduct(JSON.parse(JSON.stringify(p)));
+    setRouteReportFieldValues(normalizeRouteReportValuesFromApi(p.routeReportValues));
     setActiveVariantIdForBOM(null);
     setActiveNodeIdForBOM(null);
   };
@@ -597,22 +808,80 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     setEditingProductId(newId);
     setWorkingProduct({
       id: newId, sku: '', name: '',
-      categoryId: activeCategoryFilter, milestoneNodeIds: [],
-      categoryCustomData: {}, salesPrice: undefined, purchasePrice: undefined,
+      categoryId: activeCategoryFilter === PRODUCT_ARCHIVE_ALL ? (categories[0]?.id ?? '') : activeCategoryFilter,
+      milestoneNodeIds: [],
+      categoryCustomData: {}, routeReportValues: {}, salesPrice: undefined, purchasePrice: undefined,
       unitId: undefined,
       colorIds: [], sizeIds: [], variants: [], imageUrl: ''
     });
+    setRouteReportFieldValues({});
   };
 
-  const saveProduct = () => {
-    if (workingProduct) {
-      const toSave: Product = {
-        ...workingProduct,
-        salesPrice: workingProduct.salesPrice ?? 0,
-        purchasePrice: workingProduct.purchasePrice ?? 0,
-      };
-      onUpdateProduct(toSave);
-      setEditingProductId(null);
+  const validateProductForSave = (p: Product, catalog: Product[]): boolean => {
+    const name = (p.name ?? '').trim();
+    const sku = (p.sku ?? '').trim();
+    if (!name) {
+      toast.error('产品全称不能为空');
+      return false;
+    }
+    if (!sku) {
+      toast.error('产品编号不能为空');
+      return false;
+    }
+    const nameTaken = catalog.some(o => o.id !== p.id && (o.name ?? '').trim() === name);
+    if (nameTaken) {
+      toast.error('产品名称在租户内已存在，请更换');
+      return false;
+    }
+    const skuTaken = catalog.some(o => o.id !== p.id && (o.sku ?? '').trim() === sku);
+    if (skuTaken) {
+      toast.error('产品编号在租户内已存在，请更换');
+      return false;
+    }
+    return true;
+  };
+
+  const [saveProductBusy, setSaveProductBusy] = useState(false);
+  const saveProduct = async () => {
+    if (!workingProduct) return;
+    if (!validateProductForSave(workingProduct, products)) return;
+    const toSave: Product = {
+      ...workingProduct,
+      name: workingProduct.name.trim(),
+      sku: workingProduct.sku.trim(),
+      salesPrice: workingProduct.salesPrice ?? 0,
+      purchasePrice: workingProduct.purchasePrice ?? 0,
+      routeReportValues: routeReportFieldValues,
+    };
+    setSaveProductBusy(true);
+    try {
+      const ok = await onUpdateProduct(toSave);
+      if (ok) {
+        setEditingProductId(null);
+        setRouteReportFieldValues({});
+      }
+    } finally {
+      setSaveProductBusy(false);
+    }
+  };
+
+  const [deleteProductBusy, setDeleteProductBusy] = useState(false);
+  const isPersistedProduct = workingProduct ? products.some(p => p.id === workingProduct.id) : false;
+
+  const handleDeletePersistedProduct = async () => {
+    if (!workingProduct || !onDeleteProduct || !isPersistedProduct) return;
+    if (!window.confirm(`确定删除产品「${workingProduct.name || workingProduct.sku}」？删除后不可恢复。`)) return;
+    setDeleteProductBusy(true);
+    try {
+      closeBOMEditor();
+      const ok = await onDeleteProduct(workingProduct.id);
+      if (ok) {
+        setEditingProductId(null);
+        setWorkingProduct(null);
+        setRouteReportFieldValues({});
+      }
+    } finally {
+      setDeleteProductBusy(false);
     }
   };
 
@@ -681,24 +950,41 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   const [bomSaving, setBomSaving] = useState(false);
   const saveBOM = async () => {
     if (!workingBOM || !workingProduct || !activeVariantIdForBOM || !activeNodeIdForBOM) return;
+    if (!validateProductForSave(workingProduct, products)) return;
     setBomSaving(true);
     try {
-      await onUpdateProduct({
+      const productOk = await onUpdateProduct({
         ...workingProduct,
+        name: workingProduct.name.trim(),
+        sku: workingProduct.sku.trim(),
         salesPrice: workingProduct.salesPrice ?? 0,
         purchasePrice: workingProduct.purchasePrice ?? 0,
       });
-      await onUpdateBOM(workingBOM);
+      if (!productOk) return;
+      const bomOk = await onUpdateBOM(workingBOM);
+      if (bomOk) closeBOMEditor();
     } finally {
       setBomSaving(false);
     }
-    closeBOMEditor();
   };
 
   const copyBOMFrom = (sourceVariantId: string) => {
     const sourceBOM = boms.find(b => b.variantId === sourceVariantId && b.nodeId === activeNodeIdForBOM);
     if (sourceBOM && workingBOM) {
-      setWorkingBOM({ ...workingBOM, items: JSON.parse(JSON.stringify(sourceBOM.items)) });
+      const raw = JSON.parse(JSON.stringify(sourceBOM.items)) as BOMItem[];
+      const merged = new Map<string, BOMItem>();
+      for (const it of raw) {
+        if (!it.productId?.trim()) continue;
+        const q = typeof it.quantity === 'number' && !Number.isNaN(it.quantity) ? it.quantity : Number(it.quantity) || 0;
+        const prev = merged.get(it.productId);
+        if (prev) {
+          const pq = typeof prev.quantity === 'number' && !Number.isNaN(prev.quantity) ? prev.quantity : Number(prev.quantity) || 0;
+          merged.set(it.productId, { ...prev, quantity: pq + q, quantityInput: undefined });
+        } else {
+          merged.set(it.productId, { ...it, quantity: q, quantityInput: undefined });
+        }
+      }
+      setWorkingBOM({ ...workingBOM, items: Array.from(merged.values()) });
     }
   };
 
@@ -710,7 +996,26 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   };
 
   const filteredProducts = useMemo(() => {
-    return products.filter(p => p.categoryId === activeCategoryFilter).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id));
+    const inCategory =
+      activeCategoryFilter === PRODUCT_ARCHIVE_ALL
+        ? products
+        : products.filter(p => p.categoryId === activeCategoryFilter);
+    const q = productArchiveSearch.trim().toLowerCase();
+    const searched =
+      !q
+        ? inCategory
+        : inCategory.filter(p => {
+            const n = (p.name ?? '').toLowerCase();
+            const s = (p.sku ?? '').toLowerCase();
+            const d = (p.description ?? '').toLowerCase();
+            return n.includes(q) || s.includes(q) || d.includes(q);
+          });
+    return searched.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id));
+  }, [products, activeCategoryFilter, productArchiveSearch]);
+
+  const productsInActiveCategoryCount = useMemo(() => {
+    if (activeCategoryFilter === PRODUCT_ARCHIVE_ALL) return products.length;
+    return products.filter(p => p.categoryId === activeCategoryFilter).length;
   }, [products, activeCategoryFilter]);
 
   // 分组变体：按颜色分组
@@ -753,13 +1058,25 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
           onToggle={(id) => toggleAttribute('size', id)} onAddNew={(name) => handleAddNewSpec('sizes', name)}
         />
 
-        <div className="flex items-center justify-between sticky top-0 z-40 py-4 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200">
-          <button onClick={() => setEditingProductId(null)} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
+        <div className="flex items-center justify-between sticky top-0 z-40 py-4 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200 gap-3 flex-wrap">
+          <button type="button" onClick={() => { setEditingProductId(null); setWorkingProduct(null); setRouteReportFieldValues({}); }} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
             <ArrowLeft className="w-4 h-4" /> 返回列表
           </button>
-          <button onClick={saveProduct} className="bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">
-            <Save className="w-4 h-4" /> 保存产品资料
-          </button>
+          <div className="flex items-center gap-2 sm:gap-3 ml-auto">
+            {permCanDelete && onDeleteProduct && isPersistedProduct && (
+              <button
+                type="button"
+                disabled={deleteProductBusy}
+                onClick={() => void handleDeletePersistedProduct()}
+                className="px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 border-2 border-rose-200 text-rose-600 bg-white hover:bg-rose-50 disabled:opacity-50 transition-all text-sm"
+              >
+                <Trash2 className="w-4 h-4" /> 删除产品
+              </button>
+            )}
+            <button type="button" disabled={saveProductBusy} onClick={() => void saveProduct()} className="bg-indigo-600 text-white px-6 sm:px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all text-sm disabled:opacity-60 disabled:cursor-not-allowed">
+              <Save className="w-4 h-4" /> {saveProductBusy ? '保存中…' : '保存产品资料'}
+            </button>
+          </div>
         </div>
 
         {/* 1. 核心档案 */}
@@ -778,11 +1095,11 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
               </div>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">产品全称</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">产品全称 <span className="text-rose-500">*</span></label>
               <input type="text" value={workingProduct.name} onChange={e => setWorkingProduct({...workingProduct, name: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">产品编号</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">产品编号 <span className="text-rose-500">*</span></label>
               <input type="text" value={workingProduct.sku} onChange={e => setWorkingProduct({...workingProduct, sku: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
             </div>
             <div className="space-y-1">
@@ -968,7 +1285,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                                       src={workingProduct.categoryCustomData[field.id] as string}
                                       alt={field.label}
                                       className="h-16 w-16 object-cover rounded-xl border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400 transition-all"
-                                      onClick={() => { setFilePreviewUrl(workingProduct.categoryCustomData![field.id] as string); setFilePreviewType('image'); }}
+                                      onClick={() => { openFilePreview(workingProduct.categoryCustomData![field.id] as string, 'image'); }}
                                     />
                                     <a href={workingProduct.categoryCustomData[field.id] as string} download={`附件.${getFileExtFromDataUrl(workingProduct.categoryCustomData[field.id] as string)}`} className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-xl text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
                                       <Download className="w-4 h-4" /> 下载
@@ -978,7 +1295,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                                   <>
                                     <button
                                       type="button"
-                                      onClick={() => { setFilePreviewUrl(workingProduct.categoryCustomData![field.id] as string); setFilePreviewType('pdf'); }}
+                                      onClick={() => { openFilePreview(workingProduct.categoryCustomData![field.id] as string, 'pdf'); }}
                                       className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-xl text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
                                     >
                                       <FileText className="w-4 h-4" /> 在线查看
@@ -1086,70 +1403,318 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
               <h3 className="text-lg font-bold text-slate-800">2. 生产工序与工艺 BOM</h3>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-               <div className="space-y-6">
-                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">可用工序库 (点击选择)</h4>
-                 <div className="grid grid-cols-2 gap-3">
-                   {globalNodes.map(gn => {
-                     const isSelected = workingProduct.milestoneNodeIds.includes(gn.id);
-                     return (
-                       <div key={gn.id} onClick={() => toggleNodeInProduct(gn.id)} className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between group ${isSelected ? 'border-indigo-600 bg-indigo-50/40' : 'border-slate-50 bg-slate-50 hover:bg-white hover:border-slate-200'}`}>
-                         <span className={`text-xs font-bold ${isSelected ? 'text-indigo-900' : 'text-slate-500'}`}>{gn.name}</span>
-                         {isSelected && <Check className="w-4 h-4 text-indigo-600" />}
-                       </div>
-                     );
-                   })}
-                 </div>
-               </div>
+            <div className="space-y-8">
+              {/* 上：可选工序 */}
+              <section className="rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50/90 to-white p-6 shadow-sm">
+                <div className="flex flex-wrap items-center gap-2 gap-y-1 mb-4">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-[11px] font-black text-white">1</span>
+                  <h4 className="text-sm font-black text-slate-800">可选工序</h4>
+                  <span className="text-[10px] text-slate-400">点击加入下方标准路线</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                  {globalNodes.map(gn => {
+                    const isSelected = workingProduct.milestoneNodeIds.includes(gn.id);
+                    return (
+                      <button
+                        key={gn.id}
+                        type="button"
+                        onClick={() => toggleNodeInProduct(gn.id)}
+                        className={`p-3.5 rounded-2xl border-2 text-left transition-all flex items-center justify-between gap-2 ${isSelected ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' : 'border-slate-100 bg-white hover:border-slate-200 hover:shadow-sm'}`}
+                      >
+                        <span className={`text-xs font-bold truncate ${isSelected ? 'text-indigo-900' : 'text-slate-600'}`}>{gn.name}</span>
+                        {isSelected && <Check className="w-4 h-4 text-indigo-600 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
 
-               <div className="space-y-6">
-                 <div className="flex items-center justify-between">
-                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">标准生产路线序列 (拖拽排序)</h4>
-                    <span className="text-[10px] font-bold text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded">共 {(workingProduct.milestoneNodeIds as string[]).length} 个节点</span>
-                 </div>
-                 <div className="space-y-2 relative">
-                   {selectedNodesOrdered.length > 0 && <div className="absolute left-6 top-6 bottom-6 w-0.5 bg-slate-100 z-0"></div>}
-                   {(selectedNodesOrdered as GlobalNodeTemplate[]).map((node, idx) => {
-                     return (
-                     <div key={node.id} className="relative z-10 flex flex-wrap items-center gap-x-6 gap-y-3 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm group">
-                        <div className="w-6 h-6 bg-indigo-600 text-white rounded-lg flex items-center justify-center text-[10px] font-black shrink-0">{idx + 1}</div>
-                        <div className="flex-1 min-w-0">
-                           <p className="text-xs font-bold text-slate-800 whitespace-nowrap">{node.name}</p>
-                           {node.hasBOM && <p className="text-[9px] text-amber-500 font-bold flex items-center gap-1 mt-0.5 whitespace-nowrap"><Boxes className="w-2.5 h-2.5 shrink-0" /> 需配置 BOM 物料</p>}
+              {/* 中：标准生产路线 + 工序自定内容录入 */}
+              <section className="rounded-2xl border-2 border-indigo-100 bg-indigo-50/20 p-6 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-[11px] font-black text-white">2</span>
+                    <h4 className="text-sm font-black text-slate-800">标准生产路线</h4>
+                  </div>
+                  <span className="text-[10px] font-bold text-indigo-700 bg-white/80 border border-indigo-100 px-2.5 py-0.5 rounded-full">
+                    共 {(workingProduct.milestoneNodeIds as string[]).length} 道工序 · ↑↓ 调整顺序
+                  </span>
+                </div>
+                <div className="space-y-3 relative">
+                  {selectedNodesOrdered.length > 0 && (
+                    <div className="absolute left-[13px] top-8 bottom-8 w-0.5 bg-indigo-100 z-0 hidden sm:block" aria-hidden />
+                  )}
+                  {(selectedNodesOrdered as GlobalNodeTemplate[]).map((node, idx) => {
+                    const fieldTypeLabel: Record<string, string> = {
+                      text: '文本',
+                      number: '数字',
+                      select: '下拉',
+                      boolean: '开关',
+                      date: '日期',
+                      file: '文件/图片',
+                    };
+                    return (
+                      <div key={node.id} className="relative z-10 rounded-2xl border border-white bg-white/90 shadow-sm ring-1 ring-indigo-50 group">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 p-3 sm:pl-4">
+                          <div className="w-7 h-7 bg-indigo-600 text-white rounded-lg flex items-center justify-center text-[10px] font-black shrink-0">{idx + 1}</div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-slate-800">{node.name}</p>
+                            {node.hasBOM && (
+                              <p className="text-[9px] text-amber-600 font-bold flex items-center gap-1 mt-0.5">
+                                <Boxes className="w-2.5 h-2.5 shrink-0" /> 需在下方「BOM 精细化配置」中维护物料
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex flex-col sm:flex-row gap-2 sm:items-center shrink-0">
+                            {node.enablePieceRate && (
+                              <div className="flex items-center gap-2">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">工价</label>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={0.01}
+                                  placeholder="0"
+                                  value={workingProduct.nodeRates?.[node.id] ?? ''}
+                                  onChange={e => updateNodeRate(node.id, parseFloat(e.target.value) || 0)}
+                                  className="w-20 bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                                <span className="text-[9px] text-slate-400 whitespace-nowrap">元/件</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {idx > 0 && (
+                              <button type="button" title="上移" onClick={() => moveNode(idx, idx - 1)} className="p-1.5 hover:bg-indigo-50 rounded-lg text-slate-400 hover:text-indigo-600">↑</button>
+                            )}
+                            {idx < selectedNodesOrdered.length - 1 && (
+                              <button type="button" title="下移" onClick={() => moveNode(idx, idx + 1)} className="p-1.5 hover:bg-indigo-50 rounded-lg text-slate-400 hover:text-indigo-600">↓</button>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex flex-col sm:flex-row gap-2 sm:gap-6 shrink-0">
-                           {node.enablePieceRate && (
-                           <div className="flex items-center gap-2 min-w-[7rem]">
-                              <label className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap shrink-0">工价</label>
-                              <input
-                                type="number"
-                                min={0}
-                                step={0.01}
-                                placeholder="0"
-                                value={workingProduct.nodeRates?.[node.id] ?? ''}
-                                onChange={e => updateNodeRate(node.id, parseFloat(e.target.value) || 0)}
-                                className="min-w-[5rem] w-20 bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
-                              />
-                              <span className="text-[9px] text-slate-400 whitespace-nowrap shrink-0">元/件</span>
-                           </div>
-                           )}
+                        {Array.isArray(node.reportTemplate) && node.reportTemplate.length > 0 && (
+                        <div className="mx-3 mb-3 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2">
+                          <div className="flex flex-wrap items-center gap-2 mb-2">
+                            <FileText className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">报工填报项</span>
+                            <span className="text-[9px] text-slate-400">（模板在「系统设置 → 工序节点库」配置；填写内容会随产品保存）</span>
+                          </div>
+                          <div className="space-y-2">
+                            {(node.reportTemplate || []).map(field => {
+                              const rk = `${node.id}:${field.id}`;
+                              const val = routeReportFieldValues[node.id]?.[field.id] ?? '';
+                              const setVal = (v: string) => {
+                                setRouteReportFieldValues(prev => ({
+                                  ...prev,
+                                  [node.id]: { ...prev[node.id], [field.id]: v },
+                                }));
+                              };
+                              return (
+                                <div key={field.id} className="rounded-lg border border-slate-100 bg-white/90 px-2.5 py-2">
+                                  <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                                    {field.label}
+                                    {field.required && <span className="text-rose-400 ml-0.5">*</span>}
+                                    <span className="text-slate-300 font-normal mx-1">·</span>
+                                    <span className="text-slate-400 font-normal">{fieldTypeLabel[field.type] || field.type}</span>
+                                  </label>
+                                  {field.type === 'text' && (
+                                    <input
+                                      type="text"
+                                      value={val}
+                                      onChange={e => setVal(e.target.value)}
+                                      placeholder={field.placeholder || ''}
+                                      className="route-report-control w-full h-9 box-border bg-slate-50 border border-slate-200 rounded-lg px-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    />
+                                  )}
+                                  {field.type === 'number' && (
+                                    <input
+                                      type="number"
+                                      value={val}
+                                      onChange={e => setVal(e.target.value)}
+                                      className="route-report-control w-full h-9 box-border bg-slate-50 border border-slate-200 rounded-lg px-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    />
+                                  )}
+                                  {field.type === 'date' && (
+                                    <input
+                                      type="date"
+                                      value={val}
+                                      onChange={e => setVal(e.target.value)}
+                                      className="route-report-control w-full h-9 box-border bg-slate-50 border border-slate-200 rounded-lg px-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    />
+                                  )}
+                                  {field.type === 'select' && (
+                                    <RouteReportInlineSelect
+                                      value={val}
+                                      onChange={setVal}
+                                      options={field.options || []}
+                                      placeholder={field.placeholder?.trim() || '请选择...'}
+                                    />
+                                  )}
+                                  {field.type === 'boolean' && (
+                                    <div className="flex items-center gap-2 py-0.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => setVal(val === 'true' ? '' : 'true')}
+                                        className={`w-9 h-5 rounded-full relative transition-all ${val === 'true' ? 'bg-indigo-600' : 'bg-slate-300'}`}
+                                      >
+                                        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${val === 'true' ? 'left-4' : 'left-0.5'}`} />
+                                      </button>
+                                      <span className="text-[10px] font-medium text-slate-500">{val === 'true' ? '是' : '否'}</span>
+                                    </div>
+                                  )}
+                                  {field.type === 'file' && (() => {
+                                    const fileUrls = parseRouteReportFileUrls(val);
+                                    const maxSize = 5 * 1024 * 1024;
+                                    const acceptFiles = 'image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar';
+                                    const appendFiles = (fileList: FileList | null) => {
+                                      const files = Array.from(fileList || []);
+                                      if (files.length === 0) return;
+                                      const overs = files.filter(f => f.size > maxSize);
+                                      if (overs.length > 0) {
+                                        toast.error(`有 ${overs.length} 个文件超过 5MB 上限，已跳过`);
+                                      }
+                                      const ok = files.filter(f => f.size <= maxSize);
+                                      if (ok.length === 0) return;
+                                      Promise.all(
+                                        ok.map(
+                                          f =>
+                                            new Promise<string | null>(resolve => {
+                                              const reader = new FileReader();
+                                              reader.onload = () => resolve(reader.result as string);
+                                              reader.onerror = () => resolve(null);
+                                              reader.readAsDataURL(f);
+                                            })
+                                        )
+                                      ).then(parts => {
+                                        const next = [...fileUrls, ...parts.filter((x): x is string => !!x)];
+                                        setVal(stringifyRouteReportFileUrls(next));
+                                      });
+                                    };
+                                    return (
+                                      <div className="space-y-1.5">
+                                        <input
+                                          ref={el => { routeReportFileInputRefs.current[rk] = el; }}
+                                          type="file"
+                                          multiple
+                                          accept={acceptFiles}
+                                          className="hidden"
+                                          onChange={e => {
+                                            appendFiles(e.target.files);
+                                            e.target.value = '';
+                                          }}
+                                        />
+                                        <div className="flex flex-wrap gap-2">
+                                          {fileUrls.map((url, fi) => (
+                                            <div
+                                              key={`${rk}-${fi}`}
+                                              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 pl-1 pr-1 py-1"
+                                            >
+                                              {url.startsWith('data:image/') ? (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => { openFilePreview(url, 'image'); }}
+                                                  className="h-12 w-12 rounded-md border border-slate-200 overflow-hidden shrink-0 focus:ring-2 focus:ring-indigo-500"
+                                                >
+                                                  <img src={url} alt="" className="h-full w-full object-cover pointer-events-none" />
+                                                </button>
+                                              ) : url.startsWith('data:application/pdf') ? (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => { openFilePreview(url, 'pdf'); }}
+                                                  className="h-12 w-12 rounded-md border border-slate-200 bg-white flex items-center justify-center shrink-0 focus:ring-2 focus:ring-indigo-500"
+                                                  title="查看 PDF"
+                                                >
+                                                  <FileText className="w-5 h-5 text-rose-500 pointer-events-none" />
+                                                </button>
+                                              ) : (
+                                                <div className="h-12 w-12 rounded-md border border-slate-200 bg-white flex items-center justify-center shrink-0" title="附件">
+                                                  <FileText className="w-5 h-5 text-slate-500" />
+                                                </div>
+                                              )}
+                                              <div className="flex flex-col gap-0.5 min-w-0">
+                                                <a
+                                                  href={url}
+                                                  download={`${field.label}-${fi + 1}.${getFileExtFromDataUrl(url)}`}
+                                                  className="flex items-center gap-0.5 text-[10px] font-bold text-indigo-600 hover:underline truncate max-w-[120px]"
+                                                >
+                                                  <Download className="w-3 h-3 shrink-0" /> 下载
+                                                </a>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const next = fileUrls.filter((_, i) => i !== fi);
+                                                    setVal(stringifyRouteReportFileUrls(next));
+                                                  }}
+                                                  className="text-left text-[10px] font-bold text-rose-500 hover:text-rose-700"
+                                                >
+                                                  移除
+                                                </button>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => routeReportFileInputRefs.current[rk]?.click()}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600"
+                                          >
+                                            <ImagePlus className="w-3.5 h-3.5" /> 添加图片或文件（可多选）
+                                          </button>
+                                          {fileUrls.length > 0 && (
+                                            <button
+                                              type="button"
+                                              onClick={() => setVal('')}
+                                              className="px-2 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-[10px] font-bold hover:bg-rose-100"
+                                            >
+                                              全部清除
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+                                  {!['text', 'number', 'select', 'boolean', 'date', 'file'].includes(field.type) && (
+                                    <input
+                                      type="text"
+                                      value={val}
+                                      onChange={e => setVal(e.target.value)}
+                                      className="route-report-control w-full h-9 box-border bg-slate-50 border border-slate-200 rounded-lg px-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    />
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all w-12 justify-end">
-                           {idx > 0 && <button onClick={() => moveNode(idx, idx - 1)} className="p-1.5 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-indigo-600 transition-all">↑</button>}
-                           {idx < selectedNodesOrdered.length - 1 && <button onClick={() => moveNode(idx, idx + 1)} className="p-1.5 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-indigo-600 transition-all">↓</button>}
-                        </div>
-                     </div>
-                   ); })}
-                   {selectedNodesOrdered.length === 0 && <div className="py-12 border-2 border-dashed border-slate-100 rounded-3xl text-center text-slate-300 text-xs italic">请从左侧选择需要的生产工序节点</div>}
-                 </div>
-               </div>
-            </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {selectedNodesOrdered.length === 0 && (
+                    <div className="py-14 border-2 border-dashed border-indigo-100 rounded-2xl text-center text-slate-400 text-xs">
+                      请先在上方「可选工序」中选择工序，将在此按顺序排列
+                    </div>
+                  )}
+                </div>
+              </section>
 
-            {/* 单 SKU 产品 BOM 配置（未开启颜色尺码时，产品仅 1 种 SKU，仍可配置需 BOM 的工序） */}
-            {workingProduct.variants.length === 0 && enabledBOMNodes.length > 0 && (
-              <div className="pt-10 border-t border-slate-50 space-y-6">
-                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest block">工序 BOM 配置（单 SKU 产品）</h4>
-                <div className="p-6 rounded-3xl border border-slate-100 bg-slate-50/50">
+              {/* 下：BOM 精细化配置 */}
+              <section className="rounded-2xl border-2 border-amber-100 bg-amber-50/25 p-6 shadow-sm space-y-6">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-600 text-[11px] font-black text-white">3</span>
+                  <h4 className="text-sm font-black text-slate-800">BOM 精细化配置</h4>
+                  <span className="text-[10px] text-slate-500">按 SKU / 变体维护需 BOM 工序的物料清单</span>
+                </div>
+                {enabledBOMNodes.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-8 text-center border border-dashed border-amber-100 rounded-xl bg-white/60">
+                    当前路线中暂无需要配置 BOM 的工序；在「系统设置 → 工序节点库」中为工序开启「需 BOM」后，将在此处出现配置入口
+                  </p>
+                ) : (
+                  <>
+            {workingProduct.variants.length === 0 && (
+              <div className="space-y-4">
+                <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">单 SKU 产品</h5>
+                <div className="p-6 rounded-3xl border border-amber-100/80 bg-white/70 shadow-sm">
                   <div className="flex justify-between items-start mb-4 pb-3 border-b border-slate-200/50">
                     <div>
                       <p className="text-sm font-black text-slate-800">本产品</p>
@@ -1178,15 +1743,14 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
               </div>
             )}
 
-            {/* 变体 BOM 矩阵配置 (按颜色分组) */}
-            {workingProduct.variants.length > 0 && enabledBOMNodes.length > 0 && (
-              <div className="pt-10 border-t border-slate-50 space-y-8">
-                 <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest block">变体 BOM 精细化配置矩阵</h4>
-                    <p className="text-[10px] text-slate-400 font-medium italic">同一颜色的多个尺码在一行显示，支持各工序独立配料</p>
+            {workingProduct.variants.length > 0 && (
+              <div className="space-y-6">
+                 <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">多变体 · 按颜色分组</h5>
+                    <p className="text-[10px] text-slate-400 font-medium">同一颜色下各尺码一行，支持各工序独立配料</p>
                  </div>
 
-                 <div className="space-y-12">
+                 <div className="space-y-10">
                     {sortedVariantColorEntries(groupedVariants, workingProduct?.colorIds, workingProduct?.sizeIds).map(([colorId, colorVariants]) => {
                       const color = dictionaries.colors.find(c => c.id === colorId);
                       const colorTitle = (color?.name != null && String(color.name).trim() !== '') ? String(color.name).trim() : '（未命名颜色）';
@@ -1244,6 +1808,10 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                  </div>
               </div>
             )}
+                  </>
+                )}
+              </section>
+            </div>
 
             {/* BOM 配置弹窗（单 SKU 与多变体共用） */}
             {enabledBOMNodes.length > 0 && activeVariantIdForBOM && activeNodeIdForBOM && workingBOM && typeof document !== 'undefined' && (() => {
@@ -1252,6 +1820,22 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
               const colorName = activeVariant?.colorId ? (dictionaries.colors.find(c => c.id === activeVariant.colorId)?.name ?? '') : '';
               const sizeName = activeVariant?.sizeId ? (dictionaries.sizes.find(s => s.id === activeVariant.sizeId)?.name ?? '') : '';
               const colorSizeLabel = isSingleSku ? '单 SKU（通用）' : [colorName, sizeName].filter(Boolean).join(' / ');
+              const bomMaterialStats = workingBOM.items.reduce(
+                (acc, it) => {
+                  if (!it.productId?.trim()) return acc;
+                  acc.kinds += 1;
+                  let q = 0;
+                  if (it.quantityInput !== undefined && it.quantityInput !== '') {
+                    const n = parseFloat(it.quantityInput);
+                    q = Number.isFinite(n) ? n : 0;
+                  } else if (typeof it.quantity === 'number' && !Number.isNaN(it.quantity)) {
+                    q = it.quantity;
+                  }
+                  acc.totalQty += q;
+                  return acc;
+                },
+                { kinds: 0, totalQty: 0 },
+              );
               return createPortal(
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="bom-editor-title">
                   <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" onClick={closeBOMEditor} aria-hidden />
@@ -1288,20 +1872,40 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                     </div>
 
                     <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4 space-y-4">
-                      {workingBOM.items.map((item, idx) => (
-                        <div key={idx} className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 md:gap-4 items-start relative group shadow-sm hover:bg-white hover:border-indigo-100 transition-all">
+                      <div className="flex flex-wrap items-center justify-between gap-2 px-1 py-2 rounded-xl bg-indigo-50/80 border border-indigo-100">
+                        <span className="text-[11px] font-black text-indigo-800">物料汇总</span>
+                        <span className="text-[11px] font-bold text-indigo-600">
+                          已选 <span className="tabular-nums">{bomMaterialStats.kinds}</span> 种 · 用量合计{' '}
+                          <span className="tabular-nums">{bomMaterialStats.totalQty}</span>
+                        </span>
+                      </div>
+                      {workingBOM.items.map((item, idx) => {
+                        const unavailableProductIds = workingBOM.items
+                          .map((other, i) => (i !== idx && other.productId ? other.productId : ''))
+                          .filter(Boolean);
+                        return (
+                        <div key={idx} className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 grid grid-cols-1 md:grid-cols-[auto_1fr_auto] gap-3 md:gap-4 items-start relative group shadow-sm hover:bg-white hover:border-indigo-100 transition-all">
                           <button type="button" onClick={() => {
                             const newItems = [...workingBOM.items];
                             newItems.splice(idx, 1);
                             setWorkingBOM({ ...workingBOM, items: newItems });
-                          }} className="absolute -top-2 -right-2 w-7 h-7 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-rose-600"><Trash2 className="w-4 h-4" /></button>
+                          }} className="absolute -top-2 -right-2 w-7 h-7 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-rose-600 z-10"><Trash2 className="w-4 h-4" /></button>
+                          <div className="flex shrink-0 items-start justify-center md:justify-start pt-[3px] md:pt-1">
+                            <span
+                              className="flex h-8 min-w-[2rem] items-center justify-center rounded-full bg-indigo-600 px-2 text-xs font-black text-white shadow-md shadow-indigo-600/25 ring-2 ring-white/30"
+                              aria-label={`第 ${idx + 1} 行`}
+                            >
+                              {idx + 1}
+                            </span>
+                          </div>
                           <div className="space-y-2 min-w-0">
                             <div>
-                              <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block tracking-widest">1. 核心物料/组件 (支持搜索与分类筛选)</label>
+                              <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block tracking-widest">核心物料/组件 (支持搜索与分类筛选)</label>
                               <SearchableProductSelect
                                 compact
                                 categories={categories}
                                 value={item.productId}
+                                unavailableProductIds={unavailableProductIds}
                                 onChange={val => {
                                   const p = products.find(x => x.id === val);
                                   updateBOMItem(idx, { productId: val, categoryId: p?.categoryId });
@@ -1312,7 +1916,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                             </div>
                           </div>
                           <div className="w-full md:w-32">
-                            <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block tracking-widest">2. 标准单位用量</label>
+                            <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block tracking-widest">标准单位用量</label>
                             <input
                               type="number"
                               value={item.quantityInput ?? (item.quantity != null && item.quantity !== '' && item.quantity !== 0 ? Number(item.quantity) : '')}
@@ -1325,7 +1929,8 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                             />
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                       <button type="button" onClick={() => setWorkingBOM({ ...workingBOM, items: [...workingBOM.items, { productId: '', quantity: 0 }] })} className="w-full py-3.5 border-2 border-dashed border-indigo-200 rounded-2xl text-indigo-500 font-bold text-xs hover:bg-white hover:border-indigo-400 transition-all flex items-center justify-center gap-2 group"><Plus className="w-4 h-4 group-hover:scale-110 transition-transform" /> 添加物料清单行</button>
                     </div>
 
@@ -1350,6 +1955,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
             <img src={lightboxImageUrl} alt="产品图片" className="relative z-10 max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()} />
           </div>
         )}
+        <FilePreviewPortal preview={filePreview} onClose={closeFilePreview} />
       </div>
     );
   }
@@ -1364,14 +1970,77 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
         {permCanCreate && <button onClick={handleStartCreateProduct} className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all"><Plus className="w-4 h-4" /> 创建新产品</button>}
       </div>
 
-      <div className="flex bg-slate-100/50 p-1 rounded-xl w-fit">
-        {categories.map(cat => (
-          <button key={cat.id} onClick={() => setActiveCategoryFilter(cat.id)} className={`px-5 py-2 rounded-lg text-xs font-bold transition-all ${activeCategoryFilter === cat.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>{cat.name} ({products.filter(p => p.categoryId === cat.id).length})</button>
-        ))}
+      <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap bg-slate-100/50 p-1 rounded-xl w-fit gap-0.5">
+          <button
+            type="button"
+            onClick={() => setActiveCategoryFilter(PRODUCT_ARCHIVE_ALL)}
+            className={`px-5 py-2 rounded-lg text-xs font-bold transition-all ${activeCategoryFilter === PRODUCT_ARCHIVE_ALL ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            全部 ({products.length})
+          </button>
+          {categories.map(cat => (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => setActiveCategoryFilter(cat.id)}
+              className={`px-5 py-2 rounded-lg text-xs font-bold transition-all ${activeCategoryFilter === cat.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              {cat.name} ({products.filter(p => p.categoryId === cat.id).length})
+            </button>
+          ))}
+        </div>
+        <div className="relative w-full lg:max-w-sm">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+          <input
+            type="search"
+            value={productArchiveSearch}
+            onChange={e => setProductArchiveSearch(e.target.value)}
+            placeholder="搜索名称、产品编号、备注…"
+            className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-10 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-300 outline-none shadow-sm"
+            aria-label="搜索产品"
+          />
+          {productArchiveSearch.trim() !== '' && (
+            <button
+              type="button"
+              onClick={() => setProductArchiveSearch('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all"
+              aria-label="清空搜索"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
+      {productArchiveSearch.trim() !== '' && productsInActiveCategoryCount > 0 && (
+        <p className="text-xs font-bold text-slate-500 -mt-4">
+          当前分类下找到 <span className="text-indigo-600 tabular-nums">{filteredProducts.length}</span> 条
+          {filteredProducts.length < productsInActiveCategoryCount && (
+            <span className="text-slate-400 font-medium">（共 {productsInActiveCategoryCount} 条）</span>
+          )}
+        </p>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredProducts.map(product => {
+        {filteredProducts.length === 0 ? (
+          <div className="col-span-full flex flex-col items-center justify-center py-16 px-6 rounded-[32px] border border-dashed border-slate-200 bg-slate-50/50">
+            <Search className="w-10 h-10 text-slate-200 mb-3" />
+            <p className="text-sm font-bold text-slate-600">
+              {productsInActiveCategoryCount === 0 ? '该分类下暂无产品' : productArchiveSearch.trim() ? '未找到匹配的产品' : '该分类下暂无产品'}
+            </p>
+            {productArchiveSearch.trim() !== '' && productsInActiveCategoryCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setProductArchiveSearch('')}
+                className="mt-3 text-xs font-bold text-indigo-600 hover:underline"
+              >
+                清空搜索条件
+              </button>
+            )}
+          </div>
+        ) : (
+        filteredProducts.map(product => {
           const category = categories.find(c => c.id === product.categoryId);
           const bomCount = boms.filter(b => b.parentProductId === product.id).length;
           return (
@@ -1405,7 +2074,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                                 src={val}
                                 alt={field.label}
                                 className="h-8 w-8 object-cover rounded-lg border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400 transition-all"
-                                onClick={(e) => { e.stopPropagation(); setFilePreviewUrl(val); setFilePreviewType('image'); }}
+                                onClick={(e) => { e.stopPropagation(); openFilePreview(val, 'image'); }}
                               />
                               <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="flex items-center gap-1 px-2 py-1 bg-slate-100 rounded-lg text-[9px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600">
                                 <Download className="w-3 h-3" /> 下载
@@ -1413,7 +2082,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                             </>
                           ) : isPdf ? (
                             <>
-                              <button type="button" onClick={(e) => { e.stopPropagation(); setFilePreviewUrl(val); setFilePreviewType('pdf'); }} className="flex items-center gap-1 px-2 py-1 bg-slate-100 rounded-lg text-[9px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600">
+                              <button type="button" onClick={(e) => { e.stopPropagation(); openFilePreview(val, 'pdf'); }} className="flex items-center gap-1 px-2 py-1 bg-slate-100 rounded-lg text-[9px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600">
                                 <FileText className="w-3 h-3" /> 在线查看
                               </button>
                               <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="flex items-center gap-1 px-2 py-1 bg-slate-100 rounded-lg text-[9px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600">
@@ -1462,7 +2131,8 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
               </div>
             </div>
           )
-        })}
+        })
+        )}
       </div>
 
       {/* 图片放大弹窗 */}
@@ -1476,21 +2146,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
         </div>
       )}
 
-      {/* 文件预览弹窗 (图片/PDF) */}
-      {filePreviewUrl && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-8 bg-slate-900/80 backdrop-blur-sm" onClick={() => setFilePreviewUrl(null)}>
-          <button onClick={() => setFilePreviewUrl(null)} className="absolute top-6 right-6 z-10 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-all">
-            <X className="w-8 h-8" />
-          </button>
-          <div className="relative z-10 w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            {filePreviewType === 'image' ? (
-              <img src={filePreviewUrl} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
-            ) : (
-              <iframe src={filePreviewUrl} title="PDF 预览" className="w-full h-[85vh] border-0" />
-            )}
-          </div>
-        </div>
-      )}
+      <FilePreviewPortal preview={filePreview} onClose={closeFilePreview} />
     </div>
   );
 };

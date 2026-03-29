@@ -12,4 +12,6 @@ export const env = {
   get JWT_EXPIRES_IN() { return process.env.JWT_EXPIRES_IN || '15m'; },
   get JWT_REFRESH_EXPIRES_IN() { return process.env.JWT_REFRESH_EXPIRES_IN || '7d'; },
   get CORS_ORIGIN() { return process.env.CORS_ORIGIN || 'http://localhost:3000'; },
+  /** JSON 请求体上限（产品图、分类附件等常为 Base64，易较大）；Nginx 需同步调大 client_max_body_size */
+  get JSON_BODY_LIMIT() { return process.env.JSON_BODY_LIMIT || '50mb'; },
 };

@@ -21,6 +21,9 @@ export enum PlanStatus {
 
 export type FieldType = 'text' | 'number' | 'select' | 'boolean' | 'date' | 'file';
 
+/** 工序节点库「报工表单模板」中应使用的字段类型（仅存 text / select / file；历史数据可能含 number/boolean/date） */
+export type ProcessReportFieldType = 'text' | 'select' | 'file';
+
 export interface ReportFieldDefinition {
   id: string;
   label: string;
@@ -166,7 +169,9 @@ export interface Product {
   sizeIds: string[];
   variants: ProductVariant[];
   categoryCustomData?: Record<string, any>; 
-  milestoneNodeIds: string[]; 
+  milestoneNodeIds: string[];
+  /** 标准生产路线报工填报项存档：工序节点 id -> 字段 id -> 字符串值 */
+  routeReportValues?: Record<string, Record<string, string>>;
   /** 各工序工价（元/件 或 元/时，由 nodePricingModes 决定），key 为工序节点 id */
   nodeRates?: Record<string, number>;
   /** 各工序计价方式，未设置时使用系统默认；key 为工序节点 id */
@@ -397,6 +402,23 @@ export const FINANCE_DOC_NO_PREFIX: Record<FinanceOpType, string> = {
   RECONCILIATION: 'DZD',
   SETTLEMENT: 'GZD',
 };
+
+export interface OutsourceRouteStep {
+  stepOrder: number;
+  nodeId: string;
+  nodeName: string;
+  receiverTenantId: string;
+  receiverTenantName: string;
+}
+
+export interface OutsourceRoute {
+  id: string;
+  tenantId: string;
+  name: string;
+  steps: OutsourceRouteStep[];
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface FinanceRecord {
   id: string;

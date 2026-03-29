@@ -109,6 +109,51 @@ function ProductCategorySelectOptions({
   );
 }
 
+function NodeReportTemplateSelectOptions({
+  nodeId,
+  fieldId,
+  options,
+  onPersist,
+}: {
+  nodeId: string;
+  fieldId: string;
+  options: string[];
+  onPersist: (nodeId: string, fieldId: string, next: string[]) => void;
+}) {
+  const opts = options ?? [];
+  return (
+    <div className="w-full mt-2 pt-2 border-t border-slate-100 md:col-span-3">
+      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">下拉选项</p>
+      <div className="min-w-[180px] space-y-1.5">
+        {opts.map((opt, idx) => (
+          <PlanFormStyleSelectOptionRow
+            key={`${fieldId}-opt-${idx}`}
+            serverValue={opt}
+            onCommit={(text) => {
+              const v = text.trim();
+              if (!v) {
+                onPersist(nodeId, fieldId, opts.filter((_, i) => i !== idx));
+              } else if (v !== (opt || '').trim()) {
+                const next = [...opts];
+                next[idx] = v;
+                onPersist(nodeId, fieldId, next);
+              }
+            }}
+            onRemove={() => onPersist(nodeId, fieldId, opts.filter((_, i) => i !== idx))}
+          />
+        ))}
+        <button
+          type="button"
+          onClick={() => onPersist(nodeId, fieldId, [...opts, '新选项'])}
+          className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700"
+        >
+          <Plus className="w-3.5 h-3.5" /> 添加选项
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PlanFormStyleSelectOptionRow({
   serverValue,
   onCommit,
@@ -1098,27 +1143,60 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                 </div>
                                 <div className="space-y-3">
                                    {node.reportTemplate.length === 0 && <p className="text-center py-10 text-xs text-slate-300 italic border-2 border-dashed border-slate-100 rounded-2xl">暂无表单项，工人只需上报完工数量</p>}
-                                   {node.reportTemplate.map((field, idx) => (
-                                     <div key={field.id} className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col md:flex-row md:items-center gap-4">
-                                        <div className="w-6 h-6 bg-white rounded-lg flex items-center justify-center text-[10px] font-black text-slate-400 shadow-sm">{idx + 1}</div>
-                                        <div className="flex-1 grid grid-cols-2 md:grid-cols-3 gap-3">
-                                           <ExtFieldLabelInput
-                                             inputKey={`node-rt-${node.id}-${field.id}`}
-                                             label={field.label}
-                                             placeholder="标签名称"
-                                             onPersist={(t) => updateNodeField(node.id, field.id, { label: t })}
-                                             className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold outline-none"
-                                           />
-                                           <select value={field.type} onChange={e => updateNodeField(node.id, field.id, { type: e.target.value as FieldType })} className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold outline-none">
-                                              <option value="text">文本输入</option><option value="number">数字录入</option><option value="select">下拉选择</option><option value="boolean">布尔开关</option><option value="date">日期选取</option>
-                                           </select>
-                                           <div className="flex items-center gap-4 px-2">
-                                              <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={field.required} onChange={e => updateNodeField(node.id, field.id, { required: e.target.checked })} className="w-3.5 h-3.5 rounded text-indigo-600" /><span className="text-[10px] font-bold text-slate-400 uppercase">必填</span></label>
-                                              <button onClick={() => removeNodeField(node.id, field.id)} className="ml-auto p-1.5 text-rose-300 hover:text-rose-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                   {node.reportTemplate.map((field, idx) => {
+                                     const typeTri: FieldType =
+                                       field.type === 'select' || field.type === 'file' ? field.type : 'text';
+                                     return (
+                                     <div key={field.id} className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-3">
+                                        <div className="flex flex-col md:flex-row md:items-start gap-4">
+                                           <div className="w-6 h-6 bg-white rounded-lg flex items-center justify-center text-[10px] font-black text-slate-400 shadow-sm shrink-0">{idx + 1}</div>
+                                           <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                              <ExtFieldLabelInput
+                                                inputKey={`node-rt-${node.id}-${field.id}`}
+                                                label={field.label}
+                                                placeholder="标签名称"
+                                                onPersist={(t) => updateNodeField(node.id, field.id, { label: t })}
+                                                className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold outline-none"
+                                              />
+                                              <select
+                                                value={typeTri}
+                                                onChange={(e) => {
+                                                  const v = e.target.value as FieldType;
+                                                  if (v === 'select') {
+                                                    updateNodeField(node.id, field.id, {
+                                                      type: v,
+                                                      options:
+                                                        field.type === 'select' && Array.isArray(field.options) && field.options.length > 0
+                                                          ? field.options
+                                                          : [],
+                                                    });
+                                                  } else {
+                                                    updateNodeField(node.id, field.id, { type: v, options: undefined });
+                                                  }
+                                                }}
+                                                className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold outline-none"
+                                              >
+                                                <option value="text">文本输入</option>
+                                                <option value="select">下拉选择</option>
+                                                <option value="file">上传文件/图片</option>
+                                              </select>
+                                              <div className="flex items-center gap-4 px-2 flex-wrap">
+                                                 <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={field.required} onChange={e => updateNodeField(node.id, field.id, { required: e.target.checked })} className="w-3.5 h-3.5 rounded text-indigo-600" /><span className="text-[10px] font-bold text-slate-400 uppercase">必填</span></label>
+                                                 <button type="button" onClick={() => removeNodeField(node.id, field.id)} className="ml-auto p-1.5 text-rose-300 hover:text-rose-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                              </div>
+                                              {field.type === 'select' && (
+                                                <NodeReportTemplateSelectOptions
+                                                  nodeId={node.id}
+                                                  fieldId={field.id}
+                                                  options={field.options || []}
+                                                  onPersist={(nid, fid, next) => updateNodeField(nid, fid, { options: next })}
+                                                />
+                                              )}
                                            </div>
                                         </div>
                                      </div>
-                                   ))}
+                                   );
+                                   })}
                                 </div>
                              </div>
                           </div>
