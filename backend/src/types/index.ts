@@ -68,7 +68,7 @@ export const BASIC_SUB_MODULES = {
   partners:     { label: '合作单位',       actions: ['view', 'create', 'edit', 'delete'] as const },
   members:      { label: '成员管理',       actions: ['view', 'create', 'edit', 'delete'] as const },
   equipment:    { label: '设备管理',       actions: ['view', 'create', 'edit', 'delete'] as const },
-  dictionaries: { label: '公共数据字典',   actions: ['view', 'create', 'delete'] as const },
+  dictionaries: { label: '公共数据字典',   actions: ['view', 'create', 'edit', 'delete'] as const },
 } as const;
 
 export type BasicSubModule = keyof typeof BASIC_SUB_MODULES;

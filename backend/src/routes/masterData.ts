@@ -19,6 +19,7 @@ router.delete('/equipment/:id', requireSubPermission('basic:equipment:delete'), 
 // 字典
 router.get('/dictionaries',        requireSubPermission('basic:dictionaries:view'),   ctrl.listDictionaries);
 router.post('/dictionaries',       requireSubPermission('basic:dictionaries:create'), ctrl.createDictionaryItem);
+router.put('/dictionaries/:id',    requireSubPermission('basic:dictionaries:edit'),   ctrl.updateDictionaryItem);
 router.delete('/dictionaries/:id', requireSubPermission('basic:dictionaries:delete'), ctrl.deleteDictionaryItem);
 
 export default router;

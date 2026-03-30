@@ -132,6 +132,52 @@ export async function createDictionaryItem(req: Request, res: Response, next: Ne
     res.status(201).json(await db.dictionaryItem.create({ data: data as any }));
   } catch (e) { next(e); }
 }
+
+export async function updateDictionaryItem(req: Request, res: Response, next: NextFunction) {
+  try {
+    const db = getTenantPrisma(req.tenantId!);
+    const id = str(req.params.id);
+    const existing = await db.dictionaryItem.findFirst({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ error: '记录不存在' });
+      return;
+    }
+    const raw = sanitizeUpdate(req.body);
+    const nameIn = raw.name;
+    const valueIn = raw.value;
+    const name =
+      typeof nameIn === 'string' ? nameIn.trim() : undefined;
+    const value =
+      typeof valueIn === 'string' ? valueIn.trim() : undefined;
+    if (name !== undefined && !name) {
+      res.status(400).json({ error: '名称不能为空' });
+      return;
+    }
+    const nextName = name ?? existing.name;
+    const nextValue = value !== undefined ? value : existing.value;
+    const dup = await db.dictionaryItem.findFirst({
+      where: {
+        type: existing.type,
+        name: nextName,
+        NOT: { id },
+      },
+    });
+    if (dup) {
+      res.status(400).json({ error: `该类型下已存在「${nextName}」` });
+      return;
+    }
+    res.json(
+      await db.dictionaryItem.update({
+        where: { id },
+        data: {
+          ...(name !== undefined ? { name: nextName } : {}),
+          ...(value !== undefined ? { value: nextValue } : {}),
+        },
+      }),
+    );
+  } catch (e) { next(e); }
+}
+
 export async function deleteDictionaryItem(req: Request, res: Response, next: NextFunction) {
   try {
     const db = getTenantPrisma(req.tenantId!);

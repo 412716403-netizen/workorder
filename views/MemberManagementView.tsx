@@ -31,7 +31,7 @@ const BASIC_SUB_MODULES: { key: string; label: string; actions: string[] }[] = [
   { key: 'partners',     label: '合作单位',       actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'members',      label: '成员管理',       actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'equipment',    label: '设备管理',       actions: ['view', 'create', 'edit', 'delete'] },
-  { key: 'dictionaries', label: '公共数据字典',   actions: ['view', 'create', 'delete'] },
+  { key: 'dictionaries', label: '公共数据字典',   actions: ['view', 'create', 'edit', 'delete'] },
 ];
 
 const PRODUCTION_SUB_MODULES: { key: string; label: string; actions: string[]; group: string }[] = [

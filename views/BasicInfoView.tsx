@@ -4,15 +4,12 @@ import {
   Boxes, 
   Building2, 
   Cpu,
-  Phone,
-  ChevronRight,
   ShieldCheck,
   Plus,
   Search,
   X,
   Edit2,
   Trash2,
-  Hash,
   ArrowLeft,
   Save,
   Tag,
@@ -126,9 +123,14 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
   const [editPartner, setEditPartner] = useState<Partial<Partner>>({});
   const [editEq, setEditEq] = useState<Partial<Equipment>>({});
 
-  const [newColorName, setNewColorName] = useState('');
-  const [newSizeName, setNewSizeName] = useState('');
-  const [newUnitName, setNewUnitName] = useState('');
+  const [dictEditingId, setDictEditingId] = useState<string | null>(null);
+  const [dictAddType, setDictAddType] = useState<'color' | 'size' | 'unit'>('color');
+  const [dictAddName, setDictAddName] = useState('');
+  /** 色值 / 编码等；为空保存时用名称填充 */
+  const [dictAddValue, setDictAddValue] = useState('');
+  const [dictSaving, setDictSaving] = useState(false);
+  /** 公共字典列表：类型筛选（与合作单位分类条同级） */
+  const [activeDictKindFilter, setActiveDictKindFilter] = useState<'all' | 'color' | 'size' | 'unit'>('all');
   const [productDetailVisible, setProductDetailVisible] = useState(false);
 
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -182,38 +184,88 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
   }, []);
 
 
-  const handleAddColor = async () => {
-    const val = newColorName.trim();
-    if (!val) return;
-    if (dictionaries.colors.some(c => c.name === val)) { toast.warning(`颜色"${val}"已存在`); return; }
-    try {
-      await api.dictionaries.create({ type: 'color', name: val, value: val });
-      setNewColorName('');
-      await onRefreshDictionaries();
-    } catch (err: any) { toast.error(err.message || '操作失败'); }
-  };
-
-  const handleAddSize = async () => {
-    const val = newSizeName.trim();
-    if (!val) return;
-    if (dictionaries.sizes.some(s => s.name === val)) { toast.warning(`尺码"${val}"已存在`); return; }
-    try {
-      await api.dictionaries.create({ type: 'size', name: val, value: val });
-      setNewSizeName('');
-      await onRefreshDictionaries();
-    } catch (err: any) { toast.error(err.message || '操作失败'); }
-  };
-
   const units = dictionaries.units ?? [];
-  const handleAddUnit = async () => {
-    const val = newUnitName.trim();
-    if (!val) return;
-    if (units.some(u => u.name === val)) { toast.warning(`单位"${val}"已存在`); return; }
+
+  const closeDictionaryModal = () => {
+    setShowModal(null);
+    setDictEditingId(null);
+    setDictAddValue('');
+  };
+
+  const handleOpenDictionaryAdd = () => {
+    setDictEditingId(null);
+    setDictAddType('color');
+    setDictAddName('');
+    setDictAddValue('');
+    setShowModal('DICTIONARIES');
+  };
+
+  const handleOpenDictionaryEdit = (row: { id: string; kind: 'color' | 'size' | 'unit'; name: string; value: string }) => {
+    setDictEditingId(row.id);
+    setDictAddType(row.kind);
+    setDictAddName(row.name);
+    setDictAddValue(row.value && row.value !== row.name ? row.value : '');
+    setShowModal('DICTIONARIES');
+  };
+
+  const saveDictionaryItem = async () => {
+    const val = dictAddName.trim();
+    if (!val) {
+      toast.warning('请填写名称');
+      return;
+    }
+    const valuePayload = dictAddValue.trim() || val;
+    const typeLabel = dictAddType === 'color' ? '颜色' : dictAddType === 'size' ? '尺码' : '单位';
+
+    if (dictEditingId) {
+      const dupColor = dictAddType === 'color' && dictionaries.colors.some(c => c.id !== dictEditingId && c.name === val);
+      const dupSize = dictAddType === 'size' && dictionaries.sizes.some(s => s.id !== dictEditingId && s.name === val);
+      const dupUnit = dictAddType === 'unit' && units.some(u => u.id !== dictEditingId && u.name === val);
+      if (dupColor || dupSize || dupUnit) {
+        toast.warning(`${typeLabel}「${val}」已存在`);
+        return;
+      }
+      setDictSaving(true);
+      try {
+        await api.dictionaries.update(dictEditingId, { name: val, value: valuePayload });
+        setDictAddName('');
+        setDictAddValue('');
+        closeDictionaryModal();
+        await onRefreshDictionaries();
+        toast.success('已保存');
+      } catch (err: any) {
+        toast.error(err.message || '操作失败');
+      } finally {
+        setDictSaving(false);
+      }
+      return;
+    }
+
+    if (dictAddType === 'color' && dictionaries.colors.some(c => c.name === val)) {
+      toast.warning(`${typeLabel}「${val}」已存在`);
+      return;
+    }
+    if (dictAddType === 'size' && dictionaries.sizes.some(s => s.name === val)) {
+      toast.warning(`${typeLabel}「${val}」已存在`);
+      return;
+    }
+    if (dictAddType === 'unit' && units.some(u => u.name === val)) {
+      toast.warning(`${typeLabel}「${val}」已存在`);
+      return;
+    }
+    setDictSaving(true);
     try {
-      await api.dictionaries.create({ type: 'unit', name: val, value: val });
-      setNewUnitName('');
+      await api.dictionaries.create({ type: dictAddType, name: val, value: valuePayload });
+      setDictAddName('');
+      setDictAddValue('');
+      closeDictionaryModal();
       await onRefreshDictionaries();
-    } catch (err: any) { toast.error(err.message || '操作失败'); }
+      toast.success('已添加');
+    } catch (err: any) {
+      toast.error(err.message || '操作失败');
+    } finally {
+      setDictSaving(false);
+    }
   };
 
   const handleDeleteDictionary = async (id: string) => {
@@ -222,6 +274,34 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
       await onRefreshDictionaries();
     } catch (err: any) { toast.error(err.message || '操作失败'); }
   };
+
+  type DictRow = { id: string; kind: 'color' | 'size' | 'unit'; name: string; value: string };
+
+  const filteredDictionaryRows = useMemo(() => {
+    const rows: DictRow[] = [
+      ...dictionaries.colors.map(c => ({ id: c.id, kind: 'color' as const, name: c.name, value: c.value ?? '' })),
+      ...dictionaries.sizes.map(s => ({ id: s.id, kind: 'size' as const, name: s.name, value: s.value ?? '' })),
+      ...units.map(u => ({ id: u.id, kind: 'unit' as const, name: u.name, value: u.value ?? '' })),
+    ];
+    const byKind =
+      activeDictKindFilter === 'all' ? rows : rows.filter(r => r.kind === activeDictKindFilter);
+    const t = searchTerm.trim().toLowerCase();
+    const bySearch =
+      !t
+        ? byKind
+        : byKind.filter(
+            r => r.name.toLowerCase().includes(t) || (r.value && r.value.toLowerCase().includes(t)),
+          );
+    const kindOrder = { color: 0, size: 1, unit: 2 };
+    return [...bySearch].sort((a, b) => {
+      const d = kindOrder[a.kind] - kindOrder[b.kind];
+      if (d !== 0) return d;
+      return a.name.localeCompare(b.name, 'zh-CN');
+    });
+  }, [dictionaries.colors, dictionaries.sizes, units, activeDictKindFilter, searchTerm]);
+
+  const dictTotalCount =
+    dictionaries.colors.length + dictionaries.sizes.length + units.length;
 
   const allTabs = [
     { id: 'PRODUCTS', label: '产品与 BOM', icon: Boxes },
@@ -241,6 +321,19 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
       return matchesCategory && matchesSearch;
     });
   }, [partners, activePartnerCategoryId, searchTerm]);
+
+  const filteredEquipment = useMemo(() => {
+    const byNode = equipment.filter(e => {
+      if (equipmentNodeId == null) return true;
+      if (equipmentNodeId === EQUIPMENT_UNASSIGNED) return !e.assignedMilestoneIds?.length;
+      return e.assignedMilestoneIds?.includes(equipmentNodeId);
+    });
+    const t = searchTerm.trim().toLowerCase();
+    if (!t) return byNode;
+    return byNode.filter(
+      e => e.name.toLowerCase().includes(t) || (e.code || '').toLowerCase().includes(t),
+    );
+  }, [equipment, equipmentNodeId, searchTerm]);
 
   // --- 操作处理器 ---
   const handleOpenPartner = (p?: Partner) => {
@@ -356,84 +449,161 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
         )}
 
         {activeTab === 'PARTNERS' && !showModal && (
-          <div className="space-y-8">
-            {renderHeader('合作单位中心', '分类管理外部单位档案及自定义扩展信息', canCreate('PARTNERS') ? () => handleOpenPartner() : null, '新增单位')}
-            
-            {/* 分类导航条 */}
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setActivePartnerCategoryId('all')}
-                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${activePartnerCategoryId === 'all' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-              >
-                全部单位 ({partners.length})
-              </button>
-              {partnerCategories.map(cat => (
-                <button
-                  key={cat.id}
-                  onClick={() => setActivePartnerCategoryId(cat.id)}
-                  className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${activePartnerCategoryId === cat.id ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                >
-                  {cat.name} ({partners.filter(p => p.categoryId === cat.id).length})
+          <div className="space-y-8 animate-in fade-in duration-500">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900">合作单位中心</h1>
+                <p className="text-slate-500 mt-1 italic text-sm">分类管理外部单位档案及自定义扩展信息</p>
+              </div>
+              {canCreate('PARTNERS') && (
+                <button type="button" onClick={() => handleOpenPartner()} className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">
+                  <Plus className="w-4 h-4" /> 新增单位
                 </button>
-              ))}
+              )}
             </div>
 
-            {/* 单位卡片网格 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredPartners.map(p => {
-                const category = partnerCategories.find(c => c.id === p.categoryId);
-                const phoneFieldId = category?.customFields.find(f => f.label.includes('电话'))?.id;
-                const phoneNumber = phoneFieldId ? p.customData?.[phoneFieldId] : null;
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap bg-slate-100/50 p-1 rounded-xl gap-0.5 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => setActivePartnerCategoryId('all')}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activePartnerCategoryId === 'all' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    全部单位 ({partners.length})
+                  </button>
+                  {partnerCategories.map(cat => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setActivePartnerCategoryId(cat.id)}
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activePartnerCategoryId === cat.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                      {cat.name} ({partners.filter(p => p.categoryId === cat.id).length})
+                    </button>
+                  ))}
+                </div>
+                <div className="relative w-full sm:max-w-sm sm:shrink-0">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="search"
+                    placeholder="检索单位名称…"
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-10 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-300 outline-none shadow-sm"
+                    aria-label="检索合作单位"
+                  />
+                  {searchTerm.trim() !== '' && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all"
+                      aria-label="清空搜索"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
 
-                return (
-                  <div key={p.id} className="bg-white p-6 rounded-[32px] border border-slate-200 hover:shadow-2xl hover:border-indigo-400 transition-all group flex flex-col relative overflow-hidden">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-all shadow-inner">
-                        <Building2 className="w-6 h-6" />
-                      </div>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                        {canEdit('PARTNERS') && <button onClick={() => handleOpenPartner(p)} className="p-2 text-slate-300 hover:text-indigo-600 bg-slate-50 rounded-xl transition-colors"><Edit2 className="w-4 h-4" /></button>}
-                        {canDelete('PARTNERS') && <button onClick={async () => { try { await api.partners.delete(p.id); await onRefreshPartners(); } catch (err: any) { toast.error(err.message || '删除失败'); } }} className="p-2 text-slate-300 hover:text-rose-600 bg-slate-50 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>}
-                      </div>
-                    </div>
-                    
-                    <h3 className="text-lg font-bold text-slate-900 mb-1 group-hover:text-indigo-600 transition-colors">{p.name}</h3>
-                    <p className="text-[11px] text-slate-400 font-bold mb-4 flex items-center gap-1 uppercase tracking-tighter">
-                      <Phone className="w-3 h-3 text-slate-300" /> {phoneNumber || '未登记电话'}
-                    </p>
-                    
-                    {category && (
-                      <div className="flex flex-wrap gap-2 mb-6">
-                        <div className={`px-2 py-1 bg-indigo-50 rounded-lg text-[9px] font-bold text-indigo-600 uppercase tracking-widest border border-indigo-100`}>
-                          {category.name}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 自定义字段摘要展示 */}
-                    {category && category.customFields.length > 0 && p.customData && (
-                       <div className="mb-2 space-y-2 bg-slate-50/50 p-3 rounded-2xl border border-slate-50">
-                          {category.customFields.slice(0, 3).map(cf => (
-                             <div key={cf.id} className="flex justify-between items-center text-[10px]">
-                                <span className="text-slate-400 font-bold uppercase">{cf.label}</span>
-                                <span className="text-slate-700 font-black truncate max-w-[100px]">
-                                  {typeof p.customData?.[cf.id] === 'boolean' ? (p.customData?.[cf.id] ? '是' : '否') : (p.customData?.[cf.id] || '-')}
-                                </span>
-                             </div>
-                          ))}
-                       </div>
-                    )}
-
-                    <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-end">
-                      <ChevronRight className="w-4 h-4 text-slate-200 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all" />
-                    </div>
-                  </div>
-                );
-              })}
-              {filteredPartners.length === 0 && (
-                <div className="col-span-full py-20 text-center bg-slate-50 rounded-[40px] border-2 border-dashed border-slate-200">
-                   <Building2 className="w-12 h-12 text-slate-200 mx-auto mb-4 opacity-50" />
-                   <p className="text-slate-400 font-medium italic">该分类下暂无单位数据</p>
+              {filteredPartners.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 px-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50">
+                  <Building2 className="w-10 h-10 text-slate-200 mb-3" />
+                  <p className="text-sm font-bold text-slate-600">
+                    {searchTerm.trim() ? '未找到匹配的单位' : '该分类下暂无单位数据'}
+                  </p>
+                  {searchTerm.trim() !== '' && (
+                    <button type="button" onClick={() => setSearchTerm('')} className="mt-3 text-xs font-bold text-indigo-600 hover:underline">
+                      清空搜索条件
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50/80 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        <th className="py-3 pl-4 pr-2 w-12"></th>
+                        <th className="py-3 px-3">单位名称</th>
+                        <th className="py-3 px-3 hidden sm:table-cell">联系人</th>
+                        <th className="py-3 px-3 hidden md:table-cell">电话</th>
+                        <th className="py-3 px-3 hidden lg:table-cell">分类</th>
+                        <th className="py-3 px-3 hidden xl:table-cell text-center">协作</th>
+                        <th className="py-3 pr-4 pl-2 text-right w-24">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredPartners.map(p => {
+                        const category = partnerCategories.find(c => c.id === p.categoryId);
+                        const phoneFieldId = category?.customFields.find(f => f.label.includes('电话'))?.id;
+                        const phoneNumber = phoneFieldId ? p.customData?.[phoneFieldId] : null;
+                        const phoneDisplay = phoneNumber != null && String(phoneNumber).trim() !== '' ? String(phoneNumber) : '—';
+                        return (
+                          <tr
+                            key={p.id}
+                            className={`group hover:bg-indigo-50/40 transition-colors ${canEdit('PARTNERS') ? 'cursor-pointer' : ''}`}
+                            onClick={() => canEdit('PARTNERS') && handleOpenPartner(p)}
+                          >
+                            <td className="py-3 pl-4 pr-2">
+                              <div className="w-9 h-9 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
+                                <Building2 className="w-4 h-4" />
+                              </div>
+                            </td>
+                            <td className="py-3 px-3">
+                              <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors truncate max-w-[200px]">{p.name}</p>
+                              <p className="sm:hidden text-[10px] text-slate-400 font-medium mt-0.5 truncate">{p.contact || '—'}</p>
+                            </td>
+                            <td className="py-3 px-3 hidden sm:table-cell">
+                              <span className="text-xs text-slate-600 font-medium">{p.contact || '—'}</span>
+                            </td>
+                            <td className="py-3 px-3 hidden md:table-cell">
+                              <span className="text-xs text-slate-500 font-medium">{phoneDisplay}</span>
+                            </td>
+                            <td className="py-3 px-3 hidden lg:table-cell">
+                              {category ? (
+                                <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold text-white bg-indigo-600">{category.name}</span>
+                              ) : (
+                                <span className="text-slate-300">—</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 hidden xl:table-cell text-center">
+                              {p.collaborationTenantId ? (
+                                <span className="text-[10px] font-bold text-emerald-600">已关联</span>
+                              ) : (
+                                <span className="text-slate-300">—</span>
+                              )}
+                            </td>
+                            <td className="py-3 pr-4 pl-2 text-right">
+                              <div className="flex items-center justify-end gap-0.5" onClick={e => e.stopPropagation()}>
+                                {canEdit('PARTNERS') && (
+                                  <button type="button" onClick={() => handleOpenPartner(p)} className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" aria-label="编辑">
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {canDelete('PARTNERS') && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      try {
+                                        await api.partners.delete(p.id);
+                                        await onRefreshPartners();
+                                      } catch (err: any) {
+                                        toast.error(err.message || '删除失败');
+                                      }
+                                    }}
+                                    className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                    aria-label="删除"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
@@ -445,162 +615,408 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
         )}
 
         {activeTab === 'EQUIPMENT' && !showModal && (
-          <div className="space-y-8">
-            {renderHeader('生产设备管理', '追踪车间机械设备、工装夹具及关联工序', canCreate('EQUIPMENT') ? () => handleOpenEq() : null, '新增设备')}
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setEquipmentNodeId(null)}
-                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${equipmentNodeId === null ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-              >
-                全部 ({equipment.length})
-              </button>
-              {(() => {
-                const unassignedCount = equipment.filter(e => !e.assignedMilestoneIds?.length).length;
-                return unassignedCount > 0 ? (
-                  <button
-                    onClick={() => setEquipmentNodeId(EQUIPMENT_UNASSIGNED)}
-                    className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${equipmentNodeId === EQUIPMENT_UNASSIGNED ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                  >
-                    未分配 ({unassignedCount})
-                  </button>
-                ) : null;
-              })()}
-              {globalNodes.map(n => {
-                const count = equipment.filter(e => e.assignedMilestoneIds?.includes(n.id)).length;
-                if (count === 0) return null;
-                return (
-                  <button
-                    key={n.id}
-                    onClick={() => setEquipmentNodeId(n.id)}
-                    className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${equipmentNodeId === n.id ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                  >
-                    {n.name} ({count})
-                  </button>
-                );
-              })}
+          <div className="space-y-8 animate-in fade-in duration-500">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900">生产设备管理</h1>
+                <p className="text-slate-500 mt-1 italic text-sm">追踪车间机械设备、工装夹具及关联工序</p>
+              </div>
+              {canCreate('EQUIPMENT') && (
+                <button type="button" onClick={() => handleOpenEq()} className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">
+                  <Plus className="w-4 h-4" /> 新增设备
+                </button>
+              )}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {equipment
-                .filter(e => {
-                  if (equipmentNodeId == null) return true;
-                  if (equipmentNodeId === EQUIPMENT_UNASSIGNED) return !e.assignedMilestoneIds?.length;
-                  return e.assignedMilestoneIds?.includes(equipmentNodeId);
-                })
-                .filter(e => !searchTerm || e.name.includes(searchTerm))
-                .map(e => (
-                <div key={e.id} className="bg-white p-6 rounded-[32px] border border-slate-200 hover:shadow-2xl transition-all group flex flex-col">
-                   <div className="flex justify-between items-start mb-4">
-                    <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 group-hover:text-indigo-600 transition-all shadow-inner"><Cpu className="w-6 h-6" /></div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                      {canEdit('EQUIPMENT') && <button onClick={() => handleOpenEq(e)} className="p-2 text-slate-300 hover:text-indigo-600 bg-slate-50 rounded-xl"><Edit2 className="w-4 h-4" /></button>}
-                      {canDelete('EQUIPMENT') && <button onClick={async () => { try { await api.equipment.delete(e.id); await onRefreshEquipment(); } catch (err: any) { toast.error(err.message || '删除失败'); } }} className="p-2 text-slate-300 hover:text-rose-600 bg-slate-50 rounded-xl"><Trash2 className="w-4 h-4" /></button>}
-                    </div>
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-900 mb-1">{e.name}</h3>
-                  <p className="text-[11px] text-slate-400 font-bold mb-4 uppercase tracking-widest"><Hash className="w-3 h-3 inline mr-1" /> {e.code}</p>
-                  <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                       <Hammer className="w-3.5 h-3.5 text-blue-500" />
-                       <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">支持工序: {e.assignedMilestoneIds?.length || 0} 节点</span>
-                    </div>
-                  </div>
+
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex flex-wrap bg-slate-100/50 p-1 rounded-xl gap-0.5 min-w-0 max-w-full">
+                  <button
+                    type="button"
+                    onClick={() => setEquipmentNodeId(null)}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${equipmentNodeId === null ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    全部 ({equipment.length})
+                  </button>
+                  {(() => {
+                    const unassignedCount = equipment.filter(eq => !eq.assignedMilestoneIds?.length).length;
+                    return unassignedCount > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => setEquipmentNodeId(EQUIPMENT_UNASSIGNED)}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${equipmentNodeId === EQUIPMENT_UNASSIGNED ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                      >
+                        未分配 ({unassignedCount})
+                      </button>
+                    ) : null;
+                  })()}
+                  {globalNodes.map(n => {
+                    const count = equipment.filter(eq => eq.assignedMilestoneIds?.includes(n.id)).length;
+                    if (count === 0) return null;
+                    return (
+                      <button
+                        key={n.id}
+                        type="button"
+                        onClick={() => setEquipmentNodeId(n.id)}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${equipmentNodeId === n.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                      >
+                        {n.name} ({count})
+                      </button>
+                    );
+                  })}
                 </div>
-              ))}
+                <div className="relative w-full sm:max-w-sm sm:shrink-0">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="search"
+                    placeholder="搜索设备名称、编号…"
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-10 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-300 outline-none shadow-sm"
+                    aria-label="搜索设备"
+                  />
+                  {searchTerm.trim() !== '' && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all"
+                      aria-label="清空搜索"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {filteredEquipment.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 px-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50">
+                  <Cpu className="w-10 h-10 text-slate-200 mb-3" />
+                  <p className="text-sm font-bold text-slate-600">
+                    {searchTerm.trim() ? '未找到匹配的设备' : '当前筛选下暂无设备'}
+                  </p>
+                  {searchTerm.trim() !== '' && (
+                    <button type="button" onClick={() => setSearchTerm('')} className="mt-3 text-xs font-bold text-indigo-600 hover:underline">
+                      清空搜索条件
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50/80 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        <th className="py-3 pl-4 pr-2 w-12"></th>
+                        <th className="py-3 px-3">设备名称</th>
+                        <th className="py-3 px-3 hidden sm:table-cell">编号</th>
+                        <th className="py-3 px-3 hidden md:table-cell">关联工序</th>
+                        <th className="py-3 pr-4 pl-2 text-right w-24">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredEquipment.map(e => {
+                        const ids = e.assignedMilestoneIds ?? [];
+                        const nodeNames = ids
+                          .map(id => globalNodes.find(g => g.id === id)?.name)
+                          .filter((n): n is string => Boolean(n));
+                        const nodeSummary =
+                          nodeNames.length === 0
+                            ? '未分配'
+                            : nodeNames.length <= 2
+                              ? nodeNames.join('、')
+                              : `${nodeNames.slice(0, 2).join('、')} 等 ${nodeNames.length} 个`;
+                        return (
+                          <tr
+                            key={e.id}
+                            className={`group hover:bg-indigo-50/40 transition-colors ${canEdit('EQUIPMENT') ? 'cursor-pointer' : ''}`}
+                            onClick={() => canEdit('EQUIPMENT') && handleOpenEq(e)}
+                          >
+                            <td className="py-3 pl-4 pr-2">
+                              <div className="w-9 h-9 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
+                                <Cpu className="w-4 h-4" />
+                              </div>
+                            </td>
+                            <td className="py-3 px-3">
+                              <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors truncate max-w-[200px]">{e.name}</p>
+                              <p className="sm:hidden text-[10px] text-slate-400 font-medium mt-0.5 font-mono truncate">{e.code || '—'}</p>
+                            </td>
+                            <td className="py-3 px-3 hidden sm:table-cell">
+                              <span className="text-xs text-slate-500 font-mono font-medium">{e.code || '—'}</span>
+                            </td>
+                            <td className="py-3 px-3 hidden md:table-cell">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <Hammer className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                                <span className="text-xs text-blue-700 font-bold tabular-nums shrink-0">{ids.length}</span>
+                                <span className="text-xs text-slate-500 truncate" title={nodeNames.join('、')}>
+                                  {nodeSummary}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-3 pr-4 pl-2 text-right">
+                              <div className="flex items-center justify-end gap-0.5" onClick={ev => ev.stopPropagation()}>
+                                {canEdit('EQUIPMENT') && (
+                                  <button type="button" onClick={() => handleOpenEq(e)} className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" aria-label="编辑">
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {canDelete('EQUIPMENT') && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      try {
+                                        await api.equipment.delete(e.id);
+                                        await onRefreshEquipment();
+                                      } catch (err: any) {
+                                        toast.error(err.message || '删除失败');
+                                      }
+                                    }}
+                                    className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                    aria-label="删除"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {activeTab === 'DICTIONARIES' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start animate-in slide-in-from-bottom-4">
-            <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm p-8 space-y-8 flex flex-col h-fit">
-              <div className="flex items-center justify-between border-b border-slate-50 pb-4">
-                <div className="flex items-center gap-3">
-                  <Palette className="w-5 h-5 text-indigo-600" />
-                  <h3 className="font-bold text-slate-800 text-lg">款式颜色库</h3>
-                </div>
-                <span className="text-[10px] font-black text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full">{dictionaries.colors.length} 项</span>
-              </div>
-              <div className="overflow-y-auto custom-scrollbar max-h-96 pr-2">
-                <div className="grid grid-cols-2 gap-3">
-                  {dictionaries.colors.map(c => (
-                    <div key={c.id} className="flex items-center gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100 group">
-                      <div className="flex-1">
-                        <p className="text-xs font-bold text-slate-800">{c.name}</p>
-                      </div>
-                      {canDelete('DICTIONARIES') && <button onClick={() => handleDeleteDictionary(c.id)} className="opacity-0 group-hover:opacity-100 p-1.5 text-rose-400 hover:bg-rose-50 rounded-lg transition-all"><Trash2 className="w-3.5 h-3.5" /></button>}
-                    </div>
-                  ))}
-                </div>
+        {activeTab === 'DICTIONARIES' && !showModal && (
+          <div className="space-y-8 animate-in fade-in duration-500">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900">公共数据字典</h1>
+                <p className="text-slate-500 mt-1 italic text-sm">维护颜色、尺码与产品计量单位，供产品与单据引用</p>
               </div>
               {canCreate('DICTIONARIES') && (
-              <div className="pt-6 border-t border-slate-50 space-y-4">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">快速新增颜色</h4>
-                <div className="flex gap-3">
-                  <input type="text" placeholder="颜色名称 (如: 曜石黑、珍珠白)" value={newColorName} onChange={e => setNewColorName(e.target.value)} className="flex-1 bg-slate-50 border-none rounded-xl py-2.5 px-4 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500" />
-                  <button onClick={handleAddColor} disabled={!newColorName.trim()} className="bg-indigo-600 text-white p-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all"><Plus className="w-5 h-5" /></button>
-                </div>
-              </div>
+                <button type="button" onClick={handleOpenDictionaryAdd} className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">
+                  <Plus className="w-4 h-4" /> 新增
+                </button>
               )}
             </div>
-            <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm p-8 space-y-8 flex flex-col h-fit">
-              <div className="flex items-center justify-between border-b border-slate-50 pb-4">
-                <div className="flex items-center gap-3">
-                  <Maximize2 className="w-5 h-5 text-indigo-600" />
-                  <h3 className="font-bold text-slate-800 text-lg">款式尺码库</h3>
+
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap bg-slate-100/50 p-1 rounded-xl gap-0.5 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => setActiveDictKindFilter('all')}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeDictKindFilter === 'all' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    全部 ({dictTotalCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveDictKindFilter('color')}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeDictKindFilter === 'color' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    颜色 ({dictionaries.colors.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveDictKindFilter('size')}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeDictKindFilter === 'size' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    尺码 ({dictionaries.sizes.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveDictKindFilter('unit')}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeDictKindFilter === 'unit' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    产品单位 ({units.length})
+                  </button>
                 </div>
-                <span className="text-[10px] font-black text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full">{dictionaries.sizes.length} 项</span>
-              </div>
-              <div className="overflow-y-auto custom-scrollbar max-h-96 pr-2">
-                <div className="grid grid-cols-2 gap-3">
-                  {dictionaries.sizes.map(s => (
-                    <div key={s.id} className="flex items-center gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100 group">
-                      <div className="flex-1">
-                        <p className="text-xs font-bold text-slate-800">{s.name}</p>
-                      </div>
-                      {canDelete('DICTIONARIES') && <button onClick={() => handleDeleteDictionary(s.id)} className="opacity-0 group-hover:opacity-100 p-1.5 text-rose-400 hover:bg-rose-50 rounded-lg transition-all"><Trash2 className="w-3.5 h-3.5" /></button>}
-                    </div>
-                  ))}
+                <div className="relative w-full sm:max-w-sm sm:shrink-0">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="search"
+                    placeholder="搜索名称…"
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-10 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-300 outline-none shadow-sm"
+                    aria-label="搜索字典项"
+                  />
+                  {searchTerm.trim() !== '' && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all"
+                      aria-label="清空搜索"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
-              {canCreate('DICTIONARIES') && (
-              <div className="pt-6 border-t border-slate-50 space-y-4">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">快速新增尺码</h4>
-                <div className="flex gap-3">
-                  <input type="text" placeholder="尺码代号 (如: XL, 42)" value={newSizeName} onChange={e => setNewSizeName(e.target.value)} className="flex-1 bg-slate-50 border-none rounded-xl py-2.5 px-4 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500" />
-                  <button onClick={handleAddSize} disabled={!newSizeName.trim()} className="bg-indigo-600 text-white p-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all"><Plus className="w-5 h-5" /></button>
+
+              {searchTerm.trim() !== '' && filteredDictionaryRows.length > 0 && (
+                <p className="text-xs font-bold text-slate-500">
+                  找到 <span className="text-indigo-600 tabular-nums">{filteredDictionaryRows.length}</span> 条
+                </p>
+              )}
+
+              {filteredDictionaryRows.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 px-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50">
+                  <Library className="w-10 h-10 text-slate-200 mb-3" />
+                  <p className="text-sm font-bold text-slate-600">
+                    {searchTerm.trim() ? '未找到匹配的字典项' : '当前筛选下暂无数据'}
+                  </p>
+                  {searchTerm.trim() !== '' && (
+                    <button type="button" onClick={() => setSearchTerm('')} className="mt-3 text-xs font-bold text-indigo-600 hover:underline">
+                      清空搜索条件
+                    </button>
+                  )}
                 </div>
-              </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50/80 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        <th className="py-3 pl-4 pr-2 w-12"></th>
+                        <th className="py-3 px-3 hidden sm:table-cell">类型</th>
+                        <th className="py-3 px-3">名称</th>
+                        <th className="py-3 pr-4 pl-2 text-right min-w-[5.5rem]">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredDictionaryRows.map(row => {
+                        const kindLabel =
+                          row.kind === 'color' ? '颜色' : row.kind === 'size' ? '尺码' : '产品单位';
+                        const KindIcon = row.kind === 'color' ? Palette : row.kind === 'size' ? Maximize2 : Package;
+                        const vTrim = String(row.value || '').trim();
+                        const isHexColor =
+                          row.kind === 'color' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(vTrim);
+                        return (
+                          <tr
+                            key={`${row.kind}-${row.id}`}
+                            className={`group hover:bg-indigo-50/40 transition-colors ${canEdit('DICTIONARIES') ? 'cursor-pointer' : ''}`}
+                            onClick={() => canEdit('DICTIONARIES') && handleOpenDictionaryEdit(row)}
+                          >
+                            <td className="py-3 pl-4 pr-2">
+                              <div className="w-9 h-9 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors overflow-hidden">
+                                {isHexColor ? (
+                                  <span
+                                    className="w-full h-full block border border-slate-200"
+                                    style={{ backgroundColor: vTrim }}
+                                    title={vTrim}
+                                  />
+                                ) : (
+                                  <KindIcon className="w-4 h-4" />
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 hidden sm:table-cell">
+                              <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold text-white bg-indigo-600">{kindLabel}</span>
+                            </td>
+                            <td className="py-3 px-3">
+                              <p className={`text-sm font-bold text-slate-800 truncate max-w-[200px] ${canEdit('DICTIONARIES') ? 'group-hover:text-indigo-600 transition-colors' : ''}`}>
+                                {row.name}
+                              </p>
+                              <p className="sm:hidden text-[10px] text-slate-400 font-bold mt-0.5">{kindLabel}</p>
+                            </td>
+                            <td className="py-3 pr-4 pl-2 text-right">
+                              <div className="flex items-center justify-end gap-0.5" onClick={ev => ev.stopPropagation()}>
+                                {canEdit('DICTIONARIES') && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenDictionaryEdit(row)}
+                                    className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors inline-flex"
+                                    aria-label="编辑"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {canDelete('DICTIONARIES') && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteDictionary(row.id)}
+                                    className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors inline-flex"
+                                    aria-label="删除"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
-            <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm p-8 space-y-8 flex flex-col h-fit">
-              <div className="flex items-center justify-between border-b border-slate-50 pb-4">
-                <div className="flex items-center gap-3">
-                  <Package className="w-5 h-5 text-indigo-600" />
-                  <h3 className="font-bold text-slate-800 text-lg">产品单位库</h3>
+          </div>
+        )}
+
+        {showModal === 'DICTIONARIES' && activeTab === 'DICTIONARIES' && (
+          <div className="max-w-4xl mx-auto space-y-6 animate-in slide-in-from-bottom-4 pb-32">
+            <div className="flex items-center justify-between sticky top-0 z-40 py-4 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200">
+              <button type="button" onClick={closeDictionaryModal} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
+                <ArrowLeft className="w-4 h-4" /> 返回列表
+              </button>
+              <button
+                type="button"
+                onClick={saveDictionaryItem}
+                disabled={dictSaving || !dictAddName.trim()}
+                className="bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Save className="w-4 h-4" /> {dictSaving ? '保存中…' : '保存'}
+              </button>
+            </div>
+
+            <div className="bg-white rounded-[40px] p-8 border border-slate-200 shadow-sm space-y-8">
+              <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
+                <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
+                  <Library className="w-5 h-5" />
                 </div>
-                <span className="text-[10px] font-black text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full">{units.length} 项</span>
+                <h3 className="text-lg font-bold text-slate-800">{dictEditingId ? '编辑字典项' : '新增字典项'}</h3>
               </div>
-              <div className="overflow-y-auto custom-scrollbar max-h-96 pr-2">
-                <div className="grid grid-cols-2 gap-3">
-                  {units.map(u => (
-                    <div key={u.id} className="flex items-center gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100 group">
-                      <div className="flex-1">
-                        <p className="text-xs font-bold text-slate-800">{u.name}</p>
-                      </div>
-                      {canDelete('DICTIONARIES') && <button onClick={() => handleDeleteDictionary(u.id)} className="opacity-0 group-hover:opacity-100 p-1.5 text-rose-400 hover:bg-rose-50 rounded-lg transition-all"><Trash2 className="w-3.5 h-3.5" /></button>}
-                    </div>
-                  ))}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">字典类型</label>
+                  <select
+                    value={dictAddType}
+                    onChange={e => setDictAddType(e.target.value as 'color' | 'size' | 'unit')}
+                    disabled={!!dictEditingId}
+                    className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px] disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <option value="color">颜色</option>
+                    <option value="size">尺码</option>
+                    <option value="unit">产品单位</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">名称</label>
+                  <input
+                    type="text"
+                    value={dictAddName}
+                    onChange={e => setDictAddName(e.target.value)}
+                    className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]"
+                    placeholder={dictAddType === 'color' ? '如：曜石黑、珍珠白' : dictAddType === 'size' ? '如：XL、42' : '如：PCS、公斤'}
+                  />
+                </div>
+                <div className="space-y-1 md:col-span-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">
+                    色值 / 编码（可选，留空则与名称相同）
+                  </label>
+                  <input
+                    type="text"
+                    value={dictAddValue}
+                    onChange={e => setDictAddValue(e.target.value)}
+                    className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px] font-mono text-sm"
+                    placeholder={dictAddType === 'color' ? '如 #1a1a1a（十六进制色值）' : '如内部编码，可与名称不同'}
+                  />
                 </div>
               </div>
-              {canCreate('DICTIONARIES') && (
-              <div className="pt-6 border-t border-slate-50 space-y-4">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">快速新增单位</h4>
-                <div className="flex gap-3">
-                  <input type="text" placeholder="单位名称 (如: PCS, 公斤)" value={newUnitName} onChange={e => setNewUnitName(e.target.value)} className="flex-1 bg-slate-50 border-none rounded-xl py-2.5 px-4 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500" />
-                  <button onClick={handleAddUnit} disabled={!newUnitName.trim()} className="bg-indigo-600 text-white p-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-all"><Plus className="w-5 h-5" /></button>
-                </div>
-              </div>
-              )}
             </div>
           </div>
         )}

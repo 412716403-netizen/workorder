@@ -1726,7 +1726,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                       <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">SKU: {workingProduct.sku}</p>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="space-y-2">
                     {enabledBOMNodes.map(node => {
                       const hasNodeBOM = !!singleSkuNodeBOMs[node.id];
                       const isEditing = activeVariantIdForBOM === singleSkuVariantId && activeNodeIdForBOM === node.id;
@@ -1735,11 +1735,17 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                         <button
                           key={node.id}
                           onClick={() => openBOMEditor(singleSkuVirtualVariant, node.id)}
-                          className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border-2 ${isEditing ? 'bg-indigo-600 border-indigo-600 text-white' : (hasNodeBOM ? 'bg-amber-50 border-amber-100 text-amber-600' : 'bg-white border-slate-100 text-slate-500 hover:border-indigo-200')}`}
+                          className={`w-full px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all border-2 ${isEditing ? 'bg-indigo-600 border-indigo-600 text-white' : (hasNodeBOM ? 'bg-amber-50 border-amber-100 text-amber-600' : 'bg-white border-slate-100 text-slate-500 hover:border-indigo-200')}`}
                         >
-                          <Boxes className={`w-3.5 h-3.5 ${isEditing ? 'text-white' : (hasNodeBOM ? 'text-amber-500' : 'text-slate-300')}`} />
-                          {node.name} BOM
-                          {hasNodeBOM && !isEditing && <Check className="w-3.5 h-3.5" />}
+                          <div className="flex items-center gap-2">
+                            <Boxes className={`w-3.5 h-3.5 ${isEditing ? 'text-white' : (hasNodeBOM ? 'text-amber-500' : 'text-slate-300')}`} />
+                            <span>{node.name} BOM</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {hasNodeBOM && !isEditing && <span className="text-[9px]">已配置</span>}
+                            {hasNodeBOM && !isEditing && <Check className="w-3.5 h-3.5" />}
+                            {isEditing && <ArrowRight className="w-3.5 h-3.5" />}
+                          </div>
                         </button>
                       );
                     })}
@@ -1767,45 +1773,46 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                               <span className="text-[10px] text-slate-400 font-bold">({colorVariants.length} 个尺码变体)</span>
                            </div>
                            
-                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                              {colorVariants.map(v => {
-                                 const size = dictionaries.sizes.find(s => s.id === v.sizeId);
-                                 const sizeTitle = (size?.name != null && String(size.name).trim() !== '') ? String(size.name).trim() : '（未命名尺码）';
-                                 const nodeBoms = Object.fromEntries(
-                                   boms.filter(b => b.parentProductId === workingProduct.id && b.variantId === v.id && b.nodeId).map(b => [b.nodeId!, b.id])
-                                 );
-                                 const isActiveVar = activeVariantIdForBOM === v.id;
-                                 return (
-                                   <div key={v.id} className={`p-5 rounded-3xl border transition-all ${isActiveVar ? 'border-indigo-600 bg-indigo-50/40 shadow-xl ring-2 ring-indigo-500/10' : 'bg-slate-50/50 border-slate-100 hover:border-slate-200 hover:bg-white'}`}>
-                                      <div className="flex justify-between items-start mb-4 pb-3 border-b border-slate-200/50">
-                                         <div>
-                                            <p className="text-xs font-black text-slate-800">尺码: {sizeTitle}</p>
-                                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">SKU: {workingProduct.sku}-{v.skuSuffix}</p>
-                                         </div>
-                                      </div>
-                                      <div className="space-y-2">
-                                         {enabledBOMNodes.map(node => {
-                                           const hasNodeBOM = !!nodeBoms[node.id];
-                                           const isEditing = activeVariantIdForBOM === v.id && activeNodeIdForBOM === node.id;
-                                           return (
-                                             <button 
-                                               key={node.id}
+                           <div className="overflow-x-auto rounded-xl border border-slate-100 bg-white">
+                             <table className="w-full text-left">
+                               <thead>
+                                 <tr className="border-b border-slate-100 bg-slate-50/60 text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                                   <th className="py-2.5 pl-4 pr-2">尺码</th>
+                                   <th className="py-2.5 px-2 hidden sm:table-cell">SKU</th>
+                                   {enabledBOMNodes.map(node => <th key={node.id} className="py-2.5 px-2 text-center">{node.name}</th>)}
+                                 </tr>
+                               </thead>
+                               <tbody className="divide-y divide-slate-50">
+                                 {colorVariants.map(v => {
+                                   const size = dictionaries.sizes.find(s => s.id === v.sizeId);
+                                   const sizeTitle = (size?.name != null && String(size.name).trim() !== '') ? String(size.name).trim() : '（未命名尺码）';
+                                   const nodeBoms = Object.fromEntries(
+                                     boms.filter(b => b.parentProductId === workingProduct.id && b.variantId === v.id && b.nodeId).map(b => [b.nodeId!, b.id])
+                                   );
+                                   return (
+                                     <tr key={v.id} className="hover:bg-indigo-50/30 transition-colors">
+                                       <td className="py-2.5 pl-4 pr-2 text-xs font-bold text-slate-800 whitespace-nowrap">{sizeTitle}</td>
+                                       <td className="py-2.5 px-2 text-[10px] text-slate-400 font-medium whitespace-nowrap hidden sm:table-cell">{workingProduct.sku}-{v.skuSuffix}</td>
+                                       {enabledBOMNodes.map(node => {
+                                         const hasNodeBOM = !!nodeBoms[node.id];
+                                         const isEditing = activeVariantIdForBOM === v.id && activeNodeIdForBOM === node.id;
+                                         return (
+                                           <td key={node.id} className="py-2.5 px-2 text-center">
+                                             <button
                                                onClick={() => openBOMEditor(v, node.id)}
-                                               className={`w-full px-3 py-2 rounded-xl text-[10px] font-bold flex items-center justify-between transition-all border-2 ${isEditing ? 'bg-indigo-600 border-indigo-600 text-white' : (hasNodeBOM ? 'bg-amber-50 border-amber-100 text-amber-600' : 'bg-white border-slate-100 text-slate-500 hover:border-indigo-200')}`}
+                                               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${isEditing ? 'bg-indigo-600 border-indigo-600 text-white' : (hasNodeBOM ? 'bg-amber-50 border-amber-100 text-amber-600' : 'bg-white border-slate-100 text-slate-400 hover:border-indigo-200 hover:text-slate-600')}`}
                                              >
-                                                <div className="flex items-center gap-2">
-                                                  <Boxes className={`w-3 h-3 ${isEditing ? 'text-white' : (hasNodeBOM ? 'text-amber-500' : 'text-slate-300')}`} />
-                                                  {node.name} BOM
-                                                </div>
-                                                {hasNodeBOM && !isEditing && <Check className="w-3 h-3" />}
-                                                {isEditing && <ArrowRight className="w-3 h-3" />}
+                                               {hasNodeBOM ? <Check className="w-3 h-3" /> : <Boxes className="w-3 h-3" />}
+                                               {isEditing ? '编辑中' : (hasNodeBOM ? '已配置' : '配置')}
                                              </button>
-                                           );
-                                         })}
-                                      </div>
-                                   </div>
-                                 );
-                              })}
+                                           </td>
+                                         );
+                                       })}
+                                     </tr>
+                                   );
+                                 })}
+                               </tbody>
+                             </table>
                            </div>
                         </div>
                       );
@@ -1980,169 +1987,134 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
         )}
       </div>
 
-      <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap bg-slate-100/50 p-1 rounded-xl w-fit gap-0.5">
-          <button
-            type="button"
-            onClick={() => setActiveCategoryFilter(PRODUCT_ARCHIVE_ALL)}
-            className={`px-5 py-2 rounded-lg text-xs font-bold transition-all ${activeCategoryFilter === PRODUCT_ARCHIVE_ALL ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            全部 ({products.length})
-          </button>
-          {categories.map(cat => (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => setActiveCategoryFilter(cat.id)}
-              className={`px-5 py-2 rounded-lg text-xs font-bold transition-all ${activeCategoryFilter === cat.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              {cat.name} ({products.filter(p => p.categoryId === cat.id).length})
-            </button>
-          ))}
-        </div>
-        <div className="relative w-full lg:max-w-sm">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-          <input
-            type="search"
-            value={productArchiveSearch}
-            onChange={e => setProductArchiveSearch(e.target.value)}
-            placeholder="搜索名称、产品编号、备注…"
-            className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-10 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-300 outline-none shadow-sm"
-            aria-label="搜索产品"
-          />
-          {productArchiveSearch.trim() !== '' && (
+      <div className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap bg-slate-100/50 p-1 rounded-xl gap-0.5 min-w-0">
             <button
               type="button"
-              onClick={() => setProductArchiveSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all"
-              aria-label="清空搜索"
+              onClick={() => setActiveCategoryFilter(PRODUCT_ARCHIVE_ALL)}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeCategoryFilter === PRODUCT_ARCHIVE_ALL ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
-              <X className="w-4 h-4" />
+              全部 ({products.length})
             </button>
-          )}
-        </div>
-      </div>
-
-      {productArchiveSearch.trim() !== '' && productsInActiveCategoryCount > 0 && (
-        <p className="text-xs font-bold text-slate-500 -mt-4">
-          当前分类下找到 <span className="text-indigo-600 tabular-nums">{filteredProducts.length}</span> 条
-          {filteredProducts.length < productsInActiveCategoryCount && (
-            <span className="text-slate-400 font-medium">（共 {productsInActiveCategoryCount} 条）</span>
-          )}
-        </p>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredProducts.length === 0 ? (
-          <div className="col-span-full flex flex-col items-center justify-center py-16 px-6 rounded-[32px] border border-dashed border-slate-200 bg-slate-50/50">
-            <Search className="w-10 h-10 text-slate-200 mb-3" />
-            <p className="text-sm font-bold text-slate-600">
-              {productsInActiveCategoryCount === 0 ? '该分类下暂无产品' : productArchiveSearch.trim() ? '未找到匹配的产品' : '该分类下暂无产品'}
-            </p>
-            {productArchiveSearch.trim() !== '' && productsInActiveCategoryCount > 0 && (
+            {categories.map(cat => (
               <button
+                key={cat.id}
                 type="button"
-                onClick={() => setProductArchiveSearch('')}
-                className="mt-3 text-xs font-bold text-indigo-600 hover:underline"
+                onClick={() => setActiveCategoryFilter(cat.id)}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeCategoryFilter === cat.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
-                清空搜索条件
+                {cat.name} ({products.filter(p => p.categoryId === cat.id).length})
+              </button>
+            ))}
+          </div>
+          <div className="relative w-full sm:max-w-sm sm:shrink-0">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            <input type="search" value={productArchiveSearch} onChange={e => setProductArchiveSearch(e.target.value)}
+              placeholder="搜索名称、产品编号、备注…"
+              className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-10 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-300 outline-none shadow-sm"
+              aria-label="搜索产品" />
+            {productArchiveSearch.trim() !== '' && (
+              <button type="button" onClick={() => setProductArchiveSearch('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all" aria-label="清空搜索">
+                <X className="w-4 h-4" />
               </button>
             )}
           </div>
-        ) : (
-        filteredProducts.map(product => {
-          const category = categories.find(c => c.id === product.categoryId);
-          const bomCount = boms.filter(b => b.parentProductId === product.id).length;
-          return (
-            <div key={product.id} className="bg-white p-6 rounded-[32px] border border-slate-200 hover:shadow-2xl hover:border-indigo-400 transition-all group flex flex-col">
-              <div className="flex justify-between items-start mb-4">
-                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center overflow-hidden text-slate-400 group-hover:text-indigo-50 group-hover:text-indigo-600 transition-all shadow-inner flex-shrink-0">
-                  {product.imageUrl ? (
-                    <button type="button" onClick={() => setLightboxImageUrl(product.imageUrl)} className="w-full h-full p-0 border-0 cursor-zoom-in flex items-center justify-center"><img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover pointer-events-none" /></button>
-                  ) : (
-                    <Package className="w-6 h-6" />
-                  )}
-                </div>
-                {permCanEdit && <button type="button" onClick={() => handleStartEditProduct(product)} className="p-2 text-slate-300 hover:text-indigo-600 transition-colors bg-slate-50 rounded-xl"><Settings2 className="w-5 h-5" /></button>}
-              </div>
-              <h3 className="text-lg font-bold text-slate-900 mb-1 group-hover:text-indigo-600 transition-colors">{product.name}</h3>
-              <p className="text-[11px] text-slate-400 font-bold mb-4 flex items-center gap-1 uppercase tracking-tighter"><Hash className="w-3 h-3 text-slate-300" /> {product.sku}</p>
-              
-              {(category?.customFields?.length ?? 0) > 0 && product.categoryCustomData && (
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {category.customFields.map(field => {
-                    const val = product.categoryCustomData?.[field.id];
-                    if (val == null || val === '') return null;
-                    if (field.type === 'file' && typeof val === 'string' && val.startsWith('data:')) {
-                      const isImg = val.startsWith('data:image/');
-                      const isPdf = val.startsWith('data:application/pdf');
-                      return (
-                        <div key={field.id} className="flex items-center gap-1.5">
-                          {isImg ? (
-                            <>
-                              <img
-                                src={val}
-                                alt={field.label}
-                                className="h-8 w-8 object-cover rounded-lg border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400 transition-all"
-                                onClick={(e) => { e.stopPropagation(); openFilePreview(val, 'image'); }}
-                              />
-                              <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="flex items-center gap-1 px-2 py-1 bg-slate-100 rounded-lg text-[9px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600">
-                                <Download className="w-3 h-3" /> 下载
-                              </a>
-                            </>
-                          ) : isPdf ? (
-                            <>
-                              <button type="button" onClick={(e) => { e.stopPropagation(); openFilePreview(val, 'pdf'); }} className="flex items-center gap-1 px-2 py-1 bg-slate-100 rounded-lg text-[9px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600">
-                                <FileText className="w-3 h-3" /> 在线查看
-                              </button>
-                              <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="flex items-center gap-1 px-2 py-1 bg-slate-100 rounded-lg text-[9px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600">
-                                <Download className="w-3 h-3" /> 下载
-                              </a>
-                            </>
-                          ) : (
-                            <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="flex items-center gap-1 px-2 py-1 bg-slate-100 rounded-lg text-[9px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600">
-                              <Download className="w-3 h-3" /> 下载
-                            </a>
-                          )}
-                        </div>
-                      );
-                    }
+        </div>
+
+          {productArchiveSearch.trim() !== '' && productsInActiveCategoryCount > 0 && (
+            <p className="text-xs font-bold text-slate-500">
+              当前分类下找到 <span className="text-indigo-600 tabular-nums">{filteredProducts.length}</span> 条
+              {filteredProducts.length < productsInActiveCategoryCount && (
+                <span className="text-slate-400 font-medium">（共 {productsInActiveCategoryCount} 条）</span>
+              )}
+            </p>
+          )}
+
+          {filteredProducts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 px-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50">
+              <Search className="w-10 h-10 text-slate-200 mb-3" />
+              <p className="text-sm font-bold text-slate-600">
+                {productsInActiveCategoryCount === 0 ? '该分类下暂无产品' : productArchiveSearch.trim() ? '未找到匹配的产品' : '该分类下暂无产品'}
+              </p>
+              {productArchiveSearch.trim() !== '' && productsInActiveCategoryCount > 0 && (
+                <button type="button" onClick={() => setProductArchiveSearch('')} className="mt-3 text-xs font-bold text-indigo-600 hover:underline">清空搜索条件</button>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/80 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    <th className="py-3 pl-4 pr-2 w-12"></th>
+                    <th className="py-3 px-3">产品名称</th>
+                    <th className="py-3 px-3 hidden sm:table-cell">SKU</th>
+                    <th className="py-3 px-3 hidden md:table-cell">分类</th>
+                    <th className="py-3 px-3 text-center hidden md:table-cell">工序</th>
+                    <th className="py-3 px-3 text-center hidden md:table-cell">变体</th>
+                    <th className="py-3 px-3 text-center hidden lg:table-cell">BOM</th>
+                    <th className="py-3 px-3 text-right hidden sm:table-cell">价格</th>
+                    <th className="py-3 pr-4 pl-2 w-12"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredProducts.map(product => {
+                    const category = categories.find(c => c.id === product.categoryId);
+                    const bomCount = boms.filter(b => b.parentProductId === product.id).length;
+                    const sales = product.salesPrice ?? 0;
+                    const purchase = product.purchasePrice ?? 0;
+                    const displayPrice = sales > 0 ? sales : purchase;
+                    const priceLabel = sales > 0 ? '销售' : '采购';
                     return (
-                      <div key={field.id} className="px-2 py-1 bg-slate-50 rounded-lg text-[9px] font-bold text-slate-600">
-                        {field.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}
-                      </div>
+                      <tr key={product.id} className="group hover:bg-indigo-50/40 transition-colors cursor-pointer" onClick={() => permCanEdit && handleStartEditProduct(product)}>
+                        <td className="py-3 pl-4 pr-2">
+                          <div className="w-9 h-9 bg-slate-50 rounded-xl flex items-center justify-center overflow-hidden text-slate-400 shrink-0">
+                            {product.imageUrl ? (
+                              <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <Package className="w-4 h-4" />
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors truncate max-w-[220px]">{product.name}</p>
+                          <p className="sm:hidden text-[10px] text-slate-400 font-medium mt-0.5">{product.sku}</p>
+                        </td>
+                        <td className="py-3 px-3 hidden sm:table-cell">
+                          <span className="text-xs text-slate-500 font-medium">{product.sku}</span>
+                        </td>
+                        <td className="py-3 px-3 hidden md:table-cell">
+                          {category && <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold text-white bg-indigo-600">{category.name}</span>}
+                        </td>
+                        <td className="py-3 px-3 text-center hidden md:table-cell">
+                          <span className="text-xs font-bold text-blue-600 tabular-nums">{product.milestoneNodeIds.length}</span>
+                        </td>
+                        <td className="py-3 px-3 text-center hidden md:table-cell">
+                          <span className="text-xs font-bold text-amber-600 tabular-nums">{product.variants.length}</span>
+                        </td>
+                        <td className="py-3 px-3 text-center hidden lg:table-cell">
+                          {bomCount > 0 ? <span className="text-xs font-bold text-emerald-600 tabular-nums">{bomCount}</span> : <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="py-3 px-3 text-right hidden sm:table-cell">
+                          <span className="text-sm font-bold text-slate-800">¥{displayPrice > 0 ? displayPrice.toLocaleString() : '0'}</span>
+                          {displayPrice > 0 && <span className="text-[9px] text-slate-400 ml-1">{priceLabel}</span>}
+                        </td>
+                        <td className="py-3 pr-4 pl-2">
+                          {permCanEdit && (
+                            <button type="button" onClick={(e) => { e.stopPropagation(); handleStartEditProduct(product); }}
+                              className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">
+                              <Settings2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
                     );
                   })}
-                </div>
-              )}
-              <div className="flex flex-wrap gap-2 mb-6">
-                 <div className="px-2 py-1 bg-blue-50/50 rounded-lg text-[9px] font-bold text-blue-600 uppercase tracking-widest">工序: {product.milestoneNodeIds.length}</div>
-                 <div className="px-2 py-1 bg-amber-50/50 rounded-lg text-[9px] font-bold text-amber-600 uppercase tracking-widest">变体: {product.variants.length}</div>
-                 {bomCount > 0 && <div className="px-2 py-1 bg-emerald-50/50 rounded-lg text-[9px] font-bold text-emerald-600 uppercase tracking-widest">BOM: {bomCount} 份</div>}
-              </div>
-
-              <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
-                 <div className="flex flex-col">
-                    {(() => {
-                      const sales = product.salesPrice ?? 0;
-                      const purchase = product.purchasePrice ?? 0;
-                      const displayPrice = sales > 0 ? sales : purchase;
-                      const label = sales > 0 ? '销售' : '采购';
-                      return (
-                        <span className="text-base font-black text-indigo-600 tracking-tight" title={`${label}价`}>
-                          ¥ {displayPrice > 0 ? displayPrice.toLocaleString() : '0'}
-                          {displayPrice > 0 && <span className="text-[9px] font-medium text-slate-400 ml-1">{label}</span>}
-                        </span>
-                      );
-                    })()}
-                    <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase text-white w-fit mt-1 shadow-sm bg-indigo-600`}>{category?.name}</span>
-                 </div>
-                 <ChevronRight className="w-4 h-4 text-slate-200 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all" />
-              </div>
+                </tbody>
+              </table>
             </div>
-          )
-        })
-        )}
+          )}
       </div>
 
       {/* 图片放大弹窗 */}
