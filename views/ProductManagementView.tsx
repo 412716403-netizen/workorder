@@ -31,12 +31,14 @@ import {
   Building2,
   ImagePlus,
   Image as ImageIcon,
-  Download
+  Download,
+  Upload
 } from 'lucide-react';
 import { Product, GlobalNodeTemplate, ProductCategory, BOM, BOMItem, AppDictionaries, ProductVariant, DictionaryItem, Partner } from '../types';
 import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
 import { toast } from 'sonner';
 import * as api from '../services/api';
+import ProductImportModal from './ProductImportModal';
 
 /** 档案中心分类筛选：「全部」避免默认 cat-material 与租户真实分类 id 不一致导致列表空白 */
 const PRODUCT_ARCHIVE_ALL = '__all__';
@@ -156,6 +158,7 @@ interface ProductManagementViewProps {
   onUpdateBOM: (bom: BOM) => Promise<boolean>;
   onRefreshDictionaries: () => Promise<void>;
   onDetailViewChange?: (inDetail: boolean) => void;
+  onRefreshProducts?: () => Promise<void>;
   permCanCreate?: boolean;
   permCanEdit?: boolean;
   permCanDelete?: boolean;
@@ -642,6 +645,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   onUpdateBOM,
   onRefreshDictionaries,
   onDetailViewChange,
+  onRefreshProducts,
   permCanCreate = true,
   permCanEdit = true,
   permCanDelete = true,
@@ -690,6 +694,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   const [copyBOMDropdownOpen, setCopyBOMDropdownOpen] = useState(false);
   const [copyBOMDropdownStyle, setCopyBOMDropdownStyle] = useState<React.CSSProperties>({});
   const copyBOMTriggerRef = useRef<HTMLButtonElement>(null);
+  const [importModalOpen, setImportModalOpen] = useState(false);
   /** 档案中心列表搜索（名称、编号、备注） */
   const [productArchiveSearch, setProductArchiveSearch] = useState('');
 
@@ -1967,7 +1972,12 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
           <h1 className="text-2xl font-bold text-slate-900">产品与 BOM 档案中心</h1>
           <p className="text-slate-500 mt-1 italic text-sm">定义业务规则、生产规格与工序物料明细</p>
         </div>
-        {permCanCreate && <button onClick={handleStartCreateProduct} className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all"><Plus className="w-4 h-4" /> 创建新产品</button>}
+        {permCanCreate && (
+          <div className="flex items-center gap-2">
+            <button onClick={() => setImportModalOpen(true)} className="bg-white text-indigo-600 border-2 border-indigo-200 px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-50 hover:border-indigo-300 active:scale-95 transition-all"><Upload className="w-4 h-4" /> 导入产品</button>
+            <button onClick={handleStartCreateProduct} className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all"><Plus className="w-4 h-4" /> 创建新产品</button>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -2147,6 +2157,16 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
       )}
 
       <FilePreviewPortal preview={filePreview} onClose={closeFilePreview} />
+
+      <ProductImportModal
+        isOpen={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        categories={categories}
+        dictionaries={dictionaries}
+        products={products}
+        onRefreshDictionaries={onRefreshDictionaries}
+        onImportComplete={async () => { setImportModalOpen(false); if (onRefreshProducts) await onRefreshProducts(); }}
+      />
     </div>
   );
 };

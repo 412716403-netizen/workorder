@@ -327,6 +327,8 @@ export const products = {
   listVariants: (productId: string) => request(`/products/${productId}/variants`),
   syncVariants: (productId: string, variants: unknown[]) =>
     request(`/products/${productId}/variants`, { method: 'POST', body: JSON.stringify({ variants }) }),
+  import: (data: { categoryId: string; products: unknown[]; newDictionaryItems?: unknown[] }) =>
+    request('/products/import', { method: 'POST', body: JSON.stringify(data) }),
 };
 export const boms = {
   list: (params?: Record<string, string>) => {

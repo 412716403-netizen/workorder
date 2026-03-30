@@ -6,6 +6,7 @@ const router = Router();
 
 // 产品
 router.get('/',    requireSubPermission('basic:products:view'),   ctrl.listProducts);
+router.post('/import', requireSubPermission('basic:products:create'), ctrl.importProducts);
 router.get('/:id', requireSubPermission('basic:products:view'),   ctrl.getProduct);
 router.post('/',   requireSubPermission('basic:products:create'), ctrl.createProduct);
 router.put('/:id', requireSubPermission('basic:products:edit'),   ctrl.updateProduct);

@@ -359,6 +359,7 @@ function AppRoutes() {
           onRefreshEquipment={d.refreshEquipment}
           onRefreshPartners={d.refreshPartners}
           onRefreshPartnerCategories={d.refreshPartnerCategories}
+          onRefreshProducts={d.refreshProducts}
           tenantId={tenantCtx!.tenantId}
           tenantRole={tenantCtx!.tenantRole}
           currentUserId={userId}

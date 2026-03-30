@@ -51,6 +51,7 @@ interface BasicInfoViewProps {
   onRefreshEquipment: () => Promise<void>;
   onRefreshPartners: () => Promise<void>;
   onRefreshPartnerCategories: () => Promise<void>;
+  onRefreshProducts?: () => Promise<void>;
   tenantId: string;
   tenantRole: string;
   currentUserId: string;
@@ -70,7 +71,7 @@ type BasicTab = 'PRODUCTS' | 'PARTNERS' | 'MEMBERS' | 'EQUIPMENT' | 'DICTIONARIE
 const BasicInfoView: React.FC<BasicInfoViewProps> = ({
   products, globalNodes, categories, partnerCategories, boms, equipment, dictionaries, partners,
   onUpdateProduct, onDeleteProduct, onUpdateBOM, onRefreshDictionaries, onRefreshWorkers, onRefreshEquipment, onRefreshPartners,
-  tenantId, tenantRole, currentUserId, userPermissions
+  onRefreshProducts, tenantId, tenantRole, currentUserId, userPermissions
 }) => {
   const isOwner = tenantRole === 'owner';
   const hasPerm = (perm: string): boolean => {
@@ -351,7 +352,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
       )}
       <div>
         {activeTab === 'PRODUCTS' && (
-          <ProductManagementView products={products} globalNodes={globalNodes} categories={categories} boms={boms} dictionaries={dictionaries} partners={partners} onUpdateProduct={onUpdateProduct} onDeleteProduct={onDeleteProduct} onUpdateBOM={onUpdateBOM} onRefreshDictionaries={onRefreshDictionaries} onDetailViewChange={setProductDetailVisible} permCanCreate={canCreate('PRODUCTS')} permCanEdit={canEdit('PRODUCTS')} permCanDelete={canDelete('PRODUCTS')} initialProductId={initialProductId} onClearInitialProductId={clearInitialProductId} />
+          <ProductManagementView products={products} globalNodes={globalNodes} categories={categories} boms={boms} dictionaries={dictionaries} partners={partners} onUpdateProduct={onUpdateProduct} onDeleteProduct={onDeleteProduct} onUpdateBOM={onUpdateBOM} onRefreshDictionaries={onRefreshDictionaries} onRefreshProducts={onRefreshProducts} onDetailViewChange={setProductDetailVisible} permCanCreate={canCreate('PRODUCTS')} permCanEdit={canEdit('PRODUCTS')} permCanDelete={canDelete('PRODUCTS')} initialProductId={initialProductId} onClearInitialProductId={clearInitialProductId} />
         )}
 
         {activeTab === 'PARTNERS' && !showModal && (

@@ -360,6 +360,145 @@ export async function deleteBom(req: Request, res: Response, next: NextFunction)
   } catch (e) { next(e); }
 }
 
+// ── 批量导入产品 ──
+export async function importProducts(req: Request, res: Response, next: NextFunction) {
+  try {
+    const tenantId = req.tenantId!;
+    const db = getTenantPrisma(tenantId);
+    const { categoryId, products: rows, newDictionaryItems } = req.body as {
+      categoryId: string;
+      products: Array<{
+        name: string;
+        sku: string;
+        unitId?: string;
+        salesPrice?: number;
+        purchasePrice?: number;
+        supplierId?: string;
+        imageUrl?: string;
+        colorIds?: string[];
+        sizeIds?: string[];
+        categoryCustomData?: Record<string, any>;
+      }>;
+      newDictionaryItems?: Array<{ type: string; name: string; value: string }>;
+    };
+
+    if (!categoryId) throw new AppError(400, '必须指定产品分类');
+    if (!Array.isArray(rows) || rows.length === 0) throw new AppError(400, '导入数据不能为空');
+
+    const category = await db.productCategory.findUnique({ where: { id: categoryId } });
+    if (!category) throw new AppError(404, '产品分类不存在');
+
+    // 1. Batch-create new dictionary items (colors, sizes, units)
+    const createdDictMap = new Map<string, string>(); // "type:name" -> id
+    if (newDictionaryItems && newDictionaryItems.length > 0) {
+      for (const item of newDictionaryItems) {
+        const existing = await db.dictionaryItem.findFirst({
+          where: { type: item.type, name: item.name },
+        });
+        if (existing) {
+          createdDictMap.set(`${item.type}:${item.name}`, existing.id);
+          continue;
+        }
+        const id = genId('dict');
+        const maxRow = await db.dictionaryItem.aggregate({
+          where: { type: item.type },
+          _max: { sortOrder: true },
+        });
+        const sortOrder = (maxRow._max.sortOrder ?? -1) + 1;
+        await db.dictionaryItem.create({
+          data: { id, type: item.type, name: item.name, value: item.value, sortOrder } as any,
+        });
+        createdDictMap.set(`${item.type}:${item.name}`, id);
+      }
+    }
+
+    // 2. Fetch all existing products for dedup checking
+    const existingProducts = await basePrisma.product.findMany({
+      where: { tenantId },
+      select: { sku: true, name: true },
+    });
+    const existingSkus = new Set(existingProducts.map(p => p.sku.toLowerCase()));
+    const existingNames = new Set(existingProducts.map(p => p.name.toLowerCase()));
+
+    // 3. Batch-create products
+    const results: Array<{ row: number; success: boolean; name?: string; sku?: string; reason?: string }> = [];
+    let successCount = 0;
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 1;
+
+      try {
+        const name = (row.name ?? '').trim();
+        const sku = (row.sku ?? '').trim();
+
+        if (!name) { results.push({ row: rowNum, success: false, name, sku, reason: '产品名称不能为空' }); continue; }
+        if (!sku) { results.push({ row: rowNum, success: false, name, sku, reason: '产品编号不能为空' }); continue; }
+        if (existingSkus.has(sku.toLowerCase())) { results.push({ row: rowNum, success: false, name, sku, reason: `产品编号 "${sku}" 已存在` }); continue; }
+        if (existingNames.has(name.toLowerCase())) { results.push({ row: rowNum, success: false, name, sku, reason: `产品名称 "${name}" 已存在` }); continue; }
+
+        const productId = genId('prod');
+        const colorIds = row.colorIds ?? [];
+        const sizeIds = row.sizeIds ?? [];
+
+        const productData: Record<string, unknown> = {
+          id: productId,
+          sku,
+          name,
+          categoryId,
+          imageUrl: row.imageUrl || null,
+          salesPrice: row.salesPrice ?? null,
+          purchasePrice: row.purchasePrice ?? null,
+          supplierId: row.supplierId || null,
+          unitId: row.unitId || null,
+          colorIds: colorIds as Prisma.InputJsonValue,
+          sizeIds: sizeIds as Prisma.InputJsonValue,
+          categoryCustomData: (row.categoryCustomData ?? {}) as Prisma.InputJsonValue,
+          milestoneNodeIds: [] as Prisma.InputJsonValue,
+          routeReportValues: {} as Prisma.InputJsonValue,
+          nodeRates: {} as Prisma.InputJsonValue,
+          nodePricingModes: {} as Prisma.InputJsonValue,
+        };
+
+        // Generate variants from colorIds x sizeIds
+        const variants: Array<{ id: string; colorId: string; sizeId: string; skuSuffix: string; nodeBoms: Prisma.InputJsonValue }> = [];
+        if (colorIds.length > 0 && sizeIds.length > 0) {
+          for (const cid of colorIds) {
+            for (const sid of sizeIds) {
+              variants.push({ id: genId('pv'), colorId: cid, sizeId: sid, skuSuffix: '', nodeBoms: {} as Prisma.InputJsonValue });
+            }
+          }
+        } else if (colorIds.length > 0) {
+          for (const cid of colorIds) {
+            variants.push({ id: genId('pv'), colorId: cid, sizeId: '', skuSuffix: '', nodeBoms: {} as Prisma.InputJsonValue });
+          }
+        } else if (sizeIds.length > 0) {
+          for (const sid of sizeIds) {
+            variants.push({ id: genId('pv'), colorId: '', sizeId: sid, skuSuffix: '', nodeBoms: {} as Prisma.InputJsonValue });
+          }
+        }
+
+        await db.product.create({
+          data: {
+            ...productData,
+            variants: variants.length > 0 ? { create: variants } : undefined,
+          } as any,
+        });
+
+        existingSkus.add(sku.toLowerCase());
+        existingNames.add(name.toLowerCase());
+        successCount++;
+        results.push({ row: rowNum, success: true, name, sku });
+      } catch (e: any) {
+        const msg = e instanceof AppError ? e.message : (e?.message ?? '未知错误');
+        results.push({ row: rowNum, success: false, name: row.name, sku: row.sku, reason: msg });
+      }
+    }
+
+    res.json({ success: successCount, failed: results.filter(r => !r.success).length, results });
+  } catch (e) { next(e); }
+}
+
 // ── 工序回填：产品配好工序后自动补充 PENDING_PROCESS 工单的 milestones ──
 
 async function backfillPendingProcessOrders(productId: string, tenantId: string, milestoneNodeIds: string[]) {
