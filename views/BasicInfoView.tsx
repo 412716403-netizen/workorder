@@ -406,31 +406,34 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
   const showTabs = !productDetailVisible;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       {showTabs && (
         <>
           <div>
             <div ref={sentinelRef} className="h-px w-full" aria-hidden="true" />
             <div
               ref={tabsWrapRef}
-              className={`z-20 py-4 bg-slate-50/95 backdrop-blur-sm ${
-                isStuck ? 'fixed top-0 px-12' : '-mx-12 px-12'
+              className={`z-20 bg-slate-50/95 backdrop-blur-sm ${
+                isStuck
+                  ? 'fixed top-0 px-12 py-2.5'
+                  : '-mx-12 px-12 pt-3 pb-2 sm:pt-3.5 sm:pb-2'
               }`}
               style={isStuck && barStyle ? { left: barStyle.left, width: barStyle.width } : undefined}
             >
-              <div className="flex bg-white p-1.5 rounded-[24px] border border-slate-200 shadow-sm w-full lg:w-fit overflow-x-auto no-scrollbar">
+              <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-full lg:w-fit overflow-x-auto no-scrollbar">
                 <div className="flex gap-1 min-w-max">
                   {tabs.map(tab => (
                     <button
                       key={tab.id}
+                      type="button"
                       onClick={() => { setActiveTab(tab.id as BasicTab); setSearchTerm(''); setShowModal(null); }}
-                      className={`flex items-center gap-3 px-6 py-3 rounded-[18px] text-sm font-bold transition-all whitespace-nowrap ${
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
                         activeTab === tab.id
                           ? 'bg-indigo-50 text-indigo-600 shadow-sm'
                           : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50/50'
                       }`}
                     >
-                      <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? 'text-indigo-600' : 'text-slate-300'}`} />
+                      <tab.icon className={`w-4 h-4 shrink-0 ${activeTab === tab.id ? 'text-indigo-600' : 'text-slate-300'}`} />
                       {tab.label}
                     </button>
                   ))}
@@ -443,28 +446,34 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
           )}
         </>
       )}
-      <div>
+      <div className="-mt-1">
         {activeTab === 'PRODUCTS' && (
           <ProductManagementView products={products} globalNodes={globalNodes} categories={categories} boms={boms} dictionaries={dictionaries} partners={partners} onUpdateProduct={onUpdateProduct} onDeleteProduct={onDeleteProduct} onUpdateBOM={onUpdateBOM} onRefreshDictionaries={onRefreshDictionaries} onRefreshProducts={onRefreshProducts} onDetailViewChange={setProductDetailVisible} permCanCreate={canCreate('PRODUCTS')} permCanEdit={canEdit('PRODUCTS')} permCanDelete={canDelete('PRODUCTS')} initialProductId={initialProductId} onClearInitialProductId={clearInitialProductId} />
         )}
 
         {activeTab === 'PARTNERS' && !showModal && (
-          <div className="space-y-8 animate-in fade-in duration-500">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-4 animate-in fade-in duration-500">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
               <div>
-                <h1 className="text-2xl font-bold text-slate-900">合作单位中心</h1>
-                <p className="text-slate-500 mt-1 italic text-sm">分类管理外部单位档案及自定义扩展信息</p>
+                <h1 className="text-xl font-semibold text-slate-900 tracking-tight">合作单位中心</h1>
+                <p className="text-slate-500 mt-1 text-sm leading-snug max-w-xl">分类管理外部单位档案及自定义扩展信息</p>
               </div>
               {canCreate('PARTNERS') && (
-                <button type="button" onClick={() => handleOpenPartner()} className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">
-                  <Plus className="w-4 h-4" /> 新增单位
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenPartner()}
+                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm hover:bg-indigo-700 active:scale-[0.98] transition-all"
+                  >
+                    <Plus className="w-4 h-4 shrink-0" /> 新增单位
+                  </button>
+                </div>
               )}
             </div>
 
-            <div className="space-y-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-wrap bg-slate-100/50 p-1 rounded-xl gap-0.5 min-w-0">
+            <div className="space-y-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap gap-1.5 min-w-0">
                   <button
                     type="button"
                     onClick={() => setActivePartnerCategoryId('all')}
@@ -615,22 +624,28 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
         )}
 
         {activeTab === 'EQUIPMENT' && !showModal && (
-          <div className="space-y-8 animate-in fade-in duration-500">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-4 animate-in fade-in duration-500">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
               <div>
-                <h1 className="text-2xl font-bold text-slate-900">生产设备管理</h1>
-                <p className="text-slate-500 mt-1 italic text-sm">追踪车间机械设备、工装夹具及关联工序</p>
+                <h1 className="text-xl font-semibold text-slate-900 tracking-tight">生产设备管理</h1>
+                <p className="text-slate-500 mt-1 text-sm leading-snug max-w-xl">追踪车间机械设备、工装夹具及关联工序</p>
               </div>
               {canCreate('EQUIPMENT') && (
-                <button type="button" onClick={() => handleOpenEq()} className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">
-                  <Plus className="w-4 h-4" /> 新增设备
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEq()}
+                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm hover:bg-indigo-700 active:scale-[0.98] transition-all"
+                  >
+                    <Plus className="w-4 h-4 shrink-0" /> 新增设备
+                  </button>
+                </div>
               )}
             </div>
 
-            <div className="space-y-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex flex-wrap bg-slate-100/50 p-1 rounded-xl gap-0.5 min-w-0 max-w-full">
+            <div className="space-y-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex flex-wrap gap-1.5 min-w-0 max-w-full">
                   <button
                     type="button"
                     onClick={() => setEquipmentNodeId(null)}
@@ -789,22 +804,28 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
         )}
 
         {activeTab === 'DICTIONARIES' && !showModal && (
-          <div className="space-y-8 animate-in fade-in duration-500">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-4 animate-in fade-in duration-500">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
               <div>
-                <h1 className="text-2xl font-bold text-slate-900">公共数据字典</h1>
-                <p className="text-slate-500 mt-1 italic text-sm">维护颜色、尺码与产品计量单位，供产品与单据引用</p>
+                <h1 className="text-xl font-semibold text-slate-900 tracking-tight">公共数据字典</h1>
+                <p className="text-slate-500 mt-1 text-sm leading-snug max-w-xl">维护颜色、尺码与产品计量单位，供产品与单据引用</p>
               </div>
               {canCreate('DICTIONARIES') && (
-                <button type="button" onClick={handleOpenDictionaryAdd} className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">
-                  <Plus className="w-4 h-4" /> 新增
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleOpenDictionaryAdd}
+                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm hover:bg-indigo-700 active:scale-[0.98] transition-all"
+                  >
+                    <Plus className="w-4 h-4 shrink-0" /> 新增
+                  </button>
+                </div>
               )}
             </div>
 
-            <div className="space-y-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-wrap bg-slate-100/50 p-1 rounded-xl gap-0.5 min-w-0">
+            <div className="space-y-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap gap-1.5 min-w-0">
                   <button
                     type="button"
                     onClick={() => setActiveDictKindFilter('all')}

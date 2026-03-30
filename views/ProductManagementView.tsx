@@ -32,7 +32,8 @@ import {
   ImagePlus,
   Image as ImageIcon,
   Download,
-  Upload
+  Upload,
+  ListChecks,
 } from 'lucide-react';
 import { Product, GlobalNodeTemplate, ProductCategory, BOM, BOMItem, AppDictionaries, ProductVariant, DictionaryItem, Partner } from '../types';
 import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
@@ -633,6 +634,201 @@ const RouteReportInlineSelect = ({
   );
 };
 
+/** BOM 弹窗内：批量勾选产品后加入多行，再逐行填用量（与单行 SearchableProductSelect 互补） */
+const BomBatchAddPanel = ({
+  open,
+  onClose,
+  options,
+  categories,
+  alreadyUsedProductIds,
+  parentProductId,
+  onConfirm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  options: Product[];
+  categories: ProductCategory[];
+  alreadyUsedProductIds: string[];
+  parentProductId: string;
+  onConfirm: (rows: { productId: string; categoryId?: string }[]) => void;
+}) => {
+  const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState<string>('all');
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!open) {
+      setSearch('');
+      setActiveTab('all');
+      setPicked(new Set());
+    }
+  }, [open]);
+
+  const usedSet = useMemo(() => new Set(alreadyUsedProductIds.filter(Boolean)), [alreadyUsedProductIds]);
+
+  const pool = useMemo(
+    () => options.filter(p => p.id !== parentProductId),
+    [options, parentProductId],
+  );
+
+  const filtered = useMemo(() => {
+    return pool
+      .filter(p => {
+        const q = search.trim().toLowerCase();
+        const matchesSearch =
+          !q || p.name.toLowerCase().includes(q) || (p.sku && p.sku.toLowerCase().includes(q));
+        const matchesCategory = activeTab === 'all' || p.categoryId === activeTab;
+        return matchesSearch && matchesCategory;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id));
+  }, [pool, search, activeTab]);
+
+  const tabBtnCls = (active: boolean) =>
+    `px-2 py-1 rounded-md text-[9px] font-black uppercase transition-all whitespace-nowrap shrink-0 ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`;
+
+  const toggle = (id: string) => {
+    if (usedSet.has(id)) return;
+    setPicked(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  };
+
+  const selectAllVisible = () => {
+    setPicked(prev => {
+      const n = new Set(prev);
+      for (const p of filtered) {
+        if (!usedSet.has(p.id)) n.add(p.id);
+      }
+      return n;
+    });
+  };
+
+  const clearPicked = () => setPicked(new Set());
+
+  const handleConfirm = () => {
+    const ids = [...picked].filter(id => !usedSet.has(id));
+    if (ids.length === 0) return;
+    onConfirm(
+      ids.map(id => {
+        const p = options.find(x => x.id === id);
+        return { productId: id, categoryId: p?.categoryId };
+      }),
+    );
+    onClose();
+  };
+
+  const pickedValid = [...picked].filter(id => !usedSet.has(id));
+  const visibleSelectable = filtered.filter(p => !usedSet.has(p.id)).length;
+
+  if (!open) return null;
+
+  return (
+    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-3" data-bom-batch-panel>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-black text-indigo-800 uppercase tracking-wider flex items-center gap-1.5">
+            <ListChecks className="w-3.5 h-3.5" /> 批量勾选添加
+          </p>
+          <p className="text-[10px] text-slate-500 mt-1 leading-relaxed max-w-md">
+            勾选多个物料后一次加入下方清单，再逐行填写用量；已在本 BOM 中的不可重复勾选。仍可用「添加物料清单行」逐条搜索单选。
+          </p>
+        </div>
+        <button type="button" onClick={onClose} className="text-[10px] font-bold text-slate-500 hover:text-slate-800 shrink-0">
+          收起
+        </button>
+      </div>
+
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+        <input
+          type="text"
+          className="w-full bg-white border border-slate-200 rounded-lg py-2 pl-9 pr-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="名称或 SKU 筛选…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+
+      <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5">
+        <button type="button" onClick={() => setActiveTab('all')} className={tabBtnCls(activeTab === 'all')}>
+          全部
+        </button>
+        {categories.map(cat => (
+          <button key={cat.id} type="button" onClick={() => setActiveTab(cat.id)} className={tabBtnCls(activeTab === cat.id)}>
+            {cat.name}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={selectAllVisible}
+          disabled={visibleSelectable === 0}
+          className="text-[10px] font-bold text-indigo-600 hover:underline disabled:opacity-40 disabled:no-underline"
+        >
+          全选当前列表
+        </button>
+        <button type="button" onClick={clearPicked} disabled={picked.size === 0} className="text-[10px] font-bold text-slate-500 hover:underline disabled:opacity-40">
+          清除勾选
+        </button>
+      </div>
+
+      <div className="max-h-52 overflow-y-auto custom-scrollbar rounded-xl border border-slate-200 bg-white divide-y divide-slate-50">
+        {filtered.map(p => {
+          const used = usedSet.has(p.id);
+          const checked = picked.has(p.id);
+          const cat = categories.find(c => c.id === p.categoryId);
+          return (
+            <label
+              key={p.id}
+              className={`flex items-start gap-2.5 px-3 py-2.5 ${used ? 'opacity-45 cursor-not-allowed bg-slate-50' : 'cursor-pointer hover:bg-slate-50/80'}`}
+            >
+              <input
+                type="checkbox"
+                className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                checked={checked}
+                disabled={used}
+                onChange={() => toggle(p.id)}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex justify-between items-start gap-2">
+                  <span className="text-xs font-bold text-slate-800 truncate">{p.name}</span>
+                  {cat && (
+                    <span className="text-[7px] font-black uppercase text-slate-400 bg-slate-100 px-1 py-0 rounded shrink-0">{cat.name}</span>
+                  )}
+                </div>
+                <p className="text-[9px] font-bold text-slate-400 mt-0.5">{p.sku}</p>
+                {used && <p className="text-[9px] text-amber-600 font-bold mt-0.5">已在清单中</p>}
+              </div>
+            </label>
+          );
+        })}
+        {filtered.length === 0 && (
+          <div className="py-8 text-center text-[10px] text-slate-400 font-medium">没有可选产品</div>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+        <button type="button" onClick={onClose} className="px-3 py-2 rounded-lg text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50">
+          取消
+        </button>
+        <button
+          type="button"
+          onClick={handleConfirm}
+          disabled={pickedValid.length === 0}
+          className="px-4 py-2 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-45 disabled:cursor-not-allowed shadow-sm"
+        >
+          加入清单 ({pickedValid.length})
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const ProductManagementView: React.FC<ProductManagementViewProps> = ({ 
   products, 
   globalNodes, 
@@ -691,6 +887,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   const [activeVariantIdForBOM, setActiveVariantIdForBOM] = useState<string | null>(null);
   const [activeNodeIdForBOM, setActiveNodeIdForBOM] = useState<string | null>(null);
   const [workingBOM, setWorkingBOM] = useState<BOM | null>(null);
+  const [bomBatchOpen, setBomBatchOpen] = useState(false);
   const [copyBOMDropdownOpen, setCopyBOMDropdownOpen] = useState(false);
   const [copyBOMDropdownStyle, setCopyBOMDropdownStyle] = useState<React.CSSProperties>({});
   const copyBOMTriggerRef = useRef<HTMLButtonElement>(null);
@@ -917,6 +1114,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
 
   // --- BOM 逻辑 ---
   const openBOMEditor = (variant: ProductVariant, nodeId: string) => {
+    setBomBatchOpen(false);
     setActiveVariantIdForBOM(variant.id);
     setActiveNodeIdForBOM(nodeId);
     const existingBOM = boms.find(b => b.variantId === variant.id && b.nodeId === nodeId);
@@ -938,6 +1136,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
 
   const closeBOMEditor = useCallback(() => {
     setCopyBOMDropdownOpen(false);
+    setBomBatchOpen(false);
     setActiveVariantIdForBOM(null);
     setActiveNodeIdForBOM(null);
     setWorkingBOM(null);
@@ -1049,7 +1248,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     });
 
     return (
-      <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 pb-32">
+      <div className="max-w-5xl mx-auto space-y-4 animate-in fade-in slide-in-from-bottom-4 pb-32">
         <SpecSelectorModal 
           isOpen={modalType === 'color'} 
           onClose={() => setModalType(null)} title="选取款式生产颜色" type="color"
@@ -1063,53 +1262,67 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
           onToggle={(id) => toggleAttribute('size', id)} onAddNew={(name) => handleAddNewSpec('sizes', name)}
         />
 
-        <div className="flex items-center justify-between sticky top-0 z-40 py-4 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200 gap-3 flex-wrap">
-          <button type="button" onClick={() => { setEditingProductId(null); setWorkingProduct(null); setRouteReportFieldValues({}); }} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
-            <ArrowLeft className="w-4 h-4" /> 返回列表
+        <div className="flex items-center justify-between sticky top-0 z-40 py-3 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200 gap-2 flex-wrap">
+          <button type="button" onClick={() => { setEditingProductId(null); setWorkingProduct(null); setRouteReportFieldValues({}); }} className="flex items-center gap-2 text-slate-500 font-semibold text-sm hover:text-slate-800 transition-all">
+            <ArrowLeft className="w-4 h-4 shrink-0" /> 返回列表
           </button>
-          <div className="flex items-center gap-2 sm:gap-3 ml-auto">
+          <div className="flex items-center gap-2 ml-auto">
             {permCanDelete && onDeleteProduct && isPersistedProduct && (
               <button
                 type="button"
                 disabled={deleteProductBusy}
                 onClick={() => void handleDeletePersistedProduct()}
-                className="px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 border-2 border-rose-200 text-rose-600 bg-white hover:bg-rose-50 disabled:opacity-50 transition-all text-sm"
+                className="px-4 py-2 rounded-lg font-semibold flex items-center gap-2 border border-rose-200 text-rose-600 bg-white hover:bg-rose-50 disabled:opacity-50 transition-all text-sm shadow-sm"
               >
-                <Trash2 className="w-4 h-4" /> 删除产品
+                <Trash2 className="w-4 h-4 shrink-0" /> 删除产品
               </button>
             )}
-            <button type="button" disabled={saveProductBusy} onClick={() => void saveProduct()} className="bg-indigo-600 text-white px-6 sm:px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all text-sm disabled:opacity-60 disabled:cursor-not-allowed">
-              <Save className="w-4 h-4" /> {saveProductBusy ? '保存中…' : '保存产品资料'}
+            <button type="button" disabled={saveProductBusy} onClick={() => void saveProduct()} className="bg-indigo-600 text-white px-4 sm:px-5 py-2 rounded-lg font-semibold flex items-center gap-2 shadow-sm hover:bg-indigo-700 active:scale-[0.98] transition-all text-sm disabled:opacity-60 disabled:cursor-not-allowed">
+              <Save className="w-4 h-4 shrink-0" /> {saveProductBusy ? '保存中…' : '保存产品资料'}
             </button>
           </div>
         </div>
 
         {/* 1. 核心档案 */}
-        <div className="bg-white rounded-[40px] p-8 border border-slate-200 shadow-sm space-y-8">
-          <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
-            <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600"><FileText className="w-5 h-5" /></div>
-            <h3 className="text-lg font-bold text-slate-800">1. 核心业务档案</h3>
+        <div className="bg-white rounded-[40px] p-6 md:p-8 border border-slate-200 shadow-sm space-y-6">
+          <div className="flex items-center gap-3 border-b border-slate-50 pb-3">
+            <div className="w-9 h-9 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600"><FileText className="w-[18px] h-[18px]" /></div>
+            <h3 className="text-base font-semibold text-slate-900 tracking-tight">1. 核心业务档案</h3>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-             <div className="md:col-span-2 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+             <div className="md:col-span-2 space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">业务分类</label>
-              <div className="flex flex-wrap gap-2">
-                {categories.map(cat => (
-                  <button key={cat.id} onClick={() => setWorkingProduct({...workingProduct, categoryId: cat.id})} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border-2 ${workingProduct.categoryId === cat.id ? 'border-indigo-600 bg-indigo-50 text-indigo-600 shadow-sm' : 'border-slate-50 bg-slate-50 text-slate-400'}`}>{cat.name}</button>
-                ))}
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="选择业务分类">
+                {categories.map(cat => {
+                  const active = workingProduct.categoryId === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setWorkingProduct({ ...workingProduct, categoryId: cat.id })}
+                      className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all border ${
+                        active
+                          ? 'bg-indigo-600 text-white shadow-sm border-indigo-600 hover:bg-indigo-700 hover:border-indigo-700'
+                          : 'bg-white/60 text-slate-600 border-slate-200/80 hover:bg-white hover:text-slate-800 hover:border-slate-300'
+                      }`}
+                    >
+                      {cat.name}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">产品全称 <span className="text-rose-500">*</span></label>
-              <input type="text" value={workingProduct.name} onChange={e => setWorkingProduct({...workingProduct, name: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
+              <input type="text" value={workingProduct.name} onChange={e => setWorkingProduct({...workingProduct, name: e.target.value})} className="w-full bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">产品编号 <span className="text-rose-500">*</span></label>
-              <input type="text" value={workingProduct.sku} onChange={e => setWorkingProduct({...workingProduct, sku: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
+              <input type="text" value={workingProduct.sku} onChange={e => setWorkingProduct({...workingProduct, sku: e.target.value})} className="w-full bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">产品单位</label>
-              <select value={workingProduct.unitId ?? ''} onChange={e => setWorkingProduct({...workingProduct, unitId: e.target.value || undefined})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none">
+              <select value={workingProduct.unitId ?? ''} onChange={e => setWorkingProduct({...workingProduct, unitId: e.target.value || undefined})} className="w-full bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none">
                 <option value="">请选择单位</option>
                 {(dictionaries.units ?? []).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
@@ -1149,10 +1362,10 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                       e.target.value = '';
                     }}
                   />
-                  <label htmlFor="product-image-upload" className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold cursor-pointer hover:bg-indigo-100 transition-all w-fit">
-                    <ImagePlus className="w-4 h-4" /> 上传图片
+                  <label htmlFor="product-image-upload" className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg text-sm font-semibold cursor-pointer hover:bg-indigo-100 transition-all w-fit">
+                    <ImagePlus className="w-4 h-4 shrink-0" /> 上传图片
                   </label>
-                  <span className="text-[10px] text-slate-400">支持 JPG、PNG、GIF，建议尺寸 200×200</span>
+                  <span className="text-[10px] text-slate-500 leading-relaxed">支持 JPG、PNG、GIF，建议尺寸 200×200</span>
                 </div>
               </div>
             </div>
@@ -1165,7 +1378,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                       <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">标准销售单价 (CNY)</label>
                       <div className="relative">
                         <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                        <input type="number" value={workingProduct.salesPrice ?? ''} onChange={e => setWorkingProduct({...workingProduct, salesPrice: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0)})} className="w-full bg-slate-50 border-none rounded-xl py-3 pl-10 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="" />
+                        <input type="number" value={workingProduct.salesPrice ?? ''} onChange={e => setWorkingProduct({...workingProduct, salesPrice: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0)})} className="w-full bg-slate-50 border-none rounded-lg py-2.5 pl-10 pr-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="" />
                       </div>
                     </div>
                  )}
@@ -1175,7 +1388,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                         <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">参考采购单价 (CNY)</label>
                         <div className="relative">
                           <ShoppingCart className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                          <input type="number" value={workingProduct.purchasePrice ?? ''} onChange={e => setWorkingProduct({...workingProduct, purchasePrice: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0)})} className="w-full bg-slate-50 border-none rounded-xl py-3 pl-10 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="" />
+                          <input type="number" value={workingProduct.purchasePrice ?? ''} onChange={e => setWorkingProduct({...workingProduct, purchasePrice: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0)})} className="w-full bg-slate-50 border-none rounded-lg py-2.5 pl-10 pr-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="" />
                         </div>
                       </div>
                       <div className="space-y-1">
@@ -1187,7 +1400,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                             onChange={v => setWorkingProduct({...workingProduct, supplierId: v})}
                             optionPairs={partners.map(s => ({ value: s.id, label: s.name }))}
                             placeholder="未关联供应商"
-                            className="w-full bg-slate-50 border-none rounded-xl py-3 pl-10 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none text-left flex items-center justify-between"
+                            className="w-full bg-slate-50 border-none rounded-lg py-2.5 pl-10 pr-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none text-left flex items-center justify-between"
                           />
                         </div>
                       </div>
@@ -1197,7 +1410,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
             )}
 
             {activeCategory?.customFields && activeCategory.customFields.length > 0 && (
-              <div className="md:col-span-2 pt-6 border-t border-slate-50 mt-4 space-y-6">
+              <div className="md:col-span-2 pt-5 border-t border-slate-50 mt-3 space-y-5">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1 flex items-center gap-2">
                   <Tag className="w-3.5 h-3.5" /> 分类专用扩展属性
                 </h4>
@@ -1215,7 +1428,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                             ...workingProduct, 
                             categoryCustomData: { ...workingProduct.categoryCustomData, [field.id]: e.target.value }
                           })}
-                          className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" 
+                          className="w-full bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" 
                         />
                       )}
                       {field.type === 'number' && (
@@ -1226,7 +1439,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                             ...workingProduct, 
                             categoryCustomData: { ...workingProduct.categoryCustomData, [field.id]: parseFloat(e.target.value) || 0 }
                           })}
-                          className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" 
+                          className="w-full bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" 
                         />
                       )}
                       {field.type === 'select' && (
@@ -1238,7 +1451,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                           })}
                           options={field.options || []}
                           placeholder="请选择..."
-                          className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none text-left flex items-center justify-between"
+                          className="w-full bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none text-left flex items-center justify-between"
                         />
                       )}
                       {field.type === 'boolean' && (
@@ -1292,8 +1505,8 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                                       className="h-16 w-16 object-cover rounded-xl border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400 transition-all"
                                       onClick={() => { openFilePreview(workingProduct.categoryCustomData![field.id] as string, 'image'); }}
                                     />
-                                    <a href={workingProduct.categoryCustomData[field.id] as string} download={`附件.${getFileExtFromDataUrl(workingProduct.categoryCustomData[field.id] as string)}`} className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-xl text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
-                                      <Download className="w-4 h-4" /> 下载
+                                    <a href={workingProduct.categoryCustomData[field.id] as string} download={`附件.${getFileExtFromDataUrl(workingProduct.categoryCustomData[field.id] as string)}`} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
+                                      <Download className="w-3.5 h-3.5 shrink-0" /> 下载
                                     </a>
                                   </>
                                 ) : String(workingProduct.categoryCustomData[field.id]).startsWith('data:application/pdf') ? (
@@ -1301,17 +1514,17 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                                     <button
                                       type="button"
                                       onClick={() => { openFilePreview(workingProduct.categoryCustomData![field.id] as string, 'pdf'); }}
-                                      className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-xl text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                                      className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
                                     >
-                                      <FileText className="w-4 h-4" /> 在线查看
+                                      <FileText className="w-3.5 h-3.5 shrink-0" /> 在线查看
                                     </button>
-                                    <a href={workingProduct.categoryCustomData[field.id] as string} download={`附件.${getFileExtFromDataUrl(workingProduct.categoryCustomData[field.id] as string)}`} className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-xl text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
-                                      <Download className="w-4 h-4" /> 下载
+                                    <a href={workingProduct.categoryCustomData[field.id] as string} download={`附件.${getFileExtFromDataUrl(workingProduct.categoryCustomData[field.id] as string)}`} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
+                                      <Download className="w-3.5 h-3.5 shrink-0" /> 下载
                                     </a>
                                   </>
                                 ) : (
-                                  <a href={workingProduct.categoryCustomData[field.id] as string} download={`附件.${getFileExtFromDataUrl(workingProduct.categoryCustomData[field.id] as string)}`} className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-xl text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
-                                    <Download className="w-4 h-4" /> 下载
+                                  <a href={workingProduct.categoryCustomData[field.id] as string} download={`附件.${getFileExtFromDataUrl(workingProduct.categoryCustomData[field.id] as string)}`} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
+                                    <Download className="w-3.5 h-3.5 shrink-0" /> 下载
                                   </a>
                                 )}
                                 <button
@@ -1320,7 +1533,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                                     ...workingProduct,
                                     categoryCustomData: { ...workingProduct.categoryCustomData, [field.id]: '' }
                                   })}
-                                  className="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-[10px] font-bold hover:bg-rose-100"
+                                  className="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-xs font-semibold hover:bg-rose-100"
                                 >
                                   删除
                                 </button>
@@ -1329,9 +1542,9 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                               <button
                                 type="button"
                                 onClick={() => fileInputRefs.current[field.id]?.click()}
-                                className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                                className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-lg text-sm font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
                               >
-                                <ImagePlus className="w-4 h-4" /> 上传文件
+                                <ImagePlus className="w-4 h-4 shrink-0" /> 上传文件
                               </button>
                             )}
                           </div>
@@ -1348,14 +1561,14 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
         {/* 2. 颜色尺码配置 */}
         {activeCategory?.hasColorSize && (
           <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden">
-            <div className="grid grid-cols-[160px_1fr] divide-x divide-slate-100">
-               <div className="px-10 py-6 bg-slate-50/50 text-sm font-bold text-slate-400 flex items-center justify-center">规格名</div>
-               <div className="px-10 py-6 bg-slate-50/50 text-sm font-bold text-slate-400 flex items-center">已选规格值</div>
+            <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] divide-x divide-slate-100">
+               <div className="px-4 sm:px-8 py-4 bg-slate-50/50 text-xs font-semibold text-slate-500 flex items-center justify-center">规格名</div>
+               <div className="px-4 sm:px-8 py-4 bg-slate-50/50 text-xs font-semibold text-slate-500 flex items-center">已选规格值</div>
                
-               <div className="px-10 py-10 flex items-center justify-center text-sm font-bold text-slate-700">颜色</div>
-               <div className="px-10 py-10 flex items-center gap-6 group">
-                  <button onClick={() => setModalType('color')} className="w-14 h-14 bg-indigo-600 text-white rounded-2xl flex flex-col items-center justify-center shadow-xl shadow-indigo-100 hover:scale-105 active:scale-95 transition-all">
-                    <Filter className="w-5 h-5" />
+               <div className="px-4 sm:px-8 py-6 flex items-center justify-center text-sm font-semibold text-slate-700">颜色</div>
+               <div className="px-4 sm:px-8 py-6 flex items-center gap-4 group">
+                  <button type="button" onClick={() => setModalType('color')} className="w-12 h-12 bg-indigo-600 text-white rounded-lg flex flex-col items-center justify-center shadow-sm hover:bg-indigo-700 active:scale-95 transition-all shrink-0">
+                    <Filter className="w-[18px] h-[18px]" />
                     <div className="flex flex-col gap-0.5 mt-1">
                       <div className="w-3 h-0.5 bg-white/40 rounded-full"></div>
                       <div className="w-2 h-0.5 bg-white/40 rounded-full mx-auto"></div>
@@ -1366,20 +1579,20 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                       const c = dictionaries.colors.find(i => i.id === id);
                       const label = (c?.name != null && String(c.name).trim() !== '') ? String(c.name).trim() : '（未命名颜色）';
                       return (
-                        <span key={id} className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-600 flex items-center gap-2">
+                        <span key={id} className="px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-lg text-xs font-semibold text-slate-600 flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full" style={{backgroundColor: c?.value}}></div>
                           {label}
                         </span>
                       );
                     })}
-                    {workingProduct.colorIds.length === 0 && <span className="text-slate-300 text-sm font-medium italic">点击图标开启颜色选择器</span>}
+                    {workingProduct.colorIds.length === 0 && <span className="text-slate-400 text-xs font-medium">点击图标开启颜色选择器</span>}
                   </div>
                </div>
 
-               <div className="px-10 py-10 flex items-center justify-center text-sm font-bold text-slate-700">尺寸</div>
-               <div className="px-10 py-10 flex items-center gap-6 group">
-                  <button onClick={() => setModalType('size')} className="w-14 h-14 bg-indigo-600 text-white rounded-2xl flex flex-col items-center justify-center shadow-xl shadow-indigo-100 hover:scale-105 active:scale-95 transition-all">
-                    <Filter className="w-5 h-5" />
+               <div className="px-4 sm:px-8 py-6 flex items-center justify-center text-sm font-semibold text-slate-700">尺寸</div>
+               <div className="px-4 sm:px-8 py-6 flex items-center gap-4 group">
+                  <button type="button" onClick={() => setModalType('size')} className="w-12 h-12 bg-indigo-600 text-white rounded-lg flex flex-col items-center justify-center shadow-sm hover:bg-indigo-700 active:scale-95 transition-all shrink-0">
+                    <Filter className="w-[18px] h-[18px]" />
                     <div className="flex flex-col gap-0.5 mt-1">
                       <div className="w-3 h-0.5 bg-white/40 rounded-full"></div>
                       <div className="w-2 h-0.5 bg-white/40 rounded-full mx-auto"></div>
@@ -1390,10 +1603,10 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                       const s = dictionaries.sizes.find(sz => sz.id === id);
                       const label = (s?.name != null && String(s.name).trim() !== '') ? String(s.name).trim() : '（未命名尺码）';
                       return (
-                        <span key={id} className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-600">{label}</span>
+                        <span key={id} className="px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-lg text-xs font-semibold text-slate-600">{label}</span>
                       );
                     })}
-                    {workingProduct.sizeIds.length === 0 && <span className="text-slate-300 text-sm font-medium italic">点击图标开启尺寸选择器</span>}
+                    {workingProduct.sizeIds.length === 0 && <span className="text-slate-400 text-xs font-medium">点击图标开启尺寸选择器</span>}
                   </div>
                </div>
             </div>
@@ -1402,17 +1615,17 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
 
         {/* 3. 生产工序与工艺 BOM */}
         {activeCategory?.hasProcess && (
-          <div className="bg-white rounded-[40px] p-8 border border-slate-200 shadow-sm space-y-10">
-            <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
-              <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600"><ClipboardCheck className="w-5 h-5" /></div>
-              <h3 className="text-lg font-bold text-slate-800">2. 生产工序与工艺 BOM</h3>
+          <div className="bg-white rounded-[40px] p-6 md:p-8 border border-slate-200 shadow-sm space-y-6">
+            <div className="flex items-center gap-3 border-b border-slate-50 pb-3">
+              <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600"><ClipboardCheck className="w-[18px] h-[18px]" /></div>
+              <h3 className="text-base font-semibold text-slate-900 tracking-tight">2. 生产工序与工艺 BOM</h3>
             </div>
 
-            <div className="space-y-8">
+            <div className="space-y-6">
               {/* 上：可选工序 */}
               <section className="rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50/90 to-white p-6 shadow-sm">
                 <div className="flex flex-wrap items-center gap-2 gap-y-1 mb-4">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-[11px] font-black text-white">1</span>
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-[11px] font-black text-white">1</span>
                   <h4 className="text-sm font-black text-slate-800">可选工序</h4>
                   <span className="text-[10px] text-slate-400">点击加入下方标准路线</span>
                 </div>
@@ -1424,9 +1637,9 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                         key={gn.id}
                         type="button"
                         onClick={() => toggleNodeInProduct(gn.id)}
-                        className={`p-3.5 rounded-2xl border-2 text-left transition-all flex items-center justify-between gap-2 ${isSelected ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' : 'border-slate-100 bg-white hover:border-slate-200 hover:shadow-sm'}`}
+                        className={`p-3 rounded-lg border text-left transition-all flex items-center justify-between gap-2 ${isSelected ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'}`}
                       >
-                        <span className={`text-xs font-bold truncate ${isSelected ? 'text-indigo-900' : 'text-slate-600'}`}>{gn.name}</span>
+                        <span className={`text-xs font-semibold truncate ${isSelected ? 'text-indigo-900' : 'text-slate-600'}`}>{gn.name}</span>
                         {isSelected && <Check className="w-4 h-4 text-indigo-600 shrink-0" />}
                       </button>
                     );
@@ -1465,7 +1678,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-bold text-slate-800">{node.name}</p>
                             {node.hasBOM && (
-                              <p className="text-[9px] text-amber-600 font-bold flex items-center gap-1 mt-0.5">
+                              <p className="text-[9px] text-indigo-600 font-bold flex items-center gap-1 mt-0.5">
                                 <Boxes className="w-2.5 h-2.5 shrink-0" /> 需在下方「BOM 精细化配置」中维护物料
                               </p>
                             )}
@@ -1500,8 +1713,8 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                         <div className="mx-3 mb-3 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2">
                           <div className="flex flex-wrap items-center gap-2 mb-2">
                             <FileText className="w-3 h-3 text-slate-400 shrink-0" />
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">报工填报项</span>
-                            <span className="text-[9px] text-slate-400">（模板在「系统设置 → 工序节点库」配置；填写内容会随产品保存）</span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">报工填报项</span>
+                            <span className="text-[10px] text-slate-400">（模板在「系统设置 → 工序节点库」配置；填写内容会随产品保存）</span>
                           </div>
                           <div className="space-y-2">
                             {(node.reportTemplate || []).map(field => {
@@ -1563,7 +1776,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                                       >
                                         <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${val === 'true' ? 'left-4' : 'left-0.5'}`} />
                                       </button>
-                                      <span className="text-[10px] font-medium text-slate-500">{val === 'true' ? '是' : '否'}</span>
+                                      <span className="text-xs font-medium text-slate-500">{val === 'true' ? '是' : '否'}</span>
                                     </div>
                                   )}
                                   {field.type === 'file' && (() => {
@@ -1639,7 +1852,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                                                 <a
                                                   href={url}
                                                   download={`${field.label}-${fi + 1}.${getFileExtFromDataUrl(url)}`}
-                                                  className="flex items-center gap-0.5 text-[10px] font-bold text-indigo-600 hover:underline truncate max-w-[120px]"
+                                                  className="flex items-center gap-0.5 text-xs font-bold text-indigo-600 hover:underline truncate max-w-[120px]"
                                                 >
                                                   <Download className="w-3 h-3 shrink-0" /> 下载
                                                 </a>
@@ -1649,7 +1862,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                                                     const next = fileUrls.filter((_, i) => i !== fi);
                                                     setVal(stringifyRouteReportFileUrls(next));
                                                   }}
-                                                  className="text-left text-[10px] font-bold text-rose-500 hover:text-rose-700"
+                                                  className="text-left text-xs font-bold text-rose-500 hover:text-rose-700"
                                                 >
                                                   移除
                                                 </button>
@@ -1661,7 +1874,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                                           <button
                                             type="button"
                                             onClick={() => routeReportFileInputRefs.current[rk]?.click()}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600"
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600"
                                           >
                                             <ImagePlus className="w-3.5 h-3.5" /> 添加图片或文件（可多选）
                                           </button>
@@ -1669,7 +1882,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                                             <button
                                               type="button"
                                               onClick={() => setVal('')}
-                                              className="px-2 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-[10px] font-bold hover:bg-rose-100"
+                                              className="px-2 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-xs font-bold hover:bg-rose-100"
                                             >
                                               全部清除
                                             </button>
@@ -1703,15 +1916,15 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                 </div>
               </section>
 
-              {/* 下：BOM 精细化配置 */}
-              <section className="rounded-2xl border-2 border-amber-100 bg-amber-50/25 p-6 shadow-sm space-y-6">
+              {/* 下：BOM 精细化配置（配色与「标准生产路线」一致） */}
+              <section className="rounded-2xl border-2 border-indigo-100 bg-indigo-50/20 p-6 shadow-sm space-y-6">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-600 text-[11px] font-black text-white">3</span>
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-[11px] font-black text-white">3</span>
                   <h4 className="text-sm font-black text-slate-800">BOM 精细化配置</h4>
                   <span className="text-[10px] text-slate-500">按 SKU / 变体维护需 BOM 工序的物料清单</span>
                 </div>
                 {enabledBOMNodes.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-8 text-center border border-dashed border-amber-100 rounded-xl bg-white/60">
+                  <p className="text-xs text-slate-400 py-8 text-center border border-dashed border-indigo-100 rounded-xl bg-white/60">
                     当前路线中暂无需要配置 BOM 的工序；在「系统设置 → 工序节点库」中为工序开启「需 BOM」后，将在此处出现配置入口
                   </p>
                 ) : (
@@ -1719,7 +1932,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
             {workingProduct.variants.length === 0 && (
               <div className="space-y-4">
                 <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">单 SKU 产品</h5>
-                <div className="p-6 rounded-3xl border border-amber-100/80 bg-white/70 shadow-sm">
+                <div className="p-6 rounded-3xl border border-white bg-white/90 shadow-sm ring-1 ring-indigo-50">
                   <div className="flex justify-between items-start mb-4 pb-3 border-b border-slate-200/50">
                     <div>
                       <p className="text-sm font-black text-slate-800">本产品</p>
@@ -1735,10 +1948,10 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                         <button
                           key={node.id}
                           onClick={() => openBOMEditor(singleSkuVirtualVariant, node.id)}
-                          className={`w-full px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-between transition-all border-2 ${isEditing ? 'bg-indigo-600 border-indigo-600 text-white' : (hasNodeBOM ? 'bg-amber-50 border-amber-100 text-amber-600' : 'bg-white border-slate-100 text-slate-500 hover:border-indigo-200')}`}
+                          className={`w-full px-4 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-between transition-all border ${isEditing ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm' : (hasNodeBOM ? 'border-indigo-200 bg-indigo-50/50 text-indigo-900' : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-200')}`}
                         >
                           <div className="flex items-center gap-2">
-                            <Boxes className={`w-3.5 h-3.5 ${isEditing ? 'text-white' : (hasNodeBOM ? 'text-amber-500' : 'text-slate-300')}`} />
+                            <Boxes className={`w-3.5 h-3.5 ${isEditing ? 'text-white' : (hasNodeBOM ? 'text-indigo-600' : 'text-slate-300')}`} />
                             <span>{node.name} BOM</span>
                           </div>
                           <div className="flex items-center gap-2">
@@ -1792,7 +2005,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                                    return (
                                      <tr key={v.id} className="hover:bg-indigo-50/30 transition-colors">
                                        <td className="py-2.5 pl-4 pr-2 text-xs font-bold text-slate-800 whitespace-nowrap">{sizeTitle}</td>
-                                       <td className="py-2.5 px-2 text-[10px] text-slate-400 font-medium whitespace-nowrap hidden sm:table-cell">{workingProduct.sku}-{v.skuSuffix}</td>
+                                       <td className="py-2.5 px-2 text-xs font-bold text-slate-800 whitespace-nowrap hidden sm:table-cell">{workingProduct.sku}-{v.skuSuffix}</td>
                                        {enabledBOMNodes.map(node => {
                                          const hasNodeBOM = !!nodeBoms[node.id];
                                          const isEditing = activeVariantIdForBOM === v.id && activeNodeIdForBOM === node.id;
@@ -1800,7 +2013,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                                            <td key={node.id} className="py-2.5 px-2 text-center">
                                              <button
                                                onClick={() => openBOMEditor(v, node.id)}
-                                               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${isEditing ? 'bg-indigo-600 border-indigo-600 text-white' : (hasNodeBOM ? 'bg-amber-50 border-amber-100 text-amber-600' : 'bg-white border-slate-100 text-slate-400 hover:border-indigo-200 hover:text-slate-600')}`}
+                                               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${isEditing ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm' : (hasNodeBOM ? 'border-indigo-200 bg-indigo-50/50 text-indigo-900' : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-200 hover:text-slate-700')}`}
                                              >
                                                {hasNodeBOM ? <Check className="w-3 h-3" /> : <Boxes className="w-3 h-3" />}
                                                {isEditing ? '编辑中' : (hasNodeBOM ? '已配置' : '配置')}
@@ -1868,11 +2081,11 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <div className="relative">
-                          <button ref={copyBOMTriggerRef} type="button" onClick={() => setCopyBOMDropdownOpen(!copyBOMDropdownOpen)} className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-600 hover:bg-white transition-all"><Copy className="w-3.5 h-3.5" /> 复制现有方案</button>
+                          <button ref={copyBOMTriggerRef} type="button" onClick={() => setCopyBOMDropdownOpen(!copyBOMDropdownOpen)} className="flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-white transition-all shadow-sm"><Copy className="w-3.5 h-3.5 shrink-0" /> 复制现有方案</button>
                           {copyBOMDropdownOpen && createPortal(
                             <div data-portal-copy-bom className="bg-white rounded-2xl border border-slate-200 shadow-2xl p-2 max-h-48 overflow-y-auto custom-scrollbar" style={copyBOMDropdownStyle}>
                               {availableBOMSources.map(srcV => (
-                                <button key={srcV.id} type="button" onClick={() => { copyBOMFrom(srcV.id); setCopyBOMDropdownOpen(false); }} className="w-full text-left p-3 hover:bg-indigo-50 rounded-xl text-xs font-bold text-slate-700">{srcV.skuSuffix}</button>
+                                <button key={srcV.id} type="button" onClick={() => { copyBOMFrom(srcV.id); setCopyBOMDropdownOpen(false); }} className="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm font-semibold text-slate-700">{srcV.skuSuffix}</button>
                               ))}
                               {availableBOMSources.length === 0 && <p className="text-[10px] text-slate-300 p-4 italic text-center">暂无可复用的配置</p>}
                             </div>,
@@ -1943,7 +2156,49 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                         </div>
                         );
                       })}
-                      <button type="button" onClick={() => setWorkingBOM({ ...workingBOM, items: [...workingBOM.items, { productId: '', quantity: 0 }] })} className="w-full py-3.5 border-2 border-dashed border-indigo-200 rounded-2xl text-indigo-500 font-bold text-xs hover:bg-white hover:border-indigo-400 transition-all flex items-center justify-center gap-2 group"><Plus className="w-4 h-4 group-hover:scale-110 transition-transform" /> 添加物料清单行</button>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setWorkingBOM({ ...workingBOM, items: [...workingBOM.items, { productId: '', quantity: 0 }] })}
+                          className="flex-1 py-3.5 border-2 border-dashed border-indigo-200 rounded-2xl text-indigo-500 font-bold text-xs hover:bg-white hover:border-indigo-400 transition-all flex items-center justify-center gap-2 group"
+                        >
+                          <Plus className="w-4 h-4 group-hover:scale-110 transition-transform shrink-0" /> 添加物料清单行
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBomBatchOpen(o => !o)}
+                          className={`sm:min-w-[10rem] py-3.5 border-2 rounded-2xl font-bold text-xs transition-all flex items-center justify-center gap-2 ${
+                            bomBatchOpen
+                              ? 'border-indigo-400 bg-indigo-50 text-indigo-700'
+                              : 'border-dashed border-slate-200 text-slate-600 hover:border-indigo-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          <ListChecks className="w-4 h-4 shrink-0" />
+                          {bomBatchOpen ? '收起批量添加' : '批量勾选添加'}
+                        </button>
+                      </div>
+                      <BomBatchAddPanel
+                        open={bomBatchOpen}
+                        onClose={() => setBomBatchOpen(false)}
+                        options={products.filter(p => p.id !== workingProduct?.id)}
+                        categories={categories}
+                        alreadyUsedProductIds={workingBOM.items.map(i => i.productId).filter(Boolean)}
+                        parentProductId={workingProduct?.id ?? ''}
+                        onConfirm={rows => {
+                          setWorkingBOM({
+                            ...workingBOM,
+                            items: [
+                              ...workingBOM.items,
+                              ...rows.map(r => ({
+                                productId: r.productId,
+                                categoryId: r.categoryId,
+                                quantity: 0,
+                                quantityInput: '',
+                              })),
+                            ],
+                          });
+                        }}
+                      />
                     </div>
 
                     <div className="flex-shrink-0 flex justify-end gap-3 p-6 pt-4 border-t border-slate-100 bg-white rounded-b-[28px]">
@@ -1973,27 +2228,39 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4 animate-in fade-in duration-500">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">产品与 BOM 档案中心</h1>
-          <p className="text-slate-500 mt-1 italic text-sm">定义业务规则、生产规格与工序物料明细</p>
+          <h1 className="text-xl font-semibold text-slate-900 tracking-tight">产品与 BOM 档案中心</h1>
+          <p className="text-slate-500 mt-1 text-sm leading-snug max-w-xl">定义业务规则、生产规格与工序物料明细</p>
         </div>
         {permCanCreate && (
-          <div className="flex items-center gap-2">
-            <button onClick={() => setImportModalOpen(true)} className="bg-white text-indigo-600 border-2 border-indigo-200 px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-50 hover:border-indigo-300 active:scale-95 transition-all"><Upload className="w-4 h-4" /> 导入产品</button>
-            <button onClick={handleStartCreateProduct} className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all"><Plus className="w-4 h-4" /> 创建新产品</button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setImportModalOpen(true)}
+              className="bg-white text-indigo-600 border border-indigo-200 px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-indigo-50 hover:border-indigo-300 active:scale-[0.98] transition-all"
+            >
+              <Upload className="w-4 h-4 shrink-0" /> 导入产品
+            </button>
+            <button
+              type="button"
+              onClick={handleStartCreateProduct}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm hover:bg-indigo-700 active:scale-[0.98] transition-all"
+            >
+              <Plus className="w-4 h-4 shrink-0" /> 创建产品
+            </button>
           </div>
         )}
       </div>
 
-      <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap bg-slate-100/50 p-1 rounded-xl gap-0.5 min-w-0">
+      <div className="space-y-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-1.5 min-w-0">
             <button
               type="button"
               onClick={() => setActiveCategoryFilter(PRODUCT_ARCHIVE_ALL)}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeCategoryFilter === PRODUCT_ARCHIVE_ALL ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all border ${activeCategoryFilter === PRODUCT_ARCHIVE_ALL ? 'bg-indigo-600 text-white shadow-sm border-indigo-600 hover:bg-indigo-700 hover:border-indigo-700' : 'bg-white/60 text-slate-600 border-slate-200/80 hover:bg-white hover:text-slate-800 hover:border-slate-300'}`}
             >
               全部 ({products.length})
             </button>
@@ -2002,7 +2269,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                 key={cat.id}
                 type="button"
                 onClick={() => setActiveCategoryFilter(cat.id)}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeCategoryFilter === cat.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all border ${activeCategoryFilter === cat.id ? 'bg-indigo-600 text-white shadow-sm border-indigo-600 hover:bg-indigo-700 hover:border-indigo-700' : 'bg-white/60 text-slate-600 border-slate-200/80 hover:bg-white hover:text-slate-800 hover:border-slate-300'}`}
               >
                 {cat.name} ({products.filter(p => p.categoryId === cat.id).length})
               </button>

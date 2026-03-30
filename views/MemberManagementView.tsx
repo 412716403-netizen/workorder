@@ -596,13 +596,13 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
   }
 
   return (
-    <div className="space-y-8 w-full text-left">
-      <div className="flex flex-col gap-4 mb-2">
+    <div className="space-y-4 w-full text-left animate-in fade-in duration-500">
+      <div className="flex flex-col gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">成员管理</h1>
-          <p className="text-slate-500 mt-1 italic text-sm">管理企业成员、审核加入申请、邀请码与角色权限</p>
+          <h1 className="text-xl font-semibold text-slate-900 tracking-tight">成员管理</h1>
+          <p className="text-slate-500 mt-1 text-sm leading-snug max-w-xl">管理企业成员、审核加入申请、邀请码与角色权限</p>
         </div>
-        <div className="flex flex-wrap gap-2 justify-start">
+        <div className="flex flex-wrap gap-1.5 min-w-0 justify-start">
           {([
             { key: 'members' as const, label: '成员列表', icon: Users },
             ...(canManage
@@ -615,7 +615,7 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
               'badgeCount' in t && t.badgeCount > 0 ? (
                 <span
                   className={`ml-0.5 min-w-[18px] h-[18px] rounded-full text-[10px] font-black flex items-center justify-center ${
-                    tab === t.key ? 'bg-white text-indigo-600' : 'bg-indigo-600 text-white'
+                    tab === t.key ? 'bg-indigo-100 text-indigo-700' : 'bg-indigo-600 text-white'
                   }`}
                 >
                   {t.badgeCount}
@@ -626,13 +626,13 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
                 key={t.key}
                 type="button"
                 onClick={() => setTab(t.key)}
-                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
                   tab === t.key
-                    ? 'bg-indigo-600 text-white shadow-lg'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    ? 'bg-white text-indigo-600 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                <t.icon className="w-4 h-4 flex-shrink-0" /> {t.label}
+                <t.icon className="w-3.5 h-3.5 shrink-0" /> {t.label}
                 {badge}
               </button>
             );
@@ -649,9 +649,12 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
             <div className="flex-1 min-w-0 px-4 py-3 bg-slate-50 rounded-xl font-mono text-lg font-bold tracking-wider text-slate-900 text-left border border-slate-100">
               {tenantInfo.inviteCode}
             </div>
-            <button type="button" onClick={copyInviteCode}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 flex items-center justify-center gap-2 shrink-0">
-              <Copy className="w-5 h-5" /> 复制
+            <button
+              type="button"
+              onClick={copyInviteCode}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold shadow-sm hover:bg-indigo-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shrink-0"
+            >
+              <Copy className="w-4 h-4 shrink-0" /> 复制
             </button>
           </div>
         </div>
@@ -747,15 +750,18 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
 
       {/* ── 角色管理 ── */}
       {tab === 'roles' && canManage && (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
             <div>
-              <h3 className="font-bold text-lg text-slate-900">角色列表</h3>
-              <p className="text-sm text-slate-500">创建角色并配置细粒度权限，然后分配给成员</p>
+              <h3 className="text-base font-semibold text-slate-900 tracking-tight">角色列表</h3>
+              <p className="text-slate-500 mt-0.5 text-sm leading-snug max-w-xl">创建角色并配置细粒度权限，然后分配给成员</p>
             </div>
-            <button onClick={openCreateRole}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 flex items-center gap-2">
-              <Plus className="w-4 h-4" /> 新建角色
+            <button
+              type="button"
+              onClick={openCreateRole}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold shadow-sm hover:bg-indigo-700 active:scale-[0.98] transition-all flex items-center gap-2 shrink-0"
+            >
+              <Plus className="w-4 h-4 shrink-0" /> 新建角色
             </button>
           </div>
 

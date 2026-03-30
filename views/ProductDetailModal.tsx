@@ -61,6 +61,31 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100"><X className="w-6 h-6" /></button>
           </div>
           <div className="flex-1 overflow-y-auto p-8 space-y-6">
+            <div className="space-y-2">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-0.5">业务分类</h3>
+              <div className="flex flex-wrap gap-1.5" role="list" aria-label="产品所属业务分类">
+                {categories.length === 0 ? (
+                  <span className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-400">暂无分类配置</span>
+                ) : (
+                  categories.map(c => {
+                    const active = c.id === p.categoryId;
+                    return (
+                      <span
+                        key={c.id}
+                        role="listitem"
+                        className={`inline-flex items-center px-4 py-2 rounded-lg text-xs font-semibold transition-all border ${
+                          active
+                            ? 'bg-indigo-600 text-white shadow-sm border-indigo-600'
+                            : 'bg-white/40 text-slate-400 border-slate-200/60'
+                        }`}
+                      >
+                        {c.name}
+                      </span>
+                    );
+                  })
+                )}
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               {(p.salesPrice ?? 0) > 0 && (
                 <div className="bg-slate-50 rounded-2xl p-4">
