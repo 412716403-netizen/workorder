@@ -249,17 +249,20 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const loadRoutes = useCallback(async () => {
+  const routesLoadedRef = useRef(false);
+  const loadRoutes = useCallback(async (force = false) => {
+    if (!force && routesLoadedRef.current && outsourceRoutes.length >= 0) return;
     setRoutesLoading(true);
     try {
       const data = await api.collaboration.listOutsourceRoutes();
       setOutsourceRoutes(data);
+      routesLoadedRef.current = true;
     } catch (err: any) {
       toast.error(err.message || '加载路线失败');
     } finally {
       setRoutesLoading(false);
     }
-  }, []);
+  }, [outsourceRoutes.length]);
 
   const startEditRoute = (route?: OutsourceRoute) => {
     setEditingRoute(route ?? null);
@@ -297,7 +300,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
         toast.success('路线已创建');
       }
       setRouteEditOpen(false);
-      loadRoutes();
+      loadRoutes(true);
     } catch (err: any) {
       toast.error(err.message || '保存失败');
     } finally {
@@ -310,7 +313,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
     try {
       await api.collaboration.deleteOutsourceRoute(id);
       toast.success('已删除');
-      loadRoutes();
+      loadRoutes(true);
     } catch (err: any) {
       toast.error(err.message || '删除失败');
     }
@@ -762,34 +765,39 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
   };
 
   // Product maps
-  const loadMaps = async () => {
+  const mapsLoadedRef = useRef(false);
+  const loadMaps = async (force = false) => {
+    if (!force && mapsLoadedRef.current) return;
     setMapsLoading(true);
     try {
-      await onRefreshProducts?.();
       const data = await api.collaboration.listProductMaps();
       setProductMaps(data);
+      mapsLoadedRef.current = true;
     } catch {}
     setMapsLoading(false);
   };
 
   useEffect(() => {
     if (viewMode !== 'maps' || productMaps.length === 0) return;
-    const ids = [...new Set(productMaps.map((m: any) => m.receiverProductId).filter(Boolean))];
+    const ids = [...new Set(productMaps.map((m: any) => m.receiverProductId).filter(Boolean))]
+      .filter(id => !products.some(p => p.id === id) && !mapsFetchedProductIdsRef.current.has(id));
+    if (ids.length === 0) return;
     let cancelled = false;
-    (async () => {
-      for (const id of ids) {
-        if (cancelled) return;
-        if (products.some(p => p.id === id)) continue;
-        if (mapsFetchedProductIdsRef.current.has(id)) continue;
-        mapsFetchedProductIdsRef.current.add(id);
-        try {
-          const p = (await api.products.get(id)) as Product;
-          if (!cancelled) setResolvedReceiverProducts(prev => ({ ...prev, [id]: p }));
-        } catch {
-          mapsFetchedProductIdsRef.current.delete(id);
-        }
+    ids.forEach(id => mapsFetchedProductIdsRef.current.add(id));
+    Promise.all(
+      ids.map(id =>
+        api.products.get(id)
+          .then(p => ({ id, product: p as Product }))
+          .catch(() => { mapsFetchedProductIdsRef.current.delete(id); return null; })
+      )
+    ).then(results => {
+      if (cancelled) return;
+      const resolved: Record<string, Product> = {};
+      for (const r of results) { if (r) resolved[r.id] = r.product; }
+      if (Object.keys(resolved).length > 0) {
+        setResolvedReceiverProducts(prev => ({ ...prev, ...resolved }));
       }
-    })();
+    });
     return () => { cancelled = true; };
   }, [viewMode, productMaps, products]);
 
@@ -797,20 +805,23 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
     try {
       await api.collaboration.deleteProductMap(id);
       toast.success('已删除');
-      loadMaps();
+      loadMaps(true);
     } catch (err: any) {
       toast.error(err.message || '删除失败');
     }
   };
 
-  const refreshCollabs = useCallback(async () => {
+  const collabsLoadedRef = useRef(false);
+  const refreshCollabs = useCallback(async (force = false) => {
+    if (!force && collabsLoadedRef.current) return;
     try {
       const data = await api.collaboration.listCollaborations();
       setCollabs(data);
+      collabsLoadedRef.current = true;
     } catch {}
   }, []);
 
-  useEffect(() => { refreshCollabs(); }, [refreshCollabs]);
+  useEffect(() => { refreshCollabs(true); }, [refreshCollabs]);
 
   const handleInvite = async () => {
     const code = inviteCode.trim();
@@ -820,7 +831,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
       await api.collaboration.createCollaboration({ inviteCode: code });
       toast.success('协作建立成功');
       setInviteCode('');
-      await refreshCollabs();
+      await refreshCollabs(true);
     } catch (err: any) {
       toast.error(err.message || '建立协作失败');
     } finally {
@@ -1795,7 +1806,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
             <Settings2 className="w-4 h-4" /> 协作设置
           </button>
           <button
-            onClick={() => { setViewMode('routes'); loadRoutes(); api.collaboration.listCollaborations().then(setCollabs).catch(() => {}); }}
+            onClick={() => { setViewMode('routes'); loadRoutes(); refreshCollabs(); }}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all"
           >
             <Route className="w-4 h-4" /> 外协路线
@@ -1889,4 +1900,4 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
   );
 };
 
-export default CollaborationInboxView;
+export default React.memo(CollaborationInboxView);

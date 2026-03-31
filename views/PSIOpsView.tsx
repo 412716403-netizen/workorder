@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
+import { TableVirtuoso } from 'react-virtuoso';
 import { 
   Plus, 
   X, 
@@ -46,6 +47,8 @@ import {
 import { toast } from 'sonner';
 import { Product, Warehouse, ProductCategory, Partner, PartnerCategory, AppDictionaries, ProductVariant, PurchaseOrderFormSettings, PurchaseBillFormSettings } from '../types';
 import { sortedVariantColorEntries, sortedColorEntries } from '../utils/sortVariantsByProduct';
+import { useProgressiveList } from '../hooks/useProgressiveList';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 interface PSIOpsViewProps {
   type: string;
@@ -162,7 +165,7 @@ const ProductSelector = ({
       </div>
       <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1">
         {filteredOptions.map(p => {
-          const cat = categories.find(c => c.id === p.categoryId);
+          const cat = categoryMapPSI.get(p.categoryId);
           return (
             <button
               type="button"
@@ -312,7 +315,7 @@ const PartnerSelector = ({
                 <div className="flex justify-between items-center">
                   <p className="text-sm font-black truncate">{p.name}</p>
                   <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-400 text-[8px] font-black uppercase">
-                    {categories.find(c => c.id === p.categoryId)?.name || '未分类'}
+                    {categoryMapPSI.get(p.categoryId)?.name || '未分类'}
                   </span>
                 </div>
                 <p className="text-[10px] font-bold text-slate-400 mt-0.5">{p.contact}</p>
@@ -345,8 +348,11 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
   const recordsList = records ?? [];
   const safePurchaseOrderFormSettings = { standardFields: purchaseOrderFormSettings?.standardFields ?? [], customFields: purchaseOrderFormSettings?.customFields ?? [] };
   const safePurchaseBillFormSettings = { standardFields: purchaseBillFormSettings?.standardFields ?? [], customFields: purchaseBillFormSettings?.customFields ?? [] };
+  const productMapPSI = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
+  const warehouseMapPSI = useMemo(() => new Map(warehouses.map(w => [w.id, w])), [warehouses]);
+  const categoryMapPSI = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
   const getUnitName = (productId: string) => {
-    const p = products.find(x => x.id === productId);
+    const p = productMapPSI.get(productId);
     const u = (dictionaries.units ?? []).find(x => x.id === p?.unitId);
     return u?.name ?? 'PCS';
   };
@@ -386,6 +392,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
   const [productFlowType, setProductFlowType] = useState<string>('all');
   const [productFlowWarehouseId, setProductFlowWarehouseId] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebouncedValue(searchTerm);
   /** 调拨单弹窗 */
   const [transferModalOpen, setTransferModalOpen] = useState(false);
   const [transferForm, setTransferForm] = useState<{ fromWarehouseId: string; toWarehouseId: string; transferDate: string; note: string }>({
@@ -520,42 +527,6 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
   /** 待发货详情 - 编辑态：配货仓库（出库仓库） */
   const [pendingShipDetailEditWarehouseId, setPendingShipDetailEditWarehouseId] = useState<string | null>(null);
 
-  // 统一库存计算逻辑（入库-出库+盘点调整）。入库含：采购单、调拨入、生产入库(STOCK_IN)、生产退料(STOCK_RETURN)；出库含：销售单、调拨出、领料发出(STOCK_OUT)。excludeDocNumber 用于编辑盘点单时排除当前单的调整量再算系统数
-  const getStock = (pId: string, whId?: string, excludeDocNumber?: string) => {
-    const insPsi = recordsList.filter(r => (r.type === 'PURCHASE_BILL' || (r.type === 'TRANSFER' && r.toWarehouseId === whId)) && r.productId === pId && (!whId || r.warehouseId === whId || r.toWarehouseId === whId)).reduce((s, r) => s + r.quantity, 0);
-    const insProd = (prodRecords || []).filter((r: any) => (r.type === 'STOCK_IN' || r.type === 'STOCK_RETURN') && r.productId === pId && (!whId || r.warehouseId === whId)).reduce((s, r) => s + (r.quantity ?? 0), 0);
-    const ins = insPsi + insProd;
-    const outsPsi = recordsList.filter(r => (r.type === 'SALES_BILL' || (r.type === 'TRANSFER' && r.fromWarehouseId === whId)) && r.productId === pId && (!whId || r.warehouseId === whId || r.fromWarehouseId === whId)).reduce((s, r) => s + r.quantity, 0);
-    const outsProd = (prodRecords || []).filter((r: any) => r.type === 'STOCK_OUT' && r.productId === pId && (!whId || r.warehouseId === whId)).reduce((s, r) => s + (r.quantity ?? 0), 0);
-    const outs = outsPsi + outsProd;
-    // 底数 0：库存仅由入库、出库、调拨、盘点产生，不设演示初始值
-    const base = 0;
-    const stocktakeAdjust = recordsList.filter(r => r.type === 'STOCKTAKE' && r.productId === pId && (!whId || r.warehouseId === whId) && (r.docNumber !== excludeDocNumber)).reduce((s, r) => s + (r.diffQuantity ?? 0), 0);
-    return base + ins - outs + stocktakeAdjust;
-  };
-
-  const getNullVariantProdStock = useCallback((pId: string, whId?: string) => {
-    const ins = (prodRecords || []).filter((r: any) => (r.type === 'STOCK_IN' || r.type === 'STOCK_RETURN') && r.productId === pId && !r.variantId && (!whId || r.warehouseId === whId)).reduce((s: number, r: any) => s + (r.quantity ?? 0), 0);
-    const outs = (prodRecords || []).filter((r: any) => r.type === 'STOCK_OUT' && r.productId === pId && !r.variantId && (!whId || r.warehouseId === whId)).reduce((s: number, r: any) => s + (r.quantity ?? 0), 0);
-    return Math.max(0, ins - outs);
-  }, [prodRecords]);
-
-  // 按规格（颜色尺码）的库存，仅统计带该 variantId 的出入库与调拨；含生产入库/退料/领料（prodRecords）
-  const getStockVariant = useCallback((pId: string, whId: string | undefined, variantId: string) => {
-    const insPsi = recordsList.filter(r => (r.type === 'PURCHASE_BILL' || (r.type === 'TRANSFER' && r.toWarehouseId === whId)) && r.productId === pId && (r as any).variantId === variantId && (!whId || r.warehouseId === whId || (r as any).toWarehouseId === whId)).reduce((s, r) => s + r.quantity, 0);
-    const insProd = (prodRecords || []).filter((r: any) => (r.type === 'STOCK_IN' || r.type === 'STOCK_RETURN') && r.productId === pId && (r.variantId || '') === variantId && (!whId || r.warehouseId === whId)).reduce((s, r) => s + (r.quantity ?? 0), 0);
-    const ins = insPsi + insProd;
-    const outsPsi = recordsList.filter(r => (r.type === 'SALES_BILL' || (r.type === 'TRANSFER' && r.fromWarehouseId === whId)) && r.productId === pId && (r as any).variantId === variantId && (!whId || r.warehouseId === whId || (r as any).fromWarehouseId === whId)).reduce((s, r) => s + r.quantity, 0);
-    const outsProd = (prodRecords || []).filter((r: any) => r.type === 'STOCK_OUT' && r.productId === pId && (r.variantId || '') === variantId && (!whId || r.warehouseId === whId)).reduce((s, r) => s + (r.quantity ?? 0), 0);
-    const outs = outsPsi + outsProd;
-    return ins - outs;
-  }, [recordsList, prodRecords]);
-
-  // 产品在某仓的盘点调整量之和（有规格产品展示时 = 规格和 + 该值，才能体现盘点结果）
-  const getStocktakeAdjust = useCallback((pId: string, whId: string) => {
-    return recordsList.filter(r => r.type === 'STOCKTAKE' && r.productId === pId && r.warehouseId === whId).reduce((s, r) => s + (r.diffQuantity ?? 0), 0);
-  }, [recordsList]);
-
   // 解析记录时间戳（用于排序和比较）：优先 _savedAtMs（可靠毫秒戳），其次尝试解析 createdAt（ISO 日期）
   const parseRecordTime = useCallback((r: any): number => {
     if (typeof r._savedAtMs === 'number') return r._savedAtMs;
@@ -566,48 +537,127 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
     return 0;
   }, []);
 
-  // 某规格在某仓的展示数量
-  // 逻辑：若该产品在该仓有盘点过且规格记录带 systemQuantity，则以最近一次盘点的实盘数为基准，
-  // 再加上「最近一次盘点之后」发生的出入库和调拨变化，以保证盘后的采购/销售/调拨能正确反映。
-  const getVariantDisplayQty = useCallback((pId: string, whId: string, variantId: string) => {
-    const stVariantRecords = recordsList.filter((r: any) => r.type === 'STOCKTAKE' && r.productId === pId && r.warehouseId === whId && (r.variantId || '') === variantId && typeof r.systemQuantity === 'number');
-    if (stVariantRecords.length === 0) {
-      return getStockVariant(pId, whId, variantId);
+  // ── 库存预聚合索引：一次遍历 recordsList + prodRecords，后续 O(1) 查询 ──
+  type WhBucket = { psiIn: number; psiOut: number; transferIn: number; transferOut: number; prodIn: number; prodOut: number; stocktakeAdj: number; stocktakeByDoc: Map<string, number> };
+  type TimedQty = { time: number; qty: number };
+  type VarBucket = { psiIn: number; psiOut: number; transferIn: number; transferOut: number; prodIn: number; prodOut: number; stocktakeRecords: { time: number; qty: number; sysQty: number; id: string }[]; psiInRecords: TimedQty[]; psiOutRecords: TimedQty[]; prodInRecords: TimedQty[]; prodOutRecords: TimedQty[] };
+
+  const stockIndex = useMemo(() => {
+    const whMap = new Map<string, WhBucket>();
+    const varMap = new Map<string, VarBucket>();
+
+    const getWh = (pId: string, whId: string): WhBucket => {
+      const k = `${pId}::${whId}`;
+      let b = whMap.get(k);
+      if (!b) { b = { psiIn: 0, psiOut: 0, transferIn: 0, transferOut: 0, prodIn: 0, prodOut: 0, stocktakeAdj: 0, stocktakeByDoc: new Map() }; whMap.set(k, b); }
+      return b;
+    };
+    const getVar = (pId: string, whId: string, vId: string): VarBucket => {
+      const k = `${pId}::${whId}::${vId}`;
+      let b = varMap.get(k);
+      if (!b) { b = { psiIn: 0, psiOut: 0, transferIn: 0, transferOut: 0, prodIn: 0, prodOut: 0, stocktakeRecords: [], psiInRecords: [], psiOutRecords: [], prodInRecords: [], prodOutRecords: [] }; varMap.set(k, b); }
+      return b;
+    };
+    const pTime = (r: any): number => {
+      if (typeof r._savedAtMs === 'number') return r._savedAtMs;
+      for (const key of ['timestamp', 'createdAt']) { const t = r[key]; if (t) { const d = new Date(t); if (!isNaN(d.getTime())) return d.getTime(); } }
+      return 0;
+    };
+
+    for (const r of recordsList) {
+      const pId = r.productId;
+      if (!pId) continue;
+      const wh = r.warehouseId || '';
+      const vId = (r as any).variantId || '';
+      const qty = Number(r.quantity) || 0;
+      const time = pTime(r);
+
+      if (r.type === 'PURCHASE_BILL') {
+        if (wh) { const wb = getWh(pId, wh); wb.psiIn += qty; if (vId) { const vb = getVar(pId, wh, vId); vb.psiIn += qty; vb.psiInRecords.push({ time, qty }); } }
+      } else if (r.type === 'SALES_BILL') {
+        if (wh) { const wb = getWh(pId, wh); wb.psiOut += qty; if (vId) { const vb = getVar(pId, wh, vId); vb.psiOut += qty; vb.psiOutRecords.push({ time, qty }); } }
+      } else if (r.type === 'TRANSFER') {
+        const toWh = (r as any).toWarehouseId as string | undefined;
+        const fromWh = (r as any).fromWarehouseId as string | undefined;
+        if (toWh) { const wb = getWh(pId, toWh); wb.transferIn += qty; if (vId) { const vb = getVar(pId, toWh, vId); vb.transferIn += qty; vb.psiInRecords.push({ time, qty }); } }
+        if (fromWh) { const wb = getWh(pId, fromWh); wb.transferOut += qty; if (vId) { const vb = getVar(pId, fromWh, vId); vb.transferOut += qty; vb.psiOutRecords.push({ time, qty }); } }
+      } else if (r.type === 'STOCKTAKE') {
+        if (wh) {
+          const wb = getWh(pId, wh);
+          const diff = Number(r.diffQuantity) || 0;
+          wb.stocktakeAdj += diff;
+          const doc = r.docNumber || '';
+          wb.stocktakeByDoc.set(doc, (wb.stocktakeByDoc.get(doc) || 0) + diff);
+          if (vId && typeof (r as any).systemQuantity === 'number') {
+            getVar(pId, wh, vId).stocktakeRecords.push({ time, qty, sysQty: (r as any).systemQuantity, id: r.id });
+          }
+        }
+      }
     }
-    // 找最近一次盘点的时间和实盘数
-    const sorted = [...stVariantRecords].sort((a: any, b: any) => parseRecordTime(b) - parseRecordTime(a));
-    const latestRec = sorted[0] as any;
-    const latestQty: number = latestRec.quantity ?? 0;
-    const latestTime = parseRecordTime(latestRec);
-    // 最近一次盘点之后（>=，含同时刻的出入库）的入库和调拨入；含生产入库、生产退料
-    const insAfterPsi = recordsList.filter(r =>
-      (r.type === 'PURCHASE_BILL' || (r.type === 'TRANSFER' && (r as any).toWarehouseId === whId)) &&
-      r.productId === pId && (r as any).variantId === variantId &&
-      (!whId || r.warehouseId === whId || (r as any).toWarehouseId === whId) &&
-      parseRecordTime(r) >= latestTime
-    ).reduce((s, r) => s + r.quantity, 0);
-    const insAfterProd = (prodRecords || []).filter((r: any) =>
-      (r.type === 'STOCK_IN' || r.type === 'STOCK_RETURN') && r.productId === pId && (r.variantId || '') === variantId &&
-      (!whId || r.warehouseId === whId) && parseRecordTime(r) >= latestTime
-    ).reduce((s: number, r: any) => s + (r.quantity ?? 0), 0);
-    const insAfter = insAfterPsi + insAfterProd;
-    // 最近一次盘点之后（>=）的出库和调拨出；含领料发出
-    const outsAfterPsi = recordsList.filter(r =>
-      (r.type === 'SALES_BILL' || (r.type === 'TRANSFER' && (r as any).fromWarehouseId === whId)) &&
-      r.productId === pId && (r as any).variantId === variantId &&
-      (!whId || r.warehouseId === whId || (r as any).fromWarehouseId === whId) &&
-      parseRecordTime(r) >= latestTime
-    ).reduce((s, r) => s + r.quantity, 0);
-    const outsAfterProd = (prodRecords || []).filter((r: any) =>
-      r.type === 'STOCK_OUT' && r.productId === pId && (r.variantId || '') === variantId &&
-      (!whId || r.warehouseId === whId) && parseRecordTime(r) >= latestTime
-    ).reduce((s: number, r: any) => s + (r.quantity ?? 0), 0);
-    const outsAfter = outsAfterPsi + outsAfterProd;
-    // 最近一次盘点之后若又再次盘点（排除最新那条自身），计入后续盘点的规格级调整量
-    const adjustAfter = stVariantRecords.filter((r: any) => r.id !== latestRec.id && parseRecordTime(r) >= latestTime)
-      .reduce((s: number, r: any) => s + ((r.quantity ?? 0) - (r.systemQuantity ?? 0)), 0);
-    return latestQty + insAfter - outsAfter + adjustAfter;
-  }, [recordsList, prodRecords, getStockVariant, parseRecordTime]);
+
+    for (const r of (prodRecords || []) as any[]) {
+      const pId = r.productId;
+      if (!pId) continue;
+      const wh = r.warehouseId || '';
+      const vId = r.variantId || '';
+      const qty = Number(r.quantity) || 0;
+      const time = pTime(r);
+
+      if (r.type === 'STOCK_IN' || r.type === 'STOCK_RETURN') {
+        if (wh) { getWh(pId, wh).prodIn += qty; const vb = getVar(pId, wh, vId); vb.prodIn += qty; vb.prodInRecords.push({ time, qty }); }
+      } else if (r.type === 'STOCK_OUT') {
+        if (wh) { getWh(pId, wh).prodOut += qty; const vb = getVar(pId, wh, vId); vb.prodOut += qty; vb.prodOutRecords.push({ time, qty }); }
+      }
+    }
+
+    return { whMap, varMap };
+  }, [recordsList, prodRecords]);
+
+  // ── 库存查询函数（O(1) 查表） ──
+  const getStock = useCallback((pId: string, whId?: string, excludeDocNumber?: string) => {
+    if (!whId) return 0;
+    const b = stockIndex.whMap.get(`${pId}::${whId}`);
+    if (!b) return 0;
+    const ins = b.psiIn + b.transferIn + b.prodIn;
+    const outs = b.psiOut + b.transferOut + b.prodOut;
+    const adj = b.stocktakeAdj - (excludeDocNumber ? (b.stocktakeByDoc.get(excludeDocNumber) || 0) : 0);
+    return ins - outs + adj;
+  }, [stockIndex]);
+
+  const getStockVariant = useCallback((pId: string, whId: string | undefined, variantId: string) => {
+    if (!whId) return 0;
+    const vb = stockIndex.varMap.get(`${pId}::${whId}::${variantId}`);
+    if (!vb) return 0;
+    return (vb.psiIn + vb.transferIn + vb.prodIn) - (vb.psiOut + vb.transferOut + vb.prodOut);
+  }, [stockIndex]);
+
+  const getNullVariantProdStock = useCallback((pId: string, whId?: string) => {
+    if (!whId) return 0;
+    const vb = stockIndex.varMap.get(`${pId}::${whId}::`);
+    if (!vb) return 0;
+    return Math.max(0, vb.prodIn - vb.prodOut);
+  }, [stockIndex]);
+
+  const getStocktakeAdjust = useCallback((pId: string, whId: string) => {
+    const b = stockIndex.whMap.get(`${pId}::${whId}`);
+    return b ? b.stocktakeAdj : 0;
+  }, [stockIndex]);
+
+  const getVariantDisplayQty = useCallback((pId: string, whId: string, variantId: string) => {
+    const vb = stockIndex.varMap.get(`${pId}::${whId}::${variantId}`);
+    if (!vb || vb.stocktakeRecords.length === 0) return getStockVariant(pId, whId, variantId);
+    const latest = vb.stocktakeRecords.reduce((best, r) => r.time > best.time ? r : best);
+    const latestTime = latest.time;
+    const insAfter =
+      vb.psiInRecords.filter(r => r.time >= latestTime).reduce((s, r) => s + r.qty, 0) +
+      vb.prodInRecords.filter(r => r.time >= latestTime).reduce((s, r) => s + r.qty, 0);
+    const outsAfter =
+      vb.psiOutRecords.filter(r => r.time >= latestTime).reduce((s, r) => s + r.qty, 0) +
+      vb.prodOutRecords.filter(r => r.time >= latestTime).reduce((s, r) => s + r.qty, 0);
+    const adjustAfter = vb.stocktakeRecords.filter(r => r.id !== latest.id && r.time >= latestTime)
+      .reduce((s, r) => s + (r.qty - r.sysQty), 0);
+    return latest.qty + insAfter - outsAfter + adjustAfter;
+  }, [stockIndex, getStockVariant]);
   const generatePODocNumber = (): string => {
     const partnerCode = (form.partnerId || partners.find(p => p.name === form.partner)?.id || '0').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || '0';
     const existingForPartner = recordsList.filter((r: any) =>
@@ -1447,7 +1497,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
       if (!firstRecordIndexByProductId.has(r.productId)) firstRecordIndexByProductId.set(r.productId, idx);
     });
     byProductId.forEach((actualTotal, productId) => {
-      const product = products.find(p => p.id === productId);
+      const product = productMapPSI.get(productId);
       const hasVariants = (product?.variants?.length ?? 0) > 0;
       const systemQty = hasVariants
         ? (product!.variants ?? []).reduce((s, v) => s + getVariantDisplayQty(productId, warehouseId, v.id), 0)
@@ -1487,9 +1537,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
       groups[key].records.push(r);
     });
     return Object.entries(groups).map(([groupKey, g]) => {
-      const product = products.find(p => p.id === g.productId);
+      const product = productMapPSI.get(g.productId);
       const first = g.records[0];
-      const warehouse = warehouses.find(w => w.id === (first.allocationWarehouseId || first.warehouseId));
+      const warehouse = warehouseMapPSI.get((first.allocationWarehouseId || first.warehouseId));
       const totalQuantity = g.records.reduce((s, r) => s + ((r.allocatedQuantity ?? 0) - (r.shippedQuantity ?? 0)), 0);
       return {
         groupKey,
@@ -1564,7 +1614,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
 
   const filteredProductStocks = useMemo(() => {
     const allStocks = products.map(p => {
-      const category = categories.find(c => c.id === p.categoryId);
+      const category = categoryMapPSI.get(p.categoryId);
       const hasVariants = (p.variants?.length ?? 0) > 0;
       // 有规格产品：各仓数量 = 各规格“展示数量”之和（展示数量 = 最近盘点实盘数，无盘点则=出入库），明细与行结存一致
       const distribution = warehouses.map(wh => ({
@@ -1594,10 +1644,13 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
         : undefined) as { variantId: string; colorId: string; sizeId: string; colorName: string; sizeName: string; totalQty: number; perWarehouse: { warehouseId: string; qty: number }[] }[] | undefined;
       return { ...p, total, distribution, categoryName: category?.name || '未分类', variantBreakdown };
     });
-    if (!searchTerm.trim()) return allStocks;
-    const term = searchTerm.toLowerCase();
+    if (!debouncedSearchTerm.trim()) return allStocks;
+    const term = debouncedSearchTerm.toLowerCase();
     return allStocks.filter(ps => ps.name.toLowerCase().includes(term) || ps.sku.toLowerCase().includes(term) || ps.categoryName.toLowerCase().includes(term));
-  }, [products, warehouses, recordsList, categories, searchTerm, getStockVariant, getVariantDisplayQty, getNullVariantProdStock, dictionaries]);
+  }, [products, warehouses, recordsList, categories, debouncedSearchTerm, getStockVariant, getVariantDisplayQty, getNullVariantProdStock, dictionaries]);
+
+  const nonZeroStocks = useMemo(() => filteredProductStocks.filter(p => p.total !== 0), [filteredProductStocks]);
+  const pStocks = useProgressiveList(nonZeroStocks);
 
   // 仓库流水：与仓库相关的单据类型（STOCK_IN、STOCK_RETURN、STOCK_OUT 来自 prodRecords，其余来自 records）
   const WAREHOUSE_FLOW_TYPES = ['PURCHASE_BILL', 'SALES_BILL', 'TRANSFER', 'STOCKTAKE', 'STOCK_IN', 'STOCK_RETURN', 'STOCK_OUT'] as const;
@@ -1619,7 +1672,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
   const warehouseFlowRows = useMemo(() => {
     const list = recordsList.filter(r => WAREHOUSE_FLOW_TYPES.includes(r.type as any)) as any[];
     const psiRows = list.map(r => {
-      const product = products.find(p => p.id === r.productId);
+      const product = productMapPSI.get(r.productId);
       const dateStr = toFlowDateStr((r.createdAt || r.timestamp || '').toString()) || (r.createdAt || r.timestamp || '').toString().slice(0, 10);
       const dateOnly = dateStr;
       const displayDate = dateOnly || (r.timestamp || '—');
@@ -1627,10 +1680,10 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
       const inboundWarehouseId = r.type === 'TRANSFER' ? r.toWarehouseId : r.warehouseId;
       const outboundWarehouseId = r.type === 'TRANSFER' ? r.fromWarehouseId : (r.type === 'SALES_BILL' ? r.warehouseId : undefined);
       const warehouseName = r.type === 'SALES_BILL'
-        ? (warehouses.find(w => w.id === r.warehouseId)?.name ?? '—')
+        ? (warehouseMapPSI.get(r.warehouseId)?.name ?? '—')
         : (r.type === 'TRANSFER'
-          ? (r.toWarehouseId ? warehouses.find(w => w.id === r.toWarehouseId)?.name ?? '—' : '—')
-          : (warehouses.find(w => w.id === r.warehouseId)?.name ?? '—'));
+          ? (r.toWarehouseId ? warehouseMapPSI.get(r.toWarehouseId)?.name ?? '—' : '—')
+          : (warehouseMapPSI.get(r.warehouseId)?.name ?? '—'));
       const qty = r.quantity ?? 0;
       const isSalesReturn = r.type === 'SALES_BILL' && qty < 0;
       return {
@@ -1653,7 +1706,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
     });
     const stockInList = (prodRecords || []).filter((r: any) => r.type === 'STOCK_IN') as any[];
     const stockInRows = stockInList.map(r => {
-      const product = products.find(p => p.id === r.productId);
+      const product = productMapPSI.get(r.productId);
       const order = ordersList.find((o: { id: string; orderNumber?: string }) => o.id === r.orderId);
       const dateStr = toFlowDateStr((r.timestamp || '').toString()) || (r.timestamp || '').toString().slice(0, 10);
       const displayDate = dateStr || '—';
@@ -1670,7 +1723,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
         productSku: product?.sku ?? '—',
         quantity: r.quantity ?? 0,
         warehouseId: r.warehouseId,
-        warehouseName: warehouses.find(w => w.id === r.warehouseId)?.name ?? '—',
+        warehouseName: warehouseMapPSI.get(r.warehouseId)?.name ?? '—',
         isOutbound: false,
         partner: '—',
         record: r
@@ -1678,7 +1731,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
     });
     const stockReturnList = (prodRecords || []).filter((r: any) => r.type === 'STOCK_RETURN') as any[];
     const stockReturnRows = stockReturnList.map(r => {
-      const product = products.find(p => p.id === r.productId);
+      const product = productMapPSI.get(r.productId);
       const order = ordersList.find((o: { id: string; orderNumber?: string }) => o.id === r.orderId);
       const dateStr = toFlowDateStr((r.timestamp || '').toString()) || (r.timestamp || '').toString().slice(0, 10);
       const displayDate = dateStr || '—';
@@ -1695,7 +1748,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
         productSku: product?.sku ?? '—',
         quantity: r.quantity ?? 0,
         warehouseId: r.warehouseId,
-        warehouseName: warehouses.find(w => w.id === r.warehouseId)?.name ?? '—',
+        warehouseName: warehouseMapPSI.get(r.warehouseId)?.name ?? '—',
         isOutbound: false,
         partner: '—',
         record: r
@@ -1703,7 +1756,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
     });
     const stockOutList = (prodRecords || []).filter((r: any) => r.type === 'STOCK_OUT') as any[];
     const stockOutRows = stockOutList.map(r => {
-      const product = products.find(p => p.id === r.productId);
+      const product = productMapPSI.get(r.productId);
       const order = ordersList.find((o: { id: string; orderNumber?: string }) => o.id === r.orderId);
       const dateStr = toFlowDateStr((r.timestamp || '').toString()) || (r.timestamp || '').toString().slice(0, 10);
       const displayDate = dateStr || '—';
@@ -1720,7 +1773,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
         productSku: product?.sku ?? '—',
         quantity: r.quantity ?? 0,
         warehouseId: r.warehouseId,
-        warehouseName: warehouses.find(w => w.id === r.warehouseId)?.name ?? '—',
+        warehouseName: warehouseMapPSI.get(r.warehouseId)?.name ?? '—',
         isOutbound: true,
         partner: '—',
         record: r
@@ -1808,9 +1861,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
         })
         .map(ps => {
           const d = ps.distribution.find((x: { warehouseId: string }) => x.warehouseId === wh.id);
-          const product = products.find(p => p.id === ps.id);
           const hasVariants = (ps as any).variantBreakdown != null;
-          // 有规格时：该仓下各规格数量（不筛掉 0，以便有规格就显示展开键）；结存数量 = 各规格之和，与明细一致
           const variantBreakdown = hasVariants
             ? ((ps as any).variantBreakdown as { variantId: string; colorId: string; sizeId: string; colorName: string; sizeName: string; perWarehouse: { warehouseId: string; qty: number }[] }[]).map((vb: { variantId: string; colorId: string; sizeId: string; colorName: string; sizeName: string; perWarehouse: { warehouseId: string; qty: number }[] }) => ({
                 variantId: vb.variantId,
@@ -1821,14 +1872,13 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                 qty: vb.perWarehouse.find((pw: { warehouseId: string }) => pw.warehouseId === wh.id)?.qty ?? 0
               }))
             : undefined;
-          // 行结存 = 该仓数量（有规格时 distribution 已含规格和+盘点调整，与按物料一致）
           const qtyForLine = d?.qty ?? 0;
-          return { productId: ps.id, name: ps.name, sku: ps.sku, categoryName: ps.categoryName, qty: qtyForLine, imageUrl: product?.imageUrl, variantBreakdown };
+          return { productId: ps.id, name: ps.name, sku: ps.sku, categoryName: ps.categoryName, qty: qtyForLine, imageUrl: ps.imageUrl, variantBreakdown };
         });
       const totalQty = lines.reduce((s, l) => s + l.qty, 0);
       return { warehouseId: wh.id, warehouseName: wh.name, code: wh.code, category: wh.category, location: wh.location, contact: wh.contact, totalQty, skuCount: lines.length, lines };
     });
-  }, [warehouses, filteredProductStocks, products]);
+  }, [warehouses, filteredProductStocks]);
 
   return (
     <div className="space-y-6">
@@ -2064,7 +2114,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
       {/* 待发货清单 - 详情弹窗（数量明细、编辑、删除，参考报工流水详情） */}
       {type === 'SALES_ORDER' && pendingShipDetailGroup && (() => {
         const g = pendingShipDetailGroup;
-        const product = products.find(p => p.id === g.productId);
+        const product = productMapPSI.get(g.productId);
         const hasVariants = g.records.some((r: any) => r.variantId) && (product?.variants?.length ?? 0) > 0;
         const unitName = getUnitName(g.productId);
         const isEditing = pendingShipDetailEdit !== null;
@@ -2364,7 +2414,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
               </div>
               <div className="space-y-4">
                 {purchaseOrderItems.map((line) => {
-                  const prod = products.find(p => p.id === line.productId);
+                  const prod = productMapPSI.get(line.productId);
                   const hasVariants = prod?.variants && prod.variants.length > 0;
                   const lineQty = hasVariants
                     ? Object.values(line.variantQuantities || {}).reduce((s, q) => s + q, 0)
@@ -2387,7 +2437,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                     <div className="flex flex-wrap items-end gap-4">
                       <div className="flex-1 min-w-[200px]">
                         <ProductSelector label="目标采购品项 (支持搜索与分类筛选)" options={products} categories={categories} value={line.productId} onChange={(id) => {
-                          const p = products.find(x => x.id === id);
+                          const p = productMapPSI.get(id);
                           const hv = p?.variants && p.variants.length > 0;
                           updatePurchaseOrderItem(line.id, {
                             productId: id,
@@ -2609,7 +2659,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
               </div>
               <div className="space-y-4">
                 {salesOrderItems.map((line) => {
-                  const prod = products.find(p => p.id === line.productId);
+                  const prod = productMapPSI.get(line.productId);
                   const hasVariants = prod?.variants && prod.variants.length > 0;
                   const lineQty = hasVariants
                     ? Object.values(line.variantQuantities || {}).reduce((s, q) => s + q, 0)
@@ -2632,7 +2682,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                           categories={categories}
                           value={line.productId}
                           onChange={(id) => {
-                            const p = products.find(x => x.id === id);
+                            const p = productMapPSI.get(id);
                             const hv = p?.variants && p.variants.length > 0;
                             updateSalesOrderItem(line.id, {
                               productId: id,
@@ -2838,7 +2888,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
               </div>
               <div className="space-y-4">
                 {salesBillItems.map((line) => {
-                  const prod = products.find(p => p.id === line.productId);
+                  const prod = productMapPSI.get(line.productId);
                   const hasVariants = prod?.variants && prod.variants.length > 0;
                   const lineQty = hasVariants
                     ? Object.values(line.variantQuantities || {}).reduce((s, q) => s + q, 0)
@@ -2861,7 +2911,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                           categories={categories}
                           value={line.productId}
                           onChange={(id) => {
-                            const p = products.find(x => x.id === id);
+                            const p = productMapPSI.get(id);
                             const hv = p?.variants && p.variants.length > 0;
                             updateSalesBillItem(line.id, {
                               productId: id,
@@ -3112,7 +3162,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                   </div>
                   <div className="space-y-4">
                     {purchaseBillItems.map((line) => {
-                      const pbProd = products.find(p => p.id === line.productId);
+                      const pbProd = productMapPSI.get(line.productId);
                       const pbHasVariants = pbProd?.variants && pbProd.variants.length > 0;
                       const pbLineQty = pbHasVariants
                         ? Object.values(line.variantQuantities || {}).reduce((s, q) => s + q, 0)
@@ -3130,7 +3180,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                         <div className="flex flex-wrap items-end gap-4">
                           <div className="flex-1 min-w-[200px]">
                             <ProductSelector label="目标采购品项 (支持搜索与分类筛选)" options={products} categories={categories} value={line.productId} onChange={(id) => {
-                              const p = products.find(x => x.id === id);
+                              const p = productMapPSI.get(id);
                               const hv = p?.variants && p.variants.length > 0;
                               updatePurchaseBillItem(line.id, {
                                 productId: id,
@@ -3159,7 +3209,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                   {pbLineAmount.toFixed(2)}
                                 </div>
                               </div>
-                              {pbProd && categories.find(c => c.id === pbProd.categoryId)?.hasBatchManagement && (
+                              {pbProd && categoryMapPSI.get(pbProd.categoryId)?.hasBatchManagement && (
                                 <div className="w-28 space-y-1">
                                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">批次</label>
                                   <input type="text" value={line.batch || ''} onChange={e => updatePurchaseBillItem(line.id, { batch: e.target.value.trim() || undefined })} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="批号" />
@@ -3182,7 +3232,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                   {pbLineAmount.toFixed(2)}
                                 </div>
                               </div>
-                              {pbProd && categories.find(c => c.id === pbProd.categoryId)?.hasBatchManagement && (
+                              {pbProd && categoryMapPSI.get(pbProd.categoryId)?.hasBatchManagement && (
                                 <div className="w-28 space-y-1">
                                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">批次</label>
                                   <input type="text" value={line.batch || ''} onChange={e => updatePurchaseBillItem(line.id, { batch: e.target.value.trim() || undefined })} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="批号" />
@@ -3330,8 +3380,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                         </thead>
                         <tbody className="divide-y divide-slate-50">
                           {availableItemsFromSelectedPOs.map((item) => {
-                            const product = products.find(p => p.id === item.productId);
-                            const prodCategory = product && categories.find(c => c.id === product.categoryId);
+                            const product = productMapPSI.get(item.productId);
+                            const prodCategory = product && categoryMapPSI.get(product.categoryId);
                             const hasBatch = prodCategory?.hasBatchManagement;
                             const isChecked = selectedPOItemIds.includes(item.id);
                             const qty = selectedPOItemQuantities[item.id] ?? item.remainingQty;
@@ -3645,7 +3695,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                           <tr>
                                             <td colSpan={6} className="px-4 py-3 bg-slate-50/60 border-b border-slate-100">
                                               <div className="space-y-3 pl-4">
-                                                {sortedColorEntries(groupedByColor, products.find(p => p.id === line.productId)?.colorIds).map(([colorId, { colorName, items }]) => {
+                                                {sortedColorEntries(groupedByColor, productMapPSI.get(line.productId)?.colorIds).map(([colorId, { colorName, items }]) => {
                                                   const color = dictionaries?.colors?.find(c => c.id === colorId);
                                                   return (
                                                   <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white rounded-xl border border-slate-100">
@@ -3694,13 +3744,13 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                    )
                  ) : (
                    <div className="overflow-x-auto">
-                     {filteredProductStocks.filter(p => p.total !== 0).length === 0 ? (
+                     {nonZeroStocks.length === 0 ? (
                        <div className="py-16 text-center text-slate-400">
                          <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
                          <p className="text-sm font-bold">暂无库存数据</p>
                          <p className="text-xs mt-1">通过采购入库、生产入库等业务产生库存后在此展示</p>
                        </div>
-                     ) : (
+                     ) : (<>
                       <table className="w-full text-left">
                         <thead>
                           <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 border-b border-slate-200">
@@ -3716,7 +3766,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                         {filteredProductStocks.filter(p => p.total !== 0).map(ps => {
+                         {pStocks.visibleItems.map(ps => {
                             const hasVariants = (ps as any).variantBreakdown?.length > 0;
                             const isExpanded = expandedProductIdByMaterial === ps.id;
                             const groupedByColor: Record<string, { colorName: string; items: { sizeName: string; totalQty: number }[] }> = {};
@@ -3778,7 +3828,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                   <tr>
                                     <td colSpan={colSpan} className="px-4 py-3 bg-slate-50/60 border-b border-slate-100">
                                       <div className="space-y-3 pl-4">
-                                        {sortedColorEntries(groupedByColor, products.find(p => p.id === ps.id)?.colorIds).map(([colorId, { colorName, items }]) => {
+                                        {sortedColorEntries(groupedByColor, productMapPSI.get(ps.id)?.colorIds).map(([colorId, { colorName, items }]) => {
                                           const color = dictionaries?.colors?.find(c => c.id === colorId);
                                           return (
                                             <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white rounded-xl border border-slate-100">
@@ -3808,7 +3858,14 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                           })}
                          </tbody>
                        </table>
-                     )}
+                       {pStocks.hasMore && (
+                         <div className="flex items-center justify-center gap-3 py-3 bg-slate-50/80 border-t border-slate-100">
+                           <span className="text-xs text-slate-400">已显示 {pStocks.visibleItems.length} / {pStocks.total} 条</span>
+                           <button type="button" onClick={pStocks.showMore} className="px-4 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all">加载更多</button>
+                           <button type="button" onClick={pStocks.showAll} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700 transition-all">全部显示</button>
+                         </div>
+                       )}
+                     </>)}
                    </div>
                  )}
                </div>
@@ -3861,7 +3918,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                              {Object.entries(stocktakeOrdersGrouped).map(([docNum, docItems]) => {
                                const first = docItems[0];
                                const totalQty = docItems.reduce((s: number, i: any) => s + (i.quantity ?? 0), 0);
-                               const whName = warehouses.find(w => w.id === first.warehouseId)?.name ?? '—';
+                               const whName = warehouseMapPSI.get(first.warehouseId)?.name ?? '—';
                                return (
                                  <div key={docNum} className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors">
                                    <div className="flex items-center gap-4">
@@ -3885,7 +3942,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                            const docItems = stocktakeOrdersGrouped[stocktakeDetailDocNumber];
                            if (!docItems || docItems.length === 0) return <p className="text-slate-500 py-8">未找到该盘点单</p>;
                            const first = docItems[0];
-                           const whName = warehouses.find(w => w.id === first.warehouseId)?.name ?? '—';
+                           const whName = warehouseMapPSI.get(first.warehouseId)?.name ?? '—';
                            const byLineGroup = new Map<string, any[]>();
                            docItems.forEach((r: any) => {
                              const gid = r.lineGroupId ?? r.id;
@@ -3941,7 +3998,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                      <tbody>
                                        {Array.from(byLineGroup.entries()).map(([gid, grp]) => {
                                          const firstLine = grp[0];
-                                         const product = products.find(p => p.id === firstLine.productId);
+                                         const product = productMapPSI.get(firstLine.productId);
                                          const whId = first.warehouseId;
                                          const qty = grp.reduce((s: number, r: any) => s + (r.quantity ?? 0), 0);
                                          const hasVariants = (product?.variants?.length ?? 0) > 0;
@@ -4071,8 +4128,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                              {Object.entries(transferOrdersGrouped).map(([docNum, docItems]) => {
                                const first = docItems[0];
                                const totalQty = docItems.reduce((s: number, i: any) => s + (i.quantity ?? 0), 0);
-                               const fromName = warehouses.find(w => w.id === first.fromWarehouseId)?.name ?? '—';
-                               const toName = warehouses.find(w => w.id === first.toWarehouseId)?.name ?? '—';
+                               const fromName = warehouseMapPSI.get(first.fromWarehouseId)?.name ?? '—';
+                               const toName = warehouseMapPSI.get(first.toWarehouseId)?.name ?? '—';
                                return (
                                  <div key={docNum} className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors">
                                    <div className="flex items-center gap-4">
@@ -4102,8 +4159,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                            const docItems = transferOrdersGrouped[transferDetailDocNumber];
                            if (!docItems || docItems.length === 0) return <p className="text-slate-500 py-8">未找到该调拨单</p>;
                            const first = docItems[0];
-                           const fromName = warehouses.find(w => w.id === first.fromWarehouseId)?.name ?? '—';
-                           const toName = warehouses.find(w => w.id === first.toWarehouseId)?.name ?? '—';
+                           const fromName = warehouseMapPSI.get(first.fromWarehouseId)?.name ?? '—';
+                           const toName = warehouseMapPSI.get(first.toWarehouseId)?.name ?? '—';
                            const byLineGroup = new Map<string, any[]>();
                            docItems.forEach((r: any) => {
                              const gid = r.lineGroupId ?? r.id;
@@ -4160,7 +4217,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                      <tbody>
                                        {Array.from(byLineGroup.entries()).map(([gid, grp]) => {
                                          const firstLine = grp[0];
-                                         const product = products.find(p => p.id === firstLine.productId);
+                                         const product = productMapPSI.get(firstLine.productId);
                                          const qty = grp.reduce((s: number, r: any) => s + (r.quantity ?? 0), 0);
                                          return (
                                            <tr key={gid} className="border-b border-slate-100 last:border-0"><td className="px-4 py-3 font-bold text-slate-800">{product?.name ?? '—'} <span className="text-slate-400 font-normal text-xs">{product?.sku ?? ''}</span></td><td className="px-4 py-3 text-right font-black text-indigo-600">{qty} {product ? getUnitName(product.id) : 'PCS'}</td></tr>
@@ -4241,7 +4298,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                          </div>
                          <div className="space-y-3">
                            {transferItems.map((line) => {
-                             const trProd = products.find(p => p.id === line.productId);
+                             const trProd = productMapPSI.get(line.productId);
                              const trHasVariants = trProd?.variants && trProd.variants.length > 0;
                              const trLineQty = trHasVariants
                                ? Object.values(line.variantQuantities || {}).reduce((s, q) => s + q, 0)
@@ -4259,7 +4316,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                  <div className="flex flex-wrap items-end gap-3">
                                    <div className="flex-1 min-w-[200px] max-w-md">
                                      <ProductSelector label={isLineEmpty ? '选择产品' : '产品'} options={products} categories={categories} value={line.productId} onChange={(id) => {
-                                       const p = products.find(x => x.id === id);
+                                       const p = productMapPSI.get(id);
                                        const hv = p?.variants && p.variants.length > 0;
                                        updateTransferItem(line.id, { productId: id, quantity: hv ? undefined : 0, variantQuantities: hv ? {} : undefined });
                                      }} />
@@ -4403,7 +4460,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                          <p className="text-xs text-slate-500 mb-3">每行会显示当前「系统数量」供参考，录入实盘数量保存后将按差异调整库存。</p>
                          <div className="space-y-3">
                            {stocktakeItems.map((line) => {
-                             const stProd = products.find(p => p.id === line.productId);
+                             const stProd = productMapPSI.get(line.productId);
                              const stHasVariants = stProd?.variants && stProd.variants.length > 0;
                              const stLineQty = stHasVariants
                                ? Object.values(line.variantQuantities || {}).reduce((s, q) => s + q, 0)
@@ -4427,7 +4484,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                  <div className="flex flex-wrap items-end gap-3">
                                    <div className="flex-1 min-w-[200px] max-w-md">
                                      <ProductSelector label={isLineEmpty ? '选择产品' : '产品'} options={products} categories={categories} value={line.productId} onChange={(id) => {
-                                       const p = products.find(x => x.id === id);
+                                       const p = productMapPSI.get(id);
                                        const hv = p?.variants && p.variants.length > 0;
                                        updateStocktakeItem(line.id, { productId: id, quantity: hv ? undefined : 0, variantQuantities: hv ? {} : undefined });
                                      }} />
@@ -4587,8 +4644,10 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                          <p className="text-slate-500 text-center py-12">暂无仓库流水记录</p>
                        ) : (
                          <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                           <table className="w-full text-left text-sm">
-                            <thead>
+                           <TableVirtuoso
+                             style={{ height: Math.min(filteredWarehouseFlowRows.length * 48 + 48, 520) }}
+                             data={filteredWarehouseFlowRows}
+                             fixedHeaderContent={() => (
                               <tr className="bg-slate-50 border-b border-slate-200">
                                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">日期时间</th>
                                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">类型</th>
@@ -4598,10 +4657,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">数量</th>
                                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap w-24">操作</th>
                               </tr>
-                            </thead>
-                            <tbody>
-                              {filteredWarehouseFlowRows.map(row => (
-                                <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                             )}
+                             itemContent={(_idx, row) => (
+                               <>
                                   <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{row.displayDateTime ?? row.dateStr}</td>
                                   <td className="px-4 py-3"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">{row.typeLabel}</span></td>
                                   <td className="px-4 py-3 text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">{row.docNumber}</td>
@@ -4613,10 +4671,10 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                        <FileText className="w-3.5 h-3.5" /> 详情
                                      </button>
                                    </td>
-                                 </tr>
-                               ))}
-                             </tbody>
-                           </table>
+                               </>
+                             )}
+                             components={{ Table: (props) => <table {...props} className="w-full text-left text-sm" />, TableRow: ({ item: _item, ...props }) => <tr {...props} className="border-b border-slate-100 hover:bg-slate-50/50" /> }}
+                           />
                          </div>
                        )}
                      </div>
@@ -4792,12 +4850,12 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                  if (docRecords.length === 0) return null;
                  const first = docRecords[0];
                  const mainInfo = isStockIn
-                   ? { docNumber: first.docNo || (ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber ? `工单入库-${ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber}` : first.id), createdAt: first.timestamp || '—', partner: '—', warehouseId: first.warehouseId, warehouseName: warehouses.find(w => w.id === first.warehouseId)?.name ?? '—', note: first.reason ?? '—', fromWarehouseId: undefined, toWarehouseId: undefined, orderNumber: ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber ?? '—' }
+                   ? { docNumber: first.docNo || (ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber ? `工单入库-${ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber}` : first.id), createdAt: first.timestamp || '—', partner: '—', warehouseId: first.warehouseId, warehouseName: warehouseMapPSI.get(first.warehouseId)?.name ?? '—', note: first.reason ?? '—', fromWarehouseId: undefined, toWarehouseId: undefined, orderNumber: ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber ?? '—' }
                    : isStockReturn
-                   ? { docNumber: first.docNo || (ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber ? `退料-${ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber}` : first.id), createdAt: first.timestamp || '—', partner: '—', warehouseId: first.warehouseId, warehouseName: warehouses.find(w => w.id === first.warehouseId)?.name ?? '—', note: first.reason ?? '—', fromWarehouseId: undefined, toWarehouseId: undefined, orderNumber: ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber ?? '—' }
+                   ? { docNumber: first.docNo || (ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber ? `退料-${ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber}` : first.id), createdAt: first.timestamp || '—', partner: '—', warehouseId: first.warehouseId, warehouseName: warehouseMapPSI.get(first.warehouseId)?.name ?? '—', note: first.reason ?? '—', fromWarehouseId: undefined, toWarehouseId: undefined, orderNumber: ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber ?? '—' }
                    : isStockOut
-                   ? { docNumber: first.docNo || (ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber ? `领料-${ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber}` : first.id), createdAt: first.timestamp || '—', partner: '—', warehouseId: first.warehouseId, warehouseName: warehouses.find(w => w.id === first.warehouseId)?.name ?? '—', note: first.reason ?? '—', fromWarehouseId: undefined, toWarehouseId: undefined, orderNumber: ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber ?? '—' }
-                   : { docNumber: first.docNumber || detailDocNo, createdAt: first.createdAt || first.timestamp || '—', partner: first.partner ?? '—', warehouseId: first.warehouseId, warehouseName: warehouses.find(w => w.id === first.warehouseId)?.name ?? '—', note: first.note ?? '—', fromWarehouseId: first.fromWarehouseId, toWarehouseId: first.toWarehouseId, orderNumber: '—' };
+                   ? { docNumber: first.docNo || (ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber ? `领料-${ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber}` : first.id), createdAt: first.timestamp || '—', partner: '—', warehouseId: first.warehouseId, warehouseName: warehouseMapPSI.get(first.warehouseId)?.name ?? '—', note: first.reason ?? '—', fromWarehouseId: undefined, toWarehouseId: undefined, orderNumber: ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber ?? '—' }
+                   : { docNumber: first.docNumber || detailDocNo, createdAt: first.createdAt || first.timestamp || '—', partner: first.partner ?? '—', warehouseId: first.warehouseId, warehouseName: warehouseMapPSI.get(first.warehouseId)?.name ?? '—', note: first.note ?? '—', fromWarehouseId: first.fromWarehouseId, toWarehouseId: first.toWarehouseId, orderNumber: '—' };
                  const detailLinesByProductVariant = new Map<string, { productId: string; variantId?: string; quantity: number; purchasePrice?: number; salesPrice?: number; record: any }>();
                  docRecords.forEach(r => {
                    const vId = r.variantId ?? '';
@@ -4812,8 +4870,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                    }
                  });
                  const detailLines = Array.from(detailLinesByProductVariant.values()).map(item => {
-                   const product = products.find(p => p.id === item.productId);
-                   const category = categories.find(c => c.id === product?.categoryId);
+                   const product = productMapPSI.get(item.productId);
+                   const category = categoryMapPSI.get(product?.categoryId);
                    const hasColorSize = category?.hasColorSize && (product?.variants?.length ?? 0) > 0;
                    let variantLabel = '';
                    if (item.variantId && product?.variants) {
@@ -4855,7 +4913,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                            <div>
                              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">{detailType === 'SALES_BILL' ? '客户' : detailType === 'PURCHASE_BILL' ? '供应商' : detailType === 'TRANSFER' ? '调拨' : detailType === 'STOCKTAKE' ? '仓库' : detailType === 'STOCK_IN' || detailType === 'STOCK_RETURN' || detailType === 'STOCK_OUT' ? '工单号' : '备注'}</label>
                              <div className="py-2 px-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 bg-white">
-                               {detailType === 'TRANSFER' ? `${warehouses.find(w => w.id === mainInfo.fromWarehouseId)?.name ?? '—'} → ${warehouses.find(w => w.id === mainInfo.toWarehouseId)?.name ?? '—'}` : detailType === 'STOCKTAKE' ? mainInfo.warehouseName : detailType === 'STOCK_IN' || detailType === 'STOCK_RETURN' || detailType === 'STOCK_OUT' ? (mainInfo as any).orderNumber : mainInfo.partner}
+                               {detailType === 'TRANSFER' ? `${warehouseMapPSI.get(mainInfo.fromWarehouseId)?.name ?? '—'} → ${warehouseMapPSI.get(mainInfo.toWarehouseId)?.name ?? '—'}` : detailType === 'STOCKTAKE' ? mainInfo.warehouseName : detailType === 'STOCK_IN' || detailType === 'STOCK_RETURN' || detailType === 'STOCK_OUT' ? (mainInfo as any).orderNumber : mainInfo.partner}
                              </div>
                            </div>
                            {(detailType === 'PURCHASE_BILL' || detailType === 'SALES_BILL' || detailType === 'STOCK_IN' || detailType === 'STOCK_RETURN' || detailType === 'STOCK_OUT') && (
@@ -5232,8 +5290,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                           });
                           return Object.entries(groups).map(([gid, grp]) => {
                             const first = grp[0];
-                            const product = products.find(p => p.id === first.productId);
-                            const warehouse = warehouses.find(w => w.id === first.warehouseId);
+                            const product = productMapPSI.get(first.productId);
+                            const warehouse = warehouseMapPSI.get(first.warehouseId);
                             const orderQty = grp.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
                             const allocatedQty = type === 'SALES_ORDER' ? grp.reduce((s, i) => s + (i.allocatedQuantity ?? 0), 0) : 0;
                             const received = type === 'PURCHASE_ORDER'
@@ -5468,14 +5526,14 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                       </div>
                       <div className="space-y-4">
                         {purchaseBillItems.map((line) => {
-                          const lineProd = products.find(p => p.id === line.productId);
-                          const lineCat = lineProd && categories.find(c => c.id === lineProd.categoryId);
+                          const lineProd = productMapPSI.get(line.productId);
+                          const lineCat = lineProd && categoryMapPSI.get(lineProd.categoryId);
                           const lineHasBatch = lineCat?.hasBatchManagement;
                           return (
                           <div key={line.id} className="flex flex-wrap items-end gap-4 p-4 bg-slate-50/50 rounded-2xl border border-slate-100">
                             <div className="flex-1 min-w-[200px]">
                               <ProductSelector label="目标采购品项 (支持搜索与分类筛选)" options={products} categories={categories} value={line.productId} onChange={(id) => {
-                                const prod = products.find(p => p.id === id);
+                                const prod = productMapPSI.get(id);
                                 updatePurchaseBillItem(line.id, { productId: id, purchasePrice: prod?.purchasePrice ?? 0, batch: undefined });
                               }} />
                             </div>
@@ -5552,7 +5610,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">关联物料/产品</label>
                         <select value={form.productId} onChange={e => {
                           const pid = e.target.value;
-                          const prod = products.find(p => p.id === pid);
+                          const prod = productMapPSI.get(pid);
                           setForm({...form, productId: pid, purchasePrice: prod?.purchasePrice ?? 0});
                         }} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none">
                           <option value="">点击选择产品...</option>
@@ -5672,8 +5730,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                </thead>
                                <tbody className="divide-y divide-slate-50">
                                   {availableItemsFromSelectedPOs.map((item) => {
-                                     const product = products.find(p => p.id === item.productId);
-                                     const prodCategory = product && categories.find(c => c.id === product.categoryId);
+                                     const product = productMapPSI.get(item.productId);
+                                     const prodCategory = product && categoryMapPSI.get(product.categoryId);
                                      const hasBatch = prodCategory?.hasBatchManagement;
                                      const isChecked = selectedPOItemIds.includes(item.id);
                                      const qty = selectedPOItemQuantities[item.id] ?? item.remainingQty;
@@ -6199,4 +6257,4 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
   );
 };
 
-export default PSIOpsView;
+export default React.memo(PSIOpsView);

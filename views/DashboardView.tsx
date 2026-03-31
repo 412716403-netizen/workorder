@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { 
   BarChart, 
   Bar, 
@@ -53,35 +53,47 @@ const StatCard = ({ title, value, icon: Icon, trend, color, subValue }: any) => 
 );
 
 const DashboardView: React.FC<DashboardViewProps> = ({ orders, financeRecords, psiRecords, products, productionLinkMode = 'order' }) => {
-  // 1. 生产统计
-  const activeOrders = orders.filter(o => o.status !== 'SHIPPED');
-  const totalMilestones = orders.reduce((acc, curr) => acc + (curr.milestones?.length || 0), 0);
-  const completedMilestones = orders.reduce((acc, curr) => 
-    acc + (curr.milestones?.filter(m => m.status === MilestoneStatus.COMPLETED).length || 0), 0
-  );
-  const completionRate = totalMilestones > 0 ? Math.round((completedMilestones / totalMilestones) * 100) : 0;
+  const dashStats = useMemo(() => {
+    const activeOrders = orders.filter(o => o.status !== 'SHIPPED');
+    let totalMilestones = 0, completedMilestones = 0;
+    for (const o of orders) {
+      const ms = o.milestones;
+      if (!ms) continue;
+      totalMilestones += ms.length;
+      for (const m of ms) { if (m.status === MilestoneStatus.COMPLETED) completedMilestones++; }
+    }
+    const completionRate = totalMilestones > 0 ? Math.round((completedMilestones / totalMilestones) * 100) : 0;
 
-  // 2. 财务统计
-  const totalReceipts = financeRecords.filter(r => r.type === 'RECEIPT').reduce((sum, r) => sum + r.amount, 0);
-  const totalPayments = financeRecords.filter(r => r.type === 'PAYMENT').reduce((sum, r) => sum + r.amount, 0);
-  const cashFlow = totalReceipts - totalPayments;
+    let totalReceipts = 0, totalPayments = 0;
+    for (const r of financeRecords) {
+      if (r.type === 'RECEIPT') totalReceipts += r.amount;
+      else if (r.type === 'PAYMENT') totalPayments += r.amount;
+    }
 
-  // 3. 库存预警
-  const lowStockCount = products.filter(p => {
-    const ins = psiRecords.filter(r => r.type === 'PURCHASE_BILL' && r.productId === p.id).reduce((s, r) => s + (Number(r.quantity) || 0), 0);
-    const outs = psiRecords.filter(r => r.type === 'SALES_BILL' && r.productId === p.id).reduce((s, r) => s + (Number(r.quantity) || 0), 0);
-    return (ins - outs) < 10;
-  }).length;
+    const stockByProduct = new Map<string, number>();
+    for (const r of psiRecords) {
+      const pid = r.productId;
+      if (!pid) continue;
+      const qty = Number(r.quantity) || 0;
+      if (r.type === 'PURCHASE_BILL') stockByProduct.set(pid, (stockByProduct.get(pid) || 0) + qty);
+      else if (r.type === 'SALES_BILL') stockByProduct.set(pid, (stockByProduct.get(pid) || 0) - qty);
+    }
+    let lowStockCount = 0;
+    for (const p of products) { if ((stockByProduct.get(p.id) || 0) < 10) lowStockCount++; }
 
-  // 4. 图表数据
-  const prodProgressData = orders.map(o => {
-    const totalOrderQty = o.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
-    const msCount = o.milestones?.length || 0;
-    const progress = (totalOrderQty > 0 && msCount > 0) 
-      ? Math.round((o.milestones.reduce((acc, m) => acc + (m.completedQuantity / totalOrderQty), 0) / msCount) * 100) 
-      : 0;
-    return { name: o.orderNumber, progress };
-  });
+    const prodProgressData = orders.map(o => {
+      const totalOrderQty = o.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
+      const msCount = o.milestones?.length || 0;
+      const progress = (totalOrderQty > 0 && msCount > 0)
+        ? Math.round((o.milestones.reduce((acc, m) => acc + (m.completedQuantity / totalOrderQty), 0) / msCount) * 100)
+        : 0;
+      return { name: o.orderNumber, progress };
+    });
+
+    return { activeOrders, totalMilestones, completedMilestones, completionRate, totalReceipts, totalPayments, cashFlow: totalReceipts - totalPayments, lowStockCount, prodProgressData };
+  }, [orders, financeRecords, psiRecords, products]);
+
+  const { activeOrders, completionRate, totalReceipts, totalPayments, cashFlow, lowStockCount, prodProgressData } = dashStats;
 
   const financePieData = [
     { name: '累计收款', value: totalReceipts, color: '#6366f1' },
@@ -202,4 +214,4 @@ const DashboardView: React.FC<DashboardViewProps> = ({ orders, financeRecords, p
   );
 };
 
-export default DashboardView;
+export default React.memo(DashboardView);

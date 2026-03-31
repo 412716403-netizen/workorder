@@ -40,9 +40,33 @@ import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
 import { toast } from 'sonner';
 import * as api from '../services/api';
 import ProductImportModal from './ProductImportModal';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 /** 档案中心分类筛选：「全部」避免默认 cat-material 与租户真实分类 id 不一致导致列表空白 */
 const PRODUCT_ARCHIVE_ALL = '__all__';
+
+/** 未手填产品编号时生成：两个大写字母 + 生成时刻的时间戳（毫秒） */
+const AUTO_SKU_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+
+function generateAutoProductSku(): string {
+  let prefix = '';
+  for (let i = 0; i < 2; i++) {
+    prefix += AUTO_SKU_LETTERS[Math.floor(Math.random() * AUTO_SKU_LETTERS.length)];
+  }
+  return `${prefix}${Date.now()}`;
+}
+
+/** 产品编号留空时生成租户内唯一的编号，供保存前写入 */
+function resolveProductSkuForSave(p: Product, catalog: Product[]): Product {
+  const sku = (p.sku ?? '').trim();
+  if (sku) return p;
+  let candidate = '';
+  for (let i = 0; i < 20; i++) {
+    candidate = generateAutoProductSku();
+    if (!catalog.some(o => o.id !== p.id && (o.sku ?? '').trim() === candidate)) break;
+  }
+  return { ...p, sku: candidate };
+}
 
 function getFileExtFromDataUrl(dataUrl: string): string {
   const m = dataUrl.match(/^data:([^;]+);/);
@@ -894,6 +918,19 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   const [importModalOpen, setImportModalOpen] = useState(false);
   /** 档案中心列表搜索（名称、编号、备注） */
   const [productArchiveSearch, setProductArchiveSearch] = useState('');
+  const debouncedProductSearch = useDebouncedValue(productArchiveSearch);
+
+  const categoryCountMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of products) { m.set(p.categoryId, (m.get(p.categoryId) || 0) + 1); }
+    return m;
+  }, [products]);
+  const bomCountMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const b of boms) { m.set(b.parentProductId, (m.get(b.parentProductId) || 0) + 1); }
+    return m;
+  }, [boms]);
+  const categoryMapPM = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
 
   useEffect(() => {
     if (copyBOMDropdownOpen && copyBOMTriggerRef.current) {
@@ -1026,6 +1063,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
       toast.error('产品全称不能为空');
       return false;
     }
+    // 产品编号须在调用前经 resolveProductSkuForSave 处理（留空则已生成：两字母 + 时间戳）
     if (!sku) {
       toast.error('产品编号不能为空');
       return false;
@@ -1046,11 +1084,15 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   const [saveProductBusy, setSaveProductBusy] = useState(false);
   const saveProduct = async () => {
     if (!workingProduct) return;
-    if (!validateProductForSave(workingProduct, products)) return;
+    const resolved = resolveProductSkuForSave(workingProduct, products);
+    if ((workingProduct.sku ?? '').trim() !== (resolved.sku ?? '').trim()) {
+      setWorkingProduct(resolved);
+    }
+    if (!validateProductForSave(resolved, products)) return;
     const toSave: Product = {
-      ...workingProduct,
-      name: workingProduct.name.trim(),
-      sku: workingProduct.sku.trim(),
+      ...resolved,
+      name: resolved.name.trim(),
+      sku: resolved.sku.trim(),
       salesPrice: workingProduct.salesPrice ?? 0,
       purchasePrice: workingProduct.purchasePrice ?? 0,
       routeReportValues: routeReportFieldValues,
@@ -1154,15 +1196,19 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   const [bomSaving, setBomSaving] = useState(false);
   const saveBOM = async () => {
     if (!workingBOM || !workingProduct || !activeVariantIdForBOM || !activeNodeIdForBOM) return;
-    if (!validateProductForSave(workingProduct, products)) return;
+    const resolved = resolveProductSkuForSave(workingProduct, products);
+    if ((workingProduct.sku ?? '').trim() !== (resolved.sku ?? '').trim()) {
+      setWorkingProduct(resolved);
+    }
+    if (!validateProductForSave(resolved, products)) return;
     setBomSaving(true);
     try {
       const productOk = await onUpdateProduct({
-        ...workingProduct,
-        name: workingProduct.name.trim(),
-        sku: workingProduct.sku.trim(),
-        salesPrice: workingProduct.salesPrice ?? 0,
-        purchasePrice: workingProduct.purchasePrice ?? 0,
+        ...resolved,
+        name: resolved.name.trim(),
+        sku: resolved.sku.trim(),
+        salesPrice: resolved.salesPrice ?? 0,
+        purchasePrice: resolved.purchasePrice ?? 0,
       });
       if (!productOk) return;
       const bomOk = await onUpdateBOM(workingBOM);
@@ -1204,7 +1250,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
       activeCategoryFilter === PRODUCT_ARCHIVE_ALL
         ? products
         : products.filter(p => p.categoryId === activeCategoryFilter);
-    const q = productArchiveSearch.trim().toLowerCase();
+    const q = debouncedProductSearch.trim().toLowerCase();
     const searched =
       !q
         ? inCategory
@@ -1215,7 +1261,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
             return n.includes(q) || s.includes(q) || d.includes(q);
           });
     return searched.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id));
-  }, [products, activeCategoryFilter, productArchiveSearch]);
+  }, [products, activeCategoryFilter, debouncedProductSearch]);
 
   const productsInActiveCategoryCount = useMemo(() => {
     if (activeCategoryFilter === PRODUCT_ARCHIVE_ALL) return products.length;
@@ -1317,8 +1363,14 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
               <input type="text" value={workingProduct.name} onChange={e => setWorkingProduct({...workingProduct, name: e.target.value})} className="w-full bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">产品编号 <span className="text-rose-500">*</span></label>
-              <input type="text" value={workingProduct.sku} onChange={e => setWorkingProduct({...workingProduct, sku: e.target.value})} className="w-full bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
+              <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">产品编号</label>
+              <input
+                type="text"
+                value={workingProduct.sku}
+                onChange={e => setWorkingProduct({ ...workingProduct, sku: e.target.value })}
+                placeholder="留空则保存时自动生成"
+                className="w-full bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">产品单位</label>
@@ -2271,7 +2323,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                 onClick={() => setActiveCategoryFilter(cat.id)}
                 className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all border ${activeCategoryFilter === cat.id ? 'bg-indigo-600 text-white shadow-sm border-indigo-600 hover:bg-indigo-700 hover:border-indigo-700' : 'bg-white/60 text-slate-600 border-slate-200/80 hover:bg-white hover:text-slate-800 hover:border-slate-300'}`}
               >
-                {cat.name} ({products.filter(p => p.categoryId === cat.id).length})
+                {cat.name} ({categoryCountMap.get(cat.id) || 0})
               </button>
             ))}
           </div>
@@ -2327,8 +2379,8 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredProducts.map(product => {
-                    const category = categories.find(c => c.id === product.categoryId);
-                    const bomCount = boms.filter(b => b.parentProductId === product.id).length;
+                    const category = categoryMapPM.get(product.categoryId);
+                    const bomCount = bomCountMap.get(product.id) || 0;
                     const sales = product.salesPrice ?? 0;
                     const purchase = product.purchasePrice ?? 0;
                     const displayPrice = sales > 0 ? sales : purchase;
@@ -2410,4 +2462,4 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   );
 };
 
-export default ProductManagementView;
+export default React.memo(ProductManagementView);

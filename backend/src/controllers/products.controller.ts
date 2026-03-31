@@ -321,7 +321,8 @@ export async function createBom(req: Request, res: Response, next: NextFunction)
     const { items, ...rest } = req.body;
     const data = sanitizeCreate(rest);
     if (!data.id) data.id = genId('bom');
-    const cleanItems = items ? sanitizeItems(items, ['quantityInput']) : undefined;
+    // 嵌套 create 时 Prisma 自动关联父 BOM，不允许也不应传入 bomId（否则报 Unknown argument 'bomId'）
+    const cleanItems = items ? sanitizeItems(items, ['quantityInput', 'bomId']) : undefined;
     const bom = await db.bom.create({
       data: { ...data, items: cleanItems ? { create: cleanItems } : undefined },
       include: { items: true },

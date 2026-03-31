@@ -42,6 +42,7 @@ function OrderSearchSelect({ orders, products, value, onChange, label }: { order
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
+  const pMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const options = useMemo(() => [
     ...orders.map(o => ({ id: o.id, orderNumber: o.orderNumber, productName: o.productName, productId: o.productId })),
     { id: 'General-Wages', orderNumber: 'General-Wages', productName: '通用生产补贴/奖金', productId: '' }
@@ -50,10 +51,10 @@ function OrderSearchSelect({ orders, products, value, onChange, label }: { order
     const s = search.trim().toLowerCase();
     if (!s) return options;
     return options.filter(o => {
-      const sku = o.productId ? (products.find(p => p.id === o.productId)?.sku ?? '') : '';
+      const sku = o.productId ? (pMap.get(o.productId)?.sku ?? '') : '';
       return o.orderNumber.toLowerCase().includes(s) || (o.productName || '').toLowerCase().includes(s) || sku.toLowerCase().includes(s);
     });
-  }, [options, products, search]);
+  }, [options, pMap, search]);
   const selected = options.find(o => o.orderNumber === value);
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -79,7 +80,7 @@ function OrderSearchSelect({ orders, products, value, onChange, label }: { order
             {filtered.map(o => (
               <button key={o.id} type="button" onClick={() => { onChange(o.orderNumber); setIsOpen(false); setSearch(''); }} className={`w-full text-left p-3 rounded-xl transition-all border-2 ${o.orderNumber === value ? 'bg-indigo-50 border-indigo-600/20 text-indigo-700' : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'}`}>
                 <p className="text-sm font-bold truncate">{o.orderNumber} - {o.productName}</p>
-                {o.productId && <p className="text-[10px] text-slate-400 mt-0.5">{products.find(p => p.id === o.productId)?.sku ?? ''}</p>}
+                {o.productId && <p className="text-[10px] text-slate-400 mt-0.5">{pMap.get(o.productId)?.sku ?? ''}</p>}
               </button>
             ))}
             {filtered.length === 0 && <p className="py-6 text-center text-slate-400 text-sm">未找到匹配工单</p>}
@@ -117,6 +118,7 @@ function PartnerSelectWithCategories({
   const [activeTab, setActiveTab] = useState<string>('all');
   const [dropdownStyle, setDropdownStyle] = useState<{ top: number; left: number; width: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const catMap = useMemo(() => new Map(categories.map(c => [c.id, c.name])), [categories]);
   const filtered = useMemo(() => partners.filter(p => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || (p.contact || '').toLowerCase().includes(search.toLowerCase());
     const matchCat = activeTab === 'all' || p.categoryId === activeTab;
@@ -160,7 +162,7 @@ function PartnerSelectWithCategories({
       </div>
       <div className="max-h-52 overflow-y-auto space-y-1">
         {filtered.map(p => {
-          const catName = categories.find(c => c.id === p.categoryId)?.name || '未分类';
+          const catName = catMap.get(p.categoryId) || '未分类';
           const selected = isSelected(p);
           return (
             <button
@@ -518,6 +520,10 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
 
   const current = bizConfig[type];
   const isReceiptOrPayment = type === 'RECEIPT' || type === 'PAYMENT';
+
+  const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
+  const workerMap = useMemo(() => new Map(workers.map(w => [w.id, w])), [workers]);
+  const financeCatMap = useMemo(() => new Map(financeCategories.map(c => [c.id, c])), [financeCategories]);
   const categoriesForType = useMemo(() =>
     financeCategories.filter(c => c.kind === type),
     [financeCategories, type]
@@ -670,13 +676,14 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
     if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'settlement' || !reconQueryWorkerId) return [];
     const from = reconQueryDateFromT;
     const to = reconQueryDateToT;
-    const workerName = workers.find(w => w.id === reconQueryWorkerId)?.name ?? '';
+    const workerName = workerMap.get(reconQueryWorkerId)?.name ?? '';
     const rows: SettlementReconRow[] = [];
     const reportToWorkerId = (r: any) => (r.workerId ?? r.customData?.workerId ?? '') as string;
     const workReportGroups = new Map<string, { timestamp: string; workerId: string; workerName: string; amount: number; items: { orderNumber: string; productName: string; milestoneName: string; quantity: number; rate: number; amount: number }[] }>();
     orders.forEach(order => {
+      const nodeRates = productMap.get(order.productId)?.nodeRates;
       order.milestones?.forEach(milestone => {
-        const rate = products.find(p => p.id === order.productId)?.nodeRates?.[milestone.templateId] ?? 0;
+        const rate = nodeRates?.[milestone.templateId] ?? 0;
         (milestone.reports || []).forEach((r: any) => {
           const wid = reportToWorkerId(r);
           if (wid !== reconQueryWorkerId) return;
@@ -716,7 +723,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
       return new Date(ta).getTime() - new Date(tb).getTime();
     });
     return rows;
-  }, [type, reconciliationSubTab, reconQueryWorkerId, reconQueryDateFromT, reconQueryDateToT, orders, products, workers, prodRecords, allRecords, inFinanceDateRangeQuery]);
+  }, [type, reconciliationSubTab, reconQueryWorkerId, reconQueryDateFromT, reconQueryDateToT, orders, productMap, workerMap, prodRecords, allRecords, inFinanceDateRangeQuery]);
 
   /** 财务对账：按日期 + 工人筛选后的财务单列表（非对账时用；对账报工结算用 settlementReconList） */
   const displayRecords = useMemo(() => {
@@ -946,7 +953,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                           <td className="px-8 py-4 whitespace-nowrap"><div className="flex items-center gap-2"><Clock className="w-3.5 h-3.5 text-slate-300" /><span className="text-xs font-bold text-slate-600">{fmtDT(rec.timestamp)}</span></div></td>
                           <td className="px-8 py-4"><span className="text-xs font-bold text-slate-800">{rec.docNo || rec.id}</span></td>
                           <td className="px-8 py-4"><span className="text-xs font-bold text-slate-600">返工报工</span></td>
-                          <td className="px-8 py-4"><span className="text-sm font-bold text-slate-800">{workers.find(w => w.id === rec.workerId)?.name ?? rec.workerId ?? '-'}</span></td>
+                          <td className="px-8 py-4"><span className="text-sm font-bold text-slate-800">{workerMap.get(rec.workerId)?.name ?? rec.workerId ?? '-'}</span></td>
                           <td className="px-8 py-4 text-right"><span className="text-sm font-black text-slate-800">—</span></td>
                           <td className="px-8 py-4 text-right"><span className="text-sm font-black text-emerald-600">¥ {(Number(rec.amount) || 0).toLocaleString()}</span></td>
                           <td className="px-8 py-4 text-right"><span className="text-sm font-black text-indigo-600">¥ {balance.toLocaleString()}</span></td>
@@ -962,7 +969,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                         <td className="px-8 py-4 whitespace-nowrap"><div className="flex items-center gap-2"><Clock className="w-3.5 h-3.5 text-slate-300" /><span className="text-xs font-bold text-slate-600">{fmtDT(rec.timestamp)}</span></div></td>
                         <td className="px-8 py-4"><span className="text-xs font-bold text-slate-800">{rec.docNo || rec.id}</span></td>
                         <td className="px-8 py-4"><span className="text-xs font-bold text-slate-600">{bizConfig[rec.type]?.label ?? rec.type}</span></td>
-                        <td className="px-8 py-4"><span className="text-sm font-bold text-slate-800">{workers.find(w => w.id === rec.workerId)?.name ?? rec.workerId ?? '-'}</span></td>
+                        <td className="px-8 py-4"><span className="text-sm font-bold text-slate-800">{workerMap.get(rec.workerId)?.name ?? rec.workerId ?? '-'}</span></td>
                         <td className="px-8 py-4 text-right"><span className="text-sm font-black text-slate-800">{receivableInc > 0 ? `¥ ${receivableInc.toLocaleString()}` : '—'}</span></td>
                         <td className="px-8 py-4 text-right"><span className="text-sm font-black text-emerald-600">{receivableDec > 0 ? `¥ ${receivableDec.toLocaleString()}` : '—'}</span></td>
                         <td className="px-8 py-4 text-right"><span className="text-sm font-black text-indigo-600">¥ {balance.toLocaleString()}</span></td>
@@ -1038,14 +1045,14 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                     </td>
                     <td className="px-8 py-4">
                       <span className="text-xs font-bold text-slate-600">
-                        {rec.categoryId ? (financeCategories.find(c => c.id === rec.categoryId)?.name ?? bizConfig[rec.type]?.label) : (bizConfig[rec.type]?.label ?? rec.type)}
+                        {rec.categoryId ? (financeCatMap.get(rec.categoryId)?.name ?? bizConfig[rec.type]?.label) : (bizConfig[rec.type]?.label ?? rec.type)}
                       </span>
                     </td>
                     <td className="px-8 py-4">
                       <div className="flex flex-col gap-0.5">
                         <span className="text-sm font-bold text-slate-800">{rec.partner || '-'}</span>
                         {rec.workerId && (
-                          <span className="text-[10px] text-slate-500">关联工人：{workers.find(w => w.id === rec.workerId)?.name ?? rec.workerId}</span>
+                          <span className="text-[10px] text-slate-500">关联工人：{workerMap.get(rec.workerId)?.name ?? rec.workerId}</span>
                         )}
                       </div>
                     </td>
@@ -1145,7 +1152,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                   const row = detailRecord;
                   const rec = row.rec;
                   const order = orders.find(o => o.id === rec.orderId);
-                  const product = products.find(p => p.id === rec.productId);
+                  const product = productMap.get(rec.productId);
                   const node = rec.nodeId ? globalNodes.find(n => n.id === rec.nodeId) : null;
                   const unitPrice = rec.unitPrice != null && rec.unitPrice !== undefined ? Number(rec.unitPrice) : null;
                   const amount = Number(rec.amount) || 0;
@@ -1155,7 +1162,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                         <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">单据类型</span><p className="text-sm font-bold text-slate-800 mt-0.5">返工报工</p></div>
                         <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">单据编号</span><p className="text-sm font-bold text-slate-800 mt-0.5">{rec.docNo || rec.id}</p></div>
                         <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">业务时间</span><p className="text-sm font-bold text-slate-800 mt-0.5">{fmtDT(rec.timestamp)}</p></div>
-                        <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">工人</span><p className="text-sm font-bold text-slate-800 mt-0.5">{workers.find(w => w.id === rec.workerId)?.name ?? rec.workerId ?? '-'}</p></div>
+                        <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">工人</span><p className="text-sm font-bold text-slate-800 mt-0.5">{workerMap.get(rec.workerId)?.name ?? rec.workerId ?? '-'}</p></div>
                         <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">生产订单</span><p className="text-sm font-bold text-slate-800 mt-0.5">{order?.orderNumber ?? rec.orderId ?? '-'}</p></div>
                         <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">产品</span><p className="text-sm font-bold text-slate-800 mt-0.5">{product?.name ?? rec.productId ?? '-'}</p></div>
                         {node && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">工序节点</span><p className="text-sm font-bold text-slate-800 mt-0.5">{node.name}</p></div>}
@@ -1187,7 +1194,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                         const byProduct = new Map<string, { product: Product | undefined; lines: any[] }>();
                         lineRecords.forEach((r: any) => {
                           const pid = r.productId || 'unknown';
-                          if (!byProduct.has(pid)) byProduct.set(pid, { product: products.find(p => p.id === pid), lines: [] });
+                          if (!byProduct.has(pid)) byProduct.set(pid, { product: productMap.get(pid), lines: [] });
                           byProduct.get(pid)!.lines.push(r);
                         });
                         return (
@@ -1268,7 +1275,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                   if (row.source !== 'prod') return null;
                   const rec = row.rec;
                   const order = orders.find(o => o.id === rec.orderId);
-                  const product = products.find(p => p.id === rec.productId);
+                  const product = productMap.get(rec.productId);
                   const node = rec.nodeId ? globalNodes.find(n => n.id === rec.nodeId) : null;
                   const unitPrice = rec.unitPrice != null && rec.unitPrice !== undefined ? Number(rec.unitPrice) : null;
                   const amount = Number(rec.amount) || 0;
@@ -1355,10 +1362,10 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                   <>
                     <div className="grid grid-cols-2 gap-x-8 gap-y-4">
                       <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">单据编号</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.docNo || financeRec.id}</p></div>
-                      <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">单据类型</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.categoryId ? (financeCategories.find(c => c.id === financeRec.categoryId)?.name ?? bizConfig[financeRec.type]?.label) : (bizConfig[financeRec.type]?.label ?? financeRec.type)}</p></div>
+                      <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">单据类型</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.categoryId ? (financeCatMap.get(financeRec.categoryId)?.name ?? bizConfig[financeRec.type]?.label) : (bizConfig[financeRec.type]?.label ?? financeRec.type)}</p></div>
                       <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">业务时间</span><p className="text-sm font-bold text-slate-800 mt-0.5">{fmtDT(financeRec.timestamp)}</p></div>
                       <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{current.partnerLabel}</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.partner || '-'}</p></div>
-                      {financeRec.workerId && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">关联工人</span><p className="text-sm font-bold text-slate-800 mt-0.5">{workers.find(w => w.id === financeRec.workerId)?.name ?? financeRec.workerId}</p></div>}
+                      {financeRec.workerId && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">关联工人</span><p className="text-sm font-bold text-slate-800 mt-0.5">{workerMap.get(financeRec.workerId)?.name ?? financeRec.workerId}</p></div>}
                       {financeRec.relatedId && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">关联工单</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.relatedId}</p></div>}
                       {financeRec.paymentAccount && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">收支账户</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.paymentAccount}</p></div>}
                       <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">业务金额</span><p className={`text-sm font-black mt-0.5 ${financeRec.type === 'RECEIPT' ? 'text-emerald-600' : 'text-slate-800'}`}>¥ {financeRec.amount.toLocaleString()}</p></div>
@@ -1378,7 +1385,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                           </thead>
                           <tbody>
                             <tr>
-                              <td className="px-4 py-2 font-bold text-slate-800">{financeRec.productId ? (products.find(p => p.id === financeRec.productId)?.name ?? financeRec.productId) : '—'}</td>
+                              <td className="px-4 py-2 font-bold text-slate-800">{financeRec.productId ? (productMap.get(financeRec.productId)?.name ?? financeRec.productId) : '—'}</td>
                               <td className="px-4 py-2 text-right font-bold text-slate-800">—</td>
                               <td className="px-4 py-2 text-right font-bold text-slate-800">—</td>
                               <td className="px-4 py-2 text-right font-black text-slate-800">¥ {financeRec.amount.toLocaleString()}</td>
@@ -1389,7 +1396,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                     </div>
                     {(financeRec.note != null && financeRec.note !== '') && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">备注</span><p className="text-sm text-slate-600 mt-0.5 whitespace-pre-wrap">{financeRec.note}</p></div>}
                     {financeRec.customData && Object.keys(financeRec.customData).length > 0 && (() => {
-                      const cat = financeRec.categoryId ? financeCategories.find(c => c.id === financeRec.categoryId) : null;
+                      const cat = financeRec.categoryId ? financeCatMap.get(financeRec.categoryId) ?? null : null;
                       const fields = cat?.customFields ?? [];
                       return fields.length > 0 ? <div className="space-y-3"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">自定义内容</span><div className="grid grid-cols-2 gap-x-8 gap-y-2">{fields.map(f => <div key={f.id}><span className="text-[10px] text-slate-400">{f.label}</span><p className="text-sm font-bold text-slate-800 mt-0.5">{String(financeRec.customData![f.id] ?? '-')}</p></div>)}</div></div> : null;
                     })()}
@@ -1499,4 +1506,4 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
   );
 };
 
-export default FinanceOpsView;
+export default React.memo(FinanceOpsView);

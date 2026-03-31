@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Link, Navigate } from 'react-router-dom';
 import {
   Layout, LayoutDashboard, ClipboardList, Settings as SettingsIcon,
@@ -8,19 +8,26 @@ import {
 import LoginView from './views/LoginView';
 import OnboardingView from './views/OnboardingView';
 import TenantSelectView from './views/TenantSelectView';
-import DashboardView from './views/DashboardView';
-import ProductionManagementView from './views/ProductionManagementView';
-import PSIView from './views/PSIView';
-import FinanceView from './views/FinanceView';
-import BasicInfoView from './views/BasicInfoView';
-import SettingsView from './views/SettingsView';
-import UserAdminView from './views/UserAdminView';
 import ProfileModal from './views/ProfileModal';
-import CollaborationInboxView from './views/CollaborationInboxView';
+
+const DashboardView = React.lazy(() => import('./views/DashboardView'));
+const ProductionManagementView = React.lazy(() => import('./views/ProductionManagementView'));
+const PSIView = React.lazy(() => import('./views/PSIView'));
+const FinanceView = React.lazy(() => import('./views/FinanceView'));
+const BasicInfoView = React.lazy(() => import('./views/BasicInfoView'));
+const SettingsView = React.lazy(() => import('./views/SettingsView'));
+const UserAdminView = React.lazy(() => import('./views/UserAdminView'));
+const CollaborationInboxView = React.lazy(() => import('./views/CollaborationInboxView'));
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppDataProvider, useAppData } from './contexts/AppDataContext';
 import ErrorBoundary from './components/ErrorBoundary';
+
+const RouteFallback = () => (
+  <div className="flex items-center justify-center py-32">
+    <Loader2 className="w-7 h-7 animate-spin text-indigo-400" />
+  </div>
+);
 
 export default function App() {
   return (
@@ -204,7 +211,9 @@ function AppLayout() {
       {/* Main Content */}
       <div className="flex-1 min-h-0 overflow-auto pt-4 px-12 pb-12 bg-slate-50/30">
         <ErrorBoundary>
-          <AppRoutes />
+          <Suspense fallback={<RouteFallback />}>
+            <AppRoutes />
+          </Suspense>
         </ErrorBoundary>
       </div>
     </div>

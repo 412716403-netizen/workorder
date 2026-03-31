@@ -356,11 +356,12 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
     });
   }, [partners, dispatchPartnerSearch, dispatchPartnerCategoryTab]);
 
-  const filteredRecords = records.filter(r => r.type === limitType);
-  const stockFlowRecords = (limitType === 'STOCK_OUT' ? records.filter(r => r.type === 'STOCK_OUT' || r.type === 'STOCK_RETURN') : []).sort(
-    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  );
-  /** 领料退料流水弹窗：按筛选条件过滤后的列表及合计（工单/物料/单据号均为模糊搜索） */
+  const filteredRecords = useMemo(() => records.filter(r => r.type === limitType), [records, limitType]);
+  const stockFlowRecords = useMemo(() =>
+    limitType === 'STOCK_OUT'
+      ? records.filter(r => r.type === 'STOCK_OUT' || r.type === 'STOCK_RETURN').sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      : []
+  , [records, limitType]);
   const { filteredStockFlowRecords, totalIssueQty, totalReturnQty, countIssue, countReturn } = useMemo(() => {
     let list = stockFlowRecords;
     if (stockFlowFilterType !== 'all') list = list.filter(r => r.type === stockFlowFilterType);
@@ -7432,4 +7433,4 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
   );
 };
 
-export default ProductionMgmtOpsView;
+export default React.memo(ProductionMgmtOpsView);

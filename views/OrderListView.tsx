@@ -3,6 +3,8 @@ import React, { useState, useMemo } from 'react';
 import { Clock, Layers, Plus, History, User, Sliders, X, Trash2, FileText, Check, ChevronDown, ChevronRight, ScrollText, UserPlus, Filter, Pencil, ClipboardList, Search, Package, ArrowUpFromLine, RotateCcw, ArrowDownToLine, Split } from 'lucide-react';
 import { ProductionOrder, MilestoneStatus, Milestone, Product, GlobalNodeTemplate, OrderFormSettings, ProductCategory, AppDictionaries, Partner, BOM, ProductionOpRecord, ProdOpType, Worker, ProductMilestoneProgress, ProcessSequenceMode, Warehouse, ProductVariant } from '../types';
 import ProductDetailModal from './ProductDetailModal';
+import { useProgressiveList } from '../hooks/useProgressiveList';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import OrderDetailModal from './OrderDetailModal';
 import OrderFlowView from './OrderFlowView';
 import WorkerSelector from '../components/WorkerSelector';
@@ -132,12 +134,16 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     if (userPermissions.includes('production:orders_list:allow')) return true;
     return false;
   };
+  const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
+  const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+
   const [detailOrderId, setDetailOrderId] = useState<string | null>(initialDetailOrderId ?? null);
   const [showOrderFlowModal, setShowOrderFlowModal] = useState(false);
   /** 从产品卡片打开工单流水时传入，用于预填搜索筛选 */
   const [orderFlowProductId, setOrderFlowProductId] = useState<string | null>(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search);
   type OrderReportRow = {
     order: ProductionOrder;
     milestone: { id: string; name: string; templateId: string };
@@ -190,6 +196,160 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     dateTo: string;
     reportNo: string;
   }>({ productId: '', orderNumber: '', milestoneName: '', operator: '', dateFrom: '', dateTo: '', reportNo: '' });
+
+  const reportHistoryData = useMemo(() => {
+    type ReportRow = {
+      order: ProductionOrder;
+      milestone: { id: string; name: string; templateId: string };
+      report: {
+        id: string; timestamp: string; operator: string; quantity: number;
+        defectiveQuantity?: number; variantId?: string; reportBatchId?: string; reportNo?: string;
+        [k: string]: any;
+      };
+    };
+    const allRows: ReportRow[] = [];
+    orders.forEach(o => {
+      o.milestones?.forEach(m => {
+        (m.reports || []).forEach(r => {
+          allRows.push({ order: o, milestone: { id: m.id, name: m.name, templateId: m.templateId }, report: r });
+        });
+      });
+    });
+    type OrderBatch = { source: 'order'; key: string; rows: ReportRow[]; first: ReportRow; totalGood: number; totalDefective: number; totalAmount: number; reportNo?: string };
+    type ProductBatchItem = { progress: ProductMilestoneProgress; report: ReportRow['report'] };
+    type ProductBatch = { source: 'product'; key: string; progressId: string; productId: string; productName: string; milestoneName: string; milestoneTemplateId: string; rows: ProductBatchItem[]; first: ProductBatchItem; totalGood: number; totalDefective: number; totalAmount: number; reportNo?: string };
+    const f = reportHistoryFilter;
+    const isOutsourceReceiveReport = (report: ReportRow['report']) =>
+      report.customData?.source === 'outsourceReceive' ||
+      report.operator === '外协收回' ||
+      (typeof report.reportNo === 'string' && report.reportNo.startsWith('外协收回·'));
+    const outsourceReceiveDocKey = (report: ReportRow['report']) => {
+      const rn = report.reportNo || '';
+      if (rn.startsWith('外协收回·')) return rn.slice(5);
+      return (report.customData?.docNo as string) || rn || report.id;
+    };
+    const filteredOrderRows = allRows.filter(({ order, milestone, report }) => {
+      if (f.productId) {
+        const p = products.find(px => px.id === order.productId);
+        const name = (p?.name || '').toLowerCase();
+        const kw = f.productId.toLowerCase();
+        if (!name.includes(kw) && !order.productId.toLowerCase().includes(kw)) return false;
+      }
+      if (productionLinkMode !== 'product' && f.orderNumber && !order.orderNumber?.toLowerCase().includes(f.orderNumber.toLowerCase())) return false;
+      if (f.milestoneName && !milestone.name?.toLowerCase().includes(f.milestoneName.toLowerCase())) return false;
+      if (f.operator && !report.operator?.toLowerCase().includes(f.operator.toLowerCase())) return false;
+      if (f.reportNo) {
+        const kw = f.reportNo.toLowerCase();
+        const key = (report.reportNo || report.reportBatchId || report.id).toLowerCase();
+        if (!key.includes(kw)) return false;
+      }
+      if (f.dateFrom || f.dateTo) {
+        const dt = new Date(report.timestamp);
+        const dateStr = dt.toISOString().split('T')[0];
+        if (f.dateFrom && dateStr < f.dateFrom) return false;
+        if (f.dateTo && dateStr > f.dateTo) return false;
+      }
+      return true;
+    });
+    const groupKeyOrder = (r: ReportRow) => {
+      if (isOutsourceReceiveReport(r.report)) {
+        return `wxrecv:${r.order.id}:${r.order.productId}:${outsourceReceiveDocKey(r.report)}`;
+      }
+      return r.report.reportBatchId || r.report.id;
+    };
+    const orderGroups = new Map<string, ReportRow[]>();
+    filteredOrderRows.forEach(r => {
+      const k = groupKeyOrder(r);
+      if (!orderGroups.has(k)) orderGroups.set(k, []);
+      orderGroups.get(k)!.push(r);
+    });
+    const orderBatches: OrderBatch[] = Array.from(orderGroups.entries()).map(([k, rows]) => ({
+      source: 'order' as const, key: k, rows, first: rows[0],
+      totalGood: rows.reduce((s, r) => s + r.report.quantity, 0),
+      totalDefective: rows.reduce((s, r) => s + (r.report.defectiveQuantity ?? 0), 0),
+      totalAmount: rows.reduce((s, r) => {
+        const p = products.find(px => px.id === r.order.productId);
+        const rate = r.report.rate ?? p?.nodeRates?.[r.milestone.templateId] ?? 0;
+        return s + r.report.quantity * rate;
+      }, 0),
+      reportNo: rows.find(r => r.report.reportBatchId || r.report.reportNo)?.report.reportNo
+    }));
+    let productBatches: ProductBatch[] = [];
+    if (productionLinkMode === 'product' && productMilestoneProgresses.length > 0) {
+      const productRows: ProductBatchItem[] = [];
+      productMilestoneProgresses.forEach(pmp => {
+        (pmp.reports ?? []).forEach(r => { productRows.push({ progress: pmp, report: r }); });
+      });
+      const filteredProductRows = productRows.filter(({ progress, report }) => {
+        if (f.productId) {
+          const p = products.find(px => px.id === progress.productId);
+          const name = (p?.name || '').toLowerCase();
+          const kw = f.productId.toLowerCase();
+          if (!name.includes(kw) && !progress.productId.toLowerCase().includes(kw)) return false;
+        }
+        const mn = globalNodes.find(n => n.id === progress.milestoneTemplateId)?.name ?? '';
+        if (f.milestoneName && !mn.toLowerCase().includes(f.milestoneName.toLowerCase())) return false;
+        if (f.operator && !report.operator?.toLowerCase().includes(f.operator.toLowerCase())) return false;
+        if (f.reportNo) {
+          const kw = f.reportNo.toLowerCase();
+          const key = (report.reportNo || report.reportBatchId || report.id).toLowerCase();
+          if (!key.includes(kw)) return false;
+        }
+        if (f.dateFrom || f.dateTo) {
+          const dt = new Date(report.timestamp);
+          const dateStr = dt.toISOString().split('T')[0];
+          if (f.dateFrom && dateStr < f.dateFrom) return false;
+          if (f.dateTo && dateStr > f.dateTo) return false;
+        }
+        return true;
+      });
+      const productGroupKey = (item: ProductBatchItem) => {
+        const r = item.report;
+        if (isOutsourceReceiveReport(r)) return `wxrecv:${item.progress.productId}:${outsourceReceiveDocKey(r)}`;
+        return r.reportBatchId || r.id;
+      };
+      const productGroups = new Map<string, ProductBatchItem[]>();
+      filteredProductRows.forEach(item => {
+        const k = productGroupKey(item);
+        if (!productGroups.has(k)) productGroups.set(k, []);
+        productGroups.get(k)!.push(item);
+      });
+      productBatches = Array.from(productGroups.entries()).map(([k, rows]) => {
+        const first = rows[0];
+        const p = products.find(px => px.id === first.progress.productId);
+        const defaultRate = p?.nodeRates?.[first.progress.milestoneTemplateId] ?? 0;
+        return {
+          source: 'product' as const, key: `product-${k}`, progressId: first.progress.id,
+          productId: first.progress.productId, productName: p?.name ?? '',
+          milestoneName: globalNodes.find(n => n.id === first.progress.milestoneTemplateId)?.name ?? '',
+          milestoneTemplateId: first.progress.milestoneTemplateId,
+          rows, first,
+          totalGood: rows.reduce((s, x) => s + x.report.quantity, 0),
+          totalDefective: rows.reduce((s, x) => s + (x.report.defectiveQuantity ?? 0), 0),
+          totalAmount: rows.reduce((s, x) => s + x.report.quantity * (x.report.rate ?? defaultRate), 0),
+          reportNo: rows.find(r => r.report.reportBatchId || r.report.reportNo)?.report.reportNo
+        };
+      });
+    }
+    const batches: (OrderBatch | ProductBatch)[] = [...orderBatches, ...productBatches].sort((a, b) =>
+      new Date(b.first.report.timestamp).getTime() - new Date(a.first.report.timestamp).getTime()
+    );
+    const totalGood = batches.reduce((s, b) => s + b.totalGood, 0);
+    const totalDefective = batches.reduce((s, b) => s + b.totalDefective, 0);
+    const totalAmount = batches.reduce((s, b) => s + b.totalAmount, 0);
+    const getUnitName = (pid: string) => {
+      const p = products.find(px => px.id === pid);
+      return (p?.unitId && dictionaries?.units?.find(u => u.id === p.unitId)?.name) || '件';
+    };
+    const firstBatchProductId = batches.length > 0 ? (batches[0].source === 'order' ? batches[0].first.order.productId : batches[0].productId) : '';
+    const summaryUnit = batches.length > 0 && batches.every(b => (b.source === 'order' ? b.first.order.productId : b.productId) === firstBatchProductId)
+      ? getUnitName(firstBatchProductId) : '件';
+    const uniqueProducts = [...new Set([...orders.map(o => o.productId), ...productMilestoneProgresses.map(p => p.productId)])].filter(Boolean);
+    const uniqueMilestones = [...new Set([...allRows.map(r => r.milestone.name), ...productBatches.map(b => b.milestoneName)])].filter(Boolean);
+    const uniqueOperators = [...new Set([...allRows.map(r => r.report.operator), ...productBatches.flatMap(b => b.rows.map(r => r.report.operator))])].filter(Boolean).sort((a, b) => a.localeCompare(b));
+    return { batches, totalGood, totalDefective, totalAmount, summaryUnit, uniqueProducts, uniqueMilestones, uniqueOperators };
+  }, [orders, products, productMilestoneProgresses, reportHistoryFilter, productionLinkMode, globalNodes, dictionaries]);
+
   const [viewProductId, setViewProductId] = useState<string | null>(null);
   const [showOrderFormConfigModal, setShowOrderFormConfigModal] = useState(false);
   const [orderFormConfigDraft, setOrderFormConfigDraft] = useState<OrderFormSettings | null>(null);
@@ -339,11 +499,11 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
   /** 顶部搜索：按产品、工单号、SKU、客户过滤列表 */
   const filteredOrdersForList = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
+    const keyword = debouncedSearch.trim().toLowerCase();
     if (!keyword) return sortedOrdersForList;
 
     return sortedOrdersForList.filter(order => {
-      const product = products.find(p => p.id === order.productId);
+      const product = productMap.get(order.productId);
       const productName = (order.productName || product?.name || '').toLowerCase();
       const sku = (order.sku || '').toLowerCase();
       const orderNumber = (order.orderNumber || '').toLowerCase();
@@ -425,7 +585,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         .map(([productId, orders]) => ({
           type: 'productGroup' as const,
           productId,
-          productName: orders[0]?.productName || products.find(p => p.id === productId)?.name || '未知产品',
+          productName: orders[0]?.productName || productMap.get(productId)?.name || '未知产品',
           orders
         }))
         .sort((a, b) => (b.productName || '').localeCompare(a.productName || ''));
@@ -455,9 +615,11 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     return blocks;
   }, [filteredOrdersForList, parentToSubOrders, rootToOrders, productionLinkMode, products]);
 
+  const pBlocks = useProgressiveList(listBlocks);
+
   /** 单位名称（用于待入库等展示） */
   const getUnitName = (productId: string) => {
-    const p = products.find(x => x.id === productId);
+    const p = productMap.get(productId);
     const u = (dictionaries.units ?? []).find((x: { id: string; name: string }) => x.id === p?.unitId);
     return (u as { name: string } | undefined)?.name ?? 'PCS';
   };
@@ -598,8 +760,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     ms.reportTemplate.forEach(f => {
       initialData[f.id] = f.type === 'boolean' ? false : '';
     });
-    const product = products.find(p => p.id === order.productId);
-    const category = categories.find(c => c.id === product?.categoryId);
+    const product = productMap.get(order.productId);
+    const category = categoryMap.get(product?.categoryId);
     const hasColorSize = Boolean(product?.colorIds?.length && product?.sizeIds?.length) || Boolean(category?.hasColorSize);
     const items = productAggregate?.items ?? order.items;
     const singleVariant = items.length === 1 ? (items[0].variantId || '') : '';
@@ -668,7 +830,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     let tplIndex: number;
     let prevTemplateId: string | undefined;
     if (productionLinkMode === 'product') {
-      const product = products.find(p => p.id === productId);
+      const product = productMap.get(productId);
       const nodeIds = product?.milestoneNodeIds || [];
       tplIndex = nodeIds.indexOf(milestoneTemplateId);
       if (tplIndex > 0) prevTemplateId = nodeIds[tplIndex - 1];
@@ -777,8 +939,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     }
     const productId = reportModal.order.productId;
     const milestoneTemplateId = reportModal.milestone.templateId;
-    const product = products.find(p => p.id === productId);
-    const category = categories.find(c => c.id === product?.categoryId);
+    const product = productMap.get(productId);
+    const category = categoryMap.get(product?.categoryId);
     const hasColorSize = Boolean(product?.colorIds?.length && product?.sizeIds?.length) || Boolean(category?.hasColorSize);
 
     if (productionLinkMode === 'product' && onReportSubmitProduct) {
@@ -882,8 +1044,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   };
 
   const isMatrixMode = Boolean(reportModal && (() => {
-    const product = products.find(p => p.id === reportModal.order.productId);
-    const category = categories.find(c => c.id === product?.categoryId);
+    const product = productMap.get(reportModal.order.productId);
+    const category = categoryMap.get(product?.categoryId);
     return (product?.colorIds?.length && product?.sizeIds?.length) || category?.hasColorSize;
   })());
   const matrixTotalQty = reportForm.variantQuantities
@@ -971,10 +1133,10 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
               <Layers className="w-12 h-12 text-slate-200 mx-auto mb-4" />
               <p className="text-slate-400 font-medium">暂无工单数据</p>
             </div>
-          ) : (
-            listBlocks.map((block) => {
+          ) : (<>
+            {pBlocks.visibleItems.map((block) => {
               const renderOrderCard = (order: ProductionOrder, isChild?: boolean, indentPx?: number) => {
-                const product = products.find(p => p.id === order.productId);
+                const product = productMap.get(order.productId);
                 const totalMilestones = order.milestones.length;
                 const orderTotalQty = order.items.reduce((s, i) => s + i.quantity, 0);
                 const overallProgress = totalMilestones > 0
@@ -1005,7 +1167,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                             {order.productName || '未知产品'}
                           </button>
                           <span className="text-[10px] font-bold text-slate-500">{order.sku}</span>
-                          {product && categories.find(c => c.id === product.categoryId)?.customFields?.filter(f => f.showInForm !== false && f.type !== 'file').map(f => {
+                          {product && categoryMap.get(product.categoryId)?.customFields?.filter(f => f.showInForm !== false && f.type !== 'file').map(f => {
                             const val = product.categoryCustomData?.[f.id];
                             if (val == null || val === '') return null;
                             return <span key={f.id} className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">{f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}</span>;
@@ -1159,7 +1321,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                 );
               }
               if (block.type === 'productGroup') {
-                const product = products.find(p => p.id === block.productId);
+                const product = productMap.get(block.productId);
                 const totalQty = block.orders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.quantity, 0), 0);
                 const orderCount = block.orders.length;
                 const byTemplate = new Map<string, { name: string; completed: number }>();
@@ -1439,8 +1601,15 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                   </div>
                 </div>
               );
-            })
-          )}
+            })}
+            {pBlocks.hasMore && (
+              <div className="flex items-center justify-center gap-3 py-4">
+                <span className="text-xs text-slate-400">已显示 {pBlocks.visibleItems.length} / {pBlocks.total} 条</span>
+                <button type="button" onClick={pBlocks.showMore} className="px-4 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all">加载更多</button>
+                <button type="button" onClick={pBlocks.showAll} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700 transition-all">全部显示</button>
+              </div>
+            )}
+          </>)}
         </div>
       )}
 
@@ -1585,7 +1754,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         const pid = reportModal.order.productId;
         const useProductPmp =
           productionLinkMode === 'product' && productMilestoneProgresses.length > 0;
-        const productForModal = products.find(p => p.id === pid);
+        const productForModal = productMap.get(pid);
         const modalMilestoneOrder = productForModal?.milestoneNodeIds ?? [];
         const seqIdx = modalMilestoneOrder.indexOf(tid);
         const totalBase = useProductPmp
@@ -1720,7 +1889,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                   </div>
                   <div className="space-y-3 bg-slate-50/50 rounded-2xl p-3">
                     {(() => {
-                      const product = products.find(p => p.id === reportModal.order.productId);
+                      const product = productMap.get(reportModal.order.productId);
                       if (!product?.colorIds?.length || !product?.sizeIds?.length || !dictionaries?.colors || !dictionaries?.sizes) return null;
                       const currentOrder = ordersInModal[0];
                       const currentMs = currentOrder?.milestones.find(m => m.templateId === tid);
@@ -1824,7 +1993,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                   >
                     <option value="">请选择报工规格...</option>
                     {(reportModal.productItems ?? reportModal.order.items).map((item, idx) => {
-                      const product = products.find(p => p.id === reportModal.order.productId);
+                      const product = productMap.get(reportModal.order.productId);
                       const v = product?.variants?.find((x: { id: string }) => x.id === item.variantId);
                           const completedInMilestone = reportModal.productItems
                             ? (item.completedQuantity ?? 0)
@@ -1939,173 +2108,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
       {/* 报工流水弹窗 */}
       {showHistoryModal && (() => {
-        type ReportRow = {
-          order: ProductionOrder;
-          milestone: { id: string; name: string; templateId: string };
-          report: {
-            id: string;
-            timestamp: string;
-            operator: string;
-            quantity: number;
-            defectiveQuantity?: number;
-            variantId?: string;
-            reportBatchId?: string;
-            reportNo?: string;
-          };
-        };
-        const allRows: ReportRow[] = [];
-        orders.forEach(o => {
-          o.milestones?.forEach(m => {
-            (m.reports || []).forEach(r => {
-              allRows.push({ order: o, milestone: { id: m.id, name: m.name, templateId: m.templateId }, report: r });
-            });
-          });
-        });
-        type OrderBatch = { source: 'order'; key: string; rows: ReportRow[]; first: ReportRow; totalGood: number; totalDefective: number; totalAmount: number; reportNo?: string };
-        type ProductBatchItem = { progress: ProductMilestoneProgress; report: typeof allRows[0]['report'] };
-        type ProductBatch = { source: 'product'; key: string; progressId: string; productId: string; productName: string; milestoneName: string; milestoneTemplateId: string; rows: ProductBatchItem[]; first: ProductBatchItem; totalGood: number; totalDefective: number; totalAmount: number; reportNo?: string };
+        const { batches, totalGood, totalDefective, totalAmount, summaryUnit, uniqueProducts, uniqueMilestones, uniqueOperators } = reportHistoryData;
         const f = reportHistoryFilter;
-        const isOutsourceReceiveReport = (report: ReportRow['report']) =>
-          report.customData?.source === 'outsourceReceive' ||
-          report.operator === '外协收回' ||
-          (typeof report.reportNo === 'string' && report.reportNo.startsWith('外协收回·'));
-        const outsourceReceiveDocKey = (report: ReportRow['report']) => {
-          const rn = report.reportNo || '';
-          if (rn.startsWith('外协收回·')) return rn.slice(5);
-          return (report.customData?.docNo as string) || rn || report.id;
-        };
-        const filteredOrderRows = allRows.filter(({ order, milestone, report }) => {
-          if (f.productId) {
-            const p = products.find(px => px.id === order.productId);
-            const name = (p?.name || '').toLowerCase();
-            const kw = f.productId.toLowerCase();
-            if (!name.includes(kw) && !order.productId.toLowerCase().includes(kw)) return false;
-          }
-          if (productionLinkMode !== 'product' && f.orderNumber && !order.orderNumber?.toLowerCase().includes(f.orderNumber.toLowerCase())) return false;
-          if (f.milestoneName && !milestone.name?.toLowerCase().includes(f.milestoneName.toLowerCase())) return false;
-          if (f.operator && !report.operator?.toLowerCase().includes(f.operator.toLowerCase())) return false;
-          if (f.reportNo) {
-            const kw = f.reportNo.toLowerCase();
-            const key = (report.reportNo || report.reportBatchId || report.id).toLowerCase();
-            if (!key.includes(kw)) return false;
-          }
-          if (f.dateFrom || f.dateTo) {
-            const dt = new Date(report.timestamp);
-            const dateStr = dt.toISOString().split('T')[0];
-            if (f.dateFrom && dateStr < f.dateFrom) return false;
-            if (f.dateTo && dateStr > f.dateTo) return false;
-          }
-          return true;
-        });
-        const groupKeyOrder = (r: ReportRow) => {
-          if (isOutsourceReceiveReport(r.report)) {
-            return `wxrecv:${r.order.id}:${r.order.productId}:${outsourceReceiveDocKey(r.report)}`;
-          }
-          return r.report.reportBatchId || r.report.id;
-        };
-        const orderGroups = new Map<string, ReportRow[]>();
-        filteredOrderRows.forEach(r => {
-          const k = groupKeyOrder(r);
-          if (!orderGroups.has(k)) orderGroups.set(k, []);
-          orderGroups.get(k)!.push(r);
-        });
-        const orderBatches: OrderBatch[] = Array.from(orderGroups.entries()).map(([k, rows]) => ({
-          source: 'order' as const,
-          key: k,
-          rows,
-          first: rows[0],
-          totalGood: rows.reduce((s, r) => s + r.report.quantity, 0),
-          totalDefective: rows.reduce((s, r) => s + (r.report.defectiveQuantity ?? 0), 0),
-          totalAmount: rows.reduce((s, r) => {
-            const p = products.find(px => px.id === r.order.productId);
-            const rate = r.report.rate ?? p?.nodeRates?.[r.milestone.templateId] ?? 0;
-            return s + r.report.quantity * rate;
-          }, 0),
-          reportNo: rows.find(r => r.report.reportBatchId || r.report.reportNo)?.report.reportNo
-        }));
-        let productBatches: ProductBatch[] = [];
-        if (productionLinkMode === 'product' && productMilestoneProgresses.length > 0) {
-          const productRows: ProductBatchItem[] = [];
-          productMilestoneProgresses.forEach(pmp => {
-            (pmp.reports ?? []).forEach(r => {
-              productRows.push({ progress: pmp, report: r });
-            });
-          });
-          const filteredProductRows = productRows.filter(({ progress, report }) => {
-            if (f.productId) {
-              const p = products.find(px => px.id === progress.productId);
-              const name = (p?.name || '').toLowerCase();
-              const kw = f.productId.toLowerCase();
-              if (!name.includes(kw) && !progress.productId.toLowerCase().includes(kw)) return false;
-            }
-            const mn = globalNodes.find(n => n.id === progress.milestoneTemplateId)?.name ?? '';
-            if (f.milestoneName && !mn.toLowerCase().includes(f.milestoneName.toLowerCase())) return false;
-            if (f.operator && !report.operator?.toLowerCase().includes(f.operator.toLowerCase())) return false;
-            if (f.reportNo) {
-              const kw = f.reportNo.toLowerCase();
-              const key = (report.reportNo || report.reportBatchId || report.id).toLowerCase();
-              if (!key.includes(kw)) return false;
-            }
-            if (f.dateFrom || f.dateTo) {
-              const dt = new Date(report.timestamp);
-              const dateStr = dt.toISOString().split('T')[0];
-              if (f.dateFrom && dateStr < f.dateFrom) return false;
-              if (f.dateTo && dateStr > f.dateTo) return false;
-            }
-            return true;
-          });
-          const productGroupKey = (item: ProductBatchItem) => {
-            const r = item.report;
-            if (isOutsourceReceiveReport(r)) {
-              return `wxrecv:${item.progress.productId}:${outsourceReceiveDocKey(r)}`;
-            }
-            return r.reportBatchId || r.id;
-          };
-          const productGroups = new Map<string, ProductBatchItem[]>();
-          filteredProductRows.forEach(item => {
-            const k = productGroupKey(item);
-            if (!productGroups.has(k)) productGroups.set(k, []);
-            productGroups.get(k)!.push(item);
-          });
-          productBatches = Array.from(productGroups.entries()).map(([k, rows]) => {
-            const first = rows[0];
-            const p = products.find(px => px.id === first.progress.productId);
-            const defaultRate = p?.nodeRates?.[first.progress.milestoneTemplateId] ?? 0;
-            return {
-              source: 'product' as const,
-              key: `product-${k}`,
-              progressId: first.progress.id,
-              productId: first.progress.productId,
-              productName: p?.name ?? '',
-              milestoneName: globalNodes.find(n => n.id === first.progress.milestoneTemplateId)?.name ?? '',
-              milestoneTemplateId: first.progress.milestoneTemplateId,
-              rows,
-              first,
-              totalGood: rows.reduce((s, x) => s + x.report.quantity, 0),
-              totalDefective: rows.reduce((s, x) => s + (x.report.defectiveQuantity ?? 0), 0),
-              totalAmount: rows.reduce((s, x) => s + x.report.quantity * (x.report.rate ?? defaultRate), 0),
-              reportNo: rows.find(r => r.report.reportBatchId || r.report.reportNo)?.report.reportNo
-            };
-          });
-        }
-        const batches: (OrderBatch | ProductBatch)[] = [...orderBatches, ...productBatches].sort((a, b) => {
-          const ta = a.source === 'order' ? a.first.report.timestamp : a.first.report.timestamp;
-          const tb = b.source === 'order' ? b.first.report.timestamp : b.first.report.timestamp;
-          return new Date(tb).getTime() - new Date(ta).getTime();
-        });
-        const totalGood = batches.reduce((s, b) => s + b.totalGood, 0);
-        const totalDefective = batches.reduce((s, b) => s + b.totalDefective, 0);
-        const totalAmount = batches.reduce((s, b) => s + b.totalAmount, 0);
-        const getUnitName = (productId: string) => {
-          const p = products.find(px => px.id === productId);
-          return (p?.unitId && dictionaries?.units?.find(u => u.id === p.unitId)?.name) || '件';
-        };
-        const firstBatchProductId = batches.length > 0 ? (batches[0].source === 'order' ? batches[0].first.order.productId : batches[0].productId) : '';
-        const summaryUnit = batches.length > 0 && batches.every(b => (b.source === 'order' ? b.first.order.productId : b.productId) === firstBatchProductId)
-          ? getUnitName(firstBatchProductId) : '件';
-        const uniqueProducts = [...new Set([...orders.map(o => o.productId), ...productMilestoneProgresses.map(p => p.productId)])].filter(Boolean);
-        const uniqueMilestones = [...new Set([...allRows.map(r => r.milestone.name), ...productBatches.map(b => b.milestoneName)])].filter(Boolean);
-        const uniqueOperators = [...new Set([...allRows.map(r => r.report.operator), ...productBatches.flatMap(b => b.rows.map(r => r.report.operator))])].filter(Boolean).sort((a, b) => a.localeCompare(b));
         return (
           <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setShowHistoryModal(false); setReportDetailBatch(null); }} />
@@ -2256,8 +2260,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
       {/* 待入库清单弹窗 */}
       {showPendingStockModal && (() => {
-        const product = stockInOrder ? products.find(p => p.id === stockInOrder.order.productId) : null;
-        const category = product ? categories.find(c => c.id === product.categoryId) : null;
+        const product = stockInOrder ? productMap.get(stockInOrder.order.productId) : null;
+        const category = product ? categoryMap.get(product.categoryId) : null;
         const hasColorSize = !!(product?.variants?.length && (Boolean(product?.colorIds?.length && product?.sizeIds?.length) || category?.hasColorSize));
         const groupedVariantsForStock: Record<string, ProductVariant[]> = (() => {
           if (!product?.variants?.length) return {};
@@ -2548,7 +2552,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           .filter(r => r.type === 'STOCK_IN')
           .map(r => {
             const order = orders.find(o => o.id === r.orderId);
-            const product = products.find(p => p.id === r.productId);
+            const product = productMap.get(r.productId);
             const wh = warehouses.find(w => w.id === r.warehouseId);
             return {
               id: r.id,
@@ -2684,7 +2688,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         </thead>
                         <tbody>
                           {batches.map(batch => {
-                            const batchProduct = products.find(p => p.id === batch.first.productId);
+                            const batchProduct = productMap.get(batch.first.productId);
                             const batchUnit = (batchProduct?.unitId && dictionaries?.units?.find(u => u.id === batchProduct.unitId)?.name) || '件';
                             return (
                               <tr key={batch.docNo} className="border-b border-slate-100 hover:bg-slate-50/50">
@@ -2722,8 +2726,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
             {/* 入库流水详情弹窗 */}
             {detailBatch && (() => {
-              const product = products.find(p => p.id === detailBatch.first.productId);
-              const category = product ? categories.find(c => c.id === product.categoryId) : null;
+              const product = productMap.get(detailBatch.first.productId);
+              const category = product ? categoryMap.get(product.categoryId) : null;
               const hasColorSize = Boolean(product?.colorIds?.length && product?.sizeIds?.length) || Boolean(category?.hasColorSize);
               const unitName = (product?.unitId && dictionaries?.units?.find(u => u.id === product.unitId)?.name) || '件';
               const wh = warehouses.find(w => w.id === detailBatch.first.warehouseId);
@@ -2986,7 +2990,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                           });
                         }
                         if (onUpdateProduct && f.rate >= 0) {
-                          const product = products.find(p => p.id === editingReport.productId);
+                          const product = productMap.get(editingReport.productId);
                           if (product) {
                             onUpdateProduct({
                               ...product,
@@ -3013,7 +3017,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                           let dt = new Date(ts);
                           if (isNaN(dt.getTime())) dt = new Date();
                           const tsStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}T${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
-                          const product = products.find(p => p.id === order.productId);
+                          const product = productMap.get(order.productId);
                           const rate = product?.nodeRates?.[milestone.templateId] ?? 0;
                           const matchingWorker = workers.find(w => w.name === report.operator);
                           setEditingReport({
@@ -3050,7 +3054,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                           let dt = new Date(ts);
                           if (isNaN(dt.getTime())) dt = new Date();
                           const tsStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}T${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
-                          const product = products.find(p => p.id === progress.productId);
+                          const product = productMap.get(progress.productId);
                           const rate = product?.nodeRates?.[progress.milestoneTemplateId] ?? 0;
                           const matchingWorker = workers.find(w => w.name === report.operator);
                           setEditingReport({
@@ -3151,7 +3155,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         value={editingReport.templateId}
                         onChange={e => {
                           const newTemplateId = e.target.value;
-                          const product = products.find(p => p.id === editingReport.productId);
+                          const product = productMap.get(editingReport.productId);
                           const newRate = product?.nodeRates?.[newTemplateId] ?? 0;
                           if (reportDetailBatch.source === 'order') {
                             const order = orders.find(o => o.id === editingReport.orderId);
@@ -3528,7 +3532,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         {(() => {
                           const productId = reportDetailBatch.source === 'order' ? reportDetailBatch.first.order.productId : reportDetailBatch.productId;
                           const p = products.find(px => px.id === productId);
-                          const cat = categories.find(c => c.id === p?.categoryId);
+                          const cat = categoryMap.get(p?.categoryId);
                           const hasColorSize = Boolean(p?.colorIds?.length && p?.sizeIds?.length) || Boolean(cat?.hasColorSize);
                           const detailUnit = (p?.unitId && dictionaries?.units?.find(u => u.id === p.unitId)?.name) || '件';
                           if (!hasColorSize) return null;
@@ -3593,7 +3597,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         if (!mainOrder) return null;
         const childOrders = orders.filter(o => o.parentOrderId === reworkDetailOrderId);
         const orderIds = [reworkDetailOrderId, ...childOrders.map(o => o.id)];
-        const product = products.find(p => p.id === mainOrder.productId);
+        const product = productMap.get(mainOrder.productId);
         const orderTotalQty = mainOrder.items?.reduce((s, i) => s + i.quantity, 0) ?? 0;
 
         const defectByNode = new Map<string, { name: string; defective: number; rework: number; scrap: number; pending: number }>();
@@ -3727,7 +3731,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
       {/* 返工详情弹窗（关联产品模式）：按产品汇总，不区分工单 */}
       {reworkDetailProductId && productionLinkMode === 'product' && (() => {
-        const product = products.find(p => p.id === reworkDetailProductId);
+        const product = productMap.get(reworkDetailProductId);
         if (!product) return null;
         const relatedOrders = orders.filter(o => o.productId === reworkDetailProductId && !o.parentOrderId);
         const relatedOrderIds = new Set<string>();
@@ -3888,7 +3892,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
       {materialIssueOrderId && onAddRecord && !materialIssueForProduct && (() => {
         const order = orders.find(o => o.id === materialIssueOrderId);
         if (!order) return null;
-        const product = products.find(p => p.id === order.productId);
+        const product = productMap.get(order.productId);
         const orderQty = order.items.reduce((s, i) => s + i.quantity, 0);
         const bomMaterials: { productId: string; name: string; sku: string; unitNeeded: number; nodeNames: string[] }[] = [];
         const matMap = new Map<string, { name: string; sku: string; unitNeeded: number; nodeNames: Set<string> }>();
@@ -4107,7 +4111,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
       {/* 关联产品：多工单合并 BOM，领料写入 sourceProductId（无工单） */}
       {materialIssueForProduct && onAddRecord && (() => {
         const { productId: sourceProductId, orders: groupOrders } = materialIssueForProduct;
-        const finishedProduct = products.find(p => p.id === sourceProductId);
+        const finishedProduct = productMap.get(sourceProductId);
         const matMap = new Map<string, { name: string; sku: string; unitNeeded: number; nodeNames: Set<string> }>();
         const mergeLocal = (local: Map<string, { name: string; sku: string; unitNeeded: number; nodeNames: Set<string> }>) => {
           local.forEach((v, pid) => {
@@ -4128,7 +4132,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         const addOrderBom = (order: ProductionOrder) => {
           const orderQty = order.items.reduce((s, i) => s + i.quantity, 0);
           if (orderQty <= 0) return;
-          const product = products.find(p => p.id === order.productId) ?? finishedProduct;
+          const product = productMap.get(order.productId) ?? finishedProduct;
           const local = new Map<string, { name: string; sku: string; unitNeeded: number; nodeNames: Set<string> }>();
           const variants = product?.variants ?? [];
           const addLocal = (bom: BOM, qty: number, nodeName: string) => {
@@ -4384,4 +4388,4 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   );
 };
 
-export default OrderListView;
+export default React.memo(OrderListView);

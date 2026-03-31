@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from './AuthContext';
 import * as api from '../services/api';
@@ -205,7 +205,19 @@ export interface AppDataContextValue {
   refreshPMP: () => Promise<void>;
 }
 
-const AppDataCtx = createContext<AppDataContextValue | null>(null);
+export type AppDataState = Pick<AppDataContextValue,
+  'dataLoading' | 'products' | 'orders' | 'plans' | 'psiRecords' | 'financeRecords' | 'prodRecords' |
+  'categories' | 'partnerCategories' | 'dictionaries' | 'globalNodes' | 'boms' |
+  'partners' | 'workers' | 'equipment' | 'warehouses' |
+  'financeCategories' | 'financeAccountTypes' |
+  'planFormSettings' | 'orderFormSettings' | 'purchaseOrderFormSettings' | 'purchaseBillFormSettings' |
+  'productionLinkMode' | 'processSequenceMode' | 'allowExceedMaxReportQty' | 'productMilestoneProgresses'
+>;
+
+export type AppDataActions = Omit<AppDataContextValue, keyof AppDataState>;
+
+const DataCtx = createContext<AppDataState | null>(null);
+const ActionsCtx = createContext<AppDataActions | null>(null);
 
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const { currentUser, tenantCtx } = useAuth();
@@ -238,97 +250,155 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [allowExceedMaxReportQty, setAllowExceedMaxReportQty] = useState<boolean>(true);
   const [productMilestoneProgresses, setProductMilestoneProgresses] = useState<ProductMilestoneProgress[]>([]);
 
-  // ── Initial data loading ──
+  // ── Initial data loading (two-phase: core first, deferred second) ──
   useEffect(() => {
     let cancelled = false;
-    async function loadAll() {
-      try {
-        const results = await Promise.allSettled([
-          api.settings.getConfig(),                               // 0
-          api.settings.categories.list(),                         // 1
-          api.settings.partnerCategories.list(),                  // 2
-          api.settings.nodes.list(),                              // 3
-          api.settings.warehouses.list(),                         // 4
-          api.settings.financeCategories.list(),                  // 5
-          api.settings.financeAccountTypes.list(),                // 6
-          api.partners.list(),                                    // 7
-          api.tenants.getReportableMembers(tenantCtx!.tenantId),  // 8
-          api.equipment.list(),                                   // 9
-          api.dictionaries.list(),                                // 10
-          api.products.list(),                                    // 11
-          api.boms.list(),                                        // 12
-          api.plans.list(),                                       // 13
-          api.orders.list(),                                      // 14
-          api.production.list(),                                  // 15
-          api.psi.list(),                                         // 16
-          api.finance.list(),                                     // 17
-          api.orders.listProductProgress(),                       // 18
-        ]);
-        if (cancelled) return;
-        const v = (i: number) => results[i].status === 'fulfilled' ? (results[i] as PromiseFulfilledResult<unknown>).value : undefined;
-        const failed = results.filter(r => r.status === 'rejected');
-        if (failed.length) console.warn(`数据加载: ${failed.length}/${results.length} 个请求失败`, failed.map(r => (r as PromiseRejectedResult).reason?.message));
-        if (results[11]?.status === 'rejected') {
-          const msg = (results[11] as PromiseRejectedResult).reason?.message || '未知错误';
-          const isForbidden =
-            /无权|403|Forbidden/i.test(msg) || msg.includes('请先选择或创建企业');
-          if (isForbidden) {
-            toast.error(
-              `产品列表加载失败：${msg}。请在「成员管理」中为当前账号勾选「基础信息 → 产品档案」的查看权限（basic:products:view），或由企业管理员调整角色。`,
-            );
-          } else {
-            const migrateHint =
-              /数据库|route_report|migration|P20|column|schema|Prisma/i.test(msg)
-                ? ' 若为数据库升级后首次使用，请在服务器执行 prisma migrate deploy 并重启后端。'
-                : '';
-            toast.error(`产品列表加载失败：${msg}。${migrateHint}`.trim());
-          }
-        }
+    const val = (results: PromiseSettledResult<unknown>[], i: number) =>
+      results[i]?.status === 'fulfilled' ? (results[i] as PromiseFulfilledResult<unknown>).value : undefined;
 
-        const cfg = (v(0) || {}) as Record<string, unknown>;
-        setProductionLinkMode((cfg.productionLinkMode as ProductionLinkMode) ?? 'order');
-        setProcessSequenceMode((cfg.processSequenceMode as ProcessSequenceMode) ?? 'free');
-        setAllowExceedMaxReportQty(cfg.allowExceedMaxReportQty !== false);
-        setPlanFormSettings((cfg.planFormSettings as PlanFormSettings) ?? DEFAULT_PLAN_FORM_SETTINGS);
-        setOrderFormSettings((cfg.orderFormSettings as OrderFormSettings) ?? DEFAULT_ORDER_FORM_SETTINGS);
-        setPurchaseOrderFormSettings((cfg.purchaseOrderFormSettings as PurchaseOrderFormSettings) ?? DEFAULT_PURCHASE_ORDER_FORM_SETTINGS);
-        setPurchaseBillFormSettings((cfg.purchaseBillFormSettings as PurchaseBillFormSettings) ?? DEFAULT_PURCHASE_BILL_FORM_SETTINGS);
-        if (v(1))  setCategories(v(1) as ProductCategory[]);
-        if (v(2))  setPartnerCategories(v(2) as PartnerCategory[]);
-        if (v(3))  setGlobalNodes(v(3) as GlobalNodeTemplate[]);
-        if (v(4))  setWarehouses(v(4) as Warehouse[]);
-        if (v(5))  setFinanceCategories(v(5) as FinanceCategory[]);
-        if (v(6))  setFinanceAccountTypes(v(6) as FinanceAccountType[]);
-        if (v(7))  setPartners(v(7) as any[]);
-        if (v(8))  setWorkers(v(8) as any[]);
-        if (v(9))  setEquipment(v(9) as any[]);
-        if (v(10)) setDictionaries(v(10) as AppDictionaries);
-        if (v(11)) setProducts(normalizeDecimals(v(11) as Product[]));
-        if (v(12)) setBoms(normalizeDecimals(v(12) as BOM[]));
-        if (v(13)) setPlans(normalizeDecimals(v(13) as PlanOrder[]));
-        if (v(14)) setOrders(normalizeDecimals(v(14) as ProductionOrder[]));
-        if (v(15)) setProdRecords(normalizeDecimals(v(15) as ProductionOpRecord[]));
-        if (v(16)) setPsiRecords(normalizeDecimals(v(16) as any[]));
-        if (v(17)) setFinanceRecords(normalizeDecimals(v(17) as FinanceRecord[]));
-        if (v(18)) setProductMilestoneProgresses(normalizeDecimals(v(18) as ProductMilestoneProgress[]));
+    async function loadCore() {
+      const coreResults = await Promise.allSettled([
+        api.settings.getConfig(),                               // 0
+        api.settings.categories.list(),                         // 1
+        api.settings.partnerCategories.list(),                  // 2
+        api.settings.nodes.list(),                              // 3
+        api.settings.warehouses.list(),                         // 4
+        api.settings.financeCategories.list(),                  // 5
+        api.settings.financeAccountTypes.list(),                // 6
+        api.partners.list(),                                    // 7
+        api.dictionaries.list(),                                // 8
+        api.products.list(),                                    // 9
+        api.boms.list(),                                        // 10
+      ]);
+      if (cancelled) return;
+
+      const coreFailed = coreResults.filter(r => r.status === 'rejected');
+      if (coreFailed.length) console.warn(`核心数据加载: ${coreFailed.length}/${coreResults.length} 个请求失败`, coreFailed.map(r => (r as PromiseRejectedResult).reason?.message));
+
+      if (coreResults[9]?.status === 'rejected') {
+        const msg = (coreResults[9] as PromiseRejectedResult).reason?.message || '未知错误';
+        const isForbidden = /无权|403|Forbidden/i.test(msg) || msg.includes('请先选择或创建企业');
+        if (isForbidden) {
+          toast.error(`产品列表加载失败：${msg}。请在「成员管理」中为当前账号勾选「基础信息 → 产品档案」的查看权限（basic:products:view），或由企业管理员调整角色。`);
+        } else {
+          const migrateHint = /数据库|route_report|migration|P20|column|schema|Prisma/i.test(msg)
+            ? ' 若为数据库升级后首次使用，请在服务器执行 prisma migrate deploy 并重启后端。' : '';
+          toast.error(`产品列表加载失败：${msg}。${migrateHint}`.trim());
+        }
+      }
+
+      const cfg = (val(coreResults, 0) || {}) as Record<string, unknown>;
+      setProductionLinkMode((cfg.productionLinkMode as ProductionLinkMode) ?? 'order');
+      setProcessSequenceMode((cfg.processSequenceMode as ProcessSequenceMode) ?? 'free');
+      setAllowExceedMaxReportQty(cfg.allowExceedMaxReportQty !== false);
+      setPlanFormSettings((cfg.planFormSettings as PlanFormSettings) ?? DEFAULT_PLAN_FORM_SETTINGS);
+      setOrderFormSettings((cfg.orderFormSettings as OrderFormSettings) ?? DEFAULT_ORDER_FORM_SETTINGS);
+      setPurchaseOrderFormSettings((cfg.purchaseOrderFormSettings as PurchaseOrderFormSettings) ?? DEFAULT_PURCHASE_ORDER_FORM_SETTINGS);
+      setPurchaseBillFormSettings((cfg.purchaseBillFormSettings as PurchaseBillFormSettings) ?? DEFAULT_PURCHASE_BILL_FORM_SETTINGS);
+      if (val(coreResults, 1))  setCategories(val(coreResults, 1) as ProductCategory[]);
+      if (val(coreResults, 2))  setPartnerCategories(val(coreResults, 2) as PartnerCategory[]);
+      if (val(coreResults, 3))  setGlobalNodes(val(coreResults, 3) as GlobalNodeTemplate[]);
+      if (val(coreResults, 4))  setWarehouses(val(coreResults, 4) as Warehouse[]);
+      if (val(coreResults, 5))  setFinanceCategories(val(coreResults, 5) as FinanceCategory[]);
+      if (val(coreResults, 6))  setFinanceAccountTypes(val(coreResults, 6) as FinanceAccountType[]);
+      if (val(coreResults, 7))  setPartners(val(coreResults, 7) as any[]);
+      if (val(coreResults, 8))  setDictionaries(val(coreResults, 8) as AppDictionaries);
+      if (val(coreResults, 9))  setProducts(normalizeDecimals(val(coreResults, 9) as Product[]));
+      if (val(coreResults, 10)) setBoms(normalizeDecimals(val(coreResults, 10) as BOM[]));
+
+      if (!cancelled) setDataLoading(false);
+    }
+
+    async function loadDeferred() {
+      // Phase 2a: lightweight meta + frequently needed data first
+      const metaResults = await Promise.allSettled([
+        api.tenants.getReportableMembers(tenantCtx!.tenantId),  // 0
+        api.equipment.list(),                                   // 1
+        api.plans.list(),                                       // 2
+        api.orders.list(),                                      // 3
+        api.orders.listProductProgress(),                       // 4
+      ]);
+      if (cancelled) return;
+      if (val(metaResults, 0)) setWorkers(val(metaResults, 0) as any[]);
+      if (val(metaResults, 1)) setEquipment(val(metaResults, 1) as any[]);
+      if (val(metaResults, 2)) setPlans(normalizeDecimals(val(metaResults, 2) as PlanOrder[]));
+      if (val(metaResults, 3)) setOrders(normalizeDecimals(val(metaResults, 3) as ProductionOrder[]));
+      if (val(metaResults, 4)) setProductMilestoneProgresses(normalizeDecimals(val(metaResults, 4) as ProductMilestoneProgress[]));
+
+      // Phase 2b: heavy record collections (can be large, load in parallel but after orders)
+      const heavyResults = await Promise.allSettled([
+        api.production.list(),                                  // 0
+        api.psi.list(),                                         // 1
+        api.finance.list(),                                     // 2
+      ]);
+      if (cancelled) return;
+
+      const allFailed = [...metaResults, ...heavyResults].filter(r => r.status === 'rejected');
+      if (allFailed.length) console.warn(`延后数据加载: ${allFailed.length} 个请求失败`, allFailed.map(r => (r as PromiseRejectedResult).reason?.message));
+
+      if (val(heavyResults, 0)) setProdRecords(normalizeDecimals(val(heavyResults, 0) as ProductionOpRecord[]));
+      if (val(heavyResults, 1)) setPsiRecords(normalizeDecimals(val(heavyResults, 1) as any[]));
+      if (val(heavyResults, 2)) setFinanceRecords(normalizeDecimals(val(heavyResults, 2) as FinanceRecord[]));
+
+      const now = new Date().toISOString();
+      ['orders', 'products', 'plans', 'prodRecords', 'psiRecords', 'financeRecords'].forEach(k => { lastFetchTs.current[k] = now; });
+    }
+
+    (async () => {
+      try {
+        await loadCore();
+        if (!cancelled) loadDeferred();
       } catch (err) {
         console.error('数据加载失败', err);
-      } finally {
         if (!cancelled) setDataLoading(false);
       }
-    }
-    loadAll();
+    })();
     return () => { cancelled = true; };
   }, []);
 
-  // ── Refresh helpers ──
-  const refreshPlans = useCallback(async () => setPlans(normalizeDecimals(await api.plans.list() as PlanOrder[])), []);
-  const refreshOrders = useCallback(async () => setOrders(normalizeDecimals(await api.orders.list() as ProductionOrder[])), []);
-  const refreshProducts = useCallback(async () => setProducts(normalizeDecimals(await api.products.list() as Product[])), []);
+  // ── Incremental sync timestamps ──
+  const lastFetchTs = useRef<Record<string, string>>({});
+  const markFetched = (key: string) => { lastFetchTs.current[key] = new Date().toISOString(); };
+
+  /**
+   * Merges incremental results into the existing state.
+   * If the server returns a full list (no updatedAfter support), it replaces entirely.
+   * If only partial, it merges by id.
+   */
+  function mergeById<T extends { id: string }>(prev: T[], incoming: T[]): T[] {
+    const map = new Map(prev.map(x => [x.id, x]));
+    for (const item of incoming) map.set(item.id, item);
+    return Array.from(map.values());
+  }
+
+  // ── Refresh helpers (with incremental sync support) ──
+  const refreshPlans = useCallback(async () => { setPlans(normalizeDecimals(await api.plans.list() as PlanOrder[])); markFetched('plans'); }, []);
+  const refreshOrders = useCallback(async () => {
+    const ts = lastFetchTs.current['orders'];
+    const data = normalizeDecimals(await api.orders.list(ts ? { updatedAfter: ts } : undefined) as ProductionOrder[]);
+    setOrders(prev => ts ? mergeById(prev, data) : data);
+    markFetched('orders');
+  }, []);
+  const refreshProducts = useCallback(async () => { setProducts(normalizeDecimals(await api.products.list() as Product[])); markFetched('products'); }, []);
   const refreshBoms = useCallback(async () => setBoms(normalizeDecimals(await api.boms.list() as BOM[])), []);
-  const refreshProdRecords = useCallback(async () => setProdRecords(normalizeDecimals(await api.production.list() as ProductionOpRecord[])), []);
-  const refreshPsiRecords = useCallback(async () => setPsiRecords(normalizeDecimals(await api.psi.list() as any[])), []);
-  const refreshFinanceRecords = useCallback(async () => setFinanceRecords(normalizeDecimals(await api.finance.list() as FinanceRecord[])), []);
+  const refreshProdRecords = useCallback(async () => {
+    const ts = lastFetchTs.current['prodRecords'];
+    const data = normalizeDecimals(await api.production.list(ts ? { updatedAfter: ts } : undefined) as ProductionOpRecord[]);
+    setProdRecords(prev => ts ? mergeById(prev, data) : data);
+    markFetched('prodRecords');
+  }, []);
+  const refreshPsiRecords = useCallback(async () => {
+    const ts = lastFetchTs.current['psiRecords'];
+    const data = normalizeDecimals(await api.psi.list(ts ? { updatedAfter: ts } : undefined) as any[]);
+    setPsiRecords(prev => ts ? mergeById(prev, data) : data);
+    markFetched('psiRecords');
+  }, []);
+  const refreshFinanceRecords = useCallback(async () => {
+    const ts = lastFetchTs.current['financeRecords'];
+    const data = normalizeDecimals(await api.finance.list(ts ? { updatedAfter: ts } : undefined) as FinanceRecord[]);
+    setFinanceRecords(prev => ts ? mergeById(prev, data) : data);
+    markFetched('financeRecords');
+  }, []);
   const refreshPMP = useCallback(async () => setProductMilestoneProgresses(normalizeDecimals(await api.orders.listProductProgress() as ProductMilestoneProgress[])), []);
   const refreshCategories = useCallback(async () => setCategories(await api.settings.categories.list() as ProductCategory[]), []);
   const refreshPartnerCategories = useCallback(async () => setPartnerCategories(await api.settings.partnerCategories.list() as PartnerCategory[]), []);
@@ -350,54 +420,65 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const onUpdatePurchaseOrderFormSettings = useCallback(async (v: PurchaseOrderFormSettings) => { await api.settings.updateConfig('purchaseOrderFormSettings', v); setPurchaseOrderFormSettings(v); }, []);
   const onUpdatePurchaseBillFormSettings = useCallback(async (v: PurchaseBillFormSettings) => { await api.settings.updateConfig('purchaseBillFormSettings', v); setPurchaseBillFormSettings(v); }, []);
 
+  // ── Helpers: normalize a single record ──
+  const norm1 = <T,>(item: T): T => normalizeDecimals([item])[0];
+
   // ── Product / BOM handlers ──
   const onUpdateProduct = useCallback(async (p: Product): Promise<boolean> => {
     try {
       const exists = products.some(px => px.id === p.id);
-      if (exists) { await api.products.update(p.id, p); } else { await api.products.create(p); }
-      // 工序变更会触发后端回填工单 milestones / 状态；工单中心与关联产品进度须同步刷新
-      await Promise.allSettled([refreshProducts(), refreshOrders(), refreshPMP()]);
+      const saved = (exists ? await api.products.update(p.id, p) : await api.products.create(p)) as Product;
+      const normalized = norm1(saved);
+      setProducts(prev => exists ? prev.map(px => px.id === p.id ? normalized : px) : [...prev, normalized]);
+      // 工序变更会触发后端回填工单 milestones / 状态；后台刷新，不阻塞调用方
+      void Promise.allSettled([refreshOrders(), refreshPMP()]);
       return true;
     } catch (err: any) {
       toast.error(err.message || '操作失败');
       return false;
     }
-  }, [products, refreshProducts, refreshOrders, refreshPMP]);
+  }, [products, refreshOrders, refreshPMP]);
 
   const onDeleteProduct = useCallback(async (id: string): Promise<boolean> => {
     try {
       await api.products.delete(id);
-      await Promise.allSettled([refreshProducts(), refreshBoms(), refreshOrders(), refreshPMP()]);
+      setProducts(prev => prev.filter(px => px.id !== id));
+      void Promise.allSettled([refreshBoms(), refreshOrders(), refreshPMP()]);
       toast.success('已删除产品');
       return true;
     } catch (err: any) {
       toast.error(err.message || '删除失败');
       return false;
     }
-  }, [refreshProducts, refreshBoms, refreshOrders, refreshPMP]);
+  }, [refreshBoms, refreshOrders, refreshPMP]);
 
   const onUpdateBOM = useCallback(async (b: BOM): Promise<boolean> => {
     try {
       const exists = boms.some(bx => bx.id === b.id);
-      if (exists) { await api.boms.update(b.id, b); } else { await api.boms.create(b); }
-      await refreshBoms();
+      const saved = (exists ? await api.boms.update(b.id, b) : await api.boms.create(b)) as BOM;
+      const normalized = norm1(saved);
+      setBoms(prev => exists ? prev.map(bx => bx.id === b.id ? normalized : bx) : [...prev, normalized]);
       return true;
     } catch (err: any) {
       toast.error(err.message || '操作失败');
       return false;
     }
-  }, [boms, refreshBoms]);
+  }, [boms]);
 
   // ── Plan handlers ──
   const onCreatePlan = useCallback(async (p: PlanOrder) => {
-    try { await api.plans.create(p); await refreshPlans(); }
-    catch (err: any) { toast.error(err.message || '创建计划失败'); }
-  }, [refreshPlans]);
+    try {
+      const created = await api.plans.create(p) as PlanOrder;
+      setPlans(prev => [...prev, norm1(created)]);
+    } catch (err: any) { toast.error(err.message || '创建计划失败'); }
+  }, []);
 
   const onUpdatePlan = useCallback(async (id: string, updates: Partial<PlanOrder>) => {
-    try { await api.plans.update(id, updates); await refreshPlans(); }
-    catch (err: any) { toast.error(err.message || '更新计划失败'); }
-  }, [refreshPlans]);
+    try {
+      const updated = await api.plans.update(id, updates) as PlanOrder;
+      setPlans(prev => prev.map(p => p.id === id ? norm1(updated) : p));
+    } catch (err: any) { toast.error(err.message || '更新计划失败'); }
+  }, []);
 
   const onSplitPlan = useCallback(async (planId: string, newPlans: PlanOrder[]) => {
     try {
@@ -407,9 +488,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, [refreshPlans]);
 
   const onDeletePlan = useCallback(async (id: string) => {
-    try { await api.plans.delete(id); await refreshPlans(); }
+    try { await api.plans.delete(id); setPlans(prev => prev.filter(p => p.id !== id)); }
     catch (err: any) { toast.error(err.message || '删除计划失败'); }
-  }, [refreshPlans]);
+  }, []);
 
   const onConvertToOrder = useCallback(async (id: string) => {
     try { await api.plans.convert(id); await Promise.allSettled([refreshPlans(), refreshOrders()]); }
@@ -440,9 +521,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         variantId: vId, workerId, equipmentId, reportBatchId, reportNo,
         customData: data ?? {}, rate: rate != null ? rate : undefined,
       });
-      await refreshOrders();
+      const updated = await api.orders.get(oId) as ProductionOrder;
+      setOrders(prev => prev.map(o => o.id === oId ? norm1(updated) : o));
     } catch (err: any) { toast.error(err.message || '报工失败'); }
-  }, [workers, currentUser, orders, products, refreshOrders]);
+  }, [workers, currentUser, orders, products]);
 
   const onReportSubmitProduct = useCallback(async (productId: string, milestoneTemplateId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string) => {
     try {
@@ -466,14 +548,18 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       } else {
         await api.orders.updateReport(orderId, milestoneId, reportId, { quantity, defectiveQuantity: defectiveQuantity || 0, timestamp, operator });
       }
-      await refreshOrders();
+      const updated = await api.orders.get(orderId) as ProductionOrder;
+      setOrders(prev => prev.map(o => o.id === orderId ? norm1(updated) : o));
     } catch (err: any) { toast.error(err.message || '更新报工失败'); }
-  }, [refreshOrders]);
+  }, []);
 
   const onDeleteReport = useCallback(async ({ orderId, milestoneId, reportId }: { orderId: string; milestoneId: string; reportId: string }) => {
-    try { await api.orders.deleteReport(orderId, milestoneId, reportId); await refreshOrders(); }
-    catch (err: any) { toast.error(err.message || '删除报工失败'); }
-  }, [refreshOrders]);
+    try {
+      await api.orders.deleteReport(orderId, milestoneId, reportId);
+      const updated = await api.orders.get(orderId) as ProductionOrder;
+      setOrders(prev => prev.map(o => o.id === orderId ? norm1(updated) : o));
+    } catch (err: any) { toast.error(err.message || '删除报工失败'); }
+  }, []);
 
   const onUpdateReportProduct = useCallback(async ({ progressId, reportId, quantity, defectiveQuantity, timestamp, operator, newMilestoneTemplateId }: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string }) => {
     try {
@@ -499,43 +585,54 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, [refreshPMP]);
 
   const onUpdateOrder = useCallback(async (orderId: string, updates: Partial<ProductionOrder>) => {
-    try { await api.orders.update(orderId, updates); await refreshOrders(); }
-    catch (err: any) { toast.error(err.message || '更新工单失败'); }
-  }, [refreshOrders]);
+    try {
+      const updated = await api.orders.update(orderId, updates) as ProductionOrder;
+      setOrders(prev => prev.map(o => o.id === orderId ? norm1(updated) : o));
+    } catch (err: any) { toast.error(err.message || '更新工单失败'); }
+  }, []);
 
   const onDeleteOrder = useCallback(async (orderId: string) => {
-    try { await api.orders.delete(orderId); await refreshOrders(); }
+    try { await api.orders.delete(orderId); setOrders(prev => prev.filter(o => o.id !== orderId)); }
     catch (err: any) { toast.error(err.message || '删除工单失败'); }
-  }, [refreshOrders]);
+  }, []);
 
   // ── Production record handlers ──
   const onAddProdRecord = useCallback(async (record: ProductionOpRecord) => {
-    try { await api.production.create(record); await Promise.allSettled([refreshProdRecords(), refreshOrders(), refreshPMP()]); }
-    catch (err: any) { toast.error(err.message || '添加记录失败'); }
-  }, [refreshProdRecords, refreshOrders, refreshPMP]);
+    try {
+      const created = await api.production.create(record) as ProductionOpRecord;
+      setProdRecords(prev => [...prev, norm1(created)]);
+      void Promise.allSettled([refreshOrders(), refreshPMP()]);
+    } catch (err: any) { toast.error(err.message || '添加记录失败'); }
+  }, [refreshOrders, refreshPMP]);
 
   const onAddProdRecordBatch = useCallback(async (records: ProductionOpRecord[]) => {
     try {
-      for (const record of records) await api.production.create(record);
-      await Promise.allSettled([refreshProdRecords(), refreshOrders(), refreshPMP()]);
+      const created: ProductionOpRecord[] = [];
+      for (const record of records) created.push(await api.production.create(record) as ProductionOpRecord);
+      setProdRecords(prev => [...prev, ...normalizeDecimals(created)]);
+      void Promise.allSettled([refreshOrders(), refreshPMP()]);
     } catch (err: any) { toast.error(err.message || '批量添加记录失败'); }
-  }, [refreshProdRecords, refreshOrders, refreshPMP]);
+  }, [refreshOrders, refreshPMP]);
 
   const onUpdateProdRecord = useCallback(async (r: ProductionOpRecord) => {
-    try { await api.production.update(r.id, r); await refreshProdRecords(); }
-    catch (err: any) { toast.error(err.message || '更新记录失败'); }
-  }, [refreshProdRecords]);
+    try {
+      const updated = await api.production.update(r.id, r) as ProductionOpRecord;
+      setProdRecords(prev => prev.map(x => x.id === r.id ? norm1(updated) : x));
+    } catch (err: any) { toast.error(err.message || '更新记录失败'); }
+  }, []);
 
   const onDeleteProdRecord = useCallback(async (id: string) => {
-    try { await api.production.delete(id); await refreshProdRecords(); }
+    try { await api.production.delete(id); setProdRecords(prev => prev.filter(x => x.id !== id)); }
     catch (err: any) { toast.error(err.message || '删除记录失败'); }
-  }, [refreshProdRecords]);
+  }, []);
 
   // ── PSI record handlers ──
   const onAddPSIRecord = useCallback(async (record: any) => {
-    try { await api.psi.create(record); await refreshPsiRecords(); }
-    catch (err: any) { toast.error(err.message || '添加记录失败'); }
-  }, [refreshPsiRecords]);
+    try {
+      const created = await api.psi.create(record);
+      setPsiRecords(prev => [...prev, ...normalizeDecimals([created])]);
+    } catch (err: any) { toast.error(err.message || '添加记录失败'); }
+  }, []);
 
   const onAddPSIRecordBatch = useCallback(async (records: any[]) => {
     try { await api.psi.createBatch(records); await refreshPsiRecords(); }
@@ -554,27 +651,32 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     try {
       const ids = psiRecords.filter(r => r.type === type && r.docNumber === docNumber).map(r => r.id);
       if (ids.length) await api.psi.deleteBatch(ids);
-      await refreshPsiRecords();
+      const idSet = new Set(ids);
+      setPsiRecords(prev => prev.filter(r => !idSet.has(r.id)));
     } catch (err: any) { toast.error(err.message || '删除记录失败'); }
-  }, [psiRecords, refreshPsiRecords]);
+  }, [psiRecords]);
 
   // ── Finance record handlers ──
   const onAddFinanceRecord = useCallback(async (r: FinanceRecord) => {
-    try { await api.finance.create(r); await refreshFinanceRecords(); }
-    catch (err: any) { toast.error(err.message || '添加记录失败'); }
-  }, [refreshFinanceRecords]);
+    try {
+      const created = await api.finance.create(r) as FinanceRecord;
+      setFinanceRecords(prev => [...prev, norm1(created)]);
+    } catch (err: any) { toast.error(err.message || '添加记录失败'); }
+  }, []);
 
   const onUpdateFinanceRecord = useCallback(async (r: FinanceRecord) => {
-    try { await api.finance.update(r.id, r); await refreshFinanceRecords(); }
-    catch (err: any) { toast.error(err.message || '更新记录失败'); }
-  }, [refreshFinanceRecords]);
+    try {
+      const updated = await api.finance.update(r.id, r) as FinanceRecord;
+      setFinanceRecords(prev => prev.map(x => x.id === r.id ? norm1(updated) : x));
+    } catch (err: any) { toast.error(err.message || '更新记录失败'); }
+  }, []);
 
   const onDeleteFinanceRecord = useCallback(async (id: string) => {
-    try { await api.finance.delete(id); await refreshFinanceRecords(); }
+    try { await api.finance.delete(id); setFinanceRecords(prev => prev.filter(x => x.id !== id)); }
     catch (err: any) { toast.error(err.message || '删除记录失败'); }
-  }, [refreshFinanceRecords]);
+  }, []);
 
-  const value: AppDataContextValue = {
+  const dataValue: AppDataState = {
     dataLoading,
     products, orders, plans, psiRecords, financeRecords, prodRecords,
     categories, partnerCategories, dictionaries, globalNodes, boms,
@@ -583,6 +685,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     planFormSettings, orderFormSettings, purchaseOrderFormSettings, purchaseBillFormSettings,
     productionLinkMode, processSequenceMode, allowExceedMaxReportQty,
     productMilestoneProgresses,
+  };
+
+  const actionsValue: AppDataActions = useMemo(() => ({
     onUpdateProductionLinkMode, onUpdateProcessSequenceMode, onUpdateAllowExceedMaxReportQty,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
     onUpdatePurchaseOrderFormSettings, onUpdatePurchaseBillFormSettings,
@@ -599,13 +704,49 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     refreshPartnerCategories, refreshCategories, refreshGlobalNodes, refreshWarehouses,
     refreshFinanceCategories, refreshFinanceAccountTypes,
     refreshProducts, refreshOrders, refreshProdRecords, refreshPMP,
-  };
+  }), [
+    onUpdateProductionLinkMode, onUpdateProcessSequenceMode, onUpdateAllowExceedMaxReportQty,
+    onUpdatePlanFormSettings, onUpdateOrderFormSettings,
+    onUpdatePurchaseOrderFormSettings, onUpdatePurchaseBillFormSettings,
+    onUpdateProduct, onDeleteProduct, onUpdateBOM,
+    onCreatePlan, onUpdatePlan, onSplitPlan, onDeletePlan, onConvertToOrder,
+    onCreateSubPlan, onCreateSubPlans,
+    onReportSubmit, onReportSubmitProduct,
+    onUpdateReport, onDeleteReport, onUpdateReportProduct, onDeleteReportProduct,
+    onUpdateOrder, onDeleteOrder,
+    onAddProdRecord, onAddProdRecordBatch, onUpdateProdRecord, onDeleteProdRecord,
+    onAddPSIRecord, onAddPSIRecordBatch, onReplacePSIRecords, onDeletePSIRecords,
+    onAddFinanceRecord, onUpdateFinanceRecord, onDeleteFinanceRecord,
+    refreshDictionaries, refreshWorkers, refreshEquipment, refreshPartners,
+    refreshPartnerCategories, refreshCategories, refreshGlobalNodes, refreshWarehouses,
+    refreshFinanceCategories, refreshFinanceAccountTypes,
+    refreshProducts, refreshOrders, refreshProdRecords, refreshPMP,
+  ]);
 
-  return <AppDataCtx.Provider value={value}>{children}</AppDataCtx.Provider>;
+  return (
+    <DataCtx.Provider value={dataValue}>
+      <ActionsCtx.Provider value={actionsValue}>
+        {children}
+      </ActionsCtx.Provider>
+    </DataCtx.Provider>
+  );
 }
 
 export function useAppData(): AppDataContextValue {
-  const ctx = useContext(AppDataCtx);
-  if (!ctx) throw new Error('useAppData must be used within AppDataProvider');
+  const data = useContext(DataCtx);
+  const actions = useContext(ActionsCtx);
+  if (!data || !actions) throw new Error('useAppData must be used within AppDataProvider');
+  return useMemo(() => ({ ...data, ...actions }), [data, actions]);
+}
+
+export function useAppDataState(): AppDataState {
+  const ctx = useContext(DataCtx);
+  if (!ctx) throw new Error('useAppDataState must be used within AppDataProvider');
+  return ctx;
+}
+
+export function useAppActions(): AppDataActions {
+  const ctx = useContext(ActionsCtx);
+  if (!ctx) throw new Error('useAppActions must be used within AppDataProvider');
   return ctx;
 }

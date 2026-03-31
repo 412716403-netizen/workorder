@@ -30,6 +30,7 @@ import MemberManagementView from './MemberManagementView';
 import { Product, GlobalNodeTemplate, ProductCategory, BOM, AppDictionaries, Partner, Equipment, PartnerCategory, DictionaryItem } from '../types';
 import { toast } from 'sonner';
 import * as api from '../services/api';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 interface BasicInfoViewProps {
   products: Product[];
@@ -114,6 +115,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
   // --- 合作单位视图特有状态 ---
   const [activePartnerCategoryId, setActivePartnerCategoryId] = useState<string>(partnerCategories[0]?.id || 'all');
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebouncedValue(searchTerm);
 
   // --- 弹窗与编辑状态 ---
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -132,6 +134,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
   /** 公共字典列表：类型筛选（与合作单位分类条同级） */
   const [activeDictKindFilter, setActiveDictKindFilter] = useState<'all' | 'color' | 'size' | 'unit'>('all');
   const [productDetailVisible, setProductDetailVisible] = useState(false);
+  const [membersTabMounted, setMembersTabMounted] = useState(false);
 
   const sentinelRef = useRef<HTMLDivElement>(null);
   const tabsWrapRef = useRef<HTMLDivElement>(null);
@@ -285,7 +288,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
     ];
     const byKind =
       activeDictKindFilter === 'all' ? rows : rows.filter(r => r.kind === activeDictKindFilter);
-    const t = searchTerm.trim().toLowerCase();
+    const t = debouncedSearchTerm.trim().toLowerCase();
     const bySearch =
       !t
         ? byKind
@@ -298,7 +301,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
       if (d !== 0) return d;
       return a.name.localeCompare(b.name, 'zh-CN');
     });
-  }, [dictionaries.colors, dictionaries.sizes, units, activeDictKindFilter, searchTerm]);
+  }, [dictionaries.colors, dictionaries.sizes, units, activeDictKindFilter, debouncedSearchTerm]);
 
   const dictTotalCount =
     dictionaries.colors.length + dictionaries.sizes.length + units.length;
@@ -316,11 +319,11 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
   const filteredPartners = useMemo(() => {
     return partners.filter(p => {
       const matchesCategory = activePartnerCategoryId === 'all' || p.categoryId === activePartnerCategoryId;
-      const term = searchTerm.toLowerCase();
+      const term = debouncedSearchTerm.toLowerCase();
       const matchesSearch = p.name.toLowerCase().includes(term);
       return matchesCategory && matchesSearch;
     });
-  }, [partners, activePartnerCategoryId, searchTerm]);
+  }, [partners, activePartnerCategoryId, debouncedSearchTerm]);
 
   const filteredEquipment = useMemo(() => {
     const byNode = equipment.filter(e => {
@@ -426,7 +429,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                     <button
                       key={tab.id}
                       type="button"
-                      onClick={() => { setActiveTab(tab.id as BasicTab); setSearchTerm(''); setShowModal(null); }}
+                      onClick={() => { const t = tab.id as BasicTab; setActiveTab(t); setSearchTerm(''); setShowModal(null); if (t === 'MEMBERS') setMembersTabMounted(true); }}
                       className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
                         activeTab === tab.id
                           ? 'bg-indigo-50 text-indigo-600 shadow-sm'
@@ -619,8 +622,10 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
           </div>
         )}
 
-        {activeTab === 'MEMBERS' && (
-          <MemberManagementView tenantId={tenantId} tenantRole={tenantRole} currentUserId={currentUserId} globalNodes={globalNodes} onRefreshWorkers={onRefreshWorkers} />
+        {membersTabMounted && (
+          <div style={{ display: activeTab === 'MEMBERS' ? undefined : 'none' }}>
+            <MemberManagementView tenantId={tenantId} tenantRole={tenantRole} currentUserId={currentUserId} globalNodes={globalNodes} onRefreshWorkers={onRefreshWorkers} />
+          </div>
         )}
 
         {activeTab === 'EQUIPMENT' && !showModal && (
@@ -1181,4 +1186,4 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
   );
 };
 
-export default BasicInfoView;
+export default React.memo(BasicInfoView);

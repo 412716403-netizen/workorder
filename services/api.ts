@@ -283,12 +283,26 @@ export const adminTenants = {
     }),
 };
 
+// ── Pagination types ──
+export interface PaginationParams {
+  page?: number;
+  pageSize?: number;
+  updatedAfter?: string;
+  [key: string]: string | number | undefined;
+}
+
+function buildQs(params?: PaginationParams | Record<string, string>): string {
+  if (!params) return '';
+  const entries = Object.entries(params).filter(([, v]) => v != null && v !== '');
+  if (!entries.length) return '';
+  return '?' + new URLSearchParams(entries.map(([k, v]) => [k, String(v)])).toString();
+}
+
 // ── Generic CRUD helpers ──
 function crud<T = unknown>(base: string) {
   return {
-    list: (params?: Record<string, string>) => {
-      const qs = params ? '?' + new URLSearchParams(params).toString() : '';
-      return request<T[]>(`${base}${qs}`);
+    list: (params?: PaginationParams | Record<string, string>) => {
+      return request<T[]>(`${base}${buildQs(params)}`);
     },
     get: (id: string) => request<T>(`${base}/${id}`),
     create: (data: Partial<T>) => request<T>(base, { method: 'POST', body: JSON.stringify(data) }),
@@ -379,9 +393,8 @@ export const production = {
 
 // ── PSI ──
 export const psi = {
-  list: (params?: Record<string, string>) => {
-    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
-    return request(`/psi/records${qs}`);
+  list: (params?: PaginationParams | Record<string, string>) => {
+    return request(`/psi/records${buildQs(params)}`);
   },
   create: (data: unknown) => request('/psi/records', { method: 'POST', body: JSON.stringify(data) }),
   createBatch: (records: unknown[]) => request('/psi/records/batch', { method: 'POST', body: JSON.stringify({ records }) }),

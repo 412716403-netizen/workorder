@@ -870,19 +870,18 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
       visited.delete(productId);
     };
 
-    const getRealStock = (materialId: string) => {
-      if (!psiRecords || psiRecords.length === 0) return 0;
-      const ins = psiRecords
-        .filter(r => r.type === 'PURCHASE_BILL' && r.productId === materialId)
-        .reduce((s, r) => s + (Number(r.quantity) || 0), 0);
-      const outs = psiRecords
-        .filter(r => r.type === 'SALES_BILL' && r.productId === materialId)
-        .reduce((s, r) => s + (Number(r.quantity) || 0), 0);
-      const stocktakeAdjust = psiRecords
-        .filter(r => r.type === 'STOCKTAKE' && r.productId === materialId)
-        .reduce((s, r) => s + (Number(r.diffQuantity) || 0), 0);
-      return ins - outs + stocktakeAdjust;
-    };
+    const stockIndex = new Map<string, number>();
+    if (psiRecords && psiRecords.length > 0) {
+      for (const r of psiRecords) {
+        const pid = r.productId;
+        if (!pid) continue;
+        const prev = stockIndex.get(pid) || 0;
+        if (r.type === 'PURCHASE_BILL') stockIndex.set(pid, prev + (Number(r.quantity) || 0));
+        else if (r.type === 'SALES_BILL') stockIndex.set(pid, prev - (Number(r.quantity) || 0));
+        else if (r.type === 'STOCKTAKE') stockIndex.set(pid, prev + (Number(r.diffQuantity) || 0));
+      }
+    }
+    const getRealStock = (materialId: string) => stockIndex.get(materialId) || 0;
     
     tempPlanInfo.items.forEach((item: PlanItem) => {
       const planQty = Number(item.quantity) || 0;

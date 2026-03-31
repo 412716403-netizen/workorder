@@ -1706,4 +1706,4 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   );
 };
 
-export default SettingsView;
+export default React.memo(SettingsView);
