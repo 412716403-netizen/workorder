@@ -74,6 +74,34 @@ function buildTemplateExample(category: ProductCategory): string[] {
   return row;
 }
 
+/**
+ * 多工作表时不再固定读第一个 sheet，避免「物料 / 半成品」列结构相同却导错分类。
+ * 优先级：与所选分类同名 → 与文件名（去扩展名）同名 → 文件名按下划线分段从后往前匹配工作表名 → 第一个工作表。
+ */
+function pickWorksheetName(sheetNames: string[], categoryName: string, fileName: string): string {
+  const cat = categoryName.trim();
+  if (sheetNames.length === 0) return '';
+  const norm = (s: string) => s.trim();
+
+  const byCat = sheetNames.find(s => norm(s) === cat);
+  if (byCat) return byCat;
+
+  const stem = fileName.replace(/\.(xlsx|xls)$/i, '').trim();
+  if (stem) {
+    const byStem = sheetNames.find(s => norm(s) === stem);
+    if (byStem) return byStem;
+    const segments = stem.split(/[_\-]/).map(s => s.trim()).filter(Boolean);
+    for (let i = segments.length - 1; i >= 0; i--) {
+      const seg = segments[i];
+      if (seg.length < 2) continue;
+      const hit = sheetNames.find(s => norm(s) === seg);
+      if (hit) return hit;
+    }
+  }
+
+  return sheetNames[0];
+}
+
 export default function ProductImportModal({
   isOpen, onClose, categories, dictionaries, products, onRefreshDictionaries, onImportComplete,
 }: ProductImportModalProps) {
@@ -119,7 +147,8 @@ export default function ProductImportModal({
     ws['!cols'] = colWidths;
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, '产品导入');
+    const sheetTitle = selectedCategory.name.slice(0, 31) || '产品导入';
+    XLSX.utils.book_append_sheet(wb, ws, sheetTitle);
     XLSX.writeFile(wb, `产品导入模板_${selectedCategory.name}.xlsx`);
     toast.success('模板已下载');
   };
@@ -135,8 +164,19 @@ export default function ProductImportModal({
       try {
         const data = new Uint8Array(evt.target?.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: 'array' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
+        const pickedSheet = pickWorksheetName(wb.SheetNames, selectedCategory.name, file.name);
+        const ws = wb.Sheets[pickedSheet];
         const jsonRows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1 });
+
+        if (wb.SheetNames.length > 1) {
+          const hasSheetNamedLikeCategory = wb.SheetNames.some(s => s.trim() === selectedCategory.name.trim());
+          if (!hasSheetNamedLikeCategory && pickedSheet === wb.SheetNames[0]) {
+            toast.info(
+              `工作簿含多个工作表（${wb.SheetNames.join('、')}），未找到与「${selectedCategory.name}」同名的表，已读取「${pickedSheet}」。请将目标数据放在名为「${selectedCategory.name}」的工作表中，或把该表移到第一页。`,
+              { duration: 8000 },
+            );
+          }
+        }
 
         if (jsonRows.length < 2) {
           toast.error('Excel 文件至少需要表头行和一行数据');
@@ -274,7 +314,9 @@ export default function ProductImportModal({
         });
 
         setParsedRows(rows);
-        toast.success(`已解析 ${rows.length} 条数据，请确认后点击下一步`);
+        const sheetHint =
+          wb.SheetNames.length > 1 ? `（工作表：${pickedSheet}）` : '';
+        toast.success(`已解析 ${rows.length} 条数据${sheetHint}，请确认后点击下一步`);
       } catch (err: any) {
         toast.error('Excel 解析失败: ' + (err?.message ?? '未知错误'));
       }
@@ -584,7 +626,7 @@ export default function ProductImportModal({
                       先下载「{selectedCategory.name}」分类的导入模板
                     </p>
                     <p className="text-xs text-indigo-600/70 mb-3">
-                      模板中包含该分类所需的所有字段列，请按模板格式填写产品数据
+                      模板中包含该分类所需的所有字段列，请按模板格式填写产品数据。若一个 Excel 内有多个工作表，系统会优先读取与当前分类同名的表；否则按文件名或「产品导入模板_分类名」中的分类段匹配；均无法匹配时再读第一个工作表。
                     </p>
                     <button
                       onClick={handleDownloadTemplate}
