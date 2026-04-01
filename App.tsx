@@ -22,6 +22,7 @@ const CollaborationInboxView = React.lazy(() => import('./views/CollaborationInb
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppDataProvider, useAppData } from './contexts/AppDataContext';
 import ErrorBoundary from './components/ErrorBoundary';
+import { ConfirmProvider } from './contexts/ConfirmContext';
 
 const RouteFallback = () => (
   <div className="flex items-center justify-center py-32">
@@ -112,6 +113,7 @@ function AppLayout() {
   }
 
   return (
+    <ConfirmProvider>
     <div className="flex h-screen bg-slate-50 text-slate-900 font-sans">
       {/* Sidebar */}
       <div className="w-52 bg-white border-r border-slate-200 flex flex-col p-5 gap-8">
@@ -136,40 +138,40 @@ function AppLayout() {
 
         <nav className="flex flex-col gap-1.5">
           {hasPerm('dashboard') && (
-            <Link to="/" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+            <Link to="/" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
               <LayoutDashboard className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 经营看板
             </Link>
           )}
           {hasPerm('production') && (
-            <Link to="/production" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+            <Link to="/production" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
               <ClipboardList className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 生产管理
             </Link>
           )}
           {hasPerm('psi') && (
-            <Link to="/psi" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+            <Link to="/psi" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
               <ShoppingCart className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 进销存
             </Link>
           )}
           {hasPerm('finance') && (
-            <Link to="/finance" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+            <Link to="/finance" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
               <Wallet className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 财务结算
             </Link>
           )}
-          <Link to="/collaboration" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+          <Link to="/collaboration" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
             <Inbox className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 协作管理
           </Link>
           {hasPerm('basic') && (
-            <Link to="/basic" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+            <Link to="/basic" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
               <Boxes className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 基础信息
             </Link>
           )}
           {hasPerm('settings') && (
-            <Link to="/settings" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+            <Link to="/settings" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
               <SettingsIcon className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 系统设置
             </Link>
           )}
           {(currentUser as Record<string, unknown>)?.role === 'admin' && (
-            <Link to="/admin/users" className="flex items-center gap-3 px-5 py-3.5 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+            <Link to="/admin/users" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
               <UserCog className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 账号管理
             </Link>
           )}
@@ -209,7 +211,7 @@ function AppLayout() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 min-h-0 overflow-auto pt-4 px-12 pb-12 bg-slate-50/30">
+      <div className="flex-1 min-h-0 overflow-auto pt-4 px-12 pb-8 bg-slate-50/30">
         <ErrorBoundary>
           <Suspense fallback={<RouteFallback />}>
             <AppRoutes />
@@ -217,6 +219,7 @@ function AppLayout() {
         </ErrorBoundary>
       </div>
     </div>
+    </ConfirmProvider>
   );
 }
 

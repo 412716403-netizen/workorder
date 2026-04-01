@@ -38,9 +38,12 @@ import {
 import { Product, GlobalNodeTemplate, ProductCategory, BOM, BOMItem, AppDictionaries, ProductVariant, DictionaryItem, Partner } from '../types';
 import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
 import { toast } from 'sonner';
+import { useConfirm } from '../contexts/ConfirmContext';
 import * as api from '../services/api';
 import ProductImportModal from './ProductImportModal';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { SearchableProductSelect } from '../components/SearchableProductSelect';
+import { pageSubtitleClass, pageTitleClass } from '../styles/uiDensity';
 
 /** 档案中心分类筛选：「全部」避免默认 cat-material 与租户真实分类 id 不一致导致列表空白 */
 const PRODUCT_ARCHIVE_ALL = '__all__';
@@ -226,7 +229,7 @@ const SpecSelectorModal = ({
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full transition-all"><X className="w-5 h-5" /></button>
         </div>
-        <div className="p-8 space-y-6 flex-1 overflow-y-auto custom-scrollbar">
+        <div className="p-6 space-y-4 flex-1 overflow-y-auto custom-scrollbar">
           <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 flex flex-wrap gap-2 min-h-[60px]">
             {selectedIds.map(id => {
               const item = items.find(i => i.id === id);
@@ -285,259 +288,6 @@ const SpecSelectorModal = ({
           <button onClick={onClose} className="w-full py-4 bg-indigo-600 text-white rounded-[20px] font-black text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98] transition-all">确认选择 ({selectedIds.length})</button>
         </div>
       </div>
-    </div>
-  );
-};
-
-// 与创建生产计划中「搜索并选择产品型号」一致；下拉使用 Portal+fixed，避免在弹窗/滚动区内被裁切或被迫滚外层
-const SearchableProductSelect = ({
-  options,
-  value,
-  onChange,
-  disabled,
-  placeholder,
-  categories = [],
-  compact = false,
-  /** 已在其他 BOM 行选用的产品 id；当前行已选值仍可显示，但其他行已占用的选项置灰不可点 */
-  unavailableProductIds = [],
-}: {
-  options: Product[];
-  value: string;
-  onChange: (val: string) => void;
-  disabled?: boolean;
-  placeholder?: string;
-  categories?: ProductCategory[];
-  /** BOM 等场景：更小的触发器与选项行，一屏展示更多 */
-  compact?: boolean;
-  unavailableProductIds?: string[];
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<string>('all');
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
-
-  const selectedProduct = options.find(p => p.id === value);
-
-  const filteredOptions = useMemo(() => {
-    return options.filter(p => {
-      const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || (p.sku && p.sku.toLowerCase().includes(search.toLowerCase()));
-      const matchesCategory = activeTab === 'all' || p.categoryId === activeTab;
-      return matchesSearch && matchesCategory;
-    }).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id));
-  }, [options, search, activeTab]);
-
-  const updatePanelPosition = useCallback(() => {
-    const el = triggerRef.current;
-    if (!el || !isOpen) return;
-    const rect = el.getBoundingClientRect();
-    const gap = 6;
-    const pad = 8;
-    const w = Math.min(Math.max(rect.width, 280), window.innerWidth - pad * 2);
-    let left = rect.left;
-    if (left + w > window.innerWidth - pad) left = window.innerWidth - w - pad;
-    if (left < pad) left = pad;
-
-    const spaceBelow = window.innerHeight - rect.bottom - gap - pad;
-    const spaceAbove = rect.top - gap - pad;
-    const preferBelow = spaceBelow >= 200 || spaceBelow >= spaceAbove;
-    const cap = Math.min(window.innerHeight * 0.62, Math.max(preferBelow ? spaceBelow : spaceAbove, 200));
-
-    if (preferBelow) {
-      setPanelStyle({
-        position: 'fixed',
-        top: rect.bottom + gap,
-        left,
-        width: w,
-        maxHeight: cap,
-        zIndex: 10050,
-        display: 'flex',
-        flexDirection: 'column',
-      });
-    } else {
-      setPanelStyle({
-        position: 'fixed',
-        bottom: window.innerHeight - rect.top + gap,
-        left,
-        width: w,
-        maxHeight: cap,
-        zIndex: 10050,
-        display: 'flex',
-        flexDirection: 'column',
-      });
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    updatePanelPosition();
-    let raf = requestAnimationFrame(updatePanelPosition);
-    const onScroll = () => updatePanelPosition();
-    const onResize = () => updatePanelPosition();
-    window.addEventListener('scroll', onScroll, true);
-    window.addEventListener('resize', onResize);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener('scroll', onScroll, true);
-      window.removeEventListener('resize', onResize);
-    };
-  }, [isOpen, updatePanelPosition, search, activeTab, filteredOptions.length]);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (triggerRef.current?.contains(t)) return;
-      if ((e.target as Element)?.closest?.('[data-searchable-product-dropdown]')) return;
-      setIsOpen(false);
-    };
-    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
-
-  const triggerCls = compact
-    ? 'w-full bg-slate-50 border-none rounded-xl py-2.5 px-3 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between disabled:opacity-50 transition-all min-h-[40px]'
-    : 'w-full bg-slate-50 border-none rounded-xl py-3.5 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between disabled:opacity-50 transition-all min-h-[48px]';
-
-  const searchInputCls = compact
-    ? 'w-full bg-slate-50 border-none rounded-lg py-2 pl-9 pr-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500'
-    : 'w-full bg-slate-50 border-none rounded-xl py-3 pl-11 pr-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500';
-
-  const tabBtnCls = (active: boolean) =>
-    compact
-      ? `px-2 py-1 rounded-md text-[9px] font-black uppercase transition-all whitespace-nowrap ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`
-      : `px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`;
-
-  const unavailableSet = useMemo(() => new Set(unavailableProductIds.filter(Boolean)), [unavailableProductIds]);
-
-  const rowBtnCls = (selected: boolean, unavailable: boolean) => {
-    const pad = compact ? 'py-2 px-2.5 rounded-xl' : 'p-3 rounded-2xl';
-    if (unavailable) {
-      return `w-full text-left ${pad} transition-all border-2 opacity-50 cursor-not-allowed bg-slate-100 border-slate-100 text-slate-400`;
-    }
-    return `w-full text-left ${pad} transition-all border-2 ${
-      selected ? 'bg-indigo-50 border-indigo-600/20 text-indigo-700' : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'
-    }`;
-  };
-
-  const dropdownPanel = isOpen && typeof document !== 'undefined' && (
-    <div
-      data-searchable-product-dropdown
-      className={`bg-white border border-slate-200 shadow-2xl animate-in fade-in zoom-in-95 duration-150 ${compact ? 'rounded-xl p-3' : 'rounded-2xl p-4'}`}
-      style={panelStyle}
-      onMouseDown={e => e.preventDefault()}
-    >
-      <div className={`relative flex-shrink-0 ${compact ? 'mb-2' : 'mb-4'}`}>
-        <Search className={`absolute text-slate-400 ${compact ? 'left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5' : 'left-3.5 top-1/2 -translate-y-1/2 w-4 h-4'}`} />
-        <input
-          autoFocus
-          type="text"
-          className={searchInputCls}
-          placeholder="输入名称或 SKU 搜索..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
-      </div>
-
-      <div className={`flex items-center gap-1 flex-shrink-0 overflow-x-auto no-scrollbar ${compact ? 'mb-2 pb-0.5' : 'mb-4 pb-1'}`}>
-        <button type="button" onClick={() => setActiveTab('all')} className={tabBtnCls(activeTab === 'all')}>
-          全部
-        </button>
-        {categories.map(cat => (
-          <button key={cat.id} type="button" onClick={() => setActiveTab(cat.id)} className={tabBtnCls(activeTab === cat.id)}>
-            {cat.name}
-          </button>
-        ))}
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar space-y-0.5">
-        {filteredOptions.map(p => {
-          const cat = categories.find(c => c.id === p.categoryId);
-          const unavailable = unavailableSet.has(p.id) && p.id !== value;
-          return (
-            <button
-              key={p.id}
-              type="button"
-              disabled={unavailable}
-              title={unavailable ? '已在其他行添加，不可重复选择' : undefined}
-              onClick={() => {
-                if (unavailable) return;
-                onChange(p.id);
-                setIsOpen(false);
-                setSearch('');
-              }}
-              className={rowBtnCls(p.id === value, unavailable)}
-            >
-              <div className={`flex justify-between items-start ${compact ? 'mb-0' : 'mb-0.5'}`}>
-                <p className={`font-black truncate ${compact ? 'text-xs' : 'text-sm'}`}>{p.name}</p>
-                {cat && (
-                  <span className={`rounded bg-slate-100 text-slate-400 font-black uppercase shrink-0 ${compact ? 'px-1 py-0 text-[7px]' : 'px-1.5 py-0.5 text-[8px]'}`}>{cat.name}</span>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center gap-1">
-                <p className={`font-bold uppercase tracking-widest ${compact ? 'text-[9px]' : 'text-[10px]'} ${p.id === value ? 'text-indigo-400' : 'text-slate-400'}`}>{p.sku}</p>
-                {cat?.customFields?.map(f => {
-                  const val = p.categoryCustomData?.[f.id];
-                  if (val == null || val === '') return null;
-                  if (f.type === 'file')
-                    return (
-                      <span key={f.id} className={`font-bold text-slate-500 rounded bg-slate-50 ${compact ? 'text-[7px] px-1 py-0' : 'text-[8px] px-1.5 py-0.5'}`}>
-                        {f.label}: 已上传
-                      </span>
-                    );
-                  return (
-                    <span key={f.id} className={`font-bold text-slate-500 rounded bg-slate-50 ${compact ? 'text-[7px] px-1 py-0' : 'text-[8px] px-1.5 py-0.5'}`}>
-                      {f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}
-                    </span>
-                  );
-                })}
-              </div>
-            </button>
-          );
-        })}
-        {filteredOptions.length === 0 && (
-          <div className={compact ? 'py-6 text-center' : 'py-10 text-center'}>
-            <Package className={`text-slate-100 mx-auto mb-2 block ${compact ? 'w-6 h-6' : 'w-8 h-8'}`} />
-            <p className={`text-slate-400 font-medium ${compact ? 'text-[10px]' : 'text-xs'}`}>未找到符合条件的产品</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="relative w-full">
-      <button
-        ref={triggerRef}
-        type="button"
-        disabled={disabled}
-        onClick={() => setIsOpen(o => !o)}
-        className={triggerCls}
-      >
-        <div className="flex items-center gap-2 truncate min-w-0">
-          <Package className={`shrink-0 ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} ${selectedProduct ? 'text-indigo-600' : 'text-slate-300'}`} />
-          <span className={`font-bold truncate ${compact ? 'text-[11px]' : 'text-xs'} ${selectedProduct ? 'text-slate-900' : 'text-slate-400'}`}>
-            {selectedProduct
-              ? (() => {
-                  const cat = categories.find(c => c.id === selectedProduct.categoryId);
-                  const customParts =
-                    cat?.customFields
-                      ?.map(f => {
-                        const v = selectedProduct.categoryCustomData?.[f.id];
-                        if (v == null || v === '') return null;
-                        if (f.type === 'file') return `${f.label}: 已上传`;
-                        return `${f.label}: ${typeof v === 'boolean' ? (v ? '是' : '否') : String(v)}`;
-                      })
-                      .filter(Boolean) ?? [];
-                  const base = `${selectedProduct.name} (${selectedProduct.sku})`;
-                  return customParts.length > 0 ? `${base} ${customParts.join(' ')}` : base;
-                })()
-              : placeholder || '搜索并选择产品型号...'}
-          </span>
-        </div>
-        <ChevronRight className={`shrink-0 transition-transform ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} ${isOpen ? 'rotate-90' : 'text-slate-400'}`} />
-      </button>
-
-      {dropdownPanel && createPortal(dropdownPanel, document.body)}
     </div>
   );
 };
@@ -872,6 +622,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   initialProductId,
   onClearInitialProductId,
 }) => {
+  const confirm = useConfirm();
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>(PRODUCT_ARCHIVE_ALL);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [workingProduct, setWorkingProduct] = useState<Product | null>(null);
@@ -1114,7 +865,8 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
 
   const handleDeletePersistedProduct = async () => {
     if (!workingProduct || !onDeleteProduct || !isPersistedProduct) return;
-    if (!window.confirm(`确定删除产品「${workingProduct.name || workingProduct.sku}」？删除后不可恢复。`)) return;
+    const ok = await confirm({ message: `确定删除产品「${workingProduct.name || workingProduct.sku}」？删除后不可恢复。`, danger: true });
+    if (!ok) return;
     setDeleteProductBusy(true);
     try {
       closeBOMEditor();
@@ -1330,7 +1082,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
         </div>
 
         {/* 1. 核心档案 */}
-        <div className="bg-white rounded-[40px] p-6 md:p-8 border border-slate-200 shadow-sm space-y-6">
+        <div className="bg-white rounded-[40px] p-5 md:p-6 border border-slate-200 shadow-sm space-y-4">
           <div className="flex items-center gap-3 border-b border-slate-50 pb-3">
             <div className="w-9 h-9 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600"><FileText className="w-[18px] h-[18px]" /></div>
             <h3 className="text-base font-semibold text-slate-900 tracking-tight">1. 核心业务档案</h3>
@@ -1667,13 +1419,13 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
 
         {/* 3. 生产工序与工艺 BOM */}
         {activeCategory?.hasProcess && (
-          <div className="bg-white rounded-[40px] p-6 md:p-8 border border-slate-200 shadow-sm space-y-6">
+          <div className="bg-white rounded-[40px] p-5 md:p-6 border border-slate-200 shadow-sm space-y-4">
             <div className="flex items-center gap-3 border-b border-slate-50 pb-3">
               <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600"><ClipboardCheck className="w-[18px] h-[18px]" /></div>
               <h3 className="text-base font-semibold text-slate-900 tracking-tight">2. 生产工序与工艺 BOM</h3>
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-4">
               {/* 上：可选工序 */}
               <section className="rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50/90 to-white p-6 shadow-sm">
                 <div className="flex flex-wrap items-center gap-2 gap-y-1 mb-4">
@@ -1969,7 +1721,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
               </section>
 
               {/* 下：BOM 精细化配置（配色与「标准生产路线」一致） */}
-              <section className="rounded-2xl border-2 border-indigo-100 bg-indigo-50/20 p-6 shadow-sm space-y-6">
+              <section className="rounded-2xl border-2 border-indigo-100 bg-indigo-50/20 p-4 shadow-sm space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-[11px] font-black text-white">3</span>
                   <h4 className="text-sm font-black text-slate-800">BOM 精细化配置</h4>
@@ -2020,7 +1772,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
             )}
 
             {workingProduct.variants.length > 0 && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">多变体 · 按颜色分组</h5>
                     <p className="text-[10px] text-slate-400 font-medium">同一颜色下各尺码一行，支持各工序独立配料</p>
@@ -2283,8 +2035,8 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     <div className="space-y-4 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900 tracking-tight">产品与 BOM 档案中心</h1>
-          <p className="text-slate-500 mt-1 text-sm leading-snug max-w-xl">定义业务规则、生产规格与工序物料明细</p>
+          <h1 className={pageTitleClass}>产品与 BOM 档案中心</h1>
+          <p className={pageSubtitleClass}>定义业务规则、生产规格与工序物料明细</p>
         </div>
         {permCanCreate && (
           <div className="flex items-center gap-2 shrink-0">

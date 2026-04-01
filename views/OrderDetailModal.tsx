@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { toast } from 'sonner';
 import { X, Layers, Trash2, Pencil, Check, ClipboardList, Truck, FileText } from 'lucide-react';
 import { ProductionOrder, Product, OrderFormSettings, ProductionOpRecord, OrderItem, ProductCategory, AppDictionaries, ProductMilestoneProgress, GlobalNodeTemplate } from '../types';
+import { useConfirm } from '../contexts/ConfirmContext';
 
 interface OrderDetailModalProps {
   orderId: string | null;
@@ -24,6 +25,7 @@ interface OrderDetailModalProps {
 const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   orderId, onClose, orders, products, prodRecords, dictionaries, categories, orderFormSettings, productionLinkMode, productMilestoneProgresses = [], globalNodes = [], onUpdateOrder, onDeleteOrder
 }) => {
+  const confirm = useConfirm();
   const showInDetail = (id: string) => orderFormSettings?.standardFields.find(f => f.id === id)?.showInDetail ?? true;
   const order = orders.find(o => o.id === orderId);
   const product = products.find(p => p.id === order?.productId);
@@ -174,7 +176,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     return item?.quantity ?? 0;
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!onDeleteOrder) return;
     if (productionLinkMode !== 'product') {
       const hasReport = order.milestones.some(m => m.completedQuantity > 0 || (m.reports?.length ?? 0) > 0);
@@ -193,10 +195,10 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         return;
       }
     }
-    if (window.confirm(`确定要删除工单「${order.orderNumber}」吗？此操作不可恢复。`)) {
-      onDeleteOrder(order.id);
-      onClose();
-    }
+    const ok = await confirm({ message: `确定要删除工单「${order.orderNumber}」吗？此操作不可恢复。`, danger: true });
+    if (!ok) return;
+    onDeleteOrder(order.id);
+    onClose();
   };
 
   const displayTotalQty = isEditing

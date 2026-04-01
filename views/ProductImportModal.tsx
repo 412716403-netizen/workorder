@@ -3,7 +3,6 @@ import {
   X, Download, Upload, FileSpreadsheet, ImagePlus, Check, AlertTriangle,
   XCircle, ChevronRight, ChevronLeft, Loader2, Info
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { ProductCategory, AppDictionaries, Product, DictionaryItem } from '../types';
 import * as api from '../services/api';
 import { toast } from 'sonner';
@@ -141,16 +140,18 @@ export default function ProductImportModal({
     if (!selectedCategory) return;
     const headers = buildTemplateHeaders(selectedCategory);
     const example = buildTemplateExample(selectedCategory);
-    const ws = XLSX.utils.aoa_to_sheet([headers, example]);
-
-    const colWidths = headers.map(h => ({ wch: Math.max(h.length * 2, 14) }));
-    ws['!cols'] = colWidths;
-
-    const wb = XLSX.utils.book_new();
-    const sheetTitle = selectedCategory.name.slice(0, 31) || '产品导入';
-    XLSX.utils.book_append_sheet(wb, ws, sheetTitle);
-    XLSX.writeFile(wb, `产品导入模板_${selectedCategory.name}.xlsx`);
-    toast.success('模板已下载');
+    void import('xlsx')
+      .then((XLSX) => {
+        const ws = XLSX.utils.aoa_to_sheet([headers, example]);
+        const colWidths = headers.map(h => ({ wch: Math.max(h.length * 2, 14) }));
+        ws['!cols'] = colWidths;
+        const wb = XLSX.utils.book_new();
+        const sheetTitle = selectedCategory.name.slice(0, 31) || '产品导入';
+        XLSX.utils.book_append_sheet(wb, ws, sheetTitle);
+        XLSX.writeFile(wb, `产品导入模板_${selectedCategory.name}.xlsx`);
+        toast.success('模板已下载');
+      })
+      .catch(() => toast.error('模板生成失败'));
   };
 
   // ── Parse uploaded Excel ──
@@ -161,7 +162,9 @@ export default function ProductImportModal({
 
     const reader = new FileReader();
     reader.onload = (evt) => {
+      void (async () => {
       try {
+        const XLSX = await import('xlsx');
         const data = new Uint8Array(evt.target?.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: 'array' });
         const pickedSheet = pickWorksheetName(wb.SheetNames, selectedCategory.name, file.name);
@@ -320,6 +323,7 @@ export default function ProductImportModal({
       } catch (err: any) {
         toast.error('Excel 解析失败: ' + (err?.message ?? '未知错误'));
       }
+      })();
     };
     reader.readAsArrayBuffer(file);
     if (excelInputRef.current) excelInputRef.current.value = '';

@@ -18,6 +18,14 @@ import {
 import { buildDefectiveReworkByOrderMilestone } from '../utils/defectiveReworkByOrderMilestone';
 import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
 import { toast } from 'sonner';
+import {
+  moduleHeaderRowClass,
+  outlineToolbarButtonClass,
+  pageSubtitleClass,
+  pageTitleClass,
+  secondaryToolbarButtonClass,
+} from '../styles/uiDensity';
+import { useConfirm } from '../contexts/ConfirmContext';
 
 function fmtDT(ts: string | Date | undefined | null): string {
   if (!ts) return '—';
@@ -134,6 +142,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     if (userPermissions.includes('production:orders_list:allow')) return true;
     return false;
   };
+  const confirm = useConfirm();
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
 
@@ -1060,56 +1069,61 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   const needEquipment = reportModal && globalNodes.find(n => n.id === reportModal.milestone.templateId)?.enableEquipmentOnReport;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4 animate-in fade-in duration-500">
+      <div className={moduleHeaderRowClass}>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">生产工单中心</h1>
-          <p className="text-slate-500 mt-1 italic text-sm">追踪各工序节点进度与完工比例</p>
+          <h1 className={pageTitleClass}>生产工单中心</h1>
+          <p className={pageSubtitleClass}>追踪各工序节点进度与完工比例</p>
         </div>
-        <div className="flex items-center gap-3">
-          {/* 搜索框放在表单配置左侧 */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 shrink-0 w-full sm:w-auto">
+          {/* 搜索框：与基础信息检索框量级一致 */}
+          <div className="relative w-full sm:w-56 sm:max-w-xs">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input
-              type="text"
+              type="search"
               placeholder="搜索产品、工单号、客户..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-500 w-56 bg-white"
+              className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-3 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
             />
           </div>
+          <div className="flex flex-wrap items-center gap-2">
           {hasOrderPerm('production:orders_form_config:allow') && (
           <button
+            type="button"
             onClick={() => { setOrderFormConfigDraft(JSON.parse(JSON.stringify(orderFormSettings))); setShowOrderFormConfigModal(true); }}
-            className="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition-all border border-slate-200"
+            className={secondaryToolbarButtonClass}
           >
-            <Sliders className="w-4 h-4" /> 表单配置
+            <Sliders className="w-4 h-4 shrink-0" /> 表单配置
           </button>
           )}
           {productionLinkMode === 'product' && (
             <button
+              type="button"
               onClick={() => { setOrderFlowProductId(null); setShowOrderFlowModal(true); }}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 text-sm font-bold transition-all"
+              className={outlineToolbarButtonClass}
             >
-              <ScrollText className="w-4 h-4" />
+              <ScrollText className="w-4 h-4 shrink-0" />
               工单流水
             </button>
           )}
           {hasOrderPerm('production:orders_report_records:view') && (
           <button 
+            type="button"
             onClick={() => setShowHistoryModal(true)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 text-sm font-bold transition-all"
+            className={outlineToolbarButtonClass}
           >
-            <History className="w-4 h-4" />
+            <History className="w-4 h-4 shrink-0" />
             报工流水
           </button>
           )}
           {hasOrderPerm('production:orders_pending_stock_in') && (
           <button
+            type="button"
             onClick={() => { setShowPendingStockModal(true); setStockInOrder(null); }}
-            className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 text-sm font-bold transition-all"
+            className={outlineToolbarButtonClass}
           >
-            <ArrowDownToLine className="w-4 h-4" />
+            <ArrowDownToLine className="w-4 h-4 shrink-0" />
             待入库清单
             {pendingStockOrders.length > 0 && (
               <span className="ml-0.5 min-w-[18px] h-[18px] rounded-full bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center">
@@ -1118,6 +1132,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
             )}
           </button>
           )}
+          </div>
         </div>
       </div>
 
@@ -1127,7 +1142,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           <p className="text-slate-400 font-medium">无权限查看工单列表</p>
         </div>
       ) : (
-      <div className="grid grid-cols-1 gap-4">
+      <div className="grid grid-cols-1 gap-2">
           {orders.length === 0 ? (
             <div className="bg-white border-2 border-dashed border-slate-100 rounded-[32px] p-20 text-center">
               <Layers className="w-12 h-12 text-slate-200 mx-auto mb-4" />
@@ -1145,11 +1160,11 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                     )
                   : 0;
                 const cardClass = isChild
-                  ? 'bg-white p-5 rounded-2xl border border-l-4 border-l-slate-300 border-slate-200 hover:shadow-lg hover:border-slate-300 transition-all grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6 lg:gap-10 items-center'
-                  : 'bg-white p-6 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6 lg:gap-10 items-center';
+                  ? 'bg-white px-5 py-2 rounded-2xl border border-l-4 border-l-slate-300 border-slate-200 hover:shadow-lg hover:border-slate-300 transition-all grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3 lg:gap-4 items-center'
+                  : 'bg-white px-5 py-2 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3 lg:gap-4 items-center';
                 return (
                   <div key={order.id} className={cardClass} style={indentPx != null && indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
-                    <div className="flex items-center gap-6 min-w-0">
+                    <div className="flex items-center gap-4 min-w-0">
                       {product?.imageUrl ? (
                         <button type="button" onClick={() => hasOrderPerm('production:orders_detail:view') && setDetailOrderId(order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none block`}>
                           <img src={product.imageUrl} alt={order.productName} className="w-full h-full object-cover block" />
@@ -1181,7 +1196,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-1 min-w-0 -my-0.5">
                       {order.status === 'PENDING_PROCESS' ? (
                         <div className="flex items-center gap-3 flex-1">
                           <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-black bg-amber-50 text-amber-600 border border-amber-200">
@@ -1198,8 +1213,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                           )}
                         </div>
                       ) : order.milestones.length > 0 ? (
-                        <div className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden scroll-smooth custom-scrollbar touch-pan-x">
-                          <div className="flex items-stretch gap-2 flex-nowrap py-1 w-max">
+                        <div className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden scroll-smooth custom-scrollbar touch-pan-x -mx-0.5">
+                          <div className="flex items-stretch gap-1.5 flex-nowrap py-0.5 w-max px-0.5">
                             {order.milestones.map((ms) => {
                               const isCompleted = ms.status === MilestoneStatus.COMPLETED;
                               const canReport = !!onReportSubmit && canReportMilestone(order, ms);
@@ -1218,11 +1233,11 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                               const tooltip = `工序「${ms.name}」：已完成 ${currentCompleted} 件，可报最多 ${availableQty} 件（已扣不良、加返工完成），剩余 ${remaining} 件`;
                               const content = (
                                 <>
-                                  <span className="text-[10px] font-bold text-emerald-600 mb-2 truncate w-full text-center">{ms.name}</span>
-                                  <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-2 ${isCompleted ? 'border-emerald-400' : 'border-indigo-300'}`}>
-                                    <span className="text-base font-black text-slate-900">{currentCompleted}</span>
+                                  <span className="text-[10px] font-bold text-emerald-600 mb-1 leading-tight truncate w-full text-center">{ms.name}</span>
+                                  <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isCompleted ? 'border-emerald-400' : 'border-indigo-300'}`}>
+                                    <span className="text-base font-black text-slate-900 leading-none">{currentCompleted}</span>
                                   </div>
-                                  <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500">
+                                  <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 leading-tight">
                                     <span>{availableQty} / <span className={remaining < 0 ? 'text-rose-500' : ''}>{remaining}</span></span>
                                   </div>
                                 </>
@@ -1233,7 +1248,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                   type="button"
                                   disabled={!canReport}
                                   onClick={e => { e.stopPropagation(); canReport && handleOpenReport(order, ms); }}
-                                  className={`flex flex-col items-center shrink-0 min-w-[88px] py-2 px-2 rounded-xl border transition-colors text-left ${
+                                  className={`flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 rounded-xl border transition-colors text-left ${
                                     canReport
                                       ? 'bg-slate-50 border-slate-100 hover:bg-slate-100 hover:border-slate-200 cursor-pointer'
                                       : 'bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed'
@@ -1247,7 +1262,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                   key={ms.id}
                                   type="button"
                                   onClick={e => { e.stopPropagation(); hasOrderPerm('production:orders_detail:view') && setDetailOrderId(order.id); }}
-                                  className="flex flex-col items-center shrink-0 min-w-[88px] py-2 px-2 bg-slate-50 rounded-xl border border-slate-100 hover:bg-slate-100 hover:border-slate-200 transition-colors cursor-pointer"
+                                  className="flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 bg-slate-50 rounded-xl border border-slate-100 hover:bg-slate-100 hover:border-slate-200 transition-colors cursor-pointer"
                                   title={tooltip}
                                 >
                                   {content}
@@ -1312,7 +1327,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                       <Split className="w-4 h-4 text-slate-600" />
                       <span className="text-sm font-bold text-slate-800">原单 {groupKey}（共 {groupOrders.length} 条工单）</span>
                     </div>
-                    <div className="p-4 space-y-3">
+                    <div className="p-3 space-y-2">
                       {groupOrders.map(order => (
                         <div key={order.id}>{renderOrderCard(order)}</div>
                       ))}
@@ -1356,8 +1371,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                 return (
                   <div key={`productGroup-${block.productId}`}>
                     <div className="pt-0">
-                        <div className="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-lg hover:border-indigo-200 transition-all grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6 items-center">
-                          <div className="flex items-center gap-6 min-w-0">
+                        <div className="bg-white rounded-2xl border border-slate-200 px-5 py-2 hover:shadow-lg hover:border-indigo-200 transition-all grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3 lg:gap-4 items-center">
+                          <div className="flex items-center gap-4 min-w-0">
                             {product?.imageUrl ? (
                               <div className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0">
                                 <img src={product.imageUrl} alt={block.productName} className="w-full h-full object-cover block" />
@@ -1379,10 +1394,10 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-4 flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-1 min-w-0 -my-0.5">
                             {Array.from(byTemplate.entries()).length > 0 ? (
-                              <div className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden">
-                                <div className="flex items-stretch gap-2 flex-nowrap py-1">
+                              <div className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden -mx-0.5">
+                                <div className="flex items-stretch gap-1.5 flex-nowrap py-0.5 w-max px-0.5">
                                   {(() => {
                                     const templateEntries = Array.from(byTemplate.entries()).sort(([aId], [bId]) => {
                                       const order = product?.milestoneNodeIds || [];
@@ -1483,7 +1498,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                         type="button"
                                         disabled={!allowReport}
                                         onClick={allowReport ? handleProductGroupMsClick : undefined}
-                                        className={`flex flex-col items-center shrink-0 min-w-[88px] py-2 px-2 rounded-xl border transition-colors ${
+                                        className={`flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 rounded-xl border transition-colors ${
                                           allowReport
                                             ? 'bg-slate-50 border-slate-100 hover:bg-slate-100 hover:border-slate-200 cursor-pointer'
                                             : 'bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed'
@@ -1494,21 +1509,21 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                             : '需先完成前一道工序的报工后才能报本工序'
                                         }
                                       >
-                                        <span className="text-[10px] font-bold text-emerald-600 mb-2 truncate w-full text-center">{m.name}</span>
-                                        <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-2 ${isDone ? 'border-emerald-400' : 'border-indigo-300'}`}>
-                                          <span className="text-base font-black text-slate-900">{m.completed}</span>
+                                        <span className="text-[10px] font-bold text-emerald-600 mb-1 leading-tight truncate w-full text-center">{m.name}</span>
+                                        <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isDone ? 'border-emerald-400' : 'border-indigo-300'}`}>
+                                          <span className="text-base font-black text-slate-900 leading-none">{m.completed}</span>
                                         </div>
-                                        <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500">
+                                        <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 leading-tight">
                                           <span>{availDisplay} / <span className={remaining <= 0 && m.completed === 0 ? '' : remaining < 0 ? 'text-rose-500' : ''}>{remainingDisplay}</span></span>
                                         </div>
                                       </button>
                                     ) : (
-                                      <div key={tid} className="flex flex-col items-center shrink-0 min-w-[88px] py-2 px-2 bg-slate-50 rounded-xl border border-slate-100">
-                                        <span className="text-[10px] font-bold text-emerald-600 mb-2 truncate w-full text-center">{m.name}</span>
-                                        <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-2 ${isDone ? 'border-emerald-400' : 'border-indigo-300'}`}>
-                                          <span className="text-base font-black text-slate-900">{m.completed}</span>
+                                      <div key={tid} className="flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 bg-slate-50 rounded-xl border border-slate-100">
+                                        <span className="text-[10px] font-bold text-emerald-600 mb-1 leading-tight truncate w-full text-center">{m.name}</span>
+                                        <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isDone ? 'border-emerald-400' : 'border-indigo-300'}`}>
+                                          <span className="text-base font-black text-slate-900 leading-none">{m.completed}</span>
                                         </div>
-                                        <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500">
+                                        <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 leading-tight">
                                           <span>{availDisplay} / <span className={remaining < 0 ? 'text-rose-500' : ''}>{remainingDisplay}</span></span>
                                         </div>
                                       </div>
@@ -1588,7 +1603,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                     <Plus className="w-3.5 h-3.5 text-slate-600 shrink-0" />
                     <span className="text-xs font-bold text-slate-800">主工单及子工单（共 {allOrders.length} 条）</span>
                   </button>
-                  <div className="p-3 space-y-2">
+                  <div className="p-2.5 space-y-1.5">
                     {isExpanded ? (
                       allWithDepth.map(({ order, depth }) => {
                         const isChild = depth > 0;
@@ -1626,7 +1641,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="flex-1 overflow-auto p-6">
+            <div className="flex-1 overflow-auto p-4">
               <OrderFlowView orders={orders} products={products} embedded productionLinkMode={productionLinkMode} initialProductId={orderFlowProductId} onOpenOrderDetail={(id) => setDetailOrderId(id)} />
             </div>
           </div>
@@ -1645,7 +1660,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
               </div>
               <button onClick={() => setShowOrderFormConfigModal(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-6 space-y-6 overflow-auto">
+            <div className="p-4 space-y-4 overflow-auto">
               <div>
                 <h4 className="text-sm font-black text-slate-600 uppercase tracking-widest mb-3">标准字段显示</h4>
                 <div className="border border-slate-200 rounded-2xl overflow-hidden">
@@ -1816,7 +1831,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
               <h3 className="font-bold text-slate-800 flex items-center gap-2"><FileText className="w-5 h-5 text-indigo-600" /> {reportModal.milestone.name} · 报工</h3>
               <button onClick={() => setReportModal(null)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-4 space-y-4">
               <div className="text-xs text-slate-500 font-medium">
                 <span className="font-bold text-slate-700">{reportModal.order.productName}</span>
                 {reportModal.productTotalQty != null ? (
@@ -2187,7 +2202,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                   <span className="text-xs text-slate-400">共 {batches.length} 次报工</span>
                 </div>
               </div>
-              <div className="flex-1 overflow-auto p-6">
+              <div className="flex-1 overflow-auto p-4">
                 {batches.length === 0 ? (
                   <p className="text-slate-500 text-center py-12">暂无报工流水</p>
                 ) : (
@@ -2293,7 +2308,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                   <p className="text-sm font-bold text-slate-700">{order.productName || product?.name}</p>
                   <p className="text-xs text-slate-500 mt-0.5">工单总量 {stockInOrder.orderTotal} {unitName}，已入库 {stockInOrder.alreadyIn} {unitName}，待入库 {stockInOrder.pendingTotal} {unitName}</p>
                 </div>
-                <div className="flex-1 overflow-auto p-6 space-y-6">
+                <div className="flex-1 overflow-auto p-4 space-y-4">
                   <div>
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">入库仓库</label>
                     {warehouses.length > 0 ? (
@@ -2315,7 +2330,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                     )}
                   </div>
                   {hasColorSize && product?.variants?.length ? (
-                    <div className="space-y-6">
+                    <div className="space-y-4">
                       <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider">入库数量明细（颜色尺码）</h4>
                       {sortedVariantColorEntries(groupedVariantsForStock, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
                         const color = (dictionaries.colors as { id: string; name: string; value: string }[] | undefined)?.find(c => c.id === colorId);
@@ -2464,7 +2479,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                   <button onClick={() => setShowPendingStockModal(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
                 </div>
               </div>
-              <div className="flex-1 overflow-auto p-6">
+              <div className="flex-1 overflow-auto p-4">
                 {pendingStockOrders.length === 0 ? (
                   <p className="text-slate-500 text-center py-12">暂无待入库工单（有完成数量且待入库&gt;0 的工单将显示在此）</p>
                 ) : (
@@ -2668,7 +2683,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                     <span className="text-xs text-slate-400">共 {batches.length} 次入库，合计 {totalQtyAll} 件</span>
                   </div>
                 </div>
-                <div className="flex-1 overflow-auto p-6">
+                <div className="flex-1 overflow-auto p-4">
                   {batches.length === 0 ? (
                     <p className="text-slate-500 text-center py-12">暂无生产入库流水</p>
                   ) : (
@@ -2767,11 +2782,13 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
               };
               const handleDelete = () => {
                 if (!onDeleteRecord) return;
-                if (!window.confirm('确定要删除该入库单的所有记录吗？此操作不可恢复。')) return;
-                const docRecords = prodRecords.filter(r => r.type === 'STOCK_IN' && r.docNo === detailBatch.docNo);
-                docRecords.forEach(rec => onDeleteRecord(rec.id));
-                setStockInFlowDetailDocNo(null);
-                setStockInFlowEditing(null);
+                void confirm({ message: '确定要删除该入库单的所有记录吗？此操作不可恢复。', danger: true }).then((ok) => {
+                  if (!ok) return;
+                  const docRecords = prodRecords.filter(r => r.type === 'STOCK_IN' && r.docNo === detailBatch.docNo);
+                  docRecords.forEach(rec => onDeleteRecord(rec.id));
+                  setStockInFlowDetailDocNo(null);
+                  setStockInFlowEditing(null);
+                });
               };
               const ef = stockInFlowEditing;
               const editTotalQty = ef ? ef.rows.reduce((s, r) => s + r.quantity, 0) : 0;
@@ -2813,7 +2830,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         </button>
                       </div>
                     </div>
-                    <div className="flex-1 overflow-auto p-6 space-y-6">
+                    <div className="flex-1 overflow-auto p-4 space-y-4">
                       <h2 className="text-xl font-bold text-slate-900">{detailBatch.productName}</h2>
                       {isEditing && ef ? (
                         <>
@@ -3087,13 +3104,15 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          if (!window.confirm('确定要删除该次报工的所有记录吗？此操作不可恢复。')) return;
-                          reportDetailBatch.rows.forEach(({ order, milestone, report }) => {
-                            onDeleteReport({ orderId: order.id, milestoneId: milestone.id, reportId: report.id });
+                          void confirm({ message: '确定要删除该次报工的所有记录吗？此操作不可恢复。', danger: true }).then((ok) => {
+                            if (!ok) return;
+                            reportDetailBatch.rows.forEach(({ order, milestone, report }) => {
+                              onDeleteReport({ orderId: order.id, milestoneId: milestone.id, reportId: report.id });
+                            });
+                            setReportDetailBatch(null);
+                            setEditingReport(null);
+                            setShowHistoryModal(false);
                           });
-                          setReportDetailBatch(null);
-                          setEditingReport(null);
-                          setShowHistoryModal(false);
                         }}
                         className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold"
                       >
@@ -3104,12 +3123,14 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          if (!window.confirm('确定要删除该次报工的所有记录吗？此操作不可恢复。')) return;
-                          reportDetailBatch.rows.forEach(({ progress, report }) => {
-                            onDeleteReportProduct({ progressId: progress.id, reportId: report.id });
+                          void confirm({ message: '确定要删除该次报工的所有记录吗？此操作不可恢复。', danger: true }).then((ok) => {
+                            if (!ok) return;
+                            reportDetailBatch.rows.forEach(({ progress, report }) => {
+                              onDeleteReportProduct({ progressId: progress.id, reportId: report.id });
+                            });
+                            setReportDetailBatch(null);
+                            setEditingReport(null);
                           });
-                          setReportDetailBatch(null);
-                          setEditingReport(null);
                         }}
                         className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold"
                       >
@@ -3123,7 +3144,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-auto p-6 space-y-6">
+            <div className="flex-1 overflow-auto p-4 space-y-4">
               <h2 className="text-xl font-bold text-slate-900">{reportDetailBatch.source === 'order' ? reportDetailBatch.first.order.productName : reportDetailBatch.productName}</h2>
               {editingReport ? (() => {
                 const order = reportDetailBatch.source === 'order' ? orders.find(o => o.id === editingReport.orderId) : null;
@@ -3659,7 +3680,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                   {mainOrder.customer && <span className="text-slate-500">客户 {mainOrder.customer}</span>}
                 </div>
               </div>
-              <div className="flex-1 overflow-auto p-6 space-y-6">
+              <div className="flex-1 overflow-auto p-4 space-y-4">
                 {defectRows.length > 0 && (
                   <div>
                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">不良与处理汇总（按来源工序）</h4>
@@ -3818,7 +3839,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                   <span className="text-slate-500">合计 {totalQty} 件</span>
                 </div>
               </div>
-              <div className="flex-1 overflow-auto p-6 space-y-6">
+              <div className="flex-1 overflow-auto p-4 space-y-4">
                 {defectRows.length > 0 && (
                   <div>
                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">不良与处理汇总（按来源工序）</h4>
@@ -4000,7 +4021,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="flex-1 overflow-auto p-6">
+              <div className="flex-1 overflow-auto p-4">
                 {warehouses.length > 0 && (
                   <div className="mb-4">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">出库仓库</label>
@@ -4258,7 +4279,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="flex-1 overflow-auto p-6">
+              <div className="flex-1 overflow-auto p-4">
                 {warehouses.length > 0 && (
                   <div className="mb-4">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">出库仓库</label>

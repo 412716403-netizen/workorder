@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, Suspense, lazy } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   CalendarRange, 
@@ -11,9 +11,23 @@ import {
   PlanOrder, ProductionOrder, Product, BOM,
   ProductionOpRecord, GlobalNodeTemplate, ProdOpType, ProductCategory, AppDictionaries, Worker, Equipment, PlanFormSettings, OrderFormSettings, Partner, PartnerCategory, ProductionLinkMode, ProductMilestoneProgress, ProcessSequenceMode, Warehouse
 } from '../types';
-import PlanOrderListView from './PlanOrderListView';
-import OrderListView from './OrderListView';
-import ProductionMgmtOpsView from './ProductionMgmtOpsView';
+const PlanOrderListView = lazy(() => import('./PlanOrderListView'));
+const OrderListView = lazy(() => import('./OrderListView'));
+const ProductionMgmtOpsView = lazy(() => import('./ProductionMgmtOpsView'));
+
+const TabPanelFallback = () => (
+  <div className="flex min-h-[320px] items-center justify-center text-sm font-medium text-slate-400">
+    加载中…
+  </div>
+);
+import {
+  subModuleMainContentTopClass,
+  subModuleTabBarBackdropClass,
+  subModuleTabBarInsetClass,
+  subModuleTabBarStickyPadClass,
+  subModuleTabButtonClass,
+  subModuleTabPillClass,
+} from '../styles/uiDensity';
 
 interface ProductionManagementViewProps {
   productionLinkMode?: ProductionLinkMode;
@@ -176,41 +190,43 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
   }, [tabs.map(t => t.id).join(',')]);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-0">
       <div>
         <div ref={sentinelRef} className="h-px w-full" aria-hidden="true" />
         <div
           ref={tabsWrapRef}
-          className={`z-20 py-4 bg-slate-50/95 backdrop-blur-sm ${
-            isStuck ? 'fixed top-0 px-12' : '-mx-12 px-12'
+          className={`${subModuleTabBarBackdropClass} ${
+            isStuck
+              ? `fixed top-0 px-12 ${subModuleTabBarStickyPadClass}`
+              : subModuleTabBarInsetClass
           }`}
           style={isStuck && barStyle ? { left: barStyle.left, width: barStyle.width } : undefined}
         >
-        <div className="flex bg-white p-1.5 rounded-[24px] border border-slate-200 shadow-sm w-full lg:w-fit overflow-x-auto no-scrollbar">
-          <div className="flex gap-1 min-w-max">
-            {tabs.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as MainTab)}
-                className={`flex items-center gap-3 px-6 py-3 rounded-[18px] text-sm font-bold transition-all whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? `${tab.bg} ${tab.color} shadow-sm`
-                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50/50'
-                }`}
-              >
-                <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? tab.color : 'text-slate-300'}`} />
-                {tab.label}
-              </button>
-            ))}
+          <div className={subModuleTabPillClass}>
+            <div className="flex gap-1 min-w-max">
+              {tabs.map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id as MainTab)}
+                  className={subModuleTabButtonClass(activeTab === tab.id)}
+                >
+                  <tab.icon
+                    className={`w-4 h-4 shrink-0 ${activeTab === tab.id ? 'text-indigo-600' : 'text-slate-300'}`}
+                  />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
       </div>
       {isStuck && placeholderHeight > 0 && (
         <div style={{ height: placeholderHeight }} aria-hidden="true" />
       )}
-      <div className="min-h-[600px]">
+      <div className={`min-h-[600px] ${subModuleMainContentTopClass}`}>
         {activeTab === 'plans' && (
+          <Suspense fallback={<TabPanelFallback />}>
           <PlanOrderListView 
             productionLinkMode={productionLinkMode}
             plans={plans} 
@@ -237,9 +253,11 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
             onCreateSubPlan={onCreateSubPlan}
             onCreateSubPlans={onCreateSubPlans}
           />
+          </Suspense>
         )}
 
         {activeTab === 'orders' && (
+          <Suspense fallback={<TabPanelFallback />}>
 <OrderListView
             initialDetailOrderId={(location.state as { detailOrderId?: string })?.detailOrderId}
             onClearDetailOrderIdFromState={clearDetailOrderIdFromState}
@@ -277,9 +295,11 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
             userPermissions={userPermissions}
             tenantRole={tenantRole}
           />
+          </Suspense>
         )}
 
         {['STOCK_OUT', 'OUTSOURCE', 'REWORK'].includes(activeTab) && (
+          <Suspense fallback={<TabPanelFallback />}>
           <ProductionMgmtOpsView 
             productionLinkMode={productionLinkMode}
             productMilestoneProgresses={productMilestoneProgresses}
@@ -304,6 +324,7 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
             userPermissions={userPermissions}
             tenantRole={tenantRole}
           />
+          </Suspense>
         )}
       </div>
     </div>

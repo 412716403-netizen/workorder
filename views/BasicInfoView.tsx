@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback, Suspense, lazy } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Boxes, 
@@ -25,12 +25,26 @@ import {
   Maximize2,
   Package
 } from 'lucide-react';
-import ProductManagementView from './ProductManagementView';
-import MemberManagementView from './MemberManagementView';
+const ProductManagementView = lazy(() => import('./ProductManagementView'));
+const MemberManagementView = lazy(() => import('./MemberManagementView'));
+
+const BasicInfoPanelFallback = () => (
+  <div className="flex min-h-[320px] items-center justify-center text-sm font-medium text-slate-400">
+    加载中…
+  </div>
+);
 import { Product, GlobalNodeTemplate, ProductCategory, BOM, AppDictionaries, Partner, Equipment, PartnerCategory, DictionaryItem } from '../types';
 import { toast } from 'sonner';
 import * as api from '../services/api';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import {
+  subModuleMainContentTopClass,
+  subModuleTabBarBackdropClass,
+  subModuleTabBarInsetClass,
+  subModuleTabBarStickyPadClass,
+  subModuleTabButtonClass,
+  subModuleTabPillClass,
+} from '../styles/uiDensity';
 
 interface BasicInfoViewProps {
   products: Product[];
@@ -409,32 +423,28 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
   const showTabs = !productDetailVisible;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-0">
       {showTabs && (
         <>
           <div>
             <div ref={sentinelRef} className="h-px w-full" aria-hidden="true" />
             <div
               ref={tabsWrapRef}
-              className={`z-20 bg-slate-50/95 backdrop-blur-sm ${
+              className={`${subModuleTabBarBackdropClass} ${
                 isStuck
-                  ? 'fixed top-0 px-12 py-2.5'
-                  : '-mx-12 px-12 pt-3 pb-2 sm:pt-3.5 sm:pb-2'
+                  ? `fixed top-0 px-12 ${subModuleTabBarStickyPadClass}`
+                  : subModuleTabBarInsetClass
               }`}
               style={isStuck && barStyle ? { left: barStyle.left, width: barStyle.width } : undefined}
             >
-              <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-full lg:w-fit overflow-x-auto no-scrollbar">
+              <div className={subModuleTabPillClass}>
                 <div className="flex gap-1 min-w-max">
                   {tabs.map(tab => (
                     <button
                       key={tab.id}
                       type="button"
                       onClick={() => { const t = tab.id as BasicTab; setActiveTab(t); setSearchTerm(''); setShowModal(null); if (t === 'MEMBERS') setMembersTabMounted(true); }}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
-                        activeTab === tab.id
-                          ? 'bg-indigo-50 text-indigo-600 shadow-sm'
-                          : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50/50'
-                      }`}
+                      className={subModuleTabButtonClass(activeTab === tab.id)}
                     >
                       <tab.icon className={`w-4 h-4 shrink-0 ${activeTab === tab.id ? 'text-indigo-600' : 'text-slate-300'}`} />
                       {tab.label}
@@ -449,9 +459,11 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
           )}
         </>
       )}
-      <div className="-mt-1">
+      <div className={showTabs ? subModuleMainContentTopClass : undefined}>
         {activeTab === 'PRODUCTS' && (
+          <Suspense fallback={<BasicInfoPanelFallback />}>
           <ProductManagementView products={products} globalNodes={globalNodes} categories={categories} boms={boms} dictionaries={dictionaries} partners={partners} onUpdateProduct={onUpdateProduct} onDeleteProduct={onDeleteProduct} onUpdateBOM={onUpdateBOM} onRefreshDictionaries={onRefreshDictionaries} onRefreshProducts={onRefreshProducts} onDetailViewChange={setProductDetailVisible} permCanCreate={canCreate('PRODUCTS')} permCanEdit={canEdit('PRODUCTS')} permCanDelete={canDelete('PRODUCTS')} initialProductId={initialProductId} onClearInitialProductId={clearInitialProductId} />
+          </Suspense>
         )}
 
         {activeTab === 'PARTNERS' && !showModal && (
@@ -624,7 +636,9 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
 
         {membersTabMounted && (
           <div style={{ display: activeTab === 'MEMBERS' ? undefined : 'none' }}>
+            <Suspense fallback={<BasicInfoPanelFallback />}>
             <MemberManagementView tenantId={tenantId} tenantRole={tenantRole} currentUserId={currentUserId} globalNodes={globalNodes} onRefreshWorkers={onRefreshWorkers} />
+            </Suspense>
           </div>
         )}
 

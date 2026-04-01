@@ -35,6 +35,14 @@ import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
 import WorkerSelector from '../components/WorkerSelector';
 import EquipmentSelector from '../components/EquipmentSelector';
 import * as api from '../services/api';
+import {
+  moduleHeaderRowClass,
+  outlineAccentToolbarButtonClass,
+  outlineToolbarButtonClass,
+  pageSubtitleClass,
+  pageTitleClass,
+} from '../styles/uiDensity';
+import { useConfirm } from '../contexts/ConfirmContext';
 
 /** 待处理不良「单号」筛选：支持报工单号 BG…、批次 id */
 function reworkReportsMatchDocSearch(
@@ -120,6 +128,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
       : 'production:rework_list:allow'
   );
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const allTabs = [
     { id: 'STOCK_OUT', label: '生产物料', icon: ArrowUpFromLine, color: 'text-indigo-600', bg: 'bg-indigo-600', sub: '物料下发与库存扣减' },
     { id: 'OUTSOURCE', label: '外协管理', icon: Truck, color: 'text-indigo-600', bg: 'bg-indigo-600', sub: '外部委托加工业务追踪' },
@@ -2129,88 +2138,86 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
   const isProductionMaterial = limitType === 'STOCK_OUT';
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4">
+      <div className={moduleHeaderRowClass}>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{currentBiz?.label || '业务流水'}</h1>
-          <p className="text-slate-500 mt-1 italic text-sm">{currentBiz?.sub || '处理生产业务流水记录'}</p>
+          <h1 className={pageTitleClass}>{currentBiz?.label || '业务流水'}</h1>
+          <p className={pageSubtitleClass}>{currentBiz?.sub || '处理生产业务流水记录'}</p>
         </div>
-        {!showModal && isProductionMaterial && (
-          <div className="flex items-center gap-2">
-            {hasOpsPerm('production:material_records:view') && (
+        <div className="flex flex-wrap items-center gap-2 shrink-0 justify-end">
+        {!showModal && isProductionMaterial && hasOpsPerm('production:material_records:view') && (
             <button
               type="button"
               onClick={() => setShowStockFlowModal(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-indigo-600 rounded-xl hover:bg-slate-50 text-sm font-bold transition-all"
+              className={outlineAccentToolbarButtonClass}
             >
-              <ScrollText className="w-4 h-4" />
+              <ScrollText className="w-4 h-4 shrink-0" />
               领料退料流水
             </button>
-            )}
-          </div>
         )}
         {!showModal && limitType === 'OUTSOURCE' && (
-          <div className="flex items-center gap-2">
+          <>
             {hasOpsPerm('production:outsource_send:allow') && (
             <button
               type="button"
               onClick={() => setOutsourceModal('dispatch')}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              className={outlineToolbarButtonClass}
             >
-              <ClipboardList className="w-4 h-4" /> 待发清单
+              <ClipboardList className="w-4 h-4 shrink-0" /> 待发清单
             </button>
             )}
             {hasOpsPerm('production:outsource_receive:allow') && (
             <button
               type="button"
               onClick={() => setOutsourceModal('receive')}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              className={outlineToolbarButtonClass}
             >
-              <ArrowDownToLine className="w-4 h-4" /> 待收回清单
+              <ArrowDownToLine className="w-4 h-4 shrink-0" /> 待收回清单
             </button>
             )}
             {hasOpsPerm('production:outsource_records:view') && (
             <button
               type="button"
               onClick={() => setOutsourceModal('flow')}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              className={outlineToolbarButtonClass}
             >
-              <ScrollText className="w-4 h-4" /> 外协流水
+              <ScrollText className="w-4 h-4 shrink-0" /> 外协流水
             </button>
             )}
-          </div>
+          </>
         )}
         {!showModal && limitType === 'REWORK' && (
-          <div className="flex items-center gap-2 ml-auto">
+          <>
             {hasOpsPerm('production:rework_defective:allow') && (
             <button
               type="button"
               onClick={() => setReworkPendingModalOpen(true)}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              className={outlineToolbarButtonClass}
             >
-              <ClipboardList className="w-4 h-4" /> 待处理不良
+              <ClipboardList className="w-4 h-4 shrink-0" /> 待处理不良
             </button>
             )}
             {hasOpsPerm('production:rework_records:view') && (
             <button
               type="button"
               onClick={() => { setDefectFlowModalOpen(true); setDefectFlowDetailRecord(null); setDefectFlowDetailEditing(null); }}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              className={outlineToolbarButtonClass}
             >
-              <ScrollText className="w-4 h-4" /> 处理不良品流水
+              <ScrollText className="w-4 h-4 shrink-0" /> 处理不良品流水
             </button>
             )}
             {hasOpsPerm('production:rework_report_records:view') && (
             <button
               type="button"
               onClick={() => setReworkFlowModalOpen(true)}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              className={outlineToolbarButtonClass}
             >
-              <History className="w-4 h-4" /> 返工报工流水
+              <History className="w-4 h-4 shrink-0" /> 返工报工流水
             </button>
             )}
-          </div>
+          </>
         )}
+        </div>
       </div>
 
       {isProductionMaterial && !showModal && !canViewMainList && (
@@ -2220,7 +2227,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
         </div>
       )}
       {isProductionMaterial && !showModal && canViewMainList && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {productionLinkMode === 'product' && productMaterialStatsByProduct ? (
             (() => {
               const pEntries = Array.from(productMaterialStatsByProduct.entries());
@@ -2569,7 +2576,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
         </div>
       )}
       {limitType === 'REWORK' && !showModal && !reworkPendingModalOpen && canViewMainList && (
-        <div className="space-y-4">
+        <div className="space-y-2">
           {parentOrders.length === 0 ? (
             <div className="bg-white rounded-[32px] border border-slate-200 p-12 text-center">
               <p className="text-slate-400 text-sm">暂无工单，请先在「生产计划」下达工单</p>
@@ -2585,11 +2592,11 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                 const stats = [...(reworkStatsByOrderId.get(order.id) ?? [])];
                 const orderTotalQty = order.items.reduce((s, i) => s + i.quantity, 0);
                 const cardClass = isChild
-                  ? 'bg-white p-5 rounded-2xl border border-l-4 border-l-slate-300 border-slate-200 hover:shadow-lg hover:border-slate-300 transition-all grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6 lg:gap-10 items-center'
-                  : 'bg-white p-6 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6 lg:gap-10 items-center';
+                  ? 'bg-white px-5 py-2 rounded-2xl border border-l-4 border-l-slate-300 border-slate-200 hover:shadow-lg hover:border-slate-300 transition-all grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3 lg:gap-4 items-center'
+                  : 'bg-white px-5 py-2 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3 lg:gap-4 items-center';
                 return (
                   <div key={order.id} className={cardClass} style={indentPx != null && indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
-                    <div className="flex items-center gap-6 min-w-0">
+                    <div className="flex items-center gap-4 min-w-0">
                       {product?.imageUrl ? (
                         <button type="button" onClick={() => setReworkDetailOrderId(order.parentOrderId ?? order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none block`}>
                           <img src={product.imageUrl} alt={order.productName} className="w-full h-full object-cover block" />
@@ -2614,10 +2621,10 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-1 min-w-0 -my-0.5">
                       {stats.length > 0 ? (
-                        <div className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden scroll-smooth custom-scrollbar touch-pan-x">
-                          <div className="flex items-stretch gap-2 flex-nowrap py-1 w-max">
+                        <div className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden scroll-smooth custom-scrollbar touch-pan-x -mx-0.5">
+                          <div className="flex items-stretch gap-1.5 flex-nowrap py-0.5 w-max px-0.5">
                             {stats.map(({ nodeId, nodeName, totalQty, completedQty, pendingQty }) => {
                               const isAllDone = pendingQty <= 0;
                               return (
@@ -2626,13 +2633,13 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                                   type="button"
                                   title={`工序「${nodeName}」返工：总 ${totalQty}，已返工 ${completedQty}，${processSequenceMode === 'sequential' ? '可报 ' : '未返工 '}${pendingQty}${processSequenceMode === 'sequential' ? '（顺序模式：上道流入可报数）' : ''}（点击报工）`}
                                   onClick={() => { setReworkReportModal({ order, nodeId, nodeName }); setReworkReportQuantities({}); setReworkReportWorkerId(''); setReworkReportEquipmentId(''); }}
-                                  className="flex flex-col items-center shrink-0 min-w-[88px] py-2 px-2 rounded-xl border bg-slate-50 border-slate-100 hover:bg-indigo-50 hover:border-indigo-200 transition-colors text-left cursor-pointer"
+                                  className="flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 rounded-xl border bg-slate-50 border-slate-100 hover:bg-indigo-50 hover:border-indigo-200 transition-colors text-left cursor-pointer"
                                 >
-                                  <span className="text-[10px] font-bold text-indigo-600 mb-2 truncate w-full text-center">{nodeName}</span>
-                                  <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-2 ${isAllDone ? 'border-emerald-400' : 'border-indigo-300'}`}>
-                                    <span className="text-base font-black text-slate-900">{pendingQty}</span>
+                                  <span className="text-[10px] font-bold text-indigo-600 mb-1 leading-tight truncate w-full text-center">{nodeName}</span>
+                                  <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isAllDone ? 'border-emerald-400' : 'border-indigo-300'}`}>
+                                    <span className="text-base font-black text-slate-900 leading-none">{pendingQty}</span>
                                   </div>
-                                  <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500">
+                                  <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 leading-tight">
                                     <span>{processSequenceMode === 'sequential' ? (pendingQty + completedQty) : totalQty} / <span className="text-slate-600">{completedQty}</span></span>
                                   </div>
                                 </button>
@@ -2644,7 +2651,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         <div className="flex-1 min-w-0 text-slate-400 text-sm italic">该工单暂无返工工序</div>
                       )}
                       {(hasOpsPerm('production:rework_detail:allow') || hasOpsPerm('production:rework_material:allow')) && (
-                      <div className="flex flex-col gap-2 shrink-0">
+                      <div className="flex flex-col gap-2 shrink-0 pt-0.5">
                         {hasOpsPerm('production:rework_detail:allow') && (
                         <button
                           type="button"
@@ -2683,9 +2690,9 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                 return (
                   <div
                     key={`rework-prod-${block.productId}`}
-                    className="bg-white p-6 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group grid grid-cols-1 lg:grid-cols-[360px_1fr_auto] gap-6 lg:gap-10 items-center"
+                    className="bg-white px-5 py-2 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group grid grid-cols-1 lg:grid-cols-[360px_1fr_auto] gap-3 lg:gap-4 items-center"
                   >
-                    <div className="flex items-center gap-6 min-w-0">
+                    <div className="flex items-center gap-4 min-w-0">
                       {fp?.imageUrl ? (
                         <div className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0">
                           <img src={fp.imageUrl} alt={fp.name} className="w-full h-full object-cover block" />
@@ -2708,10 +2715,10 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-1 min-w-0 -my-0.5">
                       {stats.length > 0 ? (
-                        <div className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden scroll-smooth custom-scrollbar touch-pan-x">
-                          <div className="flex items-stretch gap-2 flex-nowrap py-1 w-max">
+                        <div className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden scroll-smooth custom-scrollbar touch-pan-x -mx-0.5">
+                          <div className="flex items-stretch gap-1.5 flex-nowrap py-0.5 w-max px-0.5">
                             {stats.map(({ nodeId, nodeName, totalQty, completedQty, pendingQty }) => {
                               const isAllDone = pendingQty <= 0;
                               return (
@@ -2725,15 +2732,15 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                                     setReworkReportWorkerId('');
                                     setReworkReportEquipmentId('');
                                   }}
-                                  className="flex flex-col items-center shrink-0 min-w-[88px] py-2 px-2 rounded-xl border bg-slate-50 border-slate-100 hover:bg-indigo-50 hover:border-indigo-200 transition-colors text-left cursor-pointer"
+                                  className="flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 rounded-xl border bg-slate-50 border-slate-100 hover:bg-indigo-50 hover:border-indigo-200 transition-colors text-left cursor-pointer"
                                 >
-                                  <span className="text-[10px] font-bold text-indigo-600 mb-2 truncate w-full text-center">{nodeName}</span>
+                                  <span className="text-[10px] font-bold text-indigo-600 mb-1 leading-tight truncate w-full text-center">{nodeName}</span>
                                   <div
-                                    className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-2 ${isAllDone ? 'border-emerald-400' : 'border-indigo-300'}`}
+                                    className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isAllDone ? 'border-emerald-400' : 'border-indigo-300'}`}
                                   >
-                                    <span className="text-base font-black text-slate-900">{pendingQty}</span>
+                                    <span className="text-base font-black text-slate-900 leading-none">{pendingQty}</span>
                                   </div>
-                                  <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500">
+                                  <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 leading-tight">
                                     <span>
                                       {processSequenceMode === 'sequential' ? pendingQty + completedQty : totalQty} /{' '}
                                       <span className="text-slate-600">{completedQty}</span>
@@ -2749,7 +2756,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                       )}
                     </div>
                     {(hasOpsPerm('production:rework_detail:allow') || hasOpsPerm('production:rework_material:allow')) && (
-                      <div className="flex flex-col gap-2 shrink-0">
+                      <div className="flex flex-col gap-2 shrink-0 pt-0.5">
                         {hasOpsPerm('production:rework_detail:allow') && (
                         <button
                           type="button"
@@ -2791,7 +2798,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                     <Plus className="w-3.5 h-3.5 text-slate-600 shrink-0" />
                     <span className="text-xs font-bold text-slate-800">主工单及子工单（共 {allWithDepth.length} 条）</span>
                   </button>
-                  <div className="p-3 space-y-2">
+                  <div className="p-2.5 space-y-1.5">
                     {isExpanded ? allWithDepth.map(({ order, depth }) => renderReworkCard(order, depth > 0, depth > 0 ? 24 * depth : 0)) : renderReworkCard(parent)}
                   </div>
                 </div>
@@ -2838,7 +2845,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                   </button>
                 </div>
               </div>
-              <div className="flex-1 overflow-auto p-6 space-y-6">
+              <div className="flex-1 overflow-auto p-4 space-y-4">
                 <h2 className="text-xl font-bold text-slate-900">{srcProd?.name ?? (order ? (products.find(p => p.id === order.productId)?.name ?? order.productName ?? '—') : '—')}</h2>
                 <div className={`grid gap-3 ${warehouses.length > 0 ? 'grid-cols-[1fr_1.5fr]' : 'grid-cols-1'}`}>
                   {warehouses.length > 0 && (
@@ -2986,11 +2993,13 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            if (!window.confirm(`确定要删除该张${isReturn ? '退料' : '领料'}单的所有记录吗？此操作不可恢复。`)) return;
-                            const docRecords = records.filter(r => r.docNo === stockDocDetail.docNo);
-                            docRecords.forEach(rec => onDeleteRecord(rec.id));
-                            setStockDocDetail(null);
-                            setStockDocEditForm(null);
+                            void confirm({ message: `确定要删除该张${isReturn ? '退料' : '领料'}单的所有记录吗？此操作不可恢复。`, danger: true }).then((ok) => {
+                              if (!ok) return;
+                              const docRecords = records.filter(r => r.docNo === stockDocDetail.docNo);
+                              docRecords.forEach(rec => onDeleteRecord(rec.id));
+                              setStockDocDetail(null);
+                              setStockDocEditForm(null);
+                            });
                           }}
                           className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold"
                         >
@@ -3004,7 +3013,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                   </button>
                 </div>
               </div>
-              <div className="flex-1 overflow-auto p-6 space-y-6">
+              <div className="flex-1 overflow-auto p-4 space-y-4">
                 <h2 className="text-xl font-bold text-slate-900">
                   {sourceProd?.name ?? (order ? (products.find(p => p.id === order.productId)?.name ?? order.productName ?? '—') : '—')}
                 </h2>
@@ -3241,7 +3250,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                 <span className="text-xs text-slate-400">共 {filteredStockFlowRecords.length} 条</span>
               </div>
             </div>
-            <div className="flex-1 overflow-auto p-6">
+            <div className="flex-1 overflow-auto p-4">
               {filteredStockFlowRecords.length === 0 ? (
                 <p className="text-slate-500 text-center py-12">暂无领料/退料流水</p>
               ) : (
@@ -3337,14 +3346,14 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
         </div>
       )}
       {limitType === 'OUTSOURCE' && !showModal && outsourceModal === null && canViewMainList && (
-        <div className="space-y-6">
+        <div className="space-y-2">
           {outsourceStatsByOrder.length === 0 ? (
             <div className="bg-white rounded-[32px] border border-slate-200 p-12 text-center">
               <Truck className="w-12 h-12 text-slate-200 mx-auto mb-4" />
               <p className="text-slate-400 text-sm">暂无委外数据，请点击上方「待发清单」「待收回清单」或「外协流水」操作。</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 gap-2">
               {outsourceStatsByOrder.map((item) => {
                 const orderId = 'orderId' in item ? item.orderId : undefined;
                 const orderNumber = 'orderNumber' in item ? item.orderNumber : undefined;
@@ -3357,9 +3366,9 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                 return (
                 <div
                   key={orderId ?? productId}
-                  className="bg-white p-6 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6 lg:gap-10 items-center"
+                  className="bg-white px-5 py-2 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3 lg:gap-4 items-center"
                 >
-                  <div className="flex items-center gap-6 min-w-0">
+                  <div className="flex items-center gap-4 min-w-0">
                     {product?.imageUrl ? (
                       <div className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0">
                         <img src={product.imageUrl} alt={productName} className="w-full h-full object-cover block" />
@@ -3388,20 +3397,20 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-start gap-2 flex-wrap flex-1 min-w-0 -my-0.5">
                     {partners.map(({ partner, nodeId, nodeName, dispatched, received, pending }) => (
                       <div
                         key={`${partner}|${nodeId}`}
-                        className="flex flex-col items-center shrink-0 min-w-[88px] py-2 px-2 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 hover:border-slate-200 transition-colors"
+                        className="flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 hover:border-slate-200 transition-colors"
                       >
-                        <div className="mb-2 w-full text-center leading-tight">
+                        <div className="mb-1 w-full text-center leading-tight">
                           <div className="text-[10px] font-bold text-emerald-600 truncate" title={nodeName}>{nodeName}</div>
                           <div className="text-[10px] font-bold text-slate-600 truncate" title={partner}>{partner}</div>
                         </div>
-                        <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-2 ${pending > 0 ? 'border-indigo-300' : 'border-emerald-400'}`}>
-                          <span className="text-base font-black text-slate-900">{pending}</span>
+                        <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${pending > 0 ? 'border-indigo-300' : 'border-emerald-400'}`}>
+                          <span className="text-base font-black text-slate-900 leading-none">{pending}</span>
                         </div>
-                        <div className="flex items-center justify-center gap-1.5">
+                        <div className="flex items-center justify-center gap-1.5 leading-tight">
                           <span className="text-[10px] font-bold text-slate-500">{dispatched} / {received}</span>
                           <button
                             type="button"
@@ -3777,7 +3786,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                   {mainOrder.customer && <span className="text-slate-500">客户 {mainOrder.customer}</span>}
                 </div>
               </div>
-              <div className="flex-1 overflow-auto p-6 space-y-6">
+              <div className="flex-1 overflow-auto p-4 space-y-4">
                 {defectRows.length > 0 && (
                   <div>
                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">不良与处理汇总（按来源工序）</h4>
@@ -3959,7 +3968,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="flex-1 overflow-auto p-6">
+              <div className="flex-1 overflow-auto p-4">
                 {warehouses.length > 0 && (
                   <div className="mb-4">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">出库仓库</label>
@@ -4145,7 +4154,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                   <span className="text-xs text-slate-400">共 {sorted.length} 条记录</span>
                 </div>
               </div>
-              <div className="flex-1 overflow-auto p-6">
+              <div className="flex-1 overflow-auto p-4">
                 {sorted.length === 0 ? (
                   <p className="text-slate-500 text-center py-12">暂无处理不良品流水</p>
                 ) : (
@@ -4284,7 +4293,14 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                       {onDeleteRecord && hasOpsPerm('production:rework_records:delete') && (
                         <button
                           type="button"
-                          onClick={() => { if (window.confirm('确定删除该记录？')) { detailBatch.forEach(x => onDeleteRecord(x.id)); setDefectFlowDetailRecord(null); setDefectFlowDetailEditing(null); } }}
+                          onClick={() => {
+                            void confirm({ message: '确定删除该记录？', danger: true }).then((ok) => {
+                              if (!ok) return;
+                              detailBatch.forEach(x => onDeleteRecord(x.id));
+                              setDefectFlowDetailRecord(null);
+                              setDefectFlowDetailEditing(null);
+                            });
+                          }}
                           className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-rose-600 bg-rose-50 hover:bg-rose-100"
                         >
                           <Trash2 className="w-4 h-4" /> 删除
@@ -4295,7 +4311,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                   <button type="button" onClick={() => { setDefectFlowDetailRecord(null); setDefectFlowDetailEditing(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
                 </div>
               </div>
-              <div className="flex-1 overflow-auto p-6 space-y-6">
+              <div className="flex-1 overflow-auto p-4 space-y-4">
                 <h2 className="text-xl font-bold text-slate-900">{product?.name ?? first.productId ?? '—'}</h2>
                 {defectFlowDetailEditing ? (
                   <>
@@ -4508,7 +4524,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                   <span className="text-xs text-slate-400">共 {sorted.length} 条返工报工记录</span>
                 </div>
               </div>
-              <div className="flex-1 overflow-auto p-6">
+              <div className="flex-1 overflow-auto p-4">
                 {sorted.length === 0 ? (
                   <p className="text-slate-500 text-center py-12">暂无返工报工流水</p>
                 ) : (
@@ -4690,7 +4706,8 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            if (!window.confirm('确定要删除该返工单的所有记录吗？此操作不可恢复。')) return;
+                            void confirm({ message: '确定要删除该返工单的所有记录吗？此操作不可恢复。', danger: true }).then((ok) => {
+                              if (!ok) return;
                             const reworkDeltas = new Map<string, { reworkId: string; nodeId: string; delta: number }>();
                             detailBatch.forEach(rec => {
                               if (rec.sourceReworkId && rec.nodeId) {
@@ -4714,6 +4731,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                             });
                             setReworkFlowDetailRecord(null);
                             setReworkFlowDetailEditing(null);
+                          });
                           }}
                           className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold"
                         >
@@ -4725,7 +4743,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                   <button type="button" onClick={() => { setReworkFlowDetailRecord(null); setReworkFlowDetailEditing(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
                 </div>
               </div>
-              <div className="flex-1 overflow-auto p-6 space-y-6">
+              <div className="flex-1 overflow-auto p-4 space-y-4">
                 <h2 className="text-xl font-bold text-slate-900">{product?.name ?? first.productId ?? '—'}</h2>
                 {reworkFlowDetailEditing ? (
                   <>
@@ -5924,7 +5942,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                     groupedByColor[v.colorId].push(v);
                   });
                   return (
-                    <div key={baseKey} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-6 space-y-4">
+                    <div key={baseKey} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-4 space-y-4">
                       <div className="flex items-center gap-3 flex-wrap">
                         {row.orderNumber != null && (
                           <span className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">{row.orderNumber}</span>
@@ -5937,7 +5955,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         {sortedVariantColorEntries(groupedByColor, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
                           const color = dictionaries?.colors?.find(c => c.id === colorId);
                           return (
-                            <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-6 p-4 bg-white rounded-xl border border-slate-100">
+                            <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white rounded-xl border border-slate-100">
                               <div className="flex items-center gap-3 w-40 shrink-0">
                                 <div className="w-5 h-5 rounded-full border border-slate-200" style={{ backgroundColor: color?.value }} />
                                 <span className="text-sm font-black text-slate-700">{color?.name ?? colorId}</span>
@@ -6014,7 +6032,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                     groupedByColor[v.colorId].push(v);
                   });
                   return (
-                    <div key={baseKey} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-6 space-y-4">
+                    <div key={baseKey} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-4 space-y-4">
                       <div className="flex items-center gap-3 flex-wrap">
                         <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">关联产品 · 颜色尺码</span>
                         <span className="text-sm font-bold text-slate-800">{row.productName}</span>
@@ -6025,7 +6043,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         {sortedVariantColorEntries(groupedByColor, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
                           const color = dictionaries?.colors?.find(c => c.id === colorId);
                           return (
-                            <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-6 p-4 bg-white rounded-xl border border-slate-100">
+                            <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white rounded-xl border border-slate-100">
                               <div className="flex items-center gap-3 w-40 shrink-0">
                                 <div className="w-5 h-5 rounded-full border border-slate-200" style={{ backgroundColor: color?.value }} />
                                 <span className="text-sm font-black text-slate-700">{color?.name ?? colorId}</span>
@@ -6356,7 +6374,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                   const rowUnitPb = receiveFormUnitPrices[baseKey] ?? 0;
                   const rowAmountPb = rowTotalPb * rowUnitPb;
                   return (
-                    <div key={baseKey} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-6 space-y-4">
+                    <div key={baseKey} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-4 space-y-4">
                       <div className="flex items-center gap-3 flex-wrap">
                         <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">关联产品 · 颜色尺码</span>
                         <span className="text-sm font-bold text-slate-800">{row.productName}</span>
@@ -6367,7 +6385,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         {sortedVariantColorEntries(groupedPb, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
                           const color = dictionaries?.colors?.find(c => c.id === colorId);
                           return (
-                            <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-6 p-4 bg-white rounded-xl border border-slate-100">
+                            <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white rounded-xl border border-slate-100">
                               <div className="flex items-center gap-3 w-40 shrink-0">
                                 <div className="w-5 h-5 rounded-full border border-slate-200" style={{ backgroundColor: color?.value }} />
                                 <span className="text-sm font-black text-slate-700">{color?.name ?? colorId}</span>
@@ -6455,7 +6473,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                   const rowUnitPrice = receiveFormUnitPrices[baseKey] ?? 0;
                   const rowAmount = rowTotalQty * rowUnitPrice;
                   return (
-                    <div key={baseKey} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-6 space-y-4">
+                    <div key={baseKey} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-4 space-y-4">
                       <div className="flex items-center gap-3 flex-wrap">
                         {productionLinkMode !== 'product' && row.orderNumber != null && <span className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">{row.orderNumber}</span>}
                         <span className="text-sm font-bold text-slate-800">{row.productName}</span>
@@ -6465,7 +6483,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         {sortedVariantColorEntries(groupedByColor, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
                           const color = dictionaries?.colors?.find(c => c.id === colorId);
                           return (
-                            <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-6 p-4 bg-white rounded-xl border border-slate-100">
+                            <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white rounded-xl border border-slate-100">
                               <div className="flex items-center gap-3 w-40 shrink-0">
                                 <div className="w-5 h-5 rounded-full border border-slate-200" style={{ backgroundColor: color?.value }} />
                                 <span className="text-sm font-black text-slate-700">{color?.name ?? colorId}</span>
@@ -6688,7 +6706,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                 <span className="text-xs text-slate-400">共 {filteredOutsourceFlowRows.length} 条</span>
               </div>
             </div>
-            <div className="flex-1 overflow-auto p-6">
+            <div className="flex-1 overflow-auto p-4">
               {filteredOutsourceFlowRows.length === 0 ? (
                 <p className="text-slate-500 text-center py-12">暂无外协流水记录</p>
               ) : (
@@ -6936,10 +6954,12 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            if (!window.confirm(`确定要删除该张外协单的所有记录吗？此操作不可恢复。`)) return;
-                            docRecords.forEach(rec => onDeleteRecord(rec.id));
-                            setFlowDetailKey(null);
-                            setFlowDetailEditMode(false);
+                            void confirm({ message: '确定要删除该张外协单的所有记录吗？此操作不可恢复。', danger: true }).then((ok) => {
+                              if (!ok) return;
+                              docRecords.forEach(rec => onDeleteRecord(rec.id));
+                              setFlowDetailKey(null);
+                              setFlowDetailEditMode(false);
+                            });
                           }}
                           className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold"
                         >
@@ -7072,7 +7092,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         groupedByColor[v.colorId].push(v);
                       });
                       return (
-                        <div key={key} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-6 space-y-4">
+                        <div key={key} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-4 space-y-4">
                           <div className="flex items-center gap-3 flex-wrap">
                             {productionLinkMode !== 'product' && orderNumber != null && orderNumber !== '' && <span className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">{orderNumber}</span>}
                             <span className="text-sm font-bold text-slate-800">{productName}</span>
@@ -7082,7 +7102,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                             {sortedVariantColorEntries(groupedByColor, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
                               const color = dictionaries?.colors?.find(c => c.id === colorId);
                               return (
-                                <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-6 p-4 bg-white rounded-xl border border-slate-100">
+                                <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white rounded-xl border border-slate-100">
                                   <div className="flex items-center gap-3 w-40 shrink-0">
                                     <div className="w-5 h-5 rounded-full border border-slate-200" style={{ backgroundColor: color?.value }} />
                                     <span className="text-sm font-black text-slate-700">{color?.name ?? colorId}</span>
@@ -7218,7 +7238,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
       {receiveModal && limitType === 'OUTSOURCE' && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/50" onClick={() => { setReceiveModal(null); setReceiveQty(0); }} aria-hidden />
-          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 p-6 space-y-4">
+          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 p-4 space-y-4">
             <h3 className="text-lg font-black text-slate-900">委外收回</h3>
             <div className="text-sm space-y-1">
               {receiveModal.orderNumber != null && <p><span className="text-slate-500">工单：</span><span className="font-bold text-slate-800">{receiveModal.orderNumber}</span></p>}
@@ -7262,7 +7282,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
       {showModal && isProductionMaterial && stockModalMode && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/50" onClick={() => { setShowModal(false); setStockModalMode(null); }} aria-hidden />
-          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 p-6 space-y-4">
+          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 p-4 space-y-4">
             <h3 className="text-lg font-black text-slate-900">
               {stockModalMode === 'stock_return' ? '生产退料' : '生产领料'}
             </h3>
@@ -7346,7 +7366,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
       {collabSyncConfirm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/50" onClick={() => { setCollabSyncConfirm(null); setSelectedRouteId(''); }} aria-hidden />
-          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 p-6 space-y-4" onClick={e => e.stopPropagation()}>
+          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 p-4 space-y-4" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
               <Building2 className="w-5 h-5 text-indigo-600" /> 同步到协作企业
             </h3>

@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  Inbox, Package, Check, X, ArrowLeft, Truck, RotateCcw,
+  Package, Check, X, ArrowLeft, Truck, RotateCcw,
   Search, Building2, Layers, ChevronDown, ChevronRight, RefreshCw,
   Link2, Settings2, Trash2, Edit2, Save, Plus, UserPlus, Route, Forward, CheckCircle2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { useConfirm } from '../contexts/ConfirmContext';
 import * as api from '../services/api';
+import { moduleHeaderRowClass, outlineToolbarButtonClass, pageSubtitleClass, pageTitleClass } from '../styles/uiDensity';
 import type { Product, Partner, ProductionOpRecord, Warehouse, ProductionOrder, AppDictionaries, GlobalNodeTemplate, OutsourceRoute, OutsourceRouteStep } from '../types';
 
 const COLLAB_RETURN_STOCK_OUT_OP = '协作回传出库';
@@ -170,6 +172,7 @@ function computeCollaborationReturnableRows(
 
 const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ products, partners, orders, prodRecords, warehouses, dictionaries, nodeTemplates, onRefreshPartners, onRefreshProducts, onRefreshOrders, onRefreshProdRecords, onRefreshPMP, tenantRole, userPermissions }) => {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [viewMode, setViewMode] = useState<ViewMode>('inbox');
   /** 对照表行：全局 products 未命中时按 id 拉取补全名称 */
   const [resolvedReceiverProducts, setResolvedReceiverProducts] = useState<Record<string, Product>>({});
@@ -309,7 +312,8 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
   };
 
   const deleteRoute = async (id: string) => {
-    if (!confirm('确认删除该路线？')) return;
+    const ok = await confirm({ message: '确认删除该路线？', danger: true });
+    if (!ok) return;
     try {
       await api.collaboration.deleteOutsourceRoute(id);
       toast.success('已删除');
@@ -445,7 +449,8 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
   };
 
   const handleConfirmForward = async (transferId: string) => {
-    if (!confirm('确认该转发？确认后将自动生成外协收回/发出流水和报工记录。')) return;
+    const ok = await confirm({ message: '确认该转发？确认后将自动生成外协收回/发出流水和报工记录。' });
+    if (!ok) return;
     setConfirmingForward(true);
     try {
       const res = await api.collaboration.confirmForward(transferId);
@@ -465,7 +470,8 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
   const [withdrawing, setWithdrawing] = useState(false);
 
   const handleWithdrawDispatch = async (dispatchId: string) => {
-    if (!confirm('确认撤回该发出批次？撤回后对方将无法看到此批次。')) return;
+    const ok = await confirm({ message: '确认撤回该发出批次？撤回后对方将无法看到此批次。' });
+    if (!ok) return;
     setWithdrawing(true);
     try {
       await api.collaboration.withdrawDispatch(dispatchId);
@@ -481,7 +487,8 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
   };
 
   const handleWithdrawReturn = async (returnId: string) => {
-    if (!confirm('确认撤回该回传？撤回后出库记录将被还原。')) return;
+    const ok = await confirm({ message: '确认撤回该回传？撤回后出库记录将被还原。' });
+    if (!ok) return;
     setWithdrawing(true);
     try {
       await api.collaboration.withdrawReturn(returnId);
@@ -497,7 +504,8 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
   };
 
   const handleWithdrawForward = async (transferId: string) => {
-    if (!confirm('确认撤回该转发？撤回后将恢复到转发前的状态，出库记录将被还原。')) return;
+    const ok = await confirm({ message: '确认撤回该转发？撤回后将恢复到转发前的状态，出库记录将被还原。' });
+    if (!ok) return;
     setWithdrawing(true);
     try {
       await api.collaboration.withdrawForward(transferId);
@@ -513,7 +521,8 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
   };
 
   const handleDeleteDispatch = async (dispatchId: string) => {
-    if (!confirm('确认删除该发出记录？删除后不可恢复。')) return;
+    const ok = await confirm({ message: '确认删除该发出记录？删除后不可恢复。', danger: true });
+    if (!ok) return;
     try {
       await api.collaboration.deleteDispatch(dispatchId);
       toast.success('已删除');
@@ -525,7 +534,8 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
   };
 
   const handleDeleteReturn = async (returnId: string) => {
-    if (!confirm('确认删除该回传记录？删除后不可恢复。')) return;
+    const ok = await confirm({ message: '确认删除该回传记录？删除后不可恢复。', danger: true });
+    if (!ok) return;
     try {
       await api.collaboration.deleteReturn(returnId);
       toast.success('已删除');
@@ -911,7 +921,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
 
   if (viewMode === 'settings') {
     return (
-      <div className="max-w-4xl mx-auto space-y-6 animate-in slide-in-from-bottom-4">
+      <div className="w-full min-w-0 space-y-4 animate-in slide-in-from-bottom-4">
         <div className="flex items-center justify-between">
           <button onClick={() => setViewMode('inbox')} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
             <ArrowLeft className="w-4 h-4" /> 返回收件箱
@@ -1050,7 +1060,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
 
   if (viewMode === 'routes') {
     return (
-      <div className="max-w-4xl mx-auto space-y-6 animate-in slide-in-from-bottom-4">
+      <div className="w-full min-w-0 space-y-4 animate-in slide-in-from-bottom-4">
         <div className="flex items-center justify-between">
           <button onClick={() => setViewMode('inbox')} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
             <ArrowLeft className="w-4 h-4" /> 返回收件箱
@@ -1187,7 +1197,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
 
   if (viewMode === 'maps') {
     return (
-      <div className="max-w-4xl mx-auto space-y-6 animate-in slide-in-from-bottom-4">
+      <div className="w-full min-w-0 space-y-4 animate-in slide-in-from-bottom-4">
         <div className="flex items-center justify-between">
           <button onClick={() => setViewMode('inbox')} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
             <ArrowLeft className="w-4 h-4" /> 返回收件箱
@@ -1267,7 +1277,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
     }, 0);
 
     return (
-      <div className="max-w-4xl mx-auto space-y-6 animate-in slide-in-from-bottom-4">
+      <div className="w-full min-w-0 space-y-4 animate-in slide-in-from-bottom-4">
         <div className="flex items-center justify-between">
           <button onClick={() => { setViewMode('inbox'); setSelectedTransfer(null); }} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
             <ArrowLeft className="w-4 h-4" /> 返回列表
@@ -1276,7 +1286,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
         </div>
 
         {/* 主单信息 */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Package className="w-6 h-6 text-indigo-600" />
@@ -1378,8 +1388,8 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
               const items = d.payload?.items ?? [];
               const qty = items.reduce((s: number, i: any) => s + (Number(i.quantity) || 0), 0);
               return (
-                <div key={d.id} className="px-6 py-4 flex items-center justify-between">
-                  <div className="space-y-1">
+                <div key={d.id} className="px-6 py-4 flex items-center justify-between gap-4 min-w-0">
+                  <div className="space-y-1 min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       {dispatchStatusLabel(d.status)}
                       <span className="text-sm font-bold text-slate-800">数量 {qty}</span>
@@ -1433,7 +1443,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
                 const items = r.payload?.items ?? [];
                 const qty = items.reduce((s: number, i: any) => s + (Number(i.quantity) || 0), 0);
                 return (
-                  <div key={r.id} className="px-6 py-4 flex items-center justify-between">
+                  <div key={r.id} className="px-6 py-4 flex items-center justify-between gap-4 min-w-0">
                     <div className="space-y-1 flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         {returnStatusLabel(r.status)}
@@ -1493,7 +1503,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
         {acceptOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-slate-900/50" onClick={() => setAcceptOpen(false)} aria-hidden />
-            <div className="relative bg-white w-full max-w-lg rounded-2xl shadow-xl border border-slate-200 p-6 space-y-5 max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
+            <div className="relative bg-white w-full max-w-lg rounded-2xl shadow-xl border border-slate-200 p-4 space-y-4 max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><Check className="w-5 h-5 text-indigo-600" /> 接受协作单</h3>
                 <button onClick={() => setAcceptOpen(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"><X className="w-5 h-5" /></button>
@@ -1589,7 +1599,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
         {returnOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-slate-900/50" onClick={() => setReturnOpen(false)} aria-hidden />
-            <div className="relative bg-white w-full max-w-lg rounded-2xl shadow-xl border border-slate-200 p-6 space-y-4 max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
+            <div className="relative bg-white w-full max-w-lg rounded-2xl shadow-xl border border-slate-200 p-4 space-y-4 max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
               <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><Truck className="w-5 h-5 text-emerald-600" /> 提交回传</h3>
               <p className="text-xs text-slate-500">
                 请先选择<strong>出库仓库</strong>，可回传 = 甲方发出总量 − 已回传总量，按颜色/尺码汇总。
@@ -1783,54 +1793,53 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
 
   // ---- INBOX LIST ----
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Inbox className="w-6 h-6 text-indigo-600" />
-          <h2 className="text-xl font-black text-slate-900">协作管理</h2>
-          {pendingCount > 0 && (
-            <span className="px-2.5 py-0.5 bg-rose-500 text-white text-xs font-black rounded-full">{pendingCount}</span>
-          )}
-          {pendingForwardCount > 0 && (
-            <span className="px-2.5 py-0.5 bg-orange-500 text-white text-xs font-black rounded-full" title="待确认转发">{pendingForwardCount}</span>
-          )}
-          {pendingReturnCount > 0 && (
-            <span className="px-2.5 py-0.5 bg-indigo-500 text-white text-xs font-black rounded-full" title="待确认收回">{pendingReturnCount}</span>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setViewMode('settings')}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all"
-          >
-            <Settings2 className="w-4 h-4" /> 协作设置
-          </button>
-          <button
-            onClick={() => { setViewMode('routes'); loadRoutes(); refreshCollabs(); }}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all"
-          >
-            <Route className="w-4 h-4" /> 外协路线
-          </button>
-          <button
-            onClick={() => { setViewMode('maps'); loadMaps(); }}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 transition-all"
-          >
-            <Link2 className="w-4 h-4" /> 对照表
-          </button>
+    <div className="w-full min-w-0 space-y-4">
+      <div className={moduleHeaderRowClass}>
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className={pageTitleClass}>协作管理</h1>
+            {pendingCount > 0 && (
+              <span className="px-2.5 py-0.5 bg-rose-500 text-white text-xs font-semibold rounded-full">{pendingCount}</span>
+            )}
+            {pendingForwardCount > 0 && (
+              <span className="px-2.5 py-0.5 bg-orange-500 text-white text-xs font-semibold rounded-full" title="待确认转发">{pendingForwardCount}</span>
+            )}
+            {pendingReturnCount > 0 && (
+              <span className="px-2.5 py-0.5 bg-indigo-500 text-white text-xs font-semibold rounded-full" title="待确认收回">{pendingReturnCount}</span>
+            )}
+          </div>
+          <p className={pageSubtitleClass}>处理委托与承接协作单，维护外协路线、物料对照与协作关系</p>
         </div>
       </div>
 
-      {/* Role filter */}
-      <div className="flex items-center gap-2">
-        {(['all', 'sender', 'receiver'] as const).map(r => (
-          <button
-            key={r}
-            onClick={() => setRoleFilter(r)}
-            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${roleFilter === r ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-          >
-            {r === 'all' ? '全部' : r === 'sender' ? '我的委托' : '我的承接'}
+      {/* 角色筛选与协作设置 / 外协路线 / 对照表同一行 */}
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-between min-w-0">
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
+          {(['all', 'sender', 'receiver'] as const).map(r => (
+            <button
+              key={r}
+              onClick={() => setRoleFilter(r)}
+              className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${roleFilter === r ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+            >
+              {r === 'all' ? '全部' : r === 'sender' ? '我的委托' : '我的承接'}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button type="button" onClick={() => setViewMode('settings')} className={outlineToolbarButtonClass}>
+            <Settings2 className="w-4 h-4 shrink-0" /> 协作设置
           </button>
-        ))}
+          <button
+            type="button"
+            onClick={() => { setViewMode('routes'); loadRoutes(); refreshCollabs(); }}
+            className={outlineToolbarButtonClass}
+          >
+            <Route className="w-4 h-4 shrink-0" /> 外协路线
+          </button>
+          <button type="button" onClick={() => { setViewMode('maps'); loadMaps(); }} className={outlineToolbarButtonClass}>
+            <Link2 className="w-4 h-4 shrink-0" /> 对照表
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -1851,10 +1860,10 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
                 onClick={() => openDetail(t)}
                 className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md hover:border-indigo-200 transition-all cursor-pointer"
               >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <Package className="w-5 h-5 text-indigo-600" />
-                    <div>
+                <div className="flex items-center justify-between gap-4 mb-3 min-w-0">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <Package className="w-5 h-5 text-indigo-600 shrink-0" />
+                    <div className="min-w-0">
                       <span className="text-sm font-black text-slate-900">{t.senderProductName}</span>
                       <span className="ml-2 text-xs text-slate-500">{t.senderProductSku}</span>
                     </div>
@@ -1885,7 +1894,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
                     <span className="text-[10px] font-bold text-emerald-500">回传</span>
                   </div>
                 )}
-                <div className="flex items-center gap-6 text-xs text-slate-500">
+                <div className="flex items-center gap-4 text-xs text-slate-500">
                   <span>{isSender ? '→' : '←'} {isSender ? t.receiverTenantName : t.senderTenantName}</span>
                   <span>Dispatch: {totalD}</span>
                   <span>回传: {totalR}</span>

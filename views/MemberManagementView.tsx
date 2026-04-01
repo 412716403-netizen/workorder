@@ -4,6 +4,7 @@ import * as api from '../services/api';
 import type { RoleRow } from '../services/api';
 import type { GlobalNodeTemplate } from '../types';
 import { toast } from 'sonner';
+import { useConfirm } from '../contexts/ConfirmContext';
 
 const ALL_PERMISSIONS = [
   { id: 'dashboard', label: '经营看板' },
@@ -102,6 +103,7 @@ type Application = {
 };
 
 export default function MemberManagementView({ tenantId, tenantRole, currentUserId, globalNodes, onRefreshWorkers }: MemberManagementViewProps) {
+  const confirm = useConfirm();
   const [tab, setTab] = useState<'members' | 'applications' | 'invite' | 'roles'>('members');
   const [members, setMembers] = useState<Member[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
@@ -183,7 +185,8 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
   }
 
   async function handleRemoveMember(uid: string) {
-    if (!confirm('确认移除该成员？')) return;
+    const ok = await confirm({ message: '确认移除该成员？', danger: true });
+    if (!ok) return;
     try {
       await api.tenants.removeMember(tenantId, uid);
       toast.success('成员已移除');
@@ -284,7 +287,8 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
   }
 
   async function handleDeleteRole(role: RoleRow) {
-    if (!confirm(`确认删除角色「${role.name}」？`)) return;
+    const ok = await confirm({ message: `确认删除角色「${role.name}」？`, danger: true });
+    if (!ok) return;
     try {
       await api.roles.delete(role.id);
       toast.success('角色已删除');

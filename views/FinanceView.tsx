@@ -7,6 +7,14 @@ import {
 import { ProductionOrder, FinanceRecord, FinanceOpType, FinanceCategory, FinanceAccountType, Partner, Worker, Product, AppDictionaries } from '../types';
 import { PartnerCategory, ProductCategory, GlobalNodeTemplate } from '../types';
 import FinanceOpsView from './FinanceOpsView';
+import {
+  subModuleMainContentTopClass,
+  subModuleTabBarBackdropClass,
+  subModuleTabBarInsetClass,
+  subModuleTabBarStickyPadClass,
+  subModuleTabButtonClass,
+  subModuleTabPillClass,
+} from '../styles/uiDensity';
 
 interface FinanceViewProps {
   orders: ProductionOrder[];
@@ -97,29 +105,30 @@ const FinanceView: React.FC<FinanceViewProps> = ({ orders, records, psiRecords =
   const tabs = allTabs.filter(tab => hasFinancePerm(permMap[tab.id]));
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-0">
       <div>
         <div ref={sentinelRef} className="h-px w-full" aria-hidden="true" />
         <div
           ref={tabsWrapRef}
-          className={`z-20 py-4 bg-slate-50/95 backdrop-blur-sm ${
-            isStuck ? 'fixed top-0 px-12' : '-mx-12 px-12'
+          className={`${subModuleTabBarBackdropClass} ${
+            isStuck
+              ? `fixed top-0 px-12 ${subModuleTabBarStickyPadClass}`
+              : subModuleTabBarInsetClass
           }`}
           style={isStuck && barStyle ? { left: barStyle.left, width: barStyle.width } : undefined}
         >
-          <div className="flex bg-white p-1.5 rounded-[24px] border border-slate-200 shadow-sm w-full lg:w-fit overflow-x-auto no-scrollbar">
+          <div className={subModuleTabPillClass}>
             <div className="flex gap-1 min-w-max">
               {tabs.map(tab => (
                 <button
                   key={tab.id}
+                  type="button"
                   onClick={() => setActiveTab(tab.id as FinanceOpType)}
-                  className={`flex items-center gap-3 px-6 py-3 rounded-[18px] text-sm font-bold transition-all whitespace-nowrap ${
-                    activeTab === tab.id
-                      ? `${tab.bg} ${tab.color} shadow-sm`
-                      : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50/50'
-                  }`}
+                  className={subModuleTabButtonClass(activeTab === tab.id)}
                 >
-                  <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? tab.color : 'text-slate-300'}`} />
+                  <tab.icon
+                    className={`w-4 h-4 shrink-0 ${activeTab === tab.id ? 'text-indigo-600' : 'text-slate-300'}`}
+                  />
                   {tab.label}
                 </button>
               ))}
@@ -130,7 +139,7 @@ const FinanceView: React.FC<FinanceViewProps> = ({ orders, records, psiRecords =
       {isStuck && placeholderHeight > 0 && (
         <div style={{ height: placeholderHeight }} aria-hidden="true" />
       )}
-      <div className="min-h-[600px]">
+      <div className={`min-h-[600px] ${subModuleMainContentTopClass}`}>
         <FinanceOpsView 
           type={activeTab}
           orders={orders}

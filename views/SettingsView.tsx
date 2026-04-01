@@ -36,6 +36,14 @@ import {
 import { ProductCategory, ReportFieldDefinition, FieldType, GlobalNodeTemplate, Warehouse, PartnerCategory, FinanceCategory, FinanceCategoryKind, FinanceAccountType, ProductionLinkMode, ProcessSequenceMode } from '../types';
 import { toast } from 'sonner';
 import * as api from '../services/api';
+import {
+  moduleHeaderRowClass,
+  outlineToolbarButtonClass,
+  pageTitleClass,
+  subModuleMainContentTopClass,
+  subModuleTabButtonClass,
+  subModuleTabPillClass,
+} from '../styles/uiDensity';
 
 interface SettingsViewProps {
   categories: ProductCategory[];
@@ -587,42 +595,47 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   return (
-    <div className="space-y-8">
-      <div className="pt-4">
-        <div className="flex bg-white p-1.5 rounded-[24px] border border-slate-200 shadow-sm w-full lg:w-fit overflow-x-auto no-scrollbar">
-        <div className="flex gap-1 min-w-max">
-          {visibleTabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as SettingsTab)}
-              className={`flex items-center gap-3 px-6 py-3 rounded-[18px] text-sm font-bold transition-all whitespace-nowrap ${
-                (effectiveTab === tab.id)
-                  ? `${tab.bg} ${tab.color} shadow-sm`
-                  : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50/50'
-              }`}
-            >
-              <tab.icon className={`w-4 h-4 ${(effectiveTab === tab.id) ? tab.color : 'text-slate-300'}`} />
-              {tab.label}
-            </button>
-          ))}
+    <div className="space-y-0">
+      <div>
+        <div className={subModuleTabPillClass}>
+          <div className="flex gap-1 min-w-max">
+            {visibleTabs.map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id as SettingsTab)}
+                className={subModuleTabButtonClass(effectiveTab === tab.id)}
+              >
+                <tab.icon
+                  className={`w-4 h-4 shrink-0 ${effectiveTab === tab.id ? 'text-indigo-600' : 'text-slate-300'}`}
+                />
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
       </div>
 
       {activeTabMeta && (
-        <div className={`mb-8 ${activeTab === 'finance_categories' ? 'flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4' : ''}`}>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">{(activeTabMeta as typeof tabs[0]).title}</h1>
-            <p className="text-slate-500 mt-1 italic text-sm">{(activeTabMeta as typeof tabs[0]).sub}</p>
+        <div
+          className={`mt-3 pb-6 ${subModuleMainContentTopClass} ${activeTab === 'finance_categories' ? moduleHeaderRowClass : ''}`}
+        >
+          <div className="space-y-2.5">
+            <h1 className={pageTitleClass}>{(activeTabMeta as typeof tabs[0]).title}</h1>
+            <p className="text-slate-500 text-sm leading-snug max-w-xl">
+              {(activeTabMeta as typeof tabs[0]).sub}
+            </p>
           </div>
           {activeTab === 'finance_categories' && canView('finance_account_types') && (
+            <div className="flex items-center gap-2 shrink-0 mt-4 sm:mt-0">
             <button
               type="button"
               onClick={() => { setShowAccountTypesModal(true); setNewAccountTypeName(''); setEditingAccountTypeId(null); }}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700 transition-all shadow-sm shrink-0"
+              className={outlineToolbarButtonClass}
             >
-              <CreditCard className="w-4 h-4" /> 收支账户类型
+              <CreditCard className="w-4 h-4 shrink-0" /> 收支账户类型
             </button>
+            </div>
           )}
         </div>
       )}
@@ -630,7 +643,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
       <div className="min-h-[600px]">
         {activeTab === 'categories' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <div className="lg:col-span-4 space-y-6">
+            <div className="lg:col-span-4 space-y-4">
               <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm p-6">
                 <h2 className="font-bold text-slate-800 mb-6 flex items-center gap-2 text-sm uppercase tracking-wider">
                   <Tag className="w-4 h-4 text-indigo-600" />
@@ -678,7 +691,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         {canDelete('categories') && <button onClick={() => removeCategory(cat.id)} className="text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition-all"><Trash2 className="w-5 h-5" /></button>}
                       </div>
                       <div className="p-8 space-y-12">
-                        <div className="space-y-6">
+                        <div className="space-y-4">
                           <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                             <LayoutGrid className="w-4 h-4" /> 1. 分类基础信息
                           </h3>
@@ -713,7 +726,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                           </div>
                         </div>
 
-                        <div className="space-y-6">
+                        <div className="space-y-4">
                           <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                             <LayoutGrid className="w-4 h-4" /> 2. 模块权限与特性开关
                           </h3>
@@ -741,7 +754,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                           </div>
                         </div>
 
-                        <div className="space-y-6 pt-6 border-t border-slate-100">
+                        <div className="space-y-4 pt-4 border-t border-slate-100">
                            <div className="flex items-center justify-between">
                               <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                                 <ListPlus className="w-4 h-4" /> 3. 分类专属扩展字段
@@ -824,7 +837,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 
         {activeTab === 'partner_categories' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <div className="lg:col-span-4 space-y-6">
+            <div className="lg:col-span-4 space-y-4">
               <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm p-6">
                 <h2 className="font-bold text-slate-800 mb-6 flex items-center gap-2 text-sm uppercase tracking-wider">
                   <Shapes className="w-4 h-4 text-indigo-600" />
@@ -872,7 +885,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         {canDelete('partner_categories') && <button onClick={() => removePartnerCategory(cat.id)} className="text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition-all"><Trash2 className="w-5 h-5" /></button>}
                       </div>
                       <div className="p-8 space-y-12">
-                        <div className="space-y-6">
+                        <div className="space-y-4">
                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Settings className="w-4 h-4" /> 1. 基础信息设置</h3>
                            <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-100">
                               <div className="space-y-1 max-w-sm">
@@ -905,7 +918,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                            </div>
                         </div>
 
-                        <div className="space-y-6 pt-6 border-t border-slate-100">
+                        <div className="space-y-4 pt-4 border-t border-slate-100">
                            <div className="flex items-center justify-between">
                               <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                                 <Building2 className="w-4 h-4" /> 2. 单位专属扩展字段 (自定义内容)
@@ -961,7 +974,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 
         {activeTab === 'nodes' && (
            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <div className="lg:col-span-4 space-y-6">
+            <div className="lg:col-span-4 space-y-4">
                <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm p-6">
                 <h2 className="font-bold text-slate-800 mb-6 flex items-center gap-2 text-sm uppercase tracking-wider">
                   <Database className="w-4 h-4 text-indigo-600" />
@@ -1009,7 +1022,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                             {canDelete('nodes') && <button onClick={() => removeNode(node.id)} className="text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition-all"><Trash2 className="w-5 h-5" /></button>}
                           </div>
                           <div className="p-8 space-y-10">
-                             <div className="space-y-6">
+                             <div className="space-y-4">
                                 <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                                   <Settings className="w-4 h-4" /> 1. 工序基础信息
                                 </h3>
@@ -1044,7 +1057,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                 </div>
                              </div>
 
-                             <div className="space-y-6">
+                             <div className="space-y-4">
                                 <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                                   <Settings className="w-4 h-4" /> 2. 工序功能开关
                                 </h3>
@@ -1134,7 +1147,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                 </div>
                              </div>
 
-                             <div className="space-y-6 pt-6 border-t border-slate-100">
+                             <div className="space-y-4 pt-4 border-t border-slate-100">
                                 <div className="flex items-center justify-between">
                                    <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><FileText className="w-4 h-4" /> 报工表单模板配置</h3>
                                    <button onClick={() => addFieldToNode(node.id)} className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black hover:bg-black transition-all">
@@ -1215,7 +1228,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 
         {activeTab === 'warehouses' && (
            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <div className="lg:col-span-4 space-y-6">
+            <div className="lg:col-span-4 space-y-4">
               <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm p-6">
                 <h2 className="font-bold text-slate-800 mb-6 flex items-center gap-2 text-sm uppercase tracking-wider">
                   <WarehouseIcon className="w-4 h-4 text-indigo-600" />
@@ -1264,7 +1277,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                             {canDelete('warehouses') && <button onClick={() => removeWarehouse(wh.id)} className="text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition-all"><Trash2 className="w-5 h-5" /></button>}
                           </div>
                           <div className="p-8 space-y-10">
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-1 md:col-span-2">
                                    <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest">仓库名称</label>
                                    <input
@@ -1331,7 +1344,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 
         {activeTab === 'finance_categories' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <div className="lg:col-span-4 space-y-6">
+            <div className="lg:col-span-4 space-y-4">
               <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm p-6">
                 <h2 className="font-bold text-slate-800 mb-6 flex items-center gap-2 text-sm uppercase tracking-wider">
                   <Wallet className="w-4 h-4 text-indigo-600" />
@@ -1380,7 +1393,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         {canDelete('finance_categories') && <button onClick={() => removeFinanceCategory(cat.id)} className="text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition-all"><Trash2 className="w-5 h-5" /></button>}
                       </div>
                       <div className="p-8 space-y-12">
-                        <div className="space-y-6">
+                        <div className="space-y-4">
                           <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Settings className="w-4 h-4" /> 1. 基础信息</h3>
                           <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-1">
@@ -1420,7 +1433,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                           </div>
                         </div>
 
-                        <div className="space-y-6">
+                        <div className="space-y-4">
                           <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><LayoutGrid className="w-4 h-4" /> 2. 关联与选项开关</h3>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {[
@@ -1446,7 +1459,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                           </div>
                         </div>
 
-                        <div className="space-y-6 pt-6 border-t border-slate-100">
+                        <div className="space-y-4 pt-4 border-t border-slate-100">
                           <div className="flex items-center justify-between">
                             <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><ListPlus className="w-4 h-4" /> 3. 自定义内容</h3>
                             <button onClick={() => addFinanceCustomField(cat.id)} className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black hover:bg-black transition-all">
@@ -1498,7 +1511,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         )}
 
         {activeTab === 'production' && (
-          <div className="max-w-2xl space-y-6">
+          <div className="max-w-2xl space-y-4">
             <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm p-8">
               <h2 className="font-bold text-slate-800 mb-6 flex items-center gap-2 text-sm uppercase tracking-wider">
                 <Link2 className="w-4 h-4 text-indigo-600" />

@@ -1,8 +1,11 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { Plus, X, Clock, DollarSign, Search, ChevronDown, Building2, Package, User, FileText, Pencil, Trash2 } from 'lucide-react';
+import { Plus, X, Clock, DollarSign, Search, ChevronDown, Building2, User, FileText, Pencil, Trash2 } from 'lucide-react';
 import { FinanceRecord, FinanceOpType, ProductionOrder, FinanceCategory, FinanceAccountType, Partner, Worker, Product, ReportFieldDefinition, PartnerCategory, ProductCategory, GlobalNodeTemplate, AppDictionaries, FINANCE_DOC_NO_PREFIX } from '../types';
+import { SearchableProductSelect } from '../components/SearchableProductSelect';
 import type { ProductionOpRecord } from '../types';
+import { moduleHeaderRowClass, pageSubtitleClass, pageTitleClass, primaryToolbarButtonClass } from '../styles/uiDensity';
+import { useConfirm } from '../contexts/ConfirmContext';
 
 function CustomFieldInput({ field, value, onChange }: { field: ReportFieldDefinition; value: any; onChange: (v: any) => void }) {
   const v = value ?? '';
@@ -304,85 +307,6 @@ function WorkerSelectWithTabs({ workers, processNodes, value, onChange, label, c
   );
 }
 
-// 关联产品：按产品分类、可搜索（参考计划单/进销存产品选择）
-function ProductSelectWithCategories({ products, categories, value, onChange, label }: { products: Product[]; categories: ProductCategory[]; value: string; onChange: (id: string) => void; label: string }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<string>('all');
-  const [dropdownStyle, setDropdownStyle] = useState<{ top: number; left: number; width: number } | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const selectedProduct = products.find(p => p.id === value);
-  const filtered = useMemo(() => products.filter(p => {
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase());
-    const matchCat = activeTab === 'all' || p.categoryId === activeTab;
-    return matchSearch && matchCat;
-  }).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id)), [products, search, activeTab]);
-  const updatePos = useCallback(() => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    setDropdownStyle({ top: rect.bottom + 8, left: rect.left, width: Math.max(rect.width, 320) });
-  }, []);
-  useEffect(() => {
-    if (isOpen) {
-      updatePos();
-      window.addEventListener('scroll', updatePos, true);
-      window.addEventListener('resize', updatePos);
-      return () => { window.removeEventListener('scroll', updatePos, true); window.removeEventListener('resize', updatePos); }
-    }
-    setDropdownStyle(null);
-  }, [isOpen, updatePos]);
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node) && !(e.target as HTMLElement).closest?.('[data-finance-product-dropdown]')) setIsOpen(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-  const dropdownContent = isOpen && dropdownStyle && typeof document !== 'undefined' && (
-    <div data-finance-product-dropdown className="fixed bg-white border border-slate-200 rounded-2xl shadow-2xl p-4 animate-in fade-in zoom-in-95" style={{ top: dropdownStyle.top, left: dropdownStyle.left, width: dropdownStyle.width, zIndex: 10000 }}>
-      <div className="relative mb-3">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-        <input autoFocus type="text" className="w-full bg-slate-50 border-none rounded-xl py-2.5 pl-10 pr-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="输入名称或 SKU 搜索..." value={search} onChange={e => setSearch(e.target.value)} />
-      </div>
-      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">产品分类</p>
-      <div className="flex items-center gap-1.5 mb-3 overflow-x-auto no-scrollbar pb-1">
-        <button type="button" onClick={() => setActiveTab('all')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase whitespace-nowrap ${activeTab === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>全部</button>
-        {categories.map(cat => (
-          <button key={cat.id} type="button" onClick={() => setActiveTab(cat.id)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase whitespace-nowrap ${activeTab === cat.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>{cat.name}</button>
-        ))}
-      </div>
-      <div className="max-h-52 overflow-y-auto space-y-1">
-        {filtered.map(p => {
-          const cat = categories.find(c => c.id === p.categoryId);
-          return (
-            <button key={p.id} type="button" onClick={() => { onChange(p.id); setIsOpen(false); setSearch(''); }} className={`w-full text-left p-3 rounded-xl transition-all border-2 ${p.id === value ? 'bg-indigo-50 border-indigo-600/20 text-indigo-700' : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'}`}>
-              <div className="flex justify-between items-start gap-2">
-                <p className="text-sm font-bold truncate">{p.name}</p>
-                <span className="text-[10px] font-bold text-slate-400 shrink-0">{cat?.name || '未分类'}</span>
-              </div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{p.sku}</p>
-            </button>
-          );
-        })}
-        {filtered.length === 0 && <p className="py-6 text-center text-slate-400 text-sm">未找到符合条件的产品</p>}
-      </div>
-    </div>
-  );
-  return (
-    <div className="space-y-1 relative" ref={containerRef}>
-      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
-      <button type="button" onClick={() => setIsOpen(!isOpen)} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 flex items-center justify-between h-[52px]">
-        <div className="flex items-center gap-2 truncate">
-          <Package className={`w-4 h-4 flex-shrink-0 ${value ? 'text-indigo-600' : 'text-slate-300'}`} />
-          <span className={value ? 'text-slate-900 truncate' : 'text-slate-400'}>{selectedProduct ? `${selectedProduct.name} (${selectedProduct.sku})` : '搜索并选择产品...'}</span>
-        </div>
-        <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : 'text-slate-400'}`} />
-      </button>
-      {dropdownContent && ReactDOM.createPortal(dropdownContent, document.body)}
-    </div>
-  );
-}
-
 interface FinanceOpsViewProps {
   type: FinanceOpType;
   orders: ProductionOrder[];
@@ -464,6 +388,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
   const canCreate = financePermModule !== 'reconciliation' && hasFinancePerm(`finance:${financePermModule}:create`);
   const canEdit = financePermModule !== 'reconciliation' && hasFinancePerm(`finance:${financePermModule}:edit`);
   const canDelete = financePermModule !== 'reconciliation' && hasFinancePerm(`finance:${financePermModule}:delete`);
+  const confirm = useConfirm();
   const fmtDT = (ts: any): string => {
     if (!ts) return '—';
     const d = new Date(ts);
@@ -786,8 +711,8 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
 
   if (!canView) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-slate-900">{current.label}</h1>
+      <div className="space-y-4">
+        <h1 className={pageTitleClass}>{current.label}</h1>
         <div className="bg-white border-2 border-dashed border-slate-100 rounded-[32px] p-20 text-center">
           <p className="text-slate-400 text-sm">暂无该模块的查看权限，请联系管理员配置</p>
         </div>
@@ -796,15 +721,15 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* 头部 */}
       <div className="flex flex-col gap-4">
-        <div className={`flex flex-col sm:flex-row sm:items-center ${type === 'RECONCILIATION' ? 'sm:justify-between' : 'sm:justify-between'}`}>
+        <div className={moduleHeaderRowClass}>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">{current.label}</h1>
+            <h1 className={pageTitleClass}>{current.label}</h1>
             {type === 'RECONCILIATION' ? (
               <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 mt-1 w-full max-w-4xl">
-                <p className="text-slate-500 italic text-sm">{current.sub}</p>
+                <p className={pageSubtitleClass}>{current.sub}</p>
                 <div className="flex bg-slate-100 p-1 rounded-xl w-fit justify-self-center">
                   <button
                     type="button"
@@ -824,16 +749,19 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                 <div />
               </div>
             ) : (
-              <p className="text-slate-500 mt-1 italic text-sm">{current.sub}</p>
+              <p className={pageSubtitleClass}>{current.sub}</p>
             )}
           </div>
           {type !== 'RECONCILIATION' && canCreate && (
+            <div className="flex items-center gap-2 shrink-0 mt-4 sm:mt-0">
             <button
+              type="button"
               onClick={() => { setEditingRecordId(null); setForm(emptyForm); setShowModal(true); }}
-              className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-95 shrink-0 mt-4 sm:mt-0"
+              className={primaryToolbarButtonClass}
             >
-              <Plus className="w-4 h-4" /> 新增{current.label}
+              <Plus className="w-4 h-4 shrink-0" /> 新增{current.label}
             </button>
+            </div>
           )}
         </div>
         {type === 'RECONCILIATION' && (
@@ -1097,7 +1025,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                     </button>
                   )}
                   {financeRec && onDeleteRecord && canDelete && (
-                    <button type="button" onClick={() => { if (window.confirm('确定删除该单据？')) { onDeleteRecord(financeRec.id); setDetailRecord(null); } }} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 text-sm font-bold transition-all">
+                    <button type="button" onClick={() => { void confirm({ message: '确定删除该单据？', danger: true }).then((ok) => { if (!ok) return; onDeleteRecord(financeRec.id); setDetailRecord(null); }); }} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 text-sm font-bold transition-all">
                       <Trash2 className="w-4 h-4" /> 删除
                     </button>
                   )}
@@ -1418,7 +1346,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
               <button onClick={() => { setShowModal(false); setForm(emptyForm); setEditingRecordId(null); }} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-white/60 transition-all"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-10 overflow-y-auto flex-1">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {isReceiptOrPayment ? (
                   <>
                     {categoriesForType.length > 0 && (
@@ -1459,7 +1387,10 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                           <WorkerSelectWithTabs workers={workers} processNodes={globalNodes} value={form.workerId} onChange={id => setForm({ ...form, workerId: id })} label="关联工人" />
                         )}
                         {selectedCategory.linkProduct && (
-                          <ProductSelectWithCategories products={products} categories={categories} value={form.productId} onChange={id => setForm({ ...form, productId: id })} label="关联产品" />
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">关联产品</label>
+                            <SearchableProductSelect options={products} categories={categories} value={form.productId} onChange={id => setForm({ ...form, productId: id })} />
+                          </div>
                         )}
                         {(selectedCategory.customFields || []).map(field => (
                           <div key={field.id} className="space-y-1">

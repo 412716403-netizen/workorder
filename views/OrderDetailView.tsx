@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Layers, Trash2, ClipboardList } from 'lucide-react';
 import { ProductionOrder, Product, OrderFormSettings, ProductionOpRecord, ProductionLinkMode } from '../types';
+import { useConfirm } from '../contexts/ConfirmContext';
 
 interface OrderDetailViewProps {
   productionLinkMode?: ProductionLinkMode;
@@ -20,6 +21,7 @@ interface OrderDetailViewProps {
 const OrderDetailView: React.FC<OrderDetailViewProps> = ({
   orders, products, prodRecords, orderFormSettings, onDeleteOrder, productionLinkMode
 }) => {
+  const confirm = useConfirm();
   const showInDetail = (id: string) => orderFormSettings?.standardFields.find(f => f.id === id)?.showInDetail ?? true;
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -30,7 +32,7 @@ const OrderDetailView: React.FC<OrderDetailViewProps> = ({
 
   if (!order) return <div className="p-8 text-center text-slate-500 font-bold">工单未找到</div>;
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!onDeleteOrder) return;
     if (productionLinkMode !== 'product') {
       const hasReport = order.milestones.some(m => m.completedQuantity > 0 || (m.reports?.length ?? 0) > 0);
@@ -49,14 +51,14 @@ const OrderDetailView: React.FC<OrderDetailViewProps> = ({
         return;
       }
     }
-    if (window.confirm(`确定要删除工单「${order.orderNumber}」吗？此操作不可恢复。`)) {
-      onDeleteOrder(order.id);
-      navigate('/production', { state: { tab: 'orders' } });
-    }
+    const ok = await confirm({ message: `确定要删除工单「${order.orderNumber}」吗？此操作不可恢复。`, danger: true });
+    if (!ok) return;
+    onDeleteOrder(order.id);
+    navigate('/production', { state: { tab: 'orders' } });
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto animate-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-4 max-w-5xl mx-auto animate-in slide-in-from-bottom-4 duration-500">
       <div className="flex items-center justify-between">
         <button onClick={() => navigate('/production', { state: { tab: 'orders' } })} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors font-bold text-sm">
           <ArrowLeft className="w-4 h-4" /> 返回工单管理
@@ -77,7 +79,7 @@ const OrderDetailView: React.FC<OrderDetailViewProps> = ({
             </div>
             <h1 className="text-3xl font-bold text-slate-900">{order.productName}</h1>
           </div>
-          <div className="flex items-center gap-6 mt-4 md:mt-0 py-4 px-6 bg-slate-50 rounded-2xl border border-slate-100 flex-wrap">
+          <div className="flex items-center gap-4 mt-4 md:mt-0 py-3 px-4 bg-slate-50 rounded-2xl border border-slate-100 flex-wrap">
             <div>
               <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">产品编号</p>
               <p className="text-sm font-bold text-slate-800">{order.sku}</p>

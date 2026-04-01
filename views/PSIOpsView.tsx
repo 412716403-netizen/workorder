@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import ReactDOM from 'react-dom';
 import { TableVirtuoso } from 'react-virtuoso';
 import { 
   Plus, 
@@ -36,7 +35,6 @@ import {
   Briefcase,
   ArrowLeft,
   Save,
-  Box,
   Trash2,
   Sliders,
   PackageCheck,
@@ -45,10 +43,21 @@ import {
   ScrollText
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { SearchableProductSelect } from '../components/SearchableProductSelect';
 import { Product, Warehouse, ProductCategory, Partner, PartnerCategory, AppDictionaries, ProductVariant, PurchaseOrderFormSettings, PurchaseBillFormSettings } from '../types';
 import { sortedVariantColorEntries, sortedColorEntries } from '../utils/sortVariantsByProduct';
 import { useProgressiveList } from '../hooks/useProgressiveList';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import {
+  moduleHeaderRowClass,
+  outlineAccentToolbarButtonClass,
+  pageSubtitleClass,
+  pageTitleClass,
+  primaryToolbarButtonClass,
+  secondaryToolbarButtonClass,
+  sectionTitleClass,
+} from '../styles/uiDensity';
+import { useConfirm } from '../contexts/ConfirmContext';
 
 interface PSIOpsViewProps {
   type: string;
@@ -77,142 +86,6 @@ interface PSIOpsViewProps {
   tenantRole?: string;
 }
 
-// 增强型产品选择器（与生产计划一致：可搜索、按分类筛选；下拉用 Portal 渲染避免被弹窗裁切）
-const ProductSelector = ({
-  options = [],
-  categories = [],
-  value,
-  onChange,
-  label = '目标品项 (支持搜索与分类筛选)'
-}: {
-  options: Product[];
-  categories: ProductCategory[];
-  value: string;
-  onChange: (productId: string) => void;
-  /** 用于采购订单显示「目标采购品项」、销售订单显示「目标商品」等 */
-  label?: string;
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<string>('all');
-  const [dropdownStyle, setDropdownStyle] = useState<{ top: number; left: number; width: number } | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const selectedProduct = options.find(p => p.id === value);
-  const filteredOptions = useMemo(() => {
-    return options.filter(p => {
-      const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase());
-      const matchesCategory = activeTab === 'all' || p.categoryId === activeTab;
-      return matchesSearch && matchesCategory;
-    }).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id));
-  }, [options, search, activeTab]);
-
-  const updateDropdownPosition = useCallback(() => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    setDropdownStyle({ top: rect.bottom + 8, left: rect.left, width: Math.max(rect.width, 320) });
-  }, []);
-
-  useEffect(() => {
-    if (isOpen) {
-      updateDropdownPosition();
-      const onScrollOrResize = () => updateDropdownPosition();
-      window.addEventListener('scroll', onScrollOrResize, true);
-      window.addEventListener('resize', onScrollOrResize);
-      return () => {
-        window.removeEventListener('scroll', onScrollOrResize, true);
-        window.removeEventListener('resize', onScrollOrResize);
-      };
-    } else {
-      setDropdownStyle(null);
-    }
-  }, [isOpen, updateDropdownPosition]);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        const target = e.target as HTMLElement;
-        if (target.closest?.('[data-product-selector-dropdown]')) return;
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const dropdownContent = isOpen && dropdownStyle && (
-    <div
-      data-product-selector-dropdown
-      className="fixed bg-white border border-slate-200 rounded-3xl shadow-2xl p-4 animate-in fade-in zoom-in-95"
-      style={{ top: dropdownStyle.top, left: dropdownStyle.left, width: dropdownStyle.width, zIndex: 10000 }}
-    >
-      <div className="relative mb-4">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-        <input
-          autoFocus
-          type="text"
-          className="w-full bg-slate-50 border-none rounded-xl py-3 pl-11 pr-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
-          placeholder="输入名称或 SKU 搜索..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
-      </div>
-      <div className="flex items-center gap-1.5 mb-4 overflow-x-auto no-scrollbar pb-1">
-        <button type="button" onClick={() => setActiveTab('all')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeTab === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>全部</button>
-        {categories.map(cat => (
-          <button type="button" key={cat.id} onClick={() => setActiveTab(cat.id)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeTab === cat.id ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>{cat.name}</button>
-        ))}
-      </div>
-      <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1">
-        {filteredOptions.map(p => {
-          const cat = categoryMapPSI.get(p.categoryId);
-          return (
-            <button
-              type="button"
-              key={p.id}
-              onClick={() => { onChange(p.id); setIsOpen(false); setSearch(''); }}
-              className={`w-full text-left p-3 rounded-2xl transition-all border-2 ${p.id === value ? 'bg-indigo-50 border-indigo-600/20 text-indigo-700' : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'}`}
-            >
-              <div className="flex justify-between items-start mb-0.5">
-                <p className="text-sm font-black truncate">{p.name}</p>
-                <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-400 text-[8px] font-black uppercase">{cat?.name || '未分类'}</span>
-              </div>
-              <p className={`text-[10px] font-bold uppercase tracking-widest ${p.id === value ? 'text-indigo-400' : 'text-slate-400'}`}>{p.sku}</p>
-            </button>
-          );
-        })}
-        {filteredOptions.length === 0 && (
-          <div className="py-10 text-center">
-            <Box className="w-8 h-8 text-slate-100 mx-auto mb-2" />
-            <p className="text-xs text-slate-400 font-medium">未找到符合条件的产品</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="relative" ref={containerRef}>
-      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{label}</label>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full bg-slate-50 border-none rounded-xl py-3.5 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between transition-all h-[52px]"
-      >
-        <div className="flex items-center gap-2 truncate">
-          <Package className={`w-4 h-4 ${selectedProduct ? 'text-indigo-600' : 'text-slate-300'}`} />
-          <span className={selectedProduct ? 'text-slate-900 truncate' : 'text-slate-400'}>
-            {selectedProduct ? `${selectedProduct.name} (${selectedProduct.sku})` : '搜索并选择产品型号...'}
-          </span>
-        </div>
-        <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : 'text-slate-400'}`} />
-      </button>
-
-      {typeof document !== 'undefined' && dropdownContent && ReactDOM.createPortal(dropdownContent, document.body)}
-    </div>
-  );
-};
-
 // 增强型合作伙伴选择器
 const PartnerSelector = ({ 
   partners = [], 
@@ -220,7 +93,8 @@ const PartnerSelector = ({
   value, 
   onChange, 
   placeholder,
-  label
+  label,
+  triggerClassName = '',
 }: { 
   partners: Partner[]; 
   categories: PartnerCategory[];
@@ -228,12 +102,15 @@ const PartnerSelector = ({
   onChange: (partnerName: string, partnerId?: string) => void; 
   placeholder?: string;
   label: string;
+  /** 触发按钮内文字字号，与基本信息/订单详情表单对齐 */
+  triggerClassName?: string;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<string>('all');
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const categoryMapPSI = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
   const filteredOptions = useMemo(() => {
     return partners.filter(p => {
       const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
@@ -258,9 +135,9 @@ const PartnerSelector = ({
         onClick={() => setIsOpen(!isOpen)}
         className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between transition-all h-[52px]"
       >
-        <div className="flex items-center gap-2 truncate">
-          <Building2 className={`w-4 h-4 ${value ? 'text-indigo-600' : 'text-slate-300'}`} />
-          <span className={value ? 'text-slate-900 truncate' : 'text-slate-400'}>
+        <div className="flex items-center gap-2 truncate min-w-0">
+          <Building2 className={`w-4 h-4 shrink-0 ${value ? 'text-indigo-600' : 'text-slate-300'}`} />
+          <span className={`truncate ${value ? 'text-slate-900' : 'text-slate-400'} ${triggerClassName || 'text-sm'}`}>
             {value || placeholder || '点击选择单位...'}
           </span>
         </div>
@@ -335,6 +212,7 @@ const PartnerSelector = ({
 };
 
 const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, categories, partners, partnerCategories, dictionaries, records, purchaseOrderFormSettings = { standardFields: [], customFields: [] }, onUpdatePurchaseOrderFormSettings, purchaseBillFormSettings = { standardFields: [], customFields: [] }, onUpdatePurchaseBillFormSettings, onAddRecord, onAddRecordBatch, onReplaceRecords, onDeleteRecords, onDetailViewChange, prodRecords = [], orders = [], userPermissions, tenantRole }) => {
+  const confirm = useConfirm();
   const _isOwner = tenantRole === 'owner';
   const hasPsiPerm = (perm: string): boolean => {
     if (_isOwner) return true;
@@ -1881,31 +1759,31 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
   }, [warehouses, filteredProductStocks]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4">
+      <div className={moduleHeaderRowClass}>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{current.label}</h1>
-          <p className="text-slate-500 mt-1 italic text-sm">{current.sub || '管理业务单据与记录'}</p>
+          <h1 className={pageTitleClass}>{current.label}</h1>
+          <p className={pageSubtitleClass}>{current.sub || '管理业务单据与记录'}</p>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           {type === 'PURCHASE_ORDER' && onUpdatePurchaseOrderFormSettings && (
-            <button onClick={() => { setPOFormConfigDraft(JSON.parse(JSON.stringify(purchaseOrderFormSettings))); setShowPOFormConfigModal(true); }} className="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition-all border border-slate-200">
-              <Sliders className="w-4 h-4" /> 表单配置
+            <button type="button" onClick={() => { setPOFormConfigDraft(JSON.parse(JSON.stringify(purchaseOrderFormSettings))); setShowPOFormConfigModal(true); }} className={secondaryToolbarButtonClass}>
+              <Sliders className="w-4 h-4 shrink-0" /> 表单配置
             </button>
           )}
           {type === 'PURCHASE_BILL' && onUpdatePurchaseBillFormSettings && (
-            <button onClick={() => { setPBFormConfigDraft(JSON.parse(JSON.stringify(purchaseBillFormSettings))); setShowPBFormConfigModal(true); }} className="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition-all border border-slate-200">
-              <Sliders className="w-4 h-4" /> 表单配置
+            <button type="button" onClick={() => { setPBFormConfigDraft(JSON.parse(JSON.stringify(purchaseBillFormSettings))); setShowPBFormConfigModal(true); }} className={secondaryToolbarButtonClass}>
+              <Sliders className="w-4 h-4 shrink-0" /> 表单配置
             </button>
           )}
           {type === 'SALES_ORDER' && !showModal && hasPsiPerm('psi:sales_order_pending_shipment:allow') && (
             <button
               type="button"
               onClick={() => setShowPendingShipmentModal(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white border border-indigo-200 text-indigo-600 rounded-xl text-sm font-bold transition-all hover:bg-indigo-50"
+              className={outlineAccentToolbarButtonClass}
             >
-              <PackageCheck className="w-4 h-4" /> 待发货清单
+              <PackageCheck className="w-4 h-4 shrink-0" /> 待发货清单
               {pendingShipmentGroups.length > 0 && (
                 <span className="ml-0.5 min-w-[18px] h-[18px] rounded-full bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center">
                   {pendingShipmentGroups.length}
@@ -1915,10 +1793,11 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
           )}
           {type !== 'WAREHOUSE_MGMT' && !(type === 'PURCHASE_ORDER' && showModal === 'PURCHASE_ORDER') && !(type === 'PURCHASE_BILL' && showModal === 'PURCHASE_BILL') && !(type === 'SALES_ORDER' && showModal === 'SALES_ORDER') && !(type === 'SALES_BILL' && showModal === 'SALES_BILL') && hasPsiPerm(`psi:${type === 'PURCHASE_ORDER' ? 'purchase_order' : type === 'PURCHASE_BILL' ? 'purchase_bill' : type === 'SALES_ORDER' ? 'sales_order' : 'sales_bill'}:create`) && (
             <button
+              type="button"
               onClick={() => { resetForm(); setEditingPODocNumber(null); setEditingSODocNumber(null); setEditingSBDocNumber(null); setShowModal(type); }}
-              className={`flex items-center gap-2 px-6 py-2.5 text-white rounded-xl text-sm font-bold transition-all shadow-lg ${current.color} shadow-indigo-100`}
+              className={`${primaryToolbarButtonClass} ${current.color}`}
             >
-            <Plus className="w-4 h-4" /> 登记新{current.label}
+            <Plus className="w-4 h-4 shrink-0" /> 登记新{current.label}
           </button>
         )}
         </div>
@@ -1960,7 +1839,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                 <span className="text-xs text-slate-400">共 {filteredPendingShipmentGroups.length} 项</span>
               </div>
             </div>
-            <div className="flex-1 overflow-auto p-6">
+            <div className="flex-1 overflow-auto p-4">
               {filteredPendingShipmentGroups.length === 0 ? (
                 <p className="text-slate-500 text-center py-12">{pendingShipmentGroups.length === 0 ? '暂无待发货项，请先在销售订单中完成配货。' : '无匹配项，请调整搜索条件。'}</p>
               ) : (
@@ -2147,16 +2026,19 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
           setPendingShipDetailGroup(null);
         };
         const handleDelete = () => {
-          if (!onReplaceRecords || !window.confirm('确定要取消该组配货吗？已配数量将清零。')) return;
-          const docRecords = recordsList.filter((re: any) => re.type === 'SALES_ORDER' && re.docNumber === g.docNumber);
-          const newRecords = docRecords.map((re: any) => {
-            if (!g.records.some((r: any) => r.id === re.id)) return re;
-            return { ...re, allocatedQuantity: 0 };
+          if (!onReplaceRecords) return;
+          void confirm({ message: '确定要取消该组配货吗？已配数量将清零。', danger: true }).then((ok) => {
+            if (!ok) return;
+            const docRecords = recordsList.filter((re: any) => re.type === 'SALES_ORDER' && re.docNumber === g.docNumber);
+            const newRecords = docRecords.map((re: any) => {
+              if (!g.records.some((r: any) => r.id === re.id)) return re;
+              return { ...re, allocatedQuantity: 0 };
+            });
+            onReplaceRecords('SALES_ORDER', g.docNumber, newRecords);
+            setPendingShipDetailGroup(null);
+            setPendingShipDetailEdit(null);
+            setPendingShipDetailEditWarehouseId(null);
           });
-          onReplaceRecords('SALES_ORDER', g.docNumber, newRecords);
-          setPendingShipDetailGroup(null);
-          setPendingShipDetailEdit(null);
-          setPendingShipDetailEditWarehouseId(null);
         };
         return (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
@@ -2205,7 +2087,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                   </button>
                 </div>
               </div>
-              <div className="flex-1 overflow-auto p-6 space-y-6">
+              <div className="flex-1 overflow-auto p-4 space-y-4">
                 <div>
                   <h2 className="text-xl font-bold text-slate-900">{g.productName}</h2>
                   <p className="text-xs text-slate-500 mt-1">客户：{g.partner}{!isEditing && ` · 仓库：${g.warehouseName}`}</p>
@@ -2306,9 +2188,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
       })()}
 
       {type === 'PURCHASE_ORDER' && showModal === 'PURCHASE_ORDER' ? (
-        <div className="max-w-5xl mx-auto space-y-6 animate-in slide-in-from-bottom-4 pb-32">
+        <div className="max-w-5xl mx-auto space-y-4 animate-in slide-in-from-bottom-4 pb-24">
           <div className="flex items-center justify-between sticky top-0 z-40 py-4 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200">
-            <button onClick={() => { setShowModal(null); setEditingPODocNumber(null); }} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
+            <button type="button" onClick={() => { setShowModal(null); setEditingPODocNumber(null); }} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors font-bold text-sm">
               <ArrowLeft className="w-4 h-4" /> 返回列表
             </button>
             <div className="flex items-center gap-3">
@@ -2316,38 +2198,40 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm('确定要删除该采购订单吗？')) {
+                    void confirm({ message: '确定要删除该采购订单吗？', danger: true }).then((ok) => {
+                      if (!ok) return;
                       onDeleteRecords('PURCHASE_ORDER', editingPODocNumber);
                       setShowModal(null);
                       setEditingPODocNumber(null);
-                    }
+                    });
                   }}
-                  className="flex items-center gap-2 px-4 py-2.5 text-rose-600 font-bold rounded-xl border border-rose-200 bg-white hover:bg-rose-50 transition-all"
+                  className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold transition-all border border-rose-200"
                 >
                   <Trash2 className="w-4 h-4" /> 删除
                 </button>
               )}
               <button
+                type="button"
                 onClick={() => handleSaveManual('PURCHASE_ORDER')}
                 disabled={!form.partner || purchaseOrderItems.length === 0 || !purchaseOrderItems.some(i => {
                   if (!i.productId) return false;
                   const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((s, v) => s + v, 0) : (i.quantity ?? 0);
                   return q > 0;
                 })}
-                className="bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
+                className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
               >
                 <Save className="w-4 h-4" /> {editingPODocNumber ? '保存修改' : '确认保存采购订单'}
               </button>
             </div>
           </div>
 
-          <div className="bg-white rounded-[40px] p-8 border border-slate-200 shadow-sm space-y-10">
+          <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm space-y-10">
             <div className="space-y-8">
-              <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
+              <div className="flex items-center gap-3 border-b border-slate-200 pb-3">
                 <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600"><FileText className="w-5 h-5" /></div>
-                <h3 className="text-lg font-bold text-slate-800">1. 采购订单基础信息</h3>
+                <h3 className={sectionTitleClass}>1. 采购订单基础信息</h3>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* 供应商、单据编号、添加日期 固定显示，不可配置 */}
                 <div className="md:col-span-2">
                   <PartnerSelector
@@ -2357,6 +2241,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                     onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id || '' })}
                     label={current.partnerLabel}
                     placeholder={`选择${current.partnerLabel}...`}
+                    triggerClassName="text-sm"
                   />
                 </div>
                 <div className="space-y-1">
@@ -2403,13 +2288,13 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
             </div>
 
             <div className="pt-10 border-t border-slate-50 space-y-8">
-              <div className="flex items-center justify-between border-b border-slate-50 pb-4">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600"><Layers className="w-5 h-5" /></div>
-                  <h3 className="text-lg font-bold text-slate-800">2. 采购明细录入</h3>
+                  <h3 className={sectionTitleClass}>2. 采购明细录入</h3>
                 </div>
-                <button onClick={addPurchaseOrderItem} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all">
-                  <Plus className="w-4 h-4" /> 添加明细行
+                <button type="button" onClick={addPurchaseOrderItem} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm hover:bg-indigo-700 active:scale-[0.98] transition-all">
+                  <Plus className="w-4 h-4 shrink-0" /> 添加明细行
                 </button>
               </div>
               <div className="space-y-4">
@@ -2433,34 +2318,42 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                     : (poDocNum ? (receivedByOrderLine[`${poDocNum}::${line.id}`] ?? 0) : 0);
                   const progress = lineQty > 0 ? Math.min(1, received / lineQty) : 0;
                   return (
-                  <div key={line.id} className="p-4 bg-slate-50/50 rounded-2xl border border-slate-100 space-y-4">
+                  <div key={line.id} className="p-4 bg-slate-50/50 rounded-2xl border border-slate-100 space-y-4 shadow-sm hover:border-indigo-100/80 transition-all">
                     <div className="flex flex-wrap items-end gap-4">
-                      <div className="flex-1 min-w-[200px]">
-                        <ProductSelector label="目标采购品项 (支持搜索与分类筛选)" options={products} categories={categories} value={line.productId} onChange={(id) => {
-                          const p = productMapPSI.get(id);
-                          const hv = p?.variants && p.variants.length > 0;
-                          updatePurchaseOrderItem(line.id, {
-                            productId: id,
-                            purchasePrice: p?.purchasePrice ?? 0,
-                            quantity: hv ? undefined : 0,
-                            variantQuantities: hv ? {} : undefined
-                          });
-                        }} />
+                      <div className="flex-1 min-w-[200px] space-y-2 min-w-0">
+                        <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block tracking-widest">目标采购品项 (支持搜索与分类筛选)</label>
+                        <SearchableProductSelect
+                          compact
+                          categories={categories}
+                          options={products}
+                          value={line.productId}
+                          placeholder="搜索并选择产品型号..."
+                          onChange={(id) => {
+                            const p = productMapPSI.get(id);
+                            const hv = p?.variants && p.variants.length > 0;
+                            updatePurchaseOrderItem(line.id, {
+                              productId: id,
+                              purchasePrice: p?.purchasePrice ?? 0,
+                              quantity: hv ? undefined : 0,
+                              variantQuantities: hv ? {} : undefined
+                            });
+                          }}
+                        />
                       </div>
                       <div className="w-28 space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">采购价 (元)</label>
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">采购价 (元)</label>
                         <input type="number" min={0} step={0.01} value={line.purchasePrice || ''} onChange={e => updatePurchaseOrderItem(line.id, { purchasePrice: parseFloat(e.target.value) || 0 })} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="0" />
                       </div>
                       {hasVariants && (
                         <>
                           <div className="w-24 space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">总数</label>
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">总数</label>
                             <div className="py-2.5 px-3 text-sm font-black text-indigo-600 bg-white rounded-xl border border-slate-200">
                               {formatQtyDisplay(lineQty)} {line.productId ? getUnitName(line.productId) : '—'}
                             </div>
                           </div>
                           <div className="w-28 space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">金额 (元)</label>
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">金额 (元)</label>
                             <div className="py-2.5 px-3 text-sm font-black text-indigo-600 bg-white rounded-xl border border-slate-200">
                               {lineAmount.toFixed(2)}
                             </div>
@@ -2470,14 +2363,14 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                       {!hasVariants && (
                         <>
                           <div className="w-24 space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">数量</label>
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">数量</label>
                             <div className="flex items-center gap-1.5">
                               <input type="number" min={0} value={line.quantity || ''} onChange={e => updatePurchaseOrderItem(line.id, { quantity: parseInt(e.target.value) || 0 })} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="0" />
                               <span className="text-[10px] font-bold text-slate-400 shrink-0">{line.productId ? getUnitName(line.productId) : '—'}</span>
                             </div>
                           </div>
                           <div className="w-28 space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">金额 (元)</label>
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">金额 (元)</label>
                             <div className="py-2.5 px-3 text-sm font-black text-indigo-600 bg-white rounded-xl border border-slate-200">
                               {lineAmount.toFixed(2)}
                             </div>
@@ -2486,7 +2379,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                       )}
                       {poDocNum && received > 0 && (
                         <div className="w-40 space-y-1 shrink-0">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">入库进度</label>
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">入库进度</label>
                           <div className="flex flex-col gap-1">
                             <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden flex">
                               {received > lineQty ? (
@@ -2504,11 +2397,13 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                           </div>
                         </div>
                       )}
-                      <button onClick={() => removePurchaseOrderItem(line.id)} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"><Trash2 className="w-5 h-5" /></button>
+                      <button type="button" onClick={() => removePurchaseOrderItem(line.id)} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all" aria-label="删除明细行"><Trash2 className="w-5 h-5" /></button>
                     </div>
                     {hasVariants && line.productId && (
                       <div className="pt-2 border-t border-slate-100 space-y-3">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">颜色尺码数量</label>
+                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 ml-1">
+                          <Layers className="w-3.5 h-3.5" /> 颜色尺码数量
+                        </label>
                         {sortedVariantColorEntries(groupedByColor, prod?.colorIds, prod?.sizeIds).map(([colorId, colorVariants]) => {
                           const color = dictionaries.colors.find(c => c.id === colorId);
                           return (
@@ -2553,17 +2448,17 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                   </div>
                 )}
               </div>
-              <div className="flex justify-end p-4 bg-indigo-600 rounded-[24px] text-white shadow-xl shadow-indigo-100 gap-8">
+              <div className="flex justify-end p-5 bg-indigo-600 rounded-2xl text-white shadow-xl shadow-indigo-100 gap-8">
                 <div className="flex items-center gap-4">
-                  <p className="text-xs font-bold opacity-80">采购总量:</p>
-                  <p className="text-xl font-black">{purchaseOrderItems.reduce((s, i) => {
+                  <p className="text-xs font-bold opacity-90">采购总量</p>
+                  <p className="text-xl font-black tabular-nums">{purchaseOrderItems.reduce((s, i) => {
                   const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((a, v) => a + v, 0) : (i.quantity || 0);
                   return s + q;
-                }, 0)} <span className="text-xs font-medium">PCS</span></p>
+                }, 0)} <span className="text-xs font-semibold opacity-90">PCS</span></p>
                 </div>
                 <div className="flex items-center gap-4 border-l border-white/30 pl-8">
-                  <p className="text-xs font-bold opacity-80">订单金额:</p>
-                  <p className="text-xl font-black">¥{purchaseOrderItems.reduce((s, i) => {
+                  <p className="text-xs font-bold opacity-90">订单金额</p>
+                  <p className="text-xl font-black tabular-nums">¥{purchaseOrderItems.reduce((s, i) => {
                     const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((a, v) => a + v, 0) : (i.quantity || 0);
                     return s + q * (i.purchasePrice || 0);
                   }, 0).toFixed(2)}</p>
@@ -2573,7 +2468,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
           </div>
         </div>
       ) : type === 'SALES_ORDER' && showModal === 'SALES_ORDER' ? (
-        <div className="max-w-6xl mx-auto space-y-6 animate-in slide-in-from-bottom-4 pb-32">
+        <div className="max-w-6xl mx-auto space-y-4 animate-in slide-in-from-bottom-4 pb-24">
           <div className="flex items-center justify-between sticky top-0 z-40 py-4 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200">
             <button onClick={() => { setShowModal(null); setEditingSODocNumber(null); }} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
               <ArrowLeft className="w-4 h-4" /> 返回列表
@@ -2583,11 +2478,12 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm('确定要删除该销售订单吗？')) {
+                    void confirm({ message: '确定要删除该销售订单吗？', danger: true }).then((ok) => {
+                      if (!ok) return;
                       onDeleteRecords('SALES_ORDER', editingSODocNumber);
                       setShowModal(null);
                       setEditingSODocNumber(null);
-                    }
+                    });
                   }}
                   className="flex items-center gap-2 px-4 py-2.5 text-rose-600 font-bold rounded-xl border border-rose-200 bg-white hover:bg-rose-50 transition-all"
                 >
@@ -2612,9 +2508,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
             <div className="space-y-8">
               <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
                 <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600"><FileText className="w-5 h-5" /></div>
-                <h3 className="text-lg font-bold text-slate-800">1. 销售订单基础信息</h3>
+                <h3 className={sectionTitleClass}>1. 销售订单基础信息</h3>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
                   <PartnerSelector
                     partners={partners}
@@ -2651,7 +2547,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
               <div className="flex items-center justify-between border-b border-slate-50 pb-4">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600"><Layers className="w-5 h-5" /></div>
-                  <h3 className="text-lg font-bold text-slate-800">2. 销售明细录入</h3>
+                  <h3 className={sectionTitleClass}>2. 销售明细录入</h3>
                 </div>
                 <button onClick={addSalesOrderItem} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all">
                   <Plus className="w-4 h-4" /> 添加明细行
@@ -2675,9 +2571,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                   return (
                   <div key={line.id} className="p-5 bg-slate-50/50 rounded-2xl border border-slate-100 space-y-4">
                     <div className="flex flex-wrap items-end gap-4">
-                      <div className="flex-1 min-w-[240px]">
-                        <ProductSelector
-                          label="目标商品 (支持搜索与分类筛选)"
+                      <div className="flex-1 min-w-[240px] space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">目标商品 (支持搜索与分类筛选)</label>
+                        <SearchableProductSelect
                           options={products}
                           categories={categories}
                           value={line.productId}
@@ -2799,7 +2695,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
           </div>
         </div>
       ) : type === 'SALES_BILL' && showModal === 'SALES_BILL' ? (
-        <div className="max-w-6xl mx-auto space-y-6 animate-in slide-in-from-bottom-4 pb-32">
+        <div className="max-w-6xl mx-auto space-y-4 animate-in slide-in-from-bottom-4 pb-24">
           <div className="flex items-center justify-between sticky top-0 z-40 py-4 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200">
             <button onClick={() => { setShowModal(null); setEditingSBDocNumber(null); }} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
               <ArrowLeft className="w-4 h-4" /> 返回列表
@@ -2809,11 +2705,12 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm('确定要删除该销售单吗？')) {
+                    void confirm({ message: '确定要删除该销售单吗？', danger: true }).then((ok) => {
+                      if (!ok) return;
                       onDeleteRecords('SALES_BILL', editingSBDocNumber);
                       setShowModal(null);
                       setEditingSBDocNumber(null);
-                    }
+                    });
                   }}
                   className="flex items-center gap-2 px-4 py-2.5 text-rose-600 font-bold rounded-xl border border-rose-200 bg-white hover:bg-rose-50 transition-all"
                 >
@@ -2838,9 +2735,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
             <div className="space-y-8">
               <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
                 <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600"><FileText className="w-5 h-5" /></div>
-                <h3 className="text-lg font-bold text-slate-800">1. 销售单基础信息</h3>
+                <h3 className={sectionTitleClass}>1. 销售单基础信息</h3>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
                   <PartnerSelector
                     partners={partners}
@@ -2880,7 +2777,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
               <div className="flex items-center justify-between border-b border-slate-50 pb-4">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600"><Layers className="w-5 h-5" /></div>
-                  <h3 className="text-lg font-bold text-slate-800">2. 销售出库明细</h3>
+                  <h3 className={sectionTitleClass}>2. 销售出库明细</h3>
                 </div>
                 <button onClick={addSalesBillItem} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all">
                   <Plus className="w-4 h-4" /> 添加明细行
@@ -2904,9 +2801,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                   return (
                   <div key={line.id} className="p-5 bg-slate-50/50 rounded-2xl border border-slate-100 space-y-4">
                     <div className="flex flex-wrap items-end gap-4">
-                      <div className="flex-1 min-w-[240px]">
-                        <ProductSelector
-                          label="目标商品 (支持搜索与分类筛选)"
+                      <div className="flex-1 min-w-[240px] space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">目标商品 (支持搜索与分类筛选)</label>
+                        <SearchableProductSelect
                           options={products}
                           categories={categories}
                           value={line.productId}
@@ -3027,7 +2924,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
           </div>
         </div>
       ) : type === 'PURCHASE_BILL' && showModal === 'PURCHASE_BILL' ? (
-        <div className="max-w-5xl mx-auto space-y-6 animate-in slide-in-from-bottom-4 pb-32">
+        <div className="max-w-5xl mx-auto space-y-4 animate-in slide-in-from-bottom-4 pb-24">
           <div className="flex items-center justify-between sticky top-0 z-40 py-4 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200">
             <button
               onClick={() => {
@@ -3048,11 +2945,12 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm('确定要删除该采购单吗？')) {
+                    void confirm({ message: '确定要删除该采购单吗？', danger: true }).then((ok) => {
+                      if (!ok) return;
                       onDeleteRecords('PURCHASE_BILL', editingPBDocNumber);
                       setShowModal(null);
                       setEditingPBDocNumber(null);
-                    }
+                    });
                   }}
                   className="flex items-center gap-2 px-4 py-2.5 text-rose-600 font-bold rounded-xl border border-rose-200 bg-white hover:bg-rose-50 transition-all"
                 >
@@ -3100,9 +2998,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                 <div className="space-y-8">
                   <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
                     <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600"><FileText className="w-5 h-5" /></div>
-                    <h3 className="text-lg font-bold text-slate-800">1. 采购单基础信息</h3>
+                    <h3 className={sectionTitleClass}>1. 采购单基础信息</h3>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据编号 (选填)</label>
                       <div className="relative">
@@ -3154,7 +3052,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                   <div className="flex items-center justify-between border-b border-slate-50 pb-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600"><Layers className="w-5 h-5" /></div>
-                      <h3 className="text-lg font-bold text-slate-800">2. 入库明细录入</h3>
+                      <h3 className={sectionTitleClass}>2. 入库明细录入</h3>
                     </div>
                     <button onClick={addPurchaseBillItem} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all">
                       <Plus className="w-4 h-4" /> 添加明细行
@@ -3178,8 +3076,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                       return (
                       <div key={line.id} className="p-4 bg-slate-50/50 rounded-2xl border border-slate-100 space-y-4">
                         <div className="flex flex-wrap items-end gap-4">
-                          <div className="flex-1 min-w-[200px]">
-                            <ProductSelector label="目标采购品项 (支持搜索与分类筛选)" options={products} categories={categories} value={line.productId} onChange={(id) => {
+                          <div className="flex-1 min-w-[200px] space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">目标采购品项 (支持搜索与分类筛选)</label>
+                            <SearchableProductSelect options={products} categories={categories} value={line.productId} onChange={(id) => {
                               const p = productMapPSI.get(id);
                               const hv = p?.variants && p.variants.length > 0;
                               updatePurchaseBillItem(line.id, {
@@ -3343,7 +3242,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                 </div>
 
                 {selectedPOOrderNums.length > 0 && (
-                  <div className="space-y-4 pt-6 border-t border-slate-100">
+                  <div className="space-y-4 pt-4 border-t border-slate-100">
                     <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><ListFilter className="w-4 h-4" /> 2. 勾选并填写本次入库数量 (支持部分到货)</h4>
                     <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
                       <table className="w-full text-left">
@@ -3444,7 +3343,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                 )}
 
                 {selectedPOItemIds.length > 0 && (
-                  <div className="space-y-6 pt-6 border-t border-slate-100">
+                  <div className="space-y-4 pt-4 border-t border-slate-100">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">本次入库单号 (选填)</label>
@@ -3494,7 +3393,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
           </div>
         </div>
       ) : type === 'WAREHOUSE_MGMT' ? (
-        <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="space-y-4 animate-in fade-in duration-300">
            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
              <div className="flex items-center gap-3 flex-wrap">
                <div className="flex bg-slate-100 p-1 rounded-xl w-fit">
@@ -3553,7 +3452,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                  {inventoryViewMode === 'warehouse' ? (
                    selectedWarehouseId == null ? (
                      /* 一级：仓库列表，点击进入该仓详情 */
-                     <div className="p-4 md:p-6">
+                     <div className="p-4 md:p-5">
                        {warehouseStockList.length === 0 ? (
                          <div className="py-16 text-center text-slate-400">
                            <WarehouseIcon className="w-12 h-12 mx-auto mb-3 opacity-50" />
@@ -3598,7 +3497,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                        const whRow = warehouseStockList.find(w => w.warehouseId === selectedWarehouseId);
                        if (!whRow) return null;
                        return (
-                         <div className="p-4 md:p-6">
+                         <div className="p-4 md:p-5">
                            <button
                              type="button"
                              onClick={() => setSelectedWarehouseId(null)}
@@ -3621,7 +3520,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                  </div>
                                </div>
                              </div>
-                             <div className="flex items-center gap-6 text-sm">
+                             <div className="flex items-center gap-4 text-sm">
                                <span className="text-slate-500 font-bold">总存量 <span className={`font-black ${whRow.totalQty < 0 ? 'text-rose-600' : 'text-indigo-600'}`}>{whRow.totalQty.toLocaleString()}</span> PCS</span>
                                <span className="text-slate-500 font-bold">物料种类 <span className="text-slate-700 font-black">{whRow.skuCount}</span> SKU</span>
                              </div>
@@ -3905,7 +3804,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                          <button type="button" onClick={() => { setStocktakeListModalOpen(false); setStocktakeDetailDocNumber(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200/80 transition-colors" aria-label="关闭"><X className="w-5 h-5" /></button>
                        </div>
                      </div>
-                     <div className="flex-1 overflow-auto p-6">
+                     <div className="flex-1 overflow-auto p-4">
                        {!stocktakeDetailDocNumber ? (
                          Object.keys(stocktakeOrdersGrouped).length === 0 ? (
                            <div className="py-16 text-center text-slate-500">
@@ -3983,7 +3882,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                              setStocktakeModalOpen(true);
                            };
                            return (
-                             <div className="space-y-6">
+                             <div className="space-y-4">
                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
                                  <div><span className="text-slate-400 block text-xs font-bold mb-0.5">盘点仓库</span><span className="font-bold text-slate-800">{whName}</span></div>
                                  <div><span className="text-slate-400 block text-xs font-bold mb-0.5">盘点日期</span><span className="font-bold text-slate-800">{(first.createdAt || '').toString().slice(0, 10)}</span></div>
@@ -4071,7 +3970,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                </div>
                                <div className="flex justify-end items-center gap-3 pt-2">
                                  {onDeleteRecords && hasPsiPerm('psi:warehouse_stocktake:delete') && (
-                                   <button type="button" onClick={() => { if (confirm('确定要删除该盘点单吗？')) { onDeleteRecords('STOCKTAKE', stocktakeDetailDocNumber); setStocktakeDetailDocNumber(null); setStocktakeListModalOpen(false); } }} className="flex items-center gap-2 px-5 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-rose-50 hover:text-rose-600 hover:border-rose-100 transition-all">
+                                   <button type="button" onClick={() => { void confirm({ message: '确定要删除该盘点单吗？', danger: true }).then((ok) => { if (!ok) return; onDeleteRecords('STOCKTAKE', stocktakeDetailDocNumber); setStocktakeDetailDocNumber(null); setStocktakeListModalOpen(false); }); }} className="flex items-center gap-2 px-5 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-rose-50 hover:text-rose-600 hover:border-rose-100 transition-all">
                                      <Trash2 className="w-4 h-4" /> 删除盘点单
                                    </button>
                                  )}
@@ -4114,7 +4013,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                          <button type="button" onClick={() => { setTransferListModalOpen(false); setTransferDetailDocNumber(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200/80 transition-colors" aria-label="关闭"><X className="w-5 h-5" /></button>
                        </div>
                      </div>
-                     <div className="flex-1 overflow-auto p-6">
+                     <div className="flex-1 overflow-auto p-4">
                        {!transferDetailDocNumber ? (
                          /* 列表 */
                          Object.keys(transferOrdersGrouped).length === 0 ? (
@@ -4143,7 +4042,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                        <FileText className="w-3.5 h-3.5" /> 查看详情
                                      </button>
                                      {onDeleteRecords && hasPsiPerm('psi:warehouse_transfer:delete') && (
-                                       <button type="button" onClick={() => { if (confirm('确定要删除该调拨单吗？')) onDeleteRecords('TRANSFER', docNum); }} className="px-3 py-1.5 text-[11px] font-bold rounded-xl border border-slate-200 text-slate-500 bg-white hover:bg-rose-50 hover:text-rose-600 hover:border-rose-100 transition-all flex items-center gap-1">
+                                       <button type="button" onClick={() => { void confirm({ message: '确定要删除该调拨单吗？', danger: true }).then((ok) => { if (!ok) return; onDeleteRecords('TRANSFER', docNum); }); }} className="px-3 py-1.5 text-[11px] font-bold rounded-xl border border-slate-200 text-slate-500 bg-white hover:bg-rose-50 hover:text-rose-600 hover:border-rose-100 transition-all flex items-center gap-1">
                                          <Trash2 className="w-3.5 h-3.5" /> 删除
                                        </button>
                                      )}
@@ -4202,7 +4101,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                              setTransferModalOpen(true);
                            };
                            return (
-                             <div className="space-y-6">
+                             <div className="space-y-4">
                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
                                  <div><span className="text-slate-400 block text-xs font-bold mb-0.5">调出仓库</span><span className="font-bold text-slate-800">{fromName}</span></div>
                                  <div><span className="text-slate-400 block text-xs font-bold mb-0.5">调入仓库</span><span className="font-bold text-slate-800">{toName}</span></div>
@@ -4255,7 +4154,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                        </div>
                        <button type="button" onClick={() => { setTransferModalOpen(false); setEditingTransferDocNumber(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200/80 transition-colors" aria-label="关闭"><X className="w-5 h-5" /></button>
                      </div>
-                     <div className="flex-1 overflow-auto p-6 space-y-6">
+                     <div className="flex-1 overflow-auto p-4 space-y-4">
                        {/* 单据信息 */}
                        <div className="bg-slate-50/80 rounded-2xl p-5 border border-slate-100">
                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">单据信息</h4>
@@ -4314,8 +4213,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                              return (
                                <div key={line.id} className={`rounded-2xl border space-y-4 transition-all ${isLineEmpty ? 'bg-white border-slate-200 p-4 border-dashed' : 'bg-white border-slate-200 p-4 shadow-sm'}`}>
                                  <div className="flex flex-wrap items-end gap-3">
-                                   <div className="flex-1 min-w-[200px] max-w-md">
-                                     <ProductSelector label={isLineEmpty ? '选择产品' : '产品'} options={products} categories={categories} value={line.productId} onChange={(id) => {
+                                   <div className="flex-1 min-w-[200px] max-w-md space-y-1">
+                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">{isLineEmpty ? '选择产品' : '产品'}</label>
+                                     <SearchableProductSelect options={products} categories={categories} value={line.productId} onChange={(id) => {
                                        const p = productMapPSI.get(id);
                                        const hv = p?.variants && p.variants.length > 0;
                                        updateTransferItem(line.id, { productId: id, quantity: hv ? undefined : 0, variantQuantities: hv ? {} : undefined });
@@ -4427,7 +4327,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                        </div>
                        <button type="button" onClick={() => { setStocktakeModalOpen(false); setEditingStocktakeDocNumber(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200/80 transition-colors" aria-label="关闭"><X className="w-5 h-5" /></button>
                      </div>
-                     <div className="flex-1 overflow-auto p-6 space-y-6">
+                     <div className="flex-1 overflow-auto p-4 space-y-4">
                        <div className="bg-slate-50/80 rounded-2xl p-5 border border-slate-100">
                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">单据信息</h4>
                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -4482,8 +4382,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                              return (
                                <div key={line.id} className={`rounded-2xl border space-y-4 transition-all ${isLineEmpty ? 'bg-white border-slate-200 p-4 border-dashed' : 'bg-white border-slate-200 p-4 shadow-sm'}`}>
                                  <div className="flex flex-wrap items-end gap-3">
-                                   <div className="flex-1 min-w-[200px] max-w-md">
-                                     <ProductSelector label={isLineEmpty ? '选择产品' : '产品'} options={products} categories={categories} value={line.productId} onChange={(id) => {
+                                   <div className="flex-1 min-w-[200px] max-w-md space-y-1">
+                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">{isLineEmpty ? '选择产品' : '产品'}</label>
+                                     <SearchableProductSelect options={products} categories={categories} value={line.productId} onChange={(id) => {
                                        const p = productMapPSI.get(id);
                                        const hv = p?.variants && p.variants.length > 0;
                                        updateStocktakeItem(line.id, { productId: id, quantity: hv ? undefined : 0, variantQuantities: hv ? {} : undefined });
@@ -4639,7 +4540,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                          <span className="text-xs text-slate-400">共 {filteredWarehouseFlowRows.length} 条</span>
                        </div>
                      </div>
-                     <div className="flex-1 overflow-auto p-6">
+                     <div className="flex-1 overflow-auto p-4">
                        {filteredWarehouseFlowRows.length === 0 ? (
                          <p className="text-slate-500 text-center py-12">暂无仓库流水记录</p>
                        ) : (
@@ -4763,7 +4664,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                          <span className="text-xs font-bold text-indigo-600">合计数量：{Math.round(productFlowTotalQuantity * 100) / 100}</span>
                        </div>
                      </div>
-                     <div className="flex-1 overflow-auto p-6">
+                     <div className="flex-1 overflow-auto p-4">
                        {productFlowDetailRows.length === 0 ? (
                          <p className="text-slate-500 text-center py-12">暂无该产品{productFlowDetail.warehouseName ? '在该仓库' : ''}的流水记录</p>
                        ) : productFlowFilteredRows.length === 0 ? (
@@ -4930,7 +4831,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                            )}
                          </div>
                        </div>
-                       <div className="flex-1 overflow-auto min-h-0 p-6">
+                       <div className="flex-1 overflow-auto min-h-0 p-4">
                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">明细</h4>
                          <div className="border border-slate-200 rounded-xl overflow-hidden">
                            <table className="w-full text-left text-sm">
@@ -4973,7 +4874,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
            </>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {sortedGroupedEntries.length === 0 ? (
             <div className="bg-white rounded-[32px] border-2 border-dashed border-slate-200 py-24 text-center">
               <FileText className="w-16 h-16 text-slate-100 mx-auto mb-4" />
@@ -5531,8 +5432,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                           const lineHasBatch = lineCat?.hasBatchManagement;
                           return (
                           <div key={line.id} className="flex flex-wrap items-end gap-4 p-4 bg-slate-50/50 rounded-2xl border border-slate-100">
-                            <div className="flex-1 min-w-[200px]">
-                              <ProductSelector label="目标采购品项 (支持搜索与分类筛选)" options={products} categories={categories} value={line.productId} onChange={(id) => {
+                            <div className="flex-1 min-w-[200px] space-y-1">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">目标采购品项 (支持搜索与分类筛选)</label>
+                              <SearchableProductSelect options={products} categories={categories} value={line.productId} onChange={(id) => {
                                 const prod = productMapPSI.get(id);
                                 updatePurchaseBillItem(line.id, { productId: id, purchasePrice: prod?.purchasePrice ?? 0, batch: undefined });
                               }} />
@@ -5586,7 +5488,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                     <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">单据备注</label><textarea rows={2} value={form.note} onChange={e => setForm({...form, note: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none resize-none" placeholder="备注说明..."></textarea></div>
                   </div>
                ) : creationMethod === 'MANUAL' || showModal !== 'PURCHASE_BILL' ? (
-                  <div className="space-y-6">
+                  <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">单据编号 (选填)</label>
@@ -5608,14 +5510,10 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                     </div>
                     <div className="space-y-1">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">关联物料/产品</label>
-                        <select value={form.productId} onChange={e => {
-                          const pid = e.target.value;
+                        <SearchableProductSelect options={products} categories={categories} value={form.productId} onChange={(pid) => {
                           const prod = productMapPSI.get(pid);
                           setForm({...form, productId: pid, purchasePrice: prod?.purchasePrice ?? 0});
-                        }} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none">
-                          <option value="">点击选择产品...</option>
-                          {[...products].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
+                        }} />
                     </div>
                     {showModal === 'PURCHASE_BILL' && (
                       <div className="grid grid-cols-2 gap-4">
@@ -5690,7 +5588,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
 
                     {/* 2. 选择具体商品行，支持部分到货：可编辑本次入库数量 */}
                     {selectedPOOrderNums.length > 0 && (
-                      <div className="space-y-4 pt-6 border-t border-slate-100 animate-in fade-in">
+                      <div className="space-y-4 pt-4 border-t border-slate-100 animate-in fade-in">
                          <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><ListFilter className="w-4 h-4" /> 2. 勾选并填写本次入库数量 (支持部分到货)</h4>
                          <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
                             <table className="w-full text-left">
@@ -5809,7 +5707,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
 
                     {/* 3. 其他入库设置 */}
                     {selectedPOItemIds.length > 0 && (
-                      <div className="space-y-6 pt-6 border-t border-slate-100 animate-in slide-in-from-bottom-4">
+                      <div className="space-y-4 pt-4 border-t border-slate-100 animate-in slide-in-from-bottom-4">
                          <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">本次入库单号 (选填)</label>
@@ -5875,7 +5773,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 space-y-4 overflow-auto flex-1 min-h-0">
+            <div className="p-4 space-y-4 overflow-auto flex-1 min-h-0">
               <p className="text-sm text-slate-600">
                 <span className="font-bold text-slate-800">{allocationModal.product?.name}</span>
                 <span className="text-slate-400 ml-1">· 单号 {allocationModal.docNumber}</span>
@@ -6046,7 +5944,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
               </div>
               <button onClick={() => setShowPOFormConfigModal(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-6 space-y-6 overflow-auto">
+            <div className="p-4 space-y-4 overflow-auto">
               <div>
                 <h4 className="text-sm font-black text-slate-600 uppercase tracking-widest mb-3">标准字段显示</h4>
                 <div className="border border-slate-200 rounded-2xl overflow-hidden">
@@ -6156,7 +6054,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
               </div>
               <button onClick={() => setShowPBFormConfigModal(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-6 space-y-6 overflow-auto">
+            <div className="p-4 space-y-4 overflow-auto">
               <div>
                 <h4 className="text-sm font-black text-slate-600 uppercase tracking-widest mb-3">标准字段显示</h4>
                 <div className="border border-slate-200 rounded-2xl overflow-hidden">

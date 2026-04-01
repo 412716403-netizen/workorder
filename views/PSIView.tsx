@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, Suspense, lazy } from 'react';
 import { 
   ClipboardList, 
   Receipt, 
@@ -7,7 +7,21 @@ import {
   Warehouse
 } from 'lucide-react';
 import { Product, Warehouse as WarehouseType, ProductCategory, Partner, PartnerCategory, AppDictionaries, PurchaseOrderFormSettings, PurchaseBillFormSettings } from '../types';
-import PSIOpsView from './PSIOpsView';
+const PSIOpsView = lazy(() => import('./PSIOpsView'));
+
+const PsiPanelFallback = () => (
+  <div className="flex min-h-[320px] items-center justify-center text-sm font-medium text-slate-400">
+    加载中…
+  </div>
+);
+import {
+  subModuleMainContentTopClass,
+  subModuleTabBarBackdropClass,
+  subModuleTabBarInsetClass,
+  subModuleTabBarStickyPadClass,
+  subModuleTabButtonClass,
+  subModuleTabPillClass,
+} from '../styles/uiDensity';
 
 interface PSIViewProps {
   products: Product[];
@@ -125,31 +139,32 @@ const PSIView: React.FC<PSIViewProps> = ({ products, records, prodRecords = [], 
   }, [tabs.map(t => t.id).join(',')]);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-0">
       {!hideTabs && (
         <>
           <div>
             <div ref={sentinelRef} className="h-px w-full" aria-hidden="true" />
             <div
               ref={tabsWrapRef}
-              className={`z-20 py-4 bg-slate-50/95 backdrop-blur-sm ${
-                isStuck ? 'fixed top-0 px-12' : '-mx-12 px-12'
+              className={`${subModuleTabBarBackdropClass} ${
+                isStuck
+                  ? `fixed top-0 px-12 ${subModuleTabBarStickyPadClass}`
+                  : subModuleTabBarInsetClass
               }`}
               style={isStuck && barStyle ? { left: barStyle.left, width: barStyle.width } : undefined}
             >
-              <div className="flex bg-white p-1.5 rounded-[24px] border border-slate-200 shadow-sm w-full lg:w-fit overflow-x-auto no-scrollbar">
+              <div className={subModuleTabPillClass}>
                 <div className="flex gap-1 min-w-max">
                   {tabs.map(tab => (
                     <button
                       key={tab.id}
+                      type="button"
                       onClick={() => setActiveTab(tab.id as PSITab)}
-                      className={`flex items-center gap-3 px-6 py-3 rounded-[18px] text-sm font-bold transition-all whitespace-nowrap ${
-                        activeTab === tab.id
-                          ? `${tab.bg} ${tab.color} shadow-sm`
-                          : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50/50'
-                      }`}
+                      className={subModuleTabButtonClass(activeTab === tab.id)}
                     >
-                      <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? tab.color : 'text-slate-300'}`} />
+                      <tab.icon
+                        className={`w-4 h-4 shrink-0 ${activeTab === tab.id ? 'text-indigo-600' : 'text-slate-300'}`}
+                      />
                       {tab.label}
                     </button>
                   ))}
@@ -162,7 +177,8 @@ const PSIView: React.FC<PSIViewProps> = ({ products, records, prodRecords = [], 
           )}
         </>
       )}
-      <div className="min-h-[600px]">
+      <div className={hideTabs ? 'min-h-[600px]' : `min-h-[600px] ${subModuleMainContentTopClass}`}>
+        <Suspense fallback={<PsiPanelFallback />}>
         <PSIOpsView 
           onDetailViewChange={setHideTabs}
           type={activeTab}
@@ -186,6 +202,7 @@ const PSIView: React.FC<PSIViewProps> = ({ products, records, prodRecords = [], 
           userPermissions={userPermissions}
           tenantRole={tenantRole}
         />
+        </Suspense>
       </div>
     </div>
   );

@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { adminUsers, adminTenants, type AdminUserRow, type AdminTenantRow } from '../services/api';
+import { pageSubtitleClass, pageTitleClass, primaryToolbarButtonClass } from '../styles/uiDensity';
 
 interface UserAdminViewProps {
   currentUserId: string;
@@ -284,20 +285,14 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
               <UserCog className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">平台管理</h1>
-              <p className="text-xs sm:text-sm text-slate-500 mt-1 leading-relaxed max-w-2xl">
-                管理平台用户与企业
-              </p>
+              <h1 className={pageTitleClass}>平台管理</h1>
+              <p className={pageSubtitleClass}>管理平台用户与企业租户</p>
             </div>
           </div>
         </div>
         {tab === 'users' && (
-          <button
-            type="button"
-            onClick={openCreate}
-            className="shrink-0 flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 shadow-md shadow-indigo-100 transition-colors sm:self-start"
-          >
-            <Plus className="w-4 h-4" />
+          <button type="button" onClick={openCreate} className={`${primaryToolbarButtonClass} shrink-0 sm:self-start`}>
+            <Plus className="w-4 h-4 shrink-0" />
             新建用户
           </button>
         )}

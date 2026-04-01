@@ -25,7 +25,6 @@ import {
   Check,
   Wrench,
   UserPlus,
-  Box,
   Boxes,
   MapPin,
   ClipboardCheck,
@@ -44,8 +43,18 @@ import {
   Download
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useConfirm } from '../contexts/ConfirmContext';
 import { PlanOrder, Product, PlanStatus, ProductCategory, AppDictionaries, ProductVariant, PlanItem, Worker, Equipment, NodeAssignment, GlobalNodeTemplate, BOM, PlanFormSettings, Partner, PartnerCategory } from '../types';
 import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
+import { SearchableProductSelect } from '../components/SearchableProductSelect';
+import {
+  moduleHeaderRowClass,
+  pageSubtitleClass,
+  pageTitleClass,
+  primaryToolbarButtonClass,
+  secondaryToolbarButtonClass,
+  sectionTitleClass,
+} from '../styles/uiDensity';
 
 function getFileExtFromDataUrl(dataUrl: string): string {
   const m = dataUrl.match(/^data:([^;]+);/);
@@ -385,171 +394,6 @@ const SearchableMultiSelectWithProcessTabs = ({
   );
 };
 
-// 增强型搜索选择器：包含分类标签
-const EnhancedProductSelector = ({ 
-  options = [], 
-  categories = [],
-  value, 
-  onChange, 
-  disabled, 
-  placeholder,
-  onFilePreview
-}: { 
-  options: Product[]; 
-  categories: ProductCategory[];
-  value: string; 
-  onChange: (productId: string, categoryId: string) => void; 
-  disabled?: boolean; 
-  placeholder?: string;
-  onFilePreview?: (url: string, type: 'image' | 'pdf') => void;
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<string>('all');
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const selectedProduct = options.find(p => p.id === value);
-  
-  const filteredOptions = useMemo(() => {
-    return options.filter(p => {
-      const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase());
-      const matchesCategory = activeTab === 'all' || p.categoryId === activeTab;
-      return matchesSearch && matchesCategory;
-    }).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id));
-  }, [options, search, activeTab]);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setIsOpen(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  return (
-    <div className="relative" ref={containerRef}>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full bg-slate-50 border-none rounded-xl py-3.5 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between disabled:opacity-50 transition-all h-[52px]"
-      >
-        <div className="flex items-center gap-2 truncate">
-          <Package className={`w-4 h-4 ${selectedProduct ? 'text-indigo-600' : 'text-slate-300'}`} />
-          <span className={selectedProduct ? 'text-slate-900 truncate' : 'text-slate-400'}>
-            {selectedProduct ? (() => {
-              const cat = categories.find(c => c.id === selectedProduct.categoryId);
-              const customParts = cat?.customFields?.filter(f => f.showInForm !== false && f.type !== 'file')
-                .map(f => {
-                  const v = selectedProduct.categoryCustomData?.[f.id];
-                  if (v == null || v === '') return null;
-                  if (f.type === 'file' && typeof v === 'string' && v.startsWith('data:')) return `${f.label}: 已上传`;
-                  return `${f.label}: ${typeof v === 'boolean' ? (v ? '是' : '否') : String(v)}`;
-                })
-                .filter(Boolean) ?? [];
-              const base = `${selectedProduct.name} (${selectedProduct.sku})`;
-              return customParts.length > 0 ? `${base} ${customParts.join(' ')}` : base;
-            })() : placeholder || '搜索并选择产品型号...'}
-          </span>
-        </div>
-        <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : 'text-slate-400'}`} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-3xl shadow-2xl z-[100] p-4 animate-in fade-in zoom-in-95">
-          <div className="relative mb-4">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              autoFocus
-              type="text"
-              className="w-full bg-slate-50 border-none rounded-xl py-3 pl-11 pr-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="输入名称或 SKU 搜索..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-          </div>
-
-          {/* 分类过滤器小标签 */}
-          <div className="flex items-center gap-1.5 mb-4 overflow-x-auto no-scrollbar pb-1">
-            <button 
-              onClick={() => setActiveTab('all')}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeTab === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
-            >
-              全部
-            </button>
-            {categories.map(cat => (
-              <button 
-                key={cat.id}
-                onClick={() => setActiveTab(cat.id)}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeTab === cat.id ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
-              >
-                {cat.name}
-              </button>
-            ))}
-          </div>
-
-          <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1">
-            {filteredOptions.map(p => {
-              const cat = categories.find(c => c.id === p.categoryId);
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => {
-                    onChange(p.id, p.categoryId || '');
-                    setIsOpen(false);
-                    setSearch('');
-                  }}
-                  className={`w-full text-left p-3 rounded-2xl transition-all border-2 ${
-                    p.id === value ? 'bg-indigo-50 border-indigo-600/20 text-indigo-700' : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-0.5">
-                    <p className="text-sm font-black truncate">{p.name}</p>
-                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-400 text-[8px] font-black uppercase">{cat?.name}</span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                  <p className={`text-[10px] font-bold uppercase tracking-widest ${p.id === value ? 'text-indigo-400' : 'text-slate-400'}`}>{p.sku}</p>
-                    {cat?.customFields?.filter(f => f.showInForm !== false && f.type !== 'file').map(f => {
-                      const val = p.categoryCustomData?.[f.id];
-                      if (val == null || val === '') return null;
-                      if (f.type === 'file' && typeof val === 'string' && val.startsWith('data:')) {
-                        const isImg = val.startsWith('data:image/');
-                        const isPdf = val.startsWith('data:application/pdf');
-                        if (isImg) return (
-                          <span key={f.id} className="inline-flex items-center gap-1">
-                            <img src={val} alt={f.label} className="h-5 w-5 object-cover rounded border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400" onClick={e => { e.stopPropagation(); onFilePreview?.(val, 'image'); }} />
-                            <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[8px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
-                          </span>
-                        );
-                        if (isPdf) return (
-                          <span key={f.id} className="inline-flex items-center gap-1">
-                            <button type="button" onClick={e => { e.stopPropagation(); onFilePreview?.(val, 'pdf'); }} className="text-[8px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">在线查看</button>
-                            <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[8px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
-                          </span>
-                        );
-                        return (
-                          <a key={f.id} href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[8px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
-                        );
-                      }
-                      return <span key={f.id} className="text-[8px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">{f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}</span>;
-                    })}
-                  </div>
-                </button>
-              );
-            })}
-            {filteredOptions.length === 0 && (
-              <div className="py-10 text-center">
-                <Box className="w-8 h-8 text-slate-100 mx-auto mb-2" />
-                <p className="text-xs text-slate-400 font-medium">未找到符合条件的产品</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
 // 计划客户：从合作单位中选择，下拉搜索，下方显示合作单位分类
 const PartnerCustomerSelector = ({
   value,
@@ -705,6 +549,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   const sectionQtyRef = useRef<HTMLDivElement>(null);
   const sectionProcessRef = useRef<HTMLDivElement>(null);
   const sectionMaterialRef = useRef<HTMLDivElement>(null);
+  const confirm = useConfirm();
 
   useEffect(() => {
     setViewProductBomSkuId(null);
@@ -1492,26 +1337,23 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
 
   return (
     <>
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4">
+      <div className={moduleHeaderRowClass}>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">生产计划单</h1>
-          <p className="text-slate-500 mt-1 italic text-sm">从需求预测到生产指令的初步规划</p>
+          <h1 className={pageTitleClass}>生产计划单</h1>
+          <p className={pageSubtitleClass}>从需求预测到生产指令的初步规划</p>
         </div>
-        {!showModal && (
-          <div className="flex items-center gap-3">
-            <button onClick={() => { setPlanFormConfigDraft(JSON.parse(JSON.stringify(planFormSettings))); setShowPlanFormConfigModal(true); }} className="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl text-sm font-bold transition-all border border-slate-200">
-              <Sliders className="w-4 h-4" /> 表单配置
-            </button>
-            <button onClick={() => { const t = new Date().toISOString().split('T')[0]; setForm(prev => ({ ...prev, dueDate: '', createdAt: t })); setShowModal(true); }} className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-bold transition-all shadow-lg shadow-indigo-100">
-            <Plus className="w-4 h-4" /> 创建生产计划
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button type="button" onClick={() => { setPlanFormConfigDraft(JSON.parse(JSON.stringify(planFormSettings))); setShowPlanFormConfigModal(true); }} className={secondaryToolbarButtonClass}>
+            <Sliders className="w-4 h-4 shrink-0" /> 表单配置
           </button>
-          </div>
-        )}
+          <button type="button" onClick={() => { const t = new Date().toISOString().split('T')[0]; setForm(prev => ({ ...prev, dueDate: '', createdAt: t })); setShowModal(true); }} className={primaryToolbarButtonClass}>
+            <Plus className="w-4 h-4 shrink-0" /> 创建生产计划
+          </button>
+        </div>
       </div>
 
-      {!showModal ? (
-        <div className="grid grid-cols-1 gap-4">
+      <div className="grid grid-cols-1 gap-4">
           {plans.length === 0 ? (
             <div className="bg-white border-2 border-dashed border-slate-100 rounded-[32px] p-20 text-center">
               <CalendarRange className="w-12 h-12 text-slate-200 mx-auto mb-4" />
@@ -1530,7 +1372,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                 const createdDate = formatPlanCreatedDateList(createdDateRaw);
               return (
                 <div key={plan.id} className="bg-white p-6 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group flex items-center justify-between">
-                  <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-4">
                       {product?.imageUrl ? (
                         <button type="button" onClick={() => setImagePreviewUrl(product.imageUrl)} className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
                           <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover block" />
@@ -1790,24 +1632,54 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
             })
           )}
         </div>
-      ) : (
-        <div className="max-w-5xl mx-auto space-y-6 animate-in slide-in-from-bottom-4 pb-32">
-          <div className="flex items-center justify-between sticky top-0 z-40 py-4 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200">
-            <button onClick={() => setShowModal(false)} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
-              <ArrowLeft className="w-4 h-4" /> 返回列表
-            </button>
-            <button onClick={handleCreate} disabled={!canSave} className="bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50">
-              <Save className="w-4 h-4" /> 确认保存计划单
-            </button>
-          </div>
 
-          <div className="bg-white rounded-[40px] p-8 border border-slate-200 shadow-sm space-y-10">
+      {showModal && (
+        <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 sm:p-6">
+          <div
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            onClick={() => setShowModal(false)}
+            aria-hidden
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="plan-create-modal-title"
+            className="relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in zoom-in-95 fade-in duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex shrink-0 flex-col gap-3 border-b border-slate-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <h2 id="plan-create-modal-title" className="text-lg font-semibold text-slate-900 tracking-tight">
+                  新建生产计划
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">填写基础信息与生产数量后保存</p>
+              </div>
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreate}
+                  disabled={!canSave}
+                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4 shrink-0" /> 确认保存计划单
+                </button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/80 p-4 sm:p-6 custom-scrollbar">
+          <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-10">
             <div className="space-y-8">
               <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
                 <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600"><FileText className="w-5 h-5" /></div>
-                <h3 className="text-lg font-bold text-slate-800">1. 计划基础信息</h3>
+                <h3 className={sectionTitleClass}>1. 计划基础信息</h3>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2 space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">目标生产品项 (支持搜索与分类筛选)</label>
                   <div className="flex items-stretch gap-4">
@@ -1823,12 +1695,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                  <EnhancedProductSelector 
+                  <SearchableProductSelect
                     options={products} 
                     categories={categories}
                     value={form.productId} 
-                    onChange={(pId, cId) => setForm({ ...form, productId: pId, categoryId: cId, variantQuantities: {}, singleQuantity: 0 })} 
-                        onFilePreview={(url, type) => { setFilePreviewUrl(url); setFilePreviewType(type); }}
+                    onChange={(pId) => { const p = products.find(x => x.id === pId); setForm({ ...form, productId: pId, categoryId: p?.categoryId ?? '', variantQuantities: {}, singleQuantity: 0 }); }}
+                    onFilePreview={(url, type) => { setFilePreviewUrl(url); setFilePreviewType(type); }}
                   />
                 </div>
                 </div>
@@ -1876,11 +1748,11 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
               <div className="pt-10 border-t border-slate-50 space-y-8 animate-in fade-in slide-in-from-top-4">
                 <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
                   <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600"><Layers className="w-5 h-5" /></div>
-                  <h3 className="text-lg font-bold text-slate-800">2. 生产数量明细录入</h3>
+                  <h3 className={sectionTitleClass}>2. 生产数量明细录入</h3>
                 </div>
 
                 {activeCategory?.hasColorSize && selectedProduct.variants && selectedProduct.variants.length > 0 ? (
-                  <div className="space-y-6">
+                  <div className="space-y-4">
                     {sortedVariantColorEntries(groupedVariants, (viewProduct || selectedProduct)?.colorIds, (viewProduct || selectedProduct)?.sizeIds).map(([colorId, colorVariants]) => {
                       const color = dictionaries.colors.find(c => c.id === colorId);
                       return (
@@ -1934,6 +1806,8 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                 )}
               </div>
             )}
+          </div>
+            </div>
           </div>
         </div>
       )}
@@ -2004,7 +1878,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
 
             <div className="flex-1 overflow-y-auto custom-scrollbar p-10 space-y-12 bg-slate-50/30">
                {/* 1. 计划基础信息 */}
-               <div ref={sectionBasicRef} className="space-y-6 scroll-mt-4">
+               <div ref={sectionBasicRef} className="space-y-4 scroll-mt-4">
                   <div className="flex items-center gap-3 border-b border-slate-100 pb-4 ml-2">
                     <FileText className="w-5 h-5 text-indigo-600" />
                     <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">1. 计划基础信息</h3>
@@ -2055,7 +1929,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                </div>
 
                {/* 2. 规格数量矩阵 */}
-               <div ref={sectionQtyRef} className="space-y-6 scroll-mt-4">
+               <div ref={sectionQtyRef} className="space-y-4 scroll-mt-4">
                   <div className="flex items-center gap-3 border-b border-slate-100 pb-4 ml-2">
                     <Layers className="w-5 h-5 text-indigo-600" />
                     <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">2. 生产数量明细录入 (可编辑)</h3>
@@ -2070,7 +1944,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                             }, {})) as [string, any[]][]).map(([colorId, colorItems]) => {
                                 const color = dictionaries.colors.find(c => c.id === colorId);
                                 return (
-                                    <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-6 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                    <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
                                         <div className="flex items-center gap-3 w-40 shrink-0">
                                             <div className="w-6 h-6 rounded-full border border-slate-200" style={{backgroundColor: color?.value}}></div>
                                             <span className="text-sm font-black text-slate-700">{color?.name}</span>
@@ -2100,7 +1974,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                </div>
 
                {/* 3. 工序任务 */}
-               <div ref={sectionProcessRef} className="space-y-6 scroll-mt-4">
+               <div ref={sectionProcessRef} className="space-y-4 scroll-mt-4">
                   <div className="flex items-center gap-3 border-b border-slate-100 pb-4 ml-2">
                     <Users className="w-5 h-5 text-indigo-600" />
                     <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">3. 工序任务</h3>
@@ -2113,7 +1987,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                        const enableEquipment = node.enableAssignment !== false && node.enableEquipmentAssignment !== false;
                        const canAssign = enableWorker || enableEquipment;
                        return (
-                         <div key={node.id} className={`flex flex-col md:flex-row md:items-center gap-6 p-6 rounded-[28px] border transition-all ${isAssigned ? 'bg-white border-indigo-200 shadow-md ring-1 ring-indigo-50' : 'bg-white/60 border-slate-200'}`}>
+                         <div key={node.id} className={`flex flex-col md:flex-row md:items-center gap-4 p-5 rounded-[28px] border transition-all ${isAssigned ? 'bg-white border-indigo-200 shadow-md ring-1 ring-indigo-50' : 'bg-white/60 border-slate-200'}`}>
                             <div className="flex items-center gap-4 md:w-56 shrink-0">
                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-[11px] font-black shadow-inner ${isAssigned ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{idx + 1}</div>
                                <div>
@@ -2145,7 +2019,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                  </div>
                                  )}
                                  {canAssign && (
-                                   <div className="flex flex-wrap items-center gap-4 md:gap-6 border-l border-slate-200 pl-4 md:pl-6 min-w-[480px] flex-1">
+                                   <div className="flex flex-wrap items-center gap-4 md:gap-4 border-l border-slate-200 pl-4 md:pl-5 min-w-[480px] flex-1">
                                      {enableWorker && (
                                        <div className="min-w-[440px] w-full max-w-[640px]">
                                          <SearchableMultiSelectWithProcessTabs
@@ -2185,7 +2059,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                </div>
 
                {/* 4. 计划生产用料清单 (BOM 汇总) */}
-               <div ref={sectionMaterialRef} className="space-y-6 pb-20 scroll-mt-4">
+               <div ref={sectionMaterialRef} className="space-y-4 pb-20 scroll-mt-4">
                   <div className="flex flex-col gap-4 ml-2">
                      <div className="flex items-center justify-between flex-wrap gap-4">
                      <div className="flex items-center gap-3">
@@ -2415,10 +2289,10 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                           </div>
                        </div>
 
-                       <div className="space-y-6">
+                       <div className="space-y-4">
                           {proposedOrders.map(order => (
                             <div key={order.orderNumber} className="bg-white border-2 border-slate-100 p-8 rounded-[40px] shadow-sm relative group hover:border-indigo-400 transition-all overflow-hidden">
-                               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 border-b border-slate-50 pb-6">
+                               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-slate-50 pb-4">
                                   <div className="flex items-center gap-5">
                                      <div className="w-14 h-14 bg-slate-900 text-white rounded-2xl flex flex-col items-center justify-center shadow-lg">
                                         <Building2 className="w-5 h-5 mb-0.5" />
@@ -2545,10 +2419,11 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                  {onDeletePlan && (
                    <button
                      onClick={() => {
-                       if (confirm('确定要删除该计划单吗？')) {
+                       void confirm({ message: '确定要删除该计划单吗？', danger: true }).then((ok) => {
+                         if (!ok) return;
                          onDeletePlan(viewPlan.id);
                          setViewDetailPlanId(null);
-                       }
+                       });
                      }}
                      className="px-6 py-3 text-sm font-black text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-2xl border border-rose-200 flex items-center gap-2"
                    >
@@ -2659,7 +2534,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                 <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><Split className="w-5 h-5 text-amber-500" /> 拆分计划单</h3>
                 <button onClick={() => setSplitPlanId(null)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
               </div>
-              <div className="p-6 space-y-4 overflow-auto">
+              <div className="p-4 space-y-4 overflow-auto">
                 <p className="text-sm text-slate-500">输入计划1数量，计划2自动为剩余</p>
                 <div className="border border-slate-200 rounded-2xl overflow-hidden">
                   <table className="w-full text-left border-collapse">
@@ -2718,7 +2593,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
               </div>
               <button onClick={() => setShowPlanFormConfigModal(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-6 space-y-6 overflow-auto">
+            <div className="p-4 space-y-4 overflow-auto">
               <div>
                 <h4 className="text-sm font-black text-slate-600 uppercase tracking-widest mb-3">标准字段显示</h4>
                 <div className="border border-slate-200 rounded-2xl overflow-hidden">
@@ -2866,7 +2741,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                 </div>
                 <button onClick={() => setViewProductId(null)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100"><X className="w-6 h-6" /></button>
               </div>
-              <div className="flex-1 overflow-y-auto p-8 space-y-6">
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   {(p.salesPrice ?? 0) > 0 && (
                     <div className="bg-slate-50 rounded-2xl p-4">
