@@ -34,6 +34,7 @@ import { splitQtyBySourceDefectiveAcrossParentOrders } from '../utils/reworkSpli
 import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
 import WorkerSelector from '../components/WorkerSelector';
 import EquipmentSelector from '../components/EquipmentSelector';
+import { SearchablePartnerSelect } from '../components/SearchablePartnerSelect';
 import * as api from '../services/api';
 import {
   moduleHeaderRowClass,
@@ -193,13 +194,6 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
   const [outsourceModal, setOutsourceModal] = useState<OutsourceModalType | null>(null);
   /** 待发清单：选中的外协工厂名称（与计划客户选择一致，存名称） */
   const [dispatchPartnerName, setDispatchPartnerName] = useState('');
-  /** 外协工厂选择器：下拉是否展开 */
-  const [dispatchPartnerOpen, setDispatchPartnerOpen] = useState(false);
-  /** 外协工厂选择器：搜索关键字 */
-  const [dispatchPartnerSearch, setDispatchPartnerSearch] = useState('');
-  /** 外协工厂选择器：当前分类 tab */
-  const [dispatchPartnerCategoryTab, setDispatchPartnerCategoryTab] = useState<string>('all');
-  const dispatchPartnerContainerRef = useRef<HTMLDivElement>(null);
   /** 待发清单：单号模糊搜索 */
   const [dispatchListSearchOrder, setDispatchListSearchOrder] = useState('');
   /** 待发清单：货号模糊搜索（产品名称或 SKU） */
@@ -256,11 +250,6 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
   const [flowDetailQuantities, setFlowDetailQuantities] = useState<Record<string, number>>({});
   /** 详情页编辑（收回单）：加工费单价 key=orderId|nodeId 或 orderId|nodeId|variantId */
   const [flowDetailUnitPrices, setFlowDetailUnitPrices] = useState<Record<string, number>>({});
-  /** 详情页：外协工厂选择器展开、搜索、分类 tab */
-  const [flowDetailPartnerOpen, setFlowDetailPartnerOpen] = useState(false);
-  const [flowDetailPartnerSearch, setFlowDetailPartnerSearch] = useState('');
-  const [flowDetailPartnerCategoryTab, setFlowDetailPartnerCategoryTab] = useState<string>('all');
-  const flowDetailPartnerRef = useRef<HTMLDivElement>(null);
   /** 外协流水搜索：日期、类型、外协工厂(模糊)、单号(模糊)、工单(模糊)、产品(模糊)、工序(模糊) */
   const [flowFilterDateFrom, setFlowFilterDateFrom] = useState('');
   const [flowFilterDateTo, setFlowFilterDateTo] = useState('');
@@ -329,41 +318,6 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
   const [reworkReportEquipmentId, setReworkReportEquipmentId] = useState('');
   /** 返工报工：单价（元/件） */
   const [reworkReportUnitPrice, setReworkReportUnitPrice] = useState<number>(0);
-
-  useEffect(() => {
-    if (!dispatchFormModalOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dispatchPartnerContainerRef.current && !dispatchPartnerContainerRef.current.contains(e.target as Node)) setDispatchPartnerOpen(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [dispatchFormModalOpen]);
-
-  /** 详情页编辑：合作单位筛选列表（与新增一致逻辑） */
-  const filteredFlowDetailPartners = useMemo(() => {
-    return partners.filter(p => {
-      const matchesSearch = p.name.toLowerCase().includes(flowDetailPartnerSearch.toLowerCase()) || (p.contact || '').toLowerCase().includes(flowDetailPartnerSearch.toLowerCase());
-      const matchesCategory = flowDetailPartnerCategoryTab === 'all' || p.categoryId === flowDetailPartnerCategoryTab;
-      return matchesSearch && matchesCategory;
-    });
-  }, [partners, flowDetailPartnerSearch, flowDetailPartnerCategoryTab]);
-
-  useEffect(() => {
-    if (!flowDetailEditMode || !flowDetailPartnerOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (flowDetailPartnerRef.current && !flowDetailPartnerRef.current.contains(e.target as Node)) setFlowDetailPartnerOpen(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [flowDetailEditMode, flowDetailPartnerOpen]);
-
-  const filteredDispatchPartners = useMemo(() => {
-    return partners.filter(p => {
-      const matchesSearch = p.name.toLowerCase().includes(dispatchPartnerSearch.toLowerCase()) || (p.contact || '').toLowerCase().includes(dispatchPartnerSearch.toLowerCase());
-      const matchesCategory = dispatchPartnerCategoryTab === 'all' || p.categoryId === dispatchPartnerCategoryTab;
-      return matchesSearch && matchesCategory;
-    });
-  }, [partners, dispatchPartnerSearch, dispatchPartnerCategoryTab]);
 
   const filteredRecords = useMemo(() => records.filter(r => r.type === limitType), [records, limitType]);
   const stockFlowRecords = useMemo(() =>
@@ -5780,86 +5734,16 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">单据基本信息</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="relative space-y-1.5" ref={dispatchPartnerContainerRef}>
+                <div className="space-y-1.5">
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">外协工厂</label>
-                  <button
-                    type="button"
-                    onClick={() => setDispatchPartnerOpen(!dispatchPartnerOpen)}
-                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between transition-all h-[52px] text-left"
-                  >
-                    <div className="flex items-center gap-2 truncate min-w-0">
-                      <Building2 className={`w-4 h-4 flex-shrink-0 ${dispatchPartnerName ? 'text-indigo-600' : 'text-slate-300'}`} />
-                      <span className={dispatchPartnerName ? 'text-slate-900 truncate' : 'text-slate-400'}>{dispatchPartnerName || '搜索并选择外协工厂...'}</span>
-                    </div>
-                    <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${dispatchPartnerOpen ? 'rotate-180' : 'text-slate-400'}`} />
-                  </button>
-                  {dispatchPartnerOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-[100] p-4 animate-in fade-in zoom-in-95">
-                      <div className="relative mb-3">
-                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input
-                          autoFocus
-                          type="text"
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
-                          placeholder="搜索单位名称或联系人..."
-                          value={dispatchPartnerSearch}
-                          onChange={e => setDispatchPartnerSearch(e.target.value)}
-                        />
-                      </div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">合作单位分类</p>
-                      <div className="flex items-center gap-1.5 mb-3 overflow-x-auto no-scrollbar pb-1">
-                        <button
-                          type="button"
-                          onClick={() => setDispatchPartnerCategoryTab('all')}
-                          className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase whitespace-nowrap ${dispatchPartnerCategoryTab === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
-                        >
-                          全部
-                        </button>
-                        {partnerCategories.map(cat => (
-                          <button
-                            key={cat.id}
-                            type="button"
-                            onClick={() => setDispatchPartnerCategoryTab(cat.id)}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase whitespace-nowrap ${dispatchPartnerCategoryTab === cat.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
-                          >
-                            {cat.name}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="max-h-52 overflow-y-auto custom-scrollbar space-y-1">
-                        {filteredDispatchPartners.map(p => {
-                          const catName = partnerCategories.find(c => c.id === p.categoryId)?.name || '未分类';
-                          return (
-                            <button
-                              key={p.id}
-                              type="button"
-                              onClick={() => {
-                                setDispatchPartnerName(p.name);
-                                setDispatchPartnerOpen(false);
-                                setDispatchPartnerSearch('');
-                              }}
-                              className={`w-full text-left p-3 rounded-xl transition-all border-2 ${p.name === dispatchPartnerName ? 'bg-indigo-50 border-indigo-600/30 text-indigo-700' : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'}`}
-                            >
-                              <div className="flex justify-between items-center gap-2">
-                                <p className="text-sm font-bold truncate">{p.name}</p>
-                                <span className="text-[10px] font-bold text-slate-400 shrink-0">{catName}</span>
-                              </div>
-                              {p.contact && <p className="text-[10px] text-slate-400 mt-0.5 truncate">{p.contact}</p>}
-                            </button>
-                          );
-                        })}
-                        {filteredDispatchPartners.length === 0 && (
-                          <div className="py-8 text-center text-slate-400 text-sm">未找到符合条件的合作单位</div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {dispatchPartnerName && (
-                    <div className="text-[10px] font-bold text-slate-500 flex items-center gap-1.5">
-                      <span className="uppercase tracking-widest text-slate-400">合作单位分类：</span>
-                      <span>{partnerCategories.find(c => c.id === partners.find(p => p.name === dispatchPartnerName)?.categoryId)?.name || '未分类'}</span>
-                    </div>
-                  )}
+                  <SearchablePartnerSelect
+                    options={partners}
+                    categories={partnerCategories}
+                    value={dispatchPartnerName}
+                    onChange={name => setDispatchPartnerName(name)}
+                    placeholder="搜索并选择外协工厂..."
+                    triggerClassName="bg-white border border-slate-200 min-h-[52px] rounded-xl"
+                  />
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">备注说明</label>
@@ -6982,60 +6866,17 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                     <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">日期</label>
                     <div className="w-full h-[52px] rounded-xl border border-slate-200 py-3 px-4 text-sm font-bold text-slate-800 bg-white flex items-center">{docDateStr}</div>
                   </div>
-                  <div className="relative space-y-1.5" ref={flowDetailPartnerRef}>
+                  <div className="space-y-1.5">
                     <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">外协工厂</label>
                     {flowDetailEditMode ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => setFlowDetailPartnerOpen(!flowDetailPartnerOpen)}
-                          className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between transition-all h-[52px] text-left"
-                        >
-                          <div className="flex items-center gap-2 truncate min-w-0">
-                            <Building2 className={`w-4 h-4 flex-shrink-0 ${flowDetailEditPartner ? 'text-indigo-600' : 'text-slate-300'}`} />
-                            <span className={flowDetailEditPartner ? 'text-slate-900 truncate' : 'text-slate-400'}>{flowDetailEditPartner || '搜索并选择外协工厂...'}</span>
-                          </div>
-                          <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${flowDetailPartnerOpen ? 'rotate-180' : 'text-slate-400'}`} />
-                        </button>
-                        {flowDetailPartnerOpen && (
-                          <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-[100] p-4">
-                            <div className="relative mb-3">
-                              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                              <input
-                                type="text"
-                                placeholder="搜索单位名称或联系人..."
-                                value={flowDetailPartnerSearch}
-                                onChange={e => setFlowDetailPartnerSearch(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
-                              />
-                            </div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">合作单位分类</p>
-                            <div className="flex items-center gap-1.5 mb-3 overflow-x-auto no-scrollbar pb-1">
-                              <button type="button" onClick={() => setFlowDetailPartnerCategoryTab('all')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase whitespace-nowrap ${flowDetailPartnerCategoryTab === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>全部</button>
-                              {partnerCategories.map(cat => (
-                                <button key={cat.id} type="button" onClick={() => setFlowDetailPartnerCategoryTab(cat.id)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase whitespace-nowrap ${flowDetailPartnerCategoryTab === cat.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>{cat.name}</button>
-                              ))}
-                            </div>
-                            <div className="max-h-52 overflow-y-auto custom-scrollbar space-y-1">
-                              {filteredFlowDetailPartners.map(p => (
-                                <button
-                                  key={p.id}
-                                  type="button"
-                                  onClick={() => { setFlowDetailEditPartner(p.name); setFlowDetailPartnerOpen(false); setFlowDetailPartnerSearch(''); }}
-                                  className={`w-full text-left p-3 rounded-xl transition-all border-2 ${p.name === flowDetailEditPartner ? 'bg-indigo-50 border-indigo-600/30 text-indigo-700' : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'}`}
-                                >
-                                  <div className="flex justify-between items-center gap-2">
-                                    <p className="text-sm font-bold truncate">{p.name}</p>
-                                    <span className="text-[10px] font-bold text-slate-400 shrink-0">{partnerCategories.find(c => c.id === p.categoryId)?.name || '未分类'}</span>
-                                  </div>
-                                  {p.contact && <p className="text-[10px] text-slate-400 mt-0.5 truncate">{p.contact}</p>}
-                                </button>
-                              ))}
-                              {filteredFlowDetailPartners.length === 0 && <div className="py-8 text-center text-slate-400 text-sm">未找到符合条件的合作单位</div>}
-                            </div>
-                          </div>
-                        )}
-                      </>
+                      <SearchablePartnerSelect
+                        options={partners}
+                        categories={partnerCategories}
+                        value={flowDetailEditPartner}
+                        onChange={name => setFlowDetailEditPartner(name)}
+                        placeholder="搜索并选择外协工厂..."
+                        triggerClassName="bg-white border border-slate-200 min-h-[52px] rounded-xl"
+                      />
                     ) : (
                       <div className="w-full h-[52px] rounded-xl border border-slate-200 py-3 px-4 text-sm font-bold text-slate-800 bg-white flex items-center">{docPartner}</div>
                     )}

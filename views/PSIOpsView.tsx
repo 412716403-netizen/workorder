@@ -32,7 +32,6 @@ import {
   ClipboardList,
   ArrowDownToLine,
   ListFilter,
-  Briefcase,
   ArrowLeft,
   Save,
   Trash2,
@@ -44,6 +43,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SearchableProductSelect } from '../components/SearchableProductSelect';
+import { SearchablePartnerSelect } from '../components/SearchablePartnerSelect';
 import { Product, Warehouse, ProductCategory, Partner, PartnerCategory, AppDictionaries, ProductVariant, PurchaseOrderFormSettings, PurchaseBillFormSettings } from '../types';
 import { sortedVariantColorEntries, sortedColorEntries } from '../utils/sortVariantsByProduct';
 import { useProgressiveList } from '../hooks/useProgressiveList';
@@ -85,131 +85,6 @@ interface PSIOpsViewProps {
   userPermissions?: string[];
   tenantRole?: string;
 }
-
-// 增强型合作伙伴选择器
-const PartnerSelector = ({ 
-  partners = [], 
-  categories = [],
-  value, 
-  onChange, 
-  placeholder,
-  label,
-  triggerClassName = '',
-}: { 
-  partners: Partner[]; 
-  categories: PartnerCategory[];
-  value: string; 
-  onChange: (partnerName: string, partnerId?: string) => void; 
-  placeholder?: string;
-  label: string;
-  /** 触发按钮内文字字号，与基本信息/订单详情表单对齐 */
-  triggerClassName?: string;
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<string>('all');
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const categoryMapPSI = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
-  const filteredOptions = useMemo(() => {
-    return partners.filter(p => {
-      const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
-      const matchesCategory = activeTab === 'all' || p.categoryId === activeTab;
-      return matchesSearch && matchesCategory;
-    });
-  }, [partners, search, activeTab]);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setIsOpen(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  return (
-    <div className="relative" ref={containerRef}>
-      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{label}</label>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between transition-all h-[52px]"
-      >
-        <div className="flex items-center gap-2 truncate min-w-0">
-          <Building2 className={`w-4 h-4 shrink-0 ${value ? 'text-indigo-600' : 'text-slate-300'}`} />
-          <span className={`truncate ${value ? 'text-slate-900' : 'text-slate-400'} ${triggerClassName || 'text-sm'}`}>
-            {value || placeholder || '点击选择单位...'}
-          </span>
-        </div>
-        <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : 'text-slate-400'}`} />
-      </button>
-
-      {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-3xl shadow-2xl z-[100] p-4 animate-in fade-in zoom-in-95">
-          <div className="relative mb-4">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              autoFocus
-              type="text"
-              className="w-full bg-slate-50 border-none rounded-xl py-3 pl-11 pr-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="搜索单位名称..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-          </div>
-
-          <div className="flex items-center gap-1.5 mb-4 overflow-x-auto no-scrollbar pb-1">
-            <button 
-              onClick={() => setActiveTab('all')}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeTab === 'all' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
-            >
-              全部
-            </button>
-            {categories.map(cat => (
-              <button 
-                key={cat.id}
-                onClick={() => setActiveTab(cat.id)}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeTab === cat.id ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
-              >
-                {cat.name}
-              </button>
-            ))}
-          </div>
-
-          <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-1">
-            {filteredOptions.map(p => (
-              <button
-                key={p.id}
-                onClick={() => {
-                  onChange(p.name, p.id);
-                  setIsOpen(false);
-                  setSearch('');
-                }}
-                className={`w-full text-left p-3 rounded-2xl transition-all border-2 ${
-                  p.name === value ? 'bg-indigo-50 border-indigo-600/20 text-indigo-700' : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'
-                }`}
-              >
-                <div className="flex justify-between items-center">
-                  <p className="text-sm font-black truncate">{p.name}</p>
-                  <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-400 text-[8px] font-black uppercase">
-                    {categoryMapPSI.get(p.categoryId)?.name || '未分类'}
-                  </span>
-                </div>
-                <p className="text-[10px] font-bold text-slate-400 mt-0.5">{p.contact}</p>
-              </button>
-            ))}
-            {filteredOptions.length === 0 && (
-              <div className="py-10 text-center">
-                <Briefcase className="w-8 h-8 text-slate-100 mx-auto mb-2" />
-                <p className="text-xs text-slate-400 font-medium">未找到符合条件的单位</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
 
 const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, categories, partners, partnerCategories, dictionaries, records, purchaseOrderFormSettings = { standardFields: [], customFields: [] }, onUpdatePurchaseOrderFormSettings, purchaseBillFormSettings = { standardFields: [], customFields: [] }, onUpdatePurchaseBillFormSettings, onAddRecord, onAddRecordBatch, onReplaceRecords, onDeleteRecords, onDetailViewChange, prodRecords = [], orders = [], userPermissions, tenantRole }) => {
   const confirm = useConfirm();
@@ -2233,13 +2108,13 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* 供应商、单据编号、添加日期 固定显示，不可配置 */}
-                <div className="md:col-span-2">
-                  <PartnerSelector
-                    partners={partners}
+                <div className="md:col-span-2 space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{current.partnerLabel}</label>
+                  <SearchablePartnerSelect
+                    options={partners}
                     categories={partnerCategories}
                     value={form.partner}
-                    onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id || '' })}
-                    label={current.partnerLabel}
+                    onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id })}
                     placeholder={`选择${current.partnerLabel}...`}
                     triggerClassName="text-sm"
                   />
@@ -2511,13 +2386,13 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                 <h3 className={sectionTitleClass}>1. 销售订单基础信息</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <PartnerSelector
-                    partners={partners}
+                <div className="md:col-span-2 space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{current.partnerLabel}</label>
+                  <SearchablePartnerSelect
+                    options={partners}
                     categories={partnerCategories}
                     value={form.partner}
-                    onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id || '' })}
-                    label={current.partnerLabel}
+                    onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id })}
                     placeholder={`选择${current.partnerLabel}...`}
                   />
                 </div>
@@ -2738,13 +2613,13 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                 <h3 className={sectionTitleClass}>1. 销售单基础信息</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <PartnerSelector
-                    partners={partners}
+                <div className="md:col-span-2 space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{current.partnerLabel}</label>
+                  <SearchablePartnerSelect
+                    options={partners}
                     categories={partnerCategories}
                     value={form.partner}
-                    onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id || '' })}
-                    label={current.partnerLabel}
+                    onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id })}
                     placeholder={`选择${current.partnerLabel}...`}
                   />
                 </div>
@@ -3008,8 +2883,15 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                         <input type="text" placeholder="留空则自动生成" value={form.docNumber} onChange={e => setForm({...form, docNumber: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 pl-10 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      <PartnerSelector partners={partners} categories={partnerCategories} value={form.partner} onChange={(name, id) => setForm({...form, partner: name, partnerId: id || ''})} label="供应商" placeholder="选择供应商..." />
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">供应商</label>
+                      <SearchablePartnerSelect
+                        options={partners}
+                        categories={partnerCategories}
+                        value={form.partner}
+                        onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id })}
+                        placeholder="选择供应商..."
+                      />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">添加日期</label>
@@ -5407,8 +5289,15 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                           <input type="text" placeholder="留空则自动生成" value={form.docNumber} onChange={e => setForm({...form, docNumber: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-10 pr-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
                         </div>
                       </div>
-                      <div className="space-y-1">
-                        <PartnerSelector partners={partners} categories={partnerCategories} value={form.partner} onChange={(name, id) => setForm({...form, partner: name, partnerId: id || ''})} label="供应商" placeholder="选择供应商..." />
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">供应商</label>
+                        <SearchablePartnerSelect
+                          options={partners}
+                          categories={partnerCategories}
+                          value={form.partner}
+                          onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id })}
+                          placeholder="选择供应商..."
+                        />
                       </div>
                     </div>
                     <div className="space-y-1">
@@ -5497,13 +5386,13 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                             <input type="text" placeholder="留空则自动生成" value={form.docNumber} onChange={e => setForm({...form, docNumber: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-10 pr-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
                           </div>
                         </div>
-                        <div className="space-y-1">
-                          <PartnerSelector 
-                            partners={partners}
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{bizConfig[showModal]?.partnerLabel}</label>
+                          <SearchablePartnerSelect
+                            options={partners}
                             categories={partnerCategories}
                             value={form.partner}
-                            onChange={(name, id) => setForm({...form, partner: name, partnerId: id || ''})}
-                            label={bizConfig[showModal]?.partnerLabel}
+                            onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id })}
                             placeholder={`选择${bizConfig[showModal]?.partnerLabel}...`}
                           />
                         </div>

@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import ReactDOM from 'react-dom';
 import { Plus, X, Clock, DollarSign, Search, ChevronDown, Building2, User, FileText, Pencil, Trash2 } from 'lucide-react';
 import { FinanceRecord, FinanceOpType, ProductionOrder, FinanceCategory, FinanceAccountType, Partner, Worker, Product, ReportFieldDefinition, PartnerCategory, ProductCategory, GlobalNodeTemplate, AppDictionaries, FINANCE_DOC_NO_PREFIX } from '../types';
 import { SearchableProductSelect } from '../components/SearchableProductSelect';
+import { SearchablePartnerSelect } from '../components/SearchablePartnerSelect';
 import type { ProductionOpRecord } from '../types';
 import { moduleHeaderRowClass, pageSubtitleClass, pageTitleClass, primaryToolbarButtonClass } from '../styles/uiDensity';
 import { useConfirm } from '../contexts/ConfirmContext';
@@ -90,136 +90,6 @@ function OrderSearchSelect({ orders, products, value, onChange, label }: { order
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// 收付款单位：按合作单位分类、可搜索（与生产计划/进销存合作单位选择方式一致）
-function PartnerSelectWithCategories({
-  partners,
-  categories,
-  value,
-  onChange,
-  label,
-  placeholder,
-  valueIsId,
-  compact,
-}: {
-  partners: Partner[];
-  categories: PartnerCategory[];
-  value: string;
-  onChange: (nameOrId: string) => void;
-  label: string;
-  placeholder?: string;
-  /** 为 true 时 value 为合作单位 id，onChange 回传 id；为 false 时 value 为名称，onChange 回传名称 */
-  valueIsId?: boolean;
-  /** 为 true 时用于筛选栏：与日期输入框同高、同风格，标签与控件同一行 */
-  compact?: boolean;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<string>('all');
-  const [dropdownStyle, setDropdownStyle] = useState<{ top: number; left: number; width: number } | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const catMap = useMemo(() => new Map(categories.map(c => [c.id, c.name])), [categories]);
-  const filtered = useMemo(() => partners.filter(p => {
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || (p.contact || '').toLowerCase().includes(search.toLowerCase());
-    const matchCat = activeTab === 'all' || p.categoryId === activeTab;
-    return matchSearch && matchCat;
-  }).sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id)), [partners, search, activeTab]);
-  const displayText = valueIsId ? (partners.find(p => p.id === value)?.name ?? '') : value;
-  const isSelected = valueIsId ? (p: Partner) => p.id === value : (p: Partner) => p.name === value;
-  const updatePos = useCallback(() => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    setDropdownStyle({ top: rect.bottom + 8, left: rect.left, width: Math.max(rect.width, 320) });
-  }, []);
-  useEffect(() => {
-    if (isOpen) {
-      updatePos();
-      window.addEventListener('scroll', updatePos, true);
-      window.addEventListener('resize', updatePos);
-      return () => { window.removeEventListener('scroll', updatePos, true); window.removeEventListener('resize', updatePos); }
-    }
-    setDropdownStyle(null);
-  }, [isOpen, updatePos]);
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node) && !(e.target as HTMLElement).closest?.('[data-finance-partner-dropdown]')) setIsOpen(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-  const dropdownContent = isOpen && dropdownStyle && typeof document !== 'undefined' && (
-    <div data-finance-partner-dropdown className="fixed bg-white border border-slate-200 rounded-2xl shadow-2xl p-4 animate-in fade-in zoom-in-95" style={{ top: dropdownStyle.top, left: dropdownStyle.left, width: dropdownStyle.width, zIndex: 10000 }}>
-      <div className="relative mb-3">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-        <input autoFocus type="text" className="w-full bg-slate-50 border-none rounded-xl py-2.5 pl-10 pr-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="搜索单位名称或联系人..." value={search} onChange={e => setSearch(e.target.value)} />
-      </div>
-      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">合作单位分类</p>
-      <div className="flex items-center gap-1.5 mb-3 overflow-x-auto no-scrollbar pb-1">
-        <button type="button" onClick={() => setActiveTab('all')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase whitespace-nowrap ${activeTab === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>全部</button>
-        {categories.map(cat => (
-          <button key={cat.id} type="button" onClick={() => setActiveTab(cat.id)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase whitespace-nowrap ${activeTab === cat.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>{cat.name}</button>
-        ))}
-      </div>
-      <div className="max-h-52 overflow-y-auto space-y-1">
-        {filtered.map(p => {
-          const catName = catMap.get(p.categoryId) || '未分类';
-          const selected = isSelected(p);
-          return (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => {
-                onChange(valueIsId ? p.id : p.name);
-                setIsOpen(false);
-                setSearch('');
-              }}
-              className={`w-full text-left p-3 rounded-xl transition-all border-2 ${selected ? 'bg-indigo-50 border-indigo-600/20 text-indigo-700' : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'}`}
-            >
-              <div className="flex justify-between items-start gap-2 mb-0.5">
-                <p className="text-sm font-bold truncate">{p.name}</p>
-                <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-400 text-[8px] font-black uppercase shrink-0">{catName}</span>
-              </div>
-              {p.contact && <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{p.contact}</p>}
-            </button>
-          );
-        })}
-        {filtered.length === 0 && <p className="py-6 text-center text-slate-400 text-sm">未找到符合条件的合作单位</p>}
-      </div>
-    </div>
-  );
-  if (compact) {
-    return (
-      <div className="flex items-center gap-2 relative" ref={containerRef}>
-        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">{label}</span>
-        <button
-          type="button"
-          onClick={() => setIsOpen(!isOpen)}
-          className="bg-white border border-slate-200 rounded-xl py-2 pl-3 pr-8 min-w-[140px] text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500 flex items-center justify-between gap-2 transition-all hover:border-slate-300"
-        >
-          <div className="flex items-center gap-1.5 truncate min-w-0">
-            <Building2 className={`w-3.5 h-3.5 flex-shrink-0 ${displayText ? 'text-indigo-600' : 'text-slate-300'}`} />
-            <span className={displayText ? 'text-slate-800 truncate' : 'text-slate-400'}>{displayText || placeholder || '请选择合作单位'}</span>
-          </div>
-          <ChevronDown className={`w-3.5 h-3.5 flex-shrink-0 transition-transform text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 ${isOpen ? 'rotate-180' : ''}`} />
-        </button>
-        {dropdownContent && ReactDOM.createPortal(dropdownContent, document.body)}
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-1 relative" ref={containerRef}>
-      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
-      <button type="button" onClick={() => setIsOpen(!isOpen)} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 flex items-center justify-between h-[52px]">
-        <div className="flex items-center gap-2 truncate">
-          <Building2 className={`w-4 h-4 flex-shrink-0 ${displayText ? 'text-indigo-600' : 'text-slate-300'}`} />
-          <span className={displayText ? 'text-slate-900 truncate' : 'text-slate-400'}>{displayText || placeholder || '搜索并选择合作单位...'}</span>
-        </div>
-        <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : 'text-slate-400'}`} />
-      </button>
-      {dropdownContent && ReactDOM.createPortal(dropdownContent, document.body)}
     </div>
   );
 }
@@ -776,16 +646,22 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">结束日期</span>
                   <input type="date" value={reconDateTo} onChange={e => setReconDateTo(e.target.value)} className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
                 </div>
-                <PartnerSelectWithCategories
-                  partners={partners}
-                  categories={partnerCategories}
-                  value={reconPartnerId}
-                  onChange={id => setReconPartnerId(id)}
-                  valueIsId
-                  compact
-                  label="合作单位"
-                  placeholder="请选择合作单位"
-                />
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">合作单位</span>
+                  <div className="min-w-[140px]">
+                    <SearchablePartnerSelect
+                      options={partners}
+                      categories={partnerCategories}
+                      value={reconPartnerId}
+                      onChange={(_, id) => setReconPartnerId(id)}
+                      valueMode="id"
+                      compact
+                      showCategoryHint={false}
+                      placeholder="请选择合作单位"
+                      triggerClassName="bg-white border border-slate-200"
+                    />
+                  </div>
+                </div>
                 <button
                   type="button"
                   onClick={() => { setReconQueryDateFrom(reconDateFrom); setReconQueryDateTo(reconDateTo); setReconQueryPartnerId(reconPartnerId); setReconQueryWorkerId(''); }}
@@ -1372,7 +1248,16 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                           </div>
                         )}
                         {selectedCategory.linkPartner && (
-                          <PartnerSelectWithCategories partners={partners} categories={partnerCategories} value={form.partner} onChange={name => setForm({ ...form, partner: name })} label={current.partnerLabel} placeholder="请选择..." />
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{current.partnerLabel}</label>
+                            <SearchablePartnerSelect
+                              options={partners}
+                              categories={partnerCategories}
+                              value={form.partner}
+                              onChange={name => setForm({ ...form, partner: name })}
+                              placeholder="请选择..."
+                            />
+                          </div>
                         )}
                         {selectedCategory.selectPaymentAccount && (
                           <div className="space-y-1">
@@ -1401,15 +1286,31 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                       </>
                     )}
                     {!selectedCategory && (
-                      <div className="lg:col-span-2">
-                        <PartnerSelectWithCategories partners={partners} categories={partnerCategories} value={form.partner} onChange={name => setForm({ ...form, partner: name })} label={current.partnerLabel} placeholder="请选择..." />
+                      <div className="space-y-1 lg:col-span-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{current.partnerLabel}</label>
+                        <SearchablePartnerSelect
+                          options={partners}
+                          categories={partnerCategories}
+                          value={form.partner}
+                          onChange={name => setForm({ ...form, partner: name })}
+                          placeholder="请选择..."
+                        />
                       </div>
                     )}
                   </>
                 ) : (
                   <>
                     <OrderSearchSelect orders={orders} products={products} value={form.relatedId} onChange={v => setForm({ ...form, relatedId: v })} label="关联工单 / 计件参考" />
-                    <PartnerSelectWithCategories partners={partners} categories={partnerCategories} value={form.partner} onChange={name => setForm({ ...form, partner: name })} label={current.partnerLabel} placeholder="请选择..." />
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{current.partnerLabel}</label>
+                      <SearchablePartnerSelect
+                        options={partners}
+                        categories={partnerCategories}
+                        value={form.partner}
+                        onChange={name => setForm({ ...form, partner: name })}
+                        placeholder="请选择..."
+                      />
+                    </div>
                   </>
                 )}
                   <div className="space-y-1">

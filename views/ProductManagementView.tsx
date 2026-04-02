@@ -28,14 +28,13 @@ import {
   Settings,
   ArrowRight,
   GripVertical,
-  Building2,
   ImagePlus,
   Image as ImageIcon,
   Download,
   Upload,
   ListChecks,
 } from 'lucide-react';
-import { Product, GlobalNodeTemplate, ProductCategory, BOM, BOMItem, AppDictionaries, ProductVariant, DictionaryItem, Partner } from '../types';
+import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, BOMItem, AppDictionaries, ProductVariant, DictionaryItem, Partner } from '../types';
 import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
 import { toast } from 'sonner';
 import { useConfirm } from '../contexts/ConfirmContext';
@@ -43,6 +42,7 @@ import * as api from '../services/api';
 import ProductImportModal from './ProductImportModal';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { SearchableProductSelect } from '../components/SearchableProductSelect';
+import { SearchablePartnerSelect } from '../components/SearchablePartnerSelect';
 import { pageSubtitleClass, pageTitleClass } from '../styles/uiDensity';
 
 /** 档案中心分类筛选：「全部」避免默认 cat-material 与租户真实分类 id 不一致导致列表空白 */
@@ -181,6 +181,7 @@ interface ProductManagementViewProps {
   boms: BOM[];
   dictionaries: AppDictionaries;
   partners: Partner[];
+  partnerCategories: PartnerCategory[];
   onUpdateProduct: (product: Product) => Promise<boolean>;
   onDeleteProduct?: (id: string) => Promise<boolean>;
   onUpdateBOM: (bom: BOM) => Promise<boolean>;
@@ -610,6 +611,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   boms,
   dictionaries,
   partners,
+  partnerCategories,
   onUpdateProduct,
   onDeleteProduct,
   onUpdateBOM,
@@ -1197,16 +1199,14 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">首选供应商 (档案关联)</label>
-                        <div className="relative">
-                          <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 z-10 pointer-events-none" />
-                          <PortalSelect
-                            value={workingProduct.supplierId || ''}
-                            onChange={v => setWorkingProduct({...workingProduct, supplierId: v})}
-                            optionPairs={partners.map(s => ({ value: s.id, label: s.name }))}
-                            placeholder="未关联供应商"
-                            className="w-full bg-slate-50 border-none rounded-lg py-2.5 pl-10 pr-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none text-left flex items-center justify-between"
-                          />
-                        </div>
+                        <SearchablePartnerSelect
+                          options={partners}
+                          categories={partnerCategories}
+                          value={workingProduct.supplierId || ''}
+                          onChange={(_, id) => setWorkingProduct({ ...workingProduct, supplierId: id })}
+                          valueMode="id"
+                          placeholder="未关联供应商"
+                        />
                       </div>
                     </>
                  )}

@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Link, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, Navigate, useParams, useLocation } from 'react-router-dom';
 import {
   Layout, LayoutDashboard, ClipboardList, Settings as SettingsIcon,
   Boxes, ShoppingCart, Wallet, LogOut, User, UserCog, Building2, Loader2, Inbox,
@@ -18,6 +18,7 @@ const BasicInfoView = React.lazy(() => import('./views/BasicInfoView'));
 const SettingsView = React.lazy(() => import('./views/SettingsView'));
 const UserAdminView = React.lazy(() => import('./views/UserAdminView'));
 const CollaborationInboxView = React.lazy(() => import('./views/CollaborationInboxView'));
+const PrintTemplateEditorView = React.lazy(() => import('./views/PrintTemplateEditorView'));
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppDataProvider, useAppData } from './contexts/AppDataContext';
@@ -29,6 +30,11 @@ const RouteFallback = () => (
     <Loader2 className="w-7 h-7 animate-spin text-indigo-400" />
   </div>
 );
+
+function PrintEditorRoute() {
+  const { id } = useParams();
+  return <PrintTemplateEditorView key={id ?? 'new'} />;
+}
 
 export default function App() {
   return (
@@ -97,6 +103,9 @@ function AuthRouter() {
 function AppLayout() {
   const auth = useAuth();
   const data = useAppData();
+  const location = useLocation();
+  /** 打印模板编辑器全屏工作区，不显示主导航侧栏 */
+  const printEditorFullscreen = location.pathname.startsWith('/print-editor');
 
   const { currentUser, tenantCtx, hasPerm, handleLogout, handleSwitchTenant } = auth;
   const { profileOpen, setProfileOpen, onProfileUpdate, onTenantCtxUpdate } = auth;
@@ -115,7 +124,8 @@ function AppLayout() {
   return (
     <ConfirmProvider>
     <div className="flex h-screen bg-slate-50 text-slate-900 font-sans">
-      {/* Sidebar */}
+      {/* Sidebar — 打印模板编辑页隐藏，便于全宽画布 */}
+      {!printEditorFullscreen && (
       <div className="w-52 bg-white border-r border-slate-200 flex flex-col p-5 gap-8">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-100">
@@ -209,12 +219,25 @@ function AppLayout() {
           </button>
         </div>
       </div>
+      )}
 
       {/* Main Content */}
-      <div className="flex-1 min-h-0 overflow-auto pt-4 px-12 pb-8 bg-slate-50/30">
+      <div
+        className={
+          printEditorFullscreen
+            ? 'flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-100 p-3'
+            : 'min-h-0 flex-1 overflow-auto bg-slate-50/30 px-12 pb-8 pt-4'
+        }
+      >
         <ErrorBoundary>
           <Suspense fallback={<RouteFallback />}>
-            <AppRoutes />
+            {printEditorFullscreen ? (
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <AppRoutes />
+              </div>
+            ) : (
+              <AppRoutes />
+            )}
           </Suspense>
         </ErrorBoundary>
       </div>
@@ -261,6 +284,9 @@ function AppRoutes() {
           partnerCategories={d.partnerCategories}
           planFormSettings={d.planFormSettings}
           onUpdatePlanFormSettings={d.onUpdatePlanFormSettings}
+          printTemplates={d.printTemplates}
+          onUpdatePrintTemplates={d.onUpdatePrintTemplates}
+          onRefreshPrintTemplates={d.refreshPrintTemplates}
           orderFormSettings={d.orderFormSettings}
           onUpdateOrderFormSettings={d.onUpdateOrderFormSettings}
           onCreatePlan={d.onCreatePlan}
@@ -339,6 +365,7 @@ function AppRoutes() {
         <CollaborationInboxView
           products={d.products}
           partners={d.partners}
+          partnerCategories={d.partnerCategories}
           orders={d.orders}
           prodRecords={d.prodRecords}
           warehouses={d.warehouses}
@@ -416,6 +443,14 @@ function AppRoutes() {
         }
       />
       <Route path="/orders/:id" element={<Navigate to="/production" replace state={{ tab: 'orders' }} />} />
+      <Route
+        path="/print-editor/:id"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <PrintEditorRoute />
+          </Suspense>
+        }
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

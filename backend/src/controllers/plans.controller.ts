@@ -146,13 +146,20 @@ export async function convertToOrder(req: Request, res: Response, next: NextFunc
       include: { items: true },
     });
     if (!plan) throw new AppError(404, '计划单不存在');
-    if (plan.status === 'CONVERTED') throw new AppError(400, '该计划单已下达工单');
 
     const product = await db.product.findUnique({ where: { id: plan.productId } });
     if (!product) throw new AppError(400, '关联产品不存在');
 
     const allDescendants = await getAllDescendantPlans(plan.id, tenantId);
     const plansToConvert: PlanWithItems[] = [plan, ...allDescendants].filter((p): p is PlanWithItems => p.status !== 'CONVERTED');
+
+    // 父计划已下达时允许「补充下达」：仅转换未 CONVERTED 的子计划；若已全部下达则拒绝
+    if (plansToConvert.length === 0) {
+      throw new AppError(
+        400,
+        plan.status === 'CONVERTED' ? '没有待下达的子计划' : '该计划单已下达工单'
+      );
+    }
 
     const existingOrders = await db.productionOrder.findMany({ select: { orderNumber: true } });
     const existingOrderNumbers = new Set(existingOrders.map(o => o.orderNumber));

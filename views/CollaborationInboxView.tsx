@@ -9,13 +9,15 @@ import { toast } from 'sonner';
 import { useConfirm } from '../contexts/ConfirmContext';
 import * as api from '../services/api';
 import { moduleHeaderRowClass, outlineToolbarButtonClass, pageSubtitleClass, pageTitleClass } from '../styles/uiDensity';
-import type { Product, Partner, ProductionOpRecord, Warehouse, ProductionOrder, AppDictionaries, GlobalNodeTemplate, OutsourceRoute, OutsourceRouteStep } from '../types';
+import type { Product, Partner, PartnerCategory, ProductionOpRecord, Warehouse, ProductionOrder, AppDictionaries, GlobalNodeTemplate, OutsourceRoute, OutsourceRouteStep } from '../types';
+import { SearchablePartnerSelect } from '../components/SearchablePartnerSelect';
 
 const COLLAB_RETURN_STOCK_OUT_OP = '协作回传出库';
 
 interface CollaborationInboxViewProps {
   products: Product[];
   partners: Partner[];
+  partnerCategories: PartnerCategory[];
   orders: ProductionOrder[];
   prodRecords: ProductionOpRecord[];
   warehouses: Warehouse[];
@@ -170,7 +172,7 @@ function computeCollaborationReturnableRows(
   return rows;
 }
 
-const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ products, partners, orders, prodRecords, warehouses, dictionaries, nodeTemplates, onRefreshPartners, onRefreshProducts, onRefreshOrders, onRefreshProdRecords, onRefreshPMP, tenantRole, userPermissions }) => {
+const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ products, partners, partnerCategories, orders, prodRecords, warehouses, dictionaries, nodeTemplates, onRefreshPartners, onRefreshProducts, onRefreshOrders, onRefreshProdRecords, onRefreshPMP, tenantRole, userPermissions }) => {
   const navigate = useNavigate();
   const confirm = useConfirm();
   const [viewMode, setViewMode] = useState<ViewMode>('inbox');
@@ -990,16 +992,15 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({ product
             <div className="px-6 py-5 border-b border-slate-100 flex flex-wrap items-end gap-3">
               <div className="space-y-1 flex-1 min-w-[180px]">
                 <label className="text-[10px] font-black text-slate-400 uppercase block ml-1">合作单位</label>
-                <select
+                <SearchablePartnerSelect
+                  options={unboundPartners}
+                  categories={partnerCategories}
                   value={bindPartnerId}
-                  onChange={e => setBindPartnerId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
-                >
-                  <option value="">选择合作单位...</option>
-                  {unboundPartners.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
+                  onChange={(_, id) => setBindPartnerId(id)}
+                  valueMode="id"
+                  placeholder="选择合作单位..."
+                  triggerClassName="bg-slate-50 border border-slate-200"
+                />
               </div>
               <div className="space-y-1 flex-1 min-w-[180px]">
                 <label className="text-[10px] font-black text-slate-400 uppercase block ml-1">协作企业</label>

@@ -23,6 +23,7 @@ import type {
   PartnerCategory,
   GlobalNodeTemplate,
   BOM,
+  PrintTemplate,
 } from '../types';
 
 // ── Decimal normalizer ──
@@ -77,7 +78,20 @@ const DEFAULT_PLAN_FORM_SETTINGS: PlanFormSettings = {
     { id: 'createdAt', label: '添加日期', showInList: true, showInCreate: true, showInDetail: true },
   ],
   customFields: [],
+  listPrint: { showPrintButton: true },
 };
+
+function normalizePlanFormSettings(raw: PlanFormSettings | null | undefined): PlanFormSettings {
+  const s = raw ?? DEFAULT_PLAN_FORM_SETTINGS;
+  const allowed = s.listPrint?.allowedTemplateIds?.filter(Boolean) ?? [];
+  return {
+    ...s,
+    listPrint: {
+      showPrintButton: s.listPrint?.showPrintButton !== false,
+      allowedTemplateIds: allowed.length > 0 ? allowed : undefined,
+    },
+  };
+}
 
 const DEFAULT_ORDER_FORM_SETTINGS: OrderFormSettings = {
   standardFields: [
@@ -138,6 +152,8 @@ export interface AppDataContextValue {
   orderFormSettings: OrderFormSettings;
   purchaseOrderFormSettings: PurchaseOrderFormSettings;
   purchaseBillFormSettings: PurchaseBillFormSettings;
+  /** 租户级打印模板列表 */
+  printTemplates: PrintTemplate[];
   productionLinkMode: ProductionLinkMode;
   processSequenceMode: ProcessSequenceMode;
   allowExceedMaxReportQty: boolean;
@@ -150,6 +166,7 @@ export interface AppDataContextValue {
   onUpdateOrderFormSettings: (v: OrderFormSettings) => Promise<void>;
   onUpdatePurchaseOrderFormSettings: (v: PurchaseOrderFormSettings) => Promise<void>;
   onUpdatePurchaseBillFormSettings: (v: PurchaseBillFormSettings) => Promise<void>;
+  onUpdatePrintTemplates: (v: PrintTemplate[]) => Promise<void>;
   // Product / BOM
   /** 成功返回 true，失败已 toast 并返回 false */
   onUpdateProduct: (p: Product) => Promise<boolean>;
@@ -203,6 +220,8 @@ export interface AppDataContextValue {
   refreshOrders: () => Promise<void>;
   refreshProdRecords: () => Promise<void>;
   refreshPMP: () => Promise<void>;
+  /** 从服务端重新拉取打印模板（多标签页保存后另一页可即时同步） */
+  refreshPrintTemplates: () => Promise<void>;
 }
 
 export type AppDataState = Pick<AppDataContextValue,
@@ -211,6 +230,7 @@ export type AppDataState = Pick<AppDataContextValue,
   'partners' | 'workers' | 'equipment' | 'warehouses' |
   'financeCategories' | 'financeAccountTypes' |
   'planFormSettings' | 'orderFormSettings' | 'purchaseOrderFormSettings' | 'purchaseBillFormSettings' |
+  'printTemplates' |
   'productionLinkMode' | 'processSequenceMode' | 'allowExceedMaxReportQty' | 'productMilestoneProgresses'
 >;
 
@@ -245,6 +265,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [orderFormSettings, setOrderFormSettings] = useState<OrderFormSettings>(DEFAULT_ORDER_FORM_SETTINGS);
   const [purchaseOrderFormSettings, setPurchaseOrderFormSettings] = useState<PurchaseOrderFormSettings>(DEFAULT_PURCHASE_ORDER_FORM_SETTINGS);
   const [purchaseBillFormSettings, setPurchaseBillFormSettings] = useState<PurchaseBillFormSettings>(DEFAULT_PURCHASE_BILL_FORM_SETTINGS);
+  const [printTemplates, setPrintTemplates] = useState<PrintTemplate[]>([]);
   const [productionLinkMode, setProductionLinkMode] = useState<ProductionLinkMode>('order');
   const [processSequenceMode, setProcessSequenceMode] = useState<ProcessSequenceMode>('free');
   const [allowExceedMaxReportQty, setAllowExceedMaxReportQty] = useState<boolean>(true);
@@ -291,10 +312,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       setProductionLinkMode((cfg.productionLinkMode as ProductionLinkMode) ?? 'order');
       setProcessSequenceMode((cfg.processSequenceMode as ProcessSequenceMode) ?? 'free');
       setAllowExceedMaxReportQty(cfg.allowExceedMaxReportQty !== false);
-      setPlanFormSettings((cfg.planFormSettings as PlanFormSettings) ?? DEFAULT_PLAN_FORM_SETTINGS);
+      setPlanFormSettings(normalizePlanFormSettings(cfg.planFormSettings as PlanFormSettings));
       setOrderFormSettings((cfg.orderFormSettings as OrderFormSettings) ?? DEFAULT_ORDER_FORM_SETTINGS);
       setPurchaseOrderFormSettings((cfg.purchaseOrderFormSettings as PurchaseOrderFormSettings) ?? DEFAULT_PURCHASE_ORDER_FORM_SETTINGS);
       setPurchaseBillFormSettings((cfg.purchaseBillFormSettings as PurchaseBillFormSettings) ?? DEFAULT_PURCHASE_BILL_FORM_SETTINGS);
+      setPrintTemplates(Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : []);
       if (val(coreResults, 1))  setCategories(val(coreResults, 1) as ProductCategory[]);
       if (val(coreResults, 2))  setPartnerCategories(val(coreResults, 2) as PartnerCategory[]);
       if (val(coreResults, 3))  setGlobalNodes(val(coreResults, 3) as GlobalNodeTemplate[]);
@@ -410,15 +432,31 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const refreshWorkers = useCallback(async () => setWorkers(await api.tenants.getReportableMembers(tenantCtx!.tenantId) as any[]), [tenantCtx?.tenantId]);
   const refreshEquipment = useCallback(async () => setEquipment(await api.equipment.list() as any[]), []);
   const refreshDictionaries = useCallback(async () => setDictionaries(await api.dictionaries.list() as AppDictionaries), []);
+  const refreshPrintTemplates = useCallback(async () => {
+    try {
+      const cfg = (await api.settings.getConfig()) as Record<string, unknown>;
+      setPrintTemplates(Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : []);
+    } catch (err: any) {
+      toast.error(err?.message || '打印模版刷新失败');
+    }
+  }, []);
 
   // ── Config update handlers ──
   const onUpdateProductionLinkMode = useCallback(async (mode: ProductionLinkMode) => { await api.settings.updateConfig('productionLinkMode', mode); setProductionLinkMode(mode); }, []);
   const onUpdateProcessSequenceMode = useCallback(async (mode: ProcessSequenceMode) => { await api.settings.updateConfig('processSequenceMode', mode); setProcessSequenceMode(mode); }, []);
   const onUpdateAllowExceedMaxReportQty = useCallback(async (value: boolean) => { await api.settings.updateConfig('allowExceedMaxReportQty', value); setAllowExceedMaxReportQty(value); }, []);
-  const onUpdatePlanFormSettings = useCallback(async (v: PlanFormSettings) => { await api.settings.updateConfig('planFormSettings', v); setPlanFormSettings(v); }, []);
+  const onUpdatePlanFormSettings = useCallback(async (v: PlanFormSettings) => {
+    const next = normalizePlanFormSettings(v);
+    await api.settings.updateConfig('planFormSettings', next);
+    setPlanFormSettings(next);
+  }, []);
   const onUpdateOrderFormSettings = useCallback(async (v: OrderFormSettings) => { await api.settings.updateConfig('orderFormSettings', v); setOrderFormSettings(v); }, []);
   const onUpdatePurchaseOrderFormSettings = useCallback(async (v: PurchaseOrderFormSettings) => { await api.settings.updateConfig('purchaseOrderFormSettings', v); setPurchaseOrderFormSettings(v); }, []);
   const onUpdatePurchaseBillFormSettings = useCallback(async (v: PurchaseBillFormSettings) => { await api.settings.updateConfig('purchaseBillFormSettings', v); setPurchaseBillFormSettings(v); }, []);
+  const onUpdatePrintTemplates = useCallback(async (v: PrintTemplate[]) => {
+    await api.settings.updateConfig('printTemplates', v);
+    setPrintTemplates(v);
+  }, []);
 
   // ── Helpers: normalize a single record ──
   const norm1 = <T,>(item: T): T => normalizeDecimals([item])[0];
@@ -683,6 +721,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     partners, workers, equipment, warehouses,
     financeCategories, financeAccountTypes,
     planFormSettings, orderFormSettings, purchaseOrderFormSettings, purchaseBillFormSettings,
+    printTemplates,
     productionLinkMode, processSequenceMode, allowExceedMaxReportQty,
     productMilestoneProgresses,
   };
@@ -691,6 +730,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     onUpdateProductionLinkMode, onUpdateProcessSequenceMode, onUpdateAllowExceedMaxReportQty,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
     onUpdatePurchaseOrderFormSettings, onUpdatePurchaseBillFormSettings,
+    onUpdatePrintTemplates,
     onUpdateProduct, onDeleteProduct, onUpdateBOM,
     onCreatePlan, onUpdatePlan, onSplitPlan, onDeletePlan, onConvertToOrder,
     onCreateSubPlan, onCreateSubPlans,
@@ -704,10 +744,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     refreshPartnerCategories, refreshCategories, refreshGlobalNodes, refreshWarehouses,
     refreshFinanceCategories, refreshFinanceAccountTypes,
     refreshProducts, refreshOrders, refreshProdRecords, refreshPMP,
+    refreshPrintTemplates,
   }), [
     onUpdateProductionLinkMode, onUpdateProcessSequenceMode, onUpdateAllowExceedMaxReportQty,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
     onUpdatePurchaseOrderFormSettings, onUpdatePurchaseBillFormSettings,
+    onUpdatePrintTemplates,
     onUpdateProduct, onDeleteProduct, onUpdateBOM,
     onCreatePlan, onUpdatePlan, onSplitPlan, onDeletePlan, onConvertToOrder,
     onCreateSubPlan, onCreateSubPlans,
@@ -721,6 +763,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     refreshPartnerCategories, refreshCategories, refreshGlobalNodes, refreshWarehouses,
     refreshFinanceCategories, refreshFinanceAccountTypes,
     refreshProducts, refreshOrders, refreshProdRecords, refreshPMP,
+    refreshPrintTemplates,
   ]);
 
   return (

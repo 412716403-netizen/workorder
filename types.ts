@@ -260,10 +260,20 @@ export interface PlanFormFieldConfig {
   showInDetail: boolean;
 }
 
+/** 计划单「列表上打印」：是否显示入口、可选模板范围（空数组表示全部模板） */
+export interface PlanListPrintSettings {
+  /** 在计划单列表显示「打印」按钮，默认 true */
+  showPrintButton?: boolean;
+  /** 勾选后仅这些模板出现在选择器中；空数组或未设置表示不限制（全部模板） */
+  allowedTemplateIds?: string[];
+}
+
 /** 计划单表单配置：列表/新增/详情页显示哪些字段，及自定义项 */
 export interface PlanFormSettings {
   standardFields: PlanFormFieldConfig[];
   customFields: PlanFormFieldConfig[];
+  /** 列表打印入口与模板范围 */
+  listPrint?: PlanListPrintSettings;
 }
 
 /** 采购订单表单配置：结构同计划单，用于列表/新增/详情页字段显示控制 */
@@ -274,6 +284,206 @@ export type PurchaseBillFormSettings = PlanFormSettings;
 
 /** 工单表单配置：结构同计划单，用于工单列表/新增/详情页字段显示控制 */
 export type OrderFormSettings = PlanFormSettings;
+
+// ── 打印模板（标签 / 单据可视化设计） ──
+
+export type PrintBodyElementType = 'text' | 'qrcode' | 'line' | 'rect' | 'image' | 'dynamicTable' | 'dynamicList';
+
+/** 打印图片：本地上传存 data URL；地址/字段可含 {{}} 占位符 */
+export type PrintImageSourceType = 'upload' | 'url' | 'field';
+
+export interface PrintImageElementConfig {
+  sourceType: PrintImageSourceType;
+  /** 上传为 data URL；地址为 http(s) 或相对路径；字段为占位模板如 {{产品.imageUrl}} */
+  src: string;
+  /** 不透明度 0–100，默认 100 */
+  opacityPct?: number;
+  /** true：等比适配（object-fit: contain）；false：拉伸铺满 */
+  keepAspectRatio?: boolean;
+  /** 图片固有宽高比 width/height；有则拖拽与改宽高时按比例联动 */
+  naturalAspectRatio?: number;
+}
+
+export interface PrintTextElementConfig {
+  content: string;
+  fontSizePt: number;
+  fontWeight: 'normal' | 'bold';
+  textAlign: 'left' | 'center' | 'right';
+  color: string;
+  displayFormat?: 'text' | 'number';
+  thousandSeparator?: boolean;
+  uppercase?: boolean;
+  /** 将文本内容编码为二维码显示（与独立二维码组件二选一场景） */
+  renderAsQr?: boolean;
+}
+
+export interface PrintQRCodeElementConfig {
+  content: string;
+}
+
+export interface PrintLineElementConfig {
+  thicknessMm: number;
+  lineStyle: 'solid' | 'dashed' | 'dotted';
+  color: string;
+  /** 与水平方向夹角（逆时针为正），单位度；0 为水平。竖线历史数据会在归一化时转为 width=长度、height=粗细、angleDeg=90 */
+  angleDeg?: number;
+}
+
+export interface PrintRectElementConfig {
+  borderWidthMm: number;
+  borderColor: string;
+  lineStyle: 'solid' | 'dashed' | 'dotted';
+  fillColor: string;
+  cornerRadiusMm: number;
+}
+
+export interface PrintTableElementConfig {
+  rows: number;
+  cols: number;
+  borderStyle: 'solid' | 'dashed' | 'none';
+  borderColor: string;
+  /** 单元格文案，key 为 `r-c` */
+  cells: Record<string, string>;
+  /** 单元格水平对齐，key 同 cells；缺省为居中 */
+  cellTextAlign?: Record<string, 'left' | 'center' | 'right'>;
+  /** 单元格文字颜色，key 同 cells；缺省为 #000000 */
+  cellColors?: Record<string, string>;
+  /** 单元格字号 pt，key 同 cells；缺省约 6pt */
+  cellFontSizePt?: Record<string, number>;
+  /** 单元格字重，key 同 cells；缺省为常规 */
+  cellFontWeight?: Record<string, 'normal' | 'bold'>;
+}
+
+/** 动态列表绑定的业务数据源（决定推荐字段；占位符仍可按需写任意 {{}}） */
+export type PrintDynamicListDataSource = 'plan' | 'order' | 'product';
+
+export interface PrintDynamicListColumn {
+  id: string;
+  headerLabel: string;
+  /** 单元格占位，如 {{工单.orderNumber}} */
+  contentTemplate: string;
+  textAlign: 'left' | 'center' | 'right';
+  color: string;
+  /** 数据行字号 pt；未设置则用组件级 fontSizePt */
+  fontSizePt?: number;
+  /** 数据行字重；未设置则为常规 */
+  fontWeight?: 'normal' | 'bold';
+  /** 表头该列字号 pt；未设置则用 headerFontSizePt */
+  headerFontSizePt?: number;
+  /**
+   * 表头该列字重；未设置则为半粗(600)
+   * `normal` | `bold` 覆盖默认
+   */
+  headerFontWeight?: 'normal' | 'bold';
+}
+
+export interface PrintDynamicListElementConfig {
+  dataSource: PrintDynamicListDataSource;
+  /** 数据列数（不含序号列）；与 columns 长度保持一致 */
+  dataColumnCount: number;
+  showHeader: boolean;
+  showSerial: boolean;
+  serialHeaderLabel: string;
+  borderStyle: 'solid' | 'dashed' | 'none';
+  borderColor: string;
+  headerBackgroundColor: string;
+  headerFontSizePt: number;
+  fontSizePt: number;
+  columns: PrintDynamicListColumn[];
+  /** 序号列宽度 mm；未设置或 0 则按比例自动分配 */
+  serialColumnWidthMm?: number;
+  /** 各数据列宽度 mm，与列顺序对应；缺项或 0 表示该列参与均分剩余空间 */
+  dataColumnWidthsMm?: number[];
+  /** 表头行高度 mm；未设置或 0 则按内容自动 */
+  headerRowHeightMm?: number;
+  /** 数据行高度 mm；未设置或 0 则占满组件内除表头外的剩余高度 */
+  bodyRowHeightMm?: number;
+}
+
+export type PrintElementConfig =
+  | PrintTextElementConfig
+  | PrintQRCodeElementConfig
+  | PrintLineElementConfig
+  | PrintRectElementConfig
+  | PrintImageElementConfig
+  | PrintTableElementConfig
+  | PrintDynamicListElementConfig;
+
+export interface PrintBodyElement {
+  id: string;
+  type: PrintBodyElementType;
+  /** 相对可打印内容区左上角，单位 mm */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  zIndex: number;
+  locked?: boolean;
+  repeatPerPage?: boolean;
+  config: PrintElementConfig;
+}
+
+export type HeaderFooterSlot = 'left' | 'center' | 'right';
+
+export interface PrintHeaderFooterItem {
+  slot: HeaderFooterSlot;
+  content: string;
+  fontSizePt: number;
+  fontWeight: 'normal' | 'bold';
+  textAlign: 'left' | 'center' | 'right';
+  color: string;
+}
+
+export interface PrintHeaderFooterConfig {
+  heightMm: number;
+  backgroundColor: string;
+  borderWidthMm: number;
+  borderColor: string;
+  items: PrintHeaderFooterItem[];
+}
+
+/** 动态列表多行打印时的行数据；列模板用 {{行.字段名}}，入口需传入（如 buildPrintListRowsFromOrderItems） */
+export type PrintListRow = Record<string, string | number | undefined | null>;
+
+/** 打印上下文：预览/打印时解析占位符 */
+export interface PrintRenderContext {
+  plan?: PlanOrder;
+  order?: ProductionOrder;
+  product?: Product;
+  milestoneName?: string;
+  completedQuantity?: number;
+  page?: { current: number; total: number };
+  /** 存在且非空时，动态列表按行渲染并按组件高度自动分页（与 ctx.page.total 取较大者） */
+  printListRows?: PrintListRow[];
+  /**
+   * 渲染某一明细行单元格时由引擎注入，业务勿手动赋值
+   * @internal
+   */
+  listRow?: PrintListRow;
+}
+
+/** 纸张可打印区内边距（mm），未设置时按 0 处理以兼容旧模板 */
+export interface PrintPaperMarginsMm {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+export interface PrintTemplate {
+  id: string;
+  name: string;
+  paperSize: { widthMm: number; heightMm: number };
+  /** 纸张内边距（mm），作用于整张纸内的内容区 */
+  paperMarginsMm?: PrintPaperMarginsMm;
+  /** 纸张底色（可打印区外侧仍为白时可与边距配合） */
+  paperBackgroundColor?: string;
+  header?: PrintHeaderFooterConfig;
+  footer?: PrintHeaderFooterConfig;
+  elements: PrintBodyElement[];
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface MilestoneReport {
   id: string;

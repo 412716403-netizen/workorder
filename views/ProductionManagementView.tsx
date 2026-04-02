@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { 
   PlanOrder, ProductionOrder, Product, BOM,
-  ProductionOpRecord, GlobalNodeTemplate, ProdOpType, ProductCategory, AppDictionaries, Worker, Equipment, PlanFormSettings, OrderFormSettings, Partner, PartnerCategory, ProductionLinkMode, ProductMilestoneProgress, ProcessSequenceMode, Warehouse
+  ProductionOpRecord, GlobalNodeTemplate, ProdOpType, ProductCategory, AppDictionaries, Worker, Equipment, PlanFormSettings, OrderFormSettings, Partner, PartnerCategory, ProductionLinkMode, ProductMilestoneProgress, ProcessSequenceMode, Warehouse, PrintTemplate
 } from '../types';
 const PlanOrderListView = lazy(() => import('./PlanOrderListView'));
 const OrderListView = lazy(() => import('./OrderListView'));
@@ -49,6 +49,9 @@ interface ProductionManagementViewProps {
   partnerCategories: PartnerCategory[];
   planFormSettings: PlanFormSettings;
   onUpdatePlanFormSettings: (settings: PlanFormSettings) => void;
+  printTemplates: PrintTemplate[];
+  onUpdatePrintTemplates: (list: PrintTemplate[]) => void | Promise<void>;
+  onRefreshPrintTemplates?: () => void | Promise<void>;
   orderFormSettings: OrderFormSettings;
   onUpdateOrderFormSettings: (settings: OrderFormSettings) => void;
   onCreatePlan: (plan: PlanOrder) => void;
@@ -82,7 +85,7 @@ type MainTab = 'plans' | 'orders' | ProdOpType;
 
 const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
   productionLinkMode = 'order', processSequenceMode = 'free', allowExceedMaxReportQty = true, plans, orders, products, categories, dictionaries, workers, equipment, prodRecords, psiRecords = [], warehouses = [], globalNodes, boms,   partners, partnerCategories,
-  planFormSettings, onUpdatePlanFormSettings, orderFormSettings, onUpdateOrderFormSettings,
+  planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orderFormSettings, onUpdateOrderFormSettings,
   onCreatePlan, onUpdateProduct, onUpdatePlan, onSplitPlan, onConvertToOrder, onDeletePlan, onAddRecord, onAddRecordBatch, onUpdateRecord, onDeleteRecord, onAddPSIRecord, onAddPSIRecordBatch, onReportSubmit, onCreateSubPlan, onCreateSubPlans, onUpdateOrder, onDeleteOrder, onUpdateReport, onDeleteReport,
   productMilestoneProgresses = [], onReportSubmitProduct, onUpdateReportProduct, onDeleteReportProduct,
   userPermissions, tenantRole
@@ -242,6 +245,10 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
             psiRecords={psiRecords}
             planFormSettings={planFormSettings}
             onUpdatePlanFormSettings={onUpdatePlanFormSettings}
+            printTemplates={printTemplates}
+            onUpdatePrintTemplates={onUpdatePrintTemplates}
+            onRefreshPrintTemplates={onRefreshPrintTemplates}
+            orders={orders}
             onCreatePlan={hasProdPerm('production:plans:create') ? onCreatePlan : undefined as any}
             onUpdateProduct={onUpdateProduct}
             onUpdatePlan={hasProdPerm('production:plans:edit') ? onUpdatePlan : undefined}
