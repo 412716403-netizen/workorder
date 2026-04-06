@@ -155,7 +155,7 @@ npx prisma studio
 | PUT | `/api/admin/users/:id` | 更新显示名、邮箱、角色、状态、`accountExpiresAt`（到期时间，null=永不到期）、重置密码等 |
 | DELETE | `/api/admin/users/:id` | 删除用户（不可删自己、不可删唯一管理员） |
 
-前端侧栏 **账号管理** 即对接上述接口。用户若已设置 **账号到期时间**，到期后将无法登录与刷新 token（提示联系管理员续期）；更新库结构后请在 `backend` 执行 **`npx prisma db push`**。
+前端侧栏 **账号管理** 即对接上述接口。用户若已设置 **账号到期时间**，到期后将无法登录与刷新 token（提示联系管理员续期）；更新库结构后请在 `backend` 执行 **`npx prisma migrate deploy`**（或 `npm run db:deploy`）。
 
 ### 系统设置
 

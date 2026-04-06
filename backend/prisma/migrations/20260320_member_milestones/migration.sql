@@ -1,2 +1,3 @@
--- AlterTable: add assigned_milestone_ids to tenant_memberships
-ALTER TABLE "tenant_memberships" ADD COLUMN "assigned_milestone_ids" JSONB NOT NULL DEFAULT '[]';
+-- tenant_memberships.assigned_milestone_ids 已吸收到
+-- 20260318_multi_tenant 基线迁移中。
+-- 保留该迁移目录，仅用于维持既有迁移历史顺序稳定。

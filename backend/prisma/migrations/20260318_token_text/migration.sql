@@ -1,2 +1,2 @@
--- AlterTable: widen refresh_tokens.token from varchar(500) to text
-ALTER TABLE "refresh_tokens" ALTER COLUMN "token" TYPE TEXT;
+-- refresh_tokens.token 已在 20260318_multi_tenant 基线迁移中直接定义为 TEXT。
+-- 保留该迁移目录，仅用于维持既有迁移历史顺序稳定。

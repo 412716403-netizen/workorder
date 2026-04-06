@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 一键：① 启动 PostgreSQL（Docker，可选）② 建表 ③ 种子数据
+# 一键：① 启动 PostgreSQL（Docker，可选）② 应用迁移 ③ 种子数据
 set -e
 cd "$(dirname "$0")/.."
 
@@ -67,14 +67,14 @@ else
   fi
 fi
 
-echo ">>> 步骤 2/3：同步表结构（prisma db push）..."
+echo ">>> 步骤 2/3：应用 Prisma 迁移（prisma migrate deploy）..."
 npx prisma generate
 set +e
-npx prisma db push --accept-data-loss 2>&1
-PUSH_EXIT=$?
+npx prisma migrate deploy 2>&1
+DEPLOY_EXIT=$?
 set -e
 
-if [[ $PUSH_EXIT -ne 0 ]]; then
+if [[ $DEPLOY_EXIT -ne 0 ]]; then
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "  连不上 PostgreSQL（常见原因与解决办法）"

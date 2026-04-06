@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 无 Docker 时：用 Homebrew 安装/启动 PostgreSQL，再建库、改 .env、push、seed
+# 无 Docker 时：用 Homebrew 安装/启动 PostgreSQL，再建库、改 .env、deploy、seed
 set -e
 cd "$(dirname "$0")/.."
 
@@ -61,9 +61,9 @@ fi
 
 export DATABASE_URL="$PG_URL"
 
-echo ">>> 建表（prisma db push）..."
+echo ">>> 应用 Prisma 迁移（prisma migrate deploy）..."
 npx prisma generate
-npx prisma db push --accept-data-loss
+npx prisma migrate deploy
 
 echo ">>> 种子数据（admin / admin123）..."
 npm run db:seed
