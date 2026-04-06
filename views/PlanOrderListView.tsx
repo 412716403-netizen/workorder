@@ -73,8 +73,8 @@ import { itemCodesApi, planVirtualBatchesApi } from '../services/api';
 import { buildPrintListRowsFromItemCodes, type ItemCodePrintContext } from '../utils/printItemCodeRows';
 import { buildVirtualBatchPrintRow } from '../utils/printVirtualBatch';
 import { formatBatchSerialLabel, formatItemCodeSerialLabel } from '../utils/serialLabels';
-import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
-import { SearchableProductSelect } from '../components/SearchableProductSelect';
+import SplitPlanModal from './plan-order-list/SplitPlanModal';
+import PlanFormConfigModal from './plan-order-list/PlanFormConfigModal';
 import { SearchablePartnerSelect } from '../components/SearchablePartnerSelect';
 import { PrintTemplateManager } from '../components/PrintTemplateManager';
 import { HiddenPrintSlot, usePrintTemplateAction } from '../components/print-editor/PrintPreview';
@@ -87,6 +87,7 @@ import {
   secondaryToolbarButtonClass,
   sectionTitleClass,
 } from '../styles/uiDensity';
+import PlanFormModal from './plan-order-list/PlanFormModal';
 
 function getFileExtFromDataUrl(dataUrl: string): string {
   const m = dataUrl.match(/^data:([^;]+);/);
@@ -473,14 +474,10 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   const [isSaving, setIsSaving] = useState(false);
   const [tempNodeRates, setTempNodeRates] = useState<Record<string, number>>({});
   const [showPlanFormConfigModal, setShowPlanFormConfigModal] = useState(false);
-  const [planFormConfigTab, setPlanFormConfigTab] = useState<'fields' | 'print'>('fields');
-  const [planFormConfigDraft, setPlanFormConfigDraft] = useState<PlanFormSettings | null>(null);
   const [planPrintPickerOpen, setPlanPrintPickerOpen] = useState(false);
   const [planPrintPickerPlan, setPlanPrintPickerPlan] = useState<PlanOrder | null>(null);
   const [planListPrintRun, setPlanListPrintRun] = useState<{ template: PrintTemplate; plan: PlanOrder } | null>(null);
   const [splitPlanId, setSplitPlanId] = useState<string | null>(null);
-  const splitNumParts = 2;
-  const [splitQuantities, setSplitQuantities] = useState<number[][]>([]);
   /** 点击图片查看大图：url 为要放大的图片地址 */
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
@@ -538,29 +535,6 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   /** 点击「已生成采购单」时展示该物料关联的采购订单列表，值为 materialId */
   const [relatedPOsMaterialId, setRelatedPOsMaterialId] = useState<string | null>(null);
 
-  const today = new Date().toISOString().split('T')[0];
-  const [form, setForm] = useState<{
-    categoryId: string;
-    productId: string;
-    customer: string;
-    dueDate: string;
-    createdAt: string;
-    variantQuantities: Record<string, number>;
-    singleQuantity: number;
-    customData: Record<string, any>;
-  }>({
-    categoryId: '',
-    productId: '',
-    customer: '',
-    dueDate: '',
-    createdAt: today,
-    variantQuantities: {},
-    singleQuantity: 0,
-    customData: {}
-  });
-
-  const selectedProduct = products.find(p => p.id === form.productId);
-  const activeCategory = categories.find(c => c.id === form.categoryId);
   const viewPlan = plans.find(p => p.id === viewDetailPlanId);
   const viewProduct = products.find(p => p.id === viewPlan?.productId);
   /** 子工单详情页物料状态同步父工单：用于 relatedPOsByMaterial、subPlan 判断等 */
@@ -1113,72 +1087,22 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   }, [viewPlan]);
 
   const groupedVariants = useMemo((): Record<string, ProductVariant[]> => {
-    const prod = viewProduct || selectedProduct;
-    if (!prod || !prod.variants) return {};
+    if (!viewProduct || !viewProduct.variants) return {};
     const groups: Record<string, ProductVariant[]> = {};
-    prod.variants.forEach(v => {
+    viewProduct.variants.forEach(v => {
       if (!groups[v.colorId]) groups[v.colorId] = [];
       groups[v.colorId].push(v);
     });
     return groups;
-  }, [selectedProduct, viewProduct]);
+  }, [viewProduct]);
 
   const productNodes = useMemo(() => {
-    const prod = viewProduct || selectedProduct;
-    if (!prod || !prod.milestoneNodeIds) return [];
-    return prod.milestoneNodeIds
+    if (!viewProduct || !viewProduct.milestoneNodeIds) return [];
+    return viewProduct.milestoneNodeIds
       .map(id => globalNodes.find(gn => gn.id === id))
       .filter((n): n is GlobalNodeTemplate => Boolean(n));
-  }, [viewProduct, selectedProduct, globalNodes]);
+  }, [viewProduct, globalNodes]);
 
-  /** 按新建顺序生成下一个计划单号：PLN1, PLN2, PLN3...（兼容旧格式 PLN-数字、PLN数字-1 等） */
-  const getNextPlanNumber = (): string => {
-    const nums = plans
-      .map(p => {
-        const m = p.planNumber.match(/^PLN-?(\d+)/);
-        return m ? parseInt(m[1], 10) : 0;
-      })
-      .filter(n => n > 0);
-    const next = nums.length > 0 ? Math.max(...nums) + 1 : 1;
-    return `PLN${next}`;
-  };
-
-  const handleCreate = () => {
-    if (!selectedProduct) return;
-    if ((selectedProduct.milestoneNodeIds?.length ?? 0) === 0) {
-      toast.error("该产品未配置工序，不允许创建生产计划。请先在产品管理中为该产品添加工序。");
-      return;
-    }
-    const items: PlanItem[] = [];
-    if (activeCategory?.hasColorSize && selectedProduct.variants && selectedProduct.variants.length > 0) {
-      (Object.entries(form.variantQuantities) as [string, number][]).forEach(([vId, qty]) => {
-        if (qty > 0) items.push({ variantId: vId, quantity: qty });
-      });
-    } else {
-      if ((form.singleQuantity as number) > 0) items.push({ quantity: form.singleQuantity as number });
-    }
-    if (items.length === 0) return;
-
-    const newPlan: PlanOrder = {
-      id: `plan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      planNumber: getNextPlanNumber(),
-      productId: form.productId,
-      items,
-      startDate: new Date().toISOString().split('T')[0],
-      dueDate: form.dueDate,
-      status: PlanStatus.APPROVED,
-      customer: form.customer,
-      priority: 'Medium',
-      assignments: {},
-      customData: Object.keys(form.customData || {}).length ? form.customData : undefined,
-      createdAt: form.createdAt || new Date().toISOString().split('T')[0]
-    };
-    
-    onCreatePlan(newPlan);
-    setShowModal(false);
-    const nextToday = new Date().toISOString().split('T')[0];
-    setForm({ categoryId: '', productId: '', customer: '', dueDate: '', createdAt: nextToday, variantQuantities: {}, singleQuantity: 0, customData: {} });
-  };
 
   const handleUpdateDetail = () => {
     if (viewDetailPlanId) {
@@ -1231,38 +1155,10 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
     });
   };
 
-  const updateVariantQty = (vId: string, val: string) => {
-    const qty = parseInt(val) || 0;
-    setForm(prev => ({
-      ...prev,
-      variantQuantities: { ...prev.variantQuantities, [vId]: qty }
-    }));
-  };
 
-  const canSave = useMemo(() => {
-    if (!form.productId) return false;
-    if (activeCategory?.hasColorSize) return (Object.values(form.variantQuantities) as number[]).some(q => (q as number) > 0);
-    return (form.singleQuantity as number) > 0;
-  }, [form, activeCategory]);
-
-  const splitPlan = splitPlanId ? plans.find(p => p.id === splitPlanId) : null;
+  const splitPlan = splitPlanId ? plans.find(p => p.id === splitPlanId) ?? null : null;
   const openSplit = (plan: PlanOrder) => {
     setSplitPlanId(plan.id);
-    setSplitQuantities(plan.items.map(item => [0, item.quantity]));
-  };
-  const setSplitQty = (itemIndex: number, partIndex: number, value: number) => {
-    if (splitPlan && splitNumParts === 2) {
-      const original = splitPlan.items[itemIndex]?.quantity ?? 0;
-      const clamped = Math.max(0, Math.min(original, value));
-      const otherPartIndex = 1 - partIndex;
-      const otherValue = original - clamped;
-      setSplitQuantities(prev => prev.map((row, i) => {
-        if (i !== itemIndex) return row;
-        return row.map((v, j) => j === partIndex ? clamped : j === otherPartIndex ? otherValue : v);
-      }));
-      return;
-    }
-    setSplitQuantities(prev => prev.map((row, i) => i === itemIndex ? row.map((v, j) => j === partIndex ? value : v) : row));
   };
   /** 从计划单号解析拆分组：仅当单号形如「原单-1」「原单-2」…「原单-99」时视为拆分单（本系统拆分生成），避免把 PLN-327611 等普通编号误判为拆分组 */
   const getSplitGroupKey = (planNumber: string): string | null => {
@@ -1614,31 +1510,6 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
     return blocks;
   }, [sortedPlansForList, rootToPlans, parentToSubPlans]);
 
-  const splitRowSums = useMemo(() => splitPlan ? splitQuantities.map((row, i) => ({ sum: row.reduce((a, b) => a + b, 0), original: splitPlan.items[i]?.quantity ?? 0 })) : [], [splitPlan, splitQuantities]);
-  const splitValid = splitRowSums.length === 0 || splitRowSums.every(({ sum, original }) => sum === original);
-  const confirmSplit = () => {
-    if (!splitPlanId || !splitPlan || !splitValid) return;
-    const newPlans: PlanOrder[] = [];
-    for (let j = 0; j < splitNumParts; j++) {
-      const partItems = splitPlan.items.map((item, i) => ({ variantId: item.variantId, quantity: splitQuantities[i]?.[j] ?? 0 }));
-      if (partItems.every(it => it.quantity === 0)) continue;
-      newPlans.push({
-        ...splitPlan,
-        id: `plan-${Date.now()}-${j}`,
-        planNumber: `${splitPlan.planNumber}-${j + 1}`,
-        items: partItems,
-        assignments: {},
-        createdAt: new Date().toISOString().split('T')[0]
-      });
-    }
-    if (newPlans.length < 2) {
-      toast.error('请拆成至少两份且每份数量大于 0。');
-      return;
-    }
-    onSplitPlan(splitPlanId, newPlans);
-    setSplitPlanId(null);
-  };
-
   return (
     <>
     <HiddenPrintSlot template={planListActivePrintTemplate} ctx={planListActivePrintCtx} printRef={planListPrintRef} />
@@ -1651,16 +1522,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={() => {
-              setPlanFormConfigDraft(JSON.parse(JSON.stringify(planFormSettings)));
-              setPlanFormConfigTab('fields');
-              setShowPlanFormConfigModal(true);
-            }}
+            onClick={() => setShowPlanFormConfigModal(true)}
             className={secondaryToolbarButtonClass}
           >
             <Sliders className="w-4 h-4 shrink-0" /> 表单配置
           </button>
-          <button type="button" onClick={() => { const t = new Date().toISOString().split('T')[0]; setForm(prev => ({ ...prev, dueDate: '', createdAt: t })); setShowModal(true); }} className={primaryToolbarButtonClass}>
+          <button type="button" onClick={() => setShowModal(true)} className={primaryToolbarButtonClass}>
             <Plus className="w-4 h-4 shrink-0" /> 创建生产计划
           </button>
         </div>
@@ -1973,187 +1840,21 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
           )}
         </div>
 
-      {showModal && (
-        <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 sm:p-6">
-          <div
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            onClick={() => setShowModal(false)}
-            aria-hidden
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="plan-create-modal-title"
-            className="relative flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in zoom-in-95 fade-in duration-200"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex shrink-0 flex-col gap-3 border-b border-slate-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <h2 id="plan-create-modal-title" className="text-lg font-semibold text-slate-900 tracking-tight">
-                  新建生产计划
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">填写基础信息与生产数量后保存</p>
-              </div>
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  取消
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCreate}
-                  disabled={!canSave}
-                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  <Save className="w-4 h-4 shrink-0" /> 确认保存计划单
-                </button>
-              </div>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/80 p-4 sm:p-6 custom-scrollbar">
-          <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-10">
-            <div className="space-y-8">
-              <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
-                <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600"><FileText className="w-5 h-5" /></div>
-                <h3 className={sectionTitleClass}>1. 计划基础信息</h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2 space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">目标生产品项 (支持搜索与分类筛选)</label>
-                  <div className="flex items-stretch gap-4">
-                    {selectedProduct && (
-                      <div className="shrink-0">
-                        {selectedProduct.imageUrl ? (
-                          <button type="button" onClick={() => setImagePreviewUrl(selectedProduct.imageUrl!)} className="rounded-xl overflow-hidden border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none block">
-                            <img src={selectedProduct.imageUrl} alt={selectedProduct.name} className="w-16 h-16 object-cover block" />
-                          </button>
-                        ) : (
-                          <div className="w-16 h-16 rounded-xl bg-slate-200 flex items-center justify-center border border-slate-100"><Package className="w-8 h-8 text-slate-400" /></div>
-                        )}
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                  <SearchableProductSelect
-                    options={products} 
-                    categories={categories}
-                    value={form.productId} 
-                    onChange={(pId) => { const p = products.find(x => x.id === pId); setForm({ ...form, productId: pId, categoryId: p?.categoryId ?? '', variantQuantities: {}, singleQuantity: 0 }); }}
-                    onFilePreview={(url, type) => { setFilePreviewUrl(url); setFilePreviewType(type); }}
-                  />
-                </div>
-                </div>
-                </div>
-                {planFormSettings.standardFields.find(f => f.id === 'customer')?.showInCreate !== false && productionLinkMode !== 'product' && (
-                  <div className="md:col-span-2 space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">计划客户（合作单位）</label>
-                    <SearchablePartnerSelect
-                      options={partners}
-                      categories={partnerCategories}
-                      value={form.customer}
-                      onChange={customerName => setForm({ ...form, customer: customerName })}
-                      placeholder="搜索并选择合作单位..."
-                    />
-                  </div>
-                )}
-                {planFormSettings.standardFields.find(f => f.id === 'dueDate')?.showInCreate !== false && (
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">期望交期截止</label>
-                  <input type="date" value={form.dueDate} onChange={e => setForm({...form, dueDate: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-                </div>
-                )}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">添加日期</label>
-                  <input type="date" value={form.createdAt} onChange={e => setForm({...form, createdAt: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-                </div>
-                {planFormSettings.customFields.filter(f => f.showInCreate).map(cf => (
-                  <div key={cf.id} className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{cf.label}</label>
-                    {cf.type === 'date' ? (
-                      <input type="date" value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-                    ) : cf.type === 'number' ? (
-                      <input type="number" value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value === '' ? '' : Number(e.target.value) } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-                    ) : cf.type === 'select' ? (
-                      <select value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]">
-                        <option value="">请选择</option>
-                        {(cf.options ?? []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                      </select>
-                    ) : (
-                      <input type="text" value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" placeholder={`${cf.label}`} />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {selectedProduct && (
-              <div className="pt-10 border-t border-slate-50 space-y-8 animate-in fade-in slide-in-from-top-4">
-                <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
-                  <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600"><Layers className="w-5 h-5" /></div>
-                  <h3 className={sectionTitleClass}>2. 生产数量明细录入</h3>
-                </div>
-
-                {activeCategory?.hasColorSize && selectedProduct.variants && selectedProduct.variants.length > 0 ? (
-                  <div className="space-y-4">
-                    {sortedVariantColorEntries(groupedVariants, (viewProduct || selectedProduct)?.colorIds, (viewProduct || selectedProduct)?.sizeIds).map(([colorId, colorVariants]) => {
-                      const color = dictionaries.colors.find(c => c.id === colorId);
-                      return (
-                        <div key={colorId} className="bg-slate-50/50 p-6 rounded-[32px] border border-slate-100 flex flex-col md:flex-row md:items-center gap-8 group hover:border-indigo-200 transition-all overflow-hidden">
-                          <div className="flex items-center gap-3 w-40 shrink-0">
-                            <div className="w-5 h-5 rounded-full border border-slate-200 shadow-inner" style={{backgroundColor: color?.value}}></div>
-                            <span className="text-sm font-black text-slate-700">{color?.name}</span>
-                          </div>
-                          <div className="flex-1 flex flex-wrap gap-4">
-                            {(colorVariants as ProductVariant[]).map(v => {
-                              const size = dictionaries.sizes.find(s => s.id === v.sizeId);
-                              return (
-                                <div key={v.id} className="flex flex-col gap-1.5 w-24">
-                                  <span className="text-[10px] font-black text-slate-400 text-center uppercase tracking-tighter">{size?.name}</span>
-                                  <input 
-                                    type="number" 
-                                    placeholder="0"
-                                    value={form.variantQuantities[v.id] || ''} 
-                                    onChange={e => updateVariantQty(v.id, e.target.value)}
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-2 px-2 text-sm font-black text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500 text-center shadow-sm" 
-                                  />
-                                </div>
-                              )
-                            })}
-                          </div>
-                          <div className="hidden md:block shrink-0 text-right bg-white/60 px-4 py-2 rounded-2xl border border-slate-100">
-                             <p className="text-[9px] font-black text-slate-300 uppercase">颜色小计</p>
-                             <p className="text-sm font-black text-slate-600">{(colorVariants as ProductVariant[]).reduce((s, v) => s + (form.variantQuantities[v.id] || 0), 0)}</p>
-                          </div>
-                        </div>
-                      )
-                    })}
-                    <div className="flex justify-end p-4 bg-indigo-600 rounded-[24px] text-white shadow-xl shadow-indigo-100">
-                       <div className="flex items-center gap-4">
-                          <p className="text-xs font-bold opacity-80">计划生产汇总总量:</p>
-                          <p className="text-xl font-black">{(Object.values(form.variantQuantities) as number[]).reduce((s, q) => s + q, 0)} <span className="text-xs font-medium">{getUnitName(form.productId)}</span></p>
-                       </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="max-w-xs space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">计划生产总量 ({getUnitName(form.productId)})</label>
-                    <input 
-                      type="number" 
-                      value={form.singleQuantity || ''} 
-                      onChange={e => setForm({...form, singleQuantity: parseInt(e.target.value)||0})} 
-                      className="w-full bg-slate-50 border-none rounded-xl py-4 px-6 text-xl font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none shadow-inner" 
-                      placeholder="0"
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <PlanFormModal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        products={products}
+        categories={categories}
+        dictionaries={dictionaries}
+        partners={partners}
+        partnerCategories={partnerCategories}
+        planFormSettings={planFormSettings}
+        plans={plans}
+        productionLinkMode={productionLinkMode}
+        onSave={(plan) => { onCreatePlan(plan); }}
+        onImagePreview={(url) => setImagePreviewUrl(url)}
+        onFilePreview={(url, type) => { setFilePreviewUrl(url); setFilePreviewType(type); }}
+      />
 
       {viewDetailPlanId && viewPlan && viewProduct && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -3340,73 +3041,15 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   );
       })()}
 
-      {splitPlanId && splitPlan && (() => {
-        const splitProduct = products.find(p => p.id === splitPlan.productId);
-        const getItemLabel = (item: PlanItem, index: number) => {
-          if (item.variantId && splitProduct?.variants) {
-            const v = splitProduct.variants.find(x => x.id === item.variantId);
-            if (v) {
-              const color = dictionaries.colors.find(c => c.id === v.colorId);
-              const size = dictionaries.sizes.find(s => s.id === v.sizeId);
-              return `${color?.name ?? ''}-${size?.name ?? ''}`.replace(/^-|-$/g, '') || `规格${index + 1}`;
-            }
-          }
-          return '默认';
-        };
-        return (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setSplitPlanId(null)} />
-            <div className="relative bg-white w-full max-w-4xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
-              <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><Split className="w-5 h-5 text-amber-500" /> 拆分计划单</h3>
-                <button onClick={() => setSplitPlanId(null)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
-              </div>
-              <div className="p-4 space-y-4 overflow-auto">
-                <p className="text-sm text-slate-500">输入计划1数量，计划2自动为剩余</p>
-                <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200">
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">规格/明细</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">原计划数量</th>
-                        {Array.from({ length: splitNumParts }, (_, j) => <th key={j} className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">计划{j + 1}数量</th>)}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {splitPlan.items.map((item, i) => (
-                        <tr key={i} className="hover:bg-slate-50/50">
-                          <td className="px-4 py-3 text-sm font-bold text-slate-700">{getItemLabel(item, i)}</td>
-                          <td className="px-4 py-3 text-sm font-black text-slate-800 text-right">{item.quantity} {splitPlan ? getUnitName(splitPlan.productId) : 'PCS'}</td>
-                          {Array.from({ length: splitNumParts }, (_, j) => {
-                            const isAuto = splitNumParts === 2 && j === 1;
-                            return (
-                              <td key={j} className="px-4 py-2 text-right">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  readOnly={isAuto}
-                                  value={splitQuantities[i]?.[j] ?? 0}
-                                  onChange={e => setSplitQty(i, j, Math.max(0, parseInt(e.target.value) || 0))}
-                                  className={`w-20 rounded-lg py-1.5 px-2 text-sm font-bold text-right outline-none ${isAuto ? 'bg-slate-100 border border-slate-100 text-slate-500 cursor-default' : 'bg-slate-50 border border-slate-200 text-indigo-600 focus:ring-2 focus:ring-indigo-500'}`}
-                                />
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {!splitValid && <p className="text-rose-600 text-sm font-bold">请确保每一行的「计划数量」之和等于「原计划数量」。</p>}
-              </div>
-              <div className="px-8 py-6 border-t border-slate-100 flex justify-end gap-3">
-                <button onClick={() => setSplitPlanId(null)} className="px-6 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-800">取消</button>
-                <button onClick={confirmSplit} disabled={!splitValid} className="px-8 py-2.5 rounded-xl text-sm font-bold bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 flex items-center gap-2"><Split className="w-4 h-4" /> 确认拆分</button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {splitPlan && (
+        <SplitPlanModal
+          plan={splitPlan}
+          products={products}
+          dictionaries={dictionaries}
+          onSplit={onSplitPlan}
+          onClose={() => setSplitPlanId(null)}
+        />
+      )}
 
       {/* 列表打印：选择模版（仅计划单列表样式，单品码标签请在计划详情「单品码一览」中打印） */}
       {planPrintPickerOpen && planPrintPickerPlan && (() => {
@@ -3707,298 +3350,20 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
       })()}
 
       {/* 计划单表单配置弹窗 */}
-      {showPlanFormConfigModal && planFormConfigDraft && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setShowPlanFormConfigModal(false)} />
-          <div className="relative flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-8 py-6">
-              <div>
-                <h3 className="flex items-center gap-2 text-lg font-black text-slate-900">
-                  <Sliders className="h-5 w-5 text-indigo-500" /> 计划单表单配置
-                </h3>
-                <p className="mt-1 text-xs text-slate-500">
-                  {planFormConfigTab === 'fields'
-                    ? '配置在列表、新增、详情页中显示的字段，可增加自定义项'
-                    : '管理打印模板；列表「打印」仅输出计划单样式，单品码标签在计划详情「单品码一览」中打印'}
-                </p>
-              </div>
-              <button onClick={() => setShowPlanFormConfigModal(false)} className="rounded-full p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-600">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="flex gap-1 border-b border-slate-100 px-6 pt-2">
-              <button
-                type="button"
-                onClick={() => setPlanFormConfigTab('fields')}
-                className={`rounded-t-xl px-4 py-2.5 text-sm font-black transition-colors ${planFormConfigTab === 'fields' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'}`}
-              >
-                字段配置
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void onRefreshPrintTemplates?.();
-                  setPlanFormConfigTab('print');
-                }}
-                className={`flex items-center gap-1.5 rounded-t-xl px-4 py-2.5 text-sm font-black transition-colors ${planFormConfigTab === 'print' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'}`}
-              >
-                <Printer className="h-4 w-4" /> 打印模版
-              </button>
-            </div>
-            {planFormConfigTab === 'print' ? (
-              <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4">
-                <div className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
-                  <h4 className="text-sm font-black text-slate-800">列表打印</h4>
-                  <p className="mt-1 text-xs text-slate-500">
-                    控制计划单列表是否显示「打印」按钮及可选模版（不勾选任何模版表示可选全部）。此处仅用于计划单列表样式打印，不含单品码标签。
-                  </p>
-                  <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-700">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded text-indigo-600"
-                      checked={planFormConfigDraft.listPrint?.showPrintButton !== false}
-                      onChange={e =>
-                        setPlanFormConfigDraft(d =>
-                          d
-                            ? {
-                                ...d,
-                                listPrint: {
-                                  showPrintButton: e.target.checked,
-                                  allowedTemplateIds: d.listPrint?.allowedTemplateIds,
-                                },
-                              }
-                            : d,
-                        )
-                      }
-                    />
-                    在计划单列表显示「打印」按钮
-                  </label>
-                  <p className="mt-3 text-[10px] font-black uppercase tracking-widest text-slate-400">列表可选模版</p>
-                  <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto">
-                    {printTemplates.length === 0 ? (
-                      <span className="text-xs text-slate-400">暂无模版，请在下方新建</span>
-                    ) : (
-                      printTemplates.map(t => {
-                        const restricted = (planFormConfigDraft.listPrint?.allowedTemplateIds?.length ?? 0) > 0;
-                        const checked = restricted ? (planFormConfigDraft.listPrint?.allowedTemplateIds?.includes(t.id) ?? false) : false;
-                        return (
-                          <label
-                            key={t.id}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:border-indigo-200"
-                          >
-                            <input
-                              type="checkbox"
-                              className="h-3.5 w-3.5 rounded text-indigo-600"
-                              checked={checked}
-                              onChange={e => {
-                                setPlanFormConfigDraft(d => {
-                                  if (!d) return d;
-                                  const prev = d.listPrint?.allowedTemplateIds ?? [];
-                                  const set = new Set(prev);
-                                  if (e.target.checked) set.add(t.id);
-                                  else set.delete(t.id);
-                                  const arr = Array.from(set);
-                                  return {
-                                    ...d,
-                                    listPrint: {
-                                      showPrintButton: d.listPrint?.showPrintButton !== false,
-                                      allowedTemplateIds: arr.length > 0 ? arr : undefined,
-                                    },
-                                  };
-                                });
-                              }}
-                            />
-                            {t.name}
-                          </label>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-                <div className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
-                  <h4 className="text-sm font-black text-slate-800">标签打印</h4>
-                  <p className="mt-1 text-xs text-slate-500">
-                    用于<strong className="text-slate-600">计划详情 → 单品码一览 → 打印单品码</strong>，以及批次码行的「打印批次标签」。不勾选任何模版表示可选全部；标签模版建议使用小尺寸纸张，并在动态列表中使用单品码或批次码占位符。
-                  </p>
-                  <p className="mt-3 text-[10px] font-black uppercase tracking-widest text-slate-400">标签可选模版</p>
-                  <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto">
-                    {printTemplates.length === 0 ? (
-                      <span className="text-xs text-slate-400">暂无模版，请在下方新建</span>
-                    ) : (
-                      printTemplates.map(t => {
-                        const restricted = (planFormConfigDraft.labelPrint?.allowedTemplateIds?.length ?? 0) > 0;
-                        const checked = restricted ? (planFormConfigDraft.labelPrint?.allowedTemplateIds?.includes(t.id) ?? false) : false;
-                        return (
-                          <label
-                            key={t.id}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:border-indigo-200"
-                          >
-                            <input
-                              type="checkbox"
-                              className="h-3.5 w-3.5 rounded text-indigo-600"
-                              checked={checked}
-                              onChange={e => {
-                                setPlanFormConfigDraft(d => {
-                                  if (!d) return d;
-                                  const prev = d.labelPrint?.allowedTemplateIds ?? [];
-                                  const set = new Set(prev);
-                                  if (e.target.checked) set.add(t.id);
-                                  else set.delete(t.id);
-                                  const arr = Array.from(set);
-                                  return {
-                                    ...d,
-                                    labelPrint: {
-                                      allowedTemplateIds: arr.length > 0 ? arr : undefined,
-                                    },
-                                  };
-                                });
-                              }}
-                            />
-                            {t.name}
-                          </label>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-                <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto lg:min-h-0 lg:overflow-hidden">
-                  <div className="min-h-0 w-full flex-1 lg:flex lg:min-h-0 lg:flex-col">
-                    <PrintTemplateManager
-                      printTemplates={printTemplates}
-                      onUpdatePrintTemplates={onUpdatePrintTemplates}
-                      planFormSettings={planFormSettings}
-                      plans={plans}
-                      orders={orders}
-                      products={products}
-                    />
-                  </div>
-                </div>
-              </div>
-            ) : (
-            <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
-              <div>
-                <h4 className="text-sm font-black text-slate-600 uppercase tracking-widest mb-3">标准字段显示</h4>
-                <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200">
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">字段</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">列表中</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">新增时</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">详情中</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {planFormConfigDraft.standardFields
-                        .filter(f => !['product', 'totalQty', 'status', 'priority', 'assignedCount', 'planNumber', ...(productionLinkMode === 'product' ? ['customer'] : [])].includes(f.id))
-                        .map(f => (
-                        <tr key={f.id} className="hover:bg-slate-50/50">
-                          <td className="px-4 py-2.5 text-sm font-bold text-slate-800">{f.label}</td>
-                          <td className="px-4 py-2.5 text-center"><input type="checkbox" checked={f.showInList} onChange={e => setPlanFormConfigDraft(d => d ? { ...d, standardFields: d.standardFields.map(sf => sf.id === f.id ? { ...sf, showInList: e.target.checked } : sf) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
-                          <td className="px-4 py-2.5 text-center"><input type="checkbox" checked={f.showInCreate} onChange={e => setPlanFormConfigDraft(d => d ? { ...d, standardFields: d.standardFields.map(sf => sf.id === f.id ? { ...sf, showInCreate: e.target.checked } : sf) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
-                          <td className="px-4 py-2.5 text-center"><input type="checkbox" checked={f.showInDetail} onChange={e => setPlanFormConfigDraft(d => d ? { ...d, standardFields: d.standardFields.map(sf => sf.id === f.id ? { ...sf, showInDetail: e.target.checked } : sf) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-sm font-black text-slate-600 uppercase tracking-widest">自定义单据内容</h4>
-                  <button type="button" onClick={() => setPlanFormConfigDraft(d => d ? { ...d, customFields: [...d.customFields, { id: `custom-${Date.now()}`, label: '新自定义项', type: 'text', showInList: true, showInCreate: true, showInDetail: true }] } : d)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700">
-                    <Plus className="w-3.5 h-3.5" /> 增加
-                  </button>
-                </div>
-                {planFormConfigDraft.customFields.length === 0 ? (
-                  <p className="text-sm text-slate-400 italic py-4 border-2 border-dashed border-slate-100 rounded-2xl text-center">暂无自定义项，点击「增加」添加</p>
-                ) : (
-                  <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200">
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">标签</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">类型</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">选项（下拉时）</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">列表中</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">新增时</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">详情中</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase w-16"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {planFormConfigDraft.customFields.map(cf => (
-                          <tr key={cf.id} className="hover:bg-slate-50/50">
-                            <td className="px-4 py-2"><input type="text" value={cf.label} onChange={e => setPlanFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, label: e.target.value } : c) } : d)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold outline-none" placeholder="标签" /></td>
-                            <td className="px-4 py-2">
-                              <select value={cf.type || 'text'} onChange={e => {
-                                const newType = e.target.value as 'text' | 'number' | 'date' | 'select';
-                                setPlanFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, type: newType, options: newType === 'select' ? (c.options ?? []) : c.options } : c) } : d);
-                              }} className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold outline-none">
-                                <option value="text">文本</option><option value="number">数字</option><option value="date">日期</option><option value="select">下拉</option>
-                              </select>
-                            </td>
-                            <td className="px-4 py-2 align-top">
-                              {cf.type === 'select' ? (
-                                <div className="min-w-[180px] space-y-1.5">
-                                  {(cf.options ?? []).map((opt, idx) => (
-                                    <div key={idx} className="flex items-center gap-1">
-                                      <input type="text" value={opt} onChange={e => setPlanFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, options: (c.options ?? []).map((o, i) => i === idx ? e.target.value : o) } : c) } : d)} className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs font-bold outline-none" placeholder="选项文案" />
-                                      <button type="button" onClick={() => setPlanFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, options: (c.options ?? []).filter((_, i) => i !== idx) } : c) } : d)} className="p-1 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
-                                    </div>
-                                  ))}
-                                  <button type="button" onClick={() => setPlanFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, options: [...(c.options ?? []), '新选项'] } : c) } : d)} className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700">
-                                    <Plus className="w-3.5 h-3.5" /> 添加选项
-                                  </button>
-                                </div>
-                              ) : (
-                                <span className="text-slate-300 text-xs">—</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-2 text-center"><input type="checkbox" checked={cf.showInList} onChange={e => setPlanFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, showInList: e.target.checked } : c) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
-                            <td className="px-4 py-2 text-center"><input type="checkbox" checked={cf.showInCreate} onChange={e => setPlanFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, showInCreate: e.target.checked } : c) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
-                            <td className="px-4 py-2 text-center"><input type="checkbox" checked={cf.showInDetail} onChange={e => setPlanFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, showInDetail: e.target.checked } : c) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
-                            <td className="px-4 py-2"><button type="button" onClick={() => setPlanFormConfigDraft(d => d ? { ...d, customFields: d.customFields.filter(c => c.id !== cf.id) } : d)} className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"><Trash2 className="w-4 h-4" /></button></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-            )}
-            {planFormConfigTab === 'fields' && (
-            <div className="flex justify-end gap-3 border-t border-slate-100 px-8 py-6">
-              <button onClick={() => setShowPlanFormConfigModal(false)} className="px-6 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-800">取消</button>
-              <button onClick={() => { onUpdatePlanFormSettings(planFormConfigDraft); setShowPlanFormConfigModal(false); setPlanFormConfigDraft(null); }} className="flex items-center gap-2 rounded-xl bg-indigo-600 px-8 py-2.5 text-sm font-bold text-white hover:bg-indigo-700">保存配置</button>
-            </div>
-            )}
-            {planFormConfigTab === 'print' && (
-            <div className="flex justify-end gap-3 border-t border-slate-100 px-8 py-6">
-              <button
-                type="button"
-                onClick={() => setShowPlanFormConfigModal(false)}
-                className="px-6 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-800"
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  onUpdatePlanFormSettings(planFormConfigDraft);
-                  setShowPlanFormConfigModal(false);
-                  setPlanFormConfigDraft(null);
-                }}
-                className="flex items-center gap-2 rounded-xl bg-indigo-600 px-8 py-2.5 text-sm font-bold text-white hover:bg-indigo-700"
-              >
-                保存配置
-              </button>
-            </div>
-            )}
-          </div>
-        </div>
-      )}
+      <PlanFormConfigModal
+        open={showPlanFormConfigModal}
+        onClose={() => setShowPlanFormConfigModal(false)}
+        settings={planFormSettings}
+        onSave={onUpdatePlanFormSettings}
+        productionLinkMode={productionLinkMode}
+        printTemplates={printTemplates}
+        onUpdatePrintTemplates={onUpdatePrintTemplates}
+        onRefreshPrintTemplates={onRefreshPrintTemplates}
+        planFormSettings={planFormSettings}
+        plans={plans}
+        orders={orders}
+        products={products}
+      />
 
       {/* 点击产品图查看大图 */}
       {imagePreviewUrl && (
