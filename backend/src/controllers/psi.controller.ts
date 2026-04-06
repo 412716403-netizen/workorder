@@ -1,157 +1,55 @@
 import type { Request, Response, NextFunction } from 'express';
 import { getTenantPrisma } from '../lib/prisma.js';
-import { genId } from '../utils/genId.js';
-import { str, optStr, sanitizeUpdate, sanitizeCreate, normalizeDates } from '../utils/request.js';
-
-const PSI_STRIP_KEYS = new Set([
-  '_savedAtMs', 'receivedQty', 'remainingQty',
-]);
-function cleanPsi(data: Record<string, unknown>) {
-  for (const k of PSI_STRIP_KEYS) delete data[k];
-  if ('batch' in data) {
-    if (!('batchNo' in data)) data.batchNo = data.batch;
-    delete data.batch;
-  }
-  return data;
-}
+import { str, optStr } from '../utils/request.js';
+import * as psiService from '../services/psi.service.js';
 
 export async function listRecords(req: Request, res: Response, next: NextFunction) {
   try {
     const db = getTenantPrisma(req.tenantId!);
-    const type = optStr(req.query.type);
-    const productId = optStr(req.query.productId);
-    const docNumber = optStr(req.query.docNumber);
-    const partnerId = optStr(req.query.partnerId);
-    const where: Record<string, unknown> = {};
-    if (type) where.type = type;
-    if (productId) where.productId = productId;
-    if (docNumber) where.docNumber = docNumber;
-    if (partnerId) where.partnerId = partnerId;
-    res.json(await db.psiRecord.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }));
+    res.json(await psiService.listRecords(db, {
+      type: optStr(req.query.type),
+      productId: optStr(req.query.productId),
+      docNumber: optStr(req.query.docNumber),
+      partnerId: optStr(req.query.partnerId),
+    }));
   } catch (e) { next(e); }
 }
 
 export async function createRecord(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    const data = cleanPsi(sanitizeCreate(req.body));
-    if (!data.id) data.id = genId('psi');
-    normalizeDates(data);
-    const record = await db.psiRecord.create({ data: data as any });
-    res.status(201).json(record);
-  } catch (e) { next(e); }
+  try { res.status(201).json(await psiService.createRecord(getTenantPrisma(req.tenantId!), req.body)); }
+  catch (e) { next(e); }
 }
 
 export async function createBatchRecords(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    const { records } = req.body;
-    const created = [];
-    for (const r of records) {
-      const data = cleanPsi(sanitizeCreate(r));
-      if (!data.id) data.id = genId('psi');
-      normalizeDates(data);
-      created.push(await db.psiRecord.create({ data: data as any }));
-    }
-    res.status(201).json(created);
-  } catch (e) { next(e); }
+  try { res.status(201).json(await psiService.createBatchRecords(getTenantPrisma(req.tenantId!), req.body.records)); }
+  catch (e) { next(e); }
 }
 
 export async function updateRecord(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    const data = cleanPsi(sanitizeUpdate(req.body));
-    normalizeDates(data);
-    const record = await db.psiRecord.update({ where: { id: str(req.params.id) }, data });
-    res.json(record);
-  } catch (e) { next(e); }
+  try { res.json(await psiService.updateRecord(getTenantPrisma(req.tenantId!), str(req.params.id), req.body)); }
+  catch (e) { next(e); }
 }
 
 export async function replaceRecords(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    const { deleteIds, newRecords } = req.body;
-    if (deleteIds?.length) {
-      await db.psiRecord.deleteMany({ where: { id: { in: deleteIds } } });
-    }
-    for (const r of newRecords || []) {
-      const data = cleanPsi(sanitizeCreate(r));
-      if (!data.id) data.id = genId('psi');
-      normalizeDates(data);
-      await db.psiRecord.create({ data: data as any });
-    }
-    res.json({ message: '已替换' });
-  } catch (e) { next(e); }
+  try { res.json(await psiService.replaceRecords(getTenantPrisma(req.tenantId!), req.body.deleteIds, req.body.newRecords)); }
+  catch (e) { next(e); }
 }
 
 export async function deleteRecord(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    await db.psiRecord.delete({ where: { id: str(req.params.id) } });
-    res.json({ message: '已删除' });
-  } catch (e) { next(e); }
+  try { res.json(await psiService.deleteRecord(getTenantPrisma(req.tenantId!), str(req.params.id))); }
+  catch (e) { next(e); }
 }
 
 export async function deleteBatchRecords(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    const { ids } = req.body;
-    await db.psiRecord.deleteMany({ where: { id: { in: ids } } });
-    res.json({ message: '已删除' });
-  } catch (e) { next(e); }
+  try { res.json(await psiService.deleteBatchRecords(getTenantPrisma(req.tenantId!), req.body.ids)); }
+  catch (e) { next(e); }
 }
 
 export async function getStock(req: Request, res: Response, next: NextFunction) {
   try {
-    const db = getTenantPrisma(req.tenantId!);
-    const productId = optStr(req.query.productId);
-    const warehouseId = optStr(req.query.warehouseId);
-
-    const whereClause: Record<string, unknown> = {
-      type: { in: ['PURCHASE_BILL', 'SALES_BILL', 'TRANSFER', 'STOCKTAKE', 'STOCK_IN'] },
-    };
-    if (productId) whereClause.productId = productId;
-
-    const records = await db.psiRecord.findMany({ where: whereClause });
-
-    const stockMap: Record<string, number> = {};
-
-    for (const r of records) {
-      const pid = r.productId;
-      if (!pid) continue;
-
-      if (r.type === 'PURCHASE_BILL' || r.type === 'STOCK_IN') {
-        if (!warehouseId || r.warehouseId === warehouseId) {
-          stockMap[pid] = (stockMap[pid] || 0) + Number(r.quantity || 0);
-        }
-      } else if (r.type === 'SALES_BILL') {
-        if (!warehouseId || r.warehouseId === warehouseId) {
-          stockMap[pid] = (stockMap[pid] || 0) - Number(r.quantity || 0);
-        }
-      } else if (r.type === 'TRANSFER') {
-        if (warehouseId) {
-          if (r.toWarehouseId === warehouseId) stockMap[pid] = (stockMap[pid] || 0) + Number(r.quantity || 0);
-          if (r.fromWarehouseId === warehouseId) stockMap[pid] = (stockMap[pid] || 0) - Number(r.quantity || 0);
-        }
-      } else if (r.type === 'STOCKTAKE') {
-        if (!warehouseId || r.warehouseId === warehouseId) {
-          stockMap[pid] = Number(r.quantity || 0);
-        }
-      }
-    }
-
-    const prodRecords = await db.productionOpRecord.findMany({
-      where: { type: 'STOCK_IN', ...(productId ? { productId } : {}) },
-    });
-    for (const r of prodRecords) {
-      stockMap[r.productId] = (stockMap[r.productId] || 0) + Number(r.quantity);
-    }
-
-    const result = Object.entries(stockMap).map(([pid, qty]) => ({
-      productId: pid,
-      stock: Math.max(0, qty),
+    res.json(await psiService.getStock(getTenantPrisma(req.tenantId!), {
+      productId: optStr(req.query.productId),
+      warehouseId: optStr(req.query.warehouseId),
     }));
-
-    res.json(result);
   } catch (e) { next(e); }
 }

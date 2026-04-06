@@ -1,187 +1,84 @@
 import type { Request, Response, NextFunction } from 'express';
 import { getTenantPrisma } from '../lib/prisma.js';
-import { genId } from '../utils/genId.js';
-import { str, optStr, sanitizeUpdate, sanitizeCreate } from '../utils/request.js';
+import { str, optStr } from '../utils/request.js';
+import * as masterDataService from '../services/masterData.service.js';
 
 // ── 合作单位 ──
 export async function listPartners(req: Request, res: Response, next: NextFunction) {
   try {
     const db = getTenantPrisma(req.tenantId!);
-    const categoryId = optStr(req.query.categoryId);
-    const search = optStr(req.query.search);
-    const where: Record<string, unknown> = {};
-    if (categoryId) where.categoryId = categoryId;
-    if (search) where.name = { contains: search, mode: 'insensitive' };
-    res.json(await db.partner.findMany({ where, include: { category: true }, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }));
+    res.json(await masterDataService.listPartners(db, { categoryId: optStr(req.query.categoryId), search: optStr(req.query.search) }));
   } catch (e) { next(e); }
 }
 export async function createPartner(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    const data = sanitizeCreate(req.body);
-    if (!data.id) data.id = genId('partner');
-    res.status(201).json(await db.partner.create({ data }));
-  } catch (e) { next(e); }
+  try { res.status(201).json(await masterDataService.createPartner(getTenantPrisma(req.tenantId!), req.body)); }
+  catch (e) { next(e); }
 }
 export async function updatePartner(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    res.json(await db.partner.update({ where: { id: str(req.params.id) }, data: sanitizeUpdate(req.body) }));
-  } catch (e) { next(e); }
+  try { res.json(await masterDataService.updatePartner(getTenantPrisma(req.tenantId!), str(req.params.id), req.body)); }
+  catch (e) { next(e); }
 }
 export async function deletePartner(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    await db.partner.delete({ where: { id: str(req.params.id) } });
-    res.json({ message: '已删除' });
-  } catch (e) { next(e); }
+  try { res.json(await masterDataService.deletePartner(getTenantPrisma(req.tenantId!), str(req.params.id))); }
+  catch (e) { next(e); }
 }
 
 // ── 工人 ──
 export async function listWorkers(req: Request, res: Response, next: NextFunction) {
   try {
     const db = getTenantPrisma(req.tenantId!);
-    const status = optStr(req.query.status);
-    const search = optStr(req.query.search);
-    const where: Record<string, unknown> = {};
-    if (status) where.status = status;
-    if (search) where.name = { contains: search, mode: 'insensitive' };
-    res.json(await db.worker.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }));
+    res.json(await masterDataService.listWorkers(db, { status: optStr(req.query.status), search: optStr(req.query.search) }));
   } catch (e) { next(e); }
 }
 export async function createWorker(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    const data = sanitizeCreate(req.body);
-    if (!data.id) data.id = genId('worker');
-    res.status(201).json(await db.worker.create({ data }));
-  } catch (e) { next(e); }
+  try { res.status(201).json(await masterDataService.createWorker(getTenantPrisma(req.tenantId!), req.body)); }
+  catch (e) { next(e); }
 }
 export async function updateWorker(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    res.json(await db.worker.update({ where: { id: str(req.params.id) }, data: sanitizeUpdate(req.body) }));
-  } catch (e) { next(e); }
+  try { res.json(await masterDataService.updateWorker(getTenantPrisma(req.tenantId!), str(req.params.id), req.body)); }
+  catch (e) { next(e); }
 }
 export async function deleteWorker(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    await db.worker.delete({ where: { id: str(req.params.id) } });
-    res.json({ message: '已删除' });
-  } catch (e) { next(e); }
+  try { res.json(await masterDataService.deleteWorker(getTenantPrisma(req.tenantId!), str(req.params.id))); }
+  catch (e) { next(e); }
 }
 
 // ── 设备 ──
 export async function listEquipment(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    const search = optStr(req.query.search);
-    const where: Record<string, unknown> = {};
-    if (search) where.name = { contains: search, mode: 'insensitive' };
-    res.json(await db.equipment.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }));
-  } catch (e) { next(e); }
+  try { res.json(await masterDataService.listEquipment(getTenantPrisma(req.tenantId!), { search: optStr(req.query.search) })); }
+  catch (e) { next(e); }
 }
 export async function createEquipment(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    const data = sanitizeCreate(req.body);
-    if (!data.id) data.id = genId('eq');
-    res.status(201).json(await db.equipment.create({ data }));
-  } catch (e) { next(e); }
+  try { res.status(201).json(await masterDataService.createEquipment(getTenantPrisma(req.tenantId!), req.body)); }
+  catch (e) { next(e); }
 }
 export async function updateEquipment(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    res.json(await db.equipment.update({ where: { id: str(req.params.id) }, data: sanitizeUpdate(req.body) }));
-  } catch (e) { next(e); }
+  try { res.json(await masterDataService.updateEquipment(getTenantPrisma(req.tenantId!), str(req.params.id), req.body)); }
+  catch (e) { next(e); }
 }
 export async function deleteEquipment(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    await db.equipment.delete({ where: { id: str(req.params.id) } });
-    res.json({ message: '已删除' });
-  } catch (e) { next(e); }
+  try { res.json(await masterDataService.deleteEquipment(getTenantPrisma(req.tenantId!), str(req.params.id))); }
+  catch (e) { next(e); }
 }
 
 // ── 数据字典 ──
 export async function listDictionaries(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    const items = await db.dictionaryItem.findMany({
-      orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
-    });
-    const grouped = {
-      colors: items.filter(i => i.type === 'color'),
-      sizes: items.filter(i => i.type === 'size'),
-      units: items.filter(i => i.type === 'unit'),
-    };
-    res.json(grouped);
-  } catch (e) { next(e); }
+  try { res.json(await masterDataService.listDictionaries(getTenantPrisma(req.tenantId!))); }
+  catch (e) { next(e); }
 }
 export async function createDictionaryItem(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    const data = sanitizeCreate(req.body);
-    if (!data.id) data.id = genId('dict');
-    const type = String(data.type ?? '');
-    const maxRow = await db.dictionaryItem.aggregate({
-      where: { type },
-      _max: { sortOrder: true },
-    });
-    data.sortOrder = (maxRow._max.sortOrder ?? -1) + 1;
-    res.status(201).json(await db.dictionaryItem.create({ data: data as any }));
-  } catch (e) { next(e); }
+  try { res.status(201).json(await masterDataService.createDictionaryItem(getTenantPrisma(req.tenantId!), req.body)); }
+  catch (e) { next(e); }
 }
-
 export async function updateDictionaryItem(req: Request, res: Response, next: NextFunction) {
   try {
-    const db = getTenantPrisma(req.tenantId!);
-    const id = str(req.params.id);
-    const existing = await db.dictionaryItem.findFirst({ where: { id } });
-    if (!existing) {
-      res.status(404).json({ error: '记录不存在' });
-      return;
-    }
-    const raw = sanitizeUpdate(req.body);
-    const nameIn = raw.name;
-    const valueIn = raw.value;
-    const name =
-      typeof nameIn === 'string' ? nameIn.trim() : undefined;
-    const value =
-      typeof valueIn === 'string' ? valueIn.trim() : undefined;
-    if (name !== undefined && !name) {
-      res.status(400).json({ error: '名称不能为空' });
-      return;
-    }
-    const nextName = name ?? existing.name;
-    const nextValue = value !== undefined ? value : existing.value;
-    const dup = await db.dictionaryItem.findFirst({
-      where: {
-        type: existing.type,
-        name: nextName,
-        NOT: { id },
-      },
-    });
-    if (dup) {
-      res.status(400).json({ error: `该类型下已存在「${nextName}」` });
-      return;
-    }
-    res.json(
-      await db.dictionaryItem.update({
-        where: { id },
-        data: {
-          ...(name !== undefined ? { name: nextName } : {}),
-          ...(value !== undefined ? { value: nextValue } : {}),
-        },
-      }),
-    );
+    const result = await masterDataService.updateDictionaryItem(getTenantPrisma(req.tenantId!), str(req.params.id), req.body);
+    if (!result) { res.status(404).json({ error: '记录不存在' }); return; }
+    if ('_validationError' in result) { res.status(400).json({ error: result._validationError }); return; }
+    res.json(result);
   } catch (e) { next(e); }
 }
-
 export async function deleteDictionaryItem(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    await db.dictionaryItem.delete({ where: { id: str(req.params.id) } });
-    res.json({ message: '已删除' });
-  } catch (e) { next(e); }
+  try { res.json(await masterDataService.deleteDictionaryItem(getTenantPrisma(req.tenantId!), str(req.params.id))); }
+  catch (e) { next(e); }
 }
