@@ -2,6 +2,30 @@
 
 基于 Node.js + Express + TypeScript + Prisma + PostgreSQL 的后端服务。
 
+## 先看这些文档
+
+如果你是第一次接手这个仓库，建议先看：
+
+- 项目文档总入口：[`../docs/README.md`](../docs/README.md)
+- 当前架构与迁移现状：[`../docs/06-current-architecture-and-migration-status.md`](../docs/06-current-architecture-and-migration-status.md)
+- 认证 / 租户 / 会话说明：[`../docs/07-auth-tenant-session.md`](../docs/07-auth-tenant-session.md)
+- 打印 / 标签 / 单品码 / 批次码链路：[`../docs/08-printing-and-label-flow.md`](../docs/08-printing-and-label-flow.md)
+
+## 当前后端定位
+
+当前后端已经不是“预留接口层”，而是项目业务真源的重要组成部分，主要负责：
+
+- 认证、租户、权限与多租户数据隔离
+- 系统设置、基础资料、计划、工单、报工、生产操作、进销存、财务等数据持久化
+- 聚合统计、业务校验、状态流转
+- 协作、单品码、虚拟批次等扩展能力
+
+需要注意：
+
+- 业务主数据以后端和数据库为真源
+- 前端仍保留部分会话 / 租户上下文缓存，详见 `docs/07-auth-tenant-session.md`
+- 打印、标签、码管理虽然主要在前端渲染，但依赖后端数据模型与接口闭环，详见 `docs/08-printing-and-label-flow.md`
+
 ## 环境要求
 
 - Node.js 18+
@@ -94,6 +118,17 @@ npx prisma studio
 
 ## API 文档
 
+## 认证与会话模型
+
+当前前后端采用混合会话模型：
+
+- access token：前端内存中维护，请求时通过 `Authorization` 发送
+- refresh：依赖 httpOnly Cookie 静默刷新
+- 用户 / 当前租户上下文：前端会缓存到浏览器，作为页面刷新后的会话恢复辅助
+
+这不表示业务数据仍由前端本地管理；业务主数据已经以后端接口和数据库为准。  
+如果需要理解这层边界，请同时阅读 [`../docs/07-auth-tenant-session.md`](../docs/07-auth-tenant-session.md)。
+
 ### 认证
 
 | 方法 | 路径 | 说明 |
@@ -176,6 +211,25 @@ npx prisma studio
 ### 经营看板
 
 - `GET /api/dashboard/stats` - 统计数据
+
+### 协作、角色与租户
+
+- `/api/tenants` - 租户列表、创建、切换、成员、申请等
+- `/api/roles` - 角色管理
+- `/api/collaboration/*` - 企业协作、外协路线、协作流转
+
+### 码管理
+
+- `/api/item-codes/*` - 单品码生成、列表、作废、扫码
+- `/api/plan-virtual-batches/*` - 虚拟批次创建、批量拆分、作废、扫码
+
+这些能力与打印 / 标签链路强相关，前端文档见 [`../docs/08-printing-and-label-flow.md`](../docs/08-printing-and-label-flow.md)。
+
+## 维护提醒
+
+- 若新增路由 / 控制器 / 数据模型，请同步更新 `docs/04-migration-checklist.md`
+- 若修改认证、租户、会话恢复方式，请同步更新 `docs/07-auth-tenant-session.md`
+- 若修改单品码、虚拟批次、扫码或打印字段，请同步更新 `docs/08-printing-and-label-flow.md`
 
 ## 默认账号
 

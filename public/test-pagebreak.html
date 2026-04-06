@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Page Break Test</title>
+<style>
+@page { size: 30mm 60mm; margin: 0; }
+body { margin: 0; padding: 0; }
+.label {
+  width: 30mm;
+  height: 60mm;
+  box-sizing: border-box;
+  border: 1px dashed #ccc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: sans-serif;
+  font-size: 14px;
+  font-weight: bold;
+  page-break-after: always;
+}
+.label:last-child {
+  page-break-after: auto;
+}
+</style>
+</head>
+<body>
+<div class="label" style="background:#f0f0ff;">标签 1</div>
+<div class="label" style="background:#f0fff0;">标签 2</div>
+<div class="label" style="background:#fff0f0;">标签 3</div>
+<div class="label" style="background:#fffff0;">标签 4</div>
+<div class="label" style="background:#f0ffff;">标签 5</div>
+</body>
+</html>

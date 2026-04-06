@@ -24,6 +24,8 @@ import financeRoutes from './routes/finance.js';
 import dashboardRoutes from './routes/dashboard.js';
 import rolesRoutes from './routes/roles.js';
 import collaborationRoutes from './routes/collaboration.js';
+import itemCodesRoutes from './routes/item-codes.js';
+import planVirtualBatchesRoutes from './routes/plan-virtual-batches.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -97,6 +99,15 @@ app.use('/api/finance',    authMiddleware, requireTenant, requirePermission('fin
 app.use('/api/dashboard',  authMiddleware, requireTenant, requirePermission('dashboard'),  apiLimiter, dashboardRoutes);
 
 app.use('/api/collaboration', authMiddleware, requireTenant, apiLimiter, collaborationRoutes);
+app.use('/api/item-codes',    authMiddleware, requireTenant, requirePermission('production'), apiLimiter, itemCodesRoutes);
+app.use(
+  '/api/plan-virtual-batches',
+  authMiddleware,
+  requireTenant,
+  requirePermission('production'),
+  apiLimiter,
+  planVirtualBatchesRoutes,
+);
 
 app.use(errorHandler);
 

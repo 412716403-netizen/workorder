@@ -112,6 +112,13 @@ function resolvePath(ctx: PrintRenderContext, path: string): unknown {
     const v = ctx.listRow[sub];
     return v;
   }
+  if (ns === '批次') {
+    const b = ctx.virtualBatch;
+    if (!b) return '';
+    const val = b[sub];
+    if (val == null || val === '') return '';
+    return val;
+  }
   if (ns === '系统') {
     if (sub === 'systemTime') return new Date().toLocaleString('zh-CN');
     if (sub === 'pageCurrent' || sub === 'page.current') return String(ctx.page?.current ?? 1);
@@ -131,15 +138,15 @@ function resolvePath(ctx: PrintRenderContext, path: string): unknown {
 /** 替换 {{a.b}} 与 ${a.b} */
 export function resolvePrintPlaceholders(text: string, ctx: PrintRenderContext): string {
   if (!text) return '';
+  const replaceOne = (raw: string, open: string, close: string) => {
+    const trimmed = raw.trim();
+    const v = resolvePath(ctx, trimmed);
+    if (trimmed.startsWith('批次.') && (v === '' || v === undefined)) return '';
+    return v != null && v !== '' ? String(v) : `${open}${raw}${close}`;
+  };
   return text
-    .replace(/\{\{([^}]+)\}\}/g, (_, raw: string) => {
-      const v = resolvePath(ctx, raw);
-      return v != null && v !== '' ? String(v) : `{{${raw}}}`;
-    })
-    .replace(/\$\{([^}]+)\}/g, (_, raw: string) => {
-      const v = resolvePath(ctx, raw);
-      return v != null && v !== '' ? String(v) : `\${${raw}}`;
-    });
+    .replace(/\{\{([^}]+)\}\}/g, (_, raw: string) => replaceOne(raw, '{{', '}}'))
+    .replace(/\$\{([^}]+)\}/g, (_, raw: string) => replaceOne(raw, '${', '}'));
 }
 
 /** 解析后的地址是否可作为 img src 使用（无未替换占位符且为 data/http(s)/绝对路径） */

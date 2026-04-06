@@ -409,6 +409,8 @@ model PlanOrder {
   childPlans       PlanOrder[]       @relation("PlanHierarchy")
   items            PlanItem[]
   productionOrders ProductionOrder[]
+  itemCodes        ItemCode[]
+  virtualBatches   PlanVirtualBatch[]
 
   @@unique([tenantId, planNumber])
   @@index([tenantId])
@@ -428,6 +430,53 @@ model PlanItem {
 
   @@index([planOrderId])
   @@map("plan_items")
+}
+
+/** 单品码（一物一码） */
+model ItemCode {
+  id          String   @id @db.VarChar(50)
+  tenantId    String   @map("tenant_id") @db.Uuid
+  planOrderId String   @map("plan_order_id") @db.VarChar(50)
+  productId   String   @map("product_id") @db.VarChar(50)
+  variantId   String?  @map("variant_id") @db.VarChar(50)
+  serialNo    Int      @map("serial_no")
+  scanToken   String   @unique @map("scan_token") @db.VarChar(50)
+  status      String   @default("ACTIVE") @db.VarChar(20)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  /** 由「批次码+单品码」生成时关联的批次；纯单品码为 null */
+  batchId     String?  @map("batch_id") @db.VarChar(50)
+
+  planOrder PlanOrder         @relation(fields: [planOrderId], references: [id], onDelete: Cascade)
+  batch     PlanVirtualBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([planOrderId])
+  @@index([productId])
+  @@index([batchId])
+  @@map("item_codes")
+}
+
+/** 批次码：单计划单、单产品、单规格下 N 件共用一个 scanToken；可选同时生成绑定单品码 */
+model PlanVirtualBatch {
+  id          String   @id @db.VarChar(50)
+  tenantId    String   @map("tenant_id") @db.Uuid
+  planOrderId String   @map("plan_order_id") @db.VarChar(50)
+  productId   String   @map("product_id") @db.VarChar(50)
+  variantId   String?  @map("variant_id") @db.VarChar(50)
+  quantity    Int      @map("quantity")
+  /** 同一计划单内从 1 递增，作废不回收号 */
+  sequenceNo  Int      @map("sequence_no")
+  scanToken   String   @unique @map("scan_token") @db.VarChar(50)
+  status      String   @default("ACTIVE") @db.VarChar(20)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  planOrder PlanOrder  @relation(fields: [planOrderId], references: [id], onDelete: Cascade)
+  itemCodes ItemCode[]
+
+  @@unique([planOrderId, sequenceNo], map: "plan_virtual_batches_plan_sequence_key")
+  @@index([tenantId])
+  @@index([planOrderId])
+  @@map("plan_virtual_batches")
 }
 
 // ============================================================

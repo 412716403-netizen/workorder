@@ -1,17 +1,48 @@
 # 数据结构文档
 
-> 实体字段、关联关系、localStorage 存储键。迁移到数据库时需设计对应表结构。
+> 本文档记录主要业务实体、关联关系，以及“数据归谁管”。当前项目已经进入前后端收口阶段，因此这里不再把所有数据一概视为 `localStorage` 真源，而是区分服务端持久化、客户端会话缓存和前端聚合状态。
 
 ---
 
-## 1. 全局状态 (App.tsx)
+## 1. 数据归属分层
 
-| 存储键 | 类型 | 说明 |
+### 1.1 服务端持久化真源
+
+以下数据以数据库 / 后端 API 为主真源，前端负责拉取、展示、编辑和局部乐观更新：
+
+| 业务域 | 主要实体 |
+|------|------|
+| 认证 / 租户 / 权限 | User, Tenant, TenantMembership, Role |
+| 系统设置 | ProductCategory, PartnerCategory, GlobalNodeTemplate, Warehouse, FinanceCategory, FinanceAccountType, SystemSetting |
+| 基础资料 | Partner, Worker, Equipment, DictionaryItem, Product, ProductVariant, BOM |
+| 计划 / 工单 / 报工 | PlanOrder, PlanItem, ProductionOrder, OrderItem, Milestone, MilestoneReport, ProductMilestoneProgress |
+| 生产操作 | ProductionOpRecord |
+| 进销存 | PsiRecord |
+| 财务 | FinanceRecord |
+| 协作 | TenantCollaboration, InterTenantSubcontractTransfer, CollaborationProductMap, OutsourceRoute |
+| 码管理 | ItemCode, PlanVirtualBatch |
+
+### 1.2 客户端会话 / 租户缓存
+
+以下数据当前仍会保存在浏览器 `localStorage`，主要用于登录态恢复和租户上下文切换，不应视为业务主数据真源：
+
+| 键 | 说明 |
+|------|------|
+| `currentUser` | 当前登录用户信息缓存 |
+| `tenantCtx` | 当前选中企业、角色、权限、到期信息 |
+| `userTenants` | 当前用户可访问企业列表 |
+| `isLoggedIn` | 登录态标记 |
+
+### 1.3 前端聚合状态
+
+`AppDataContext` 当前聚合了大部分页面直接消费的数据与操作入口，主要包括：
+
+| 状态键 | 类型 | 说明 |
 |--------|------|------|
 | products | `Product[]` | 产品主数据 |
 | orders | `ProductionOrder[]` | 生产订单 |
 | plans | `PlanOrder[]` | 计划单 |
-| psiRecords | `any[]` | 进销存记录（采购订单、采购单、销售单、盘点、调拨等） |
+| psiRecords | `any[]` | 进销存记录 |
 | financeRecords | `FinanceRecord[]` | 财务记录 |
 | prodRecords | `ProductionOpRecord[]` | 生产操作记录 |
 | categories | `ProductCategory[]` | 产品分类 |
@@ -23,22 +54,40 @@
 | workers | `Worker[]` | 工人 |
 | equipment | `Equipment[]` | 设备 |
 | warehouses | `Warehouse[]` | 仓库 |
-| printSettings | `PrintSettings` | 打印模板配置 |
+| financeCategories | `FinanceCategory[]` | 收付款类型 |
+| financeAccountTypes | `FinanceAccountType[]` | 收支账户类型 |
 | planFormSettings | `PlanFormSettings` | 计划单表单配置 |
+| orderFormSettings | `OrderFormSettings` | 工单表单配置 |
+| purchaseOrderFormSettings | `PurchaseOrderFormSettings` | 采购订单表单配置 |
+| purchaseBillFormSettings | `PurchaseBillFormSettings` | 采购单表单配置 |
+| printTemplates | `PrintTemplate[]` | 打印模板配置 |
+| productionLinkMode | `ProductionLinkMode` | 生产关联模式 |
+| processSequenceMode | `ProcessSequenceMode` | 工序顺序模式 |
+| allowExceedMaxReportQty | `boolean` | 是否允许超额报工 |
+| productMilestoneProgresses | `ProductMilestoneProgress[]` | 关联产品模式进度数据 |
 
-### 1.1 系统设置 / 基本信息与全局 state 对应
+### 1.4 说明
 
-| 入口 | 子模块 | 管理的存储键 |
+- `types.ts` 是前端类型定义入口
+- `backend/prisma/schema.prisma` 是数据库模型入口
+- `services/api.ts` 是前端接口契约入口
+- 当三者不一致时，应优先修正文档，明确“当前真源”与“迁移中暂存状态”
+
+### 1.5 系统设置 / 基本信息与聚合状态对应
+
+| 入口 | 子模块 | 主要状态 / 实体 |
 |------|--------|--------------|
-| **系统设置** | 产品分类管理 | categories |
-| | 合作单位分类 | partnerCategories |
-| | 工序节点库 | globalNodes（含 reportTemplate、enablePieceRate） |
-| | 仓库分类管理 | warehouses |
-| **基本信息** | 产品与 BOM | products, boms |
-| | 合作单位 | partners |
-| | 工人管理 | workers |
-| | 设备管理 | equipment |
-| | 公共数据字典 | dictionaries |
+| **系统设置** | 产品分类管理 | categories / ProductCategory |
+| | 合作单位分类 | partnerCategories / PartnerCategory |
+| | 工序节点库 | globalNodes / GlobalNodeTemplate |
+| | 仓库管理 | warehouses / Warehouse |
+| | 收付款类型 | financeCategories / FinanceCategory |
+| | 收支账户类型 | financeAccountTypes / FinanceAccountType |
+| **基本信息** | 产品与 BOM | products, boms / Product, BOM |
+| | 合作单位 | partners / Partner |
+| | 工人管理 | workers / Worker |
+| | 设备管理 | equipment / Equipment |
+| | 公共数据字典 | dictionaries / DictionaryItem |
 
 ---
 

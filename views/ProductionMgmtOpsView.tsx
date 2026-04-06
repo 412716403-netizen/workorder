@@ -259,6 +259,25 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
   const [flowFilterOrder, setFlowFilterOrder] = useState('');
   const [flowFilterProduct, setFlowFilterProduct] = useState('');
   const [flowFilterMilestone, setFlowFilterMilestone] = useState('');
+  /** 外协物料外发弹窗：目标工单 id（工单模式）或 null */
+  const [matDispatchOrderId, setMatDispatchOrderId] = useState<string | null>(null);
+  /** 外协物料外发弹窗：目标产品 id（产品模式）或 null */
+  const [matDispatchProductId, setMatDispatchProductId] = useState<string | null>(null);
+  /** 外协物料外发弹窗：该卡片上已有的外协工厂列表 */
+  const [matDispatchPartnerOptions, setMatDispatchPartnerOptions] = useState<string[]>([]);
+  const [matDispatchPartner, setMatDispatchPartner] = useState('');
+  const [matDispatchWarehouseId, setMatDispatchWarehouseId] = useState('');
+  const [matDispatchRemark, setMatDispatchRemark] = useState('');
+  const [matDispatchQty, setMatDispatchQty] = useState<Record<string, number>>({});
+  /** 外协物料退回弹窗 */
+  const [matReturnOrderId, setMatReturnOrderId] = useState<string | null>(null);
+  const [matReturnProductId, setMatReturnProductId] = useState<string | null>(null);
+  const [matReturnPartnerOptions, setMatReturnPartnerOptions] = useState<string[]>([]);
+  const [matReturnPartner, setMatReturnPartner] = useState('');
+  const [matReturnWarehouseId, setMatReturnWarehouseId] = useState('');
+  const [matReturnRemark, setMatReturnRemark] = useState('');
+  const [matReturnQty, setMatReturnQty] = useState<Record<string, number>>({});
+
   /** 返工管理：待处理不良弹窗 */
   const [reworkPendingModalOpen, setReworkPendingModalOpen] = useState(false);
   /** 返工报工流水弹窗（参考报工流水） */
@@ -3222,6 +3241,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         )}
                         <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">物料</th>
                         <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">数量</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">外协工厂</th>
                         <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">原因/备注</th>
                         <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">经办</th>
                         <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap w-24">操作</th>
@@ -3233,6 +3253,8 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         const matProduct = products.find(p => p.id === rec.productId);
                         const sourceProd = rec.sourceProductId ? products.find(p => p.id === rec.sourceProductId) : null;
                         const isReturn = rec.type === 'STOCK_RETURN';
+                        const isOutsourceDispatch = rec.type === 'STOCK_OUT' && !!rec.partner;
+                        const isOutsourceReturn = rec.type === 'STOCK_RETURN' && !!rec.partner;
                         const docNo = rec.docNo ?? '';
                         const openDetail = () => {
                           if (!docNo) return;
@@ -3245,19 +3267,22 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                             : rec.orderId
                               ? order?.orderNumber ?? '—'
                               : matProduct?.name ?? '—';
+                        const typeLabel = isOutsourceReturn ? '外退' : isReturn ? '退料' : isOutsourceDispatch ? '外发' : '领料';
+                        const typeClass = isOutsourceReturn ? 'bg-orange-100 text-orange-800' : isReturn ? 'bg-amber-100 text-amber-800' : isOutsourceDispatch ? 'bg-teal-100 text-teal-800' : 'bg-indigo-100 text-indigo-800';
                         return (
                           <tr key={rec.id} className="border-b border-slate-100 hover:bg-slate-50/50">
                             <td className="px-4 py-3 text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">{rec.docNo ?? '—'}</td>
                             <td className="px-4 py-3">
-                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${isReturn ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-800'}`}>
-                                {isReturn ? <Undo2 className="w-3 h-3" /> : <ArrowUpFromLine className="w-3 h-3" />}
-                                {isReturn ? '退料' : '领料'}
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${typeClass}`}>
+                                {isOutsourceReturn ? <Undo2 className="w-3 h-3" /> : isReturn ? <Undo2 className="w-3 h-3" /> : isOutsourceDispatch ? <Truck className="w-3 h-3" /> : <ArrowUpFromLine className="w-3 h-3" />}
+                                {typeLabel}
                               </span>
                             </td>
                             <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{rec.timestamp}</td>
                             <td className="px-4 py-3 text-[10px] font-black text-indigo-600">{linkCol}</td>
                             <td className="px-4 py-3 font-bold text-slate-800">{matProduct?.name ?? '未知物料'}</td>
                             <td className="px-4 py-3 text-right font-black text-indigo-600">{rec.quantity}</td>
+                            <td className="px-4 py-3 text-xs font-bold text-teal-700 whitespace-nowrap">{rec.partner ?? '—'}</td>
                             <td className="px-4 py-3 text-xs text-slate-500 max-w-[180px] truncate">{rec.reason ?? '—'}</td>
                             <td className="px-4 py-3 text-right text-xs font-bold text-slate-600">{rec.operator}</td>
                             <td className="px-4 py-3">
@@ -3275,7 +3300,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                         );
                       })}
                       <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold">
-                        <td className="px-4 py-3" colSpan={9}>
+                        <td className="px-4 py-3" colSpan={10}>
                           <span className="text-[10px] text-slate-500 uppercase mr-3">合计</span>
                           <span className="text-xs text-indigo-600">领料 {countIssue} 条，{totalIssueQty}</span>
                           <span className="text-slate-300 mx-2">|</span>
@@ -3320,7 +3345,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                 return (
                 <div
                   key={orderId ?? productId}
-                  className="bg-white px-5 py-2 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3 lg:gap-4 items-center"
+                  className="bg-white px-5 py-2 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all grid grid-cols-1 lg:grid-cols-[360px_1fr_auto] gap-3 lg:gap-4 items-center"
                 >
                   <div className="flex items-center gap-4 min-w-0">
                     {product?.imageUrl ? (
@@ -3385,6 +3410,64 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
                       </div>
                     ))}
                   </div>
+                  {hasOpsPerm('production:outsource_material:allow') && (
+                    <div className="flex flex-col gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={e => {
+                          e.stopPropagation();
+                          const uniquePartners = [...new Set(partners.map(p => p.partner))];
+                          setMatDispatchPartnerOptions(uniquePartners);
+                          setMatDispatchPartner(uniquePartners[0] ?? '');
+                          setMatDispatchWarehouseId(warehouses[0]?.id ?? '');
+                          setMatDispatchRemark('');
+                          setMatDispatchQty({});
+                          if (productionLinkMode === 'product') {
+                            setMatDispatchProductId(productId);
+                            setMatDispatchOrderId(null);
+                          } else {
+                            setMatDispatchOrderId(orderId ?? null);
+                            setMatDispatchProductId(null);
+                          }
+                        }}
+                        className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all w-full justify-center"
+                      >
+                        <Package className="w-3.5 h-3.5" /> 物料外发
+                      </button>
+                      <button
+                        type="button"
+                        onClick={e => {
+                          e.stopPropagation();
+                          const outsourceDispatchPartners = [...new Set(
+                            records.filter(r => r.type === 'STOCK_OUT' && !!r.partner && (
+                              productionLinkMode === 'product'
+                                ? (r.sourceProductId === productId || (!r.orderId && !r.sourceProductId && r.productId))
+                                : r.orderId === orderId
+                            )).map(r => r.partner!)
+                          )];
+                          if (outsourceDispatchPartners.length === 0) {
+                            toast.warning('该卡片暂无外发记录，无法退回');
+                            return;
+                          }
+                          setMatReturnPartnerOptions(outsourceDispatchPartners);
+                          setMatReturnPartner(outsourceDispatchPartners[0] ?? '');
+                          setMatReturnWarehouseId(warehouses[0]?.id ?? '');
+                          setMatReturnRemark('');
+                          setMatReturnQty({});
+                          if (productionLinkMode === 'product') {
+                            setMatReturnProductId(productId);
+                            setMatReturnOrderId(null);
+                          } else {
+                            setMatReturnOrderId(orderId ?? null);
+                            setMatReturnProductId(null);
+                          }
+                        }}
+                        className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-amber-100 text-amber-600 bg-white hover:bg-amber-50 transition-all w-full justify-center"
+                      >
+                        <Undo2 className="w-3.5 h-3.5" /> 物料退回
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
               })}
@@ -3392,6 +3475,602 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
           )}
         </div>
       )}
+
+      {/* 外协物料外发弹窗 */}
+      {limitType === 'OUTSOURCE' && (matDispatchOrderId || matDispatchProductId) && (() => {
+        const isProductMode = productionLinkMode === 'product';
+        const targetOrder = !isProductMode && matDispatchOrderId ? orders.find(o => o.id === matDispatchOrderId) : undefined;
+        const targetProductId = isProductMode ? matDispatchProductId : targetOrder?.productId;
+        const targetProduct = targetProductId ? products.find(p => p.id === targetProductId) : undefined;
+        const orderQty = targetOrder?.items?.reduce((s, i) => s + i.quantity, 0) ?? 0;
+        const bomMaterials: { productId: string; name: string; sku: string; unitNeeded: number; nodeNames: string[] }[] = [];
+        const matMap = new Map<string, { name: string; sku: string; unitNeeded: number; nodeNames: Set<string> }>();
+        const addBomItems = (bom: BOM, qty: number, nodeName: string) => {
+          bom.items.forEach(bi => {
+            const mp = products.find(px => px.id === bi.productId);
+            const add = Number(bi.quantity) * qty;
+            const existing = matMap.get(bi.productId);
+            if (existing) {
+              existing.unitNeeded += add;
+              if (nodeName) existing.nodeNames.add(nodeName);
+            } else {
+              const ns = new Set<string>();
+              if (nodeName) ns.add(nodeName);
+              matMap.set(bi.productId, { name: mp?.name ?? '未知物料', sku: mp?.sku ?? '', unitNeeded: add, nodeNames: ns });
+            }
+          });
+        };
+        if (isProductMode && targetProduct) {
+          const relatedOrders = orders.filter(o => o.productId === targetProduct.id);
+          const variants = targetProduct.variants ?? [];
+          relatedOrders.forEach(ord => {
+            const oQty = ord.items?.reduce((s, i) => s + i.quantity, 0) ?? 0;
+            if (variants.length > 0) {
+              ord.items?.forEach(item => {
+                const v = variants.find(vx => vx.id === item.variantId) ?? variants[0];
+                const lineQty = item.quantity;
+                const seenBomIds = new Set<string>();
+                if (v?.nodeBoms && Object.keys(v.nodeBoms).length > 0) {
+                  Object.entries(v.nodeBoms).forEach(([nodeId, bomId]) => {
+                    if (seenBomIds.has(bomId)) return;
+                    seenBomIds.add(bomId);
+                    const nodeName = globalNodes.find(n => n.id === nodeId)?.name ?? '';
+                    const bom = boms.find(b => b.id === bomId);
+                    if (bom) addBomItems(bom, lineQty, nodeName);
+                  });
+                } else {
+                  boms.filter(b => b.parentProductId === targetProduct.id && b.variantId === v.id && b.nodeId).forEach(bom => {
+                    if (seenBomIds.has(bom.id)) return;
+                    seenBomIds.add(bom.id);
+                    const nodeName = globalNodes.find(n => n.id === bom.nodeId)?.name ?? '';
+                    addBomItems(bom, lineQty, nodeName);
+                  });
+                }
+              });
+            }
+            if (matMap.size === 0) {
+              const seenBomIds = new Set<string>();
+              boms.filter(b => b.parentProductId === targetProduct.id && b.nodeId).forEach(bom => {
+                if (seenBomIds.has(bom.id)) return;
+                seenBomIds.add(bom.id);
+                const nodeName = globalNodes.find(n => n.id === bom.nodeId)?.name ?? '';
+                const qty = bom.variantId
+                  ? (ord.items?.find(i => i.variantId === bom.variantId)?.quantity ?? 0)
+                  : oQty;
+                addBomItems(bom, qty, nodeName);
+              });
+            }
+          });
+        } else if (targetOrder && targetProduct) {
+          const variants = targetProduct.variants ?? [];
+          if (variants.length > 0) {
+            targetOrder.items?.forEach(item => {
+              const v = variants.find(vx => vx.id === item.variantId) ?? variants[0];
+              const lineQty = item.quantity;
+              const seenBomIds = new Set<string>();
+              if (v?.nodeBoms && Object.keys(v.nodeBoms).length > 0) {
+                Object.entries(v.nodeBoms).forEach(([nodeId, bomId]) => {
+                  if (seenBomIds.has(bomId)) return;
+                  seenBomIds.add(bomId);
+                  const nodeName = globalNodes.find(n => n.id === nodeId)?.name ?? '';
+                  const bom = boms.find(b => b.id === bomId);
+                  if (bom) addBomItems(bom, lineQty, nodeName);
+                });
+              } else {
+                boms.filter(b => b.parentProductId === targetProduct.id && b.variantId === v.id && b.nodeId).forEach(bom => {
+                  if (seenBomIds.has(bom.id)) return;
+                  seenBomIds.add(bom.id);
+                  const nodeName = globalNodes.find(n => n.id === bom.nodeId)?.name ?? '';
+                  addBomItems(bom, lineQty, nodeName);
+                });
+              }
+            });
+          }
+          if (matMap.size === 0) {
+            const seenBomIds = new Set<string>();
+            boms.filter(b => b.parentProductId === targetProduct.id && b.nodeId).forEach(bom => {
+              if (seenBomIds.has(bom.id)) return;
+              seenBomIds.add(bom.id);
+              const nodeName = globalNodes.find(n => n.id === bom.nodeId)?.name ?? '';
+              const qty = bom.variantId
+                ? (targetOrder.items?.find(i => i.variantId === bom.variantId)?.quantity ?? 0)
+                : orderQty;
+              addBomItems(bom, qty, nodeName);
+            });
+          }
+        }
+        matMap.forEach((v, pid) => {
+          bomMaterials.push({ productId: pid, ...v, nodeNames: Array.from(v.nodeNames) });
+        });
+        const issuedMap = new Map<string, number>();
+        if (isProductMode) {
+          records.filter(r => r.type === 'STOCK_OUT' && r.productId && (r.sourceProductId === targetProductId || (!r.orderId && !r.sourceProductId && r.productId))).forEach(r => {
+            issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
+          });
+          const relatedOrderIds = new Set(orders.filter(o => o.productId === targetProductId).map(o => o.id));
+          records.filter(r => r.type === 'STOCK_OUT' && r.orderId && relatedOrderIds.has(r.orderId)).forEach(r => {
+            issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
+          });
+        } else if (targetOrder) {
+          records.filter(r => r.type === 'STOCK_OUT' && r.orderId === targetOrder.id && r.reason !== '来自于返工').forEach(r => {
+            issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
+          });
+        }
+        const getNextWfDocNo = () => {
+          const prefix = 'WF';
+          const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+          const pattern = `${prefix}${todayStr}-`;
+          const existing = records.filter(r => r.type === 'STOCK_OUT' && r.docNo && r.docNo.startsWith(pattern));
+          const seqs = existing.map(r => parseInt(r.docNo!.slice(pattern.length), 10)).filter(n => !isNaN(n));
+          const maxSeq = seqs.length ? Math.max(...seqs) : 0;
+          return `${pattern}${String(maxSeq + 1).padStart(4, '0')}`;
+        };
+        const closeMatDispatch = () => {
+          setMatDispatchOrderId(null);
+          setMatDispatchProductId(null);
+          setMatDispatchQty({});
+          setMatDispatchPartner('');
+          setMatDispatchRemark('');
+        };
+        const handleMatDispatchSubmit = async () => {
+          if (!matDispatchPartner) {
+            toast.warning('请选择外协工厂');
+            return;
+          }
+          const toIssue = bomMaterials.filter(m => (matDispatchQty[m.productId] ?? 0) > 0);
+          if (toIssue.length === 0) {
+            toast.warning('请至少填写一项发出数量');
+            return;
+          }
+          const docNo = getNextWfDocNo();
+          const timestamp = new Date().toLocaleString();
+          const batch: ProductionOpRecord[] = toIssue.map(m => ({
+            id: `wf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            type: 'STOCK_OUT' as ProdOpType,
+            orderId: isProductMode ? undefined : (matDispatchOrderId ?? undefined),
+            productId: m.productId,
+            quantity: matDispatchQty[m.productId],
+            operator: '张主管',
+            timestamp,
+            status: '已完成',
+            partner: matDispatchPartner,
+            warehouseId: matDispatchWarehouseId || undefined,
+            docNo,
+            reason: matDispatchRemark.trim() || undefined,
+            sourceProductId: isProductMode ? (targetProductId ?? undefined) : undefined,
+          }));
+          if (onAddRecordBatch && batch.length > 1) {
+            await onAddRecordBatch(batch);
+          } else {
+            for (const rec of batch) onAddRecord(rec);
+          }
+          toast.success(`已外发 ${toIssue.length} 种物料至「${matDispatchPartner}」`);
+          closeMatDispatch();
+        };
+        const headerLabel = isProductMode
+          ? (targetProduct?.name ?? '—')
+          : `${targetOrder?.orderNumber ?? '—'} — ${targetProduct?.name ?? '—'}`;
+        return (
+          <div className="fixed inset-0 z-[55] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={closeMatDispatch} aria-hidden />
+            <div className="relative bg-white w-full max-w-2xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                    <Package className="w-5 h-5 text-indigo-600" /> 物料外发
+                  </h3>
+                  <p className="text-sm text-slate-500 mt-0.5">{headerLabel}</p>
+                </div>
+                <button type="button" onClick={closeMatDispatch} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-auto p-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">外协工厂</label>
+                    {matDispatchPartnerOptions.length <= 1 ? (
+                      <div className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 bg-slate-50">{matDispatchPartnerOptions[0] ?? '—'}</div>
+                    ) : (
+                      <select
+                        value={matDispatchPartner}
+                        onChange={e => setMatDispatchPartner(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                      >
+                        {matDispatchPartnerOptions.map(p => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  {warehouses.length > 0 && (
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">出库仓库</label>
+                      <select
+                        value={matDispatchWarehouseId}
+                        onChange={e => setMatDispatchWarehouseId(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                      >
+                        {warehouses.map(w => (
+                          <option key={w.id} value={w.id}>{w.name}{w.code ? ` (${w.code})` : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">备注说明</label>
+                  <input
+                    type="text"
+                    value={matDispatchRemark}
+                    onChange={e => setMatDispatchRemark(e.target.value)}
+                    placeholder="选填"
+                    className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 bg-white focus:ring-2 focus:ring-indigo-500 outline-none placeholder:text-slate-400"
+                  />
+                </div>
+                {bomMaterials.length === 0 ? (
+                  <p className="py-8 text-center text-slate-400 text-sm">该{isProductMode ? '产品' : '工单'}未配置 BOM 物料，无法进行物料外发</p>
+                ) : (
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/80 border-b border-slate-100">
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">物料</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">理论需量</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-36">已发进度</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-40">本次外发数量</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {bomMaterials.map(m => {
+                        const issued = issuedMap.get(m.productId) ?? 0;
+                        return (
+                          <tr key={m.productId} className="hover:bg-slate-50/50">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-sm font-bold text-slate-800">{m.name}</p>
+                                {m.nodeNames.map(nn => (
+                                  <span key={nn} className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{nn}</span>
+                                ))}
+                              </div>
+                              {m.sku && <p className="text-[10px] text-slate-400 mt-0.5">{m.sku}</p>}
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm font-bold text-slate-600">{m.unitNeeded}</td>
+                            <td className="px-4 py-3">
+                              {(() => {
+                                const needed = m.unitNeeded;
+                                const pct = needed > 0 ? Math.min(100, (issued / needed) * 100) : 0;
+                                const overIssue = issued > needed;
+                                return (
+                                  <div className="flex flex-col gap-1">
+                                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden flex">
+                                      {overIssue ? (
+                                        <>
+                                          <div className="h-full bg-emerald-500" style={{ width: `${(needed / issued) * 100}%` }} />
+                                          <div className="h-full bg-rose-500" style={{ width: `${((issued - needed) / issued) * 100}%` }} />
+                                        </>
+                                      ) : (
+                                        <div className={`h-full rounded-full ${pct >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${pct}%` }} />
+                                      )}
+                                    </div>
+                                    <span className="text-[9px] font-bold text-slate-500">
+                                      {overIssue ? <span>已发 {issued} <span className="text-rose-500">（超发 {issued - needed}）</span></span> : `已发 ${issued}`}
+                                    </span>
+                                  </div>
+                                );
+                              })()}
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="number"
+                                min={0}
+                                step={1}
+                                value={matDispatchQty[m.productId] ?? ''}
+                                onChange={e => setMatDispatchQty(prev => ({ ...prev, [m.productId]: Number(e.target.value) || 0 }))}
+                                className="w-full rounded-xl border border-slate-200 py-2 px-3 text-sm font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
+                                placeholder="0"
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              {bomMaterials.length > 0 && (
+                <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={closeMatDispatch}
+                    className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleMatDispatchSubmit}
+                    disabled={!bomMaterials.some(m => (matDispatchQty[m.productId] ?? 0) > 0) || !matDispatchPartner}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                  >
+                    <ArrowUpFromLine className="w-4 h-4" /> 确认外发
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 外协物料退回弹窗 */}
+      {limitType === 'OUTSOURCE' && (matReturnOrderId || matReturnProductId) && (() => {
+        const isProductMode = productionLinkMode === 'product';
+        const targetOrder = !isProductMode && matReturnOrderId ? orders.find(o => o.id === matReturnOrderId) : undefined;
+        const targetProductId = isProductMode ? matReturnProductId : targetOrder?.productId;
+        const targetProduct = targetProductId ? products.find(p => p.id === targetProductId) : undefined;
+
+        const dispatchedByPartnerMat = new Map<string, number>();
+        const returnedByPartnerMat = new Map<string, number>();
+        const matInfoMap = new Map<string, { name: string; sku: string }>();
+        const filterForCard = (r: ProductionOpRecord) => {
+          if (isProductMode) {
+            return r.sourceProductId === targetProductId || (!r.orderId && !r.sourceProductId && r.productId);
+          }
+          return r.orderId === matReturnOrderId;
+        };
+        records.filter(r => r.type === 'STOCK_OUT' && !!r.partner && r.partner === matReturnPartner && filterForCard(r)).forEach(r => {
+          const key = r.productId;
+          dispatchedByPartnerMat.set(key, (dispatchedByPartnerMat.get(key) ?? 0) + r.quantity);
+          if (!matInfoMap.has(key)) {
+            const mp = products.find(px => px.id === key);
+            matInfoMap.set(key, { name: mp?.name ?? '未知物料', sku: mp?.sku ?? '' });
+          }
+        });
+        if (isProductMode) {
+          const relatedOrderIds = new Set(orders.filter(o => o.productId === targetProductId).map(o => o.id));
+          records.filter(r => r.type === 'STOCK_OUT' && !!r.partner && r.partner === matReturnPartner && r.orderId && relatedOrderIds.has(r.orderId)).forEach(r => {
+            const key = r.productId;
+            dispatchedByPartnerMat.set(key, (dispatchedByPartnerMat.get(key) ?? 0) + r.quantity);
+            if (!matInfoMap.has(key)) {
+              const mp = products.find(px => px.id === key);
+              matInfoMap.set(key, { name: mp?.name ?? '未知物料', sku: mp?.sku ?? '' });
+            }
+          });
+        }
+        records.filter(r => r.type === 'STOCK_RETURN' && !!r.partner && r.partner === matReturnPartner && filterForCard(r)).forEach(r => {
+          returnedByPartnerMat.set(r.productId, (returnedByPartnerMat.get(r.productId) ?? 0) + r.quantity);
+        });
+        if (isProductMode) {
+          const relatedOrderIds = new Set(orders.filter(o => o.productId === targetProductId).map(o => o.id));
+          records.filter(r => r.type === 'STOCK_RETURN' && !!r.partner && r.partner === matReturnPartner && r.orderId && relatedOrderIds.has(r.orderId)).forEach(r => {
+            returnedByPartnerMat.set(r.productId, (returnedByPartnerMat.get(r.productId) ?? 0) + r.quantity);
+          });
+        }
+        const consumedByPartnerMat = new Map<string, number>();
+        (() => {
+          const receivedByNode = new Map<string, number>();
+          const outsourceFilter = (r: ProductionOpRecord) => {
+            if (isProductMode) {
+              return !r.orderId && r.productId === targetProductId;
+            }
+            return r.orderId === matReturnOrderId;
+          };
+          records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && r.partner === matReturnPartner && r.nodeId && outsourceFilter(r)).forEach(r => {
+            receivedByNode.set(r.nodeId!, (receivedByNode.get(r.nodeId!) ?? 0) + r.quantity);
+          });
+          if (isProductMode) {
+            const relatedOrderIds = new Set(orders.filter(o => o.productId === targetProductId).map(o => o.id));
+            records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && r.partner === matReturnPartner && r.nodeId && r.orderId && relatedOrderIds.has(r.orderId)).forEach(r => {
+              receivedByNode.set(r.nodeId!, (receivedByNode.get(r.nodeId!) ?? 0) + r.quantity);
+            });
+          }
+          receivedByNode.forEach((recvQty, nodeId) => {
+            const nodeBoms = boms.filter(b => b.parentProductId === targetProductId && b.nodeId === nodeId);
+            nodeBoms.forEach(bom => {
+              bom.items.forEach(bi => {
+                const matConsumption = Number(bi.quantity) * recvQty;
+                consumedByPartnerMat.set(bi.productId, (consumedByPartnerMat.get(bi.productId) ?? 0) + matConsumption);
+              });
+            });
+          });
+        })();
+        const returnableMaterials = Array.from(dispatchedByPartnerMat.entries()).map(([pid, dispatched]) => ({
+          productId: pid,
+          name: matInfoMap.get(pid)?.name ?? '未知物料',
+          sku: matInfoMap.get(pid)?.sku ?? '',
+          dispatched,
+          consumed: consumedByPartnerMat.get(pid) ?? 0,
+          returned: returnedByPartnerMat.get(pid) ?? 0,
+        })).filter(m => m.dispatched > 0);
+
+        const getNextWtDocNo = () => {
+          const prefix = 'WT';
+          const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+          const pattern = `${prefix}${todayStr}-`;
+          const existing = records.filter(r => r.type === 'STOCK_RETURN' && r.docNo && r.docNo.startsWith(pattern));
+          const seqs = existing.map(r => parseInt(r.docNo!.slice(pattern.length), 10)).filter(n => !isNaN(n));
+          const maxSeq = seqs.length ? Math.max(...seqs) : 0;
+          return `${pattern}${String(maxSeq + 1).padStart(4, '0')}`;
+        };
+        const closeMatReturn = () => {
+          setMatReturnOrderId(null);
+          setMatReturnProductId(null);
+          setMatReturnQty({});
+          setMatReturnPartner('');
+          setMatReturnRemark('');
+        };
+        const handleMatReturnSubmit = async () => {
+          if (!matReturnPartner) {
+            toast.warning('请选择外协工厂');
+            return;
+          }
+          const toReturn = returnableMaterials.filter(m => (matReturnQty[m.productId] ?? 0) > 0);
+          if (toReturn.length === 0) {
+            toast.warning('请至少填写一项退回数量');
+            return;
+          }
+          const overItems = toReturn.filter(m => (matReturnQty[m.productId] ?? 0) > Math.max(0, m.dispatched - m.consumed - m.returned));
+          if (overItems.length > 0) {
+            toast.warning(`「${overItems[0].name}」退回数量超过可退回数量`);
+            return;
+          }
+          const docNo = getNextWtDocNo();
+          const timestamp = new Date().toLocaleString();
+          const batch: ProductionOpRecord[] = toReturn.map(m => ({
+            id: `wt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            type: 'STOCK_RETURN' as ProdOpType,
+            orderId: isProductMode ? undefined : (matReturnOrderId ?? undefined),
+            productId: m.productId,
+            quantity: matReturnQty[m.productId],
+            operator: '张主管',
+            timestamp,
+            status: '已完成',
+            partner: matReturnPartner,
+            warehouseId: matReturnWarehouseId || undefined,
+            docNo,
+            reason: matReturnRemark.trim() || undefined,
+            sourceProductId: isProductMode ? (targetProductId ?? undefined) : undefined,
+          }));
+          if (onAddRecordBatch && batch.length > 1) {
+            await onAddRecordBatch(batch);
+          } else {
+            for (const rec of batch) onAddRecord(rec);
+          }
+          toast.success(`已退回 ${toReturn.length} 种物料，来自「${matReturnPartner}」`);
+          closeMatReturn();
+        };
+        const headerLabel = isProductMode
+          ? (targetProduct?.name ?? '—')
+          : `${targetOrder?.orderNumber ?? '—'} — ${targetProduct?.name ?? '—'}`;
+        return (
+          <div className="fixed inset-0 z-[55] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={closeMatReturn} aria-hidden />
+            <div className="relative bg-white w-full max-w-3xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                    <Undo2 className="w-5 h-5 text-amber-600" /> 物料退回
+                  </h3>
+                  <p className="text-sm text-slate-500 mt-0.5">{headerLabel}</p>
+                </div>
+                <button type="button" onClick={closeMatReturn} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-auto p-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">外协工厂</label>
+                    {matReturnPartnerOptions.length <= 1 ? (
+                      <div className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 bg-slate-50">{matReturnPartnerOptions[0] ?? '—'}</div>
+                    ) : (
+                      <select
+                        value={matReturnPartner}
+                        onChange={e => {
+                          setMatReturnPartner(e.target.value);
+                          setMatReturnQty({});
+                        }}
+                        className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none bg-white"
+                      >
+                        {matReturnPartnerOptions.map(p => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  {warehouses.length > 0 && (
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">退回仓库</label>
+                      <select
+                        value={matReturnWarehouseId}
+                        onChange={e => setMatReturnWarehouseId(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none bg-white"
+                      >
+                        {warehouses.map(w => (
+                          <option key={w.id} value={w.id}>{w.name}{w.code ? ` (${w.code})` : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">备注说明</label>
+                  <input
+                    type="text"
+                    value={matReturnRemark}
+                    onChange={e => setMatReturnRemark(e.target.value)}
+                    placeholder="选填"
+                    className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 bg-white focus:ring-2 focus:ring-amber-500 outline-none placeholder:text-slate-400"
+                  />
+                </div>
+                {returnableMaterials.length === 0 ? (
+                  <p className="py-8 text-center text-slate-400 text-sm">该工厂暂无外发记录</p>
+                ) : (
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/80 border-b border-slate-100">
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">物料</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">已外发</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">交货耗材</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">已退回</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">可退回</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-40">本次退回数量</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {returnableMaterials.map(m => {
+                        const remaining = Math.max(0, m.dispatched - m.consumed - m.returned);
+                        return (
+                          <tr key={m.productId} className="hover:bg-slate-50/50">
+                            <td className="px-4 py-3">
+                              <p className="text-sm font-bold text-slate-800">{m.name}</p>
+                              {m.sku && <p className="text-[10px] text-slate-400 mt-0.5">{m.sku}</p>}
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm font-bold text-indigo-600">{m.dispatched}</td>
+                            <td className="px-4 py-3 text-right text-sm font-bold text-rose-600">{m.consumed}</td>
+                            <td className="px-4 py-3 text-right text-sm font-bold text-amber-600">{m.returned}</td>
+                            <td className="px-4 py-3 text-right text-sm font-black text-emerald-600">{remaining}</td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="number"
+                                min={0}
+                                max={remaining}
+                                step={1}
+                                value={matReturnQty[m.productId] ?? ''}
+                                onChange={e => setMatReturnQty(prev => ({ ...prev, [m.productId]: Math.min(Number(e.target.value) || 0, remaining) }))}
+                                className="w-full rounded-xl border border-slate-200 py-2 px-3 text-sm font-bold text-slate-800 text-right focus:ring-2 focus:ring-amber-500 outline-none"
+                                placeholder="0"
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              {returnableMaterials.length > 0 && (
+                <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={closeMatReturn}
+                    className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleMatReturnSubmit}
+                    disabled={!returnableMaterials.some(m => (matReturnQty[m.productId] ?? 0) > 0) || !matReturnPartner}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 transition-colors"
+                  >
+                    <Undo2 className="w-4 h-4" /> 确认退回
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {limitType === 'OUTSOURCE' && outsourceModal === 'dispatch' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

@@ -533,3 +533,103 @@ export const collaboration = {
   deleteProductMap: (id: string) =>
     request(`/collaboration/collaboration-product-maps/${id}`, { method: 'DELETE' }),
 };
+
+// ── 单品码（ItemCode）──
+
+export const itemCodesApi = {
+  generate: (planOrderId: string) =>
+    request<{ generated: number; totalForPlan: number; byVariant: Array<{ variantId: string | null; count: number }> }>(
+      '/item-codes/generate',
+      { method: 'POST', body: JSON.stringify({ planOrderId }) },
+    ),
+
+  list: (params: {
+    planOrderId?: string;
+    variantId?: string;
+    batchId?: string;
+    status?: string;
+    page?: number;
+    pageSize?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params.planOrderId) qs.set('planOrderId', params.planOrderId);
+    if (params.variantId) qs.set('variantId', params.variantId);
+    if (params.batchId) qs.set('batchId', params.batchId);
+    if (params.status) qs.set('status', params.status);
+    if (params.page) qs.set('page', String(params.page));
+    if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+    return request<{ items: import('../types').ItemCode[]; total: number; page: number; pageSize: number }>(
+      `/item-codes?${qs.toString()}`,
+    );
+  },
+
+  void: (id: string) =>
+    request<import('../types').ItemCode>(`/item-codes/${id}/void`, { method: 'PATCH' }),
+
+  scan: (token: string) =>
+    request<any>(`/item-codes/scan/${token}`),
+};
+
+export const planVirtualBatchesApi = {
+  create: (body: {
+    planOrderId: string;
+    variantId?: string | null;
+    quantity: number;
+    withItemCodes?: boolean;
+  }) =>
+    request<import('../types').PlanVirtualBatch & { itemCodesCreated?: number }>('/plan-virtual-batches', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  bulkSplit: (body: {
+    planOrderId: string;
+    variantId?: string | null;
+    batchSize: number;
+    withItemCodes?: boolean;
+  }) =>
+    request<{
+      created: number;
+      items: import('../types').PlanVirtualBatch[];
+      batchSize: number;
+      quantities: number[];
+      totalQuantity: number;
+      maxFromPlan: number;
+      allocatedBefore: number;
+      itemCodesCreated?: number;
+    }>('/plan-virtual-batches/bulk-split', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /** 计划树内出现的每个规格分别按每批件数拆满剩余额度，无需指定 variantId */
+  bulkSplitAll: (body: { planOrderId: string; batchSize: number; withItemCodes?: boolean }) =>
+    request<{
+      totalCreated: number;
+      items: import('../types').PlanVirtualBatch[];
+      batchSize: number;
+      byVariant: Array<{
+        variantId: string | null;
+        created: number;
+        quantities: number[];
+        totalQty: number;
+      }>;
+      itemCodesCreated?: number;
+    }>('/plan-virtual-batches/bulk-split-all', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  list: (params: { planOrderId?: string }) => {
+    const qs = new URLSearchParams();
+    if (params.planOrderId) qs.set('planOrderId', params.planOrderId);
+    return request<{ items: import('../types').PlanVirtualBatch[]; total: number }>(
+      `/plan-virtual-batches?${qs.toString()}`,
+    );
+  },
+
+  void: (id: string) =>
+    request<import('../types').PlanVirtualBatch>(`/plan-virtual-batches/${id}/void`, { method: 'PATCH' }),
+
+  scan: (token: string) => request<any>(`/plan-virtual-batches/scan/${encodeURIComponent(token)}`),
+};

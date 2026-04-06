@@ -52,6 +52,7 @@ const PRODUCTION_SUB_MODULES: { key: string; label: string; actions: string[]; g
   { key: 'outsource_send', label: '待发清单', actions: ['allow'], group: '外协管理' },
   { key: 'outsource_receive', label: '待收回清单', actions: ['allow'], group: '外协管理' },
   { key: 'outsource_records', label: '外协流水', actions: ['view', 'edit', 'delete'], group: '外协管理' },
+  { key: 'outsource_material', label: '物料外发', actions: ['allow'], group: '外协管理' },
   { key: 'rework_list', label: '主列表', actions: ['allow'], group: '返工管理' },
   { key: 'rework_defective', label: '待处理不良', actions: ['allow'], group: '返工管理' },
   { key: 'rework_records', label: '处理不良流水', actions: ['view', 'edit', 'delete'], group: '返工管理' },

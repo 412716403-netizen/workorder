@@ -43,8 +43,8 @@ export const outlineToolbarButtonClass =
 export const outlineAccentToolbarButtonClass =
   'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border border-indigo-200 bg-white text-indigo-600 hover:bg-indigo-50 active:scale-[0.98] transition-all';
 
-/** 子模块 Tab 外层（非吸顶）：略收紧下边距，便于与下方标题贴近 */
-export const subModuleTabBarInsetClass = '-mx-12 px-12 pt-2.5 pb-1 sm:pt-3 sm:pb-1';
+/** 子模块 Tab 外层（非吸顶）：仅纵向留白，不做负边距全宽背景 */
+export const subModuleTabBarInsetClass = 'pt-2.5 pb-1 sm:pt-3 sm:pb-1';
 
 /** 子模块 Tab 吸顶时的纵向内边距 */
 export const subModuleTabBarStickyPadClass = 'py-2';
@@ -55,9 +55,9 @@ export const subModuleMainContentTopClass = 'pt-4 sm:pt-5';
 /** 子模块 Tab 条背景 */
 export const subModuleTabBarBackdropClass = 'z-20 bg-slate-50/95 backdrop-blur-sm';
 
-/** 子模块 Tab 白色胶囊容器（略紧凑） */
+/** 子模块 Tab 白色胶囊容器（宽度随内容，不撑满） */
 export const subModuleTabPillClass =
-  'flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-full lg:w-fit overflow-x-auto no-scrollbar';
+  'inline-flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit max-w-full overflow-x-auto no-scrollbar';
 
 /** 单个子模块 Tab 按钮（与 BasicInfo 子模块 Tab 一致） */
 export function subModuleTabButtonClass(active: boolean): string {

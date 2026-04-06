@@ -1,108 +1,89 @@
-# 迁移清单（接入数据库/后端）
+# 迁移清单（后端接入与收口）
 
-> 接入数据库时，供后端开发对照。每完成一项可勾选。前端需同步将数据源从 localStorage 改为 API 调用。
+> 本文档不再把项目视为“尚未接入后端”的空白清单，而是记录各模块当前是否已经具备后端能力、哪些仍需收口。更完整的现状说明见 [`06-current-architecture-and-migration-status.md`](./06-current-architecture-and-migration-status.md)。
 
----
+## 状态说明
 
-## 1. 进销存 (PSI)
-
-| # | API/能力 | 对应前端逻辑 | 输入 | 输出 | 状态 |
-|---|----------|--------------|------|------|------|
-| 1 | 库存查询 | `getStock(pId, whId?)` | productId, warehouseId? | 库存数量 | ⬜ |
-| 2 | 采购订单已入库汇总 | `receivedByOrderLine` | - | `{ [docNum::lineId]: qty }` 或按需结构 | ⬜ |
-| 3 | 采购订单/采购单 CRUD | `handleSaveManual`, `onReplaceRecords` | 单据+明细 | 保存结果 | ⬜ |
-| 4 | 采购单引用订单生成 | `handleConvertPOToBill` | 选中的订单行+数量 | 新采购单记录 | ⬜ |
-| 5 | 单据列表（含 lineGroupId 分组） | `groupedRecords` + 列表分组 | type, 可选筛选 | 按 docNumber 分组，组内按 lineGroupId 分组 | ⬜ |
-| 6 | 盘点、调拨、销售单 | 对应保存逻辑 | 表单数据 | 新记录 | ⬜ |
-
-**注意事项**：
-- 单据替换时需保持列表顺序（插入到原位置）
-- lineGroupId 需在保存时写入，引用订单生成采购单时继承
+- `已落地`：已确认存在后端路由 / API 封装 / 数据模型主链路
+- `部分落地`：已有后端能力，但前端切换、行为验证、文档同步或边界治理仍未完成
+- `待补齐`：当前未确认闭环，或仍以旧逻辑为主
 
 ---
 
-## 2. 经营看板 (Dashboard)
+## 1. 认证、租户与权限
 
-| # | API/能力 | 对应前端逻辑 | 输入 | 输出 | 状态 |
-|---|----------|--------------|------|------|------|
-| 1 | 生产统计汇总 | DashboardView L56-61 | - | activeOrders, totalMilestones, completedMilestones, completionRate | ⬜ |
-| 2 | 财务统计汇总 | DashboardView L64-66 | - | totalReceipts, totalPayments, cashFlow | ⬜ |
-| 3 | 库存预警 | DashboardView L69-73 | - | lowStockCount 或 lowStockProducts | ⬜ |
-| 4 | 订单进度 | DashboardView L76-83 | - | prodProgressData | ⬜ |
-
-**可选**：Dashboard 可提供聚合 API，一次性返回所有看板指标，减少请求数。
+| 模块 | 当前状态 | 说明 | 剩余收口 |
+|------|------|------|------|
+| 登录、登出、刷新 token | 已落地 | 已有后端认证接口与前端 API 封装 | 继续收敛会话缓存语义，减少文档与实现漂移 |
+| 租户选择、成员与权限 | 已落地 | 已有 tenants / roles / admin 相关接口 | 统一权限模型与文档说明 |
+| 浏览器本地缓存 | 部分落地 | `currentUser`、`tenantCtx`、`userTenants`、`isLoggedIn` 仍保存在 `localStorage` | 明确哪些属于会话缓存，哪些不得再作为业务真源 |
 
 ---
 
-## 3. 计划/BOM (PlanOrder)
+## 2. 系统设置与基础资料
 
-| # | API/能力 | 对应前端逻辑 | 输入 | 输出 | 状态 |
-|---|----------|--------------|------|------|------|
-| 1 | 物料需求计算 | `materialRequirements` | planId, productId, items | 物料清单（含 totalNeeded, stock, shortage） | ⬜ |
-| 2 | 采购单智能拆单 | `handleGenerateProposedOrders` | materialRequirements, boms | 按供应商分组的采购建议 | ⬜ |
-| 3 | 计划单 CRUD | plans 增删改 | 计划单数据 | 保存结果 | ⬜ |
-| 4 | BOM CRUD | boms 增删改 | BOM 数据 | 保存结果 | ⬜ |
-
-**注意**：`stableMockStock` 需替换为真实库存查询（可复用 PSI 库存 API）。
+| 模块 | 当前状态 | 说明 | 剩余收口 |
+|------|------|------|------|
+| 产品分类、合作单位分类、工序节点、仓库 | 已落地 | 已有 settings 路由与前端封装 | 细化子权限说明，保持文档同步 |
+| 收付款类型、收支账户类型 | 已落地 | 已有 settings 路由与前端封装 | 对照财务页面核验真实使用范围 |
+| 产品、BOM、合作单位、工人、设备、字典 | 已落地 | 已有 master / products / boms 等后端能力 | 持续清理前端历史假设与文档中的旧字段说明 |
 
 ---
 
-## 4. 财务 (Finance)
+## 3. 计划、工单与报工
 
-| # | API/能力 | 对应前端逻辑 | 输入 | 输出 | 状态 |
-|---|----------|--------------|------|------|------|
-| 1 | 财务记录 CRUD | FinanceOpsView | 记录数据 | 保存结果 | ⬜ |
-| 2 | 按类型列表 | records.filter(r => r.type === activeTab) | type | 记录列表 | ⬜ |
-| 3 | 收支汇总 | Dashboard 财务统计 | - | totalReceipts, totalPayments | ⬜ |
-
----
-
-## 5. 基础数据（系统设置 + 基本信息）
-
-### 5.1 系统设置入口 (SettingsView) — 4 个子模块
-
-| # | API/能力 | 管理实体 | 说明 | 状态 |
-|---|----------|----------|------|------|
-| 1 | 产品分类 CRUD | categories | 含 customFields | ⬜ |
-| 2 | 合作单位分类 CRUD | partnerCategories | 含 customFields | ⬜ |
-| 3 | 工序节点 CRUD | globalNodes | 含 reportTemplate、enablePieceRate | ⬜ |
-| 4 | 仓库 CRUD | warehouses | - | ⬜ |
-
-### 5.2 基本信息入口 (BasicInfoView) — 5 个子模块
-
-| # | API/能力 | 管理实体 | 说明 | 状态 |
-|---|----------|----------|------|------|
-| 1 | 产品 CRUD | products | ProductManagementView 嵌入 | ⬜ |
-| 2 | BOM CRUD | boms | 关联 products | ⬜ |
-| 3 | 合作单位 CRUD | partners | 关联 partnerCategories | ⬜ |
-| 4 | 工人 CRUD | workers | assignedMilestoneIds | ⬜ |
-| 5 | 设备 CRUD | equipment | assignedMilestoneIds | ⬜ |
-| 6 | 字典 CRUD | dictionaries | colors, sizes, units | ⬜ |
+| 模块 | 当前状态 | 说明 | 剩余收口 |
+|------|------|------|------|
+| 计划单 CRUD、拆单、下达工单、子计划 | 已落地 | 已有 `/api/plans` 及相关动作接口 | 继续核对前端是否仍保留旧计算路径 |
+| 工单 CRUD、报工、可报量查询 | 已落地 | 已有 `/api/orders`、报工与产品进度接口 | 继续补充服务层与测试 |
+| 生产操作记录 | 已落地 | 已有 `/api/production/records` 等接口 | 梳理大体量前端页面与复杂业务校验 |
+| 生产关联模式 | 部分落地 | 规则和实现已并存，但文档仍偏历史设计视角 | 统一“关联工单 / 关联产品”的文档入口与数据归属说明 |
 
 ---
 
-## 6. 生产管理 (Production)
+## 4. 进销存（PSI）
 
-| # | API/能力 | 对应前端逻辑 | 输入 | 输出 | 状态 |
-|---|----------|--------------|------|------|------|
-| 1 | 工单 CRUD | orders 增删改 | 工单数据 | 保存结果 | ⬜ |
-| 2 | 工单删除（含校验） | OrderDetailView handleDelete | orderId | 校验：报工、prodRecords、子工单 | ⬜ |
-| 3 | 生产操作记录 CRUD | ProductionMgmtOpsView | prodRecords | 领料出库/外协/返工/生产入库 | ⬜ |
-| 4 | 计划转工单 | App onConvertToOrder | planId | 新建 orders，更新 plans.status | ⬜ |
-
-**注意**：工单删除前需校验无报工、无 ProductionOpRecord、无子工单；后端可复用相同规则。
+| 模块 | 当前状态 | 说明 | 剩余收口 |
+|------|------|------|------|
+| PSI 记录 CRUD | 已落地 | 已有 `/api/psi/records` 系列接口 | 继续核对前端大页面内是否仍有遗留本地计算假设 |
+| 库存查询 | 已落地 | 已有 `/api/psi/stock` 与前端 `getStock` 封装 | 对齐文档中的历史 mock / stableMockStock 描述 |
+| 采购单替换、批量写入、列表分组 | 部分落地 | API 已出现，但前端行为与列表分组策略仍需持续验证 | 细化“后端返回什么，前端只做展示什么” |
 
 ---
 
-## 7. 前后端职责划分建议
+## 5. 财务与经营看板
 
-| 层级 | 职责 |
+| 模块 | 当前状态 | 说明 | 剩余收口 |
+|------|------|------|------|
+| 财务记录 CRUD | 已落地 | 已有 `/api/finance/records` | 补充统计、校验与测试说明 |
+| Dashboard 汇总接口 | 已落地 | 已有 `/api/dashboard/stats` 聚合接口 | 核对看板指标口径与业务文档的一致性 |
+| 收支汇总、库存预警、订单进度 | 部分落地 | 已有后端聚合方向 | 继续按指标逐项校验计算口径 |
+
+---
+
+## 6. 协作、打印与码管理
+
+| 模块 | 当前状态 | 说明 | 剩余收口 |
+|------|------|------|------|
+| 企业协作 / 外协路线 | 已落地 | 已有 collaboration 路由、数据模型与前端 API 封装 | 继续治理 controller 过胖与权限边界不一致问题 |
+| 打印模板、预览、标签 | 部分落地 | 前端能力完整，但文档入口尚未充分整理 | 后续可补独立打印链路文档 |
+| 单品码 `ItemCode` | 已落地 | 已有 schema、route、controller、前端 API 封装 | 补扫码响应类型与迁移链核验 |
+| 虚拟批次 `PlanVirtualBatch` | 已落地 | 已有 schema、route、controller、前端 API 封装 | 核对 migration 完整性与打印链路说明 |
+
+---
+
+## 7. 当前主要收口项
+
+1. 文档已明显落后于代码实现，应以“当前架构现状 + 收口清单”取代旧的“未来接后端”口径。
+2. 前端超大页面文件需要拆分，否则后端能力越完整，前端维护成本越高。
+3. 后端需逐步从“route -> controller -> prisma”过渡到更稳定的 service 分层。
+4. Prisma schema 与 migrations 需要继续核对，尤其是近期新增的单品码/批次码链路。
+
+## 8. 前后端职责划分
+
+| 层级 | 主要职责 |
 |------|------|
-| 后端 | 数据持久化、聚合计算（库存、已入库、汇总统计）、单据号生成、业务校验 |
-| 前端 | UI、表单校验、调用 API、本地缓存/乐观更新、列表分组展示（若后端返回明细则前端仅做展示分组） |
+| 后端 | 数据持久化、权限校验、业务规则校验、聚合计算、单据号与状态流转 |
+| 前端 | UI、表单交互、API 调用、轻量展示分组、局部乐观更新、会话缓存恢复 |
 
-**建议**：库存、已入库、财务汇总等计算优先放在后端，保证数据一致性；前端仅负责展示与交互。
-
----
-
-*接入数据库时按此清单逐项实现，并同步更新本文档状态。*
+**原则**：库存、汇总、状态流转、跨单据校验等应继续以后端为真源；前端不再承担核心业务真相，只承担展示与交互。

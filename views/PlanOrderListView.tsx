@@ -41,6 +41,9 @@ import {
   Sliders,
   Download,
   Printer,
+  QrCode,
+  Ban,
+  RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useConfirm } from '../contexts/ConfirmContext';
@@ -63,7 +66,13 @@ import {
   PrintTemplate,
   ProductionOrder,
   PrintRenderContext,
+  ItemCode,
+  PlanVirtualBatch,
 } from '../types';
+import { itemCodesApi, planVirtualBatchesApi } from '../services/api';
+import { buildPrintListRowsFromItemCodes, type ItemCodePrintContext } from '../utils/printItemCodeRows';
+import { buildVirtualBatchPrintRow } from '../utils/printVirtualBatch';
+import { formatBatchSerialLabel, formatItemCodeSerialLabel } from '../utils/serialLabels';
 import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
 import { SearchableProductSelect } from '../components/SearchableProductSelect';
 import { SearchablePartnerSelect } from '../components/SearchablePartnerSelect';
@@ -423,6 +432,30 @@ const SearchableMultiSelectWithProcessTabs = ({
   );
 };
 
+/** 计划树根 id → 根及所有子孙计划 id（与后端批次码子树一致） */
+function collectSubtreePlanIdsForPlan(rootId: string, allPlans: PlanOrder[]): string[] {
+  const childrenMap = new Map<string, PlanOrder[]>();
+  for (const p of allPlans) {
+    if (!p.parentPlanId) continue;
+    if (!childrenMap.has(p.parentPlanId)) childrenMap.set(p.parentPlanId, []);
+    childrenMap.get(p.parentPlanId)!.push(p);
+  }
+  const out: string[] = [];
+  let frontier: string[] = [rootId];
+  while (frontier.length > 0) {
+    out.push(...frontier);
+    const next: string[] = [];
+    for (const id of frontier) {
+      const ch = childrenMap.get(id);
+      if (ch) next.push(...ch.map(c => c.id));
+    }
+    frontier = next;
+  }
+  return out;
+}
+
+type TraceGenMode = null | 'item' | 'batch' | 'batchWithItems';
+
 const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMode = 'order', plans, products, categories, dictionaries, workers, equipment, globalNodes, boms, partners, partnerCategories = [], psiRecords = [], planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orders = [], onCreatePlan, onSplitPlan, onConvertToOrder, onDeletePlan, onUpdateProduct, onUpdatePlan, onAddPSIRecord, onAddPSIRecordBatch, onCreateSubPlan, onCreateSubPlans }) => {
   const [showModal, setShowModal] = useState(false);
   const [viewDetailPlanId, setViewDetailPlanId] = useState<string | null>(null);
@@ -452,6 +485,35 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
   const [filePreviewType, setFilePreviewType] = useState<'image' | 'pdf'>('image');
+  const [itemCodes, setItemCodes] = useState<ItemCode[]>([]);
+  const [itemCodesTotal, setItemCodesTotal] = useState(0);
+  const [itemCodesPage, setItemCodesPage] = useState(1);
+  const [itemCodesLoading, setItemCodesLoading] = useState(false);
+  const [itemCodesGenerating, setItemCodesGenerating] = useState(false);
+  const [itemCodesVariantFilter, setItemCodesVariantFilter] = useState<string>('');
+  /** 详情内「打印单品码」弹窗 */
+  const [itemCodePrintOpen, setItemCodePrintOpen] = useState(false);
+  const [itemCodePrintPlan, setItemCodePrintPlan] = useState<PlanOrder | null>(null);
+  const [itemCodePrintCodes, setItemCodePrintCodes] = useState<ItemCode[]>([]);
+  const [itemCodePrintSelectedIds, setItemCodePrintSelectedIds] = useState<Set<string>>(new Set());
+  const [itemCodePrintLoading, setItemCodePrintLoading] = useState(false);
+  const [virtualBatches, setVirtualBatches] = useState<PlanVirtualBatch[]>([]);
+  /** 子树内全部批次码，用于计算「最多还可生成」（与后端占用汇总一致） */
+  const [virtualBatchesSubtree, setVirtualBatchesSubtree] = useState<PlanVirtualBatch[]>([]);
+  const [virtualBatchesLoading, setVirtualBatchesLoading] = useState(false);
+  const [vbCreating, setVbCreating] = useState(false);
+  const [vbBulkBatchSize, setVbBulkBatchSize] = useState<string>('');
+  const [vbBulkSplitting, setVbBulkSplitting] = useState(false);
+  const [vbVariantId, setVbVariantId] = useState<string>('');
+  const [vbQuantity, setVbQuantity] = useState<string>('');
+  /** 追溯码：先选生成类型，再展示对应表单（单品码 / 批次码 / 单品码+批次码） */
+  const [traceGenMode, setTraceGenMode] = useState<TraceGenMode>(null);
+  /** 单品码列表按批次筛选（从批次表点击单品码数时设置） */
+  const [itemCodesBatchFilter, setItemCodesBatchFilter] = useState<string>('');
+  const [batchPrintModal, setBatchPrintModal] = useState<{ plan: PlanOrder; batch: PlanVirtualBatch } | null>(null);
+  const sectionTraceRef = useRef<HTMLDivElement>(null);
+  const traceItemListRef = useRef<HTMLDivElement>(null);
+  const traceBatchListRef = useRef<HTMLDivElement>(null);
   /** 计划详情页内锚点：点击小标签滚动到对应类目 */
   const sectionBasicRef = useRef<HTMLDivElement>(null);
   const sectionQtyRef = useRef<HTMLDivElement>(null);
@@ -516,6 +578,78 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
     }
     return nums;
   }, [viewPlan, plans]);
+
+  /** 与后端一致：子树内计划量 − 子树内有效批次占用 = 本次最多可填 */
+  const vbQuotaInfo = useMemo(() => {
+    if (!viewPlan || !viewProduct) return null;
+    const vKey = (v: string | null | undefined) => v ?? '';
+    if (viewProduct.variants.length > 0 && !vbVariantId) {
+      return { kind: 'needVariant' as const };
+    }
+    const effVariant: string | null = viewProduct.variants.length > 0 ? vbVariantId : null;
+    const subtree = collectSubtreePlanIdsForPlan(viewPlan.id, plans);
+    const productId = viewPlan.productId;
+    let maxFromPlan = 0;
+    for (const pid of subtree) {
+      const p = plans.find(pl => pl.id === pid);
+      if (!p || p.productId !== productId) continue;
+      for (const it of p.items || []) {
+        if (vKey(it.variantId) === vKey(effVariant)) {
+          maxFromPlan += Math.floor(Number(it.quantity));
+        }
+      }
+    }
+    let allocated = 0;
+    for (const b of virtualBatchesSubtree) {
+      if (b.status !== 'ACTIVE') continue;
+      if (b.productId !== productId) continue;
+      if (!subtree.includes(b.planOrderId)) continue;
+      if (vKey(b.variantId) !== vKey(effVariant)) continue;
+      allocated += b.quantity;
+    }
+    const remaining = Math.max(0, maxFromPlan - allocated);
+    return { kind: 'ok' as const, maxFromPlan, allocated, remaining };
+  }, [viewPlan, viewProduct, vbVariantId, plans, virtualBatchesSubtree]);
+
+  /** 全规格剩余可拆件数合计（与批量拆满逻辑一致，用于禁用/提示） */
+  const vbBulkAllSummary = useMemo(() => {
+    if (!viewPlan || !viewProduct) return null;
+    const vKey = (v: string | null | undefined) => v ?? '';
+    const subtree = collectSubtreePlanIdsForPlan(viewPlan.id, plans);
+    const productId = viewPlan.productId;
+    const variantKeys = new Set<string>();
+    for (const pid of subtree) {
+      const p = plans.find(pl => pl.id === pid);
+      if (!p || p.productId !== productId) continue;
+      for (const it of p.items || []) {
+        variantKeys.add(vKey(it.variantId));
+      }
+    }
+    if (variantKeys.size === 0) {
+      return { totalRemaining: 0, variantCount: 0 };
+    }
+    let totalRemaining = 0;
+    for (const vk of variantKeys) {
+      let maxFromPlan = 0;
+      for (const pid of subtree) {
+        const p = plans.find(pl => pl.id === pid);
+        if (!p || p.productId !== productId) continue;
+        for (const it of p.items || []) {
+          if (vKey(it.variantId) === vk) maxFromPlan += Math.floor(Number(it.quantity));
+        }
+      }
+      let allocated = 0;
+      for (const b of virtualBatchesSubtree) {
+        if (b.status !== 'ACTIVE') continue;
+        if (b.productId !== productId) continue;
+        if (!subtree.includes(b.planOrderId)) continue;
+        if (vKey(b.variantId) !== vk) continue;
+        allocated += b.quantity;
+      }
+      totalRemaining += Math.max(0, maxFromPlan - allocated);
+    }
+    return { totalRemaining, variantCount: variantKeys.size };
+  }, [viewPlan, viewProduct, plans, virtualBatchesSubtree]);
 
   const getUnitName = (productId: string) => {
     const p = products.find(x => x.id === productId);
@@ -1189,6 +1323,9 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
     ? {
         plan: planListPrintRun.plan,
         product: products.find(p => p.id === planListPrintRun.plan.productId),
+        printListRows: (planListPrintRun.plan as any)._printListRows ?? undefined,
+        labelPerRow: (planListPrintRun.plan as any)._labelPerRow ?? undefined,
+        virtualBatch: (planListPrintRun.plan as any)._virtualBatch ?? undefined,
       }
     : idlePlanPrintCtx;
 
@@ -1199,11 +1336,19 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
 
   useEffect(() => {
     if (!planListPrintRun) return;
-    const raf = requestAnimationFrame(() => {
-      void handlePlanListPrint();
-      setPlanListPrintRun(null);
-    });
-    return () => cancelAnimationFrame(raf);
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      const maybePromise = handlePlanListPrint();
+      if (maybePromise && typeof (maybePromise as any).then === 'function') {
+        (maybePromise as Promise<void>).finally(() => {
+          if (!cancelled) setPlanListPrintRun(null);
+        });
+      } else {
+        setTimeout(() => { if (!cancelled) setPlanListPrintRun(null); }, 1000);
+      }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [planListPrintRun, handlePlanListPrint]);
 
   const openPlanPrintPicker = useCallback(
@@ -1216,6 +1361,213 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
       setPlanPrintPickerOpen(true);
     },
     [planListPrintPickerTemplates],
+  );
+
+  const labelPrintPickerTemplates = useMemo(() => {
+    const allowed = planFormSettings.labelPrint?.allowedTemplateIds;
+    if (!allowed?.length) return printTemplates;
+    return printTemplates.filter(t => allowed.includes(t.id));
+  }, [printTemplates, planFormSettings.labelPrint?.allowedTemplateIds]);
+
+  const openItemCodePrintPicker = useCallback(
+    (plan: PlanOrder, variantFilter: string, batchFilter: string) => {
+      if (!labelPrintPickerTemplates.length) {
+        toast.error('暂无标签打印模版，请在「表单配置 → 打印模版」中配置标签白名单或取消白名单限制');
+        return;
+      }
+      setItemCodePrintPlan(plan);
+      setItemCodePrintOpen(true);
+      setItemCodePrintLoading(true);
+      const params: Record<string, string | number> = {
+        planOrderId: plan.id,
+        page: 1,
+        pageSize: 500,
+        status: 'ACTIVE',
+      };
+      if (variantFilter) params.variantId = variantFilter;
+      if (batchFilter) params.batchId = batchFilter;
+      void itemCodesApi
+        .list(params as any)
+        .then(res => {
+          setItemCodePrintCodes(res.items);
+          setItemCodePrintSelectedIds(new Set(res.items.map(c => c.id)));
+        })
+        .catch(() => toast.error('加载单品码失败'))
+        .finally(() => setItemCodePrintLoading(false));
+    },
+    [labelPrintPickerTemplates],
+  );
+
+  const loadItemCodes = useCallback(async (planOrderId: string, page = 1, variantFilter = '', batchFilter = '') => {
+    setItemCodesLoading(true);
+    try {
+      const params: any = { planOrderId, page, pageSize: 100, status: 'ACTIVE' };
+      if (variantFilter) params.variantId = variantFilter;
+      if (batchFilter) params.batchId = batchFilter;
+      const res = await itemCodesApi.list(params);
+      setItemCodes(res.items);
+      setItemCodesTotal(res.total);
+      setItemCodesPage(res.page);
+    } catch (e: any) {
+      toast.error(e.message || '加载单品码失败');
+    } finally {
+      setItemCodesLoading(false);
+    }
+  }, []);
+
+  const handleGenerateItemCodes = useCallback(async (planOrderId: string) => {
+    setItemCodesGenerating(true);
+    try {
+      const res = await itemCodesApi.generate(planOrderId);
+      if (res.generated === 0) {
+        toast.info('单品码已全部生成，无需补充');
+      } else {
+        const details = res.byVariant
+          .filter(v => v.count > 0)
+          .map(v => `${v.variantId ? v.variantId : '总量'}: ${v.count}`)
+          .join(', ');
+        toast.success(`已生成 ${res.generated} 个单品码${details ? `（${details}）` : ''}`);
+      }
+      await loadItemCodes(planOrderId, 1, itemCodesVariantFilter, itemCodesBatchFilter);
+    } catch (e: any) {
+      toast.error(e.message || '生成单品码失败');
+    } finally {
+      setItemCodesGenerating(false);
+    }
+  }, [loadItemCodes, itemCodesVariantFilter, itemCodesBatchFilter]);
+
+  const handleVoidItemCode = useCallback(async (codeId: string, planOrderId: string) => {
+    try {
+      await itemCodesApi.void(codeId);
+      toast.success('单品码已作废');
+      await loadItemCodes(planOrderId, itemCodesPage, itemCodesVariantFilter, itemCodesBatchFilter);
+    } catch (e: any) {
+      toast.error(e.message || '作废失败');
+    }
+  }, [loadItemCodes, itemCodesPage, itemCodesVariantFilter, itemCodesBatchFilter]);
+
+  const loadVirtualBatches = useCallback(async (planOrderId: string) => {
+    setVirtualBatchesLoading(true);
+    try {
+      const subtree = collectSubtreePlanIdsForPlan(planOrderId, plans);
+      const results = await Promise.all(
+        subtree.map(id => planVirtualBatchesApi.list({ planOrderId: id }).then(res => ({ id, items: res.items }))),
+      );
+      const byId = new Map<string, PlanVirtualBatch>();
+      for (const { items } of results) {
+        for (const b of items) byId.set(b.id, b);
+      }
+      setVirtualBatchesSubtree([...byId.values()]);
+      setVirtualBatches(results.find(r => r.id === planOrderId)?.items ?? []);
+    } catch (e: any) {
+      toast.error(e.message || '加载批次码失败');
+    } finally {
+      setVirtualBatchesLoading(false);
+    }
+  }, [plans]);
+
+  useEffect(() => {
+    if (viewDetailPlanId) {
+      void loadItemCodes(viewDetailPlanId);
+      void loadVirtualBatches(viewDetailPlanId);
+      setItemCodesVariantFilter('');
+      setItemCodesBatchFilter('');
+      setVbVariantId('');
+      setVbQuantity('');
+      setVbBulkBatchSize('');
+      setTraceGenMode(null);
+    } else {
+      setItemCodes([]);
+      setItemCodesTotal(0);
+      setVirtualBatches([]);
+      setVirtualBatchesSubtree([]);
+    }
+  }, [viewDetailPlanId, loadItemCodes, loadVirtualBatches]);
+
+  const handleCreateVirtualBatch = useCallback(
+    async (planOrderId: string, productVariants: ProductVariant[]) => {
+      const qty = Math.floor(Number(vbQuantity));
+      if (!Number.isFinite(qty) || qty < 1) {
+        toast.error('请输入有效的批次件数（≥1）');
+        return;
+      }
+      let variantId: string | null = null;
+      if (productVariants.length > 0) {
+        if (!vbVariantId) {
+          toast.error('请选择规格（颜色/尺码）');
+          return;
+        }
+        variantId = vbVariantId;
+      }
+      setVbCreating(true);
+      try {
+        const res = await planVirtualBatchesApi.create({
+          planOrderId,
+          variantId,
+          quantity: qty,
+          withItemCodes: traceGenMode === 'batchWithItems',
+        });
+        const ic = res.itemCodesCreated ?? 0;
+        toast.success(
+          ic > 0 ? `已生成批次码，并生成 ${ic} 个单品码` : '已生成批次码',
+        );
+        setVbQuantity('');
+        await loadVirtualBatches(planOrderId);
+        await loadItemCodes(planOrderId, 1, itemCodesVariantFilter, itemCodesBatchFilter);
+      } catch (e: any) {
+        toast.error(e.message || '生成失败');
+      } finally {
+        setVbCreating(false);
+      }
+    },
+    [vbQuantity, vbVariantId, traceGenMode, loadVirtualBatches, loadItemCodes, itemCodesVariantFilter, itemCodesBatchFilter],
+  );
+
+  const handleBulkSplitVirtualBatches = useCallback(
+    async (planOrderId: string) => {
+      const bs = Math.floor(Number(vbBulkBatchSize));
+      if (!Number.isFinite(bs) || bs < 1) {
+        toast.error('请输入有效的每批件数（≥1）');
+        return;
+      }
+      setVbBulkSplitting(true);
+      try {
+        const res = await planVirtualBatchesApi.bulkSplitAll({
+          planOrderId,
+          batchSize: bs,
+          withItemCodes: traceGenMode === 'batchWithItems',
+        });
+        const vCount = res.byVariant.length;
+        const totalQty = res.byVariant.reduce((s, x) => s + x.totalQty, 0);
+        const ic = res.itemCodesCreated ?? 0;
+        toast.success(
+          ic > 0
+            ? `已生成 ${res.totalCreated} 个批次码（${vCount} 种规格），合计 ${totalQty} 件；同时生成 ${ic} 个单品码`
+            : `已生成 ${res.totalCreated} 个批次码（${vCount} 种规格），合计 ${totalQty} 件，每批最多 ${res.batchSize} 件`,
+        );
+        await loadVirtualBatches(planOrderId);
+        await loadItemCodes(planOrderId, 1, itemCodesVariantFilter, itemCodesBatchFilter);
+      } catch (e: any) {
+        toast.error(e.message || '批量拆批失败');
+      } finally {
+        setVbBulkSplitting(false);
+      }
+    },
+    [vbBulkBatchSize, traceGenMode, loadVirtualBatches, loadItemCodes, itemCodesVariantFilter, itemCodesBatchFilter],
+  );
+
+  const handleVoidVirtualBatch = useCallback(
+    async (id: string, planOrderId: string) => {
+      try {
+        await planVirtualBatchesApi.void(id);
+        toast.success('批次码已作废（关联单品码已同步作废）');
+        await loadVirtualBatches(planOrderId);
+        await loadItemCodes(planOrderId, itemCodesPage, itemCodesVariantFilter, itemCodesBatchFilter);
+      } catch (e: any) {
+        toast.error(e.message || '作废失败');
+      }
+    },
+    [loadVirtualBatches, loadItemCodes, itemCodesPage, itemCodesVariantFilter, itemCodesBatchFilter],
   );
 
   /** 递归获取某计划下所有子孙计划（深度优先，用于列表展示），返回 { plan, depth } */
@@ -1865,6 +2217,9 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
               <button type="button" onClick={() => sectionMaterialRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/80 transition-colors">
                 生产用料
               </button>
+              <button type="button" onClick={() => sectionTraceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/80 transition-colors">
+                <span className="inline-flex items-center gap-1"><QrCode className="w-3.5 h-3.5" />追溯码</span>
+              </button>
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar p-10 space-y-12 bg-slate-50/30">
@@ -2401,6 +2756,484 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                   )}
                </div>
 
+               {/* 5. 追溯码 */}
+               <div ref={sectionTraceRef} className="space-y-4 scroll-mt-4">
+                  <div className="flex items-center gap-3 border-b border-slate-100 pb-4 ml-2">
+                    <QrCode className="w-5 h-5 text-indigo-600" />
+                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">5. 追溯码</h3>
+                  </div>
+                  <div className="bg-white p-8 rounded-[32px] border border-slate-200 shadow-sm space-y-8">
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">生成类型</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setTraceGenMode('item')}
+                          className={`rounded-2xl border-2 px-4 py-4 text-left transition-all ${traceGenMode === 'item' ? 'border-indigo-500 bg-indigo-50/80 shadow-md shadow-indigo-100' : 'border-slate-200 bg-slate-50/50 hover:border-slate-300'}`}
+                        >
+                          <span className="text-xs font-black text-slate-800 block">单品码</span>
+                          <span className="text-[10px] text-slate-500 mt-1 block leading-snug">一物一码，不经过批次</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTraceGenMode('batch')}
+                          className={`rounded-2xl border-2 px-4 py-4 text-left transition-all ${traceGenMode === 'batch' ? 'border-indigo-500 bg-indigo-50/80 shadow-md shadow-indigo-100' : 'border-slate-200 bg-slate-50/50 hover:border-slate-300'}`}
+                        >
+                          <span className="text-xs font-black text-slate-800 block">批次码</span>
+                          <span className="text-[10px] text-slate-500 mt-1 block leading-snug">按批二维码，不自动建单品码</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTraceGenMode('batchWithItems')}
+                          className={`rounded-2xl border-2 px-4 py-4 text-left transition-all ${traceGenMode === 'batchWithItems' ? 'border-indigo-500 bg-indigo-50/80 shadow-md shadow-indigo-100' : 'border-slate-200 bg-slate-50/50 hover:border-slate-300'}`}
+                        >
+                          <span className="text-xs font-black text-slate-800 block">单品码+批次码</span>
+                          <span className="text-[10px] text-slate-500 mt-1 block leading-snug">建批时同步生成关联单品码</span>
+                        </button>
+                      </div>
+                      {traceGenMode === null && (
+                        <p className="mt-4 text-xs text-amber-900 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 leading-relaxed">
+                          请先选择要生成的码类型，再填写参数并点击生成。
+                        </p>
+                      )}
+                    </div>
+
+                    {(traceGenMode === 'item' || traceGenMode === 'batchWithItems') && (
+                      <div className="flex items-center justify-between flex-wrap gap-3 rounded-2xl border border-slate-100 bg-slate-50/50 p-5">
+                        <p className="text-xs text-slate-500 max-w-xl">
+                          {traceGenMode === 'batchWithItems' ? (
+                            <>
+                              除批次同步生成的关联单品码外，还可在此<strong className="text-slate-700">单独补充</strong>不绑定批次的单品码；下方列表含<strong className="text-slate-700">批次码</strong>列便于对照。
+                            </>
+                          ) : (
+                            <>为计划内每件货物生成全局唯一单品码（不绑定批次），可用于标签打印与扫码识别。</>
+                          )}
+                        </p>
+                        <button
+                          type="button"
+                          disabled={itemCodesGenerating}
+                          onClick={() => viewPlan && handleGenerateItemCodes(viewPlan.id)}
+                          className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all flex items-center gap-2 disabled:opacity-50 shadow-lg shadow-indigo-100 shrink-0"
+                        >
+                          {itemCodesGenerating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <QrCode className="w-3.5 h-3.5" />}
+                          {itemCodesGenerating ? '生成中...' : '生成单品码'}
+                        </button>
+                      </div>
+                    )}
+
+                    {(traceGenMode === 'batch' || traceGenMode === 'batchWithItems') && (
+                      <div className="space-y-6">
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                          一个二维码对应<strong className="text-slate-700">固定件数</strong>。额度按<strong className="text-slate-600">本计划及子计划、同产品</strong>的计划明细汇总；有效批次占用额度，作废不占。标签请使用打印模版中的批次码占位符。
+                          {traceGenMode === 'batchWithItems' ? (
+                            <> 当前类型下，每批会<strong className="text-slate-600">同步创建 N 条可单独扫码的单品码</strong>并与批次关联；作废批次将级联作废这些单品码。</>
+                          ) : (
+                            <> 当前类型下<strong className="text-slate-600">不会</strong>随批次自动创建单品码。</>
+                          )}
+                        </p>
+
+                        <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/80 to-white p-5 space-y-4 shadow-sm shadow-indigo-500/5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-white">
+                              <Layers className="w-3.5 h-3.5" />
+                            </span>
+                            <div>
+                              <p className="text-[11px] font-black text-indigo-950 uppercase tracking-wider">快速批量</p>
+                              <p className="text-[10px] text-slate-500 mt-0.5">对计划树里出现的<strong className="text-slate-600">每一种规格</strong>分别拆满剩余额度，无需先选规格。</p>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+                            <div className="flex w-[7.5rem] shrink-0 flex-col gap-1">
+                              <label className="text-[10px] font-black text-slate-400 uppercase">每批件数</label>
+                              <input
+                                type="number"
+                                min={1}
+                                value={vbBulkBatchSize}
+                                onChange={e => setVbBulkBatchSize(e.target.value)}
+                                placeholder={vbBulkAllSummary && vbBulkAllSummary.totalRemaining > 0 ? '如 50' : '—'}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-800"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              disabled={
+                                vbBulkSplitting ||
+                                !vbBulkAllSummary ||
+                                vbBulkAllSummary.variantCount === 0 ||
+                                vbBulkAllSummary.totalRemaining <= 0
+                              }
+                              onClick={() => viewPlan && handleBulkSplitVirtualBatches(viewPlan.id)}
+                              className="shrink-0 rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-200 transition-all hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                            >
+                              {vbBulkSplitting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />}
+                              {vbBulkSplitting ? '拆批中...' : '一键拆满全部规格'}
+                            </button>
+                            {vbBulkAllSummary && vbBulkAllSummary.variantCount > 0 ? (
+                              <p className="text-[10px] text-slate-500 sm:max-w-xs sm:pb-0.5">
+                                {vbBulkAllSummary.totalRemaining > 0 ? (
+                                  <>全规格合计还可分配约 <strong className="text-slate-700">{vbBulkAllSummary.totalRemaining}</strong> 件（{vbBulkAllSummary.variantCount} 种规格有明细）。</>
+                                ) : (
+                                  <>当前各规格剩余额度已为 0，无法继续批量拆批。</>
+                                )}
+                              </p>
+                            ) : (
+                              <p className="text-[10px] text-slate-400 sm:pb-0.5">暂无计划明细，无法拆批。</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50/40 p-5 space-y-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-700 text-white">
+                              <Boxes className="w-3.5 h-3.5" />
+                            </span>
+                            <div>
+                              <p className="text-[11px] font-black text-slate-800 uppercase tracking-wider">单条生成</p>
+                              <p className="text-[10px] text-slate-500 mt-0.5">任选一种规格，自定义本批次件数（受该规格剩余额度限制）。</p>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-end gap-3">
+                            {viewProduct.variants.length > 0 ? (
+                              <div className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-[220px]">
+                                <label className="text-[10px] font-black text-slate-400 uppercase">规格</label>
+                                <select
+                                  value={vbVariantId}
+                                  onChange={e => setVbVariantId(e.target.value)}
+                                  className="w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-800"
+                                >
+                                  <option value="">请选择</option>
+                                  {viewProduct.variants.map(v => {
+                                    const color = dictionaries.colors.find(c => c.id === v.colorId);
+                                    const size = dictionaries.sizes.find(s => s.id === v.sizeId);
+                                    const label = [color?.name, size?.name].filter(Boolean).join('-') || v.skuSuffix || v.id;
+                                    return (
+                                      <option key={v.id} value={v.id}>{label}</option>
+                                    );
+                                  })}
+                                </select>
+                              </div>
+                            ) : null}
+                            <div className="flex w-[7.5rem] shrink-0 flex-col gap-1">
+                              <label className="text-[10px] font-black text-slate-400 uppercase">件数</label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={vbQuotaInfo?.kind === 'ok' && vbQuotaInfo.remaining > 0 ? vbQuotaInfo.remaining : undefined}
+                                value={vbQuantity}
+                                onChange={e => setVbQuantity(e.target.value)}
+                                placeholder={
+                                  vbQuotaInfo?.kind === 'needVariant'
+                                    ? '请先选规格'
+                                    : vbQuotaInfo?.kind === 'ok'
+                                      ? vbQuotaInfo.remaining > 0
+                                        ? `最多 ${vbQuotaInfo.remaining}`
+                                        : '已满（0）'
+                                      : '如 100'
+                                }
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-800"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              disabled={vbCreating}
+                              onClick={() => viewPlan && handleCreateVirtualBatch(viewPlan.id, viewProduct.variants)}
+                              className="shrink-0 border-2 border-slate-300 bg-white text-slate-800 px-5 py-2.5 rounded-xl text-xs font-bold hover:border-slate-400 hover:bg-slate-50 transition-all flex items-center gap-2 disabled:opacity-50"
+                            >
+                              {vbCreating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Boxes className="w-3.5 h-3.5" />}
+                              {vbCreating ? '生成中...' : '生成批次码'}
+                            </button>
+                          </div>
+                          {vbQuotaInfo?.kind === 'ok' && vbQuotaInfo.maxFromPlan > 0 && (
+                            <p className="text-[10px] text-slate-400 leading-tight">
+                              当前所选规格：计划量 {vbQuotaInfo.maxFromPlan}，已用批次 {vbQuotaInfo.allocated}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {(traceGenMode === 'item' || traceGenMode === 'batchWithItems') && (
+                    <div ref={traceItemListRef} className="border-t border-slate-200 pt-8 space-y-4 scroll-mt-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                          <QrCode className="w-4 h-4 text-indigo-600 shrink-0" />
+                          单品码一览
+                        </h4>
+                        {viewPlan && itemCodesTotal > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => openItemCodePrintPicker(viewPlan, itemCodesVariantFilter, itemCodesBatchFilter)}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-white px-4 py-2 text-xs font-black text-indigo-700 hover:bg-indigo-50 transition-colors"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            打印单品码
+                          </button>
+                        )}
+                      </div>
+
+                      {viewProduct.variants.length > 0 && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] font-black text-slate-400 uppercase">筛选规格：</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setItemCodesVariantFilter('');
+                              setItemCodesBatchFilter('');
+                              viewPlan && loadItemCodes(viewPlan.id, 1, '', '');
+                            }}
+                            className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${!itemCodesVariantFilter ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                          >
+                            全部
+                          </button>
+                          {viewProduct.variants.map(v => {
+                            const color = dictionaries.colors.find(c => c.id === v.colorId);
+                            const size = dictionaries.sizes.find(s => s.id === v.sizeId);
+                            const label = [color?.name, size?.name].filter(Boolean).join('-') || v.skuSuffix || v.id;
+                            return (
+                              <button
+                                key={v.id}
+                                type="button"
+                                onClick={() => {
+                                  setItemCodesBatchFilter('');
+                                  setItemCodesVariantFilter(v.id);
+                                  viewPlan && loadItemCodes(viewPlan.id, 1, v.id, '');
+                                }}
+                                className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${itemCodesVariantFilter === v.id ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {itemCodesBatchFilter && viewPlan && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[10px] font-black text-slate-400 uppercase">批次筛选</span>
+                          <span className="rounded-lg bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">
+                            仅显示所选批次的单品码
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setItemCodesBatchFilter('');
+                              viewPlan && loadItemCodes(viewPlan.id, 1, itemCodesVariantFilter, '');
+                            }}
+                            className="text-xs font-bold text-indigo-600 hover:text-indigo-800"
+                          >
+                            清除批次筛选
+                          </button>
+                        </div>
+                      )}
+
+                      {itemCodesLoading ? (
+                        <div className="text-center py-8 text-sm text-slate-400">加载中...</div>
+                      ) : itemCodes.length === 0 ? (
+                        <div className="text-center py-8 text-sm text-slate-400">
+                          暂无单品码
+                          {traceGenMode === 'item'
+                            ? '，点击上方「生成单品码」开始'
+                            : '；可点击上方「生成单品码」补充，或通过下方批次生成时自动创建关联单品码'}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="text-xs text-slate-500">
+                            共 <span className="font-black text-indigo-600">{itemCodesTotal}</span> 个单品码
+                            {itemCodesTotal > 100 && `（第 ${itemCodesPage} 页）`}
+                          </div>
+                          <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                            <table className="w-full text-left border-collapse">
+                              <thead>
+                                <tr className="bg-slate-50 border-b border-slate-200">
+                                  <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase">编号</th>
+                                  <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase">
+                                    {traceGenMode === 'batchWithItems' ? '批次码' : '所属批次'}
+                                  </th>
+                                  <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase">规格</th>
+                                  <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase">状态</th>
+                                  <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase">生成时间</th>
+                                  <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase text-right">操作</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {itemCodes.map(code => {
+                                  const variant = viewProduct.variants.find(v => v.id === code.variantId);
+                                  const color = variant?.colorId ? dictionaries.colors.find(c => c.id === variant.colorId) : null;
+                                  const size = variant?.sizeId ? dictionaries.sizes.find(s => s.id === variant.sizeId) : null;
+                                  const variantLabel = [color?.name, size?.name].filter(Boolean).join('-') || variant?.skuSuffix || '—';
+                                  return (
+                                    <tr key={code.id} className="hover:bg-slate-50/50">
+                                      <td className="px-4 py-2.5 text-xs font-bold text-slate-800 break-all">
+                                        {formatItemCodeSerialLabel(viewPlan.planNumber, code.serialNo)}
+                                      </td>
+                                      <td
+                                        className={`px-4 py-2.5 text-xs break-all ${traceGenMode === 'batchWithItems' && code.batch?.sequenceNo != null ? 'cursor-pointer text-indigo-600 hover:underline' : 'text-slate-600'}`}
+                                        onClick={() => {
+                                          if (!code.batch?.sequenceNo || traceGenMode !== 'batchWithItems') return;
+                                          traceBatchListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                        }}
+                                        title={traceGenMode === 'batchWithItems' && code.batch?.sequenceNo != null ? '点击查看下方批次码一览' : undefined}
+                                      >
+                                        {code.batch?.sequenceNo != null
+                                          ? formatBatchSerialLabel(viewPlan.planNumber, code.batch.sequenceNo)
+                                          : '—'}
+                                      </td>
+                                      <td className="px-4 py-2.5 text-xs text-slate-600">{variantLabel}</td>
+                                      <td className="px-4 py-2.5">
+                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${code.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-500'}`}>
+                                          {code.status === 'ACTIVE' ? '正常' : '已作废'}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 py-2.5 text-[10px] text-slate-400">{new Date(code.createdAt).toLocaleDateString('zh-CN')}</td>
+                                      <td className="px-4 py-2.5 text-right">
+                                        {code.status === 'ACTIVE' && (
+                                          <button
+                                            type="button"
+                                            onClick={() => viewPlan && handleVoidItemCode(code.id, viewPlan.id)}
+                                            className="text-[10px] font-bold text-rose-400 hover:text-rose-600 px-2 py-1 rounded hover:bg-rose-50 transition-colors"
+                                          >
+                                            <Ban className="w-3 h-3 inline mr-0.5" />作废
+                                          </button>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                          {itemCodesTotal > 100 && (
+                            <div className="flex items-center justify-center gap-2 pt-2">
+                              <button
+                                type="button"
+                                disabled={itemCodesPage <= 1}
+                                onClick={() =>
+                                  viewPlan &&
+                                  loadItemCodes(viewPlan.id, itemCodesPage - 1, itemCodesVariantFilter, itemCodesBatchFilter)
+                                }
+                                className="px-3 py-1 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 disabled:opacity-50"
+                              >
+                                上一页
+                              </button>
+                              <span className="text-xs text-slate-500">第 {itemCodesPage} 页 / 共 {Math.ceil(itemCodesTotal / 100)} 页</span>
+                              <button
+                                type="button"
+                                disabled={itemCodesPage >= Math.ceil(itemCodesTotal / 100)}
+                                onClick={() =>
+                                  viewPlan &&
+                                  loadItemCodes(viewPlan.id, itemCodesPage + 1, itemCodesVariantFilter, itemCodesBatchFilter)
+                                }
+                                className="px-3 py-1 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 disabled:opacity-50"
+                              >
+                                下一页
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    )}
+
+                    {(traceGenMode === 'batch' || traceGenMode === 'batchWithItems') && (
+                    <div ref={traceBatchListRef} className="border-t border-slate-200 pt-8 space-y-4 scroll-mt-4">
+                      <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                        <Boxes className="w-4 h-4 text-indigo-600 shrink-0" />
+                        批次码一览
+                      </h4>
+                      {virtualBatchesLoading ? (
+                        <div className="text-center py-8 text-sm text-slate-400">加载中...</div>
+                      ) : virtualBatches.length === 0 ? (
+                        <div className="text-center py-8 text-sm text-slate-400">暂无批次码</div>
+                      ) : (
+                        <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-200">
+                                <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase min-w-[7rem]">编号</th>
+                                <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase">规格</th>
+                                <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase">件数</th>
+                                {traceGenMode === 'batchWithItems' && (
+                                  <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase w-16">单品码</th>
+                                )}
+                                <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase">状态</th>
+                                <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase">创建时间</th>
+                                <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase text-right">操作</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {virtualBatches.map(b => {
+                                const variant = b.variantId ? viewProduct.variants.find(v => v.id === b.variantId) : null;
+                                const color = variant?.colorId ? dictionaries.colors.find(c => c.id === variant.colorId) : null;
+                                const size = variant?.sizeId ? dictionaries.sizes.find(s => s.id === variant.sizeId) : null;
+                                const variantLabel = variant
+                                  ? [color?.name, size?.name].filter(Boolean).join('-') || variant.skuSuffix || '—'
+                                  : '默认';
+                                return (
+                                  <tr key={b.id} className="hover:bg-slate-50/50">
+                                    <td className="px-4 py-2.5 text-xs font-black text-slate-700 break-all" title={b.sequenceNo != null ? String(b.sequenceNo) : undefined}>
+                                      {b.sequenceNo != null ? formatBatchSerialLabel(viewPlan.planNumber, b.sequenceNo) : '—'}
+                                    </td>
+                                    <td className="px-4 py-2.5 text-xs text-slate-600">{variantLabel}</td>
+                                    <td className="px-4 py-2.5 text-xs font-black text-indigo-600">{b.quantity}</td>
+                                    {traceGenMode === 'batchWithItems' && (
+                                      <td className="px-4 py-2.5 text-xs">
+                                        {(b.itemCodeCount ?? 0) > 0 ? (
+                                          <button
+                                            type="button"
+                                            className="font-black text-indigo-600 hover:underline"
+                                            onClick={() => {
+                                              if (!viewPlan) return;
+                                              setItemCodesBatchFilter(b.id);
+                                              traceItemListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                              void loadItemCodes(viewPlan.id, 1, itemCodesVariantFilter, b.id);
+                                            }}
+                                          >
+                                            {b.itemCodeCount}
+                                          </button>
+                                        ) : (
+                                          <span className="text-slate-400">—</span>
+                                        )}
+                                      </td>
+                                    )}
+                                    <td className="px-4 py-2.5">
+                                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${b.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-500'}`}>
+                                        {b.status === 'ACTIVE' ? '正常' : '已作废'}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2.5 text-[10px] text-slate-400">{new Date(b.createdAt).toLocaleString('zh-CN')}</td>
+                                    <td className="px-4 py-2.5 text-right space-x-2">
+                                      {b.status === 'ACTIVE' && (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => viewPlan && setBatchPrintModal({ plan: viewPlan, batch: b })}
+                                            className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded hover:bg-indigo-50 transition-colors"
+                                          >
+                                            <Printer className="w-3 h-3 inline mr-0.5" />打印标签
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => viewPlan && handleVoidVirtualBatch(b.id, viewPlan.id)}
+                                            className="text-[10px] font-bold text-rose-400 hover:text-rose-600 px-2 py-1 rounded hover:bg-rose-50 transition-colors"
+                                          >
+                                            <Ban className="w-3 h-3 inline mr-0.5" />作废
+                                          </button>
+                                        </>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                    )}
+                  </div>
+               </div>
+
+
             </div>
 
             <div className="px-10 py-6 bg-white/80 backdrop-blur-lg border-t border-slate-100 flex justify-between items-center sticky bottom-0">
@@ -2575,8 +3408,17 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
         );
       })()}
 
-      {/* 列表打印：选择模版 */}
-      {planPrintPickerOpen && planPrintPickerPlan && (
+      {/* 列表打印：选择模版（仅计划单列表样式，单品码标签请在计划详情「单品码一览」中打印） */}
+      {planPrintPickerOpen && planPrintPickerPlan && (() => {
+        const pickerPlan = planPrintPickerPlan;
+
+        const handlePickListTemplate = (t: PrintTemplate) => {
+          setPlanListPrintRun({ template: t, plan: pickerPlan });
+          setPlanPrintPickerOpen(false);
+          setPlanPrintPickerPlan(null);
+        };
+
+        return (
         <div className="fixed inset-0 z-[72] flex items-center justify-center p-4">
           <button
             type="button"
@@ -2596,7 +3438,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <div>
                 <h3 className="text-base font-black text-slate-900">选择打印模版</h3>
-                <p className="mt-0.5 text-xs text-slate-500">计划单 {planPrintPickerPlan.planNumber}</p>
+                <p className="mt-0.5 text-xs text-slate-500">计划单 {pickerPlan.planNumber}</p>
               </div>
               <button
                 type="button"
@@ -2609,16 +3451,15 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <ul className="max-h-[min(60vh,360px)] divide-y divide-slate-100 overflow-y-auto p-2">
-              {planListPrintPickerTemplates.map(t => (
+
+            <ul className="max-h-[min(40vh,280px)] divide-y divide-slate-100 overflow-y-auto p-2">
+              {planListPrintPickerTemplates.length === 0 ? (
+                <li className="text-center py-6 text-xs text-slate-400">暂无可用模版</li>
+              ) : planListPrintPickerTemplates.map(t => (
                 <li key={t.id}>
                   <button
                     type="button"
-                    onClick={() => {
-                      setPlanListPrintRun({ template: t, plan: planPrintPickerPlan });
-                      setPlanPrintPickerOpen(false);
-                      setPlanPrintPickerPlan(null);
-                    }}
+                    onClick={() => handlePickListTemplate(t)}
                     className="flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold text-slate-800 hover:bg-indigo-50"
                   >
                     <span className="min-w-0 truncate">{t.name}</span>
@@ -2631,7 +3472,239 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
             </ul>
           </div>
         </div>
-      )}
+        );
+      })()}
+
+      {/* 计划详情：单品码标签打印 */}
+      {itemCodePrintOpen && itemCodePrintPlan && (() => {
+        const pickerPlan = itemCodePrintPlan;
+        const pickerProduct = products.find(p => p.id === pickerPlan.productId);
+
+        const handleItemCodeTemplatePick = (t: PrintTemplate) => {
+          const selectedCodes = itemCodePrintCodes.filter(c => itemCodePrintSelectedIds.has(c.id));
+          if (selectedCodes.length === 0) {
+            toast.error('请至少勾选一个单品码');
+            return;
+          }
+          const orders2 = (orders ?? []).filter((o: any) => o.planOrderId === pickerPlan.id);
+          const ctx2: ItemCodePrintContext = {
+            planNumber: pickerPlan.planNumber,
+            productName: pickerProduct?.name ?? '',
+            orderNumbers: orders2.map((o: any) => o.orderNumber),
+            variants: pickerProduct?.variants ?? [],
+          };
+          const baseUrl = window.location.origin;
+          const rows = buildPrintListRowsFromItemCodes(selectedCodes, ctx2, dictionaries, baseUrl);
+          setPlanListPrintRun({
+            template: t,
+            plan: { ...pickerPlan, _printListRows: rows, _labelPerRow: true } as any,
+          });
+          setItemCodePrintOpen(false);
+          setItemCodePrintPlan(null);
+          setItemCodePrintSelectedIds(new Set());
+        };
+
+        return (
+        <div className="fixed inset-0 z-[72] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            aria-label="关闭"
+            onClick={() => {
+              setItemCodePrintOpen(false);
+              setItemCodePrintPlan(null);
+              setItemCodePrintSelectedIds(new Set());
+            }}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div>
+                <h3 className="text-base font-black text-slate-900">打印单品码标签</h3>
+                <p className="mt-0.5 text-xs text-slate-500">计划单 {pickerPlan.planNumber}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setItemCodePrintOpen(false);
+                  setItemCodePrintPlan(null);
+                  setItemCodePrintSelectedIds(new Set());
+                }}
+                className="rounded-full p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="px-5 py-3 border-b border-slate-100 max-h-48 overflow-y-auto">
+              {itemCodePrintLoading ? (
+                <div className="text-center py-4 text-xs text-slate-400">加载中...</div>
+              ) : itemCodePrintCodes.length === 0 ? (
+                <div className="text-center py-4 text-xs text-slate-400">暂无单品码，请先生成单品码</div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-[10px] text-slate-400">
+                    已加载 {itemCodePrintCodes.length} 条（最多 500 条；超出时请用规格/批次筛选后分批打印）
+                  </p>
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 rounded text-indigo-600"
+                        checked={itemCodePrintSelectedIds.size === itemCodePrintCodes.length && itemCodePrintCodes.length > 0}
+                        onChange={e => {
+                          setItemCodePrintSelectedIds(
+                            e.target.checked ? new Set(itemCodePrintCodes.map(c => c.id)) : new Set(),
+                          );
+                        }}
+                      />
+                      全选（{itemCodePrintSelectedIds.size}/{itemCodePrintCodes.length}）
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {itemCodePrintCodes.map(code => {
+                      const variant = pickerProduct?.variants.find(v => v.id === code.variantId);
+                      const color = variant?.colorId ? dictionaries.colors.find(c => c.id === variant.colorId) : null;
+                      const size = variant?.sizeId ? dictionaries.sizes.find(s => s.id === variant.sizeId) : null;
+                      const vLabel = [color?.name, size?.name].filter(Boolean).join('-') || variant?.skuSuffix || '';
+                      return (
+                        <label
+                          key={code.id}
+                          className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-bold cursor-pointer transition-colors ${itemCodePrintSelectedIds.has(code.id) ? 'border-indigo-200 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'}`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-3 w-3 rounded text-indigo-600"
+                            checked={itemCodePrintSelectedIds.has(code.id)}
+                            onChange={e => {
+                              const next = new Set(itemCodePrintSelectedIds);
+                              if (e.target.checked) next.add(code.id);
+                              else next.delete(code.id);
+                              setItemCodePrintSelectedIds(next);
+                            }}
+                          />
+                          {formatItemCodeSerialLabel(pickerPlan.planNumber, code.serialNo)}
+                          {vLabel ? ` · ${vLabel}` : ''}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <ul className="max-h-[min(40vh,280px)] divide-y divide-slate-100 overflow-y-auto p-2">
+              {labelPrintPickerTemplates.length === 0 ? (
+                <li className="text-center py-6 text-xs text-slate-400">
+                  暂无标签打印模版，请在「表单配置 → 打印模版」中配置标签白名单
+                </li>
+              ) : labelPrintPickerTemplates.map(t => (
+                <li key={t.id}>
+                  <button
+                    type="button"
+                    onClick={() => handleItemCodeTemplatePick(t)}
+                    className="flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold text-slate-800 hover:bg-indigo-50"
+                  >
+                    <span className="min-w-0 truncate">{t.name}</span>
+                    <span className="shrink-0 text-xs font-bold text-indigo-600">
+                      {t.paperSize.widthMm}×{t.paperSize.heightMm} mm
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        );
+      })()}
+
+      {/* 批次码：选择标签模版 */}
+      {batchPrintModal && (() => {
+        const { plan, batch } = batchPrintModal;
+        const prod = products.find(p => p.id === plan.productId);
+        const variant = batch.variantId ? prod?.variants.find(v => v.id === batch.variantId) : null;
+        const color = variant?.colorId ? dictionaries.colors.find(c => c.id === variant.colorId) : null;
+        const size = variant?.sizeId ? dictionaries.sizes.find(s => s.id === variant.sizeId) : null;
+        const variantLabel = variant
+          ? [color?.name, size?.name].filter(Boolean).join('-') || variant.skuSuffix || ''
+          : '';
+        const pickTemplate = (t: PrintTemplate) => {
+          const orders2 = (orders ?? []).filter((o: ProductionOrder) => o.planOrderId === plan.id);
+          const vbRow = buildVirtualBatchPrintRow(
+            batch,
+            {
+              planNumber: plan.planNumber,
+              productName: prod?.name ?? '',
+              sku: prod?.sku ?? '',
+              orderNumbers: orders2.map(o => o.orderNumber).filter(Boolean).join(', '),
+              variantLabel,
+              colorName: color?.name ?? '',
+              sizeName: size?.name ?? '',
+            },
+            window.location.origin,
+          );
+          setPlanListPrintRun({ template: t, plan: { ...plan, _virtualBatch: vbRow } as any });
+          setBatchPrintModal(null);
+        };
+        return (
+          <div className="fixed inset-0 z-[73] flex items-center justify-center p-4">
+            <button
+              type="button"
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              aria-label="关闭"
+              onClick={() => setBatchPrintModal(null)}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                <div>
+                  <h3 className="text-base font-black text-slate-900">打印批次标签</h3>
+                  <p className="mt-0.5 text-xs text-slate-500 break-all">
+                    {batch.sequenceNo != null ? formatBatchSerialLabel(plan.planNumber, batch.sequenceNo) : '—'} · {batch.quantity} 件{variantLabel ? ` · ${variantLabel}` : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBatchPrintModal(null)}
+                  className="rounded-full p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <ul className="max-h-[min(40vh,280px)] divide-y divide-slate-100 overflow-y-auto p-2">
+                {labelPrintPickerTemplates.length === 0 ? (
+                  <li className="text-center py-6 text-xs text-slate-400">
+                    暂无标签打印模版，请在「表单配置 → 打印模版」中配置标签白名单
+                  </li>
+                ) : (
+                  labelPrintPickerTemplates.map(t => (
+                    <li key={t.id}>
+                      <button
+                        type="button"
+                        onClick={() => pickTemplate(t)}
+                        className="flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold text-slate-800 hover:bg-indigo-50"
+                      >
+                        <span className="min-w-0 truncate">{t.name}</span>
+                        <span className="shrink-0 text-xs font-bold text-indigo-600">
+                          {t.paperSize.widthMm}×{t.paperSize.heightMm} mm
+                        </span>
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 计划单表单配置弹窗 */}
       {showPlanFormConfigModal && planFormConfigDraft && (
@@ -2646,7 +3719,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                 <p className="mt-1 text-xs text-slate-500">
                   {planFormConfigTab === 'fields'
                     ? '配置在列表、新增、详情页中显示的字段，可增加自定义项'
-                    : '管理打印模板，并设置计划单列表上的打印入口与可选模版范围'}
+                    : '管理打印模板；列表「打印」仅输出计划单样式，单品码标签在计划详情「单品码一览」中打印'}
                 </p>
               </div>
               <button onClick={() => setShowPlanFormConfigModal(false)} className="rounded-full p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-600">
@@ -2677,7 +3750,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                 <div className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
                   <h4 className="text-sm font-black text-slate-800">列表打印</h4>
                   <p className="mt-1 text-xs text-slate-500">
-                    控制计划单列表是否显示「打印」按钮；可限制列表打印时只能选部分模版（不勾选任何模版表示可选全部）。
+                    控制计划单列表是否显示「打印」按钮及可选模版（不勾选任何模版表示可选全部）。此处仅用于计划单列表样式打印，不含单品码标签。
                   </p>
                   <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-700">
                     <input
@@ -2729,6 +3802,52 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                     ...d,
                                     listPrint: {
                                       showPrintButton: d.listPrint?.showPrintButton !== false,
+                                      allowedTemplateIds: arr.length > 0 ? arr : undefined,
+                                    },
+                                  };
+                                });
+                              }}
+                            />
+                            {t.name}
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+                <div className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
+                  <h4 className="text-sm font-black text-slate-800">标签打印</h4>
+                  <p className="mt-1 text-xs text-slate-500">
+                    用于<strong className="text-slate-600">计划详情 → 单品码一览 → 打印单品码</strong>，以及批次码行的「打印批次标签」。不勾选任何模版表示可选全部；标签模版建议使用小尺寸纸张，并在动态列表中使用单品码或批次码占位符。
+                  </p>
+                  <p className="mt-3 text-[10px] font-black uppercase tracking-widest text-slate-400">标签可选模版</p>
+                  <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto">
+                    {printTemplates.length === 0 ? (
+                      <span className="text-xs text-slate-400">暂无模版，请在下方新建</span>
+                    ) : (
+                      printTemplates.map(t => {
+                        const restricted = (planFormConfigDraft.labelPrint?.allowedTemplateIds?.length ?? 0) > 0;
+                        const checked = restricted ? (planFormConfigDraft.labelPrint?.allowedTemplateIds?.includes(t.id) ?? false) : false;
+                        return (
+                          <label
+                            key={t.id}
+                            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:border-indigo-200"
+                          >
+                            <input
+                              type="checkbox"
+                              className="h-3.5 w-3.5 rounded text-indigo-600"
+                              checked={checked}
+                              onChange={e => {
+                                setPlanFormConfigDraft(d => {
+                                  if (!d) return d;
+                                  const prev = d.labelPrint?.allowedTemplateIds ?? [];
+                                  const set = new Set(prev);
+                                  if (e.target.checked) set.add(t.id);
+                                  else set.delete(t.id);
+                                  const arr = Array.from(set);
+                                  return {
+                                    ...d,
+                                    labelPrint: {
                                       allowedTemplateIds: arr.length > 0 ? arr : undefined,
                                     },
                                   };

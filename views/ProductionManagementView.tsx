@@ -107,7 +107,7 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
     plans: ['plans'],
     orders: ['orders_list', 'orders_form_config', 'orders_report_records', 'orders_pending_stock_in', 'orders_detail', 'orders_material', 'orders_rework'],
     STOCK_OUT: ['material_list', 'material_records', 'material_issue', 'material_return'],
-    OUTSOURCE: ['outsource_list', 'outsource_send', 'outsource_receive', 'outsource_records'],
+    OUTSOURCE: ['outsource_list', 'outsource_send', 'outsource_receive', 'outsource_records', 'outsource_material'],
     REWORK: ['rework_list', 'rework_defective', 'rework_records', 'rework_report_records', 'rework_detail', 'rework_material'],
   };
 

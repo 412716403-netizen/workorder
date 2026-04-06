@@ -55,10 +55,36 @@ export function buildPrintFieldOptions(planCustomFields: PlanFormFieldConfig[]):
     { group: '明细行', value: '行.completedQuantity', label: '完成数量（工单行）' },
     { group: '明细行', value: '行.variantId', label: '规格 variantId' },
   ];
+  const itemCodeRow: PrintFieldOption[] = [
+    { group: '单品码行', value: '行.scanUrl', label: '扫码URL（二维码内容）' },
+    { group: '单品码行', value: '行.scanToken', label: '扫码Token' },
+    { group: '单品码行', value: '行.serialNo', label: '单品码序号（数字）' },
+    { group: '单品码行', value: '行.serialLabel', label: '单品码编号（如 J-PLN12-0001）' },
+    { group: '单品码行', value: '行.variantLabel', label: '规格文案（颜色+尺码）' },
+    { group: '单品码行', value: '行.colorName', label: '颜色名称' },
+    { group: '单品码行', value: '行.sizeName', label: '尺码名称' },
+    { group: '单品码行', value: '行.orderNumbers', label: '关联工单号' },
+    { group: '单品码行', value: '行.status', label: '单品码状态' },
+  ];
+  const virtualBatchRow: PrintFieldOption[] = [
+    { group: '批次码', value: '批次.scanUrl', label: '扫码URL（二维码内容）' },
+    { group: '批次码', value: '批次.scanToken', label: '扫码Token' },
+    { group: '批次码', value: '批次.sequenceNo', label: '批次序号（数字，计划内）' },
+    { group: '批次码', value: '批次.serialLabel', label: '批次编号（B-计划单号-序号）' },
+    { group: '批次码', value: '批次.quantity', label: '批次件数' },
+    { group: '批次码', value: '批次.variantLabel', label: '规格文案（颜色+尺码）' },
+    { group: '批次码', value: '批次.colorName', label: '颜色名称' },
+    { group: '批次码', value: '批次.sizeName', label: '尺码名称' },
+    { group: '批次码', value: '批次.planNumber', label: '计划单号' },
+    { group: '批次码', value: '批次.orderNumbers', label: '关联工单号' },
+    { group: '批次码', value: '批次.productName', label: '产品名称' },
+    { group: '批次码', value: '批次.sku', label: 'SKU' },
+    { group: '批次码', value: '批次.status', label: '批次状态' },
+  ];
   const customPlan: PrintFieldOption[] = planCustomFields.map(f => ({
     group: '计划自定义',
     value: `计划.custom.${f.id}`,
     label: f.label,
   }));
-  return [...system, ...plan, ...order, ...product, ...proc, ...listRow, ...customPlan];
+  return [...system, ...plan, ...order, ...product, ...proc, ...listRow, ...itemCodeRow, ...virtualBatchRow, ...customPlan];
 }

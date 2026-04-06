@@ -174,6 +174,7 @@ function BodyElementView({
             color: c.color,
             overflow: 'hidden',
             wordBreak: 'break-all',
+            whiteSpace: 'pre-line',
             lineHeight: 1.2,
             height: '100%',
           }}
@@ -541,7 +542,11 @@ export function PrintPaper({ template, ctx, children, bodyClassName, editorMode 
   const m = getPaperMarginsMm(template);
   const paperBg = template.paperBackgroundColor?.trim() ? template.paperBackgroundColor : '#ffffff';
 
-  const totalPages = getPrintOutputPageCount(template, ctx, !!editorMode);
+  const isLabelPerRow = !editorMode && !!ctx.labelPerRow && !!ctx.printListRows?.length;
+  const totalPages = isLabelPerRow
+    ? ctx.printListRows!.length
+    : getPrintOutputPageCount(template, ctx, !!editorMode);
+
 
   const baseOuterStyle: React.CSSProperties = {
     width: `${template.paperSize.widthMm}mm`,
@@ -564,43 +569,48 @@ export function PrintPaper({ template, ctx, children, bodyClassName, editorMode 
 
   return (
     <div
-      className={
-        !editorMode && totalPages > 1
-          ? 'flex flex-col items-center gap-10 text-slate-900 print:gap-0'
-          : 'flex flex-col text-slate-900'
-      }
+      className={editorMode ? 'flex flex-col text-slate-900' : 'text-slate-900'}
     >
       {pages.map(pageIndex => {
         const pageCtx: PrintRenderContext = {
           ...ctxBase,
           page: { current: pageIndex, total: totalPages },
+          ...(isLabelPerRow ? { listRow: ctx.printListRows![pageIndex - 1] } : {}),
         };
         const listChunk =
-          listPag && ctx.printListRows?.length && !editorMode
+          !isLabelPerRow && listPag && ctx.printListRows?.length && !editorMode
             ? getListRowsForPrintPage(listPag, ctx.printListRows, pageIndex)
             : undefined;
         const elementsForPage = editorMode
           ? sorted
-          : sorted.filter(el => {
-              if (el.repeatPerPage) return true;
-              if (pageIndex === 1) return true;
-              if (ctx.printListRows?.length && el.type === 'dynamicList') return true;
-              return false;
-            });
+          : isLabelPerRow
+            ? sorted
+            : sorted.filter(el => {
+                if (el.repeatPerPage) return true;
+                if (pageIndex === 1) return true;
+                if (ctx.printListRows?.length && el.type === 'dynamicList') return true;
+                return false;
+              });
+        const isLastPage = pageIndex === totalPages;
         const outerStyle: React.CSSProperties = {
           ...baseOuterStyle,
+          display: 'block',
           ...(editorMode
             ? {}
             : {
                 breakInside: 'avoid' as const,
-                ...(totalPages > 1 && pageIndex < totalPages
-                  ? { breakAfter: 'page' as const, pageBreakAfter: 'always' as const }
+                ...(totalPages > 1 && !isLastPage
+                  ? {
+                      pageBreakAfter: 'always' as const,
+                      breakAfter: 'page' as const,
+                      marginBottom: 0,
+                    }
                   : {}),
               }),
         };
 
         return (
-          <div key={pageIndex} className="print:shadow-none" style={outerStyle}>
+          <div key={pageIndex} style={outerStyle} data-label-page={isLabelPerRow ? pageIndex : undefined}>
             <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-white">
               {template.header && (
                 <div

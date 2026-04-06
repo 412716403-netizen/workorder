@@ -19,6 +19,40 @@ export enum PlanStatus {
   CONVERTED = 'CONVERTED'
 }
 
+/** 单品码（一物一码）：计划内每件唯一扫码标识 */
+export interface ItemCode {
+  id: string;
+  tenantId: string;
+  planOrderId: string;
+  productId: string;
+  variantId?: string | null;
+  serialNo: number;
+  scanToken: string;
+  status: 'ACTIVE' | 'VOIDED';
+  createdAt: string;
+  /** 由「批次码+单品码」生成时关联的批次 id */
+  batchId?: string | null;
+  /** 列表接口 include，用于展示所属批次编号 */
+  batch?: { id: string; sequenceNo: number } | null;
+}
+
+/** 批次码：单计划单、单产品、单规格 + 数量；可选同时生成绑定单品码 */
+export interface PlanVirtualBatch {
+  id: string;
+  tenantId: string;
+  planOrderId: string;
+  productId: string;
+  variantId?: string | null;
+  quantity: number;
+  /** 同一计划单内从 1 递增，作废不回收 */
+  sequenceNo: number;
+  scanToken: string;
+  status: 'ACTIVE' | 'VOIDED';
+  createdAt: string;
+  /** 列表接口返回：该批次下绑定单品码条数 */
+  itemCodeCount?: number;
+}
+
 export type FieldType = 'text' | 'number' | 'select' | 'boolean' | 'date' | 'file';
 
 /** 工序节点库「报工表单模板」中应使用的字段类型（仅存 text / select / file；历史数据可能含 number/boolean/date） */
@@ -268,12 +302,19 @@ export interface PlanListPrintSettings {
   allowedTemplateIds?: string[];
 }
 
+/** 标签打印模版白名单（独立于列表打印） */
+export interface PlanLabelPrintSettings {
+  allowedTemplateIds?: string[];
+}
+
 /** 计划单表单配置：列表/新增/详情页显示哪些字段，及自定义项 */
 export interface PlanFormSettings {
   standardFields: PlanFormFieldConfig[];
   customFields: PlanFormFieldConfig[];
   /** 列表打印入口与模板范围 */
   listPrint?: PlanListPrintSettings;
+  /** 标签打印模版白名单 */
+  labelPrint?: PlanLabelPrintSettings;
 }
 
 /** 采购订单表单配置：结构同计划单，用于列表/新增/详情页字段显示控制 */
@@ -445,6 +486,9 @@ export interface PrintHeaderFooterConfig {
 /** 动态列表多行打印时的行数据；列模板用 {{行.字段名}}，入口需传入（如 buildPrintListRowsFromOrderItems） */
 export type PrintListRow = Record<string, string | number | undefined | null>;
 
+/** 打印用批次字段（键与占位符路径一致，如 scanUrl、quantity） */
+export type VirtualBatchPrintRow = Record<string, string>;
+
 /** 打印上下文：预览/打印时解析占位符 */
 export interface PrintRenderContext {
   plan?: PlanOrder;
@@ -455,11 +499,15 @@ export interface PrintRenderContext {
   page?: { current: number; total: number };
   /** 存在且非空时，动态列表按行渲染并按组件高度自动分页（与 ctx.page.total 取较大者） */
   printListRows?: PrintListRow[];
+  /** 标签打印模式：每行数据独占一整页，所有元素均可使用 {{行.xxx}} 占位符 */
+  labelPerRow?: boolean;
   /**
    * 渲染某一明细行单元格时由引擎注入，业务勿手动赋值
    * @internal
    */
   listRow?: PrintListRow;
+  /** 批次码标签：占位符 {{批次.xxx}}，见 printFieldOptions「批次码」分组 */
+  virtualBatch?: VirtualBatchPrintRow;
 }
 
 /** 纸张可打印区内边距（mm），未设置时按 0 处理以兼容旧模板 */

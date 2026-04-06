@@ -8,7 +8,7 @@ const TENANT_MODELS = new Set([
   'Partner', 'Worker', 'Equipment', 'Product', 'Bom',
   'PlanOrder', 'ProductionOrder', 'ProductMilestoneProgress',
   'ProductionOpRecord', 'PsiRecord', 'FinanceRecord',
-  'Role',
+  'Role', 'ItemCode', 'PlanVirtualBatch',
 ]);
 
 function injectTenantWhere(args: any, tenantId: string) {
