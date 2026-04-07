@@ -93,9 +93,9 @@ export function createPresetLabelTemplate(
 }
 
 export function createBlankCustomTemplate(
-  widthMm = PRINT_PAPER_A4_MM.widthMm,
-  heightMm = PRINT_PAPER_A4_MM.heightMm,
-  name = '未命名模板',
+  widthMm: number = PRINT_PAPER_A4_MM.widthMm,
+  heightMm: number = PRINT_PAPER_A4_MM.heightMm,
+  name: string = '未命名模板',
 ): PrintTemplate {
   const t = nowIso();
   return {

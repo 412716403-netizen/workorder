@@ -22,6 +22,7 @@ import {
   subModuleTabButtonClass,
   subModuleTabPillClass,
 } from '../styles/uiDensity';
+import { useModulePermission, usePermFilteredTabs } from '../hooks/useModulePermission';
 
 interface PSIViewProps {
   products: Product[];
@@ -69,15 +70,7 @@ const PSIView: React.FC<PSIViewProps> = ({ products, records, prodRecords = [], 
   const [placeholderHeight, setPlaceholderHeight] = useState(0);
   const [barStyle, setBarStyle] = useState<{ left: number; width: number } | null>(null);
 
-  const _isOwner = tenantRole === 'owner';
-  const hasPsiPerm = (perm: string): boolean => {
-    if (_isOwner) return true;
-    if (!userPermissions || userPermissions.length === 0) return true;
-    if (userPermissions.includes('psi') && !userPermissions.some(p => p.startsWith('psi:'))) return true;
-    if (userPermissions.includes(perm)) return true;
-    if (userPermissions.some(p => p.startsWith(`${perm}:`))) return true;
-    return false;
-  };
+  const { hasPerm: hasPsiPerm } = useModulePermission({ tenantRole, userPermissions, moduleName: 'psi' });
 
   const updateBarPosition = () => {
     const scrollParent = sentinelRef.current?.closest('[class*="overflow-auto"]');
@@ -118,25 +111,21 @@ const PSIView: React.FC<PSIViewProps> = ({ products, records, prodRecords = [], 
     return () => cancelAnimationFrame(id);
   }, []);
 
-  const allTabs = [
+  const allTabs = useMemo(() => [
     { id: 'PURCHASE_ORDER', label: '采购订单', icon: ClipboardList, color: 'text-indigo-600', bg: 'bg-indigo-50', sub: '合同与采购计划' },
     { id: 'PURCHASE_BILL', label: '采购单', icon: Receipt, color: 'text-indigo-600', bg: 'bg-indigo-50', sub: '进货收货确认' },
     { id: 'SALES_ORDER', label: '销售订单', icon: ShoppingBag, color: 'text-indigo-600', bg: 'bg-indigo-50', sub: '客户订货合同' },
     { id: 'SALES_BILL', label: '销售单', icon: CreditCard, color: 'text-indigo-600', bg: 'bg-indigo-50', sub: '发货与账务结算' },
     { id: 'WAREHOUSE_MGMT', label: '仓库管理', icon: Warehouse, color: 'text-indigo-600', bg: 'bg-indigo-50', sub: '库存查询、调拨与盘点工具' },
-  ];
-
-  const tabs = useMemo(() => allTabs.filter(tab => {
-    const keys = TAB_PERM_GROUPS[tab.id];
-    if (!keys) return true;
-    return keys.some(k => hasPsiPerm(`psi:${k}`));
-  }), [userPermissions, tenantRole]);
-
-  useEffect(() => {
-    if (tabs.length > 0 && !tabs.some(t => t.id === activeTab)) {
-      setActiveTab(tabs[0].id as PSITab);
-    }
-  }, [tabs.map(t => t.id).join(',')]);
+  ], []);
+  const tabs = usePermFilteredTabs({
+    allTabs,
+    permGroups: TAB_PERM_GROUPS,
+    permPrefix: 'psi',
+    hasPerm: hasPsiPerm,
+    activeTab,
+    setActiveTab: (id) => setActiveTab(id as PSITab),
+  });
 
   return (
     <div className="space-y-0">

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect, Suspense, lazy } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, Suspense, lazy } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   CalendarRange, 
@@ -28,6 +28,7 @@ import {
   subModuleTabButtonClass,
   subModuleTabPillClass,
 } from '../styles/uiDensity';
+import { useModulePermission, usePermFilteredTabs } from '../hooks/useModulePermission';
 
 interface ProductionManagementViewProps {
   productionLinkMode?: ProductionLinkMode;
@@ -93,23 +94,15 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
   const location = useLocation();
   const navigate = useNavigate();
 
-  const isOwner = tenantRole === 'owner';
-  const hasProdPerm = (permKey: string): boolean => {
-    if (isOwner) return true;
-    if (!userPermissions) return true;
-    if (userPermissions.includes('production')) return true;
-    if (userPermissions.includes(permKey)) return true;
-    if (userPermissions.some(p => p.startsWith(`${permKey}:`))) return true;
-    return false;
-  };
+  const { hasPerm: hasProdPerm } = useModulePermission({ tenantRole, userPermissions, moduleName: 'production' });
 
-  const TAB_PERM_GROUPS: Record<string, string[]> = {
+  const PROD_TAB_PERM_GROUPS: Record<string, string[]> = useMemo(() => ({
     plans: ['plans'],
     orders: ['orders_list', 'orders_form_config', 'orders_report_records', 'orders_pending_stock_in', 'orders_detail', 'orders_material', 'orders_rework'],
     STOCK_OUT: ['material_list', 'material_records', 'material_issue', 'material_return'],
     OUTSOURCE: ['outsource_list', 'outsource_send', 'outsource_receive', 'outsource_records', 'outsource_material'],
     REWORK: ['rework_list', 'rework_defective', 'rework_records', 'rework_report_records', 'rework_detail', 'rework_material'],
-  };
+  }), []);
 
   const [activeTab, setActiveTab] = useState<MainTab>('plans');
 
@@ -173,24 +166,21 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
     return () => cancelAnimationFrame(id);
   }, []);
 
-  const allTabs = [
+  const allTabs = useMemo(() => [
     { id: 'plans', label: '生产计划', icon: CalendarRange, color: 'text-indigo-600', bg: 'bg-indigo-50' },
     { id: 'orders', label: '工单中心', icon: ClipboardList, color: 'text-indigo-600', bg: 'bg-indigo-50' },
     { id: 'STOCK_OUT', label: '生产物料', icon: ArrowUpFromLine, color: 'text-indigo-600', bg: 'bg-indigo-50' },
     { id: 'OUTSOURCE', label: '外协管理', icon: Truck, color: 'text-indigo-600', bg: 'bg-indigo-50' },
     { id: 'REWORK', label: '返工管理', icon: RotateCcw, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-  ];
-  const tabs = allTabs.filter(tab => {
-    const keys = TAB_PERM_GROUPS[tab.id];
-    if (!keys) return true;
-    return keys.some(k => hasProdPerm(`production:${k}`));
+  ], []);
+  const tabs = usePermFilteredTabs({
+    allTabs,
+    permGroups: PROD_TAB_PERM_GROUPS,
+    permPrefix: 'production',
+    hasPerm: hasProdPerm,
+    activeTab,
+    setActiveTab: (id) => setActiveTab(id as MainTab),
   });
-
-  useEffect(() => {
-    if (tabs.length > 0 && !tabs.some(t => t.id === activeTab)) {
-      setActiveTab(tabs[0].id as MainTab);
-    }
-  }, [tabs.map(t => t.id).join(',')]);
 
   return (
     <div className="space-y-0">

@@ -1,118 +1,94 @@
-import type { Request, Response, NextFunction } from 'express';
 import { str, optStr } from '../utils/request.js';
 import * as collabService from '../services/collaboration.service.js';
+import { asyncHandler } from '../middleware/asyncHandler.js';
 
-export async function createCollaboration(req: Request, res: Response, next: NextFunction) {
-  try {
-    const result = await collabService.createCollaboration(req.tenantId!, req.user?.userId, req.body.inviteCode);
-    res.status(result.id ? 201 : 200).json(result);
-  } catch (e) { next(e); }
-}
+export const createCollaboration = asyncHandler(async (req, res) => {
+  const result = await collabService.createCollaboration(req.tenantId!, req.user?.userId, req.body.inviteCode);
+  res.status(result.id ? 201 : 200).json(result);
+});
 
-export async function listCollaborations(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await collabService.listCollaborations(req.tenantId!)); }
-  catch (e) { next(e); }
-}
+export const listCollaborations = asyncHandler(async (req, res) => {
+  res.json(await collabService.listCollaborations(req.tenantId!));
+});
 
-export async function listOutsourceRoutes(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await collabService.listOutsourceRoutes(req.tenantId!)); }
-  catch (e) { next(e); }
-}
+export const listOutsourceRoutes = asyncHandler(async (req, res) => {
+  res.json(await collabService.listOutsourceRoutes(req.tenantId!));
+});
 
-export async function createOutsourceRoute(req: Request, res: Response, next: NextFunction) {
-  try { res.status(201).json(await collabService.createOutsourceRoute(req.tenantId!, req.body)); }
-  catch (e) { next(e); }
-}
+export const createOutsourceRoute = asyncHandler(async (req, res) => {
+  res.status(201).json(await collabService.createOutsourceRoute(req.tenantId!, req.body));
+});
 
-export async function updateOutsourceRoute(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await collabService.updateOutsourceRoute(req.tenantId!, str(req.params.id), req.body)); }
-  catch (e) { next(e); }
-}
+export const updateOutsourceRoute = asyncHandler(async (req, res) => {
+  res.json(await collabService.updateOutsourceRoute(req.tenantId!, str(req.params.id), req.body));
+});
 
-export async function deleteOutsourceRoute(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await collabService.deleteOutsourceRoute(req.tenantId!, str(req.params.id))); }
-  catch (e) { next(e); }
-}
+export const deleteOutsourceRoute = asyncHandler(async (req, res) => {
+  res.json(await collabService.deleteOutsourceRoute(req.tenantId!, str(req.params.id)));
+});
 
-export async function syncDispatch(req: Request, res: Response, next: NextFunction) {
-  try { res.status(201).json(await collabService.syncDispatch(req.tenantId!, req.body)); }
-  catch (e) { next(e); }
-}
+export const syncDispatch = asyncHandler(async (req, res) => {
+  res.status(201).json(await collabService.syncDispatch(req.tenantId!, req.body));
+});
 
-export async function listTransfers(req: Request, res: Response, next: NextFunction) {
-  try {
-    res.json(await collabService.listTransfers(req.tenantId!, {
-      role: optStr(req.query.role), status: optStr(req.query.status),
-    }));
-  } catch (e) { next(e); }
-}
+export const listTransfers = asyncHandler(async (req, res) => {
+  res.json(await collabService.listTransfers(req.tenantId!, {
+    role: optStr(req.query.role), status: optStr(req.query.status),
+  }));
+});
 
-export async function getTransfer(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await collabService.getTransfer(req.tenantId!, str(req.params.id))); }
-  catch (e) { next(e); }
-}
+export const getTransfer = asyncHandler(async (req, res) => {
+  res.json(await collabService.getTransfer(req.tenantId!, str(req.params.id)));
+});
 
-export async function acceptTransfer(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await collabService.acceptTransfer(req.tenantId!, str(req.params.id), req.body)); }
-  catch (e) { next(e); }
-}
+export const acceptTransfer = asyncHandler(async (req, res) => {
+  res.json(await collabService.acceptTransfer(req.tenantId!, str(req.params.id), req.body));
+});
 
-export async function createReturn(req: Request, res: Response, next: NextFunction) {
-  try { res.status(201).json(await collabService.createReturn(req.tenantId!, str(req.params.id), req.body)); }
-  catch (e) { next(e); }
-}
+export const createReturn = asyncHandler(async (req, res) => {
+  res.status(201).json(await collabService.createReturn(req.tenantId!, str(req.params.id), req.body));
+});
 
-export async function receiveReturn(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await collabService.receiveReturn(req.tenantId!, str(req.params.id))); }
-  catch (e) { next(e); }
-}
+export const receiveReturn = asyncHandler(async (req, res) => {
+  res.json(await collabService.receiveReturn(req.tenantId!, str(req.params.id)));
+});
 
-export async function forwardTransfer(req: Request, res: Response, next: NextFunction) {
-  try { res.status(201).json(await collabService.forwardTransfer(req.tenantId!, str(req.params.id), req.body)); }
-  catch (e) { next(e); }
-}
+export const forwardTransfer = asyncHandler(async (req, res) => {
+  res.status(201).json(await collabService.forwardTransfer(req.tenantId!, str(req.params.id), req.body));
+});
 
-export async function confirmForward(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await collabService.confirmForward(req.tenantId!, str(req.params.id))); }
-  catch (e) { next(e); }
-}
+export const confirmForward = asyncHandler(async (req, res) => {
+  res.json(await collabService.confirmForward(req.tenantId!, str(req.params.id)));
+});
 
-export async function listProductMaps(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await collabService.listProductMaps(req.tenantId!, optStr(req.query.collaborationId))); }
-  catch (e) { next(e); }
-}
+export const listProductMaps = asyncHandler(async (req, res) => {
+  res.json(await collabService.listProductMaps(req.tenantId!, optStr(req.query.collaborationId)));
+});
 
-export async function updateProductMap(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await collabService.updateProductMap(req.tenantId!, str(req.params.id), req.body)); }
-  catch (e) { next(e); }
-}
+export const updateProductMap = asyncHandler(async (req, res) => {
+  res.json(await collabService.updateProductMap(req.tenantId!, str(req.params.id), req.body));
+});
 
-export async function deleteProductMap(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await collabService.deleteProductMap(req.tenantId!, str(req.params.id))); }
-  catch (e) { next(e); }
-}
+export const deleteProductMap = asyncHandler(async (req, res) => {
+  res.json(await collabService.deleteProductMap(req.tenantId!, str(req.params.id)));
+});
 
-export async function withdrawDispatch(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await collabService.withdrawDispatch(req.tenantId!, str(req.params.id))); }
-  catch (e) { next(e); }
-}
+export const withdrawDispatch = asyncHandler(async (req, res) => {
+  res.json(await collabService.withdrawDispatch(req.tenantId!, str(req.params.id)));
+});
 
-export async function withdrawReturn(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await collabService.withdrawReturn(req.tenantId!, str(req.params.id))); }
-  catch (e) { next(e); }
-}
+export const withdrawReturn = asyncHandler(async (req, res) => {
+  res.json(await collabService.withdrawReturn(req.tenantId!, str(req.params.id)));
+});
 
-export async function withdrawForward(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await collabService.withdrawForward(req.tenantId!, str(req.params.id))); }
-  catch (e) { next(e); }
-}
+export const withdrawForward = asyncHandler(async (req, res) => {
+  res.json(await collabService.withdrawForward(req.tenantId!, str(req.params.id)));
+});
 
-export async function deleteDispatch(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await collabService.deleteDispatch(req.tenantId!, str(req.params.id))); }
-  catch (e) { next(e); }
-}
+export const deleteDispatch = asyncHandler(async (req, res) => {
+  res.json(await collabService.deleteDispatch(req.tenantId!, str(req.params.id)));
+});
 
-export async function deleteReturn(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await collabService.deleteReturn(req.tenantId!, str(req.params.id))); }
-  catch (e) { next(e); }
-}
+export const deleteReturn = asyncHandler(async (req, res) => {
+  res.json(await collabService.deleteReturn(req.tenantId!, str(req.params.id)));
+});

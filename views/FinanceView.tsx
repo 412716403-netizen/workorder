@@ -15,6 +15,7 @@ import {
   subModuleTabButtonClass,
   subModuleTabPillClass,
 } from '../styles/uiDensity';
+import { useModulePermission } from '../hooks/useModulePermission';
 
 interface FinanceViewProps {
   orders: ProductionOrder[];
@@ -84,13 +85,7 @@ const FinanceView: React.FC<FinanceViewProps> = ({ orders, records, psiRecords =
     return () => cancelAnimationFrame(id);
   }, []);
 
-  const _isOwner = tenantRole === 'owner';
-  const hasFinancePerm = (permKey: string): boolean => {
-    if (_isOwner) return true;
-    if (!userPermissions || userPermissions.length === 0) return true;
-    if (userPermissions.includes('finance') && !userPermissions.some(p => p.startsWith('finance:'))) return true;
-    return userPermissions.includes(permKey);
-  };
+  const { hasPerm: hasFinancePerm } = useModulePermission({ tenantRole, userPermissions, moduleName: 'finance' });
 
   const allTabs = [
     { id: 'RECEIPT', label: '收款单', icon: ArrowDownCircle, color: 'text-indigo-600', bg: 'bg-indigo-50', sub: '客户款项回收记录' },

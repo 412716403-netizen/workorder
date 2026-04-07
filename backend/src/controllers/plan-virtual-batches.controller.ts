@@ -1,7 +1,7 @@
-import type { Request, Response, NextFunction } from 'express';
 import { getTenantPrisma } from '../lib/prisma.js';
 import { str, optStr } from '../utils/request.js';
 import * as batchService from '../services/planVirtualBatches.service.js';
+import { asyncHandler } from '../middleware/asyncHandler.js';
 
 function parseWithItemCodes(body: unknown): boolean {
   const b = body as Record<string, unknown> | null;
@@ -13,80 +13,56 @@ function parseVariantId(raw: unknown): string | null {
   return raw === undefined || raw === null || raw === '' ? null : str(raw);
 }
 
-export async function create(req: Request, res: Response, next: NextFunction) {
-  try {
-    const tenantId = req.tenantId!;
-    const db = getTenantPrisma(tenantId);
-    const result = await batchService.createBatch(db, tenantId, {
-      planOrderId: str(req.body.planOrderId),
-      quantity: Math.floor(Number(req.body.quantity)),
-      variantId: parseVariantId(req.body.variantId),
-      withItemCodes: parseWithItemCodes(req.body),
-    });
-    res.json(result);
-  } catch (e) {
-    next(e);
-  }
-}
+export const create = asyncHandler(async (req, res) => {
+  const tenantId = req.tenantId!;
+  const db = getTenantPrisma(tenantId);
+  const result = await batchService.createBatch(db, tenantId, {
+    planOrderId: str(req.body.planOrderId),
+    quantity: Math.floor(Number(req.body.quantity)),
+    variantId: parseVariantId(req.body.variantId),
+    withItemCodes: parseWithItemCodes(req.body),
+  });
+  res.json(result);
+});
 
-export async function bulkSplit(req: Request, res: Response, next: NextFunction) {
-  try {
-    const tenantId = req.tenantId!;
-    const db = getTenantPrisma(tenantId);
-    const result = await batchService.bulkSplit(db, tenantId, {
-      planOrderId: str(req.body.planOrderId),
-      batchSize: Math.floor(Number(req.body.batchSize)),
-      variantId: parseVariantId(req.body.variantId),
-      withItemCodes: parseWithItemCodes(req.body),
-    });
-    res.json(result);
-  } catch (e) {
-    next(e);
-  }
-}
+export const bulkSplit = asyncHandler(async (req, res) => {
+  const tenantId = req.tenantId!;
+  const db = getTenantPrisma(tenantId);
+  const result = await batchService.bulkSplit(db, tenantId, {
+    planOrderId: str(req.body.planOrderId),
+    batchSize: Math.floor(Number(req.body.batchSize)),
+    variantId: parseVariantId(req.body.variantId),
+    withItemCodes: parseWithItemCodes(req.body),
+  });
+  res.json(result);
+});
 
-export async function bulkSplitAllVariants(req: Request, res: Response, next: NextFunction) {
-  try {
-    const tenantId = req.tenantId!;
-    const db = getTenantPrisma(tenantId);
-    const result = await batchService.bulkSplitAllVariants(db, tenantId, {
-      planOrderId: str(req.body.planOrderId),
-      batchSize: Math.floor(Number(req.body.batchSize)),
-      withItemCodes: parseWithItemCodes(req.body),
-    });
-    res.json(result);
-  } catch (e) {
-    next(e);
-  }
-}
+export const bulkSplitAllVariants = asyncHandler(async (req, res) => {
+  const tenantId = req.tenantId!;
+  const db = getTenantPrisma(tenantId);
+  const result = await batchService.bulkSplitAllVariants(db, tenantId, {
+    planOrderId: str(req.body.planOrderId),
+    batchSize: Math.floor(Number(req.body.batchSize)),
+    withItemCodes: parseWithItemCodes(req.body),
+  });
+  res.json(result);
+});
 
-export async function list(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    const result = await batchService.listBatches(db, {
-      planOrderId: optStr(req.query.planOrderId),
-    });
-    res.json(result);
-  } catch (e) {
-    next(e);
-  }
-}
+export const list = asyncHandler(async (req, res) => {
+  const db = getTenantPrisma(req.tenantId!);
+  const result = await batchService.listBatches(db, {
+    planOrderId: optStr(req.query.planOrderId),
+  });
+  res.json(result);
+});
 
-export async function voidBatch(req: Request, res: Response, next: NextFunction) {
-  try {
-    const db = getTenantPrisma(req.tenantId!);
-    const result = await batchService.voidBatch(db, str(req.params.id));
-    res.json(result);
-  } catch (e) {
-    next(e);
-  }
-}
+export const voidBatch = asyncHandler(async (req, res) => {
+  const db = getTenantPrisma(req.tenantId!);
+  const result = await batchService.voidBatch(db, str(req.params.id));
+  res.json(result);
+});
 
-export async function scan(req: Request, res: Response, next: NextFunction) {
-  try {
-    const result = await batchService.scanBatch(req.tenantId!, str(req.params.token));
-    res.json(result);
-  } catch (e) {
-    next(e);
-  }
-}
+export const scan = asyncHandler(async (req, res) => {
+  const result = await batchService.scanBatch(req.tenantId!, str(req.params.token));
+  res.json(result);
+});

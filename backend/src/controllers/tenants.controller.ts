@@ -1,92 +1,73 @@
-import type { Request, Response, NextFunction } from 'express';
 import { str } from '../utils/request.js';
 import * as authService from '../services/auth.service.js';
 import * as tenantsService from '../services/tenants.service.js';
+import { asyncHandler } from '../middleware/asyncHandler.js';
 
-export async function createTenant(req: Request, res: Response, next: NextFunction) {
-  try {
-    const result = await tenantsService.createTenant(req.user!.userId, req.body);
-    res.status(201).json(result);
-  } catch (e) { next(e); }
-}
+export const createTenant = asyncHandler(async (req, res) => {
+  const result = await tenantsService.createTenant(req.user!.userId, req.body);
+  res.status(201).json(result);
+});
 
-export async function listTenants(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await tenantsService.listTenants(req.user!.userId)); }
-  catch (e) { next(e); }
-}
+export const listTenants = asyncHandler(async (req, res) => {
+  res.json(await tenantsService.listTenants(req.user!.userId));
+});
 
-export async function selectTenant(req: Request, res: Response, next: NextFunction) {
-  try {
-    const result = await authService.selectTenant(req.user!.userId, str(req.params.id));
-    const { setAuthCookies } = await import('../utils/cookies.js');
-    setAuthCookies(res, result.accessToken, result.refreshToken);
-    res.json(result);
-  } catch (e) { next(e); }
-}
+export const selectTenant = asyncHandler(async (req, res) => {
+  const result = await authService.selectTenant(req.user!.userId, str(req.params.id));
+  const { setAuthCookies } = await import('../utils/cookies.js');
+  setAuthCookies(res, result.accessToken, result.refreshToken);
+  res.json(result);
+});
 
-export async function getTenant(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await tenantsService.getTenant(req.user!.userId, str(req.params.id))); }
-  catch (e) { next(e); }
-}
+export const getTenant = asyncHandler(async (req, res) => {
+  res.json(await tenantsService.getTenant(req.user!.userId, str(req.params.id)));
+});
 
-export async function updateTenant(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await tenantsService.updateTenant(req.user!.userId, str(req.params.id), req.body)); }
-  catch (e) { next(e); }
-}
+export const updateTenant = asyncHandler(async (req, res) => {
+  res.json(await tenantsService.updateTenant(req.user!.userId, str(req.params.id), req.body));
+});
 
-export async function getMembers(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await tenantsService.getMembers(str(req.params.id))); }
-  catch (e) { next(e); }
-}
+export const getMembers = asyncHandler(async (req, res) => {
+  res.json(await tenantsService.getMembers(str(req.params.id)));
+});
 
-export async function updateMemberRole(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await tenantsService.updateMemberRole(req.user!.userId, str(req.params.id), str(req.params.uid), req.body)); }
-  catch (e) { next(e); }
-}
+export const updateMemberRole = asyncHandler(async (req, res) => {
+  res.json(await tenantsService.updateMemberRole(req.user!.userId, str(req.params.id), str(req.params.uid), req.body));
+});
 
-export async function updateMemberPermissions(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await tenantsService.updateMemberPermissions(req.user!.userId, str(req.params.id), str(req.params.uid), req.body.permissions)); }
-  catch (e) { next(e); }
-}
+export const updateMemberPermissions = asyncHandler(async (req, res) => {
+  res.json(await tenantsService.updateMemberPermissions(req.user!.userId, str(req.params.id), str(req.params.uid), req.body.permissions));
+});
 
-export async function removeMember(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await tenantsService.removeMember(req.user!.userId, str(req.params.id), str(req.params.uid))); }
-  catch (e) { next(e); }
-}
+export const removeMember = asyncHandler(async (req, res) => {
+  res.json(await tenantsService.removeMember(req.user!.userId, str(req.params.id), str(req.params.uid)));
+});
 
-export async function lookupByInviteCode(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await tenantsService.lookupByInviteCode((req.query.code as string)?.trim())); }
-  catch (e) { next(e); }
-}
+export const lookupByInviteCode = asyncHandler(async (req, res) => {
+  res.json(await tenantsService.lookupByInviteCode((req.query.code as string)?.trim()));
+});
 
-export async function applyToJoin(req: Request, res: Response, next: NextFunction) {
-  try {
-    const app = await tenantsService.applyToJoin(req.user!.userId, str(req.params.id), req.body.message);
-    res.status(201).json(app);
-  } catch (e) { next(e); }
-}
+export const applyToJoin = asyncHandler(async (req, res) => {
+  const app = await tenantsService.applyToJoin(req.user!.userId, str(req.params.id), req.body.message);
+  res.status(201).json(app);
+});
 
-export async function getApplications(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await tenantsService.getApplications(str(req.params.id))); }
-  catch (e) { next(e); }
-}
+export const getApplications = asyncHandler(async (req, res) => {
+  res.json(await tenantsService.getApplications(str(req.params.id)));
+});
 
-export async function reviewApplication(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await tenantsService.reviewApplication(req.user!.userId, str(req.params.id), str(req.params.appId), req.body)); }
-  catch (e) { next(e); }
-}
+export const reviewApplication = asyncHandler(async (req, res) => {
+  res.json(await tenantsService.reviewApplication(req.user!.userId, str(req.params.id), str(req.params.appId), req.body));
+});
 
-export async function getMyApplications(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await tenantsService.getMyApplications(req.user!.userId)); }
-  catch (e) { next(e); }
-}
+export const getMyApplications = asyncHandler(async (req, res) => {
+  res.json(await tenantsService.getMyApplications(req.user!.userId));
+});
 
-export async function getReportableMembers(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await tenantsService.getReportableMembers(str(req.params.id))); }
-  catch (e) { next(e); }
-}
+export const getReportableMembers = asyncHandler(async (req, res) => {
+  res.json(await tenantsService.getReportableMembers(str(req.params.id)));
+});
 
-export async function updateMemberMilestones(req: Request, res: Response, next: NextFunction) {
-  try { res.json(await tenantsService.updateMemberMilestones(req.user!.userId, str(req.params.id), str(req.params.uid), req.body.assignedMilestoneIds)); }
-  catch (e) { next(e); }
-}
+export const updateMemberMilestones = asyncHandler(async (req, res) => {
+  res.json(await tenantsService.updateMemberMilestones(req.user!.userId, str(req.params.id), str(req.params.uid), req.body.assignedMilestoneIds));
+});
