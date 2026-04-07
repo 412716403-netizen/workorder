@@ -5,10 +5,16 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 
 export const listOrders = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
+  const page = req.query.page ? Number(req.query.page) : undefined;
+  const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
   res.json(await ordersService.listOrders(db, {
     status: optStr(req.query.status),
     productId: optStr(req.query.productId),
     parentOrderId: optStr(req.query.parentOrderId),
+    search: optStr(req.query.search),
+    lite: req.query.lite === 'true',
+    page,
+    pageSize,
   }));
 });
 

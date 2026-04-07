@@ -16,16 +16,22 @@ const DOC_PREFIX: Record<string, string> = {
 
 export async function listRecords(
   db: TenantPrismaClient,
-  opts: { type?: string; orderId?: string; productId?: string },
+  opts: { type?: string; orderId?: string; productId?: string; page?: number; pageSize?: number },
 ) {
   const where: Record<string, unknown> = {};
   if (opts.type) where.type = opts.type;
   if (opts.orderId) where.orderId = opts.orderId;
   if (opts.productId) where.productId = opts.productId;
-  return db.productionOpRecord.findMany({
-    where,
-    orderBy: [{ timestamp: 'desc' }, { id: 'asc' }],
-  });
+  const orderBy: any = [{ timestamp: 'desc' }, { id: 'asc' }];
+
+  if (opts.page != null && opts.pageSize != null) {
+    const [data, total] = await Promise.all([
+      db.productionOpRecord.findMany({ where, orderBy, skip: (opts.page - 1) * opts.pageSize, take: opts.pageSize }),
+      db.productionOpRecord.count({ where }),
+    ]);
+    return { data, total, page: opts.page, pageSize: opts.pageSize };
+  }
+  return db.productionOpRecord.findMany({ where, orderBy });
 }
 
 export async function getRecord(db: TenantPrismaClient, id: string) {
@@ -93,25 +99,31 @@ export async function deleteRecord(db: TenantPrismaClient, id: string) {
 }
 
 export async function getDefectiveRework(db: TenantPrismaClient) {
-  const orders = await db.productionOrder.findMany({
-    include: { milestones: { include: { reports: true } } },
-  });
-  const reworkRecords = await db.productionOpRecord.findMany({
-    where: { type: { in: ['REWORK', 'REWORK_REPORT'] } },
-  });
+  const [milestones, defectiveAgg, reworkRecords] = await Promise.all([
+    db.milestone.findMany({ select: { id: true, templateId: true, productionOrderId: true } }),
+    basePrisma.milestoneReport.groupBy({
+      by: ['milestoneId'],
+      _sum: { defectiveQuantity: true },
+      having: { defectiveQuantity: { _sum: { gt: 0 } } },
+    }),
+    db.productionOpRecord.findMany({
+      where: { type: { in: ['REWORK', 'REWORK_REPORT'] } },
+      select: { orderId: true, sourceNodeId: true, nodeId: true, quantity: true },
+    }),
+  ]);
+
+  const msMap = new Map(milestones.map(m => [m.id, m]));
+  const defectiveByMs = new Map(defectiveAgg.map(a => [a.milestoneId, Number(a._sum?.defectiveQuantity || 0)]));
 
   const result: Record<string, { defective: number; rework: number }> = {};
-  for (const order of orders) {
-    for (const ms of order.milestones) {
-      const key = `${order.id}|${ms.templateId}`;
-      const defective = ms.reports.reduce((s, r) => s + Number(r.defectiveQuantity), 0);
-      const rework = reworkRecords
-        .filter(
-          (r) =>
-            r.orderId === order.id &&
-            (r.sourceNodeId === ms.templateId || r.nodeId === ms.templateId),
-        )
-        .reduce((s, r) => s + Number(r.quantity), 0);
+
+  for (const ms of milestones) {
+    const key = `${ms.productionOrderId}|${ms.templateId}`;
+    const defective = defectiveByMs.get(ms.id) || 0;
+    const rework = reworkRecords
+      .filter(r => r.orderId === ms.productionOrderId && (r.sourceNodeId === ms.templateId || r.nodeId === ms.templateId))
+      .reduce((s, r) => s + Number(r.quantity), 0);
+    if (defective > 0 || rework > 0) {
       result[key] = { defective, rework };
     }
   }

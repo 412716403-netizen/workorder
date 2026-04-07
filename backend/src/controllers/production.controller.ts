@@ -7,10 +7,14 @@ export { applyOutsourceProgress } from '../services/production.service.js';
 
 export const listRecords = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
+  const page = req.query.page ? Number(req.query.page) : undefined;
+  const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
   res.json(await productionService.listRecords(db, {
     type: optStr(req.query.type),
     orderId: optStr(req.query.orderId),
     productId: optStr(req.query.productId),
+    page,
+    pageSize,
   }));
 });
 

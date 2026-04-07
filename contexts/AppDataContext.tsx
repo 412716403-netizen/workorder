@@ -222,6 +222,8 @@ export interface AppDataContextValue {
   refreshPMP: () => Promise<void>;
   /** 从服务端重新拉取打印模板（多标签页保存后另一页可即时同步） */
   refreshPrintTemplates: () => Promise<void>;
+  /** 按需加载重数据（orders/plans/prodRecords/psiRecords/financeRecords），首次调用触发加载，后续调用无操作 */
+  ensureDeferredLoaded: () => Promise<void>;
 }
 
 export type AppDataState = Pick<AppDataContextValue,
@@ -236,7 +238,57 @@ export type AppDataState = Pick<AppDataContextValue,
 
 export type AppDataActions = Omit<AppDataContextValue, keyof AppDataState>;
 
-const DataCtx = createContext<AppDataState | null>(null);
+// ── Domain sub-context types ──
+
+export interface MasterDataState {
+  categories: ProductCategory[];
+  partnerCategories: PartnerCategory[];
+  dictionaries: AppDictionaries;
+  globalNodes: GlobalNodeTemplate[];
+  partners: any[];
+  workers: any[];
+  equipment: any[];
+  warehouses: Warehouse[];
+  products: Product[];
+  boms: BOM[];
+}
+
+export interface ConfigState {
+  productionLinkMode: ProductionLinkMode;
+  processSequenceMode: ProcessSequenceMode;
+  allowExceedMaxReportQty: boolean;
+  planFormSettings: PlanFormSettings;
+  orderFormSettings: OrderFormSettings;
+  purchaseOrderFormSettings: PurchaseOrderFormSettings;
+  purchaseBillFormSettings: PurchaseBillFormSettings;
+  printTemplates: PrintTemplate[];
+}
+
+export interface OrdersState {
+  orders: ProductionOrder[];
+  plans: PlanOrder[];
+  productMilestoneProgresses: ProductMilestoneProgress[];
+  prodRecords: ProductionOpRecord[];
+}
+
+export interface PsiState {
+  psiRecords: any[];
+}
+
+export interface FinanceState {
+  financeRecords: FinanceRecord[];
+  financeCategories: FinanceCategory[];
+  financeAccountTypes: FinanceAccountType[];
+}
+
+// ── Domain sub-contexts ──
+
+const LoadingCtx = createContext<boolean>(true);
+const MasterDataCtx = createContext<MasterDataState | null>(null);
+const ConfigCtx = createContext<ConfigState | null>(null);
+const OrdersCtx = createContext<OrdersState | null>(null);
+const PsiCtx = createContext<PsiState | null>(null);
+const FinanceCtx = createContext<FinanceState | null>(null);
 const ActionsCtx = createContext<AppDataActions | null>(null);
 
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
@@ -271,11 +323,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [allowExceedMaxReportQty, setAllowExceedMaxReportQty] = useState<boolean>(true);
   const [productMilestoneProgresses, setProductMilestoneProgresses] = useState<ProductMilestoneProgress[]>([]);
 
-  // ── Initial data loading (two-phase: core first, deferred second) ──
+  const val = (results: PromiseSettledResult<unknown>[], i: number) =>
+    results[i]?.status === 'fulfilled' ? (results[i] as PromiseFulfilledResult<unknown>).value : undefined;
+
+  // ── Initial data loading (core data only — heavy data loaded on demand) ──
   useEffect(() => {
     let cancelled = false;
-    const val = (results: PromiseSettledResult<unknown>[], i: number) =>
-      results[i]?.status === 'fulfilled' ? (results[i] as PromiseFulfilledResult<unknown>).value : undefined;
 
     async function loadCore() {
       const coreResults = await Promise.allSettled([
@@ -290,6 +343,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         api.dictionaries.list(),                                // 8
         api.products.list(),                                    // 9
         api.boms.list(),                                        // 10
+        api.tenants.getReportableMembers(tenantCtx!.tenantId),  // 11
+        api.equipment.list(),                                   // 12
       ]);
       if (cancelled) return;
 
@@ -327,49 +382,15 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       if (val(coreResults, 8))  setDictionaries(val(coreResults, 8) as AppDictionaries);
       if (val(coreResults, 9))  setProducts(normalizeDecimals(val(coreResults, 9) as Product[]));
       if (val(coreResults, 10)) setBoms(normalizeDecimals(val(coreResults, 10) as BOM[]));
+      if (val(coreResults, 11)) setWorkers(val(coreResults, 11) as any[]);
+      if (val(coreResults, 12)) setEquipment(val(coreResults, 12) as any[]);
 
       if (!cancelled) setDataLoading(false);
-    }
-
-    async function loadDeferred() {
-      // Phase 2a: lightweight meta + frequently needed data first
-      const metaResults = await Promise.allSettled([
-        api.tenants.getReportableMembers(tenantCtx!.tenantId),  // 0
-        api.equipment.list(),                                   // 1
-        api.plans.list(),                                       // 2
-        api.orders.list(),                                      // 3
-        api.orders.listProductProgress(),                       // 4
-      ]);
-      if (cancelled) return;
-      if (val(metaResults, 0)) setWorkers(val(metaResults, 0) as any[]);
-      if (val(metaResults, 1)) setEquipment(val(metaResults, 1) as any[]);
-      if (val(metaResults, 2)) setPlans(normalizeDecimals(val(metaResults, 2) as PlanOrder[]));
-      if (val(metaResults, 3)) setOrders(normalizeDecimals(val(metaResults, 3) as ProductionOrder[]));
-      if (val(metaResults, 4)) setProductMilestoneProgresses(normalizeDecimals(val(metaResults, 4) as ProductMilestoneProgress[]));
-
-      // Phase 2b: heavy record collections (can be large, load in parallel but after orders)
-      const heavyResults = await Promise.allSettled([
-        api.production.list(),                                  // 0
-        api.psi.list(),                                         // 1
-        api.finance.list(),                                     // 2
-      ]);
-      if (cancelled) return;
-
-      const allFailed = [...metaResults, ...heavyResults].filter(r => r.status === 'rejected');
-      if (allFailed.length) console.warn(`延后数据加载: ${allFailed.length} 个请求失败`, allFailed.map(r => (r as PromiseRejectedResult).reason?.message));
-
-      if (val(heavyResults, 0)) setProdRecords(normalizeDecimals(val(heavyResults, 0) as ProductionOpRecord[]));
-      if (val(heavyResults, 1)) setPsiRecords(normalizeDecimals(val(heavyResults, 1) as any[]));
-      if (val(heavyResults, 2)) setFinanceRecords(normalizeDecimals(val(heavyResults, 2) as FinanceRecord[]));
-
-      const now = new Date().toISOString();
-      ['orders', 'products', 'plans', 'prodRecords', 'psiRecords', 'financeRecords'].forEach(k => { lastFetchTs.current[k] = now; });
     }
 
     (async () => {
       try {
         await loadCore();
-        if (!cancelled) loadDeferred();
       } catch (err) {
         console.error('数据加载失败', err);
         if (!cancelled) setDataLoading(false);
@@ -381,6 +402,44 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   // ── Incremental sync timestamps ──
   const lastFetchTs = useRef<Record<string, string>>({});
   const markFetched = (key: string) => { lastFetchTs.current[key] = new Date().toISOString(); };
+
+  // ── Lazy load for heavy data (orders/plans/prodRecords/psiRecords/financeRecords) ──
+  const deferredLoadState = useRef<'idle' | 'loading' | 'done'>('idle');
+
+  const ensureDeferredLoaded = useCallback(async () => {
+    if (deferredLoadState.current !== 'idle') return;
+    deferredLoadState.current = 'loading';
+
+    try {
+      const metaResults = await Promise.allSettled([
+        api.plans.list(),                    // 0
+        api.orders.list(),                   // 1
+        api.orders.listProductProgress(),    // 2
+      ]);
+      if (val(metaResults, 0)) setPlans(normalizeDecimals(val(metaResults, 0) as PlanOrder[]));
+      if (val(metaResults, 1)) setOrders(normalizeDecimals(val(metaResults, 1) as ProductionOrder[]));
+      if (val(metaResults, 2)) setProductMilestoneProgresses(normalizeDecimals(val(metaResults, 2) as ProductMilestoneProgress[]));
+
+      const heavyResults = await Promise.allSettled([
+        api.production.list(),               // 0
+        api.psi.list(),                      // 1
+        api.finance.list(),                  // 2
+      ]);
+      if (val(heavyResults, 0)) setProdRecords(normalizeDecimals(val(heavyResults, 0) as ProductionOpRecord[]));
+      if (val(heavyResults, 1)) setPsiRecords(normalizeDecimals(val(heavyResults, 1) as any[]));
+      if (val(heavyResults, 2)) setFinanceRecords(normalizeDecimals(val(heavyResults, 2) as FinanceRecord[]));
+
+      const allFailed = [...metaResults, ...heavyResults].filter(r => r.status === 'rejected');
+      if (allFailed.length) console.warn(`延后数据加载: ${allFailed.length} 个请求失败`, allFailed.map(r => (r as PromiseRejectedResult).reason?.message));
+
+      const now = new Date().toISOString();
+      ['orders', 'products', 'plans', 'prodRecords', 'psiRecords', 'financeRecords'].forEach(k => { lastFetchTs.current[k] = now; });
+    } catch (err) {
+      console.error('延后数据加载失败', err);
+    } finally {
+      deferredLoadState.current = 'done';
+    }
+  }, []);
 
   /**
    * Merges incremental results into the existing state.
@@ -714,17 +773,28 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     catch (err: any) { toast.error(err.message || '删除记录失败'); }
   }, []);
 
-  const dataValue: AppDataState = {
-    dataLoading,
-    products, orders, plans, psiRecords, financeRecords, prodRecords,
-    categories, partnerCategories, dictionaries, globalNodes, boms,
-    partners, workers, equipment, warehouses,
-    financeCategories, financeAccountTypes,
+  // ── Domain-specific memoized values ──
+
+  const masterDataValue: MasterDataState = useMemo(() => ({
+    categories, partnerCategories, dictionaries, globalNodes,
+    partners, workers, equipment, warehouses, products, boms,
+  }), [categories, partnerCategories, dictionaries, globalNodes, partners, workers, equipment, warehouses, products, boms]);
+
+  const configValue: ConfigState = useMemo(() => ({
+    productionLinkMode, processSequenceMode, allowExceedMaxReportQty,
     planFormSettings, orderFormSettings, purchaseOrderFormSettings, purchaseBillFormSettings,
     printTemplates,
-    productionLinkMode, processSequenceMode, allowExceedMaxReportQty,
-    productMilestoneProgresses,
-  };
+  }), [productionLinkMode, processSequenceMode, allowExceedMaxReportQty, planFormSettings, orderFormSettings, purchaseOrderFormSettings, purchaseBillFormSettings, printTemplates]);
+
+  const ordersValue: OrdersState = useMemo(() => ({
+    orders, plans, productMilestoneProgresses, prodRecords,
+  }), [orders, plans, productMilestoneProgresses, prodRecords]);
+
+  const psiValue: PsiState = useMemo(() => ({ psiRecords }), [psiRecords]);
+
+  const financeValue: FinanceState = useMemo(() => ({
+    financeRecords, financeCategories, financeAccountTypes,
+  }), [financeRecords, financeCategories, financeAccountTypes]);
 
   const actionsValue: AppDataActions = useMemo(() => ({
     onUpdateProductionLinkMode, onUpdateProcessSequenceMode, onUpdateAllowExceedMaxReportQty,
@@ -745,6 +815,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     refreshFinanceCategories, refreshFinanceAccountTypes,
     refreshProducts, refreshOrders, refreshProdRecords, refreshPMP,
     refreshPrintTemplates,
+    ensureDeferredLoaded,
   }), [
     onUpdateProductionLinkMode, onUpdateProcessSequenceMode, onUpdateAllowExceedMaxReportQty,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
@@ -764,27 +835,61 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     refreshFinanceCategories, refreshFinanceAccountTypes,
     refreshProducts, refreshOrders, refreshProdRecords, refreshPMP,
     refreshPrintTemplates,
+    ensureDeferredLoaded,
   ]);
 
   return (
-    <DataCtx.Provider value={dataValue}>
-      <ActionsCtx.Provider value={actionsValue}>
-        {children}
-      </ActionsCtx.Provider>
-    </DataCtx.Provider>
+    <LoadingCtx.Provider value={dataLoading}>
+    <MasterDataCtx.Provider value={masterDataValue}>
+    <ConfigCtx.Provider value={configValue}>
+    <OrdersCtx.Provider value={ordersValue}>
+    <PsiCtx.Provider value={psiValue}>
+    <FinanceCtx.Provider value={financeValue}>
+    <ActionsCtx.Provider value={actionsValue}>
+      {children}
+    </ActionsCtx.Provider>
+    </FinanceCtx.Provider>
+    </PsiCtx.Provider>
+    </OrdersCtx.Provider>
+    </ConfigCtx.Provider>
+    </MasterDataCtx.Provider>
+    </LoadingCtx.Provider>
   );
 }
 
-export function useAppData(): AppDataContextValue {
-  const data = useContext(DataCtx);
-  const actions = useContext(ActionsCtx);
-  if (!data || !actions) throw new Error('useAppData must be used within AppDataProvider');
-  return useMemo(() => ({ ...data, ...actions }), [data, actions]);
+// ── Domain-specific hooks (fine-grained subscriptions) ──
+
+export function useDataLoading(): boolean {
+  return useContext(LoadingCtx);
 }
 
-export function useAppDataState(): AppDataState {
-  const ctx = useContext(DataCtx);
-  if (!ctx) throw new Error('useAppDataState must be used within AppDataProvider');
+export function useMasterData(): MasterDataState {
+  const ctx = useContext(MasterDataCtx);
+  if (!ctx) throw new Error('useMasterData must be used within AppDataProvider');
+  return ctx;
+}
+
+export function useConfigData(): ConfigState {
+  const ctx = useContext(ConfigCtx);
+  if (!ctx) throw new Error('useConfigData must be used within AppDataProvider');
+  return ctx;
+}
+
+export function useOrdersData(): OrdersState {
+  const ctx = useContext(OrdersCtx);
+  if (!ctx) throw new Error('useOrdersData must be used within AppDataProvider');
+  return ctx;
+}
+
+export function usePsiData(): PsiState {
+  const ctx = useContext(PsiCtx);
+  if (!ctx) throw new Error('usePsiData must be used within AppDataProvider');
+  return ctx;
+}
+
+export function useFinanceData(): FinanceState {
+  const ctx = useContext(FinanceCtx);
+  if (!ctx) throw new Error('useFinanceData must be used within AppDataProvider');
   return ctx;
 }
 
@@ -792,4 +897,33 @@ export function useAppActions(): AppDataActions {
   const ctx = useContext(ActionsCtx);
   if (!ctx) throw new Error('useAppActions must be used within AppDataProvider');
   return ctx;
+}
+
+// ── Backward-compatible aggregate hooks ──
+
+export function useAppData(): AppDataContextValue {
+  const loading = useDataLoading();
+  const master = useMasterData();
+  const config = useConfigData();
+  const orders = useOrdersData();
+  const psi = usePsiData();
+  const finance = useFinanceData();
+  const actions = useAppActions();
+  return useMemo(() => ({
+    dataLoading: loading,
+    ...master, ...config, ...orders, ...psi, ...finance, ...actions,
+  }), [loading, master, config, orders, psi, finance, actions]);
+}
+
+export function useAppDataState(): AppDataState {
+  const loading = useDataLoading();
+  const master = useMasterData();
+  const config = useConfigData();
+  const orders = useOrdersData();
+  const psi = usePsiData();
+  const finance = useFinanceData();
+  return useMemo(() => ({
+    dataLoading: loading,
+    ...master, ...config, ...orders, ...psi, ...finance,
+  }), [loading, master, config, orders, psi, finance]);
 }

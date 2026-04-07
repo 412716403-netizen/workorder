@@ -520,6 +520,9 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
     return rows;
   }, [type, reconciliationSubTab, reconQueryWorkerId, reconQueryDateFromT, reconQueryDateToT, orders, productMap, workerMap, prodRecords, allRecords, inFinanceDateRangeQuery]);
 
+  const FIN_PAGE_SIZE = 20;
+  const [finPage, setFinPage] = useState(1);
+
   /** 财务对账：按日期 + 工人筛选后的财务单列表（非对账时用；对账报工结算用 settlementReconList） */
   const displayRecords = useMemo(() => {
     if (type !== 'RECONCILIATION') return records;
@@ -535,6 +538,13 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
       return true;
     });
   }, [type, records, allRecords, reconciliationSubTab, reconQueryDateFromT, reconQueryDateToT, reconQueryWorkerId, inFinanceDateRangeQuery]);
+
+  useEffect(() => { setFinPage(1); }, [type]);
+  const finTotalPages = Math.max(1, Math.ceil(displayRecords.length / FIN_PAGE_SIZE));
+  const pagedDisplayRecords = useMemo(
+    () => displayRecords.slice((finPage - 1) * FIN_PAGE_SIZE, finPage * FIN_PAGE_SIZE),
+    [displayRecords, finPage],
+  );
 
   /** 报工结算：每行应收增加、应收减少及逐行应收余额。应收减少=报工单、返工报工、收款单；应收增加=付款单 */
   const settlementReconWithBalance = useMemo(() => {
@@ -722,7 +732,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
               {(() => {
                 const isPartnerRecon = type === 'RECONCILIATION' && reconciliationSubTab === 'partner';
                 const isSettlementRecon = type === 'RECONCILIATION' && reconciliationSubTab === 'settlement';
-                const listLength = isPartnerRecon ? partnerReconWithBalance.length : isSettlementRecon ? settlementReconWithBalance.length : displayRecords.length;
+                const listLength = isPartnerRecon ? partnerReconWithBalance.length : isSettlementRecon ? settlementReconWithBalance.length : pagedDisplayRecords.length;
                 const colSpan = (isPartnerRecon || isSettlementRecon) ? 8 : 6;
                 const emptyMsg = type === 'RECONCILIATION' ? (reconHasFilter ? '该条件下暂无对账单据' : (reconciliationSubTab === 'partner' ? '请选择合作单位后点击查询' : '请选择工人后点击查询')) : '暂无该模块财务记录';
                 if (listLength === 0) {
@@ -836,7 +846,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                     );
                   });
                 }
-                return displayRecords.map(rec => (
+                return pagedDisplayRecords.map(rec => (
                   <tr key={rec.id} className="hover:bg-slate-50/30 transition-colors">
                     <td className="px-8 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
@@ -879,6 +889,13 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
               })()}
             </tbody>
           </table>
+          {finTotalPages > 1 && type !== 'RECONCILIATION' && (
+            <div className="flex items-center justify-center gap-3 py-4">
+              <span className="text-xs text-slate-400">共 {displayRecords.length} 条，第 {finPage} / {finTotalPages} 页</span>
+              <button type="button" disabled={finPage <= 1} onClick={() => setFinPage(p => p - 1)} className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed">上一页</button>
+              <button type="button" disabled={finPage >= finTotalPages} onClick={() => setFinPage(p => p + 1)} className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed">下一页</button>
+            </div>
+          )}
         </div>
       </div>
 

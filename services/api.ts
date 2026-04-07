@@ -284,6 +284,13 @@ export const adminTenants = {
 };
 
 // ── Pagination types ──
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface PaginationParams {
   page?: number;
   pageSize?: number;
@@ -360,6 +367,8 @@ export const boms = {
 // ── Plans ──
 export const plans = {
   ...crud('/plans'),
+  listPaginated: (params: PaginationParams | Record<string, string>) =>
+    request<PaginatedResponse<any>>(`/plans${buildQs(params)}`),
   split: (id: string, data: unknown) => request(`/plans/${id}/split`, { method: 'POST', body: JSON.stringify(data) }),
   convert: (id: string) => request(`/plans/${id}/convert`, { method: 'POST' }),
   createSubPlans: (id: string, subPlans: unknown[]) =>
@@ -369,6 +378,8 @@ export const plans = {
 // ── Orders ──
 export const orders = {
   ...crud('/orders'),
+  listPaginated: (params: PaginationParams | Record<string, string>) =>
+    request<PaginatedResponse<any>>(`/orders${buildQs(params)}`),
   createReport: (orderId: string, milestoneId: string, data: unknown) =>
     request(`/orders/${orderId}/milestones/${milestoneId}/reports`, { method: 'POST', body: JSON.stringify(data) }),
   updateReport: (orderId: string, milestoneId: string, reportId: string, data: unknown) =>
@@ -388,6 +399,8 @@ export const orders = {
 // ── Production ──
 export const production = {
   ...crud('/production/records'),
+  listPaginated: (params: PaginationParams | Record<string, string>) =>
+    request<PaginatedResponse<any>>(`/production/records${buildQs(params)}`),
   getDefectiveRework: () => request('/production/defective-rework'),
 };
 
@@ -396,6 +409,8 @@ export const psi = {
   list: (params?: PaginationParams | Record<string, string>) => {
     return request(`/psi/records${buildQs(params)}`);
   },
+  listPaginated: (params: PaginationParams | Record<string, string>) =>
+    request<PaginatedResponse<any>>(`/psi/records${buildQs(params)}`),
   create: (data: unknown) => request('/psi/records', { method: 'POST', body: JSON.stringify(data) }),
   createBatch: (records: unknown[]) => request('/psi/records/batch', { method: 'POST', body: JSON.stringify({ records }) }),
   update: (id: string, data: unknown) => request(`/psi/records/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -410,7 +425,11 @@ export const psi = {
 };
 
 // ── Finance ──
-export const finance = crud('/finance/records');
+export const finance = {
+  ...crud('/finance/records'),
+  listPaginated: (params: PaginationParams | Record<string, string>) =>
+    request<PaginatedResponse<any>>(`/finance/records${buildQs(params)}`),
+};
 
 // ── Dashboard ──
 export const dashboard = {

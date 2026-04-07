@@ -706,7 +706,7 @@ export default function ProductImportModal({
                   <div className="flex flex-wrap gap-2 mt-3">
                     {Array.from(imageFiles.entries()).map(([name, url]) => (
                       <div key={name} className="relative group">
-                        <img src={url} alt={name} className="w-12 h-12 object-cover rounded-lg border border-slate-200" />
+                        <img loading="lazy" decoding="async" src={url} alt={name} className="w-12 h-12 object-cover rounded-lg border border-slate-200" />
                         <div className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={(e) => {

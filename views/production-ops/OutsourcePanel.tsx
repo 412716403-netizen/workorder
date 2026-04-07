@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -27,6 +27,7 @@ import type {
   ProductMilestoneProgress,
 } from '../../types';
 import { PanelProps, hasOpsPerm, OutsourceModalType } from './types';
+import { useDataIndexes } from './useDataIndexes';
 import * as api from '../../services/api';
 import {
   moduleHeaderRowClass,
@@ -107,6 +108,12 @@ const OutsourcePanel: React.FC<PanelProps> = ({
   const [matReturnRemark, setMatReturnRemark] = useState('');
   const [matReturnQty, setMatReturnQty] = useState<Record<string, number>>({});
 
+  const OUTS_PAGE_SIZE = 10;
+  const [outsPage, setOutsPage] = useState(1);
+  useEffect(() => { setOutsPage(1); }, [productionLinkMode]);
+
+  const idx = useDataIndexes(orders, products, boms, globalNodes, productMilestoneProgresses);
+
   const defectiveReworkByOrderForOutsource = useMemo(
     () => buildDefectiveReworkByOrderMilestone(orders, records),
     [orders, records]
@@ -126,18 +133,18 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         dispatchedByKey[key] = (dispatchedByKey[key] ?? 0) + r.quantity;
       });
       const rows: { orderId?: string; orderNumber?: string; productId: string; productName: string; nodeId: string; milestoneName: string; orderTotalQty: number; reportedQty: number; dispatchedQty: number; availableQty: number }[] = [];
-      const productIds = new Set<string>(products.map(p => String(p.id)));
       const getDr = (oid: string, tid: string) =>
         defectiveReworkByOrderForOutsource.get(`${oid}|${tid}`) ?? { defective: 0, rework: 0 };
-      productIds.forEach(productId => {
-        const product = products.find(p => p.id === productId);
-        const blockOrders = orders.filter(o => o.productId === productId);
-        const nodeIds = (product?.milestoneNodeIds || []).filter((nid: string) => {
-          const node = globalNodes.find(n => n.id === nid);
+      const { productsById, ordersByProductId, nodesById, pmpByKey } = idx;
+      for (const product of products) {
+        const productId = String(product.id);
+        const blockOrders = ordersByProductId.get(productId) ?? [];
+        const nodeIds = (product.milestoneNodeIds || []).filter((nid: string) => {
+          const node = nodesById.get(nid);
           return node?.allowOutsource;
         });
         nodeIds.forEach((nodeId: string) => {
-          const node = globalNodes.find(n => n.id === nodeId);
+          const node = nodesById.get(nodeId);
           const maxReportable =
             blockOrders.length > 0
               ? productGroupMaxReportableSum(
@@ -146,17 +153,18 @@ const OutsourcePanel: React.FC<PanelProps> = ({
                   productId,
                   productMilestoneProgresses || [],
                   (processSequenceMode ?? 'free') as ProcessSequenceMode,
-                  getDr
+                  getDr,
+                  pmpByKey
                 )
               : 0;
-          const reportedQty = pmpCompletedAtTemplate(productMilestoneProgresses || [], productId, nodeId);
+          const reportedQty = pmpCompletedAtTemplate(productMilestoneProgresses || [], productId, nodeId, pmpByKey);
           const key = `${productId}|${nodeId}`;
           const dispatchedQty = dispatchedByKey[key] ?? 0;
           const availableQty = Math.max(0, maxReportable - reportedQty - dispatchedQty);
           if (availableQty <= 0) return;
           rows.push({
             productId,
-            productName: product?.name ?? '—',
+            productName: product.name ?? '—',
             nodeId,
             milestoneName: node?.name ?? nodeId,
             orderTotalQty: maxReportable,
@@ -165,7 +173,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
             availableQty
           });
         });
-      });
+      }
       return rows.sort((a, b) => (a.productName || '').localeCompare(b.productName || ''));
     }
 
@@ -181,9 +189,9 @@ const OutsourcePanel: React.FC<PanelProps> = ({
     const parentList = orders.filter(o => !o.parentOrderId);
     parentList.forEach(order => {
       const rawOrderTotalQty = order.items.reduce((s, i) => s + i.quantity, 0);
-      const product = products.find(p => p.id === order.productId);
+      const product = idx.productsById.get(order.productId);
       order.milestones.forEach(ms => {
-        const node = globalNodes.find(n => n.id === ms.templateId);
+        const node = idx.nodesById.get(ms.templateId);
         if (!node?.allowOutsource) return;
         if (product && !(product.milestoneNodeIds || []).includes(ms.templateId)) return;
         let baseQty = rawOrderTotalQty;
@@ -216,7 +224,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
       });
     });
     return rows;
-  }, [productionLinkMode, records, orders, products, globalNodes, productMilestoneProgresses, processSequenceMode, defectiveReworkByOrderForOutsource]);
+  }, [productionLinkMode, records, orders, products, globalNodes, productMilestoneProgresses, processSequenceMode, defectiveReworkByOrderForOutsource, idx]);
 
   const outsourceReceiveRows = useMemo(() => {
     const outsourceRecords = records.filter(r => r.type === 'OUTSOURCE');
@@ -236,8 +244,8 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         const pending = v.dispatched - v.received;
         if (pending <= 0) return;
         const [productId, nodeId] = key.split('|');
-        const product = products.find(p => p.id === productId);
-        const node = globalNodes.find(n => n.id === nodeId);
+        const product = idx.productsById.get(productId);
+        const node = idx.nodesById.get(nodeId);
         rows.push({
           nodeId,
           productId,
@@ -265,10 +273,10 @@ const OutsourcePanel: React.FC<PanelProps> = ({
       const pending = v.dispatched - v.received;
       if (pending <= 0) return;
       const [orderId, nodeId] = key.split('|');
-      const order = orders.find(o => o.id === orderId);
+      const order = idx.ordersById.get(orderId);
       if (!order) return;
       const ms = order.milestones.find(m => m.templateId === nodeId);
-      const product = products.find(p => p.id === order.productId);
+      const product = idx.productsById.get(order.productId);
       rows.push({
         orderId,
         nodeId,
@@ -283,7 +291,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
       });
     });
     return rows;
-  }, [productionLinkMode, records, orders, products, globalNodes]);
+  }, [productionLinkMode, records, orders, products, globalNodes, idx]);
 
   const outsourceStatsByOrder = useMemo(() => {
     const isProductMode = productionLinkMode === 'product';
@@ -300,13 +308,13 @@ const OutsourcePanel: React.FC<PanelProps> = ({
       const byProduct = new Map<string, { partner: string; nodeId: string; nodeName: string; dispatched: number; received: number; pending: number }[]>();
       Object.values(byKey).forEach(v => {
         const pending = Math.max(0, v.dispatched - v.received);
-        const nodeName = (globalNodes.find(n => n.id === v.nodeId)?.name ?? v.nodeId) || '—';
+        const nodeName = (idx.nodesById.get(v.nodeId)?.name ?? v.nodeId) || '—';
         if (!byProduct.has(v.productId)) byProduct.set(v.productId, []);
         byProduct.get(v.productId)!.push({ partner: v.partner, nodeId: v.nodeId, nodeName, dispatched: v.dispatched, received: v.received, pending });
       });
       return Array.from(byProduct.entries())
         .map(([productId, ptnrs]) => {
-          const product = products.find(p => p.id === productId);
+          const product = idx.productsById.get(productId);
           const seq = product?.milestoneNodeIds ?? [];
           const nodeOrder = (nodeId: string) => {
             const i = seq.indexOf(nodeId);
@@ -337,16 +345,16 @@ const OutsourcePanel: React.FC<PanelProps> = ({
     const byOrder = new Map<string, { partner: string; nodeId: string; nodeName: string; dispatched: number; received: number; pending: number }[]>();
     Object.values(byKey).forEach(v => {
       const pending = Math.max(0, v.dispatched - v.received);
-      const order = orders.find(o => o.id === v.orderId);
+      const order = idx.ordersById.get(v.orderId);
       const ms = order?.milestones?.find(m => m.templateId === v.nodeId);
-      const nodeName = (ms?.name ?? globalNodes.find(n => n.id === v.nodeId)?.name ?? v.nodeId) || '—';
+      const nodeName = (ms?.name ?? idx.nodesById.get(v.nodeId)?.name ?? v.nodeId) || '—';
       if (!byOrder.has(v.orderId)) byOrder.set(v.orderId, []);
       byOrder.get(v.orderId)!.push({ partner: v.partner, nodeId: v.nodeId, nodeName, dispatched: v.dispatched, received: v.received, pending });
     });
     return Array.from(byOrder.entries())
       .map(([orderId, ptnrs]) => {
-        const order = orders.find(o => o.id === orderId);
-        const product = products.find(p => p.id === order?.productId);
+        const order = idx.ordersById.get(orderId);
+        const product = idx.productsById.get(order?.productId ?? '');
         const milestoneIndex = (nodeId: string) => {
           const idx = order?.milestones?.findIndex(m => m.templateId === nodeId) ?? -1;
           return idx >= 0 ? idx : 9999;
@@ -361,7 +369,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         };
       })
       .sort((a, b) => (a.orderNumber || '').localeCompare(b.orderNumber || ''));
-  }, [productionLinkMode, records, orders, products, globalNodes]);
+  }, [productionLinkMode, records, orders, products, globalNodes, idx]);
 
   const outsourceFlowSummaryRows = useMemo(() => {
     const isProductMode = productionLinkMode === 'product';
@@ -373,7 +381,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
       outsourceList.forEach(rec => {
         const docNo = rec.docNo ?? '—';
         const pid = rec.productId || '';
-        const product = products.find(p => p.id === pid);
+        const product = idx.productsById.get(pid);
         const k = key(docNo, pid);
         if (!byKey.has(k)) {
           byKey.set(k, { docNo, productId: pid, productName: product?.name ?? '—', records: [] });
@@ -388,7 +396,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           const partner = row.records[0]?.partner ?? '—';
           const totalQuantity = row.records.reduce((s, r) => s + r.quantity, 0);
           const remark = row.records.map(r => r.reason).filter(Boolean)[0] ?? '—';
-          const nodeNames = [...new Set(row.records.map(r => r.nodeId).filter(Boolean))].map(nid => globalNodes.find(n => n.id === nid)?.name ?? nid);
+          const nodeNames = [...new Set(row.records.map(r => r.nodeId).filter(Boolean))].map(nid => idx.nodesById.get(nid)?.name ?? nid);
           const milestoneStr = nodeNames.length ? nodeNames.join('、') : '—';
           const hasDispatch = row.records.some(r => r.status !== '已收回');
           const hasReceive = row.records.some(r => r.status === '已收回');
@@ -408,8 +416,8 @@ const OutsourcePanel: React.FC<PanelProps> = ({
       const docNo = rec.docNo ?? '—';
       const oid = rec.orderId || '';
       const pid = rec.productId || '';
-      const order = orders.find(o => o.id === oid);
-      const product = products.find(p => p.id === pid);
+      const order = idx.ordersById.get(oid);
+      const product = idx.productsById.get(pid);
       const k = key(docNo, oid, pid);
       if (!byKey.has(k)) {
         byKey.set(k, {
@@ -431,7 +439,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         const partner = row.records[0]?.partner ?? '—';
         const totalQuantity = row.records.reduce((s, r) => s + r.quantity, 0);
         const remark = row.records.map(r => r.reason).filter(Boolean)[0] ?? '—';
-        const nodeNames = [...new Set(row.records.map(r => r.nodeId).filter(Boolean))].map(nid => globalNodes.find(n => n.id === nid)?.name ?? nid);
+        const nodeNames = [...new Set(row.records.map(r => r.nodeId).filter(Boolean))].map(nid => idx.nodesById.get(nid)?.name ?? nid);
         const milestoneStr = nodeNames.length ? nodeNames.join('、') : '—';
         const hasDispatch = row.records.some(r => r.status !== '已收回');
         const hasReceive = row.records.some(r => r.status === '已收回');
@@ -443,7 +451,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         const tB = b.records[0]?.timestamp ?? '';
         return new Date(tB).getTime() - new Date(tA).getTime();
       });
-  }, [productionLinkMode, records, orders, products, globalNodes]);
+  }, [productionLinkMode, records, orders, products, globalNodes, idx]);
 
   const OUTSOURCE_DOCNO_REGEX = /^WX-(\d+)-(\d+)$/;
   const getPartnerCodeFromName = (partnerName: string): number => {
@@ -518,7 +526,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
       const variantId = parts[2];
       if (isProductMode) {
         const productId = parts[0];
-        const product = products.find(p => p.id === productId);
+        const product = idx.productsById.get(productId);
         if (!product) return;
         batch.push({
           id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -536,7 +544,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         } as ProductionOpRecord);
       } else {
         const orderId = parts[0];
-        const order = orders.find(o => o.id === orderId);
+        const order = idx.ordersById.get(orderId);
         if (!order) return;
         batch.push({
           id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -726,7 +734,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         const baseKey = parts.length === 3 ? `${orderId}|${nodeId}` : key;
         const unitPrice = receiveFormUnitPrices[baseKey] ?? 0;
         const amount = qty * unitPrice;
-        const order = orders.find(o => o.id === orderId);
+        const order = idx.ordersById.get(orderId);
         if (!order) continue;
         onAddRecord({
           id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -807,14 +815,18 @@ const OutsourcePanel: React.FC<PanelProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-2">
-              {outsourceStatsByOrder.map((item) => {
+              {(() => {
+                const outsTotalPages = Math.max(1, Math.ceil(outsourceStatsByOrder.length / OUTS_PAGE_SIZE));
+                const pagedStats = outsourceStatsByOrder.slice((outsPage - 1) * OUTS_PAGE_SIZE, outsPage * OUTS_PAGE_SIZE);
+                return (<>
+              {pagedStats.map((item) => {
                 const orderId = 'orderId' in item ? item.orderId : undefined;
                 const orderNumber = 'orderNumber' in item ? item.orderNumber : undefined;
                 const productId = 'productId' in item ? item.productId : (item as { productId: string }).productId;
                 const productName = item.productName;
                 const ptnrs = item.partners;
-                const order = orderId ? orders.find(o => o.id === orderId) : undefined;
-                const product = products.find(p => p.id === productId);
+                const order = orderId ? idx.ordersById.get(orderId) : undefined;
+                const product = idx.productsById.get(productId);
                 const orderTotalQty = order?.items?.reduce((s, i) => s + i.quantity, 0) ?? 0;
                 return (
                 <div
@@ -824,7 +836,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
                   <div className="flex items-center gap-4 min-w-0">
                     {product?.imageUrl ? (
                       <div className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0">
-                        <img src={product.imageUrl} alt={productName} className="w-full h-full object-cover block" />
+                        <img loading="lazy" decoding="async" src={product.imageUrl} alt={productName} className="w-full h-full object-cover block" />
                       </div>
                     ) : (
                       <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600">
@@ -945,6 +957,14 @@ const OutsourcePanel: React.FC<PanelProps> = ({
                 </div>
               );
               })}
+              {outsTotalPages > 1 && (
+                <div className="flex items-center justify-center gap-3 py-4">
+                  <span className="text-xs text-slate-400">共 {outsourceStatsByOrder.length} 项，第 {outsPage} / {outsTotalPages} 页</span>
+                  <button type="button" disabled={outsPage <= 1} onClick={() => setOutsPage(p => p - 1)} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all">上一页</button>
+                  <button type="button" disabled={outsPage >= outsTotalPages} onClick={() => setOutsPage(p => p + 1)} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all">下一页</button>
+                </div>
+              )}
+              </>); })()}
             </div>
           )}
         </div>

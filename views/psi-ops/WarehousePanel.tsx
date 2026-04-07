@@ -833,7 +833,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                                            <td className="px-4 py-3">
                                              {line.imageUrl ? (
                                                <button type="button" onClick={() => setImagePreviewUrl(line.imageUrl!)} className="w-10 h-10 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer hover:opacity-90 transition-opacity">
-                                                 <img src={line.imageUrl} alt={line.name} className="w-full h-full object-cover block" />
+                                                 <img loading="lazy" decoding="async" src={line.imageUrl} alt={line.name} className="w-full h-full object-cover block" />
                                                </button>
                                              ) : (
                                                <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-300">
@@ -957,7 +957,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                                   <td className="px-4 py-3">
                                     {ps.imageUrl ? (
                                       <button type="button" onClick={() => setImagePreviewUrl(ps.imageUrl!)} className="w-10 h-10 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer hover:opacity-90 transition-opacity">
-                                        <img src={ps.imageUrl} alt={ps.name} className="w-full h-full object-cover block" />
+                                        <img loading="lazy" decoding="async" src={ps.imageUrl} alt={ps.name} className="w-full h-full object-cover block" />
                                       </button>
                                     ) : (
                                       <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-300">

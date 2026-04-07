@@ -271,7 +271,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                         <td className="py-3 pl-4 pr-2">
                           <div className="w-9 h-9 bg-slate-50 rounded-xl flex items-center justify-center overflow-hidden text-slate-400 shrink-0">
                             {product.imageUrl ? (
-                              <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                              <img loading="lazy" decoding="async" src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
                             ) : (
                               <Package className="w-4 h-4" />
                             )}

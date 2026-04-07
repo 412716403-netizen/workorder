@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, Navigate, useParams, useLocation } from 'react-router-dom';
 import {
   Layout, LayoutDashboard, ClipboardList, Settings as SettingsIcon,
@@ -21,7 +21,7 @@ const CollaborationInboxView = React.lazy(() => import('./views/CollaborationInb
 const PrintTemplateEditorView = React.lazy(() => import('./views/PrintTemplateEditorView'));
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { AppDataProvider, useAppData } from './contexts/AppDataContext';
+import { AppDataProvider, useDataLoading, useMasterData, useConfigData, useOrdersData, usePsiData, useFinanceData, useAppActions } from './contexts/AppDataContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ConfirmProvider } from './contexts/ConfirmContext';
 
@@ -102,15 +102,14 @@ function AuthRouter() {
 
 function AppLayout() {
   const auth = useAuth();
-  const data = useAppData();
+  const dataLoading = useDataLoading();
   const location = useLocation();
-  /** 打印模板编辑器全屏工作区，不显示主导航侧栏 */
   const printEditorFullscreen = location.pathname.startsWith('/print-editor');
 
   const { currentUser, tenantCtx, hasPerm, handleLogout, handleSwitchTenant } = auth;
   const { profileOpen, setProfileOpen, onProfileUpdate, onTenantCtxUpdate } = auth;
 
-  if (data.dataLoading) {
+  if (dataLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center gap-4">
@@ -246,189 +245,173 @@ function AppLayout() {
   );
 }
 
+// ── Route wrappers: each subscribes only to the domains it needs ──
+
+function DashboardRoute() {
+  return <DashboardView />;
+}
+
+function ProductionRoute() {
+  const m = useMasterData();
+  const c = useConfigData();
+  const o = useOrdersData();
+  const { psiRecords } = usePsiData();
+  const a = useAppActions();
+  const { tenantCtx } = useAuth();
+  useEffect(() => { a.ensureDeferredLoaded(); }, [a.ensureDeferredLoaded]);
+  return (
+    <ProductionManagementView
+      productionLinkMode={c.productionLinkMode} processSequenceMode={c.processSequenceMode}
+      allowExceedMaxReportQty={c.allowExceedMaxReportQty}
+      plans={o.plans} orders={o.orders} products={m.products} categories={m.categories}
+      dictionaries={m.dictionaries} workers={m.workers} equipment={m.equipment}
+      prodRecords={o.prodRecords} psiRecords={psiRecords} warehouses={m.warehouses}
+      globalNodes={m.globalNodes} boms={m.boms} partners={m.partners}
+      partnerCategories={m.partnerCategories}
+      planFormSettings={c.planFormSettings} onUpdatePlanFormSettings={a.onUpdatePlanFormSettings}
+      printTemplates={c.printTemplates} onUpdatePrintTemplates={a.onUpdatePrintTemplates}
+      onRefreshPrintTemplates={a.refreshPrintTemplates}
+      orderFormSettings={c.orderFormSettings} onUpdateOrderFormSettings={a.onUpdateOrderFormSettings}
+      onCreatePlan={a.onCreatePlan} onUpdateProduct={a.onUpdateProduct}
+      onUpdatePlan={a.onUpdatePlan} onSplitPlan={a.onSplitPlan}
+      onDeletePlan={a.onDeletePlan} onConvertToOrder={a.onConvertToOrder}
+      onAddRecord={a.onAddProdRecord} onAddRecordBatch={a.onAddProdRecordBatch}
+      onUpdateRecord={a.onUpdateProdRecord} onDeleteRecord={a.onDeleteProdRecord}
+      onAddPSIRecord={a.onAddPSIRecord} onAddPSIRecordBatch={a.onAddPSIRecordBatch}
+      onCreateSubPlan={a.onCreateSubPlan} onCreateSubPlans={a.onCreateSubPlans}
+      onReportSubmit={a.onReportSubmit} onReportSubmitProduct={a.onReportSubmitProduct}
+      onUpdateReport={a.onUpdateReport} onDeleteReport={a.onDeleteReport}
+      productMilestoneProgresses={o.productMilestoneProgresses}
+      onUpdateReportProduct={a.onUpdateReportProduct} onDeleteReportProduct={a.onDeleteReportProduct}
+      onUpdateOrder={a.onUpdateOrder} onDeleteOrder={a.onDeleteOrder}
+      userPermissions={tenantCtx?.permissions} tenantRole={tenantCtx?.tenantRole}
+    />
+  );
+}
+
+function PsiRoute() {
+  const m = useMasterData();
+  const c = useConfigData();
+  const o = useOrdersData();
+  const { psiRecords } = usePsiData();
+  const a = useAppActions();
+  const { tenantCtx } = useAuth();
+  useEffect(() => { a.ensureDeferredLoaded(); }, [a.ensureDeferredLoaded]);
+  return (
+    <PSIView
+      products={m.products} records={psiRecords} prodRecords={o.prodRecords}
+      orders={o.orders} warehouses={m.warehouses} categories={m.categories}
+      partners={m.partners} partnerCategories={m.partnerCategories} dictionaries={m.dictionaries}
+      purchaseOrderFormSettings={c.purchaseOrderFormSettings}
+      onUpdatePurchaseOrderFormSettings={a.onUpdatePurchaseOrderFormSettings}
+      purchaseBillFormSettings={c.purchaseBillFormSettings}
+      onUpdatePurchaseBillFormSettings={a.onUpdatePurchaseBillFormSettings}
+      onAddRecord={a.onAddPSIRecord} onAddRecordBatch={a.onAddPSIRecordBatch}
+      onReplaceRecords={a.onReplacePSIRecords} onDeleteRecords={a.onDeletePSIRecords}
+      userPermissions={tenantCtx?.permissions} tenantRole={tenantCtx?.tenantRole || ''}
+    />
+  );
+}
+
+function FinanceRoute() {
+  const m = useMasterData();
+  const o = useOrdersData();
+  const { psiRecords } = usePsiData();
+  const f = useFinanceData();
+  const a = useAppActions();
+  const { tenantCtx } = useAuth();
+  useEffect(() => { a.ensureDeferredLoaded(); }, [a.ensureDeferredLoaded]);
+  return (
+    <FinanceView
+      orders={o.orders} records={f.financeRecords} psiRecords={psiRecords}
+      prodRecords={o.prodRecords}
+      onAddRecord={a.onAddFinanceRecord} onUpdateRecord={a.onUpdateFinanceRecord}
+      onDeleteRecord={a.onDeleteFinanceRecord}
+      financeCategories={f.financeCategories} financeAccountTypes={f.financeAccountTypes}
+      partners={m.partners} workers={m.workers} products={m.products}
+      partnerCategories={m.partnerCategories} categories={m.categories}
+      globalNodes={m.globalNodes} dictionaries={m.dictionaries}
+      userPermissions={tenantCtx?.permissions} tenantRole={tenantCtx?.tenantRole}
+    />
+  );
+}
+
+function CollaborationRoute() {
+  const m = useMasterData();
+  const o = useOrdersData();
+  const a = useAppActions();
+  const { tenantCtx } = useAuth();
+  useEffect(() => { a.ensureDeferredLoaded(); }, [a.ensureDeferredLoaded]);
+  return (
+    <CollaborationInboxView
+      products={m.products} partners={m.partners} partnerCategories={m.partnerCategories}
+      orders={o.orders} prodRecords={o.prodRecords} warehouses={m.warehouses}
+      dictionaries={m.dictionaries} nodeTemplates={m.globalNodes}
+      onRefreshPartners={a.refreshPartners} onRefreshProducts={a.refreshProducts}
+      onRefreshOrders={a.refreshOrders} onRefreshProdRecords={a.refreshProdRecords}
+      onRefreshPMP={a.refreshPMP}
+      tenantRole={tenantCtx?.tenantRole} userPermissions={tenantCtx?.permissions}
+    />
+  );
+}
+
+function BasicInfoRoute() {
+  const m = useMasterData();
+  const a = useAppActions();
+  const { tenantCtx, currentUser } = useAuth();
+  const userId = String(currentUser?.id ?? '');
+  return (
+    <BasicInfoView
+      products={m.products} globalNodes={m.globalNodes} categories={m.categories}
+      partnerCategories={m.partnerCategories} boms={m.boms} equipment={m.equipment}
+      dictionaries={m.dictionaries} partners={m.partners}
+      onUpdateProduct={a.onUpdateProduct} onDeleteProduct={a.onDeleteProduct}
+      onUpdateBOM={a.onUpdateBOM}
+      onRefreshDictionaries={a.refreshDictionaries} onRefreshWorkers={a.refreshWorkers}
+      onRefreshEquipment={a.refreshEquipment} onRefreshPartners={a.refreshPartners}
+      onRefreshPartnerCategories={a.refreshPartnerCategories} onRefreshProducts={a.refreshProducts}
+      tenantId={tenantCtx!.tenantId} tenantRole={tenantCtx!.tenantRole}
+      currentUserId={userId} userPermissions={tenantCtx!.permissions}
+    />
+  );
+}
+
+function SettingsRoute() {
+  const m = useMasterData();
+  const c = useConfigData();
+  const f = useFinanceData();
+  const a = useAppActions();
+  const { tenantCtx } = useAuth();
+  return (
+    <SettingsView
+      categories={m.categories} partnerCategories={m.partnerCategories}
+      globalNodes={m.globalNodes} warehouses={m.warehouses}
+      productionLinkMode={c.productionLinkMode} onUpdateProductionLinkMode={a.onUpdateProductionLinkMode}
+      processSequenceMode={c.processSequenceMode} onUpdateProcessSequenceMode={a.onUpdateProcessSequenceMode}
+      allowExceedMaxReportQty={c.allowExceedMaxReportQty}
+      onUpdateAllowExceedMaxReportQty={a.onUpdateAllowExceedMaxReportQty}
+      onRefreshCategories={a.refreshCategories} onRefreshPartnerCategories={a.refreshPartnerCategories}
+      onRefreshGlobalNodes={a.refreshGlobalNodes} onRefreshWarehouses={a.refreshWarehouses}
+      financeCategories={f.financeCategories} onRefreshFinanceCategories={a.refreshFinanceCategories}
+      financeAccountTypes={f.financeAccountTypes} onRefreshFinanceAccountTypes={a.refreshFinanceAccountTypes}
+      userPermissions={tenantCtx?.permissions} tenantRole={tenantCtx?.tenantRole}
+    />
+  );
+}
+
 function AppRoutes() {
-  const auth = useAuth();
-  const d = useAppData();
-  const { currentUser, tenantCtx } = auth;
+  const { currentUser } = useAuth();
   const userId = String(currentUser?.id ?? '');
 
   return (
     <Routes>
-      <Route path="/" element={
-        <DashboardView
-          orders={d.orders}
-          financeRecords={d.financeRecords}
-          psiRecords={d.psiRecords}
-          products={d.products}
-          productionLinkMode={d.productionLinkMode}
-        />
-      } />
-      <Route path="/production" element={
-        <ProductionManagementView
-          productionLinkMode={d.productionLinkMode}
-          processSequenceMode={d.processSequenceMode}
-          allowExceedMaxReportQty={d.allowExceedMaxReportQty}
-          plans={d.plans}
-          orders={d.orders}
-          products={d.products}
-          categories={d.categories}
-          dictionaries={d.dictionaries}
-          workers={d.workers}
-          equipment={d.equipment}
-          prodRecords={d.prodRecords}
-          psiRecords={d.psiRecords}
-          warehouses={d.warehouses}
-          globalNodes={d.globalNodes}
-          boms={d.boms}
-          partners={d.partners}
-          partnerCategories={d.partnerCategories}
-          planFormSettings={d.planFormSettings}
-          onUpdatePlanFormSettings={d.onUpdatePlanFormSettings}
-          printTemplates={d.printTemplates}
-          onUpdatePrintTemplates={d.onUpdatePrintTemplates}
-          onRefreshPrintTemplates={d.refreshPrintTemplates}
-          orderFormSettings={d.orderFormSettings}
-          onUpdateOrderFormSettings={d.onUpdateOrderFormSettings}
-          onCreatePlan={d.onCreatePlan}
-          onUpdateProduct={d.onUpdateProduct}
-          onUpdatePlan={d.onUpdatePlan}
-          onSplitPlan={d.onSplitPlan}
-          onDeletePlan={d.onDeletePlan}
-          onConvertToOrder={d.onConvertToOrder}
-          onAddRecord={d.onAddProdRecord}
-          onAddRecordBatch={d.onAddProdRecordBatch}
-          onUpdateRecord={d.onUpdateProdRecord}
-          onDeleteRecord={d.onDeleteProdRecord}
-          onAddPSIRecord={d.onAddPSIRecord}
-          onAddPSIRecordBatch={d.onAddPSIRecordBatch}
-          onCreateSubPlan={d.onCreateSubPlan}
-          onCreateSubPlans={d.onCreateSubPlans}
-          onReportSubmit={d.onReportSubmit}
-          onReportSubmitProduct={d.onReportSubmitProduct}
-          onUpdateReport={d.onUpdateReport}
-          onDeleteReport={d.onDeleteReport}
-          productMilestoneProgresses={d.productMilestoneProgresses}
-          onUpdateReportProduct={d.onUpdateReportProduct}
-          onDeleteReportProduct={d.onDeleteReportProduct}
-          onUpdateOrder={d.onUpdateOrder}
-          onDeleteOrder={d.onDeleteOrder}
-          userPermissions={tenantCtx?.permissions}
-          tenantRole={tenantCtx?.tenantRole}
-        />
-      } />
-      <Route path="/psi" element={
-        <PSIView
-          products={d.products}
-          records={d.psiRecords}
-          prodRecords={d.prodRecords}
-          orders={d.orders}
-          warehouses={d.warehouses}
-          categories={d.categories}
-          partners={d.partners}
-          partnerCategories={d.partnerCategories}
-          dictionaries={d.dictionaries}
-          purchaseOrderFormSettings={d.purchaseOrderFormSettings}
-          onUpdatePurchaseOrderFormSettings={d.onUpdatePurchaseOrderFormSettings}
-          purchaseBillFormSettings={d.purchaseBillFormSettings}
-          onUpdatePurchaseBillFormSettings={d.onUpdatePurchaseBillFormSettings}
-          onAddRecord={d.onAddPSIRecord}
-          onAddRecordBatch={d.onAddPSIRecordBatch}
-          onReplaceRecords={d.onReplacePSIRecords}
-          onDeleteRecords={d.onDeletePSIRecords}
-          userPermissions={tenantCtx?.permissions}
-          tenantRole={tenantCtx?.tenantRole || ''}
-        />
-      } />
-      <Route path="/finance" element={
-        <FinanceView
-          orders={d.orders}
-          records={d.financeRecords}
-          psiRecords={d.psiRecords}
-          prodRecords={d.prodRecords}
-          onAddRecord={d.onAddFinanceRecord}
-          onUpdateRecord={d.onUpdateFinanceRecord}
-          onDeleteRecord={d.onDeleteFinanceRecord}
-          financeCategories={d.financeCategories}
-          financeAccountTypes={d.financeAccountTypes}
-          partners={d.partners}
-          workers={d.workers}
-          products={d.products}
-          partnerCategories={d.partnerCategories}
-          categories={d.categories}
-          globalNodes={d.globalNodes}
-          dictionaries={d.dictionaries}
-          userPermissions={tenantCtx?.permissions}
-          tenantRole={tenantCtx?.tenantRole}
-        />
-      } />
-      <Route path="/collaboration" element={
-        <CollaborationInboxView
-          products={d.products}
-          partners={d.partners}
-          partnerCategories={d.partnerCategories}
-          orders={d.orders}
-          prodRecords={d.prodRecords}
-          warehouses={d.warehouses}
-          dictionaries={d.dictionaries}
-          nodeTemplates={d.globalNodes}
-          onRefreshPartners={d.refreshPartners}
-          onRefreshProducts={d.refreshProducts}
-          onRefreshOrders={d.refreshOrders}
-          onRefreshProdRecords={d.refreshProdRecords}
-          onRefreshPMP={d.refreshPMP}
-          tenantRole={tenantCtx?.tenantRole}
-          userPermissions={tenantCtx?.permissions}
-        />
-      } />
-      <Route path="/basic" element={
-        <BasicInfoView
-          products={d.products}
-          globalNodes={d.globalNodes}
-          categories={d.categories}
-          partnerCategories={d.partnerCategories}
-          boms={d.boms}
-          equipment={d.equipment}
-          dictionaries={d.dictionaries}
-          partners={d.partners}
-          onUpdateProduct={d.onUpdateProduct}
-          onDeleteProduct={d.onDeleteProduct}
-          onUpdateBOM={d.onUpdateBOM}
-          onRefreshDictionaries={d.refreshDictionaries}
-          onRefreshWorkers={d.refreshWorkers}
-          onRefreshEquipment={d.refreshEquipment}
-          onRefreshPartners={d.refreshPartners}
-          onRefreshPartnerCategories={d.refreshPartnerCategories}
-          onRefreshProducts={d.refreshProducts}
-          tenantId={tenantCtx!.tenantId}
-          tenantRole={tenantCtx!.tenantRole}
-          currentUserId={userId}
-          userPermissions={tenantCtx!.permissions}
-        />
-      } />
-      <Route path="/settings" element={
-        <SettingsView
-          categories={d.categories}
-          partnerCategories={d.partnerCategories}
-          globalNodes={d.globalNodes}
-          warehouses={d.warehouses}
-          productionLinkMode={d.productionLinkMode}
-          onUpdateProductionLinkMode={d.onUpdateProductionLinkMode}
-          processSequenceMode={d.processSequenceMode}
-          onUpdateProcessSequenceMode={d.onUpdateProcessSequenceMode}
-          allowExceedMaxReportQty={d.allowExceedMaxReportQty}
-          onUpdateAllowExceedMaxReportQty={d.onUpdateAllowExceedMaxReportQty}
-          onRefreshCategories={d.refreshCategories}
-          onRefreshPartnerCategories={d.refreshPartnerCategories}
-          onRefreshGlobalNodes={d.refreshGlobalNodes}
-          onRefreshWarehouses={d.refreshWarehouses}
-          financeCategories={d.financeCategories}
-          onRefreshFinanceCategories={d.refreshFinanceCategories}
-          financeAccountTypes={d.financeAccountTypes}
-          onRefreshFinanceAccountTypes={d.refreshFinanceAccountTypes}
-          userPermissions={tenantCtx?.permissions}
-          tenantRole={tenantCtx?.tenantRole}
-        />
-      } />
+      <Route path="/" element={<DashboardRoute />} />
+      <Route path="/production" element={<ProductionRoute />} />
+      <Route path="/psi" element={<PsiRoute />} />
+      <Route path="/finance" element={<FinanceRoute />} />
+      <Route path="/collaboration" element={<CollaborationRoute />} />
+      <Route path="/basic" element={<BasicInfoRoute />} />
+      <Route path="/settings" element={<SettingsRoute />} />
       <Route
         path="/admin/users"
         element={

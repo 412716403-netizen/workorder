@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, useDroppable } from '@dnd-kit/core';
 import { toast } from 'sonner';
 import { ArrowLeft, Eye, Minus, Plus, Printer, Save } from 'lucide-react';
-import { useAppData } from '../contexts/AppDataContext';
+import { useMasterData, useConfigData, useOrdersData, useAppActions } from '../contexts/AppDataContext';
 import type {
   PrintBodyElement,
   PrintBodyElementType,
@@ -50,7 +50,10 @@ function CanvasDropZone({
 export default function PrintTemplateEditorView() {
   const { id: routeId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { printTemplates, onUpdatePrintTemplates, plans, products, orders, planFormSettings } = useAppData();
+  const { products } = useMasterData();
+  const { printTemplates, planFormSettings } = useConfigData();
+  const { orders, plans } = useOrdersData();
+  const { onUpdatePrintTemplates } = useAppActions();
 
   const editor = usePrintEditor(createBlankCustomTemplate());
 

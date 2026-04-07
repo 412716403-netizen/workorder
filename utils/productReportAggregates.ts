@@ -12,8 +12,10 @@ export function sumVariantQtyInOrders(orders: ProductionOrder[], variantId: stri
 export function pmpCompletedAtTemplate(
   pmp: ProductMilestoneProgress[],
   productId: string,
-  templateId: string
+  templateId: string,
+  pmpByKey?: Map<string, number>,
 ): number {
+  if (pmpByKey) return pmpByKey.get(`${productId}|${templateId}`) ?? 0;
   return pmp
     .filter(p => p.productId === productId && p.milestoneTemplateId === templateId)
     .reduce((s, p) => s + (p.completedQuantity ?? 0), 0);
@@ -45,9 +47,10 @@ export function orderMaxReportableAtTemplateProductAware(
     blockOrders: ProductionOrder[];
     defective: number;
     rework: number;
+    pmpByKey?: Map<string, number>;
   }
 ): number {
-  const { processSequenceMode, productId, pmp, blockOrders, defective, rework } = args;
+  const { processSequenceMode, productId, pmp, blockOrders, defective, rework, pmpByKey } = args;
   const idx = order.milestones.findIndex(m => m.templateId === templateId);
   if (idx < 0) return 0;
   const orderQty = order.items.reduce((s, i) => s + i.quantity, 0);
@@ -56,7 +59,7 @@ export function orderMaxReportableAtTemplateProductAware(
     const prevMs = order.milestones[idx - 1];
     const prevTid = prevMs.templateId;
     const blockQty = sumBlockOrderQty(blockOrders);
-    const pmpPrevTotal = pmpCompletedAtTemplate(pmp, productId, prevTid);
+    const pmpPrevTotal = pmpCompletedAtTemplate(pmp, productId, prevTid, pmpByKey);
     const fromMilestone = prevMs.completedQuantity ?? 0;
     if (fromMilestone > 0) {
       baseQty = Math.min(orderQty, fromMilestone);
@@ -83,7 +86,8 @@ export function productGroupMaxReportableSum(
   productId: string,
   pmp: ProductMilestoneProgress[],
   processSequenceMode: ProcessSequenceMode,
-  getDefectiveRework: (orderId: string, tid: string) => { defective: number; rework: number }
+  getDefectiveRework: (orderId: string, tid: string) => { defective: number; rework: number },
+  pmpByKey?: Map<string, number>,
 ): number {
   let sum = blockOrders.reduce((acc, o) => {
     const { defective, rework } = getDefectiveRework(o.id, templateId);
@@ -95,13 +99,13 @@ export function productGroupMaxReportableSum(
         pmp,
         blockOrders,
         defective,
-        rework
+        rework,
+        pmpByKey
       })
     );
   }, 0);
   const pmpDef = pmpDefectiveTotalAtTemplate(pmp, productId, templateId);
   const mileDef = blockOrders.reduce((s, o) => s + getDefectiveRework(o.id, templateId).defective, 0);
-  /** 件数展示为整数，避免顺序分摊出现 337.835… */
   return Math.max(0, Math.round(sum - Math.max(0, pmpDef - mileDef)));
 }
 

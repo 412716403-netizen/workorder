@@ -5,10 +5,14 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 
 export const listRecords = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
+  const page = req.query.page ? Number(req.query.page) : undefined;
+  const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
   res.json(await financeService.listRecords(db, {
     type: optStr(req.query.type),
     status: optStr(req.query.status),
     categoryId: optStr(req.query.categoryId),
+    page,
+    pageSize,
   }));
 });
 

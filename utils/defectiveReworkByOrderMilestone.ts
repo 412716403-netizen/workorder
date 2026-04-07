@@ -16,38 +16,60 @@ export function buildDefectiveReworkByOrderMilestone(
   const reworkReports = (prodRecords || []).filter((r): r is ProductionOpRecord => r.type === 'REWORK_REPORT');
   if (reworkReports.length === 0) return map;
 
+  const ordersById = new Map<string, ProductionOrder>(orders.map(o => [o.id, o]));
+  const recordById = new Map<string, ProductionOpRecord>();
+  const reworkRecords: ProductionOpRecord[] = [];
+  for (const r of (prodRecords || [])) {
+    recordById.set(r.id, r);
+    if (r.type === 'REWORK') reworkRecords.push(r);
+  }
+  const reworkByOrderSource = new Map<string, ProductionOpRecord[]>();
+  const reworkByProductSource = new Map<string, ProductionOpRecord[]>();
+  for (const r of reworkRecords) {
+    const src = r.sourceNodeId ?? r.nodeId ?? '';
+    if (r.orderId) {
+      const k = `${r.orderId}|${src}`;
+      let arr = reworkByOrderSource.get(k);
+      if (!arr) { arr = []; reworkByOrderSource.set(k, arr); }
+      arr.push(r);
+    } else if (r.productId) {
+      const k = `${r.productId}|${src}`;
+      let arr = reworkByProductSource.get(k);
+      if (!arr) { arr = []; reworkByProductSource.set(k, arr); }
+      arr.push(r);
+    }
+  }
+
   const orderIdToParent = new Map<string, string>();
   orders.forEach(o => {
     if (o.parentOrderId) orderIdToParent.set(o.id, o.parentOrderId);
   });
 
   const getParentOrderId = (orderId: string) => orderIdToParent.get(orderId) ?? orderId;
-  const orderProduct = (oid: string) => orders.find(o => o.id === oid)?.productId;
+  const orderProduct = (oid: string) => ordersById.get(oid)?.productId;
   const getOriginalSourceNodeId = (r: ProductionOpRecord): string | undefined => {
     const pid = orderProduct(r.orderId ?? '');
+    const nodeId = r.nodeId ?? '';
+    const parentOid = orderIdToParent.get(r.orderId ?? '');
+    const candidates = [
+      ...(reworkByOrderSource.get(`${r.orderId}|${nodeId}`) ?? []),
+      ...(parentOid ? (reworkByOrderSource.get(`${parentOid}|${nodeId}`) ?? []) : []),
+      ...(pid ? (reworkByProductSource.get(`${pid}|${nodeId}`) ?? []) : []),
+    ];
     const pathIncludes = (x: ProductionOpRecord, node: string) => {
       const path = x.reworkNodeIds?.length ? x.reworkNodeIds : x.nodeId ? [x.nodeId] : [];
       return path.includes(node);
     };
-    const rework = (prodRecords || []).find(
-      x =>
-        x.type === 'REWORK' &&
-        pathIncludes(x, r.nodeId ?? '') &&
-        (x.orderId === r.orderId ||
-          x.orderId === orderIdToParent.get(r.orderId ?? '') ||
-          (!x.orderId && pid != null && x.productId === pid))
-    ) as ProductionOpRecord | undefined;
+    const rework = candidates.find(x => pathIncludes(x, nodeId));
     return rework?.sourceNodeId ?? (r.sourceNodeId ?? r.nodeId ?? undefined);
   };
   const getReworkNodeIdsForOrder = (orderId: string, sourceNodeId: string): string[] => {
-    const o = orders.find(x => x.id === orderId);
-    let r = (prodRecords || []).find(
-      x => x.type === 'REWORK' && x.orderId === orderId && (x.sourceNodeId ?? x.nodeId) === sourceNodeId
-    ) as ProductionOpRecord | undefined;
+    const o = ordersById.get(orderId);
+    const byOrder = reworkByOrderSource.get(`${orderId}|${sourceNodeId}`);
+    let r = byOrder?.[0] as ProductionOpRecord | undefined;
     if (!r && o) {
-      r = (prodRecords || []).find(
-        x => x.type === 'REWORK' && !x.orderId && x.productId === o.productId && (x.sourceNodeId ?? x.nodeId) === sourceNodeId
-      ) as ProductionOpRecord | undefined;
+      const byProduct = reworkByProductSource.get(`${o.productId}|${sourceNodeId}`);
+      r = byProduct?.[0] as ProductionOpRecord | undefined;
     }
     if (r?.reworkNodeIds?.length) return r.reworkNodeIds;
     if (r?.nodeId) return [r.nodeId];
@@ -75,10 +97,10 @@ export function buildDefectiveReworkByOrderMilestone(
   };
 
   reworkReports.forEach(r => {
-    const rw =
-      r.sourceReworkId != null && r.sourceReworkId !== ''
-        ? ((prodRecords || []).find(x => x.id === r.sourceReworkId && x.type === 'REWORK') as ProductionOpRecord | undefined)
-        : undefined;
+    const rwCandidate = r.sourceReworkId != null && r.sourceReworkId !== ''
+      ? recordById.get(r.sourceReworkId)
+      : undefined;
+    const rw = rwCandidate?.type === 'REWORK' ? rwCandidate : undefined;
     let parentOrderId: string;
     let originalSourceNodeId: string;
     let reworkNodeIdsFromRw: string[] | undefined;

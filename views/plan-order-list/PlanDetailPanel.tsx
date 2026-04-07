@@ -1087,7 +1087,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
              <div className="flex items-center gap-5">
                 {viewProduct.imageUrl ? (
                   <button type="button" onClick={() => onImagePreview(viewProduct.imageUrl)} className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-200 shadow-sm flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
-                    <img src={viewProduct.imageUrl} alt={viewProduct.name} className="w-full h-full object-cover block" />
+                    <img loading="lazy" decoding="async" src={viewProduct.imageUrl} alt={viewProduct.name} className="w-full h-full object-cover block" />
                   </button>
                 ) : (
                   <div className="w-14 h-14 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-100 flex-shrink-0"><Info className="w-7 h-7" /></div>

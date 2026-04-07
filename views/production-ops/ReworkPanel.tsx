@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Plus,
   Clock,
@@ -14,9 +14,13 @@ import {
 } from 'lucide-react';
 import { ProductionOpRecord, ProductionOrder } from '../../types';
 import {
+  moduleHeaderRowClass,
   outlineToolbarButtonClass,
+  pageTitleClass,
+  pageSubtitleClass,
 } from '../../styles/uiDensity';
 import { PanelProps, hasOpsPerm, getOrderFamilyIds, getOrderFamilyWithDepth, ReworkPendingRow } from './types';
+import { useDataIndexes } from './useDataIndexes';
 import ReworkPendingDefectiveModal from './ReworkPendingDefectiveModal';
 import ReworkOrderDetailModal from './ReworkOrderDetailModal';
 import ReworkMaterialIssueModal from './ReworkMaterialIssueModal';
@@ -56,6 +60,12 @@ const ReworkPanel: React.FC<PanelProps> = ({
   /** 返工报工弹窗：点击工序标签打开，当前工单 + 工序 */
   const [reworkReportModal, setReworkReportModal] = useState<{ order: ProductionOrder; nodeId: string; nodeName: string } | null>(null);
 
+  const REWORK_PAGE_SIZE = 10;
+  const [reworkPage, setReworkPage] = useState(1);
+  useEffect(() => { setReworkPage(1); }, [productionLinkMode]);
+
+  const idx = useDataIndexes(orders, products, boms, globalNodes, productMilestoneProgresses);
+
   /** 父工单列表（无 parentOrderId 的为父工单） */
   const parentOrders = useMemo(() => orders.filter(o => !o.parentOrderId), [orders]);
 
@@ -80,7 +90,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
         });
       const rows: ReworkPendingRow[] = [];
       orders.forEach(order => {
-        const product = products.find(p => p.id === order.productId);
+        const product = idx.productsById.get(order.productId);
         order.milestones.forEach(ms => {
           const defectiveTotal = (ms.reports || []).reduce((s, r) => s + (r.defectiveQuantity ?? 0), 0);
           if (defectiveTotal <= 0) return;
@@ -146,8 +156,8 @@ const ReworkPanel: React.FC<PanelProps> = ({
       const scrapTotal = scrapProd.get(key) ?? 0;
       const pendingQty = defectiveTotal - reworkTotal - scrapTotal;
       if (pendingQty <= 0) return;
-      const product = products.find(p => p.id === productId);
-      const parents = orders.filter(o => !o.parentOrderId && o.productId === productId);
+      const product = idx.productsById.get(productId);
+      const parents = idx.rootOrdersByProductId.get(productId) ?? [];
       const cnt = parents.length;
       const parentNos = parents.map(o => o.orderNumber).filter(Boolean) as string[];
       const productOrdersTitle = parentNos.join('、');
@@ -165,7 +175,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
         productId,
         productName: product?.name ?? '—',
         nodeId,
-        milestoneName: globalNodes.find(n => n.id === nodeId)?.name ?? nodeId,
+        milestoneName: idx.nodesById.get(nodeId)?.name ?? nodeId,
         defectiveTotal,
         reworkTotal,
         scrapTotal,
@@ -229,21 +239,23 @@ const ReworkPanel: React.FC<PanelProps> = ({
     });
     const result = new Map<string, { nodeId: string; nodeName: string; totalQty: number; completedQty: number; pendingQty: number }[]>();
     byProduct.forEach((byNode, pid) => {
-      const product = products.find(p => p.id === pid);
+      const product = idx.productsById.get(pid);
       const seq = product?.milestoneNodeIds ?? [];
       let list = Array.from(byNode.entries())
         .filter(([, v]) => v.totalQty > 0)
         .map(([nodeId, v]) => ({
           nodeId,
-          nodeName: globalNodes.find(n => n.id === nodeId)?.name ?? nodeId,
+          nodeName: idx.nodesById.get(nodeId)?.name ?? nodeId,
           totalQty: v.totalQty,
           completedQty: v.completedQty,
           pendingQty: processSequenceMode === 'sequential' ? v.pendingSeq : v.totalQty - v.completedQty
         }));
       if (seq.length) {
+        const seqIndex = new Map<string, number>();
+        for (let i = 0; i < seq.length; i++) seqIndex.set(seq[i], i);
         list.sort((a, b) => {
-          const ia = seq.indexOf(a.nodeId);
-          const ib = seq.indexOf(b.nodeId);
+          const ia = seqIndex.get(a.nodeId) ?? -1;
+          const ib = seqIndex.get(b.nodeId) ?? -1;
           if (ia === -1 && ib === -1) return (a.nodeName || '').localeCompare(b.nodeName || '');
           if (ia === -1) return 1;
           if (ib === -1) return -1;
@@ -251,9 +263,9 @@ const ReworkPanel: React.FC<PanelProps> = ({
         });
       } else {
         list.sort((a, b) => {
-          const idxA = globalNodes.findIndex(n => n.id === a.nodeId);
-          const idxB = globalNodes.findIndex(n => n.id === b.nodeId);
-          return (idxA < 0 ? 999 : idxA) - (idxB < 0 ? 999 : idxB);
+          const idxA = idx.nodeIndexMap.get(a.nodeId) ?? 999;
+          const idxB = idx.nodeIndexMap.get(b.nodeId) ?? 999;
+          return idxA - idxB;
         });
       }
       if (list.length > 0) result.set(pid, list);
@@ -267,11 +279,19 @@ const ReworkPanel: React.FC<PanelProps> = ({
       return new Map<string, { nodeId: string; nodeName: string; totalQty: number; completedQty: number; pendingQty: number }[]>();
     }
     const reworkRecords = records.filter(r => r.type === 'REWORK');
+    const reworkByOrderId = new Map<string, ProductionOpRecord[]>();
+    for (const r of reworkRecords) {
+      if (!r.orderId) continue;
+      let arr = reworkByOrderId.get(r.orderId);
+      if (!arr) { arr = []; reworkByOrderId.set(r.orderId, arr); }
+      arr.push(r);
+    }
     const result = new Map<string, { nodeId: string; nodeName: string; totalQty: number; completedQty: number; pendingQty: number }[]>();
     orders.forEach(order => {
+      const orderReworks = reworkByOrderId.get(order.id);
+      if (!orderReworks || orderReworks.length === 0) return;
       const byNode = new Map<string, { totalQty: number; completedQty: number; pendingSeq: number }>();
-      reworkRecords.forEach(r => {
-        if (r.orderId !== order.id) return;
+      orderReworks.forEach(r => {
         const targetNodes = (r.reworkNodeIds && r.reworkNodeIds.length > 0) ? r.reworkNodeIds : (r.nodeId ? [r.nodeId] : []);
         const completed =
           r.status === '已完成' ||
@@ -290,20 +310,20 @@ const ReworkPanel: React.FC<PanelProps> = ({
         .filter(([, v]) => v.totalQty > 0)
         .map(([nodeId, v]) => ({
           nodeId,
-          nodeName: globalNodes.find(n => n.id === nodeId)?.name ?? nodeId,
+          nodeName: idx.nodesById.get(nodeId)?.name ?? nodeId,
           totalQty: v.totalQty,
           completedQty: v.completedQty,
           pendingQty: processSequenceMode === 'sequential' ? v.pendingSeq : v.totalQty - v.completedQty
         }))
         .sort((a, b) => {
-          const idxA = globalNodes.findIndex(n => n.id === a.nodeId);
-          const idxB = globalNodes.findIndex(n => n.id === b.nodeId);
-          return (idxA < 0 ? 999 : idxA) - (idxB < 0 ? 999 : idxB);
+          const idxA = idx.nodeIndexMap.get(a.nodeId) ?? 999;
+          const idxB = idx.nodeIndexMap.get(b.nodeId) ?? 999;
+          return idxA - idxB;
         });
       if (list.length > 0) result.set(order.id, list);
     });
     return result;
-  }, [productionLinkMode, records, orders, globalNodes, processSequenceMode]);
+  }, [productionLinkMode, records, orders, globalNodes, processSequenceMode, idx]);
 
   /** 处理不良品流水单号（生成返工 REWORK + 报损 SCRAP 共用）：FL + 日期(yyyyMMdd) + 序号(4位)，使两条流水单号连续 */
   const getNextReworkDocNo = () => {
@@ -330,26 +350,25 @@ const ReworkPanel: React.FC<PanelProps> = ({
   /** 返工管理：工单模式=主/子分组；关联产品模式=仅按产品一条（工序汇总） */
   const reworkListBlocks = useMemo(() => {
     if (productionLinkMode === 'product') {
-      return Array.from(reworkStatsByProductId.keys())
+      return (Array.from(reworkStatsByProductId.keys()) as string[])
         .sort((a, b) =>
-          (products.find(p => p.id === a)?.name || '').localeCompare(products.find(p => p.id === b)?.name || '', 'zh-CN')
+          (idx.productsById.get(a)?.name || '').localeCompare(idx.productsById.get(b)?.name || '', 'zh-CN')
         )
         .map(productId => ({ type: 'productAggregate' as const, productId }));
     }
     const reworkOrderIds = new Set(orders.filter(o => (reworkStatsByOrderId.get(o.id)?.length ?? 0) > 0).map(o => o.id));
     const parentHasRework = (parent: ProductionOrder) => {
       if (reworkOrderIds.has(parent.id)) return true;
-      return getOrderFamilyIds(orders, parent.id).some(id => reworkOrderIds.has(id));
+      return getOrderFamilyIds(orders, parent.id, idx.childrenByParentId).some(id => reworkOrderIds.has(id));
     };
-    const children = (parentId: string) => orders.filter(o => o.parentOrderId === parentId);
     const blocks: ({ type: 'single'; order: ProductionOrder } | { type: 'parentChild'; parent: ProductionOrder; children: ProductionOrder[] })[] = [];
     const used = new Set<string>();
     parentOrders.forEach(order => {
       if (used.has(order.id)) return;
-      const childList = children(order.id);
+      const childList = idx.childrenByParentId.get(order.id) ?? [];
       if (childList.length > 0 && parentHasRework(order)) {
         used.add(order.id);
-        getOrderFamilyIds(orders, order.id).forEach(id => used.add(id));
+        getOrderFamilyIds(orders, order.id, idx.childrenByParentId).forEach(id => used.add(id));
         blocks.push({ type: 'parentChild', parent: order, children: childList });
       } else if (reworkStatsByOrderId.has(order.id)) {
         used.add(order.id);
@@ -357,40 +376,45 @@ const ReworkPanel: React.FC<PanelProps> = ({
       }
     });
     return blocks;
-  }, [productionLinkMode, parentOrders, orders, reworkStatsByOrderId, reworkStatsByProductId, products]);
+  }, [productionLinkMode, parentOrders, orders, reworkStatsByOrderId, reworkStatsByProductId, products, idx]);
 
   // ── JSX ──────────────────────────────────────────────────────────────────
   return (
-    <>
-      {/* Header buttons */}
-      <div className="flex flex-wrap items-center gap-2 mb-2">
-        {hasOpsPerm(tenantRole, userPermissions, 'production:rework_defective:allow') && (
-        <button
-          type="button"
-          onClick={() => setReworkPendingModalOpen(true)}
-          className={outlineToolbarButtonClass}
-        >
-          <ClipboardList className="w-4 h-4 shrink-0" /> 待处理不良
-        </button>
-        )}
-        {hasOpsPerm(tenantRole, userPermissions, 'production:rework_records:view') && (
-        <button
-          type="button"
-          onClick={() => { setDefectFlowModalOpen(true); setDefectFlowDetailRecord(null); }}
-          className={outlineToolbarButtonClass}
-        >
-          <ScrollText className="w-4 h-4 shrink-0" /> 处理不良品流水
-        </button>
-        )}
-        {hasOpsPerm(tenantRole, userPermissions, 'production:rework_report_records:view') && (
-        <button
-          type="button"
-          onClick={() => setReworkFlowModalOpen(true)}
-          className={outlineToolbarButtonClass}
-        >
-          <History className="w-4 h-4 shrink-0" /> 返工报工流水
-        </button>
-        )}
+    <div className="space-y-4">
+      <div className={moduleHeaderRowClass}>
+        <div>
+          <h1 className={pageTitleClass}>返工管理</h1>
+          <p className={pageSubtitleClass}>不良品处理与返工报工追踪</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 shrink-0 justify-end">
+          {hasOpsPerm(tenantRole, userPermissions, 'production:rework_defective:allow') && (
+          <button
+            type="button"
+            onClick={() => setReworkPendingModalOpen(true)}
+            className={outlineToolbarButtonClass}
+          >
+            <ClipboardList className="w-4 h-4 shrink-0" /> 待处理不良
+          </button>
+          )}
+          {hasOpsPerm(tenantRole, userPermissions, 'production:rework_records:view') && (
+          <button
+            type="button"
+            onClick={() => { setDefectFlowModalOpen(true); setDefectFlowDetailRecord(null); }}
+            className={outlineToolbarButtonClass}
+          >
+            <ScrollText className="w-4 h-4 shrink-0" /> 处理不良品流水
+          </button>
+          )}
+          {hasOpsPerm(tenantRole, userPermissions, 'production:rework_report_records:view') && (
+          <button
+            type="button"
+            onClick={() => setReworkFlowModalOpen(true)}
+            className={outlineToolbarButtonClass}
+          >
+            <History className="w-4 h-4 shrink-0" /> 返工报工流水
+          </button>
+          )}
+        </div>
       </div>
 
       {/* No permission */}
@@ -413,9 +437,13 @@ const ReworkPanel: React.FC<PanelProps> = ({
               <p className="text-slate-400 text-sm">暂无返工记录，请先在「待处理不良」中处理不良品</p>
             </div>
           ) : (
-            reworkListBlocks.map((block) => {
+            (() => {
+              const reworkTotalPages = Math.max(1, Math.ceil(reworkListBlocks.length / REWORK_PAGE_SIZE));
+              const pagedBlocks = reworkListBlocks.slice((reworkPage - 1) * REWORK_PAGE_SIZE, reworkPage * REWORK_PAGE_SIZE);
+              return (<>
+            {pagedBlocks.map((block) => {
               const renderReworkCard = (order: ProductionOrder, isChild?: boolean, indentPx?: number) => {
-                const product = products.find(p => p.id === order.productId);
+                const product = idx.productsById.get(order.productId);
                 const stats = [...(reworkStatsByOrderId.get(order.id) ?? [])];
                 const orderTotalQty = order.items.reduce((s, i) => s + i.quantity, 0);
                 const cardClass = isChild
@@ -426,7 +454,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
                     <div className="flex items-center gap-4 min-w-0">
                       {product?.imageUrl ? (
                         <button type="button" onClick={() => setReworkDetailOrderId(order.parentOrderId ?? order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none block`}>
-                          <img src={product.imageUrl} alt={order.productName} className="w-full h-full object-cover block" />
+                          <img loading="lazy" decoding="async" src={product.imageUrl} alt={order.productName} className="w-full h-full object-cover block" />
                         </button>
                       ) : (
                         <button type="button" onClick={() => setReworkDetailOrderId(order.parentOrderId ?? order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 transition-colors`}>
@@ -505,13 +533,12 @@ const ReworkPanel: React.FC<PanelProps> = ({
               };
 
               if (block.type === 'productAggregate') {
-                const fp = products.find(p => p.id === block.productId);
+                const fp = idx.productsById.get(block.productId);
                 const stats = reworkStatsByProductId.get(block.productId) ?? [];
-                const repOrder = parentOrders
-                  .filter(o => o.productId === block.productId)
+                const productParents = idx.rootOrdersByProductId.get(block.productId) ?? [];
+                const repOrder = [...productParents]
                   .sort((a, b) => (a.orderNumber || '').localeCompare(b.orderNumber || ''))[0];
-                const totalQtyAll = parentOrders
-                  .filter(o => o.productId === block.productId)
+                const totalQtyAll = productParents
                   .reduce((s, o) => s + o.items.reduce((t, i) => t + i.quantity, 0), 0);
                 if (!repOrder) return null;
                 return (
@@ -522,7 +549,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
                     <div className="flex items-center gap-4 min-w-0">
                       {fp?.imageUrl ? (
                         <div className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0">
-                          <img src={fp.imageUrl} alt={fp.name} className="w-full h-full object-cover block" />
+                          <img loading="lazy" decoding="async" src={fp.imageUrl} alt={fp.name} className="w-full h-full object-cover block" />
                         </div>
                       ) : (
                         <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600">
@@ -608,7 +635,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
                 return <div key={block.order.id}>{renderReworkCard(block.order)}</div>;
               }
               const { parent, children: childList } = block;
-              const allWithDepth = getOrderFamilyWithDepth(orders, parent.id);
+              const allWithDepth = getOrderFamilyWithDepth(orders, parent.id, idx.ordersById, idx.childrenByParentId);
               const isExpanded = reworkExpandedParents.has(parent.id);
               return (
                 <div key={`rework-parentChild-${parent.id}`} className="rounded-2xl border-2 border-slate-300 bg-slate-50/50 overflow-hidden">
@@ -627,7 +654,15 @@ const ReworkPanel: React.FC<PanelProps> = ({
                   </div>
                 </div>
               );
-            })
+            })}
+            {reworkTotalPages > 1 && (
+              <div className="flex items-center justify-center gap-3 py-4">
+                <span className="text-xs text-slate-400">共 {reworkListBlocks.length} 项，第 {reworkPage} / {reworkTotalPages} 页</span>
+                <button type="button" disabled={reworkPage <= 1} onClick={() => setReworkPage(p => p - 1)} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all">上一页</button>
+                <button type="button" disabled={reworkPage >= reworkTotalPages} onClick={() => setReworkPage(p => p + 1)} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all">下一页</button>
+              </div>
+            )}
+            </>); })()
           )}
         </div>
       )}
@@ -777,7 +812,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
           onClose={() => { setReworkReportModal(null); }}
         />
       )}
-    </>
+    </div>
   );
 };
 

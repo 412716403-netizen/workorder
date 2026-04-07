@@ -83,15 +83,19 @@ export function hasOpsPerm(
   return false;
 }
 
-export function getOrderFamilyIds(orders: ProductionOrder[], parentId: string): string[] {
+export function getOrderFamilyIds(
+  orders: ProductionOrder[],
+  parentId: string,
+  childrenByParentId?: Map<string, ProductionOrder[]>,
+): string[] {
   const ids: string[] = [parentId];
   const queue: string[] = [parentId];
   while (queue.length > 0) {
     const pid = queue.shift()!;
-    orders.filter(o => o.parentOrderId === pid).forEach(o => {
-      ids.push(o.id);
-      queue.push(o.id);
-    });
+    const children = childrenByParentId
+      ? (childrenByParentId.get(pid) ?? [])
+      : orders.filter(o => o.parentOrderId === pid);
+    for (const o of children) { ids.push(o.id); queue.push(o.id); }
   }
   return ids;
 }
@@ -99,18 +103,23 @@ export function getOrderFamilyIds(orders: ProductionOrder[], parentId: string): 
 export function getOrderFamilyWithDepth(
   orders: ProductionOrder[],
   parentId: string,
+  ordersById?: Map<string, ProductionOrder>,
+  childrenByParentId?: Map<string, ProductionOrder[]>,
 ): { order: ProductionOrder; depth: number }[] {
   const result: { order: ProductionOrder; depth: number }[] = [];
-  const parent = orders.find(o => o.id === parentId);
+  const parent = ordersById ? ordersById.get(parentId) : orders.find(o => o.id === parentId);
   if (!parent) return result;
   result.push({ order: parent, depth: 0 });
   const queue: { id: string; depth: number }[] = [{ id: parentId, depth: 0 }];
   while (queue.length > 0) {
     const { id, depth } = queue.shift()!;
-    orders.filter(o => o.parentOrderId === id).forEach(o => {
+    const children = childrenByParentId
+      ? (childrenByParentId.get(id) ?? [])
+      : orders.filter(o => o.parentOrderId === id);
+    for (const o of children) {
       result.push({ order: o, depth: depth + 1 });
       queue.push({ id: o.id, depth: depth + 1 });
-    });
+    }
   }
   return result;
 }

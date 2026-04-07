@@ -1,10 +1,10 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Clock, Layers, Plus, History, User, Sliders, X, FileText, ChevronDown, ChevronRight, ScrollText, Pencil, Search, Package, RotateCcw, ArrowDownToLine, Split } from 'lucide-react';
 import { ProductionOrder, MilestoneStatus, Milestone, Product, GlobalNodeTemplate, OrderFormSettings, ProductCategory, AppDictionaries, Partner, BOM, ProductionOpRecord, Worker, ProductMilestoneProgress, ProcessSequenceMode, Warehouse } from '../types';
 import ProductDetailModal from './ProductDetailModal';
-import { useProgressiveList } from '../hooks/useProgressiveList';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { orders as ordersApi } from '../services/api';
 import OrderDetailModal from './OrderDetailModal';
 import OrderFlowView from './OrderFlowView';
 import PendingStockPanel from './order-list/PendingStockPanel';
@@ -148,7 +148,32 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   const [orderFlowProductId, setOrderFlowProductId] = useState<string | null>(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [search, setSearch] = useState('');
-  const debouncedSearch = useDebouncedValue(search);
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const PAGE_SIZE = 20;
+  const [fetchedOrders, setFetchedOrders] = useState<ProductionOrder[]>([]);
+  const fetchGenRef = useRef(0);
+
+  const fetchPagedOrders = useCallback(async (page: number, searchTerm: string) => {
+    const gen = ++fetchGenRef.current;
+    try {
+      const params: Record<string, string> = { page: String(page), pageSize: String(PAGE_SIZE) };
+      if (searchTerm) params.search = searchTerm;
+      const result = await ordersApi.listPaginated(params);
+      if (gen !== fetchGenRef.current) return;
+      setFetchedOrders(result.data as ProductionOrder[]);
+      setTotalOrders(result.total);
+    } catch (e) {
+      console.error('Failed to fetch paginated orders', e);
+    }
+  }, []);
+
+  useEffect(() => { setCurrentPage(1); }, [debouncedSearch]);
+  useEffect(() => { fetchPagedOrders(currentPage, debouncedSearch); }, [currentPage, debouncedSearch, fetchPagedOrders]);
+
+  const displayOrders = fetchedOrders.length > 0 || debouncedSearch || currentPage > 1 ? fetchedOrders : orders;
+  const totalPages = Math.max(1, Math.ceil(totalOrders / PAGE_SIZE));
   type OrderReportRow = {
     order: ProductionOrder;
     milestone: { id: string; name: string; templateId: string };
@@ -259,71 +284,17 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
   const showInList = (id: string) => orderFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
 
-  /** 列表排序：新建工单在前（优先 createdAt，与后端 list 一致；无则按 genId 的 base36 时间片、工单号） */
-  const sortedOrdersForList = useMemo(() => {
-    const createdMs = (o: ProductionOrder) => {
-      if (!o.createdAt) return 0;
-      const t = new Date(o.createdAt).getTime();
-      return Number.isNaN(t) ? 0 : t;
-    };
-    /** genId: `${prefix}-${Date.now().toString(36)}-${rand}` */
-    const idTimeSlice = (id: string) => {
-      const parts = id.split('-');
-      if (parts.length >= 2) {
-        const n = parseInt(parts[1], 36);
-        if (!Number.isNaN(n)) return n;
-      }
-      return 0;
-    };
-    const woSeq = (n: string) => {
-      const m = (n || '').match(/^WO(\d+)/i);
-      return m ? parseInt(m[1], 10) : 0;
-    };
-    return [...orders].sort((a, b) => {
-      const ca = createdMs(a);
-      const cb = createdMs(b);
-      if (cb !== ca) return cb - ca;
-      const ia = idTimeSlice(a.id);
-      const ib = idTimeSlice(b.id);
-      if (ib !== ia) return ib - ia;
-      return woSeq(b.orderNumber) - woSeq(a.orderNumber);
-    });
-  }, [orders]);
-
-  /** 顶部搜索：按产品、工单号、SKU、客户过滤列表 */
-  const filteredOrdersForList = useMemo(() => {
-    const keyword = debouncedSearch.trim().toLowerCase();
-    if (!keyword) return sortedOrdersForList;
-
-    return sortedOrdersForList.filter(order => {
-      const product = productMap.get(order.productId);
-      const productName = (order.productName || product?.name || '').toLowerCase();
-      const sku = (order.sku || '').toLowerCase();
-      const orderNumber = (order.orderNumber || '').toLowerCase();
-      const customer = productionLinkMode !== 'product'
-        ? (order.customer || '').toLowerCase()
-        : '';
-
-      return (
-        productName.includes(keyword) ||
-        sku.includes(keyword) ||
-        orderNumber.includes(keyword) ||
-        (customer && customer.includes(keyword))
-      );
-    });
-  }, [sortedOrdersForList, products, search, productionLinkMode]);
-
   /** 父子工单映射：父工单 id → 子工单列表 */
   const parentToSubOrders = useMemo(() => {
     const map = new Map<string, ProductionOrder[]>();
-    orders.filter(o => o.parentOrderId).forEach(o => {
+    displayOrders.filter(o => o.parentOrderId).forEach(o => {
       const pid = o.parentOrderId!;
       if (!map.has(pid)) map.set(pid, []);
       map.get(pid)!.push(o);
     });
     map.forEach(arr => arr.sort((a, b) => (a.orderNumber || '').localeCompare(b.orderNumber || '')));
     return map;
-  }, [orders]);
+  }, [displayOrders]);
 
   /** 递归获取某工单下所有子孙工单（深度优先，用于列表展示），返回 { order, depth } */
   const getAllDescendantsWithDepth = (orderId: string, depth: number): { order: ProductionOrder; depth: number }[] => {
@@ -350,7 +321,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   const rootToOrders = useMemo(() => {
     if (productionLinkMode !== 'order') return new Map<string, ProductionOrder[]>();
     const map = new Map<string, ProductionOrder[]>();
-    filteredOrdersForList.forEach(o => {
+    displayOrders.forEach(o => {
       const root = getRootOrderNumber(o.orderNumber || '');
       if (!map.has(root)) map.set(root, []);
       map.get(root)!.push(o);
@@ -358,7 +329,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     const multi = new Map<string, ProductionOrder[]>();
     map.forEach((arr, root) => { if (arr.length >= 2) multi.set(root, arr); });
     return multi;
-  }, [filteredOrdersForList, productionLinkMode]);
+  }, [displayOrders, productionLinkMode]);
 
   /** 列表展示块：单条 或 原单分组（同一计划拆出的多工单） 或 主工单+子工单分组 或 按产品分组（product 模式） */
   type ListBlock =
@@ -369,7 +340,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   const listBlocks = useMemo((): ListBlock[] => {
     if (productionLinkMode === 'product') {
       const byProduct = new Map<string, ProductionOrder[]>();
-      for (const order of filteredOrdersForList) {
+      for (const order of displayOrders) {
         const pid = order.productId || 'unknown';
         if (!byProduct.has(pid)) byProduct.set(pid, []);
         byProduct.get(pid)!.push(order);
@@ -385,7 +356,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     }
     const blocks: ListBlock[] = [];
     const used = new Set<string>();
-    for (const order of filteredOrdersForList) {
+    for (const order of displayOrders) {
       if (used.has(order.id)) continue;
       if (order.parentOrderId) continue;
       const root = getRootOrderNumber(order.orderNumber || '');
@@ -406,9 +377,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
       }
     }
     return blocks;
-  }, [filteredOrdersForList, parentToSubOrders, rootToOrders, productionLinkMode, products]);
-
-  const pBlocks = useProgressiveList(listBlocks);
+  }, [displayOrders, parentToSubOrders, rootToOrders, productionLinkMode, products]);
 
 
   /** 待入库清单：有完成数量即可显示。可入库数量 = 最后一道工序的完成量 - 已入库量；有颜色尺码时按规格取最后一道工序报工汇总。 */
@@ -607,7 +576,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
               <p className="text-slate-400 font-medium">暂无工单数据</p>
             </div>
           ) : (<>
-            {pBlocks.visibleItems.map((block) => {
+            {listBlocks.map((block) => {
               const renderOrderCard = (order: ProductionOrder, isChild?: boolean, indentPx?: number) => {
                 const product = productMap.get(order.productId);
                 const totalMilestones = order.milestones.length;
@@ -625,7 +594,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                     <div className="flex items-center gap-4 min-w-0">
                       {product?.imageUrl ? (
                         <button type="button" onClick={() => hasOrderPerm('production:orders_detail:view') && setDetailOrderId(order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none block`}>
-                          <img src={product.imageUrl} alt={order.productName} className="w-full h-full object-cover block" />
+                          <img loading="lazy" decoding="async" src={product.imageUrl} alt={order.productName} className="w-full h-full object-cover block" />
                         </button>
                       ) : (
                         <button type="button" onClick={() => hasOrderPerm('production:orders_detail:view') && setDetailOrderId(order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 transition-colors`}>
@@ -833,7 +802,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                           <div className="flex items-center gap-4 min-w-0">
                             {product?.imageUrl ? (
                               <div className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0">
-                                <img src={product.imageUrl} alt={block.productName} className="w-full h-full object-cover block" />
+                                <img loading="lazy" decoding="async" src={product.imageUrl} alt={block.productName} className="w-full h-full object-cover block" />
                               </div>
                             ) : (
                               <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600">
@@ -1073,11 +1042,11 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                 </div>
               );
             })}
-            {pBlocks.hasMore && (
+            {totalPages > 1 && (
               <div className="flex items-center justify-center gap-3 py-4">
-                <span className="text-xs text-slate-400">已显示 {pBlocks.visibleItems.length} / {pBlocks.total} 条</span>
-                <button type="button" onClick={pBlocks.showMore} className="px-4 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all">加载更多</button>
-                <button type="button" onClick={pBlocks.showAll} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700 transition-all">全部显示</button>
+                <span className="text-xs text-slate-400">共 {totalOrders} 条，第 {currentPage} / {totalPages} 页</span>
+                <button type="button" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)} className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed">上一页</button>
+                <button type="button" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)} className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed">下一页</button>
               </div>
             )}
           </>)}

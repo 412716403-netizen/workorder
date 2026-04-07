@@ -5,11 +5,15 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 
 export const listRecords = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
+  const page = req.query.page ? Number(req.query.page) : undefined;
+  const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
   res.json(await psiService.listRecords(db, {
     type: optStr(req.query.type),
     productId: optStr(req.query.productId),
     docNumber: optStr(req.query.docNumber),
     partnerId: optStr(req.query.partnerId),
+    page,
+    pageSize,
   }));
 });
 

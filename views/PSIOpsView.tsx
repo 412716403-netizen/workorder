@@ -357,6 +357,15 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
     return entries.sort(([docNumA], [docNumB]) => (docNumB || '').localeCompare(docNumA || ''));
   }, [groupedRecords]);
 
+  const PSI_PAGE_SIZE = 20;
+  const [psiPage, setPsiPage] = useState(1);
+  useEffect(() => { setPsiPage(1); }, [type]);
+  const psiTotalPages = Math.max(1, Math.ceil(sortedGroupedEntries.length / PSI_PAGE_SIZE));
+  const pagedGroupedEntries = useMemo(
+    () => sortedGroupedEntries.slice((psiPage - 1) * PSI_PAGE_SIZE, psiPage * PSI_PAGE_SIZE),
+    [sortedGroupedEntries, psiPage],
+  );
+
   /** 调拨单按单号分组（列表弹窗用） */
   const transferOrdersGrouped = useMemo(() => {
     const filtered = recordsList.filter((r: any) => r.type === 'TRANSFER');
@@ -513,13 +522,13 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
         />
       ) : (
         <div className="space-y-4">
-          {sortedGroupedEntries.length === 0 ? (
+          {pagedGroupedEntries.length === 0 && sortedGroupedEntries.length === 0 ? (
             <div className="bg-white rounded-[32px] border-2 border-dashed border-slate-200 py-24 text-center">
               <FileText className="w-16 h-16 text-slate-100 mx-auto mb-4" />
               <p className="text-slate-400 font-medium italic">暂无{current.label}流水记录</p>
             </div>
           ) : (
-            sortedGroupedEntries.map(([docNum, docItems]) => {
+            pagedGroupedEntries.map(([docNum, docItems]) => {
               const mainInfo = docItems[0];
               const totalQty = docItems.reduce((s, i) => s + (i.quantity ?? 0), 0);
               const totalAmount = (type === 'SALES_ORDER' || type === 'SALES_BILL')
@@ -849,7 +858,13 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
               );
             })
           )}
-
+          {psiTotalPages > 1 && (
+            <div className="flex items-center justify-center gap-3 py-4">
+              <span className="text-xs text-slate-400">共 {sortedGroupedEntries.length} 条单据，第 {psiPage} / {psiTotalPages} 页</span>
+              <button type="button" disabled={psiPage <= 1} onClick={() => setPsiPage(p => p - 1)} className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed">上一页</button>
+              <button type="button" disabled={psiPage >= psiTotalPages} onClick={() => setPsiPage(p => p + 1)} className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed">下一页</button>
+            </div>
+          )}
         </div>
       )}
 

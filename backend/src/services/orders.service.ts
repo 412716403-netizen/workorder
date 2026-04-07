@@ -7,21 +7,41 @@ import { sanitizeUpdate, sanitizeItems, normalizeDates } from '../utils/request.
 
 export async function listOrders(
   db: TenantPrismaClient,
-  opts: { status?: string; productId?: string; parentOrderId?: string },
+  opts: {
+    status?: string; productId?: string; parentOrderId?: string;
+    search?: string; page?: number; pageSize?: number; lite?: boolean;
+  },
 ) {
   const where: Record<string, unknown> = {};
   if (opts.status) where.status = opts.status;
   if (opts.productId) where.productId = opts.productId;
   if (opts.parentOrderId) where.parentOrderId = opts.parentOrderId;
-  return db.productionOrder.findMany({
-    where,
-    include: {
-      items: true,
-      milestones: { include: { reports: true }, orderBy: { sortOrder: 'asc' } },
-      childOrders: { include: { items: true } },
-    },
-    orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-  });
+  if (opts.search) {
+    where.OR = [
+      { orderNumber: { contains: opts.search, mode: 'insensitive' } },
+      { productName: { contains: opts.search, mode: 'insensitive' } },
+      { sku: { contains: opts.search, mode: 'insensitive' } },
+      { customer: { contains: opts.search, mode: 'insensitive' } },
+    ];
+  }
+
+  const include = opts.lite
+    ? { items: true }
+    : {
+        items: true,
+        milestones: { include: { reports: true }, orderBy: { sortOrder: 'asc' as const } },
+        childOrders: { include: { items: true } },
+      };
+  const orderBy: any = [{ createdAt: 'desc' }, { id: 'asc' }];
+
+  if (opts.page != null && opts.pageSize != null) {
+    const [data, total] = await Promise.all([
+      db.productionOrder.findMany({ where, include, orderBy, skip: (opts.page - 1) * opts.pageSize, take: opts.pageSize }),
+      db.productionOrder.count({ where }),
+    ]);
+    return { data, total, page: opts.page, pageSize: opts.pageSize };
+  }
+  return db.productionOrder.findMany({ where, include, orderBy });
 }
 
 export async function getOrder(db: TenantPrismaClient, id: string) {

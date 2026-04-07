@@ -11,9 +11,14 @@ type PlanWithItems = PlanOrder & { items: PlanItem[] };
 
 export const listPlans = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
+  const page = req.query.page ? Number(req.query.page) : undefined;
+  const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
   const result = await planService.listPlans(db, {
     status: optStr(req.query.status),
     productId: optStr(req.query.productId),
+    search: optStr(req.query.search),
+    page,
+    pageSize,
   });
   res.json(result);
 });

@@ -9,6 +9,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { authMiddleware } from './middleware/auth.js';
 import { requireAdmin } from './middleware/requireAdmin.js';
 import { requireTenant, requirePermission } from './middleware/tenant.js';
+import { cacheControl } from './middleware/cacheControl.js';
 
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
@@ -30,19 +31,23 @@ import planVirtualBatchesRoutes from './routes/plan-virtual-batches.js';
 const app = express();
 app.set('trust proxy', 1);
 
-function convertDecimals(obj: unknown): unknown {
+function convertDecimals(obj: unknown, depth = 0): unknown {
   if (obj === null || obj === undefined) return obj;
+  const t = typeof obj;
+  if (t === 'string' || t === 'number' || t === 'boolean') return obj;
   if (obj instanceof Date) return obj;
-  if (typeof obj === 'object' && typeof (obj as any).toNumber === 'function' && typeof (obj as any).toFixed === 'function') {
+  if (t === 'object' && typeof (obj as any).toNumber === 'function' && typeof (obj as any).toFixed === 'function') {
     return (obj as any).toNumber();
   }
-  if (Array.isArray(obj)) return obj.map(convertDecimals);
-  if (typeof obj === 'object' && obj.constructor === Object) {
-    const result: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-      result[k] = convertDecimals(v);
-    }
-    return result;
+  if (depth > 8) return obj;
+  if (Array.isArray(obj)) {
+    for (let i = 0; i < obj.length; i++) obj[i] = convertDecimals(obj[i], depth + 1);
+    return obj;
+  }
+  if (t === 'object' && obj!.constructor === Object) {
+    const rec = obj as Record<string, unknown>;
+    for (const k in rec) rec[k] = convertDecimals(rec[k], depth + 1);
+    return rec;
   }
   return obj;
 }
@@ -88,9 +93,9 @@ app.use('/api/admin', authMiddleware, requireAdmin, apiLimiter, adminRoutes);
 
 app.use('/api/roles',      authMiddleware, requireTenant, apiLimiter, rolesRoutes);
 
-app.use('/api/settings',   authMiddleware, requireTenant, apiLimiter, settingsRoutes);
-app.use('/api/master',     authMiddleware, requireTenant, apiLimiter, masterDataRoutes);
-app.use('/api/products',   authMiddleware, requireTenant, apiLimiter, productsRoutes);
+app.use('/api/settings',   authMiddleware, requireTenant, apiLimiter, cacheControl(60), settingsRoutes);
+app.use('/api/master',     authMiddleware, requireTenant, apiLimiter, cacheControl(60), masterDataRoutes);
+app.use('/api/products',   authMiddleware, requireTenant, apiLimiter, cacheControl(60), productsRoutes);
 app.use('/api/plans',      authMiddleware, requireTenant, requirePermission('production'), apiLimiter, plansRoutes);
 app.use('/api/orders',     authMiddleware, requireTenant, requirePermission('production'), apiLimiter, ordersRoutes);
 app.use('/api/production', authMiddleware, requireTenant, requirePermission('production'), apiLimiter, productionRoutes);

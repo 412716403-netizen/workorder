@@ -49,7 +49,7 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-4">
               {p.imageUrl ? (
-                <img src={p.imageUrl} alt={p.name} className="w-16 h-16 rounded-2xl object-cover border border-slate-200" />
+                <img loading="lazy" decoding="async" src={p.imageUrl} alt={p.name} className="w-16 h-16 rounded-2xl object-cover border border-slate-200" />
               ) : (
                 <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-400"><Package className="w-8 h-8" /></div>
               )}

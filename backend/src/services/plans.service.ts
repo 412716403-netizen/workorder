@@ -9,17 +9,29 @@ import { sanitizeCreate, sanitizeUpdate, sanitizeItems, normalizeDates } from '.
 
 export async function listPlans(
   db: TenantPrismaClient,
-  opts: { status?: string; productId?: string },
+  opts: { status?: string; productId?: string; search?: string; page?: number; pageSize?: number },
 ) {
   const where: Record<string, unknown> = {};
   if (opts.status) where.status = opts.status;
   if (opts.productId) where.productId = opts.productId;
+  if (opts.search) {
+    where.OR = [
+      { planNumber: { contains: opts.search, mode: 'insensitive' } },
+      { customer: { contains: opts.search, mode: 'insensitive' } },
+    ];
+  }
 
-  return db.planOrder.findMany({
-    where,
-    include: { items: true, childPlans: { include: { items: true } } },
-    orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-  });
+  const include = { items: true, childPlans: { include: { items: true } } };
+  const orderBy: any = [{ createdAt: 'desc' }, { id: 'asc' }];
+
+  if (opts.page != null && opts.pageSize != null) {
+    const [data, total] = await Promise.all([
+      db.planOrder.findMany({ where, include, orderBy, skip: (opts.page - 1) * opts.pageSize, take: opts.pageSize }),
+      db.planOrder.count({ where }),
+    ]);
+    return { data, total, page: opts.page, pageSize: opts.pageSize };
+  }
+  return db.planOrder.findMany({ where, include, orderBy });
 }
 
 export async function getPlan(db: TenantPrismaClient, planId: string) {

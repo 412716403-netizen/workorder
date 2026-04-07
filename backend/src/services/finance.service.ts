@@ -6,17 +6,23 @@ import { sanitizeUpdate, sanitizeCreate, normalizeDates } from '../utils/request
 
 export async function listRecords(
   db: TenantPrismaClient,
-  opts: { type?: string; status?: string; categoryId?: string },
+  opts: { type?: string; status?: string; categoryId?: string; page?: number; pageSize?: number },
 ) {
   const where: Record<string, unknown> = {};
   if (opts.type) where.type = opts.type;
   if (opts.status) where.status = opts.status;
   if (opts.categoryId) where.categoryId = opts.categoryId;
-  return db.financeRecord.findMany({
-    where,
-    include: { category: true },
-    orderBy: [{ timestamp: 'desc' }, { id: 'asc' }],
-  });
+  const include = { category: true };
+  const orderBy: any = [{ timestamp: 'desc' }, { id: 'asc' }];
+
+  if (opts.page != null && opts.pageSize != null) {
+    const [data, total] = await Promise.all([
+      db.financeRecord.findMany({ where, include, orderBy, skip: (opts.page - 1) * opts.pageSize, take: opts.pageSize }),
+      db.financeRecord.count({ where }),
+    ]);
+    return { data, total, page: opts.page, pageSize: opts.pageSize };
+  }
+  return db.financeRecord.findMany({ where, include, orderBy });
 }
 
 export async function getRecord(db: TenantPrismaClient, id: string) {

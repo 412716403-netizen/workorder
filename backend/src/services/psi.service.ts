@@ -15,14 +15,23 @@ function cleanPsi(data: Record<string, unknown>) {
 
 export async function listRecords(
   db: TenantPrismaClient,
-  opts: { type?: string; productId?: string; docNumber?: string; partnerId?: string },
+  opts: { type?: string; productId?: string; docNumber?: string; partnerId?: string; page?: number; pageSize?: number },
 ) {
   const where: Record<string, unknown> = {};
   if (opts.type) where.type = opts.type;
   if (opts.productId) where.productId = opts.productId;
   if (opts.docNumber) where.docNumber = opts.docNumber;
   if (opts.partnerId) where.partnerId = opts.partnerId;
-  return db.psiRecord.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] });
+  const orderBy: any = [{ createdAt: 'desc' }, { id: 'asc' }];
+
+  if (opts.page != null && opts.pageSize != null) {
+    const [data, total] = await Promise.all([
+      db.psiRecord.findMany({ where, orderBy, skip: (opts.page - 1) * opts.pageSize, take: opts.pageSize }),
+      db.psiRecord.count({ where }),
+    ]);
+    return { data, total, page: opts.page, pageSize: opts.pageSize };
+  }
+  return db.psiRecord.findMany({ where, orderBy });
 }
 
 export async function createRecord(
@@ -39,14 +48,15 @@ export async function createBatchRecords(
   db: TenantPrismaClient,
   records: Record<string, unknown>[],
 ) {
-  const created = [];
-  for (const r of records) {
+  const prepared = records.map(r => {
     const data = cleanPsi(sanitizeCreate(r));
     if (!data.id) data.id = genId('psi');
     normalizeDates(data);
-    created.push(await db.psiRecord.create({ data: data as any }));
-  }
-  return created;
+    return data as any;
+  });
+  const ids = prepared.map((d: any) => d.id as string);
+  await db.psiRecord.createMany({ data: prepared });
+  return db.psiRecord.findMany({ where: { id: { in: ids } }, orderBy: { createdAt: 'desc' } });
 }
 
 export async function updateRecord(
@@ -67,11 +77,14 @@ export async function replaceRecords(
   if (deleteIds?.length) {
     await db.psiRecord.deleteMany({ where: { id: { in: deleteIds } } });
   }
-  for (const r of newRecords || []) {
+  const toInsert = (newRecords || []).map(r => {
     const data = cleanPsi(sanitizeCreate(r));
     if (!data.id) data.id = genId('psi');
     normalizeDates(data);
-    await db.psiRecord.create({ data: data as any });
+    return data as any;
+  });
+  if (toInsert.length) {
+    await db.psiRecord.createMany({ data: toInsert });
   }
   return { message: '已替换' };
 }
@@ -90,45 +103,66 @@ export async function getStock(
   db: TenantPrismaClient,
   opts: { productId?: string; warehouseId?: string },
 ) {
-  const whereClause: Record<string, unknown> = {
-    type: { in: ['PURCHASE_BILL', 'SALES_BILL', 'TRANSFER', 'STOCKTAKE', 'STOCK_IN'] },
-  };
-  if (opts.productId) whereClause.productId = opts.productId;
+  const productFilter = opts.productId ? { productId: opts.productId } : { productId: { not: null } };
+  const warehouseFilter = opts.warehouseId ? { warehouseId: opts.warehouseId } : {};
 
-  const records = await db.psiRecord.findMany({ where: whereClause });
+  const [inboundAgg, outboundAgg, transferIn, transferOut, stocktakeAgg, prodStockIn] = await Promise.all([
+    db.psiRecord.groupBy({
+      by: ['productId'],
+      where: { type: { in: ['PURCHASE_BILL', 'STOCK_IN'] }, ...productFilter, ...warehouseFilter },
+      _sum: { quantity: true },
+    }),
+    db.psiRecord.groupBy({
+      by: ['productId'],
+      where: { type: 'SALES_BILL', ...productFilter, ...warehouseFilter },
+      _sum: { quantity: true },
+    }),
+    opts.warehouseId
+      ? db.psiRecord.groupBy({
+          by: ['productId'],
+          where: { type: 'TRANSFER', toWarehouseId: opts.warehouseId, ...productFilter },
+          _sum: { quantity: true },
+        })
+      : Promise.resolve([]),
+    opts.warehouseId
+      ? db.psiRecord.groupBy({
+          by: ['productId'],
+          where: { type: 'TRANSFER', fromWarehouseId: opts.warehouseId, ...productFilter },
+          _sum: { quantity: true },
+        })
+      : Promise.resolve([]),
+    db.psiRecord.groupBy({
+      by: ['productId'],
+      where: { type: 'STOCKTAKE', ...productFilter, ...warehouseFilter },
+      _sum: { quantity: true },
+    }),
+    db.productionOpRecord.groupBy({
+      by: ['productId'],
+      where: { type: 'STOCK_IN', ...(opts.productId ? { productId: opts.productId } : {}) },
+      _sum: { quantity: true },
+    }),
+  ]);
+
   const stockMap: Record<string, number> = {};
+  const stocktakeSet = new Set<string>();
 
-  for (const r of records) {
-    const pid = r.productId;
-    if (!pid) continue;
-
-    if (r.type === 'PURCHASE_BILL' || r.type === 'STOCK_IN') {
-      if (!opts.warehouseId || r.warehouseId === opts.warehouseId) {
-        stockMap[pid] = (stockMap[pid] || 0) + Number(r.quantity || 0);
-      }
-    } else if (r.type === 'SALES_BILL') {
-      if (!opts.warehouseId || r.warehouseId === opts.warehouseId) {
-        stockMap[pid] = (stockMap[pid] || 0) - Number(r.quantity || 0);
-      }
-    } else if (r.type === 'TRANSFER') {
-      if (opts.warehouseId) {
-        if ((r as any).toWarehouseId === opts.warehouseId)
-          stockMap[pid] = (stockMap[pid] || 0) + Number(r.quantity || 0);
-        if ((r as any).fromWarehouseId === opts.warehouseId)
-          stockMap[pid] = (stockMap[pid] || 0) - Number(r.quantity || 0);
-      }
-    } else if (r.type === 'STOCKTAKE') {
-      if (!opts.warehouseId || r.warehouseId === opts.warehouseId) {
-        stockMap[pid] = Number(r.quantity || 0);
-      }
-    }
+  for (const r of stocktakeAgg) {
+    if (r.productId) { stockMap[r.productId] = Number(r._sum?.quantity || 0); stocktakeSet.add(r.productId); }
   }
-
-  const prodRecords = await db.productionOpRecord.findMany({
-    where: { type: 'STOCK_IN', ...(opts.productId ? { productId: opts.productId } : {}) },
-  });
-  for (const r of prodRecords) {
-    stockMap[r.productId] = (stockMap[r.productId] || 0) + Number(r.quantity);
+  for (const r of inboundAgg) {
+    if (r.productId) stockMap[r.productId] = (stockMap[r.productId] || 0) + Number(r._sum?.quantity || 0);
+  }
+  for (const r of outboundAgg) {
+    if (r.productId) stockMap[r.productId] = (stockMap[r.productId] || 0) - Number(r._sum?.quantity || 0);
+  }
+  for (const r of transferIn) {
+    if (r.productId) stockMap[r.productId] = (stockMap[r.productId] || 0) + Number(r._sum?.quantity || 0);
+  }
+  for (const r of transferOut) {
+    if (r.productId) stockMap[r.productId] = (stockMap[r.productId] || 0) - Number(r._sum?.quantity || 0);
+  }
+  for (const r of prodStockIn) {
+    stockMap[r.productId] = (stockMap[r.productId] || 0) + Number(r._sum?.quantity || 0);
   }
 
   return Object.entries(stockMap).map(([pid, qty]) => ({

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   ArrowUpFromLine,
   Undo2,
@@ -12,6 +12,7 @@ import type {
   ProdOpType,
 } from '../../types';
 import { PanelProps, hasOpsPerm, getOrderFamilyIds, type StockDocDetail } from './types';
+import { useDataIndexes } from './useDataIndexes';
 import {
   moduleHeaderRowClass,
   outlineAccentToolbarButtonClass,
@@ -54,18 +55,35 @@ const StockMaterialPanel: React.FC<PanelProps> = ({
   const [stockConfirmReason, setStockConfirmReason] = useState('');
   const [stockDocDetail, setStockDocDetail] = useState<StockDocDetail | null>(null);
 
+  const STOCK_PAGE_SIZE = 10;
+  const [stockPage, setStockPage] = useState(1);
+  useEffect(() => { setStockPage(1); }, [productionLinkMode]);
+
+  const idx = useDataIndexes(orders, products, boms, [] /* no globalNodes needed */, productMilestoneProgresses);
+
   const parentOrders = useMemo(() => orders.filter(o => !o.parentOrderId), [orders]);
 
   /** 按父工单聚合：父工单 id -> 该父工单及所有子工单下各物料的 领料/退料/净领用/报工理论耗材 汇总；含 BOM 全部物料（无记录时也显示） */
   const parentMaterialStats = useMemo(() => {
+    const { productsById, bomsById, bomsByParentProduct, childrenByParentId } = idx;
     const result = new Map<string, { productId: string; issue: number; returnQty: number; theoryCost: number }[]>();
     const parentList = orders.filter(o => !o.parentOrderId);
+
+    const stockRecordsByOrder = new Map<string, typeof records>();
+    for (const r of records) {
+      if (r.type !== 'STOCK_OUT' && r.type !== 'STOCK_RETURN') continue;
+      if (!r.orderId) continue;
+      let arr = stockRecordsByOrder.get(r.orderId);
+      if (!arr) { arr = []; stockRecordsByOrder.set(r.orderId, arr); }
+      arr.push(r);
+    }
+
     parentList.forEach(parent => {
-      const familyIds = new Set(getOrderFamilyIds(orders, parent.id));
+      const familyIds = new Set(getOrderFamilyIds(orders, parent.id, childrenByParentId));
       const prodMap = new Map<string, { issue: number; returnQty: number; theoryCost: number }>();
       const familyOrders = orders.filter(o => familyIds.has(o.id));
       familyOrders.forEach(ord => {
-        const ordProduct = products.find(p => p.id === ord.productId);
+        const ordProduct = productsById.get(ord.productId);
         const variants = ordProduct?.variants ?? [];
         const variantCompletedMap = new Map<string, number>();
         ord.milestones.forEach(ms => {
@@ -100,11 +118,11 @@ const StockMaterialPanel: React.FC<PanelProps> = ({
               (Object.values(v.nodeBoms) as string[]).forEach(bomId => {
                 if (seenBomIds.has(bomId)) return;
                 seenBomIds.add(bomId);
-                const bom = boms.find(b => b.id === bomId);
+                const bom = bomsById.get(bomId);
                 bom?.items.forEach(bi => addTheory(bi, vCompleted));
               });
             } else {
-              boms.filter(b => b.parentProductId === ordProduct!.id && b.variantId === v.id && b.nodeId).forEach(bom => {
+              (bomsByParentProduct.get(ordProduct!.id) ?? []).filter(b => b.variantId === v.id && b.nodeId).forEach(bom => {
                 if (seenBomIds.has(bom.id)) return;
                 seenBomIds.add(bom.id);
                 bom.items.forEach(bi => addTheory(bi, vCompleted));
@@ -118,78 +136,84 @@ const StockMaterialPanel: React.FC<PanelProps> = ({
               (Object.values(v.nodeBoms) as string[]).forEach(bomId => {
                 if (seenBomIds.has(bomId)) return;
                 seenBomIds.add(bomId);
-                const bom = boms.find(b => b.id === bomId);
+                const bom = bomsById.get(bomId);
                 bom?.items.forEach(bi => addTheory(bi, totalCompleted));
               });
             }
           });
           if (prodMap.size === 0 && ordProduct) {
-            boms.filter(b => b.parentProductId === ordProduct.id && b.nodeId).forEach(bom => {
+            (bomsByParentProduct.get(ordProduct.id) ?? []).filter(b => b.nodeId).forEach(bom => {
               bom.items.forEach(bi => addTheory(bi, totalCompleted));
             });
           }
         } else if (ordProduct) {
-          boms.filter(b => b.parentProductId === ordProduct.id && b.nodeId).forEach(bom => {
+          (bomsByParentProduct.get(ordProduct.id) ?? []).filter(b => b.nodeId).forEach(bom => {
             bom.items.forEach(bi => addTheory(bi, totalCompleted));
           });
         }
       });
-      records.forEach(r => {
-        if ((r.type !== 'STOCK_OUT' && r.type !== 'STOCK_RETURN') || !familyIds.has(r.orderId)) return;
-        if (!prodMap.has(r.productId)) prodMap.set(r.productId, { issue: 0, returnQty: 0, theoryCost: 0 });
-        const cur = prodMap.get(r.productId)!;
-        if (r.type === 'STOCK_OUT') cur.issue += r.quantity;
-        else cur.returnQty += r.quantity;
+      familyIds.forEach(fid => {
+        const recs = stockRecordsByOrder.get(fid);
+        if (!recs) return;
+        for (const r of recs) {
+          if (!prodMap.has(r.productId)) prodMap.set(r.productId, { issue: 0, returnQty: 0, theoryCost: 0 });
+          const cur = prodMap.get(r.productId)!;
+          if (r.type === 'STOCK_OUT') cur.issue += r.quantity;
+          else cur.returnQty += r.quantity;
+        }
       });
       result.set(parent.id, Array.from(prodMap.entries()).map(([productId, v]) => ({ productId, ...v })));
     });
     return result;
-  }, [records, orders, boms, products]);
+  }, [records, orders, boms, products, idx]);
 
   /** 关联产品模式：按成品聚合物料（多工单同产品合并一行卡片） */
   const productMaterialStatsByProduct = useMemo(() => {
     if (productionLinkMode !== 'product') return null as Map<string, { productId: string; issue: number; returnQty: number; theoryCost: number }[]> | null;
+    const { productsById, bomsById, bomsByParentProduct, childrenByParentId, rootOrdersByProductId, pmpByKey } = idx;
     const result = new Map<string, { productId: string; issue: number; returnQty: number; theoryCost: number }[]>();
     const finishedProductHasBom = (fpId: string): boolean => {
-      const ordProduct = products.find(p => p.id === fpId);
+      const ordProduct = productsById.get(fpId);
       if (!ordProduct) return false;
       const variants = ordProduct.variants ?? [];
-      const bomItems: { productId: string; quantity: number }[] = [];
       if (variants.length > 0) {
-        variants.forEach(v => {
+        for (const v of variants) {
           if (v.nodeBoms) {
-            Object.values(v.nodeBoms).forEach(bomId => {
-              const bom = boms.find(b => b.id === bomId);
-              bom?.items.forEach(bi => bomItems.push(bi));
-            });
+            for (const bomId of Object.values(v.nodeBoms) as string[]) {
+              const bom = bomsById.get(bomId);
+              if (bom && bom.items.length > 0) return true;
+            }
           }
-        });
+        }
       }
-      if (bomItems.length === 0) {
-        boms.filter(b => b.parentProductId === ordProduct.id && b.nodeId).forEach(bom => {
-          bom.items.forEach(bi => bomItems.push(bi));
-        });
-      }
-      return bomItems.length > 0;
+      const parentBoms = bomsByParentProduct.get(ordProduct.id) ?? [];
+      return parentBoms.some(b => b.nodeId && b.items.length > 0);
     };
+
+    const pmpByProduct = new Map<string, number>();
+    if (productMilestoneProgresses.length > 0) {
+      for (const p of productMilestoneProgresses) {
+        pmpByProduct.set(p.productId, Math.max(pmpByProduct.get(p.productId) ?? 0, p.completedQuantity ?? 0));
+      }
+    }
+
     const finishedIds = ([...new Set(orders.filter(o => !o.parentOrderId).map(o => o.productId))] as string[])
       .filter(Boolean)
       .filter(fpId => finishedProductHasBom(fpId));
     for (const fpId of finishedIds) {
-      const roots = orders.filter(o => !o.parentOrderId && o.productId === fpId);
+      const roots = rootOrdersByProductId.get(fpId) ?? [];
       const allFamilyIds = new Set<string>();
-      roots.forEach(p => getOrderFamilyIds(orders, p.id).forEach(id => allFamilyIds.add(id)));
+      roots.forEach(p => getOrderFamilyIds(orders, p.id, childrenByParentId).forEach(id => allFamilyIds.add(id)));
       const prodMap = new Map<string, { issue: number; returnQty: number; theoryCost: number }>();
       roots.forEach(parent => {
-        const familyIds = new Set(getOrderFamilyIds(orders, parent.id));
+        const familyIds = new Set(getOrderFamilyIds(orders, parent.id, childrenByParentId));
         const familyOrders = orders.filter(o => familyIds.has(o.id));
         familyOrders.forEach(ord => {
-          const ordProduct = products.find(p => p.id === ord.productId);
+          const ordProduct = productsById.get(ord.productId);
           const variants = ordProduct?.variants ?? [];
           let totalCompleted = ord.milestones.reduce((max, ms) => Math.max(max, ms.completedQuantity), 0);
           if (totalCompleted <= 0 && productMilestoneProgresses.length > 0) {
-            const pm = productMilestoneProgresses.filter(p => p.productId === fpId);
-            if (pm.length > 0) totalCompleted = Math.max(...pm.map(p => p.completedQuantity ?? 0), 0);
+            totalCompleted = pmpByProduct.get(fpId) ?? 0;
           }
 
           const variantCompletedMap = new Map<string, number>();
@@ -217,11 +241,11 @@ const StockMaterialPanel: React.FC<PanelProps> = ({
                 (Object.values(v.nodeBoms) as string[]).forEach(bomId => {
                   if (seenBomIds.has(bomId)) return;
                   seenBomIds.add(bomId);
-                  const bom = boms.find(b => b.id === bomId);
+                  const bom = bomsById.get(bomId);
                   bom?.items.forEach(bi => addTheory2(bi, vCompleted));
                 });
               } else {
-                boms.filter(b => b.parentProductId === ordProduct!.id && b.variantId === v.id && b.nodeId).forEach(bom => {
+                (bomsByParentProduct.get(ordProduct!.id) ?? []).filter(b => b.variantId === v.id && b.nodeId).forEach(bom => {
                   if (seenBomIds.has(bom.id)) return;
                   seenBomIds.add(bom.id);
                   bom.items.forEach(bi => addTheory2(bi, vCompleted));
@@ -237,14 +261,14 @@ const StockMaterialPanel: React.FC<PanelProps> = ({
                   (Object.values(v.nodeBoms) as string[]).forEach(bomId => {
                     if (seenBomIds.has(bomId)) return;
                     seenBomIds.add(bomId);
-                    const bom = boms.find(b => b.id === bomId);
+                    const bom = bomsById.get(bomId);
                     bom?.items.forEach(bi => bomItems.push({ productId: bi.productId, quantity: Number(bi.quantity) }));
                   });
                 }
               });
             }
             if (bomItems.length === 0) {
-              boms.filter(b => b.parentProductId === ordProduct.id && b.nodeId).forEach(bom => {
+              (bomsByParentProduct.get(ordProduct.id) ?? []).filter(b => b.nodeId).forEach(bom => {
                 bom.items.forEach(bi => bomItems.push({ productId: bi.productId, quantity: Number(bi.quantity) }));
               });
             }
@@ -265,7 +289,7 @@ const StockMaterialPanel: React.FC<PanelProps> = ({
       result.set(fpId, Array.from(prodMap.entries()).map(([productId, v]) => ({ productId, ...v })));
     }
     return result;
-  }, [productionLinkMode, records, orders, boms, products, productMilestoneProgresses]);
+  }, [productionLinkMode, records, orders, boms, products, productMilestoneProgresses, idx]);
 
   /** 领料/退料单据号：领料 LLyyyyMMdd-0001，退料 TLyyyyMMdd-0001，当日同类型顺序递增 */
   const getNextStockDocNo = (type: 'STOCK_OUT' | 'STOCK_RETURN') => {
@@ -396,9 +420,12 @@ const StockMaterialPanel: React.FC<PanelProps> = ({
                   </div>
                 );
               }
-              return pEntries.map(([fpId, materials]) => {
-                const fp = products.find(p => p.id === fpId);
-                const orderCnt = orders.filter(o => !o.parentOrderId && o.productId === fpId).length;
+              const totalProductPages = Math.max(1, Math.ceil(pEntries.length / STOCK_PAGE_SIZE));
+              const pagedEntries = pEntries.slice((stockPage - 1) * STOCK_PAGE_SIZE, stockPage * STOCK_PAGE_SIZE);
+              return (<>
+              {pagedEntries.map(([fpId, materials]) => {
+                const fp = idx.productsById.get(fpId);
+                const orderCnt = (idx.rootOrdersByProductId.get(fpId) ?? []).length;
                 const selecting = stockSelectSourceProductId === fpId && stockSelectMode;
                 return (
                   <div key={`fp-${fpId}`} className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
@@ -493,7 +520,7 @@ const StockMaterialPanel: React.FC<PanelProps> = ({
                           </tr>
                         ) : (
                           materials.map(({ productId, issue, returnQty, theoryCost }) => {
-                            const prod = products.find(p => p.id === productId);
+                            const prod = idx.productsById.get(productId);
                             const net = issue - returnQty;
                             const isSelected = stockSelectedIds.has(productId);
                             return (
@@ -551,17 +578,29 @@ const StockMaterialPanel: React.FC<PanelProps> = ({
                   </div>
                 </div>
               );
-              });
+              })}
+              {totalProductPages > 1 && (
+                <div className="flex items-center justify-center gap-3 py-4">
+                  <span className="text-xs text-slate-400">共 {pEntries.length} 项，第 {stockPage} / {totalProductPages} 页</span>
+                  <button type="button" disabled={stockPage <= 1} onClick={() => setStockPage(p => p - 1)} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all">上一页</button>
+                  <button type="button" disabled={stockPage >= totalProductPages} onClick={() => setStockPage(p => p + 1)} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all">下一页</button>
+                </div>
+              )}
+              </>);
             })()
           ) : parentOrders.length === 0 ? (
             <div className="bg-white rounded-[32px] border border-slate-200 p-12 text-center">
               <p className="text-slate-400 text-sm">暂无工单，请先在「生产计划」下达工单</p>
             </div>
           ) : (
-            parentOrders.map(order => {
-              const product = products.find(p => p.id === order.productId);
+            (() => {
+              const totalOrderPages = Math.max(1, Math.ceil(parentOrders.length / STOCK_PAGE_SIZE));
+              const pagedParentOrders = parentOrders.slice((stockPage - 1) * STOCK_PAGE_SIZE, stockPage * STOCK_PAGE_SIZE);
+              return (<>
+            {pagedParentOrders.map(order => {
+              const product = idx.productsById.get(order.productId);
               const materials = parentMaterialStats.get(order.id) ?? [];
-              const familyIds = getOrderFamilyIds(orders, order.id);
+              const familyIds = getOrderFamilyIds(orders, order.id, idx.childrenByParentId);
               const childCount = familyIds.length - 1;
               return (
                 <div key={order.id} className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
@@ -664,7 +703,7 @@ const StockMaterialPanel: React.FC<PanelProps> = ({
                           </tr>
                         ) : (
                           materials.map(({ productId, issue, returnQty, theoryCost }) => {
-                            const prod = products.find(p => p.id === productId);
+                            const prod = idx.productsById.get(productId);
                             const net = issue - returnQty;
                             const isSelected = stockSelectedIds.has(productId);
                             return (
@@ -722,7 +761,16 @@ const StockMaterialPanel: React.FC<PanelProps> = ({
                   </div>
                 </div>
               );
-            })
+            })}
+            {totalOrderPages > 1 && (
+              <div className="flex items-center justify-center gap-3 py-4">
+                <span className="text-xs text-slate-400">共 {parentOrders.length} 条工单，第 {stockPage} / {totalOrderPages} 页</span>
+                <button type="button" disabled={stockPage <= 1} onClick={() => setStockPage(p => p - 1)} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all">上一页</button>
+                <button type="button" disabled={stockPage >= totalOrderPages} onClick={() => setStockPage(p => p + 1)} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all">下一页</button>
+              </div>
+            )}
+            </>);
+            })()
           )}
         </div>
       )}

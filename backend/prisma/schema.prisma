@@ -417,6 +417,9 @@ model PlanOrder {
   @@index([parentPlanId])
   @@index([productId])
   @@index([status])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, updatedAt])
   @@map("plan_orders")
 }
 
@@ -514,6 +517,9 @@ model ProductionOrder {
   @@index([parentOrderId])
   @@index([productId])
   @@index([status])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, updatedAt])
   @@map("production_orders")
 }
 
@@ -670,6 +676,8 @@ model ProductionOpRecord {
   @@index([productId])
   @@index([timestamp])
   @@index([docNo])
+  @@index([tenantId, type, timestamp])
+  @@index([tenantId, updatedAt])
   @@map("production_op_records")
 }
 
@@ -721,6 +729,8 @@ model PsiRecord {
   @@index([partnerId])
   @@index([warehouseId])
   @@index([timestamp])
+  @@index([tenantId, type, createdAt])
+  @@index([tenantId, updatedAt])
   @@map("psi_records")
 }
 
@@ -757,6 +767,8 @@ model FinanceRecord {
   @@index([timestamp])
   @@index([categoryId])
   @@index([workerId])
+  @@index([tenantId, type, createdAt])
+  @@index([tenantId, updatedAt])
   @@map("finance_records")
 }
 
