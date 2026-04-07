@@ -17,6 +17,18 @@ import type {
 
 export type OutsourceModalType = 'dispatch' | 'receive' | 'flow';
 
+export interface StockDocDetail {
+  docNo: string;
+  type: 'STOCK_OUT' | 'STOCK_RETURN';
+  orderId: string;
+  sourceProductId?: string;
+  timestamp: string;
+  warehouseId: string;
+  lines: { productId: string; quantity: number }[];
+  reason?: string;
+  operator: string;
+}
+
 export type ReworkPendingRow = {
   scope: 'order' | 'product';
   orderId: string;

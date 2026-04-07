@@ -1,51 +1,17 @@
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { TableVirtuoso } from 'react-virtuoso';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   Plus, 
-  X, 
   Clock, 
   Package, 
   User, 
-  Hash,
-  AlertCircle,
-  ArrowRight,
-  Boxes,
-  Warehouse as WarehouseIcon,
   ChevronRight,
-  ChevronDown,
-  Tag,
-  LayoutGrid,
-  List,
-  MoveRight,
-  TrendingDown,
-  TrendingUp,
-  ArrowRightCircle,
-  Search,
-  Filter,
-  Layers,
   FileText,
   Building2,
   CheckCircle2,
-  ShoppingCart,
-  CheckSquare,
-  Square,
-  ClipboardList,
-  ArrowDownToLine,
-  ListFilter,
-  ArrowLeft,
-  Save,
-  Trash2,
   Sliders,
   PackageCheck,
-  Pencil,
-  Check,
-  ScrollText
 } from 'lucide-react';
-import { toast } from 'sonner';
-import { SearchableProductSelect } from '../components/SearchableProductSelect';
-import { SearchablePartnerSelect } from '../components/SearchablePartnerSelect';
 import { Product, Warehouse, ProductCategory, Partner, PartnerCategory, AppDictionaries, ProductVariant, PurchaseOrderFormSettings, PurchaseBillFormSettings } from '../types';
-import { sortedVariantColorEntries, sortedColorEntries } from '../utils/sortVariantsByProduct';
 import {
   moduleHeaderRowClass,
   outlineAccentToolbarButtonClass,
@@ -53,11 +19,13 @@ import {
   pageTitleClass,
   primaryToolbarButtonClass,
   secondaryToolbarButtonClass,
-  sectionTitleClass,
 } from '../styles/uiDensity';
-import { useConfirm } from '../contexts/ConfirmContext';
 import WarehousePanel from './psi-ops/WarehousePanel';
 import OrderBillFormPage from './psi-ops/OrderBillFormPage';
+import PendingShipmentListModal, { PendingShipmentGroup } from './psi-ops/PendingShipmentListModal';
+import PendingShipDetailModal from './psi-ops/PendingShipDetailModal';
+import AllocationModal from './psi-ops/AllocationModal';
+import FormConfigModal from './psi-ops/FormConfigModal';
 
 interface PSIOpsViewProps {
   type: string;
@@ -87,7 +55,6 @@ interface PSIOpsViewProps {
 }
 
 const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, categories, partners, partnerCategories, dictionaries, records, purchaseOrderFormSettings = { standardFields: [], customFields: [] }, onUpdatePurchaseOrderFormSettings, purchaseBillFormSettings = { standardFields: [], customFields: [] }, onUpdatePurchaseBillFormSettings, onAddRecord, onAddRecordBatch, onReplaceRecords, onDeleteRecords, onDetailViewChange, prodRecords = [], orders = [], userPermissions, tenantRole }) => {
-  const confirm = useConfirm();
   const _isOwner = tenantRole === 'owner';
   const hasPsiPerm = (perm: string): boolean => {
     if (_isOwner) return true;
@@ -122,9 +89,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
   // 当前是否处于采购订单编辑模式（存原始单号）
   const [editingPODocNumber, setEditingPODocNumber] = useState<string | null>(null);
   const [showPOFormConfigModal, setShowPOFormConfigModal] = useState(false);
-  const [poFormConfigDraft, setPOFormConfigDraft] = useState<PurchaseOrderFormSettings | null>(null);
   const [showPBFormConfigModal, setShowPBFormConfigModal] = useState(false);
-  const [pbFormConfigDraft, setPBFormConfigDraft] = useState<PurchaseBillFormSettings | null>(null);
   // 采购单详情查看/删除（存单号）
   const [editingPBDocNumber, setEditingPBDocNumber] = useState<string | null>(null);
   // 销售订单详情编辑（存单号）
@@ -165,31 +130,10 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
 
   const current = bizConfig[type];
 
-  // 待发货清单：搜索与勾选
-  const [pendingShipSearchDoc, setPendingShipSearchDoc] = useState('');
-  const [pendingShipSearchProduct, setPendingShipSearchProduct] = useState('');
-  const [pendingShipSearchPartner, setPendingShipSearchPartner] = useState('');
-  const [pendingShipSearchWarehouse, setPendingShipSearchWarehouse] = useState('');
-  const [pendingShipSelectedIds, setPendingShipSelectedIds] = useState<Set<string>>(new Set());
   /** 销售订单下：待发货清单是否以弹窗形式打开 */
   const [showPendingShipmentModal, setShowPendingShipmentModal] = useState(false);
-  /** 待发货清单 - 详情弹窗：当前选中的分组（按 lineGroupId 一组，有颜色尺码时一行显示总数） */
-  const [pendingShipDetailGroup, setPendingShipDetailGroup] = useState<{
-    groupKey: string;
-    docNumber: string;
-    productId: string;
-    productName: string;
-    productSku: string;
-    partner: string;
-    warehouseId: string;
-    warehouseName: string;
-    totalQuantity: number;
-    records: any[];
-  } | null>(null);
-  /** 待发货详情 - 编辑态：各行的已配数量（variantId -> qty 或 单行 quantity） */
-  const [pendingShipDetailEdit, setPendingShipDetailEdit] = useState<Record<string, number> | number | null>(null);
-  /** 待发货详情 - 编辑态：配货仓库（出库仓库） */
-  const [pendingShipDetailEditWarehouseId, setPendingShipDetailEditWarehouseId] = useState<string | null>(null);
+  /** 待发货清单 - 详情弹窗：当前选中的分组 */
+  const [pendingShipDetailGroup, setPendingShipDetailGroup] = useState<PendingShipmentGroup | null>(null);
 
   // 解析记录时间戳（用于排序和比较）：优先 _savedAtMs（可靠毫秒戳），其次尝试解析 createdAt（ISO 日期）
   const parseRecordTime = useCallback((r: any): number => {
@@ -396,21 +340,6 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
     });
   }, [recordsList, type, products, warehouses]);
 
-  const filteredPendingShipmentGroups = useMemo(() => {
-    if (type !== 'SALES_ORDER') return [];
-    const doc = pendingShipSearchDoc.trim().toLowerCase();
-    const prod = pendingShipSearchProduct.trim().toLowerCase();
-    const part = pendingShipSearchPartner.trim().toLowerCase();
-    const wh = pendingShipSearchWarehouse.trim().toLowerCase();
-    return pendingShipmentGroups.filter(row => {
-      if (doc && !row.docNumber.toLowerCase().includes(doc)) return false;
-      if (prod && !row.productName.toLowerCase().includes(prod) && !row.productSku.toLowerCase().includes(prod)) return false;
-      if (part && !row.partner.toLowerCase().includes(part)) return false;
-      if (wh && !row.warehouseName.toLowerCase().includes(wh)) return false;
-      return true;
-    });
-  }, [type, pendingShipmentGroups, pendingShipSearchDoc, pendingShipSearchProduct, pendingShipSearchPartner, pendingShipSearchWarehouse]);
-
   const groupedRecords = useMemo(() => {
     const filtered = recordsList.filter(r => r.type === type);
     const groups: Record<string, any[]> = {};
@@ -463,12 +392,12 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
         
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           {type === 'PURCHASE_ORDER' && onUpdatePurchaseOrderFormSettings && (
-            <button type="button" onClick={() => { setPOFormConfigDraft(JSON.parse(JSON.stringify(purchaseOrderFormSettings))); setShowPOFormConfigModal(true); }} className={secondaryToolbarButtonClass}>
+            <button type="button" onClick={() => setShowPOFormConfigModal(true)} className={secondaryToolbarButtonClass}>
               <Sliders className="w-4 h-4 shrink-0" /> 表单配置
             </button>
           )}
           {type === 'PURCHASE_BILL' && onUpdatePurchaseBillFormSettings && (
-            <button type="button" onClick={() => { setPBFormConfigDraft(JSON.parse(JSON.stringify(purchaseBillFormSettings))); setShowPBFormConfigModal(true); }} className={secondaryToolbarButtonClass}>
+            <button type="button" onClick={() => setShowPBFormConfigModal(true)} className={secondaryToolbarButtonClass}>
               <Sliders className="w-4 h-4 shrink-0" /> 表单配置
             </button>
           )}
@@ -499,388 +428,32 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
       </div>
 
       {type === 'SALES_ORDER' && showPendingShipmentModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setShowPendingShipmentModal(false)} aria-hidden />
-          <div className="relative bg-white w-full max-w-6xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2"><PackageCheck className="w-5 h-5 text-indigo-600" /> 待发货清单</h3>
-              <button type="button" onClick={() => setShowPendingShipmentModal(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
-              <div className="flex items-center gap-2 mb-3">
-                <Filter className="w-4 h-4 text-slate-500" />
-                <span className="text-xs font-bold text-slate-500 uppercase">筛选</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 block mb-1">订单单号</label>
-                  <input type="text" value={pendingShipSearchDoc} onChange={e => setPendingShipSearchDoc(e.target.value)} placeholder="模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 block mb-1">商品名称</label>
-                  <input type="text" value={pendingShipSearchProduct} onChange={e => setPendingShipSearchProduct(e.target.value)} placeholder="产品名/SKU 模糊" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 block mb-1">客户</label>
-                  <input type="text" value={pendingShipSearchPartner} onChange={e => setPendingShipSearchPartner(e.target.value)} placeholder="模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 block mb-1">仓库</label>
-                  <input type="text" value={pendingShipSearchWarehouse} onChange={e => setPendingShipSearchWarehouse(e.target.value)} placeholder="模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
-                </div>
-              </div>
-              <div className="mt-2 flex items-center gap-4">
-                <span className="text-xs text-slate-400">已配货未出库的销售订单明细；勾选后点击「发货」生成销售单（仅可同时勾选同一客户、同一仓库的明细一起发货）。</span>
-                <span className="text-xs text-slate-400">共 {filteredPendingShipmentGroups.length} 项</span>
-              </div>
-            </div>
-            <div className="flex-1 overflow-auto p-4">
-              {filteredPendingShipmentGroups.length === 0 ? (
-                <p className="text-slate-500 text-center py-12">{pendingShipmentGroups.length === 0 ? '暂无待发货项，请先在销售订单中完成配货。' : '无匹配项，请调整搜索条件。'}</p>
-              ) : (
-                <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200">
-                        <th className="w-12 px-4 py-3" />
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">订单单号</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">商品名称</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">客户</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">数量</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">仓库</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap w-24">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredPendingShipmentGroups.map(group => {
-                        const groupRecordIds = group.records.map((r: any) => r.id);
-                        const allChecked = groupRecordIds.every(id => pendingShipSelectedIds.has(id));
-                        const checked = allChecked;
-                        const toggleGroupSelection = () => {
-                          if (!allChecked && pendingShipSelectedIds.size > 0) {
-                            const firstId = pendingShipSelectedIds.values().next().value!;
-                            const firstGroup = filteredPendingShipmentGroups.find(gg => gg.records.some((r: any) => r.id === firstId));
-                            if (firstGroup && (firstGroup.partner !== group.partner || firstGroup.warehouseId !== group.warehouseId)) {
-                              toast.warning('只能选择同一客户、同一仓库的明细同时发货，请先取消其他勾选。');
-                              return;
-                            }
-                          }
-                          setPendingShipSelectedIds(prev => {
-                            const next = new Set(prev);
-                            if (allChecked) {
-                              groupRecordIds.forEach(id => next.delete(id));
-                              return next;
-                            }
-                            groupRecordIds.forEach(id => next.add(id));
-                            return next;
-                          });
-                        };
-                        return (
-                          <tr
-                            key={group.groupKey}
-                            className="border-b border-slate-100 hover:bg-slate-50/50 cursor-pointer"
-                            onClick={toggleGroupSelection}
-                          >
-                            <td className="px-4 py-3 align-middle" onClick={e => e.stopPropagation()}>
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={toggleGroupSelection}
-                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                              />
-                            </td>
-                            <td className="px-4 py-3 text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">{group.docNumber}</td>
-                            <td className="px-4 py-3 font-bold text-slate-800 truncate" title={group.productName}>{group.productName}</td>
-                            <td className="px-4 py-3 font-bold text-slate-800 truncate" title={group.partner}>{group.partner}</td>
-                            <td className="px-4 py-3 text-right font-black text-indigo-600">{group.totalQuantity.toLocaleString()}</td>
-                            <td className="px-4 py-3 font-bold text-slate-700 truncate" title={group.warehouseName}>{group.warehouseName}</td>
-                            <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              onClick={() => { setPendingShipDetailGroup(group); setPendingShipDetailEdit(null); }}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all whitespace-nowrap shrink-0"
-                            >
-                              <FileText className="w-3.5 h-3.5" /> 详情
-                            </button>
-                            </td>
-                        </tr>
-                      );
-                    })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-            {pendingShipmentGroups.length > 0 && (
-              <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/30 flex flex-wrap items-center justify-between gap-4 shrink-0">
-                <span className="text-sm font-bold text-slate-600">已选 {pendingShipSelectedIds.size} 项</span>
-                <button
-                  type="button"
-                  disabled={pendingShipSelectedIds.size === 0}
-                  onClick={async () => {
-                    if (pendingShipSelectedIds.size === 0 || !onAddRecord) return;
-                    const selectedRecords = filteredPendingShipmentGroups.flatMap(g => g.records).filter((r: any) => pendingShipSelectedIds.has(r.id));
-                    const first = selectedRecords[0];
-                    const partnerName = first.partner || '';
-                    const partnerId = first.partnerId || partners.find(p => p.name === partnerName)?.id || '';
-                    const warehouseId = first.allocationWarehouseId || first.warehouseId || '';
-                    if (!warehouseId || !partnerName) {
-                      toast.error('所选明细缺少客户或仓库信息，无法生成销售单。');
-                      return;
-                    }
-                    const newDocNumber = generateSBDocNumberForPartner(partnerId, partnerName);
-                    const timestamp = new Date().toLocaleString();
-                    const createdAt = new Date().toISOString().split('T')[0];
-                    let recIdx = 0;
-                    const newBillRecords = selectedRecords.map((r: any) => {
-                      const pendingQty = (r.allocatedQuantity ?? 0) - (r.shippedQuantity ?? 0);
-                      const price = r.salesPrice ?? 0;
-                      return {
-                        id: `psi-sb-${Date.now()}-${recIdx++}`,
-                        type: 'SALES_BILL',
-                        docNumber: newDocNumber,
-                        timestamp,
-                        _savedAtMs: Date.now(),
-                        partner: partnerName,
-                        partnerId,
-                        warehouseId,
-                        productId: r.productId,
-                        variantId: r.variantId,
-                        quantity: pendingQty,
-                        salesPrice: price,
-                        amount: pendingQty * price,
-                        note: '',
-                        operator: '张主管',
-                        lineGroupId: r.lineGroupId ?? r.id,
-                        createdAt,
-                      };
-                    });
-                    if (onAddRecordBatch) await onAddRecordBatch(newBillRecords);
-                    else { for (const r of newBillRecords) await onAddRecord(r); }
-                    // 发走后只增加已发数量，不修改已配数量，销售订单仍为已配货；待发清单按「已配-已发」过滤，发走的自动不显示
-                    if (onReplaceRecords) {
-                      const docNumbersToUpdate = [...new Set(selectedRecords.map((r: any) => r.docNumber))];
-                      docNumbersToUpdate.forEach(docNum => {
-                        const docRecords = recordsList.filter((re: any) => re.type === 'SALES_ORDER' && re.docNumber === docNum);
-                        const newRecords = docRecords.map((re: any) => {
-                          if (!pendingShipSelectedIds.has(re.id)) return re;
-                          const allocated = re.allocatedQuantity ?? 0;
-                          const alreadyShipped = re.shippedQuantity ?? 0;
-                          const pending = allocated - alreadyShipped;
-                          return { ...re, shippedQuantity: alreadyShipped + pending };
-                        });
-                        onReplaceRecords('SALES_ORDER', docNum, newRecords);
-                      });
-                    }
-                    setPendingShipSelectedIds(new Set());
-                    setShowPendingShipmentModal(false);
-                  }}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ArrowDownToLine className="w-4 h-4" /> 发货生成销售单
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        <PendingShipmentListModal
+          pendingShipmentGroups={pendingShipmentGroups}
+          partners={partners}
+          recordsList={recordsList}
+          onClose={() => setShowPendingShipmentModal(false)}
+          onOpenDetail={group => setPendingShipDetailGroup(group)}
+          onAddRecord={onAddRecord}
+          onAddRecordBatch={onAddRecordBatch}
+          onReplaceRecords={onReplaceRecords}
+          generateSBDocNumberForPartner={generateSBDocNumberForPartner}
+        />
       )}
 
-      {/* 待发货清单 - 详情弹窗（数量明细、编辑、删除，参考报工流水详情） */}
-      {type === 'SALES_ORDER' && pendingShipDetailGroup && (() => {
-        const g = pendingShipDetailGroup;
-        const product = productMapPSI.get(g.productId);
-        const hasVariants = g.records.some((r: any) => r.variantId) && (product?.variants?.length ?? 0) > 0;
-        const unitName = getUnitName(g.productId);
-        const isEditing = pendingShipDetailEdit !== null;
-        const editQuantities = isEditing
-          ? (hasVariants
-            ? (pendingShipDetailEdit as Record<string, number>)
-            : { _single: pendingShipDetailEdit as number })
-          : null;
-        const editWarehouseId = pendingShipDetailEditWarehouseId ?? g.warehouseId;
-        const handleSaveEdit = () => {
-          if (!onReplaceRecords || editQuantities == null) return;
-          const docRecords = recordsList.filter((re: any) => re.type === 'SALES_ORDER' && re.docNumber === g.docNumber);
-          const newRecords = docRecords.map((re: any) => {
-            const inGroup = g.records.some((r: any) => r.id === re.id);
-            if (!inGroup) return re;
-            const base = { ...re, allocationWarehouseId: editWarehouseId || re.allocationWarehouseId };
-            if (hasVariants && re.variantId != null) {
-              const qty = (editQuantities as Record<string, number>)[re.variantId] ?? re.allocatedQuantity ?? 0;
-              return { ...base, allocatedQuantity: Math.max(0, qty) };
-            }
-            if (!hasVariants) {
-              const qty = typeof editQuantities === 'number' ? editQuantities : (editQuantities as Record<string, number>)._single ?? re.allocatedQuantity ?? 0;
-              return { ...base, allocatedQuantity: Math.max(0, qty) };
-            }
-            return base;
-          });
-          onReplaceRecords('SALES_ORDER', g.docNumber, newRecords);
-          setPendingShipDetailEdit(null);
-          setPendingShipDetailEditWarehouseId(null);
-          setPendingShipDetailGroup(null);
-        };
-        const handleDelete = () => {
-          if (!onReplaceRecords) return;
-          void confirm({ message: '确定要取消该组配货吗？已配数量将清零。', danger: true }).then((ok) => {
-            if (!ok) return;
-            const docRecords = recordsList.filter((re: any) => re.type === 'SALES_ORDER' && re.docNumber === g.docNumber);
-            const newRecords = docRecords.map((re: any) => {
-              if (!g.records.some((r: any) => r.id === re.id)) return re;
-              return { ...re, allocatedQuantity: 0 };
-            });
-            onReplaceRecords('SALES_ORDER', g.docNumber, newRecords);
-            setPendingShipDetailGroup(null);
-            setPendingShipDetailEdit(null);
-            setPendingShipDetailEditWarehouseId(null);
-          });
-        };
-        return (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => { setPendingShipDetailGroup(null); setPendingShipDetailEdit(null); setPendingShipDetailEditWarehouseId(null); }} aria-hidden />
-            <div className="relative bg-white w-full max-w-2xl max-h-[90vh] rounded-2xl shadow-xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-              <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                  <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{g.docNumber}</span>
-                  配货详情
-                </h3>
-                <div className="flex items-center gap-2">
-                  {isEditing ? (
-                    <>
-                      <button type="button" onClick={() => { setPendingShipDetailEdit(null); setPendingShipDetailEditWarehouseId(null); }} className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">取消</button>
-                      <button type="button" onClick={handleSaveEdit} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700">
-                        <Check className="w-4 h-4" /> 保存
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPendingShipDetailEditWarehouseId(g.warehouseId);
-                          if (hasVariants) {
-                            const next: Record<string, number> = {};
-                            g.records.forEach((r: any) => { next[r.variantId] = r.allocatedQuantity ?? 0; });
-                            setPendingShipDetailEdit(next);
-                          } else {
-                            setPendingShipDetailEdit(g.records[0]?.allocatedQuantity ?? 0);
-                          }
-                        }}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      >
-                        <Pencil className="w-4 h-4" /> 编辑
-                      </button>
-                      {onReplaceRecords && (
-                        <button type="button" onClick={handleDelete} className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold">
-                          <Trash2 className="w-4 h-4" /> 删除
-                        </button>
-                      )}
-                    </>
-                  )}
-                  <button type="button" onClick={() => { setPendingShipDetailGroup(null); setPendingShipDetailEdit(null); setPendingShipDetailEditWarehouseId(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-              <div className="flex-1 overflow-auto p-4 space-y-4">
-                <div>
-                  <h2 className="text-xl font-bold text-slate-900">{g.productName}</h2>
-                  <p className="text-xs text-slate-500 mt-1">客户：{g.partner}{!isEditing && ` · 仓库：${g.warehouseName}`}</p>
-                  {isEditing && (
-                    <div className="mt-3">
-                      <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">配货仓库（出库仓库）</label>
-                      <select
-                        value={editWarehouseId}
-                        onChange={e => setPendingShipDetailEditWarehouseId(e.target.value)}
-                        className="w-full max-w-xs bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
-                      >
-                        {warehouses.map(w => (
-                          <option key={w.id} value={w.id}>{w.name}{w.code ? ` (${w.code})` : ''}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider mb-3">数量明细</h4>
-                  <div className="border border-slate-200 rounded-xl overflow-hidden">
-                    <table className="w-full text-left text-sm">
-                      <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200">
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">规格 / 颜色尺码</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">已配数量</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {hasVariants
-                          ? g.records.map((r: any) => {
-                              const v = product?.variants?.find((vv: ProductVariant) => vv.id === r.variantId);
-                              const colorName = v?.colorId ? (dictionaries.colors.find(c => c.id === v.colorId)?.name ?? '') : '';
-                              const sizeName = v?.sizeId ? (dictionaries.sizes.find(s => s.id === v.sizeId)?.name ?? '') : '';
-                              const specLabel = [colorName, sizeName].filter(Boolean).join(' / ') || (r.variantId ?? '—');
-                              const qty = isEditing && editQuantities && typeof editQuantities === 'object' && !('_single' in editQuantities)
-                                ? (editQuantities as Record<string, number>)[r.variantId] ?? r.allocatedQuantity ?? 0
-                                : r.allocatedQuantity ?? 0;
-                              return (
-                                <tr key={r.id} className="border-b border-slate-100">
-                                  <td className="px-4 py-3 font-bold text-slate-800">{specLabel}</td>
-                                  <td className="px-4 py-3 text-right">
-                                    {isEditing ? (
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        value={qty}
-                                        onChange={e => setPendingShipDetailEdit((prev: Record<string, number> | number | null) => {
-                                          const next = prev as Record<string, number>;
-                                          return { ...next, [r.variantId]: Math.max(0, parseInt(e.target.value, 10) || 0) };
-                                        })}
-                                        className="w-24 text-right py-1.5 px-2 rounded-lg border border-slate-200 text-sm font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none"
-                                      />
-                                    ) : (
-                                      <span className="font-black text-indigo-600">{qty.toLocaleString()} {unitName}</span>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          : (
-                            <tr className="border-b border-slate-100">
-                              <td className="px-4 py-3 font-bold text-slate-800">数量</td>
-                              <td className="px-4 py-3 text-right">
-                                {isEditing ? (
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    value={typeof editQuantities === 'number' ? editQuantities : (editQuantities as Record<string, number>)?._single ?? g.totalQuantity}
-                                    onChange={e => setPendingShipDetailEdit(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                                    className="w-24 text-right py-1.5 px-2 rounded-lg border border-slate-200 text-sm font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none"
-                                  />
-                                ) : (
-                                  <span className="font-black text-indigo-600">{g.totalQuantity.toLocaleString()} {unitName}</span>
-                                )}
-                              </td>
-                            </tr>
-                          )}
-                        <tr className="bg-indigo-50/80 font-bold">
-                          <td className="px-4 py-3 text-slate-700">合计</td>
-                          <td className="px-4 py-3 text-right text-indigo-600">
-                            {isEditing && hasVariants && editQuantities && typeof editQuantities === 'object' && !('_single' in editQuantities)
-                              ? (Object.values(editQuantities) as number[]).reduce((s, n) => s + (n || 0), 0).toLocaleString()
-                              : isEditing && !hasVariants && typeof editQuantities === 'number'
-                                ? (editQuantities as number).toLocaleString()
-                                : g.totalQuantity.toLocaleString()}{' '}
-                            {unitName}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {type === 'SALES_ORDER' && pendingShipDetailGroup && (
+        <PendingShipDetailModal
+          key={pendingShipDetailGroup.groupKey}
+          group={pendingShipDetailGroup}
+          productMapPSI={productMapPSI}
+          dictionaries={dictionaries}
+          getUnitName={getUnitName}
+          warehouses={warehouses}
+          onReplaceRecords={onReplaceRecords}
+          recordsList={recordsList}
+          onClose={() => setPendingShipDetailGroup(null)}
+        />
+      )}
 
       {showModal && ['PURCHASE_ORDER', 'PURCHASE_BILL', 'SALES_ORDER', 'SALES_BILL'].includes(showModal) && showModal === type ? (
         <OrderBillFormPage
@@ -1281,398 +854,43 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
       )}
 
 
-      {/* 销售订单列表 - 配货弹窗 */}
       {allocationModal && allocationQuantities !== null && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => { setAllocationModal(null); setAllocationQuantities(null); }} />
-          <div className="relative bg-white w-full max-w-2xl rounded-2xl shadow-xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2">
-                <PackageCheck className="w-5 h-5 text-indigo-500" />
-                <h3 className="text-base font-black text-slate-800">配货</h3>
-              </div>
-              <button type="button" onClick={() => { setAllocationModal(null); setAllocationQuantities(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-4 space-y-4 overflow-auto flex-1 min-h-0">
-              <p className="text-sm text-slate-600">
-                <span className="font-bold text-slate-800">{allocationModal.product?.name}</span>
-                <span className="text-slate-400 ml-1">· 单号 {allocationModal.docNumber}</span>
-              </p>
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">配货仓库（出库仓库）</label>
-                <select
-                  value={allocationWarehouseId}
-                  onChange={e => setAllocationWarehouseId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-200"
-                >
-                  <option value="">请选择仓库...</option>
-                  {warehouses.map(w => (
-                    <option key={w.id} value={w.id}>{w.name}</option>
-                  ))}
-                </select>
-              </div>
-              {(() => {
-                const orderTotal = allocationModal.grp.reduce((s: number, i: any) => s + (i.quantity ?? 0), 0);
-                const allocatedTotal = allocationModal.grp.reduce((s: number, i: any) => s + (i.allocatedQuantity ?? 0), 0);
-                const remainingTotal = typeof allocationQuantities === 'object'
-                  ? (Object.values(allocationQuantities) as number[]).reduce((a, b) => a + b, 0)
-                  : (allocationQuantities ?? 0);
-                const unallocatedTotal = Math.max(0, orderTotal - allocatedTotal - remainingTotal);
-                return (
-                  <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
-                    <span className="text-slate-500">订单数量：<strong className="text-slate-800">{orderTotal.toLocaleString()}</strong></span>
-                    <span className="text-slate-500">已配货数量：<strong className="text-slate-700">{allocatedTotal.toLocaleString()}</strong></span>
-                    <span className="text-slate-500">本次剩余待配：<strong className="text-indigo-600">{remainingTotal.toLocaleString()}</strong></span>
-                    {unallocatedTotal > 0 && (
-                      <span className="text-slate-500">未配货：<strong className="text-amber-600">{unallocatedTotal.toLocaleString()}</strong></span>
-                    )}
-                  </div>
-                );
-              })()}
-              {allocationModal.grp.some((i: any) => i.variantId) ? (
-                <div className="space-y-4 overflow-auto">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">数量明细（有颜色尺码）· 输入为剩余配货数量</p>
-                  {(() => {
-                    const groupedByColor: Record<string, ProductVariant[]> = {};
-                    const grpVariantIds = new Set(allocationModal.grp.map((i: any) => i.variantId).filter(Boolean));
-                    allocationModal.product?.variants?.forEach((v: ProductVariant) => {
-                      if (!grpVariantIds.has(v.id)) return;
-                      if (!groupedByColor[v.colorId]) groupedByColor[v.colorId] = [];
-                      groupedByColor[v.colorId].push(v);
-                    });
-                    const orderByVariant: Record<string, number> = {};
-                    const allocatedByVariant: Record<string, number> = {};
-                    allocationModal.grp.forEach((i: any) => {
-                      if (i.variantId) {
-                        orderByVariant[i.variantId] = (orderByVariant[i.variantId] ?? 0) + (i.quantity ?? 0);
-                        allocatedByVariant[i.variantId] = (allocatedByVariant[i.variantId] ?? 0) + (i.allocatedQuantity ?? 0);
-                      }
-                    });
-                    return sortedVariantColorEntries(groupedByColor, allocationModal.product?.colorIds, allocationModal.product?.sizeIds).map(([colorId, colorVariants]) => {
-                      const color = dictionaries.colors.find(c => c.id === colorId);
-                      const orderSum = (colorVariants as ProductVariant[]).reduce((s, v) => s + (orderByVariant[v.id] ?? 0), 0);
-                      const allocatedSum = (colorVariants as ProductVariant[]).reduce((s, v) => s + (allocatedByVariant[v.id] ?? 0), 0);
-                      const remainingSum = typeof allocationQuantities === 'object'
-                        ? (colorVariants as ProductVariant[]).reduce((s, v) => s + (allocationQuantities[v.id] ?? 0), 0)
-                        : 0;
-                      const unallocSum = Math.max(0, orderSum - allocatedSum - remainingSum);
-                      return (
-                        <div key={colorId} className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-[20px] border border-slate-100 shadow-sm">
-                          <div className="flex items-center gap-2 w-28 shrink-0">
-                            <div className="w-4 h-4 rounded-full border border-slate-200 shrink-0" style={{ backgroundColor: (color as any)?.value || '#e2e8f0' }} />
-                            <span className="text-xs font-bold text-slate-700">{color?.name || '未命名'}</span>
-                          </div>
-                          <div className="flex flex-wrap gap-3">
-                            {colorVariants.map(v => {
-                              const size = dictionaries.sizes.find(s => s.id === v.sizeId);
-                              const orderQty = orderByVariant[v.id] ?? 0;
-                              const allocatedQty = allocatedByVariant[v.id] ?? 0;
-                              const remainingQty = typeof allocationQuantities === 'object' ? (allocationQuantities[v.id] ?? 0) : 0;
-                              const unallocated = Math.max(0, orderQty - allocatedQty - remainingQty);
-                              return (
-                                <div key={v.id} className="flex flex-col gap-0.5 w-20">
-                                  <span className="text-[9px] font-black text-slate-400 uppercase">{size?.name || v.skuSuffix}</span>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    placeholder="0"
-                                    value={remainingQty || ''}
-                                    onChange={e => {
-                                      const val = parseInt(e.target.value, 10);
-                                      setAllocationQuantities(prev => {
-                                        if (typeof prev !== 'object') return prev;
-                                        return { ...prev, [v.id]: isNaN(val) ? 0 : val };
-                                      });
-                                    }}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-sm font-black text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500 text-center"
-                                    title="剩余配货数量"
-                                  />
-                                  <div className="flex justify-between text-[9px] text-slate-400">
-                                    <span>已配 {allocatedQty}</span>
-                                    {unallocated > 0 && <span className="text-amber-600">未配 {unallocated}</span>}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">剩余配货数量</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={typeof allocationQuantities === 'number' ? allocationQuantities : 0}
-                    onChange={e => {
-                      const v = parseInt(e.target.value, 10);
-                      setAllocationQuantities(isNaN(v) ? 0 : v);
-                    }}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-200"
-                    placeholder="本次配货数量"
-                  />
-                  {allocationModal.grp[0] && (allocationModal.grp[0].allocatedQuantity ?? 0) > 0 && (
-                    <p className="text-xs text-slate-500 mt-1">已配货：{(allocationModal.grp[0].allocatedQuantity ?? 0).toLocaleString()}</p>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="px-6 py-5 border-t border-slate-100 flex justify-end gap-4 shrink-0 bg-slate-50/50">
-              <button type="button" onClick={() => { setAllocationModal(null); setAllocationQuantities(null); }} className="px-6 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-800 rounded-xl hover:bg-white border border-slate-200 transition-colors">
-                取消
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!allocationModal || !onReplaceRecords) { setAllocationModal(null); setAllocationQuantities(null); return; }
-                  if (!allocationWarehouseId) return;
-                  const docRecords = recordsList.filter((r: any) => r.type === 'SALES_ORDER' && r.docNumber === allocationModal.docNumber);
-                  const newRecords = docRecords.map((r: any) => {
-                    const inGrp = allocationModal.grp.find((g: any) => g.id === r.id);
-                    if (!inGrp) return r;
-                    const remaining = typeof allocationQuantities === 'object' && inGrp.variantId
-                      ? (allocationQuantities[inGrp.variantId] ?? 0)
-                      : (typeof allocationQuantities === 'number' ? allocationQuantities : 0);
-                    return { ...r, allocatedQuantity: (r.allocatedQuantity ?? 0) + remaining, allocationWarehouseId: allocationWarehouseId };
-                  });
-                  onReplaceRecords('SALES_ORDER', allocationModal.docNumber, newRecords);
-                  setAllocationModal(null);
-                  setAllocationQuantities(null);
-                }}
-                disabled={!allocationWarehouseId}
-                className="px-8 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                确定
-              </button>
-            </div>
-          </div>
-        </div>
+        <AllocationModal
+          allocationModal={allocationModal}
+          allocationQuantities={allocationQuantities}
+          allocationWarehouseId={allocationWarehouseId}
+          onQuantityChange={v => setAllocationQuantities(v)}
+          onWarehouseIdChange={v => setAllocationWarehouseId(v)}
+          warehouses={warehouses}
+          dictionaries={dictionaries}
+          recordsList={recordsList}
+          onReplaceRecords={onReplaceRecords}
+          onClose={() => { setAllocationModal(null); setAllocationQuantities(null); }}
+        />
       )}
 
-      {/* 采购订单表单配置弹窗 */}
-      {showPOFormConfigModal && poFormConfigDraft && onUpdatePurchaseOrderFormSettings && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setShowPOFormConfigModal(false)} />
-          <div className="relative bg-white w-full max-w-3xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
-            <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><Sliders className="w-5 h-5 text-indigo-500" /> 采购订单表单配置</h3>
-                <p className="text-xs text-slate-500 mt-1">配置在列表、新增、详情页中显示的字段，可增加自定义项</p>
-              </div>
-              <button onClick={() => setShowPOFormConfigModal(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="p-4 space-y-4 overflow-auto">
-              <div>
-                <h4 className="text-sm font-black text-slate-600 uppercase tracking-widest mb-3">标准字段显示</h4>
-                <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200">
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">字段</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">列表中</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">新增时</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">详情中</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {poFormConfigDraft.standardFields.filter(f => !['docNumber', 'partner', 'createdAt'].includes(f.id)).map(f => (
-                        <tr key={f.id} className="hover:bg-slate-50/50">
-                          <td className="px-4 py-2.5 text-sm font-bold text-slate-800">{f.label}</td>
-                          <td className="px-4 py-2.5 text-center"><input type="checkbox" checked={f.showInList} onChange={e => setPOFormConfigDraft(d => d ? { ...d, standardFields: d.standardFields.map(sf => sf.id === f.id ? { ...sf, showInList: e.target.checked } : sf) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
-                          <td className="px-4 py-2.5 text-center"><input type="checkbox" checked={f.showInCreate} onChange={e => setPOFormConfigDraft(d => d ? { ...d, standardFields: d.standardFields.map(sf => sf.id === f.id ? { ...sf, showInCreate: e.target.checked } : sf) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
-                          <td className="px-4 py-2.5 text-center"><input type="checkbox" checked={f.showInDetail} onChange={e => setPOFormConfigDraft(d => d ? { ...d, standardFields: d.standardFields.map(sf => sf.id === f.id ? { ...sf, showInDetail: e.target.checked } : sf) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-sm font-black text-slate-600 uppercase tracking-widest">自定义单据内容</h4>
-                  <button type="button" onClick={() => setPOFormConfigDraft(d => d ? { ...d, customFields: [...d.customFields, { id: `custom-${Date.now()}`, label: '新自定义项', type: 'text', showInList: true, showInCreate: true, showInDetail: true }] } : d)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700">
-                    <Plus className="w-3.5 h-3.5" /> 增加
-                  </button>
-                </div>
-                {poFormConfigDraft.customFields.length === 0 ? (
-                  <p className="text-sm text-slate-400 italic py-4 border-2 border-dashed border-slate-100 rounded-2xl text-center">暂无自定义项，点击「增加」添加</p>
-                ) : (
-                  <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200">
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">标签</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">类型</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">选项（下拉时）</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">列表中</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">新增时</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">详情中</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase w-16"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {poFormConfigDraft.customFields.map(cf => (
-                          <tr key={cf.id} className="hover:bg-slate-50/50">
-                            <td className="px-4 py-2"><input type="text" value={cf.label} onChange={e => setPOFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, label: e.target.value } : c) } : d)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold outline-none" placeholder="标签" /></td>
-                            <td className="px-4 py-2">
-                              <select value={cf.type || 'text'} onChange={e => {
-                                const newType = e.target.value as 'text' | 'number' | 'date' | 'select';
-                                setPOFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, type: newType, options: newType === 'select' ? (c.options ?? []) : c.options } : c) } : d);
-                              }} className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold outline-none">
-                                <option value="text">文本</option><option value="number">数字</option><option value="date">日期</option><option value="select">下拉</option>
-                              </select>
-                            </td>
-                            <td className="px-4 py-2 align-top">
-                              {cf.type === 'select' ? (
-                                <div className="min-w-[180px] space-y-1.5">
-                                  {(cf.options ?? []).map((opt, idx) => (
-                                    <div key={idx} className="flex items-center gap-1">
-                                      <input type="text" value={opt} onChange={e => setPOFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, options: (c.options ?? []).map((o, i) => i === idx ? e.target.value : o) } : c) } : d)} className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs font-bold outline-none" placeholder="选项文案" />
-                                      <button type="button" onClick={() => setPOFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, options: (c.options ?? []).filter((_, i) => i !== idx) } : c) } : d)} className="p-1 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
-                                    </div>
-                                  ))}
-                                  <button type="button" onClick={() => setPOFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, options: [...(c.options ?? []), '新选项'] } : c) } : d)} className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700">
-                                    <Plus className="w-3.5 h-3.5" /> 添加选项
-                                  </button>
-                                </div>
-                              ) : (
-                                <span className="text-slate-300 text-xs">—</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-2 text-center"><input type="checkbox" checked={cf.showInList} onChange={e => setPOFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, showInList: e.target.checked } : c) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
-                            <td className="px-4 py-2 text-center"><input type="checkbox" checked={cf.showInCreate} onChange={e => setPOFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, showInCreate: e.target.checked } : c) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
-                            <td className="px-4 py-2 text-center"><input type="checkbox" checked={cf.showInDetail} onChange={e => setPOFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, showInDetail: e.target.checked } : c) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
-                            <td className="px-4 py-2"><button type="button" onClick={() => setPOFormConfigDraft(d => d ? { ...d, customFields: d.customFields.filter(c => c.id !== cf.id) } : d)} className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"><Trash2 className="w-4 h-4" /></button></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="px-8 py-6 border-t border-slate-100 flex justify-end gap-3">
-              <button onClick={() => setShowPOFormConfigModal(false)} className="px-6 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-800">取消</button>
-              <button onClick={() => { onUpdatePurchaseOrderFormSettings(poFormConfigDraft); setShowPOFormConfigModal(false); setPOFormConfigDraft(null); }} className="px-8 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-2">保存配置</button>
-            </div>
-          </div>
-        </div>
+      {showPOFormConfigModal && onUpdatePurchaseOrderFormSettings && (
+        <FormConfigModal
+          title="采购订单表单配置"
+          subtitle="配置在列表、新增、详情页中显示的字段，可增加自定义项"
+          hiddenStandardFieldIds={['docNumber', 'partner', 'createdAt']}
+          initialSettings={purchaseOrderFormSettings}
+          onSave={onUpdatePurchaseOrderFormSettings}
+          onClose={() => setShowPOFormConfigModal(false)}
+        />
       )}
 
-      {/* 采购单表单配置弹窗 */}
-      {showPBFormConfigModal && pbFormConfigDraft && onUpdatePurchaseBillFormSettings && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setShowPBFormConfigModal(false)} />
-          <div className="relative bg-white w-full max-w-3xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
-            <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><Sliders className="w-5 h-5 text-indigo-500" /> 采购单表单配置</h3>
-                <p className="text-xs text-slate-500 mt-1">配置在列表、新增、详情页中显示的字段，可增加自定义项</p>
-              </div>
-              <button onClick={() => setShowPBFormConfigModal(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="p-4 space-y-4 overflow-auto">
-              <div>
-                <h4 className="text-sm font-black text-slate-600 uppercase tracking-widest mb-3">标准字段显示</h4>
-                <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200">
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">字段</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">列表中</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">新增时</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">详情中</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {pbFormConfigDraft.standardFields.filter(f => !['docNumber', 'partner', 'warehouse', 'createdAt'].includes(f.id)).map(f => (
-                        <tr key={f.id} className="hover:bg-slate-50/50">
-                          <td className="px-4 py-2.5 text-sm font-bold text-slate-800">{f.label}</td>
-                          <td className="px-4 py-2.5 text-center"><input type="checkbox" checked={f.showInList} onChange={e => setPBFormConfigDraft(d => d ? { ...d, standardFields: d.standardFields.map(sf => sf.id === f.id ? { ...sf, showInList: e.target.checked } : sf) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
-                          <td className="px-4 py-2.5 text-center"><input type="checkbox" checked={f.showInCreate} onChange={e => setPBFormConfigDraft(d => d ? { ...d, standardFields: d.standardFields.map(sf => sf.id === f.id ? { ...sf, showInCreate: e.target.checked } : sf) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
-                          <td className="px-4 py-2.5 text-center"><input type="checkbox" checked={f.showInDetail} onChange={e => setPBFormConfigDraft(d => d ? { ...d, standardFields: d.standardFields.map(sf => sf.id === f.id ? { ...sf, showInDetail: e.target.checked } : sf) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-sm font-black text-slate-600 uppercase tracking-widest">自定义单据内容</h4>
-                  <button type="button" onClick={() => setPBFormConfigDraft(d => d ? { ...d, customFields: [...d.customFields, { id: `custom-${Date.now()}`, label: '新自定义项', type: 'text', showInList: true, showInCreate: true, showInDetail: true }] } : d)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700">
-                    <Plus className="w-3.5 h-3.5" /> 增加
-                  </button>
-                </div>
-                {pbFormConfigDraft.customFields.length === 0 ? (
-                  <p className="text-sm text-slate-400 italic py-4 border-2 border-dashed border-slate-100 rounded-2xl text-center">暂无自定义项，点击「增加」添加</p>
-                ) : (
-                  <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200">
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">标签</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">类型</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">选项（下拉时）</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">列表中</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">新增时</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-center">详情中</th>
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase w-16"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {pbFormConfigDraft.customFields.map(cf => (
-                          <tr key={cf.id} className="hover:bg-slate-50/50">
-                            <td className="px-4 py-2"><input type="text" value={cf.label} onChange={e => setPBFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, label: e.target.value } : c) } : d)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold outline-none" placeholder="标签" /></td>
-                            <td className="px-4 py-2">
-                              <select value={cf.type || 'text'} onChange={e => {
-                                const newType = e.target.value as 'text' | 'number' | 'date' | 'select';
-                                setPBFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, type: newType, options: newType === 'select' ? (c.options ?? []) : c.options } : c) } : d);
-                              }} className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold outline-none">
-                                <option value="text">文本</option><option value="number">数字</option><option value="date">日期</option><option value="select">下拉</option>
-                              </select>
-                            </td>
-                            <td className="px-4 py-2 align-top">
-                              {cf.type === 'select' ? (
-                                <div className="min-w-[180px] space-y-1.5">
-                                  {(cf.options ?? []).map((opt, idx) => (
-                                    <div key={idx} className="flex items-center gap-1">
-                                      <input type="text" value={opt} onChange={e => setPBFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, options: (c.options ?? []).map((o, i) => i === idx ? e.target.value : o) } : c) } : d)} className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs font-bold outline-none" placeholder="选项文案" />
-                                      <button type="button" onClick={() => setPBFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, options: (c.options ?? []).filter((_, i) => i !== idx) } : c) } : d)} className="p-1 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
-                                    </div>
-                                  ))}
-                                  <button type="button" onClick={() => setPBFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, options: [...(c.options ?? []), '新选项'] } : c) } : d)} className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700">
-                                    <Plus className="w-3.5 h-3.5" /> 添加选项
-                                  </button>
-                                </div>
-                              ) : (
-                                <span className="text-slate-300 text-xs">—</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-2 text-center"><input type="checkbox" checked={cf.showInList} onChange={e => setPBFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, showInList: e.target.checked } : c) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
-                            <td className="px-4 py-2 text-center"><input type="checkbox" checked={cf.showInCreate} onChange={e => setPBFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, showInCreate: e.target.checked } : c) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
-                            <td className="px-4 py-2 text-center"><input type="checkbox" checked={cf.showInDetail} onChange={e => setPBFormConfigDraft(d => d ? { ...d, customFields: d.customFields.map(c => c.id === cf.id ? { ...c, showInDetail: e.target.checked } : c) } : d)} className="w-4 h-4 rounded text-indigo-600" /></td>
-                            <td className="px-4 py-2"><button type="button" onClick={() => setPBFormConfigDraft(d => d ? { ...d, customFields: d.customFields.filter(c => c.id !== cf.id) } : d)} className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"><Trash2 className="w-4 h-4" /></button></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="px-8 py-6 border-t border-slate-100 flex justify-end gap-3">
-              <button onClick={() => setShowPBFormConfigModal(false)} className="px-6 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-800">取消</button>
-              <button onClick={() => { onUpdatePurchaseBillFormSettings(pbFormConfigDraft); setShowPBFormConfigModal(false); setPBFormConfigDraft(null); }} className="px-8 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-2">保存配置</button>
-            </div>
-          </div>
-        </div>
+      {showPBFormConfigModal && onUpdatePurchaseBillFormSettings && (
+        <FormConfigModal
+          title="采购单表单配置"
+          subtitle="配置在列表、新增、详情页中显示的字段，可增加自定义项"
+          hiddenStandardFieldIds={['docNumber', 'partner', 'warehouse', 'createdAt']}
+          initialSettings={purchaseBillFormSettings}
+          onSave={onUpdatePurchaseBillFormSettings}
+          onClose={() => setShowPBFormConfigModal(false)}
+        />
       )}
+
     </div>
   );
 };

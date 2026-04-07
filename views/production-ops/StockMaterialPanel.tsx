@@ -2,35 +2,26 @@ import React, { useState, useMemo } from 'react';
 import {
   ArrowUpFromLine,
   Undo2,
-  Truck,
   Layers,
-  X,
   ScrollText,
   Check,
-  Filter,
-  FileText,
-  Pencil,
-  Trash2,
   Package,
 } from 'lucide-react';
 import type {
   ProductionOpRecord,
-  ProductionOrder,
-  Product,
   ProdOpType,
-  Warehouse,
-  BOM,
-  AppDictionaries,
-  ProductMilestoneProgress,
 } from '../../types';
-import { PanelProps, hasOpsPerm, getOrderFamilyIds } from './types';
+import { PanelProps, hasOpsPerm, getOrderFamilyIds, type StockDocDetail } from './types';
 import {
   moduleHeaderRowClass,
   outlineAccentToolbarButtonClass,
   pageSubtitleClass,
   pageTitleClass,
 } from '../../styles/uiDensity';
-import { useConfirm } from '../../contexts/ConfirmContext';
+import StockConfirmModal from './StockConfirmModal';
+import StockDocDetailModal from './StockDocDetailModal';
+import StockFlowListModal from './StockFlowListModal';
+import StockMaterialFormModal from './StockMaterialFormModal';
 
 const StockMaterialPanel: React.FC<PanelProps> = ({
   productionLinkMode,
@@ -48,18 +39,9 @@ const StockMaterialPanel: React.FC<PanelProps> = ({
   userPermissions,
   tenantRole,
 }) => {
-  const confirm = useConfirm();
   const canViewMainList = hasOpsPerm(tenantRole, userPermissions, 'production:material_list:allow');
 
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({
-    orderId: '',
-    productId: '',
-    quantity: 0,
-    reason: '',
-    partner: '',
-    warehouseId: ''
-  });
   const [stockModalMode, setStockModalMode] = useState<'stock_out' | 'stock_return' | null>(null);
   const [showStockFlowModal, setShowStockFlowModal] = useState(false);
   const [stockSelectOrderId, setStockSelectOrderId] = useState<string | null>(null);
@@ -70,92 +52,7 @@ const StockMaterialPanel: React.FC<PanelProps> = ({
   const [stockConfirmQuantities, setStockConfirmQuantities] = useState<Record<string, number>>({});
   const [stockConfirmWarehouseId, setStockConfirmWarehouseId] = useState('');
   const [stockConfirmReason, setStockConfirmReason] = useState('');
-  const [stockFlowFilterType, setStockFlowFilterType] = useState<'all' | 'STOCK_OUT' | 'STOCK_RETURN'>('all');
-  const [stockFlowFilterOrderKeyword, setStockFlowFilterOrderKeyword] = useState('');
-  const [stockFlowFilterProductKeyword, setStockFlowFilterProductKeyword] = useState('');
-  const [stockFlowFilterDocNo, setStockFlowFilterDocNo] = useState('');
-  const [stockFlowFilterDateFrom, setStockFlowFilterDateFrom] = useState('');
-  const [stockFlowFilterDateTo, setStockFlowFilterDateTo] = useState('');
-  const [stockDocDetail, setStockDocDetail] = useState<{
-    docNo: string;
-    type: 'STOCK_OUT' | 'STOCK_RETURN';
-    orderId: string;
-    sourceProductId?: string;
-    timestamp: string;
-    warehouseId: string;
-    lines: { productId: string; quantity: number }[];
-    reason?: string;
-    operator: string;
-  } | null>(null);
-  const [stockDocEditForm, setStockDocEditForm] = useState<{
-    warehouseId: string;
-    lines: { productId: string; quantity: number }[];
-    reason: string;
-  } | null>(null);
-
-  const stockFlowRecords = useMemo(() =>
-    records.filter(r => r.type === 'STOCK_OUT' || r.type === 'STOCK_RETURN').sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-  , [records]);
-  const { filteredStockFlowRecords, totalIssueQty, totalReturnQty, countIssue, countReturn } = useMemo(() => {
-    let list = stockFlowRecords;
-    if (stockFlowFilterType !== 'all') list = list.filter(r => r.type === stockFlowFilterType);
-    if (stockFlowFilterOrderKeyword.trim()) {
-      const kw = stockFlowFilterOrderKeyword.trim().toLowerCase();
-      if (productionLinkMode === 'product') {
-        list = list.filter(r => {
-          const sp = r.sourceProductId ? products.find(x => x.id === r.sourceProductId) : null;
-          const name = (sp?.name ?? '').toLowerCase();
-          const id = (r.sourceProductId ?? '').toLowerCase();
-          return name.includes(kw) || id.includes(kw);
-        });
-      } else {
-        list = list.filter(r => {
-          const o = orders.find(x => x.id === r.orderId);
-          const orderNum = (o?.orderNumber ?? '').toLowerCase();
-          const orderId = (r.orderId ?? '').toLowerCase();
-          return orderNum.includes(kw) || orderId.includes(kw);
-        });
-      }
-    }
-    if (stockFlowFilterProductKeyword.trim()) {
-      const kw = stockFlowFilterProductKeyword.trim().toLowerCase();
-      list = list.filter(r => {
-        const p = products.find(x => x.id === r.productId);
-        const name = (p?.name ?? '').toLowerCase();
-        const productId = (r.productId ?? '').toLowerCase();
-        return name.includes(kw) || productId.includes(kw);
-      });
-    }
-    if (stockFlowFilterDocNo.trim()) {
-      const kw = stockFlowFilterDocNo.trim().toLowerCase();
-      list = list.filter(r => ((r.docNo ?? '').toLowerCase()).includes(kw));
-    }
-    if (stockFlowFilterDateFrom) {
-      const from = stockFlowFilterDateFrom;
-      list = list.filter(r => {
-        const d = r.timestamp ? new Date(r.timestamp).toISOString().split('T')[0] : '';
-        return d >= from;
-      });
-    }
-    if (stockFlowFilterDateTo) {
-      const to = stockFlowFilterDateTo;
-      list = list.filter(r => {
-        const d = r.timestamp ? new Date(r.timestamp).toISOString().split('T')[0] : '';
-        return d <= to;
-      });
-    }
-    const issueList = list.filter(r => r.type === 'STOCK_OUT');
-    const returnList = list.filter(r => r.type === 'STOCK_RETURN');
-    const totalIssueQty = issueList.reduce((s, r) => s + r.quantity, 0);
-    const totalReturnQty = returnList.reduce((s, r) => s + r.quantity, 0);
-    return {
-      filteredStockFlowRecords: list,
-      totalIssueQty,
-      totalReturnQty,
-      countIssue: issueList.length,
-      countReturn: returnList.length
-    };
-  }, [stockFlowRecords, stockFlowFilterType, stockFlowFilterOrderKeyword, stockFlowFilterProductKeyword, stockFlowFilterDocNo, stockFlowFilterDateFrom, stockFlowFilterDateTo, orders, products, productionLinkMode]);
+  const [stockDocDetail, setStockDocDetail] = useState<StockDocDetail | null>(null);
 
   const parentOrders = useMemo(() => orders.filter(o => !o.parentOrderId), [orders]);
 
@@ -381,23 +278,6 @@ const StockMaterialPanel: React.FC<PanelProps> = ({
     return `${prefix}${todayStr}-${String(maxSeq + 1).padStart(4, '0')}`;
   };
 
-  const buildStockDocDetailFromDocNo = (docNo: string) => {
-    const docRecords = stockFlowRecords.filter(r => r.docNo === docNo);
-    if (docRecords.length === 0) return null;
-    const first = docRecords[0];
-    return {
-      docNo,
-      type: first.type as 'STOCK_OUT' | 'STOCK_RETURN',
-      orderId: first.orderId ?? '',
-      sourceProductId: first.sourceProductId,
-      timestamp: first.timestamp,
-      warehouseId: first.warehouseId ?? '',
-      lines: docRecords.map(r => ({ productId: r.productId, quantity: r.quantity })),
-      reason: first.reason,
-      operator: first.operator
-    };
-  };
-
   const handleStockConfirmSubmit = async () => {
     if (!stockSelectMode) return;
     const toSubmit = Array.from(stockSelectedIds).filter(pid => (stockConfirmQuantities[pid] ?? 0) > 0);
@@ -475,30 +355,6 @@ const StockMaterialPanel: React.FC<PanelProps> = ({
     setStockSelectedIds(new Set());
     setStockConfirmQuantities({});
     setStockConfirmReason('');
-  };
-
-  const handleAdd = () => {
-    const isStockReturn = stockModalMode === 'stock_return';
-    const recordType: ProdOpType = isStockReturn ? 'STOCK_RETURN' : 'STOCK_OUT';
-    const docNo = getNextStockDocNo(recordType);
-    const newRecord: ProductionOpRecord = {
-      id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      type: recordType,
-      orderId: productionLinkMode === 'product' ? undefined : (form.orderId || undefined),
-      productId: form.productId,
-      quantity: form.quantity,
-      reason: form.reason,
-      partner: form.partner,
-      operator: '张主管',
-      timestamp: new Date().toLocaleString(),
-      status: '已完成',
-      warehouseId: form.warehouseId || undefined,
-      docNo
-    };
-    onAddRecord(newRecord);
-    setShowModal(false);
-    setStockModalMode(null);
-    setForm({ orderId: '', productId: '', quantity: 0, reason: '', partner: '', warehouseId: '' });
   };
 
   return (
@@ -871,626 +727,64 @@ const StockMaterialPanel: React.FC<PanelProps> = ({
         </div>
       )}
 
-      {showStockConfirmModal && (stockSelectOrderId || stockSelectSourceProductId) && stockSelectMode && (() => {
-        const order = stockSelectOrderId ? orders.find(o => o.id === stockSelectOrderId) : undefined;
-        const srcProd = stockSelectSourceProductId ? products.find(p => p.id === stockSelectSourceProductId) : undefined;
-        const selectedList: string[] = Array.from(stockSelectedIds);
-        const hasValidQty = selectedList.some(pid => (stockConfirmQuantities[pid] ?? 0) > 0);
-        const isReturn = stockSelectMode === 'stock_return';
-        const getUnitName = (productId: string) => {
-          const p = products.find(x => x.id === productId);
-          return (p?.unitId && (dictionaries?.units ?? []).find(u => u.id === p.unitId)?.name) || '件';
-        };
-        return (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setShowStockConfirmModal(false); setStockConfirmReason(''); }} aria-hidden />
-            <div className="relative bg-white w-full max-w-2xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-              <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                  <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
-                    {srcProd ? srcProd.name : (order?.orderNumber ?? '')}
-                  </span>
-                  {isReturn ? '确认退料' : '确认领料'}
-                </h3>
-                <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => { setShowStockConfirmModal(false); setStockConfirmReason(''); }} className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">取消</button>
-                  <button
-                    type="button"
-                    onClick={handleStockConfirmSubmit}
-                    disabled={!hasValidQty}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white transition-colors disabled:opacity-50 ${isReturn ? 'bg-rose-600 hover:bg-rose-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
-                  >
-                    <Check className="w-4 h-4" /> {isReturn ? '确认退料' : '确认领料'}
-                  </button>
-                  <button type="button" onClick={() => { setShowStockConfirmModal(false); setStockConfirmReason(''); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-              <div className="flex-1 overflow-auto p-4 space-y-4">
-                <h2 className="text-xl font-bold text-slate-900">{srcProd?.name ?? (order ? (products.find(p => p.id === order.productId)?.name ?? order.productName ?? '—') : '—')}</h2>
-                <div className={`grid gap-3 ${warehouses.length > 0 ? 'grid-cols-[1fr_1.5fr]' : 'grid-cols-1'}`}>
-                  {warehouses.length > 0 && (
-                    <div className="bg-slate-50 rounded-xl px-4 py-2">
-                      <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">{isReturn ? '退回仓库' : '出库仓库'}</p>
-                      <select
-                        value={stockConfirmWarehouseId}
-                        onChange={e => setStockConfirmWarehouseId(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-200"
-                      >
-                        {warehouses.map(w => (
-                          <option key={w.id} value={w.id}>{w.name}{w.code ? ` (${w.code})` : ''}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  <div className="bg-slate-50 rounded-xl px-4 py-2">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">备注</p>
-                    <input
-                      type="text"
-                      value={stockConfirmReason}
-                      onChange={e => setStockConfirmReason(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-200"
-                      placeholder="选填"
-                    />
-                  </div>
-                </div>
-                <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200">
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">物料</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">数量</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase w-16">单位</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedList.map(pid => {
-                        const prod = products.find(p => p.id === pid);
-                        return (
-                          <tr key={pid} className="border-b border-slate-100">
-                            <td className="px-4 py-3 font-medium text-slate-800">{prod?.name ?? pid}</td>
-                            <td className="px-4 py-3 text-right">
-                              <input
-                                type="number"
-                                min={0}
-                                step={1}
-                                value={stockConfirmQuantities[pid] ?? ''}
-                                onChange={e => setStockConfirmQuantities(prev => ({ ...prev, [pid]: Number(e.target.value) || 0 }))}
-                                className="w-20 bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200"
-                                placeholder="0"
-                              />
-                            </td>
-                            <td className="px-4 py-3 text-slate-500">{getUnitName(pid)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      <StockConfirmModal
+        visible={showStockConfirmModal}
+        onClose={() => { setShowStockConfirmModal(false); setStockConfirmReason(''); }}
+        onSubmit={handleStockConfirmSubmit}
+        stockSelectMode={stockSelectMode}
+        stockSelectOrderId={stockSelectOrderId}
+        stockSelectSourceProductId={stockSelectSourceProductId}
+        stockSelectedIds={stockSelectedIds}
+        stockConfirmQuantities={stockConfirmQuantities}
+        onQuantityChange={(pid, qty) => setStockConfirmQuantities(prev => ({ ...prev, [pid]: qty }))}
+        stockConfirmWarehouseId={stockConfirmWarehouseId}
+        onWarehouseChange={setStockConfirmWarehouseId}
+        stockConfirmReason={stockConfirmReason}
+        onReasonChange={setStockConfirmReason}
+        orders={orders}
+        products={products}
+        warehouses={warehouses}
+        dictionaries={dictionaries}
+      />
 
-      {/* 领料/退料单保存后的单据详情弹窗 */}
-      {stockDocDetail && (() => {
-        const order = orders.find(o => o.id === stockDocDetail.orderId);
-        const sourceProd = stockDocDetail.sourceProductId
-          ? products.find(p => p.id === stockDocDetail.sourceProductId)
-          : null;
-        const warehouse = warehouses.find(w => w.id === stockDocDetail.warehouseId);
-        const getUnitName = (productId: string) => {
-          const p = products.find(x => x.id === productId);
-          return (p?.unitId && (dictionaries?.units ?? []).find(u => u.id === p.unitId)?.name) || '件';
-        };
-        const isReturn = stockDocDetail.type === 'STOCK_RETURN';
-        const isEditing = stockDocEditForm !== null;
-        const startEdit = () => setStockDocEditForm({
-          warehouseId: stockDocDetail.warehouseId,
-          lines: stockDocDetail.lines.map(l => ({ productId: l.productId, quantity: l.quantity })),
-          reason: stockDocDetail.reason ?? ''
-        });
-        const cancelEdit = () => setStockDocEditForm(null);
-        const saveEdit = () => {
-          if (!stockDocEditForm || !onUpdateRecord) return;
-          const docRecords = records.filter(r => r.docNo === stockDocDetail.docNo);
-          docRecords.forEach(rec => {
-            const line = stockDocEditForm.lines.find(l => l.productId === rec.productId);
-            if (line) {
-              onUpdateRecord({
-                ...rec,
-                quantity: line.quantity,
-                warehouseId: stockDocEditForm.warehouseId || undefined,
-                reason: stockDocEditForm.reason.trim() || undefined
-              });
-            }
-          });
-          setStockDocDetail(prev => prev ? {
-            ...prev,
-            warehouseId: stockDocEditForm.warehouseId,
-            lines: stockDocEditForm.lines,
-            reason: stockDocEditForm.reason.trim() || undefined
-          } : null);
-          setStockDocEditForm(null);
-        };
-        const editForm = stockDocEditForm;
-        return (
-          <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setStockDocDetail(null); setStockDocEditForm(null); }} aria-hidden />
-            <div className="relative bg-white w-full max-w-2xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-              <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                  <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
-                    {order
-                      ? order.orderNumber
-                      : sourceProd?.name ??
-                        (stockDocDetail.lines[0]
-                          ? products.find(p => p.id === stockDocDetail.lines[0].productId)?.name ?? stockDocDetail.docNo
-                          : stockDocDetail.docNo)}
-                  </span>
-                  {isReturn ? '退料单详情' : '领料单详情'}
-                </h3>
-                <div className="flex items-center gap-2">
-                  {isEditing ? (
-                    <>
-                      <button type="button" onClick={cancelEdit} className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">取消</button>
-                      <button type="button" onClick={saveEdit} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700">
-                        <Check className="w-4 h-4" /> 保存
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      {onUpdateRecord && hasOpsPerm(tenantRole, userPermissions, 'production:material_records:edit') && (
-                        <button
-                          type="button"
-                          onClick={startEdit}
-                          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200"
-                        >
-                          <Pencil className="w-4 h-4" /> 编辑
-                        </button>
-                      )}
-                      {onDeleteRecord && hasOpsPerm(tenantRole, userPermissions, 'production:material_records:delete') && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void confirm({ message: `确定要删除该张${isReturn ? '退料' : '领料'}单的所有记录吗？此操作不可恢复。`, danger: true }).then((ok) => {
-                              if (!ok) return;
-                              const docRecords = records.filter(r => r.docNo === stockDocDetail.docNo);
-                              docRecords.forEach(rec => onDeleteRecord(rec.id));
-                              setStockDocDetail(null);
-                              setStockDocEditForm(null);
-                            });
-                          }}
-                          className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold"
-                        >
-                          <Trash2 className="w-4 h-4" /> 删除
-                        </button>
-                      )}
-                    </>
-                  )}
-                  <button type="button" onClick={() => { setStockDocDetail(null); setStockDocEditForm(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-              <div className="flex-1 overflow-auto p-4 space-y-4">
-                <h2 className="text-xl font-bold text-slate-900">
-                  {sourceProd?.name ?? (order ? (products.find(p => p.id === order.productId)?.name ?? order.productName ?? '—') : '—')}
-                </h2>
-                {!isEditing ? (
-                  <>
-                    <div className="flex flex-wrap gap-4">
-                      <div className="bg-slate-50 rounded-xl px-4 py-2">
-                        <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">单据号</p>
-                        <p className="text-sm font-bold text-slate-800 font-mono">{stockDocDetail.docNo}</p>
-                      </div>
-                      <div className="bg-slate-50 rounded-xl px-4 py-2">
-                        <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">类型</p>
-                        <p className="text-sm font-bold text-slate-800">{isReturn ? '退料' : '领料'}</p>
-                      </div>
-                      <div className="bg-slate-50 rounded-xl px-4 py-2">
-                        <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">业务时间</p>
-                        <p className="text-sm font-bold text-slate-800">{stockDocDetail.timestamp}</p>
-                      </div>
-                      {warehouse && (
-                        <div className="bg-slate-50 rounded-xl px-4 py-2">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">{isReturn ? '退回仓库' : '出库仓库'}</p>
-                          <p className="text-sm font-bold text-slate-800">{warehouse.name}{warehouse.code ? ` (${warehouse.code})` : ''}</p>
-                        </div>
-                      )}
-                      <div className="bg-slate-50 rounded-xl px-4 py-2">
-                        <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">经办</p>
-                        <p className="text-sm font-bold text-slate-800">{stockDocDetail.operator}</p>
-                      </div>
-                      {stockDocDetail.reason && (
-                        <div className="bg-slate-50 rounded-xl px-4 py-2">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">备注</p>
-                          <p className="text-sm font-bold text-slate-800">{stockDocDetail.reason}</p>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 overflow-auto -mt-2">
-                      <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                        <table className="w-full text-left text-sm">
-                          <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200">
-                              <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">物料</th>
-                              <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">数量</th>
-                              <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase w-16">单位</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {stockDocDetail.lines.map(({ productId, quantity }) => {
-                              const prod = products.find(p => p.id === productId);
-                              return (
-                                <tr key={productId} className="border-b border-slate-100">
-                                  <td className="px-4 py-3 font-medium text-slate-800">{prod?.name ?? productId}</td>
-                                  <td className="px-4 py-3 font-bold text-indigo-600 text-right">{quantity}</td>
-                                  <td className="px-4 py-3 text-slate-500">{getUnitName(productId)}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    {editForm && (
-                      <>
-                        <div className="grid grid-cols-[1fr_1.5fr] gap-3">
-                          <div className="bg-slate-50 rounded-xl px-4 py-2">
-                            <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">{isReturn ? '退回仓库' : '出库仓库'}</p>
-                            <select
-                              value={editForm.warehouseId}
-                              onChange={e => setStockDocEditForm(prev => prev ? { ...prev, warehouseId: e.target.value } : null)}
-                              className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-200"
-                            >
-                              {warehouses.map(w => (
-                                <option key={w.id} value={w.id}>{w.name}{w.code ? ` (${w.code})` : ''}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="bg-slate-50 rounded-xl px-4 py-2">
-                            <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">备注</p>
-                            <input
-                              type="text"
-                              value={editForm.reason}
-                              onChange={e => setStockDocEditForm(prev => prev ? { ...prev, reason: e.target.value } : null)}
-                              className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-200"
-                              placeholder="选填"
-                            />
-                          </div>
-                        </div>
-                        <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                          <table className="w-full text-left text-sm">
-                            <thead>
-                              <tr className="bg-slate-50 border-b border-slate-200">
-                                <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">物料</th>
-                                <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">数量</th>
-                                <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase w-16">单位</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {editForm.lines.map(({ productId, quantity }) => {
-                                const prod = products.find(p => p.id === productId);
-                                return (
-                                  <tr key={productId} className="border-b border-slate-100">
-                                    <td className="px-4 py-3 font-medium text-slate-800">{prod?.name ?? productId}</td>
-                                    <td className="px-4 py-3 text-right">
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        value={quantity}
-                                        onChange={e => {
-                                          const v = Number(e.target.value) || 0;
-                                          setStockDocEditForm(prev => prev ? {
-                                            ...prev,
-                                            lines: prev.lines.map(l => l.productId === productId ? { ...l, quantity: v } : l)
-                                          } : null);
-                                        }}
-                                        className="w-20 bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200"
-                                      />
-                                    </td>
-                                    <td className="px-4 py-3 text-slate-500">{getUnitName(productId)}</td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      <StockDocDetailModal
+        detail={stockDocDetail}
+        onClose={() => setStockDocDetail(null)}
+        onDetailChange={setStockDocDetail}
+        records={records}
+        orders={orders}
+        products={products}
+        warehouses={warehouses}
+        dictionaries={dictionaries}
+        onUpdateRecord={onUpdateRecord}
+        onDeleteRecord={onDeleteRecord}
+        userPermissions={userPermissions}
+        tenantRole={tenantRole}
+      />
 
-      {/* 领料退料流水弹窗 */}
-      {showStockFlowModal && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setShowStockFlowModal(false)} aria-hidden />
-          <div className="relative bg-white w-full max-w-6xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2"><ScrollText className="w-5 h-5 text-indigo-600" /> 领料退料流水</h3>
-              <button type="button" onClick={() => setShowStockFlowModal(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
-              <div className="flex items-center gap-2 mb-3">
-                <Filter className="w-4 h-4 text-slate-500" />
-                <span className="text-xs font-bold text-slate-500 uppercase">筛选</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 block mb-1">日期起</label>
-                  <input
-                    type="date"
-                    value={stockFlowFilterDateFrom}
-                    onChange={e => setStockFlowFilterDateFrom(e.target.value)}
-                    className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 block mb-1">日期止</label>
-                  <input
-                    type="date"
-                    value={stockFlowFilterDateTo}
-                    onChange={e => setStockFlowFilterDateTo(e.target.value)}
-                    className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 block mb-1">类型</label>
-                  <select
-                    value={stockFlowFilterType}
-                    onChange={e => setStockFlowFilterType(e.target.value as 'all' | 'STOCK_OUT' | 'STOCK_RETURN')}
-                    className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200 bg-white"
-                  >
-                    <option value="all">全部</option>
-                    <option value="STOCK_OUT">领料</option>
-                    <option value="STOCK_RETURN">退料</option>
-                  </select>
-                </div>
-                {productionLinkMode !== 'product' ? (
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 block mb-1">工单</label>
-                    <input
-                      type="text"
-                      value={stockFlowFilterOrderKeyword}
-                      onChange={e => setStockFlowFilterOrderKeyword(e.target.value)}
-                      placeholder="工单号模糊搜索"
-                      className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
-                    />
-                  </div>
-                ) : (
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 block mb-1">关联产品</label>
-                    <input
-                      type="text"
-                      value={stockFlowFilterOrderKeyword}
-                      onChange={e => setStockFlowFilterOrderKeyword(e.target.value)}
-                      placeholder="成品名称模糊搜索"
-                      className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
-                    />
-                  </div>
-                )}
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 block mb-1">物料</label>
-                  <input
-                    type="text"
-                    value={stockFlowFilterProductKeyword}
-                    onChange={e => setStockFlowFilterProductKeyword(e.target.value)}
-                    placeholder="物料名称模糊搜索"
-                    className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 block mb-1">单据号</label>
-                  <input
-                    type="text"
-                    value={stockFlowFilterDocNo}
-                    onChange={e => setStockFlowFilterDocNo(e.target.value)}
-                    placeholder="LL/TL 模糊搜索"
-                    className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
-                  />
-                </div>
-              </div>
-              <div className="mt-2 flex items-center gap-4">
-                <button
-                  type="button"
-                  onClick={() => { setStockFlowFilterType('all'); setStockFlowFilterOrderKeyword(''); setStockFlowFilterProductKeyword(''); setStockFlowFilterDocNo(''); setStockFlowFilterDateFrom(''); setStockFlowFilterDateTo(''); }}
-                  className="text-xs font-bold text-slate-500 hover:text-slate-700"
-                >
-                  清空筛选
-                </button>
-                <span className="text-xs text-slate-400">共 {filteredStockFlowRecords.length} 条</span>
-              </div>
-            </div>
-            <div className="flex-1 overflow-auto p-4">
-              {filteredStockFlowRecords.length === 0 ? (
-                <p className="text-slate-500 text-center py-12">暂无领料/退料流水</p>
-              ) : (
-                <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200">
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">单据号</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">类型</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">业务时间</th>
-                        {productionLinkMode !== 'product' ? (
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">工单</th>
-                        ) : (
-                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">关联产品</th>
-                        )}
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">物料</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">数量</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">外协工厂</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">原因/备注</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">经办</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap w-24">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredStockFlowRecords.map(rec => {
-                        const order = orders.find(o => o.id === rec.orderId);
-                        const matProduct = products.find(p => p.id === rec.productId);
-                        const sourceProd = rec.sourceProductId ? products.find(p => p.id === rec.sourceProductId) : null;
-                        const isReturn = rec.type === 'STOCK_RETURN';
-                        const isOutsourceDispatch = rec.type === 'STOCK_OUT' && !!rec.partner;
-                        const isOutsourceReturn = rec.type === 'STOCK_RETURN' && !!rec.partner;
-                        const docNo = rec.docNo ?? '';
-                        const openDetail = () => {
-                          if (!docNo) return;
-                          const detail = buildStockDocDetailFromDocNo(docNo);
-                          if (detail) setStockDocDetail(detail);
-                        };
-                        const linkCol =
-                          productionLinkMode === 'product'
-                            ? sourceProd?.name ?? (rec.orderId ? order?.orderNumber ?? '—' : '—')
-                            : rec.orderId
-                              ? order?.orderNumber ?? '—'
-                              : matProduct?.name ?? '—';
-                        const typeLabel = isOutsourceReturn ? '外退' : isReturn ? '退料' : isOutsourceDispatch ? '外发' : '领料';
-                        const typeClass = isOutsourceReturn ? 'bg-orange-100 text-orange-800' : isReturn ? 'bg-amber-100 text-amber-800' : isOutsourceDispatch ? 'bg-teal-100 text-teal-800' : 'bg-indigo-100 text-indigo-800';
-                        return (
-                          <tr key={rec.id} className="border-b border-slate-100 hover:bg-slate-50/50">
-                            <td className="px-4 py-3 text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">{rec.docNo ?? '—'}</td>
-                            <td className="px-4 py-3">
-                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${typeClass}`}>
-                                {isOutsourceReturn ? <Undo2 className="w-3 h-3" /> : isReturn ? <Undo2 className="w-3 h-3" /> : isOutsourceDispatch ? <Truck className="w-3 h-3" /> : <ArrowUpFromLine className="w-3 h-3" />}
-                                {typeLabel}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{rec.timestamp}</td>
-                            <td className="px-4 py-3 text-[10px] font-black text-indigo-600">{linkCol}</td>
-                            <td className="px-4 py-3 font-bold text-slate-800">{matProduct?.name ?? '未知物料'}</td>
-                            <td className="px-4 py-3 text-right font-black text-indigo-600">{rec.quantity}</td>
-                            <td className="px-4 py-3 text-xs font-bold text-teal-700 whitespace-nowrap">{rec.partner ?? '—'}</td>
-                            <td className="px-4 py-3 text-xs text-slate-500 max-w-[180px] truncate">{rec.reason ?? '—'}</td>
-                            <td className="px-4 py-3 text-right text-xs font-bold text-slate-600">{rec.operator}</td>
-                            <td className="px-4 py-3">
-                              {docNo && hasOpsPerm(tenantRole, userPermissions, 'production:material_records:view') ? (
-                                <button
-                                  type="button"
-                                  onClick={openDetail}
-                                  className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all whitespace-nowrap shrink-0"
-                                >
-                                  <FileText className="w-3.5 h-3.5" /> 详情
-                                </button>
-                              ) : null}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold">
-                        <td className="px-4 py-3" colSpan={10}>
-                          <span className="text-[10px] text-slate-500 uppercase mr-3">合计</span>
-                          <span className="text-xs text-indigo-600">领料 {countIssue} 条，{totalIssueQty}</span>
-                          <span className="text-slate-300 mx-2">|</span>
-                          <span className="text-xs text-amber-600">退料 {countReturn} 条，{totalReturnQty}</span>
-                          <span className="text-slate-300 mx-2">|</span>
-                          <span className="text-xs text-slate-700">净领料 {Math.round((totalIssueQty - totalReturnQty) * 100) / 100}</span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <StockFlowListModal
+        visible={showStockFlowModal}
+        onClose={() => setShowStockFlowModal(false)}
+        records={records}
+        orders={orders}
+        products={products}
+        productionLinkMode={productionLinkMode}
+        onOpenDocDetail={setStockDocDetail}
+        userPermissions={userPermissions}
+        tenantRole={tenantRole}
+      />
 
-      {showModal && stockModalMode && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/50" onClick={() => { setShowModal(false); setStockModalMode(null); }} aria-hidden />
-          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 p-4 space-y-4">
-            <h3 className="text-lg font-black text-slate-900">
-              {stockModalMode === 'stock_return' ? '生产退料' : '生产领料'}
-            </h3>
-            {form.orderId && (
-              <div className="text-sm">
-                <span className="text-slate-500">工单：</span>
-                <span className="font-bold text-slate-800">{orders.find(o => o.id === form.orderId)?.orderNumber ?? form.orderId}</span>
-              </div>
-            )}
-            {warehouses.length > 0 && (
-              <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
-                  {stockModalMode === 'stock_return' ? '退回仓库' : '出库仓库'}
-                </label>
-                <select
-                  value={form.warehouseId}
-                  onChange={e => setForm(f => ({ ...f, warehouseId: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
-                >
-                  {warehouses.map(w => (
-                    <option key={w.id} value={w.id}>{w.name}{w.code ? ` (${w.code})` : ''}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div>
-              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">物料</label>
-              <select
-                value={form.productId}
-                onChange={e => setForm(f => ({ ...f, productId: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
-              >
-                <option value="">请选择物料</option>
-                {[...products].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id)).map(p => (
-                  <option key={p.id} value={p.id}>{p.name} {p.sku ? `(${p.sku})` : ''}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">数量</label>
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={form.quantity || ''}
-                onChange={e => setForm(f => ({ ...f, quantity: Number(e.target.value) || 0 }))}
-                className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
-                placeholder="0"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">原因/备注</label>
-              <input
-                type="text"
-                value={form.reason || ''}
-                onChange={e => setForm(f => ({ ...f, reason: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
-                placeholder="选填"
-              />
-            </div>
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => { setShowModal(false); setStockModalMode(null); }}
-                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                onClick={handleAdd}
-                disabled={!form.productId || (form.quantity ?? 0) <= 0}
-                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-              >
-                确认
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <StockMaterialFormModal
+        visible={showModal}
+        onClose={() => { setShowModal(false); setStockModalMode(null); }}
+        stockModalMode={stockModalMode}
+        orders={orders}
+        products={products}
+        warehouses={warehouses}
+        productionLinkMode={productionLinkMode}
+        onAddRecord={onAddRecord}
+        getNextStockDocNo={getNextStockDocNo}
+      />
     </div>
   );
 };

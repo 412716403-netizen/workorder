@@ -1,31 +1,29 @@
-import React, { useState, useMemo } from 'react';
-import { TableVirtuoso } from 'react-virtuoso';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
-  Plus,
   X,
   Package,
   ChevronRight,
   ChevronDown,
   MoveRight,
   Search,
-  Filter,
-  Layers,
   FileText,
   ClipboardList,
   ArrowLeft,
-  Save,
-  Trash2,
-  Pencil,
   ScrollText,
   Warehouse as WarehouseIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { SearchableProductSelect } from '../../components/SearchableProductSelect';
-import { Product, Warehouse, ProductCategory, Partner, AppDictionaries, ProductVariant } from '../../types';
-import { sortedVariantColorEntries, sortedColorEntries } from '../../utils/sortVariantsByProduct';
+import { Product, Warehouse, ProductCategory, Partner, AppDictionaries } from '../../types';
+import { sortedColorEntries } from '../../utils/sortVariantsByProduct';
 import { useProgressiveList } from '../../hooks/useProgressiveList';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
-import { useConfirm } from '../../contexts/ConfirmContext';
+import StocktakeListModal from './StocktakeListModal';
+import TransferListModal from './TransferListModal';
+import TransferOrderModal from './TransferOrderModal';
+import StocktakeOrderModal from './StocktakeOrderModal';
+import WarehouseFlowModal from './WarehouseFlowModal';
+import ProductFlowDetailModal from './ProductFlowDetailModal';
+import WarehouseFlowDocumentDetailModal from './WarehouseFlowDocumentDetailModal';
 
 interface WarehouseProps {
   products: Product[];
@@ -78,7 +76,6 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   formatQtyDisplay,
   parseRecordTime,
 }) => {
-  const confirm = useConfirm();
   const recordsList = records ?? [];
   const ordersList = orders ?? [];
 
@@ -99,17 +96,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [warehouseFlowModalOpen, setWarehouseFlowModalOpen] = useState(false);
   const [warehouseFlowDetailKey, setWarehouseFlowDetailKey] = useState<string | null>(null);
-  const [whFlowDateFrom, setWhFlowDateFrom] = useState('');
-  const [whFlowDateTo, setWhFlowDateTo] = useState('');
-  const [whFlowType, setWhFlowType] = useState<string>('all');
-  const [whFlowWarehouse, setWhFlowWarehouse] = useState<string>('all');
-  const [whFlowDocNo, setWhFlowDocNo] = useState('');
-  const [whFlowProduct, setWhFlowProduct] = useState('');
   const [productFlowDetail, setProductFlowDetail] = useState<{ productId: string; productName: string; warehouseId: string | null; warehouseName: string | null } | null>(null);
-  const [productFlowDateFrom, setProductFlowDateFrom] = useState('');
-  const [productFlowDateTo, setProductFlowDateTo] = useState('');
-  const [productFlowType, setProductFlowType] = useState<string>('all');
-  const [productFlowWarehouseId, setProductFlowWarehouseId] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebouncedValue(searchTerm);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
@@ -119,9 +106,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   const [transferItems, setTransferItems] = useState<{ id: string; productId: string; quantity?: number; variantQuantities?: Record<string, number> }[]>([]);
   const [editingTransferDocNumber, setEditingTransferDocNumber] = useState<string | null>(null);
   const [transferListModalOpen, setTransferListModalOpen] = useState(false);
-  const [transferDetailDocNumber, setTransferDetailDocNumber] = useState<string | null>(null);
   const [stocktakeListModalOpen, setStocktakeListModalOpen] = useState(false);
-  const [stocktakeDetailDocNumber, setStocktakeDetailDocNumber] = useState<string | null>(null);
   const [stocktakeModalOpen, setStocktakeModalOpen] = useState(false);
   const [stocktakeForm, setStocktakeForm] = useState<{ warehouseId: string; stocktakeDate: string; note: string }>({
     warehouseId: '', stocktakeDate: new Date().toISOString().split('T')[0], note: ''
@@ -355,6 +340,92 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
     setStocktakeItems([]);
   };
 
+  // ── 列表弹层回调 ──
+  const handleCreateStocktake = useCallback(() => {
+    setEditingStocktakeDocNumber(null);
+    setStocktakeForm({ warehouseId: '', stocktakeDate: new Date().toISOString().split('T')[0], note: '' });
+    setStocktakeItems([]);
+    setStocktakeListModalOpen(false);
+    setStocktakeModalOpen(true);
+  }, []);
+
+  const handleEditStocktake = useCallback((docNumber: string, docItems: any[]) => {
+    setEditingStocktakeDocNumber(docNumber);
+    const first = docItems[0];
+    setStocktakeForm({
+      warehouseId: first.warehouseId || '',
+      stocktakeDate: (first.createdAt || '').toString().slice(0, 10) || new Date().toISOString().split('T')[0],
+      note: first.note || ''
+    });
+    const groups: Record<string, any[]> = {};
+    docItems.forEach((item: any) => {
+      const gid = item.lineGroupId ?? item.id;
+      if (!groups[gid]) groups[gid] = [];
+      groups[gid].push(item);
+    });
+    setStocktakeItems(Object.entries(groups).map(([gid, grp]) => {
+      const firstItem = grp[0];
+      const variantQuantities: Record<string, number> = {};
+      let quantity = 0;
+      grp.forEach((item: any) => {
+        if (item.variantId) {
+          variantQuantities[item.variantId] = (variantQuantities[item.variantId] ?? 0) + (item.quantity ?? 0);
+        } else {
+          quantity += item.quantity ?? 0;
+        }
+      });
+      const hasVariants = Object.keys(variantQuantities).length > 0;
+      return hasVariants
+        ? { id: gid, productId: firstItem.productId, variantQuantities }
+        : { id: gid, productId: firstItem.productId, quantity };
+    }));
+    setStocktakeListModalOpen(false);
+    setStocktakeModalOpen(true);
+  }, []);
+
+  const handleCreateTransfer = useCallback(() => {
+    setEditingTransferDocNumber(null);
+    setTransferForm({ fromWarehouseId: '', toWarehouseId: '', transferDate: new Date().toISOString().split('T')[0], note: '' });
+    setTransferItems([]);
+    setTransferListModalOpen(false);
+    setTransferModalOpen(true);
+  }, []);
+
+  const handleEditTransfer = useCallback((docNumber: string, docItems: any[]) => {
+    setEditingTransferDocNumber(docNumber);
+    const first = docItems[0];
+    setTransferForm({
+      fromWarehouseId: first.fromWarehouseId || '',
+      toWarehouseId: first.toWarehouseId || '',
+      transferDate: (first.createdAt || '').toString().slice(0, 10) || new Date().toISOString().split('T')[0],
+      note: first.note || ''
+    });
+    const groups: Record<string, any[]> = {};
+    docItems.forEach((item: any) => {
+      const gid = item.lineGroupId ?? item.id;
+      if (!groups[gid]) groups[gid] = [];
+      groups[gid].push(item);
+    });
+    setTransferItems(Object.entries(groups).map(([gid, grp]) => {
+      const firstItem = grp[0];
+      const variantQuantities: Record<string, number> = {};
+      let quantity = 0;
+      grp.forEach((item: any) => {
+        if (item.variantId) {
+          variantQuantities[item.variantId] = (variantQuantities[item.variantId] ?? 0) + (item.quantity ?? 0);
+        } else {
+          quantity += item.quantity ?? 0;
+        }
+      });
+      const hasVariants = Object.keys(variantQuantities).length > 0;
+      return hasVariants
+        ? { id: gid, productId: firstItem.productId, variantQuantities }
+        : { id: gid, productId: firstItem.productId, quantity };
+    }));
+    setTransferListModalOpen(false);
+    setTransferModalOpen(true);
+  }, []);
+
   // ── 调拨单按单号分组 ──
   const transferOrdersGrouped = useMemo(() => {
     const filtered = recordsList.filter((r: any) => r.type === 'TRANSFER');
@@ -563,60 +634,6 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
       .sort((a, b) => (b as any)._sortTs - (a as any)._sortTs);
   }, [recordsList, prodRecords, products, warehouses, ordersList, parseRecordTime, productMapPSI, warehouseMapPSI]);
 
-  const filteredWarehouseFlowRows = useMemo(() => {
-    let rows = warehouseFlowRows;
-    if (whFlowDateFrom) rows = rows.filter(r => r.dateStr >= whFlowDateFrom);
-    if (whFlowDateTo) rows = rows.filter(r => r.dateStr <= whFlowDateTo);
-    if (whFlowType !== 'all') {
-      if (whFlowType === 'SALES_RETURN') rows = rows.filter(r => r.type === 'SALES_BILL' && r.quantity < 0);
-      else if (whFlowType === 'SALES_BILL') rows = rows.filter(r => r.type === 'SALES_BILL' && r.quantity >= 0);
-      else rows = rows.filter(r => r.type === whFlowType);
-    }
-    if (whFlowWarehouse !== 'all') {
-      rows = rows.filter(r => (r.warehouseId || '') === whFlowWarehouse);
-    }
-    if (whFlowDocNo.trim()) {
-      const t = whFlowDocNo.trim().toLowerCase();
-      rows = rows.filter(r => (r.docNumber || '').toLowerCase().includes(t));
-    }
-    if (whFlowProduct.trim()) {
-      const t = whFlowProduct.trim().toLowerCase();
-      rows = rows.filter(r => r.productName.toLowerCase().includes(t) || r.productSku.toLowerCase().includes(t));
-    }
-    return rows;
-  }, [warehouseFlowRows, whFlowDateFrom, whFlowDateTo, whFlowType, whFlowWarehouse, whFlowDocNo, whFlowProduct]);
-
-  // ── 产品流水详情 ──
-  const productFlowDetailRows = useMemo(() => {
-    if (!productFlowDetail) return [];
-    const pid = productFlowDetail.productId;
-    const whId = productFlowDetail.warehouseId;
-    let rows = warehouseFlowRows.filter((r: any) => r.productId === pid);
-    if (whId) {
-      rows = rows.filter((r: any) => {
-        const rec = r.record;
-        if (rec.type === 'TRANSFER') return rec.toWarehouseId === whId || rec.fromWarehouseId === whId;
-        if (rec.type === 'SALES_BILL') return rec.warehouseId === whId;
-        return (r.warehouseId || rec.warehouseId) === whId;
-      });
-    }
-    return rows.sort((a: any, b: any) => parseRecordTime(b.record) - parseRecordTime(a.record));
-  }, [warehouseFlowRows, productFlowDetail, parseRecordTime]);
-
-  const productFlowFilteredRows = useMemo(() => {
-    let rows = productFlowDetailRows;
-    if (productFlowDateFrom) rows = rows.filter((r: any) => (r.dateStr || '') >= productFlowDateFrom);
-    if (productFlowDateTo) rows = rows.filter((r: any) => (r.dateStr || '') <= productFlowDateTo);
-    if (productFlowType !== 'all') {
-      if (productFlowType === 'SALES_RETURN') rows = rows.filter((r: any) => r.type === 'SALES_BILL' && r.quantity < 0);
-      else rows = rows.filter((r: any) => r.type === productFlowType);
-    }
-    if (productFlowWarehouseId !== 'all') rows = rows.filter((r: any) => (r.warehouseId || '') === productFlowWarehouseId);
-    return rows;
-  }, [productFlowDetailRows, productFlowDateFrom, productFlowDateTo, productFlowType, productFlowWarehouseId]);
-
-  const productFlowTotalQuantity = useMemo(() => productFlowFilteredRows.reduce((s: number, r: any) => s + (r.quantity ?? 0), 0), [productFlowFilteredRows]);
-
   // ── 按仓库聚合的库存列表 ──
   const warehouseStockList = useMemo(() => {
     return warehouses.map(wh => {
@@ -667,7 +684,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                {hasPsiPerm('psi:warehouse_stocktake:view') && (
                <button
                  type="button"
-                 onClick={() => { setStocktakeListModalOpen(true); setStocktakeDetailDocNumber(null); }}
+                 onClick={() => setStocktakeListModalOpen(true)}
                  className="flex items-center gap-2 px-5 py-2.5 bg-white border border-indigo-200 text-indigo-600 rounded-xl text-sm font-bold transition-all hover:bg-indigo-50"
                >
                  <ClipboardList className="w-4 h-4" /> 盘点单
@@ -676,7 +693,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                {hasPsiPerm('psi:warehouse_transfer:view') && (
                <button
                  type="button"
-                 onClick={() => { setTransferListModalOpen(true); setTransferDetailDocNumber(null); }}
+                 onClick={() => setTransferListModalOpen(true)}
                  className="flex items-center gap-2 px-5 py-2.5 bg-white border border-indigo-200 text-indigo-600 rounded-xl text-sm font-bold transition-all hover:bg-indigo-50"
                >
                  <MoveRight className="w-4 h-4" /> 调拨单
@@ -1030,1083 +1047,104 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                  </div>
                )}
 
-               {stocktakeListModalOpen && (
-                 <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-                   <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setStocktakeListModalOpen(false); setStocktakeDetailDocNumber(null); }} aria-hidden />
-                   <div className="relative bg-white w-full max-w-3xl max-h-[85vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-                     <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/50">
-                       <div className="flex items-center gap-3">
-                         {stocktakeDetailDocNumber ? (
-                           <button type="button" onClick={() => setStocktakeDetailDocNumber(null)} className="p-2 text-slate-500 hover:text-indigo-600 rounded-full hover:bg-slate-200/80 transition-colors" aria-label="返回列表"><ArrowLeft className="w-5 h-5" /></button>
-                         ) : null}
-                         <div>
-                           <h3 className="font-black text-slate-800 flex items-center gap-2 text-lg"><ClipboardList className="w-5 h-5 text-indigo-600" /> {stocktakeDetailDocNumber ? `盘点单详情 - ${stocktakeDetailDocNumber}` : '盘点单'}</h3>
-                           <p className="text-xs text-slate-500 mt-0.5">{stocktakeDetailDocNumber ? '查看明细，可点击「编辑」修改' : '盘点单列表，可查看详情或新增'}</p>
-                         </div>
-                       </div>
-                       <div className="flex items-center gap-2">
-                         {!stocktakeDetailDocNumber && hasPsiPerm('psi:warehouse_stocktake:create') && (
-                           <button type="button" onClick={() => { setEditingStocktakeDocNumber(null); setStocktakeForm({ warehouseId: '', stocktakeDate: new Date().toISOString().split('T')[0], note: '' }); setStocktakeItems([]); setStocktakeListModalOpen(false); setStocktakeModalOpen(true); }} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all">
-                             <Plus className="w-4 h-4" /> 新增盘点单
-                           </button>
-                         )}
-                         <button type="button" onClick={() => { setStocktakeListModalOpen(false); setStocktakeDetailDocNumber(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200/80 transition-colors" aria-label="关闭"><X className="w-5 h-5" /></button>
-                       </div>
-                     </div>
-                     <div className="flex-1 overflow-auto p-4">
-                       {!stocktakeDetailDocNumber ? (
-                         Object.keys(stocktakeOrdersGrouped).length === 0 ? (
-                           <div className="py-16 text-center text-slate-500">
-                             <FileText className="w-12 h-12 mx-auto mb-3 text-slate-200" />
-                             <p className="text-sm font-medium">暂无盘点单</p>
-                             <p className="text-xs mt-1">点击「新增盘点单」创建第一张盘点单</p>
-                           </div>
-                         ) : (
-                           <div className="space-y-3">
-                             {Object.entries(stocktakeOrdersGrouped).map(([docNum, docItems]) => {
-                               const first = docItems[0];
-                               const totalQty = docItems.reduce((s: number, i: any) => s + (i.quantity ?? 0), 0);
-                               const whName = warehouseMapPSI.get(first.warehouseId)?.name ?? '—';
-                               return (
-                                 <div key={docNum} className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                                   <div className="flex items-center gap-4">
-                                     <span className="text-[10px] font-mono font-black text-indigo-600 uppercase tracking-wide">{docNum}</span>
-                                     <span className="text-sm text-slate-600">{whName}</span>
-                                     <span className="text-xs text-slate-400">{(first.createdAt || '').toString().slice(0, 10)}</span>
-                                     <span className="text-sm font-bold text-slate-700">共 {totalQty} 件</span>
-                                   </div>
-                                   <div className="flex items-center gap-2">
-                                     <button type="button" onClick={() => setStocktakeDetailDocNumber(docNum)} className="px-3 py-1.5 text-[11px] font-bold rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1">
-                                       <FileText className="w-3.5 h-3.5" /> 查看详情
-                                     </button>
-                                   </div>
-                                 </div>
-                               );
-                             })}
-                           </div>
-                         )
-                       ) : (
-                         (() => {
-                           const docItems = stocktakeOrdersGrouped[stocktakeDetailDocNumber];
-                           if (!docItems || docItems.length === 0) return <p className="text-slate-500 py-8">未找到该盘点单</p>;
-                           const first = docItems[0];
-                           const whName = warehouseMapPSI.get(first.warehouseId)?.name ?? '—';
-                           const byLineGroup = new Map<string, any[]>();
-                           docItems.forEach((r: any) => {
-                             const gid = r.lineGroupId ?? r.id;
-                             if (!byLineGroup.has(gid)) byLineGroup.set(gid, []);
-                             byLineGroup.get(gid)!.push(r);
-                           });
-                           const openStocktakeForEdit = () => {
-                             setEditingStocktakeDocNumber(stocktakeDetailDocNumber);
-                             setStocktakeForm({
-                               warehouseId: first.warehouseId || '',
-                               stocktakeDate: (first.createdAt || '').toString().slice(0, 10) || new Date().toISOString().split('T')[0],
-                               note: first.note || ''
-                             });
-                             const groups: Record<string, any[]> = {};
-                             docItems.forEach((item: any) => {
-                               const gid = item.lineGroupId ?? item.id;
-                               if (!groups[gid]) groups[gid] = [];
-                               groups[gid].push(item);
-                             });
-                             setStocktakeItems(Object.entries(groups).map(([gid, grp]) => {
-                               const firstItem = grp[0];
-                               const variantQuantities: Record<string, number> = {};
-                               let quantity = 0;
-                               grp.forEach((item: any) => {
-                                 if (item.variantId) {
-                                   variantQuantities[item.variantId] = (variantQuantities[item.variantId] ?? 0) + (item.quantity ?? 0);
-                                 } else {
-                                   quantity += item.quantity ?? 0;
-                                 }
-                               });
-                               const hasVariants = Object.keys(variantQuantities).length > 0;
-                               return hasVariants
-                                 ? { id: gid, productId: firstItem.productId, variantQuantities }
-                                 : { id: gid, productId: firstItem.productId, quantity };
-                             }));
-                             setStocktakeListModalOpen(false);
-                             setStocktakeDetailDocNumber(null);
-                             setStocktakeModalOpen(true);
-                           };
-                           return (
-                             <div className="space-y-4">
-                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                                 <div><span className="text-slate-400 block text-xs font-bold mb-0.5">盘点仓库</span><span className="font-bold text-slate-800">{whName}</span></div>
-                                 <div><span className="text-slate-400 block text-xs font-bold mb-0.5">盘点日期</span><span className="font-bold text-slate-800">{(first.createdAt || '').toString().slice(0, 10)}</span></div>
-                                 {first.note && <div className="col-span-2"><span className="text-slate-400 block text-xs font-bold mb-0.5">备注</span><span className="text-slate-600">{first.note}</span></div>}
-                               </div>
-                               <div>
-                                 <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">盘点明细</h4>
-                                 <p className="text-xs text-slate-500 mb-2">「系统数量」= 本单保存时该产品在系统中的数量（盘前），「实盘数量」= 本单盘点录入的数量，便于了解从多少数量盘库到多少数量；有颜色尺码会展开各规格的当时系统数与实盘数。</p>
-                                 <div className="border border-slate-200 rounded-xl overflow-hidden">
-                                   <table className="w-full text-left text-sm">
-                                     <thead><tr className="bg-slate-50 border-b border-slate-200"><th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">产品</th><th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">系统数量（盘前）</th><th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">实盘数量</th></tr></thead>
-                                     <tbody>
-                                       {Array.from(byLineGroup.entries()).map(([gid, grp]) => {
-                                         const firstLine = grp[0];
-                                         const product = productMapPSI.get(firstLine.productId);
-                                         const whId = first.warehouseId;
-                                         const qty = grp.reduce((s: number, r: any) => s + (r.quantity ?? 0), 0);
-                                         const hasVariants = (product?.variants?.length ?? 0) > 0;
-                                         const hasSavedSysQty = grp.some((r: any) => typeof r.systemQuantity === 'number');
-                                         const systemQtyAtStocktake = hasSavedSysQty
-                                           ? grp.reduce((s: number, r: any) => s + (r.systemQuantity ?? 0), 0)
-                                           : (() => { const diffQ = docItems.find((r: any) => r.productId === firstLine.productId)?.diffQuantity ?? 0; return qty - Number(diffQ); })();
-                                         const stGroupedByColor: Record<string, ProductVariant[]> = {};
-                                         if (product?.variants) {
-                                           product.variants.forEach((v: ProductVariant) => {
-                                             if (!stGroupedByColor[v.colorId]) stGroupedByColor[v.colorId] = [];
-                                             stGroupedByColor[v.colorId].push(v);
-                                           });
-                                         }
-                                         const variantQtyFromGrp = (variantId: string) => grp.reduce((s: number, r: any) => s + (r.variantId === variantId ? (r.quantity ?? 0) : 0), 0);
-                                         const variantSysFromGrp = (variantId: string) => {
-                                           const rec = grp.find((r: any) => (r.variantId || '') === variantId);
-                                           return typeof rec?.systemQuantity === 'number' ? rec.systemQuantity : null;
-                                         };
-                                         return (
-                                           <React.Fragment key={gid}>
-                                             <tr className="border-b border-slate-100">
-                                               <td className="px-4 py-3 font-bold text-slate-800">{product?.name ?? '—'} <span className="text-slate-400 font-normal text-xs">{product?.sku ?? ''}</span></td>
-                                               <td className="px-4 py-3 text-right font-bold text-slate-600">{systemQtyAtStocktake} {product ? getUnitName(product.id) : 'PCS'}</td>
-                                               <td className="px-4 py-3 text-right font-black text-indigo-600">{qty} {product ? getUnitName(product.id) : 'PCS'}</td>
-                                             </tr>
-                                             {hasVariants && whId && (
-                                               <tr className="border-b border-slate-100 last:border-0 bg-slate-50/60">
-                                                 <td colSpan={3} className="px-4 py-3">
-                                                   <div className="space-y-3">
-                                                     {sortedVariantColorEntries(stGroupedByColor, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
-                                                       const color = dictionaries?.colors?.find(c => c.id === colorId);
-                                                       return (
-                                                         <div key={colorId} className="flex flex-wrap items-center gap-4 bg-white p-3 rounded-xl border border-slate-100">
-                                                           <div className="flex items-center gap-2 w-28 shrink-0">
-                                                             <div className="w-4 h-4 rounded-full border border-slate-200 shrink-0" style={{ backgroundColor: (color as any)?.value || '#e2e8f0' }} />
-                                                             <span className="text-xs font-bold text-slate-700">{color?.name || '未命名'}</span>
-                                                           </div>
-                                                           <div className="flex flex-wrap gap-4">
-                                                             {colorVariants.map((v: ProductVariant) => {
-                                                               const size = dictionaries?.sizes?.find(s => s.id === v.sizeId);
-                                                               const actualV = variantQtyFromGrp(v.id);
-                                                               const sysV = variantSysFromGrp(v.id) ?? actualV;
-                                                               return (
-                                                                 <div key={v.id} className="flex flex-col gap-0.5 w-24">
-                                                                   <span className="text-[9px] font-bold text-slate-400 uppercase">{size?.name || v.skuSuffix}</span>
-                                                                   <div className="flex items-center gap-2 text-xs">
-                                                                     <span className="text-slate-500">系统 <span className="font-bold text-slate-600">{sysV}</span></span>
-                                                                     <span className="text-slate-400">/</span>
-                                                                     <span className="text-indigo-600 font-black">实盘 {actualV}</span>
-                                                                   </div>
-                                                                 </div>
-                                                               );
-                                                             })}
-                                                           </div>
-                                                         </div>
-                                                       );
-                                                     })}
-                                                   </div>
-                                                 </td>
-                                               </tr>
-                                             )}
-                                           </React.Fragment>
-                                         );
-                                       })}
-                                     </tbody>
-                                   </table>
-                                 </div>
-                               </div>
-                               <div className="flex justify-end items-center gap-3 pt-2">
-                                 {onDeleteRecords && hasPsiPerm('psi:warehouse_stocktake:delete') && (
-                                   <button type="button" onClick={() => { void confirm({ message: '确定要删除该盘点单吗？', danger: true }).then((ok) => { if (!ok) return; onDeleteRecords('STOCKTAKE', stocktakeDetailDocNumber); setStocktakeDetailDocNumber(null); setStocktakeListModalOpen(false); }); }} className="flex items-center gap-2 px-5 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-rose-50 hover:text-rose-600 hover:border-rose-100 transition-all">
-                                     <Trash2 className="w-4 h-4" /> 删除盘点单
-                                   </button>
-                                 )}
-                                 {hasPsiPerm('psi:warehouse_stocktake:edit') && (
-                                 <button type="button" onClick={openStocktakeForEdit} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all">
-                                   <Pencil className="w-4 h-4" /> 编辑盘点单
-                                 </button>
-                                 )}
-                               </div>
-                             </div>
-                           );
-                         })()
-                       )}
-                     </div>
-                   </div>
-                 </div>
-               )}
-
-               {transferListModalOpen && (
-                 <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-                   <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setTransferListModalOpen(false); setTransferDetailDocNumber(null); }} aria-hidden />
-                   <div className="relative bg-white w-full max-w-3xl max-h-[85vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-                     <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/50">
-                       <div className="flex items-center gap-3">
-                         {transferDetailDocNumber ? (
-                           <button type="button" onClick={() => setTransferDetailDocNumber(null)} className="p-2 text-slate-500 hover:text-indigo-600 rounded-full hover:bg-slate-200/80 transition-colors" aria-label="返回列表"><ArrowLeft className="w-5 h-5" /></button>
-                         ) : null}
-                         <div>
-                           <h3 className="font-black text-slate-800 flex items-center gap-2 text-lg"><MoveRight className="w-5 h-5 text-indigo-600" /> {transferDetailDocNumber ? `调拨单详情 - ${transferDetailDocNumber}` : '调拨单'}</h3>
-                           <p className="text-xs text-slate-500 mt-0.5">{transferDetailDocNumber ? '查看明细，可点击「编辑」修改' : '调拨单列表，可查看详情或新建'}</p>
-                         </div>
-                       </div>
-                       <div className="flex items-center gap-2">
-                         {!transferDetailDocNumber && hasPsiPerm('psi:warehouse_transfer:create') && (
-                           <button type="button" onClick={() => { setEditingTransferDocNumber(null); setTransferForm({ fromWarehouseId: '', toWarehouseId: '', transferDate: new Date().toISOString().split('T')[0], note: '' }); setTransferItems([]); setTransferListModalOpen(false); setTransferModalOpen(true); }} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all">
-                             <Plus className="w-4 h-4" /> 新建调拨单
-                           </button>
-                         )}
-                         <button type="button" onClick={() => { setTransferListModalOpen(false); setTransferDetailDocNumber(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200/80 transition-colors" aria-label="关闭"><X className="w-5 h-5" /></button>
-                       </div>
-                     </div>
-                     <div className="flex-1 overflow-auto p-4">
-                       {!transferDetailDocNumber ? (
-                         Object.keys(transferOrdersGrouped).length === 0 ? (
-                           <div className="py-16 text-center text-slate-500">
-                             <FileText className="w-12 h-12 mx-auto mb-3 text-slate-200" />
-                             <p className="text-sm font-medium">暂无调拨单</p>
-                             <p className="text-xs mt-1">点击「新建调拨单」创建第一张调拨单</p>
-                           </div>
-                         ) : (
-                           <div className="space-y-3">
-                             {Object.entries(transferOrdersGrouped).map(([docNum, docItems]) => {
-                               const first = docItems[0];
-                               const totalQty = docItems.reduce((s: number, i: any) => s + (i.quantity ?? 0), 0);
-                               const fromName = warehouseMapPSI.get(first.fromWarehouseId)?.name ?? '—';
-                               const toName = warehouseMapPSI.get(first.toWarehouseId)?.name ?? '—';
-                               return (
-                                 <div key={docNum} className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors">
-                                   <div className="flex items-center gap-4">
-                                     <span className="text-[10px] font-mono font-black text-indigo-600 uppercase tracking-wide">{docNum}</span>
-                                     <span className="text-sm text-slate-600">{fromName} → {toName}</span>
-                                     <span className="text-xs text-slate-400">{(first.createdAt || '').toString().slice(0, 10)}</span>
-                                     <span className="text-sm font-bold text-slate-700">共 {totalQty} 件</span>
-                                   </div>
-                                   <div className="flex items-center gap-2">
-                                     <button type="button" onClick={() => setTransferDetailDocNumber(docNum)} className="px-3 py-1.5 text-[11px] font-bold rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1">
-                                       <FileText className="w-3.5 h-3.5" /> 查看详情
-                                     </button>
-                                     {onDeleteRecords && hasPsiPerm('psi:warehouse_transfer:delete') && (
-                                       <button type="button" onClick={() => { void confirm({ message: '确定要删除该调拨单吗？', danger: true }).then((ok) => { if (!ok) return; onDeleteRecords('TRANSFER', docNum); }); }} className="px-3 py-1.5 text-[11px] font-bold rounded-xl border border-slate-200 text-slate-500 bg-white hover:bg-rose-50 hover:text-rose-600 hover:border-rose-100 transition-all flex items-center gap-1">
-                                         <Trash2 className="w-3.5 h-3.5" /> 删除
-                                       </button>
-                                     )}
-                                   </div>
-                                 </div>
-                               );
-                             })}
-                           </div>
-                         )
-                       ) : (
-                         (() => {
-                           const docItems = transferOrdersGrouped[transferDetailDocNumber];
-                           if (!docItems || docItems.length === 0) return <p className="text-slate-500 py-8">未找到该调拨单</p>;
-                           const first = docItems[0];
-                           const fromName = warehouseMapPSI.get(first.fromWarehouseId)?.name ?? '—';
-                           const toName = warehouseMapPSI.get(first.toWarehouseId)?.name ?? '—';
-                           const byLineGroup = new Map<string, any[]>();
-                           docItems.forEach((r: any) => {
-                             const gid = r.lineGroupId ?? r.id;
-                             if (!byLineGroup.has(gid)) byLineGroup.set(gid, []);
-                             byLineGroup.get(gid)!.push(r);
-                           });
-                           const openTransferForEdit = () => {
-                             setEditingTransferDocNumber(transferDetailDocNumber);
-                             setTransferForm({
-                               fromWarehouseId: first.fromWarehouseId || '',
-                               toWarehouseId: first.toWarehouseId || '',
-                               transferDate: (first.createdAt || '').toString().slice(0, 10) || new Date().toISOString().split('T')[0],
-                               note: first.note || ''
-                             });
-                             const groups: Record<string, any[]> = {};
-                             docItems.forEach((item: any) => {
-                               const gid = item.lineGroupId ?? item.id;
-                               if (!groups[gid]) groups[gid] = [];
-                               groups[gid].push(item);
-                             });
-                             setTransferItems(Object.entries(groups).map(([gid, grp]) => {
-                               const firstItem = grp[0];
-                               const variantQuantities: Record<string, number> = {};
-                               let quantity = 0;
-                               grp.forEach((item: any) => {
-                                 if (item.variantId) {
-                                   variantQuantities[item.variantId] = (variantQuantities[item.variantId] ?? 0) + (item.quantity ?? 0);
-                                 } else {
-                                   quantity += item.quantity ?? 0;
-                                 }
-                               });
-                               const hasVariants = Object.keys(variantQuantities).length > 0;
-                               return hasVariants
-                                 ? { id: gid, productId: firstItem.productId, variantQuantities }
-                                 : { id: gid, productId: firstItem.productId, quantity };
-                             }));
-                             setTransferListModalOpen(false);
-                             setTransferDetailDocNumber(null);
-                             setTransferModalOpen(true);
-                           };
-                           return (
-                             <div className="space-y-4">
-                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                                 <div><span className="text-slate-400 block text-xs font-bold mb-0.5">调出仓库</span><span className="font-bold text-slate-800">{fromName}</span></div>
-                                 <div><span className="text-slate-400 block text-xs font-bold mb-0.5">调入仓库</span><span className="font-bold text-slate-800">{toName}</span></div>
-                                 <div><span className="text-slate-400 block text-xs font-bold mb-0.5">调拨日期</span><span className="font-bold text-slate-800">{(first.createdAt || '').toString().slice(0, 10)}</span></div>
-                                 {first.note && <div className="col-span-2"><span className="text-slate-400 block text-xs font-bold mb-0.5">备注</span><span className="text-slate-600">{first.note}</span></div>}
-                               </div>
-                               <div>
-                                 <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">调拨明细</h4>
-                                 <div className="border border-slate-200 rounded-xl overflow-hidden">
-                                   <table className="w-full text-left text-sm">
-                                     <thead><tr className="bg-slate-50 border-b border-slate-200"><th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">产品</th><th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">数量</th></tr></thead>
-                                     <tbody>
-                                       {Array.from(byLineGroup.entries()).map(([gid, grp]) => {
-                                         const firstLine = grp[0];
-                                         const product = productMapPSI.get(firstLine.productId);
-                                         const qty = grp.reduce((s: number, r: any) => s + (r.quantity ?? 0), 0);
-                                         return (
-                                           <tr key={gid} className="border-b border-slate-100 last:border-0"><td className="px-4 py-3 font-bold text-slate-800">{product?.name ?? '—'} <span className="text-slate-400 font-normal text-xs">{product?.sku ?? ''}</span></td><td className="px-4 py-3 text-right font-black text-indigo-600">{qty} {product ? getUnitName(product.id) : 'PCS'}</td></tr>
-                                         );
-                                       })}
-                                     </tbody>
-                                   </table>
-                                 </div>
-                               </div>
-                               {hasPsiPerm('psi:warehouse_transfer:edit') && (
-                               <div className="flex justify-end pt-2">
-                                 <button type="button" onClick={openTransferForEdit} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all">
-                                   <Pencil className="w-4 h-4" /> 编辑调拨单
-                                 </button>
-                               </div>
-                               )}
-                             </div>
-                           );
-                         })()
-                       )}
-                     </div>
-                   </div>
-                 </div>
-               )}
-
-               {transferModalOpen && (
-                 <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-                   <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setTransferModalOpen(false); setEditingTransferDocNumber(null); }} aria-hidden />
-                   <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-                     <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/50">
-                       <div>
-                         <h3 className="font-black text-slate-800 flex items-center gap-2 text-lg"><MoveRight className="w-5 h-5 text-indigo-600" /> {editingTransferDocNumber ? '编辑调拨单' : '调拨单'}</h3>
-                         <p className="text-xs text-slate-500 mt-0.5">{editingTransferDocNumber ? `单号：${editingTransferDocNumber}` : '选择调出/调入仓库并添加调拨产品'}</p>
-                       </div>
-                       <button type="button" onClick={() => { setTransferModalOpen(false); setEditingTransferDocNumber(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200/80 transition-colors" aria-label="关闭"><X className="w-5 h-5" /></button>
-                     </div>
-                     <div className="flex-1 overflow-auto p-4 space-y-4">
-                       <div className="bg-slate-50/80 rounded-2xl p-5 border border-slate-100">
-                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">单据信息</h4>
-                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                           <div>
-                             <label className="text-[10px] font-bold text-slate-500 block mb-1.5">调出仓库</label>
-                             <select value={transferForm.fromWarehouseId} onChange={e => setTransferForm(f => ({ ...f, fromWarehouseId: e.target.value }))} className="w-full text-sm py-2.5 px-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-                               <option value="">请选择</option>
-                               {warehouses.map(w => (
-                                 <option key={w.id} value={w.id}>{w.name}</option>
-                               ))}
-                             </select>
-                           </div>
-                           <div>
-                             <label className="text-[10px] font-bold text-slate-500 block mb-1.5">调入仓库</label>
-                             <select value={transferForm.toWarehouseId} onChange={e => setTransferForm(f => ({ ...f, toWarehouseId: e.target.value }))} className="w-full text-sm py-2.5 px-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-                               <option value="">请选择</option>
-                               {warehouses.map(w => (
-                                 <option key={w.id} value={w.id}>{w.name}</option>
-                               ))}
-                             </select>
-                           </div>
-                           <div>
-                             <label className="text-[10px] font-bold text-slate-500 block mb-1.5">调拨日期</label>
-                             <input type="date" value={transferForm.transferDate} onChange={e => setTransferForm(f => ({ ...f, transferDate: e.target.value }))} className="w-full text-sm py-2.5 px-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white" />
-                           </div>
-                           <div className="sm:col-span-2 lg:col-span-1">
-                             <label className="text-[10px] font-bold text-slate-500 block mb-1.5">备注</label>
-                             <input type="text" value={transferForm.note} onChange={e => setTransferForm(f => ({ ...f, note: e.target.value }))} placeholder="选填" className="w-full text-sm py-2.5 px-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white" />
-                           </div>
-                         </div>
-                       </div>
-                       <div>
-                         <div className="flex items-center justify-between mb-3">
-                           <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Layers className="w-4 h-4 text-indigo-500" /> 调拨明细</h4>
-                           <button type="button" onClick={addTransferItem} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-sm">
-                             <Plus className="w-4 h-4" /> 添加明细行
-                           </button>
-                         </div>
-                         <div className="space-y-3">
-                           {transferItems.map((line) => {
-                             const trProd = productMapPSI.get(line.productId);
-                             const trHasVariants = trProd?.variants && trProd.variants.length > 0;
-                             const trLineQty = trHasVariants
-                               ? Object.values(line.variantQuantities || {}).reduce((s, q) => s + q, 0)
-                               : (line.quantity ?? 0);
-                             const trGroupedByColor: Record<string, ProductVariant[]> = {};
-                             if (trProd?.variants) {
-                               trProd.variants.forEach(v => {
-                                 if (!trGroupedByColor[v.colorId]) trGroupedByColor[v.colorId] = [];
-                                 trGroupedByColor[v.colorId].push(v);
-                               });
-                             }
-                             const isLineEmpty = !line.productId;
-                             return (
-                               <div key={line.id} className={`rounded-2xl border space-y-4 transition-all ${isLineEmpty ? 'bg-white border-slate-200 p-4 border-dashed' : 'bg-white border-slate-200 p-4 shadow-sm'}`}>
-                                 <div className="flex flex-wrap items-end gap-3">
-                                   <div className="flex-1 min-w-[200px] max-w-md space-y-1">
-                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">{isLineEmpty ? '选择产品' : '产品'}</label>
-                                     <SearchableProductSelect options={products} categories={categories} value={line.productId} onChange={(id) => {
-                                       const p = productMapPSI.get(id);
-                                       const hv = p?.variants && p.variants.length > 0;
-                                       updateTransferItem(line.id, { productId: id, quantity: hv ? undefined : 0, variantQuantities: hv ? {} : undefined });
-                                     }} />
-                                   </div>
-                                   {trHasVariants && (
-                                     <div className="w-24 space-y-1">
-                                       <label className="text-[10px] font-bold text-slate-500 block">总数</label>
-                                       <div className="py-2.5 px-3 text-sm font-black text-indigo-600 bg-indigo-50 rounded-xl border border-indigo-100">
-                                         {formatQtyDisplay(trLineQty)} {line.productId ? getUnitName(line.productId) : '—'}
-                                       </div>
-                                     </div>
-                                   )}
-                                   {!trHasVariants && (
-                                     <div className="w-28 space-y-1">
-                                       <label className="text-[10px] font-bold text-slate-500 block">数量</label>
-                                       <div className="flex items-center gap-1.5">
-                                         <input type="number" min={0} value={line.quantity ?? ''} onChange={e => updateTransferItem(line.id, { quantity: parseInt(e.target.value) || 0 })} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="0" />
-                                         <span className="text-[10px] font-bold text-slate-400 shrink-0">{line.productId ? getUnitName(line.productId) : '—'}</span>
-                                       </div>
-                                     </div>
-                                   )}
-                                   <button type="button" onClick={() => removeTransferItem(line.id)} className="p-2.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all shrink-0" title="删除该行"><Trash2 className="w-5 h-5" /></button>
-                                 </div>
-                                 {trHasVariants && line.productId && (
-                                   <div className="pt-3 border-t border-slate-100 space-y-3">
-                                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">颜色尺码数量</label>
-                                     {sortedVariantColorEntries(trGroupedByColor, trProd?.colorIds, trProd?.sizeIds).map(([colorId, colorVariants]) => {
-                                       const color = dictionaries.colors.find(c => c.id === colorId);
-                                       return (
-                                         <div key={colorId} className="flex flex-wrap items-center gap-4 bg-slate-50/80 p-3 rounded-xl border border-slate-100">
-                                           <div className="flex items-center gap-2 w-28 shrink-0">
-                                             <div className="w-4 h-4 rounded-full border border-slate-200 shrink-0" style={{ backgroundColor: (color as any)?.value || '#e2e8f0' }} />
-                                             <span className="text-xs font-bold text-slate-700">{color?.name || '未命名'}</span>
-                                           </div>
-                                           <div className="flex flex-wrap gap-3">
-                                             {colorVariants.map(v => {
-                                               const size = dictionaries.sizes.find(s => s.id === v.sizeId);
-                                               return (
-                                                 <div key={v.id} className="flex flex-col gap-0.5 w-20">
-                                                   <span className="text-[9px] font-bold text-slate-400 uppercase">{size?.name || v.skuSuffix}</span>
-                                                   <input type="number" min={0} placeholder="0" value={line.variantQuantities?.[v.id] ?? ''} onChange={e => updateTransferVariantQty(line.id, v.id, parseInt(e.target.value) || 0)} className="w-full bg-white border border-slate-200 rounded-lg py-1.5 px-2 text-sm font-bold text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500 text-center" />
-                                                 </div>
-                                               );
-                                             })}
-                                           </div>
-                                           <div className="ml-auto text-right shrink-0">
-                                             <span className="text-[9px] font-bold text-slate-400">小计</span>
-                                             <p className="text-sm font-black text-slate-600">{(colorVariants as ProductVariant[]).reduce((s, v) => s + (line.variantQuantities?.[v.id] || 0), 0)}</p>
-                                           </div>
-                                         </div>
-                                       );
-                                     })}
-                                   </div>
-                                 )}
-                               </div>
-                             );
-                           })}
-                           {transferItems.length === 0 && (
-                             <div className="py-14 border-2 border-dashed border-slate-200 rounded-2xl text-center bg-slate-50/50">
-                               <Layers className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                               <p className="text-slate-500 text-sm font-medium">暂无明细，点击「添加明细行」添加调拨产品</p>
-                             </div>
-                           )}
-                         </div>
-                       </div>
-                     </div>
-                     <div className="shrink-0 px-6 py-4 border-t border-slate-200 bg-slate-50/80 flex flex-wrap items-center justify-between gap-4">
-                       <div className="text-sm text-slate-600">
-                         {transferItems.length > 0 && (() => {
-                           const totalQty = transferItems.reduce((sum, i) => sum + (i.variantQuantities ? Object.values(i.variantQuantities).reduce((s, v) => s + v, 0) : (i.quantity ?? 0)), 0);
-                           const validLines = transferItems.filter(i => i.productId && ((i.variantQuantities ? Object.values(i.variantQuantities).reduce((s, v) => s + v, 0) : (i.quantity ?? 0)) > 0)).length;
-                           return <span>共 <strong className="text-indigo-600">{validLines}</strong> 种产品，合计 <strong className="text-indigo-600">{totalQty}</strong> 件</span>;
-                         })()}
-                       </div>
-                       <button
-                         type="button"
-                         onClick={handleSaveTransfer}
-                         disabled={
-                           !transferForm.fromWarehouseId ||
-                           !transferForm.toWarehouseId ||
-                           transferForm.fromWarehouseId === transferForm.toWarehouseId ||
-                           transferItems.length === 0 ||
-                           !transferItems.some(i => {
-                             if (!i.productId) return false;
-                             const q = i.variantQuantities ? Object.values(i.variantQuantities).reduce((s, v) => s + v, 0) : (i.quantity ?? 0);
-                             return q > 0;
-                           })
-                         }
-                         className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:pointer-events-none shadow-md"
-                       >
-                         <Save className="w-4 h-4" /> 保存调拨单
-                       </button>
-                     </div>
-                   </div>
-                 </div>
-               )}
-
-               {stocktakeModalOpen && (
-                 <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-                   <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setStocktakeModalOpen(false); setEditingStocktakeDocNumber(null); }} aria-hidden />
-                   <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-                     <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50/50">
-                       <div>
-                         <h3 className="font-black text-slate-800 flex items-center gap-2 text-lg"><ClipboardList className="w-5 h-5 text-indigo-600" /> {editingStocktakeDocNumber ? '编辑盘点单' : '盘点单'}</h3>
-                         <p className="text-xs text-slate-500 mt-0.5">{editingStocktakeDocNumber ? `单号：${editingStocktakeDocNumber}` : '选择盘点仓库并录入实盘数量'}</p>
-                       </div>
-                       <button type="button" onClick={() => { setStocktakeModalOpen(false); setEditingStocktakeDocNumber(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200/80 transition-colors" aria-label="关闭"><X className="w-5 h-5" /></button>
-                     </div>
-                     <div className="flex-1 overflow-auto p-4 space-y-4">
-                       <div className="bg-slate-50/80 rounded-2xl p-5 border border-slate-100">
-                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">单据信息</h4>
-                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                           <div>
-                             <label className="text-[10px] font-bold text-slate-500 block mb-1.5">盘点仓库</label>
-                             <select value={stocktakeForm.warehouseId} onChange={e => setStocktakeForm(f => ({ ...f, warehouseId: e.target.value }))} className="w-full text-sm py-2.5 px-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-                               <option value="">请选择</option>
-                               {warehouses.map(w => (
-                                 <option key={w.id} value={w.id}>{w.name}</option>
-                               ))}
-                             </select>
-                           </div>
-                           <div>
-                             <label className="text-[10px] font-bold text-slate-500 block mb-1.5">盘点日期</label>
-                             <input type="date" value={stocktakeForm.stocktakeDate} onChange={e => setStocktakeForm(f => ({ ...f, stocktakeDate: e.target.value }))} className="w-full text-sm py-2.5 px-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white" />
-                           </div>
-                           <div className="sm:col-span-2 lg:col-span-1">
-                             <label className="text-[10px] font-bold text-slate-500 block mb-1.5">备注</label>
-                             <input type="text" value={stocktakeForm.note} onChange={e => setStocktakeForm(f => ({ ...f, note: e.target.value }))} placeholder="选填" className="w-full text-sm py-2.5 px-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-white" />
-                           </div>
-                         </div>
-                       </div>
-                       <div>
-                         <div className="flex items-center justify-between mb-3">
-                           <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Layers className="w-4 h-4 text-indigo-500" /> 盘点明细（可多产品）</h4>
-                           <button type="button" onClick={addStocktakeItem} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-sm">
-                             <Plus className="w-4 h-4" /> 添加明细行
-                           </button>
-                         </div>
-                         <p className="text-xs text-slate-500 mb-3">每行会显示当前「系统数量」供参考，录入实盘数量保存后将按差异调整库存。</p>
-                         <div className="space-y-3">
-                           {stocktakeItems.map((line) => {
-                             const stProd = productMapPSI.get(line.productId);
-                             const stHasVariants = stProd?.variants && stProd.variants.length > 0;
-                             const stLineQty = stHasVariants
-                               ? Object.values(line.variantQuantities || {}).reduce((s, q) => s + q, 0)
-                               : (line.quantity ?? 0);
-                             const stGroupedByColor: Record<string, ProductVariant[]> = {};
-                             if (stProd?.variants) {
-                               stProd.variants.forEach(v => {
-                                 if (!stGroupedByColor[v.colorId]) stGroupedByColor[v.colorId] = [];
-                                 stGroupedByColor[v.colorId].push(v);
-                               });
-                             }
-                             const isLineEmpty = !line.productId;
-                             const systemQtyForLine = line.productId && stocktakeForm.warehouseId
-                               ? (stHasVariants && stProd?.variants
-                                   ? stProd.variants.reduce((s, v) => s + getVariantDisplayQty(line.productId!, stocktakeForm.warehouseId!, v.id), 0)
-                                   : getStock(line.productId, stocktakeForm.warehouseId, editingStocktakeDocNumber ?? undefined))
-                               : null;
-                             return (
-                               <div key={line.id} className={`rounded-2xl border space-y-4 transition-all ${isLineEmpty ? 'bg-white border-slate-200 p-4 border-dashed' : 'bg-white border-slate-200 p-4 shadow-sm'}`}>
-                                 <div className="flex flex-wrap items-end gap-3">
-                                   <div className="flex-1 min-w-[200px] max-w-md space-y-1">
-                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">{isLineEmpty ? '选择产品' : '产品'}</label>
-                                     <SearchableProductSelect options={products} categories={categories} value={line.productId} onChange={(id) => {
-                                       const p = productMapPSI.get(id);
-                                       const hv = p?.variants && p.variants.length > 0;
-                                       updateStocktakeItem(line.id, { productId: id, quantity: hv ? undefined : 0, variantQuantities: hv ? {} : undefined });
-                                     }} />
-                                   </div>
-                                   {line.productId && stocktakeForm.warehouseId && (
-                                     <div className="w-28 space-y-1">
-                                       <label className="text-[10px] font-bold text-slate-500 block">系统数量</label>
-                                       <div className="py-2.5 px-3 text-sm font-bold text-slate-600 bg-slate-50 rounded-xl border border-slate-200">
-                                         {systemQtyForLine != null ? systemQtyForLine : '—'} {getUnitName(line.productId)}
-                                       </div>
-                                     </div>
-                                   )}
-                                   {stHasVariants && (
-                                     <div className="w-24 space-y-1">
-                                       <label className="text-[10px] font-bold text-slate-500 block">总数</label>
-                                       <div className="py-2.5 px-3 text-sm font-black text-indigo-600 bg-indigo-50 rounded-xl border border-indigo-100">
-                                         {formatQtyDisplay(stLineQty)} {line.productId ? getUnitName(line.productId) : '—'}
-                                       </div>
-                                     </div>
-                                   )}
-                                   {!stHasVariants && (
-                                     <div className="w-28 space-y-1">
-                                       <label className="text-[10px] font-bold text-slate-500 block">实盘数量</label>
-                                       <div className="flex items-center gap-1.5">
-                                         <input type="number" min={0} value={line.quantity ?? ''} onChange={e => updateStocktakeItem(line.id, { quantity: parseInt(e.target.value) || 0 })} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="0" />
-                                         <span className="text-[10px] font-bold text-slate-400 shrink-0">{line.productId ? getUnitName(line.productId) : '—'}</span>
-                                       </div>
-                                     </div>
-                                   )}
-                                   <button type="button" onClick={() => removeStocktakeItem(line.id)} className="p-2.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all shrink-0" title="删除该行"><Trash2 className="w-5 h-5" /></button>
-                                 </div>
-                                 {stHasVariants && line.productId && (
-                                   <div className="pt-3 border-t border-slate-100 space-y-3">
-                                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">颜色尺码（{stocktakeForm.warehouseId ? '系统数量供参考，请录入实盘数量' : '请先选择盘点仓库后可显示系统数量' }）</label>
-                                     {sortedVariantColorEntries(stGroupedByColor, stProd?.colorIds, stProd?.sizeIds).map(([colorId, colorVariants]) => {
-                                       const color = dictionaries.colors.find(c => c.id === colorId);
-                                       return (
-                                         <div key={colorId} className="flex flex-wrap items-center gap-4 bg-slate-50/80 p-3 rounded-xl border border-slate-100">
-                                           <div className="flex items-center gap-2 w-28 shrink-0">
-                                             <div className="w-4 h-4 rounded-full border border-slate-200 shrink-0" style={{ backgroundColor: (color as any)?.value || '#e2e8f0' }} />
-                                             <span className="text-xs font-bold text-slate-700">{color?.name || '未命名'}</span>
-                                           </div>
-                                           <div className="flex flex-wrap gap-3">
-                                             {colorVariants.map(v => {
-                                               const size = dictionaries.sizes.find(s => s.id === v.sizeId);
-                                               const sysQtyV = stocktakeForm.warehouseId ? getVariantDisplayQty(line.productId, stocktakeForm.warehouseId, v.id) : null;
-                                               return (
-                                                 <div key={v.id} className="flex flex-col gap-0.5 w-20">
-                                                   <span className="text-[9px] font-bold text-slate-400 uppercase">{size?.name || v.skuSuffix}</span>
-                                                   {sysQtyV != null && <span className="text-[9px] text-slate-500">系统 {sysQtyV}</span>}
-                                                   <input type="number" min={0} placeholder="0" value={line.variantQuantities?.[v.id] ?? ''} onChange={e => updateStocktakeVariantQty(line.id, v.id, parseInt(e.target.value) || 0)} className="w-full bg-white border border-slate-200 rounded-lg py-1.5 px-2 text-sm font-bold text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500 text-center" />
-                                                 </div>
-                                               );
-                                             })}
-                                           </div>
-                                           <div className="ml-auto text-right shrink-0">
-                                             <span className="text-[9px] font-bold text-slate-400">小计</span>
-                                             <p className="text-sm font-black text-slate-600">{(colorVariants as ProductVariant[]).reduce((s, v) => s + (line.variantQuantities?.[v.id] || 0), 0)}</p>
-                                           </div>
-                                         </div>
-                                       );
-                                     })}
-                                   </div>
-                                 )}
-                               </div>
-                             );
-                           })}
-                           {stocktakeItems.length === 0 && (
-                             <div className="py-14 border-2 border-dashed border-slate-200 rounded-2xl text-center bg-slate-50/50">
-                               <Layers className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                               <p className="text-slate-500 text-sm font-medium">暂无明细，点击「添加明细行」录入盘点数量</p>
-                             </div>
-                           )}
-                         </div>
-                         <div className="mt-6 flex justify-end">
-                           <button
-                             type="button"
-                             onClick={handleSaveStocktake}
-                             disabled={
-                               !stocktakeForm.warehouseId ||
-                               stocktakeItems.length === 0 ||
-                               !stocktakeItems.some(i => {
-                                 if (!i.productId) return false;
-                                 const q = i.variantQuantities ? Object.values(i.variantQuantities).reduce((s, v) => s + v, 0) : (i.quantity ?? 0);
-                                 return q >= 0;
-                               })
-                             }
-                             className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:pointer-events-none shadow-md"
-                           >
-                             <Save className="w-4 h-4" /> 保存盘点单
-                           </button>
-                         </div>
-                       </div>
-                     </div>
-                   </div>
-                 </div>
-               )}
-
-               {warehouseFlowModalOpen && (
-                 <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-                   <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setWarehouseFlowModalOpen(false); setWarehouseFlowDetailKey(null); }} aria-hidden />
-                   <div className="relative bg-white w-full max-w-6xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-                     <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-                       <h3 className="font-bold text-slate-800 flex items-center gap-2"><ScrollText className="w-5 h-5 text-indigo-600" /> 仓库流水</h3>
-                       <button type="button" onClick={() => { setWarehouseFlowModalOpen(false); setWarehouseFlowDetailKey(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
-                     </div>
-                     <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
-                       <div className="flex items-center gap-2 mb-3">
-                         <Filter className="w-4 h-4 text-slate-500" />
-                         <span className="text-xs font-bold text-slate-500 uppercase">筛选</span>
-                       </div>
-                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                         <div>
-                           <label className="text-[10px] font-bold text-slate-400 block mb-1">日期起</label>
-                           <input type="date" value={whFlowDateFrom} onChange={e => setWhFlowDateFrom(e.target.value)} className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
-                         </div>
-                         <div>
-                           <label className="text-[10px] font-bold text-slate-400 block mb-1">日期止</label>
-                           <input type="date" value={whFlowDateTo} onChange={e => setWhFlowDateTo(e.target.value)} className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
-                         </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-400 block mb-1">类型</label>
-                          <select value={whFlowType} onChange={e => setWhFlowType(e.target.value)} className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200 bg-white">
-                            <option value="all">全部</option>
-                            {WAREHOUSE_FLOW_TYPES.map(t => (
-                              <option key={t} value={t}>{warehouseFlowTypeLabel[t]}</option>
-                            ))}
-                            <option value="SALES_RETURN">销售退货</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-400 block mb-1">仓库</label>
-                          <select value={whFlowWarehouse} onChange={e => setWhFlowWarehouse(e.target.value)} className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200 bg-white">
-                            <option value="all">全部</option>
-                            {warehouses.map(w => (
-                              <option key={w.id} value={w.id}>{w.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-400 block mb-1">单号</label>
-                           <input type="text" value={whFlowDocNo} onChange={e => setWhFlowDocNo(e.target.value)} placeholder="模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
-                         </div>
-                         <div>
-                           <label className="text-[10px] font-bold text-slate-400 block mb-1">产品</label>
-                           <input type="text" value={whFlowProduct} onChange={e => setWhFlowProduct(e.target.value)} placeholder="模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
-                         </div>
-                       </div>
-                       <div className="mt-2 flex items-center gap-4">
-                         <button type="button" onClick={() => { setWhFlowDateFrom(''); setWhFlowDateTo(''); setWhFlowType('all'); setWhFlowWarehouse('all'); setWhFlowDocNo(''); setWhFlowProduct(''); }} className="text-xs font-bold text-slate-500 hover:text-slate-700">清空筛选</button>
-                         <span className="text-xs text-slate-400">共 {filteredWarehouseFlowRows.length} 条</span>
-                       </div>
-                     </div>
-                     <div className="flex-1 overflow-auto p-4">
-                       {filteredWarehouseFlowRows.length === 0 ? (
-                         <p className="text-slate-500 text-center py-12">暂无仓库流水记录</p>
-                       ) : (
-                         <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                           <TableVirtuoso
-                             style={{ height: Math.min(filteredWarehouseFlowRows.length * 48 + 48, 520) }}
-                             data={filteredWarehouseFlowRows}
-                             fixedHeaderContent={() => (
-                              <tr className="bg-slate-50 border-b border-slate-200">
-                                <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">日期时间</th>
-                                <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">类型</th>
-                                <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">单号</th>
-                                <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">仓库</th>
-                                <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">产品</th>
-                                <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">数量</th>
-                                <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap w-24">操作</th>
-                              </tr>
-                             )}
-                             itemContent={(_idx, row) => (
-                               <>
-                                  <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{row.displayDateTime ?? row.dateStr}</td>
-                                  <td className="px-4 py-3"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">{row.typeLabel}</span></td>
-                                  <td className="px-4 py-3 text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">{row.docNumber}</td>
-                                  <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{row.warehouseName}</td>
-                                  <td className="px-4 py-3 font-bold text-slate-800">{row.productName} <span className="text-slate-400 font-normal text-[10px]">{row.productSku}</span></td>
-                                  <td className="px-4 py-3 text-right font-black text-indigo-600">{row.quantity}</td>
-                                  <td className="px-4 py-3">
-                                     <button type="button" onClick={() => setWarehouseFlowDetailKey(`${row.type}|${row.docNumber}`)} className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all whitespace-nowrap">
-                                       <FileText className="w-3.5 h-3.5" /> 详情
-                                     </button>
-                                   </td>
-                               </>
-                             )}
-                             components={{ Table: (props) => <table {...props} className="w-full text-left text-sm" />, TableRow: ({ item: _item, ...props }) => <tr {...props} className="border-b border-slate-100 hover:bg-slate-50/50" /> }}
-                           />
-                         </div>
-                       )}
-                     </div>
-                   </div>
-                 </div>
-               )}
-
+               <StocktakeListModal
+                 open={stocktakeListModalOpen}
+                 onClose={() => setStocktakeListModalOpen(false)}
+                 stocktakeOrdersGrouped={stocktakeOrdersGrouped}
+                 warehouseMapPSI={warehouseMapPSI}
+                 productMapPSI={productMapPSI}
+                 dictionaries={dictionaries}
+                 hasPsiPerm={hasPsiPerm}
+                 onDeleteRecords={onDeleteRecords}
+                 onCreateNew={handleCreateStocktake}
+                 onEditStocktake={handleEditStocktake}
+                 getUnitName={getUnitName}
+               />
+               <TransferListModal
+                 open={transferListModalOpen}
+                 onClose={() => setTransferListModalOpen(false)}
+                 transferOrdersGrouped={transferOrdersGrouped}
+                 warehouseMapPSI={warehouseMapPSI}
+                 productMapPSI={productMapPSI}
+                 hasPsiPerm={hasPsiPerm}
+                 onDeleteRecords={onDeleteRecords}
+                 onCreateNew={handleCreateTransfer}
+                 onEditTransfer={handleEditTransfer}
+                 getUnitName={getUnitName}
+               />
+               <TransferOrderModal
+                 open={transferModalOpen}
+                 onClose={() => { setTransferModalOpen(false); setEditingTransferDocNumber(null); }}
+                 editingDocNumber={editingTransferDocNumber}
+                 transferForm={transferForm}
+                 setTransferForm={setTransferForm}
+                 transferItems={transferItems}
+                 addTransferItem={addTransferItem}
+                 updateTransferItem={updateTransferItem}
+                 updateTransferVariantQty={updateTransferVariantQty}
+                 removeTransferItem={removeTransferItem}
+                 handleSaveTransfer={handleSaveTransfer}
+                 warehouses={warehouses}
+                 products={products}
+                 categories={categories}
+                 productMapPSI={productMapPSI}
+                 dictionaries={dictionaries}
+                 getUnitName={getUnitName}
+                 formatQtyDisplay={formatQtyDisplay}
+               />
+               <StocktakeOrderModal
+                 open={stocktakeModalOpen}
+                 onClose={() => { setStocktakeModalOpen(false); setEditingStocktakeDocNumber(null); }}
+                 editingDocNumber={editingStocktakeDocNumber}
+                 stocktakeForm={stocktakeForm}
+                 setStocktakeForm={setStocktakeForm}
+                 stocktakeItems={stocktakeItems}
+                 addStocktakeItem={addStocktakeItem}
+                 updateStocktakeItem={updateStocktakeItem}
+                 updateStocktakeVariantQty={updateStocktakeVariantQty}
+                 removeStocktakeItem={removeStocktakeItem}
+                 handleSaveStocktake={handleSaveStocktake}
+                 warehouses={warehouses}
+                 products={products}
+                 categories={categories}
+                 productMapPSI={productMapPSI}
+                 dictionaries={dictionaries}
+                 getUnitName={getUnitName}
+                 formatQtyDisplay={formatQtyDisplay}
+                 getVariantDisplayQty={getVariantDisplayQty}
+                 getStock={getStock}
+               />
+               <WarehouseFlowModal
+                 open={warehouseFlowModalOpen}
+                 onClose={() => { setWarehouseFlowModalOpen(false); setWarehouseFlowDetailKey(null); }}
+                 warehouseFlowRows={warehouseFlowRows}
+                 warehouses={warehouses}
+                 onViewDetail={setWarehouseFlowDetailKey}
+               />
                {productFlowDetail && (
-                 <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-                   <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setProductFlowDetail(null); setWarehouseFlowDetailKey(null); setProductFlowDateFrom(''); setProductFlowDateTo(''); setProductFlowType('all'); setProductFlowWarehouseId('all'); }} aria-hidden />
-                   <div className="relative bg-white w-full max-w-6xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-                     <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-                       <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                         <ScrollText className="w-5 h-5 text-indigo-600" />
-                         仓库流水
-                         {productFlowDetail.warehouseName ? ` - ${productFlowDetail.warehouseName} / ${productFlowDetail.productName}` : ` - ${productFlowDetail.productName}`}
-                       </h3>
-                       <button type="button" onClick={() => { setProductFlowDetail(null); setWarehouseFlowDetailKey(null); setProductFlowDateFrom(''); setProductFlowDateTo(''); setProductFlowType('all'); setProductFlowWarehouseId('all'); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
-                     </div>
-                     <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
-                       <div className="flex items-center gap-2 mb-3">
-                         <Filter className="w-4 h-4 text-slate-500" />
-                         <span className="text-xs font-bold text-slate-500 uppercase">筛选</span>
-                       </div>
-                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                         <div>
-                           <label className="text-[10px] font-bold text-slate-400 block mb-1">开始时间</label>
-                           <input
-                             type="date"
-                             value={productFlowDateFrom}
-                             onChange={e => setProductFlowDateFrom(e.target.value)}
-                             className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
-                           />
-                         </div>
-                         <div>
-                           <label className="text-[10px] font-bold text-slate-400 block mb-1">结束时间</label>
-                           <input
-                             type="date"
-                             value={productFlowDateTo}
-                             onChange={e => setProductFlowDateTo(e.target.value)}
-                             className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
-                           />
-                         </div>
-                         <div>
-                           <label className="text-[10px] font-bold text-slate-400 block mb-1">类型</label>
-                           <select
-                             value={productFlowType}
-                             onChange={e => setProductFlowType(e.target.value)}
-                             className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200 bg-white"
-                           >
-                             <option value="all">全部</option>
-                             <option value="PURCHASE_BILL">采购入库</option>
-                             <option value="SALES_BILL">销售出库</option>
-                             <option value="SALES_RETURN">销售退货</option>
-                             <option value="TRANSFER">调拨</option>
-                             <option value="STOCKTAKE">盘点</option>
-                             <option value="STOCK_IN">生产入库</option>
-                             <option value="STOCK_RETURN">生产退料</option>
-                             <option value="STOCK_OUT">领料发出</option>
-                           </select>
-                         </div>
-                         <div>
-                           <label className="text-[10px] font-bold text-slate-400 block mb-1">仓库</label>
-                           <select
-                             value={productFlowWarehouseId}
-                             onChange={e => setProductFlowWarehouseId(e.target.value)}
-                             className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200 bg-white"
-                           >
-                             <option value="all">全部</option>
-                             {warehouses.map(w => (
-                               <option key={w.id} value={w.id}>{w.name}</option>
-                             ))}
-                           </select>
-                         </div>
-                       </div>
-                       <div className="mt-2 flex items-center gap-4 flex-wrap">
-                         <button
-                           type="button"
-                           onClick={() => { setProductFlowDateFrom(''); setProductFlowDateTo(''); setProductFlowType('all'); setProductFlowWarehouseId('all'); }}
-                           className="text-xs font-bold text-slate-500 hover:text-slate-700"
-                         >
-                           清空筛选
-                         </button>
-                         <span className="text-xs text-slate-400">共 {productFlowFilteredRows.length} 条</span>
-                         <span className="text-xs font-bold text-indigo-600">合计数量：{Math.round(productFlowTotalQuantity * 100) / 100}</span>
-                       </div>
-                     </div>
-                     <div className="flex-1 overflow-auto p-4">
-                       {productFlowDetailRows.length === 0 ? (
-                         <p className="text-slate-500 text-center py-12">暂无该产品{productFlowDetail.warehouseName ? '在该仓库' : ''}的流水记录</p>
-                       ) : productFlowFilteredRows.length === 0 ? (
-                         <p className="text-slate-500 text-center py-12">无符合筛选条件的记录</p>
-                       ) : (
-                         <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                           <table className="w-full text-left text-sm">
-                             <thead>
-                               <tr className="bg-slate-50 border-b border-slate-200">
-                                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">日期时间</th>
-                                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">类型</th>
-                                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">单号</th>
-                                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">仓库</th>
-                                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">产品</th>
-                                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">数量</th>
-                                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap w-24">操作</th>
-                               </tr>
-                             </thead>
-                             <tbody>
-                               {productFlowFilteredRows.map((row: any) => (
-                                 <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50/50">
-                                   <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{row.displayDateTime ?? row.dateStr}</td>
-                                   <td className="px-4 py-3"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">{row.typeLabel}</span></td>
-                                   <td className="px-4 py-3 text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">{row.docNumber}</td>
-                                   <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{row.warehouseName}</td>
-                                   <td className="px-4 py-3 font-bold text-slate-800">{row.productName} <span className="text-slate-400 font-normal text-[10px]">{row.productSku}</span></td>
-                                   <td className="px-4 py-3 text-right font-black text-indigo-600">{row.quantity}</td>
-                                   <td className="px-4 py-3">
-                                     <button type="button" onClick={() => setWarehouseFlowDetailKey(`${row.type}|${row.docNumber}`)} className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all whitespace-nowrap">
-                                       <FileText className="w-3.5 h-3.5" /> 详情
-                                     </button>
-                                   </td>
-                                 </tr>
-                               ))}
-                             </tbody>
-                           </table>
-                         </div>
-                       )}
-                     </div>
-                   </div>
-                 </div>
+                 <ProductFlowDetailModal
+                   productFlowDetail={productFlowDetail}
+                   onClose={() => { setProductFlowDetail(null); setWarehouseFlowDetailKey(null); }}
+                   warehouseFlowRows={warehouseFlowRows}
+                   warehouses={warehouses}
+                   parseRecordTime={parseRecordTime}
+                   onViewDetail={setWarehouseFlowDetailKey}
+                 />
                )}
-
-               {(warehouseFlowModalOpen || productFlowDetail) && warehouseFlowDetailKey && (() => {
-                 const [detailType, detailDocNo] = warehouseFlowDetailKey.split('|');
-                 const isStockIn = detailType === 'STOCK_IN';
-                 const isStockReturn = detailType === 'STOCK_RETURN';
-                 const isStockOut = detailType === 'STOCK_OUT';
-                 const docRecords = isStockIn
-                   ? (prodRecords || []).filter((r: any) => {
-                       if (r.type !== 'STOCK_IN') return false;
-                       if (r.docNo === detailDocNo || r.id === detailDocNo) return true;
-                       if (detailDocNo.startsWith('工单入库-')) {
-                         const wantOrderNum = detailDocNo.replace('工单入库-', '');
-                         const order = ordersList.find((o: { id: string; orderNumber?: string }) => o.id === r.orderId);
-                         return order?.orderNumber === wantOrderNum;
-                       }
-                       return false;
-                     }) as any[]
-                   : isStockReturn
-                   ? (prodRecords || []).filter((r: any) => {
-                       if (r.type !== 'STOCK_RETURN') return false;
-                       if (r.docNo === detailDocNo || r.id === detailDocNo) return true;
-                       if (detailDocNo.startsWith('退料-')) {
-                         const wantOrderNum = detailDocNo.replace('退料-', '');
-                         const order = ordersList.find((o: { id: string; orderNumber?: string }) => o.id === r.orderId);
-                         return order?.orderNumber === wantOrderNum;
-                       }
-                       return false;
-                     }) as any[]
-                   : isStockOut
-                   ? (prodRecords || []).filter((r: any) => {
-                       if (r.type !== 'STOCK_OUT') return false;
-                       if (r.docNo === detailDocNo || r.id === detailDocNo) return true;
-                       if (detailDocNo.startsWith('领料-')) {
-                         const wantOrderNum = detailDocNo.replace('领料-', '');
-                         const order = ordersList.find((o: { id: string; orderNumber?: string }) => o.id === r.orderId);
-                         return order?.orderNumber === wantOrderNum;
-                       }
-                       return false;
-                     }) as any[]
-                   : recordsList.filter((r: any) => r.type === detailType && (r.docNumber || '') === detailDocNo) as any[];
-                 if (docRecords.length === 0) return null;
-                 const first = docRecords[0];
-                 const mainInfo = isStockIn
-                   ? { docNumber: first.docNo || (ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber ? `工单入库-${ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber}` : first.id), createdAt: first.timestamp || '—', partner: '—', warehouseId: first.warehouseId, warehouseName: warehouseMapPSI.get(first.warehouseId)?.name ?? '—', note: first.reason ?? '—', fromWarehouseId: undefined, toWarehouseId: undefined, orderNumber: ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber ?? '—' }
-                   : isStockReturn
-                   ? { docNumber: first.docNo || (ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber ? `退料-${ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber}` : first.id), createdAt: first.timestamp || '—', partner: '—', warehouseId: first.warehouseId, warehouseName: warehouseMapPSI.get(first.warehouseId)?.name ?? '—', note: first.reason ?? '—', fromWarehouseId: undefined, toWarehouseId: undefined, orderNumber: ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber ?? '—' }
-                   : isStockOut
-                   ? { docNumber: first.docNo || (ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber ? `领料-${ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber}` : first.id), createdAt: first.timestamp || '—', partner: '—', warehouseId: first.warehouseId, warehouseName: warehouseMapPSI.get(first.warehouseId)?.name ?? '—', note: first.reason ?? '—', fromWarehouseId: undefined, toWarehouseId: undefined, orderNumber: ordersList.find((o: { id: string; orderNumber?: string }) => o.id === first.orderId)?.orderNumber ?? '—' }
-                   : { docNumber: first.docNumber || detailDocNo, createdAt: first.createdAt || first.timestamp || '—', partner: first.partner ?? '—', warehouseId: first.warehouseId, warehouseName: warehouseMapPSI.get(first.warehouseId)?.name ?? '—', note: first.note ?? '—', fromWarehouseId: first.fromWarehouseId, toWarehouseId: first.toWarehouseId, orderNumber: '—' };
-                 const detailLinesByProductVariant = new Map<string, { productId: string; variantId?: string; quantity: number; purchasePrice?: number; salesPrice?: number; record: any }>();
-                 docRecords.forEach(r => {
-                   const vId = r.variantId ?? '';
-                   const key = `${r.productId}|${vId}`;
-                   const existing = detailLinesByProductVariant.get(key);
-                   const qty = r.quantity ?? 0;
-                   const price = r.purchasePrice ?? r.salesPrice;
-                   if (!existing) {
-                     detailLinesByProductVariant.set(key, { productId: r.productId, variantId: vId || undefined, quantity: qty, purchasePrice: price, salesPrice: r.salesPrice, record: r });
-                   } else {
-                     existing.quantity += qty;
-                   }
-                 });
-                 const detailLines = Array.from(detailLinesByProductVariant.values()).map(item => {
-                   const product = productMapPSI.get(item.productId);
-                   const category = categoryMapPSI.get(product?.categoryId);
-                   const hasColorSize = category?.hasColorSize && (product?.variants?.length ?? 0) > 0;
-                   let variantLabel = '';
-                   if (item.variantId && product?.variants) {
-                     const v = product.variants.find((vv: ProductVariant) => vv.id === item.variantId);
-                     if (v) {
-                       const colorName = (dictionaries.colors ?? []).find(c => c.id === v.colorId)?.name ?? '';
-                       const sizeName = (dictionaries.sizes ?? []).find(s => s.id === v.sizeId)?.name ?? '';
-                       variantLabel = [colorName, sizeName].filter(Boolean).join(' / ') || v.skuSuffix || item.variantId;
-                     }
-                   }
-                   return {
-                     ...item,
-                     productName: product?.name ?? '—',
-                     productSku: product?.sku ?? '—',
-                     unitName: item.productId ? getUnitName(item.productId) : 'PCS',
-                     hasColorSize: !!variantLabel,
-                     variantLabel
-                   };
-                 });
-                 return (
-                   <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-                     <div className="absolute inset-0 bg-slate-900/60" onClick={() => setWarehouseFlowDetailKey(null)} aria-hidden />
-                     <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-xl border border-slate-200 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-                       <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
-                         <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><ScrollText className="w-5 h-5 text-indigo-600" /> 单据详情 · {mainInfo.docNumber}</h3>
-                         <button type="button" onClick={() => setWarehouseFlowDetailKey(null)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
-                       </div>
-                       <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
-                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">单据基本信息</h4>
-                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                           <div>
-                             <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">单号</label>
-                             <div className="py-2 px-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 bg-white">{mainInfo.docNumber}</div>
-                           </div>
-                           <div>
-                             <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">日期时间</label>
-                             <div className="py-2 px-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 bg-white">{formatFlowDateTime(mainInfo.createdAt)}</div>
-                           </div>
-                           <div>
-                             <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">{detailType === 'SALES_BILL' ? '客户' : detailType === 'PURCHASE_BILL' ? '供应商' : detailType === 'TRANSFER' ? '调拨' : detailType === 'STOCKTAKE' ? '仓库' : detailType === 'STOCK_IN' || detailType === 'STOCK_RETURN' || detailType === 'STOCK_OUT' ? '工单号' : '备注'}</label>
-                             <div className="py-2 px-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 bg-white">
-                               {detailType === 'TRANSFER' ? `${warehouseMapPSI.get(mainInfo.fromWarehouseId)?.name ?? '—'} → ${warehouseMapPSI.get(mainInfo.toWarehouseId)?.name ?? '—'}` : detailType === 'STOCKTAKE' ? mainInfo.warehouseName : detailType === 'STOCK_IN' || detailType === 'STOCK_RETURN' || detailType === 'STOCK_OUT' ? (mainInfo as any).orderNumber : mainInfo.partner}
-                             </div>
-                           </div>
-                           {(detailType === 'PURCHASE_BILL' || detailType === 'SALES_BILL' || detailType === 'STOCK_IN' || detailType === 'STOCK_RETURN' || detailType === 'STOCK_OUT') && (
-                             <div>
-                               <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">仓库</label>
-                               <div className="py-2 px-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 bg-white">{mainInfo.warehouseName}</div>
-                             </div>
-                           )}
-                           {mainInfo.note && (
-                             <div className="md:col-span-2">
-                               <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">备注</label>
-                               <div className="py-2 px-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 bg-white truncate" title={mainInfo.note}>{mainInfo.note}</div>
-                             </div>
-                           )}
-                         </div>
-                       </div>
-                       <div className="flex-1 overflow-auto min-h-0 p-4">
-                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">明细</h4>
-                         <div className="border border-slate-200 rounded-xl overflow-hidden">
-                           <table className="w-full text-left text-sm">
-                             <thead>
-                               <tr className="bg-slate-50 border-b border-slate-200">
-                                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">产品 / SKU</th>
-                                 {detailLines.some((l: any) => l.variantLabel) && <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">规格（颜色/尺码）</th>}
-                                 <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">数量</th>
-                                 {(detailType === 'PURCHASE_BILL' || detailType === 'SALES_BILL') && <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">单价</th>}
-                                 {(detailType === 'PURCHASE_BILL' || detailType === 'SALES_BILL') && <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">金额</th>}
-                               </tr>
-                             </thead>
-                             <tbody>
-                               {detailLines.map((line, idx) => {
-                                 const price = line.purchasePrice ?? line.salesPrice ?? 0;
-                                 return (
-                                   <tr key={`${line.productId}-${line.variantId ?? ''}-${idx}`} className="border-b border-slate-100">
-                                     <td className="px-4 py-3"><span className="font-bold text-slate-800">{line.productName}</span> <span className="text-slate-400 text-[10px]">{line.productSku}</span></td>
-                                     {detailLines.some((l: any) => l.variantLabel) && (
-                                       <td className="px-4 py-3 text-slate-600">{line.variantLabel || '—'}</td>
-                                     )}
-                                     <td className="px-4 py-3 text-right font-bold text-indigo-600">{(line.quantity ?? 0)} {line.unitName}</td>
-                                     {(detailType === 'PURCHASE_BILL' || detailType === 'SALES_BILL') && (
-                                       <>
-                                         <td className="px-4 py-3 text-right">¥{price.toFixed(2)}</td>
-                                         <td className="px-4 py-3 text-right">¥{((line.quantity ?? 0) * price).toFixed(2)}</td>
-                                       </>
-                                     )}
-                                   </tr>
-                                 );
-                               })}
-                             </tbody>
-                           </table>
-                         </div>
-                       </div>
-                     </div>
-                   </div>
-                 );
-               })()}
+               {(warehouseFlowModalOpen || productFlowDetail) && warehouseFlowDetailKey && (
+                 <WarehouseFlowDocumentDetailModal
+                   warehouseFlowDetailKey={warehouseFlowDetailKey}
+                   onClose={() => setWarehouseFlowDetailKey(null)}
+                   recordsList={recordsList}
+                   prodRecords={prodRecords}
+                   ordersList={ordersList}
+                   productMapPSI={productMapPSI}
+                   warehouseMapPSI={warehouseMapPSI}
+                   categoryMapPSI={categoryMapPSI}
+                   dictionaries={dictionaries}
+                   getUnitName={getUnitName}
+                 />
+               )}
            </>
         </div>
   );
