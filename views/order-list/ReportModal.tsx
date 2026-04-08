@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { FileText, X, Check, UserPlus } from 'lucide-react';
 import {
   ProductionOrder,
@@ -91,6 +91,19 @@ const ReportModal: React.FC<ReportModalProps> = ({
     defectiveAndReworkByOrderMilestone.get(`${orderId}|${templateId}`) ??
     { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> };
 
+  /** 与列表一致：优先用父级最新 orders，避免弹窗内仍用打开时的工单快照 */
+  const orderIdsInModal = useMemo(
+    () => (reportModal.productOrders?.length ? reportModal.productOrders.map(o => o.id) : [reportModal.order.id]),
+    [reportModal.productOrders, reportModal.order.id],
+  );
+  const ordersInModal = useMemo(() => {
+    const resolved = orderIdsInModal
+      .map(id => orders.find(o => o.id === id))
+      .filter((o): o is ProductionOrder => o != null);
+    if (resolved.length > 0) return resolved;
+    return reportModal.productOrders?.length ? reportModal.productOrders : [reportModal.order];
+  }, [orderIdsInModal, orders, reportModal.productOrders, reportModal.order]);
+
   const [reportForm, setReportForm] = useState<{
     quantity: number;
     defectiveQuantity: number;
@@ -148,10 +161,10 @@ const ReportModal: React.FC<ReportModalProps> = ({
     }));
   };
 
-  const getSeqRemainingForVariant = (variantId: string): number => {
+  const getSeqRemainingForVariant = useCallback((variantId: string): number => {
     const productId = reportModal.order.productId;
     const milestoneTemplateId = reportModal.milestone.templateId;
-    const allOrders = reportModal.productOrders?.length ? reportModal.productOrders : [reportModal.order];
+    const allOrders = ordersInModal;
     const items = reportModal.productItems ?? reportModal.order.items;
     const item = items.find(i => (i.variantId || '') === variantId) ?? (items.length === 1 ? items[0] : undefined);
 
@@ -168,15 +181,19 @@ const ReportModal: React.FC<ReportModalProps> = ({
       if (tplIndex > 0) prevTemplateId = ref.milestones[tplIndex - 1].templateId;
     }
 
+    const freshMilestone = allOrders
+      .map(o => o.milestones.find(m => m.templateId === milestoneTemplateId))
+      .find(Boolean);
+
     if (tplIndex <= 0) {
       if (!item) return 0;
       if (reportModal.productItems) {
         return item.quantity - (item.completedQuantity ?? 0);
       }
       if (items.length === 1 && !item.variantId) {
-        return item.quantity - (reportModal.milestone.completedQuantity || 0);
+        return item.quantity - (freshMilestone?.completedQuantity ?? reportModal.milestone.completedQuantity ?? 0);
       }
-      const completedInMilestone = (reportModal.milestone.reports || [])
+      const completedInMilestone = (freshMilestone?.reports || reportModal.milestone.reports || [])
         .filter(r => (r.variantId || '') === variantId)
         .reduce((s, r) => s + r.quantity, 0);
       return item.quantity - completedInMilestone;
@@ -211,7 +228,15 @@ const ReportModal: React.FC<ReportModalProps> = ({
       }
     });
     return prevQty - curQty;
-  };
+  }, [
+    reportModal.order,
+    reportModal.milestone,
+    reportModal.productItems,
+    ordersInModal,
+    productionLinkMode,
+    productMap,
+    productMilestoneProgresses,
+  ]);
 
   const getNextReportNo = () => {
     const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
@@ -358,9 +383,6 @@ const ReportModal: React.FC<ReportModalProps> = ({
 
   if (!open) return null;
 
-  const orderIdsInModal = reportModal.productOrders?.length ? reportModal.productOrders.map(o => o.id) : [reportModal.order.id];
-  const resolvedFromOrders = orderIdsInModal.map(id => orders.find(o => o.id === id)).filter((o): o is ProductionOrder => o != null);
-  const ordersInModal = resolvedFromOrders.length > 0 ? resolvedFromOrders : (reportModal.productOrders?.length ? reportModal.productOrders : [reportModal.order]);
   const tid = reportModal.milestone.templateId;
   const pid = reportModal.order.productId;
   const useProductPmp = productionLinkMode === 'product' && productMilestoneProgresses.length > 0;

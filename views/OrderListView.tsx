@@ -172,7 +172,13 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   useEffect(() => { setCurrentPage(1); }, [debouncedSearch]);
   useEffect(() => { fetchPagedOrders(currentPage, debouncedSearch); }, [currentPage, debouncedSearch, fetchPagedOrders]);
 
-  const displayOrders = fetchedOrders.length > 0 || debouncedSearch || currentPage > 1 ? fetchedOrders : orders;
+  /** 分页接口的工单与上下文 orders 合并：报工后父级会更新 orders，避免列表仍显示旧工序完成量 */
+  const displayOrders = useMemo(() => {
+    const usePaged = fetchedOrders.length > 0 || Boolean(debouncedSearch) || currentPage > 1;
+    if (!usePaged) return orders;
+    const byId = new Map(orders.map(o => [o.id, o]));
+    return fetchedOrders.map(o => byId.get(o.id) ?? o);
+  }, [fetchedOrders, orders, debouncedSearch, currentPage]);
   const totalPages = Math.max(1, Math.ceil(totalOrders / PAGE_SIZE));
   type OrderReportRow = {
     order: ProductionOrder;

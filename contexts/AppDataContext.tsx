@@ -663,8 +663,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       });
       const updated = await api.orders.get(oId) as ProductionOrder;
       setOrders(prev => prev.map(o => o.id === oId ? norm1(updated) : o));
+      void refreshProdRecords();
     } catch (err: any) { toast.error(err.message || '报工失败'); }
-  }, [workers, currentUser, orders, products]);
+  }, [workers, currentUser, orders, products, refreshProdRecords]);
 
   const onReportSubmitProduct = useCallback(async (productId: string, milestoneTemplateId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string) => {
     try {
@@ -676,8 +677,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         reportBatchId, reportNo, customData: data ?? {}, rate: rate != null ? rate : undefined,
       });
       await refreshPMP();
+      void refreshProdRecords();
     } catch (err: any) { toast.error(err.message || '报工失败'); }
-  }, [workers, currentUser, products, refreshPMP]);
+  }, [workers, currentUser, products, refreshPMP, refreshProdRecords]);
 
   const onUpdateReport = useCallback(async ({ orderId, milestoneId, reportId, quantity, defectiveQuantity, timestamp, operator, newMilestoneId }: { orderId: string; milestoneId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneId?: string }) => {
     try {
