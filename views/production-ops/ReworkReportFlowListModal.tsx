@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { History, X, Filter, FileText } from 'lucide-react';
 import { ProductionOpRecord, ProductionOrder, Product, GlobalNodeTemplate } from '../../types';
 import { hasOpsPerm } from './types';
+import { formatTimestamp } from '../../utils/formatTime';
 
 export interface ReworkReportFlowListModalProps {
   productionLinkMode: 'order' | 'product';
@@ -64,6 +65,26 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
     })();
   };
 
+  const reworkById = useMemo(() => {
+    const m = new Map<string, ProductionOpRecord>();
+    (records || []).forEach(x => {
+      if (x.type === 'REWORK' && x.id != null) m.set(String(x.id), x);
+    });
+    return m;
+  }, [records]);
+
+  const resolveReceiveFactory = (rr: ProductionOpRecord) => {
+    const p = (rr.partner ?? '').trim();
+    if (p) return p;
+    const sid = rr.sourceReworkId;
+    if (sid) {
+      const src = reworkById.get(String(sid));
+      const sp = (src?.partner ?? '').trim();
+      if (sp) return sp;
+    }
+    return '—';
+  };
+
   const f = reworkFlowFilter;
   const filtered = useMemo(() => reworkRecords.filter(r => {
     const order = orders.find(o => o.id === r.orderId);
@@ -81,17 +102,49 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
       if (!name.includes(kw) && !(r.productId ?? '').toLowerCase().includes(kw)) return false;
     }
     if (f.nodeName && !nodeName.toLowerCase().includes(f.nodeName.toLowerCase())) return false;
-    if (f.operator && !(r.operator ?? '').toLowerCase().includes(f.operator.toLowerCase())) return false;
+    if (f.operator) {
+      const kw = f.operator.toLowerCase();
+      const opOk = (r.operator ?? '').toLowerCase().includes(kw);
+      const partnerOk = (r.partner ?? '').toLowerCase().includes(kw);
+      const src = r.sourceReworkId ? reworkById.get(String(r.sourceReworkId)) : undefined;
+      const srcPartnerOk = (src?.partner ?? '').toLowerCase().includes(kw);
+      if (!opOk && !partnerOk && !srcPartnerOk) return false;
+    }
     if (f.reportNo) {
       const key = getDisplayDocNo(r).toLowerCase();
       if (!key.includes(f.reportNo.toLowerCase())) return false;
     }
     return true;
-  }), [reworkRecords, f, orders, products, globalNodes, reworkDisplayDocNoMap]);
+  }), [reworkRecords, f, orders, products, globalNodes, reworkDisplayDocNoMap, reworkById]);
 
   const sorted = useMemo(() => [...filtered].sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()), [filtered]);
-  const totalQuantity = useMemo(() => sorted.reduce((s, r) => s + (r.quantity ?? 0), 0), [sorted]);
-  const totalAmount = useMemo(() => sorted.reduce((s, r) => s + (r.amount ?? 0), 0), [sorted]);
+
+  /** 标准 FG 单号 + 同一产品合并为一行（与返工报工详情批次一致） */
+  const groupedRows = useMemo(() => {
+    const groups = new Map<string, { records: ProductionOpRecord[]; totalQty: number; totalAmount: number; first: ProductionOpRecord }>();
+    for (const r of sorted) {
+      const mergeable = Boolean(r.docNo && validDocNoRe.test(r.docNo));
+      const gKey = mergeable ? `${r.docNo}|${r.productId ?? ''}` : r.id;
+      const amt = r.amount ?? 0;
+      const existing = groups.get(gKey);
+      if (existing) {
+        existing.records.push(r);
+        existing.totalQty += r.quantity ?? 0;
+        existing.totalAmount += amt;
+      } else {
+        groups.set(gKey, { records: [r], totalQty: r.quantity ?? 0, totalAmount: amt, first: r });
+      }
+    }
+    const maxTime = (recs: ProductionOpRecord[]) =>
+      recs.reduce((m, x) => {
+        const t = new Date(x.timestamp || 0).getTime();
+        return isNaN(t) ? m : Math.max(m, t);
+      }, 0);
+    return [...groups.values()].sort((a, b) => maxTime(b.records) - maxTime(a.records));
+  }, [sorted]);
+
+  const totalQuantity = useMemo(() => groupedRows.reduce((s, g) => s + g.totalQty, 0), [groupedRows]);
+  const totalAmount = useMemo(() => groupedRows.reduce((s, g) => s + g.totalAmount, 0), [groupedRows]);
   const hasAnyPrice = useMemo(() => sorted.some(r => r.unitPrice != null && r.unitPrice > 0), [sorted]);
   const uniqueNodeNames = useMemo(() => [...new Set(reworkRecords.map(r => globalNodes.find(n => n.id === r.nodeId)?.name).filter(Boolean))] as string[], [reworkRecords, globalNodes]);
 
@@ -104,7 +157,7 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
           <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
         </div>
         <div className="px-6 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0">
-          <p className="text-xs text-slate-500">仅显示每次在工序上做返工报工产生的流水，报一次产生一条（新单据号）。按报工时间排序。</p>
+          <p className="text-xs text-slate-500">返工报工流水；同一报工单号（FG）且同一产品的多条明细合并为一行显示。按最近时间排序。</p>
         </div>
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
           <div className="flex items-center gap-2 mb-3">
@@ -143,16 +196,16 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
             </div>
             <div>
               <label className="text-[10px] font-bold text-slate-400 block mb-1">操作人</label>
-              <input type="text" value={f.operator} onChange={e => setReworkFlowFilter(prev => ({ ...prev, operator: e.target.value }))} placeholder="操作人模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
+              <input type="text" value={f.operator} onChange={e => setReworkFlowFilter(prev => ({ ...prev, operator: e.target.value }))} placeholder="操作人或收回工厂" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
             </div>
           </div>
           <div className="mt-2 flex items-center gap-4">
             <button type="button" onClick={() => setReworkFlowFilter({ dateFrom: '', dateTo: '', orderNumber: '', productId: '', nodeName: '', operator: '', reportNo: '' })} className="text-xs font-bold text-slate-500 hover:text-slate-700">清空筛选</button>
-            <span className="text-xs text-slate-400">共 {sorted.length} 条返工报工记录</span>
+            <span className="text-xs text-slate-400">共 {groupedRows.length} 条（已合并同单号同产品）</span>
           </div>
         </div>
         <div className="flex-1 overflow-auto p-4">
-          {sorted.length === 0 ? (
+          {groupedRows.length === 0 ? (
             <p className="text-slate-500 text-center py-12">暂无返工报工流水</p>
           ) : (
             <div className="border border-slate-200 rounded-2xl overflow-hidden">
@@ -164,6 +217,7 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">报工单号</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">产品</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">工序</th>
+                    <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">收回工厂</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">数量</th>
                     {hasAnyPrice && <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">单价</th>}
                     {hasAnyPrice && <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">金额</th>}
@@ -172,21 +226,48 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {sorted.map(r => {
+                  {groupedRows.map(({ first: r, records: groupRecs, totalQty, totalAmount }) => {
                     const order = orders.find(o => o.id === r.orderId);
                     const product = products.find(p => p.id === r.productId);
-                    const nodeName = r.nodeId ? (globalNodes.find(n => n.id === r.nodeId)?.name ?? '') : '—';
+                    const nodeNames = [...new Set(groupRecs.map(x => x.nodeId ? (globalNodes.find(n => n.id === x.nodeId)?.name ?? '') : '').filter(Boolean))] as string[];
+                    const nodeLabel = nodeNames.length === 0 ? '—' : nodeNames.length === 1 ? nodeNames[0]! : nodeNames.join('、');
+                    const orderNumbers = productionLinkMode !== 'product'
+                      ? [...new Set(groupRecs.map(x => orders.find(o => o.id === x.orderId)?.orderNumber).filter(Boolean))] as string[]
+                      : [];
+                    const orderLabel = productionLinkMode === 'product'
+                      ? null
+                      : orderNumbers.length <= 1
+                        ? (order?.orderNumber ?? '—')
+                        : `${orderNumbers[0]} 等${orderNumbers.length}单`;
+                    const ops = [...new Set(groupRecs.map(x => (x.operator ?? '').trim()).filter(op => op && op !== '外协收回'))];
+                    const opLabel = ops.length === 0 ? '—' : ops.length === 1 ? ops[0]! : `${ops[0]} 等${ops.length}人`;
+                    const factoryLabels = [...new Set(groupRecs.map(resolveReceiveFactory).filter(x => x !== '—'))];
+                    const factoryLabel = factoryLabels.length === 0 ? '—' : factoryLabels.length === 1 ? factoryLabels[0]! : factoryLabels.join('、');
+                    const prices = groupRecs.map(x => x.unitPrice).filter((p): p is number => p != null && p > 0);
+                    const unitLabel = prices.length === 0 ? '—' : prices.every(p => p === prices[0]) ? prices[0]!.toFixed(2) : '—';
+                    const amtLabel = totalAmount > 0 ? totalAmount.toFixed(2) : '—';
+                    const latestTs = groupRecs.reduce<{ t: number; ts?: string }>((best, x) => {
+                      const t = new Date(x.timestamp || 0).getTime();
+                      if (isNaN(t)) return best;
+                      return t >= best.t ? { t, ts: x.timestamp } : best;
+                    }, { t: -1 }).ts;
+                    const rowKey = r.docNo && validDocNoRe.test(r.docNo) ? `${r.docNo}|${r.productId ?? ''}` : r.id;
                     return (
-                      <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/50">
-                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{r.timestamp || '—'}</td>
-                        {productionLinkMode !== 'product' && <td className="px-4 py-3 font-bold text-slate-800 whitespace-nowrap">{order?.orderNumber ?? '—'}</td>}
+                      <tr key={rowKey} className="border-b border-slate-100 hover:bg-slate-50/50">
+                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{formatTimestamp(latestTs)}</td>
+                        {productionLinkMode !== 'product' && (
+                          <td className="px-4 py-3 font-bold text-slate-800 whitespace-nowrap" title={orderNumbers.length > 1 ? orderNumbers.join('、') : undefined}>
+                            {orderLabel}
+                          </td>
+                        )}
                         <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{getDisplayDocNo(r)}</td>
                         <td className="px-4 py-3 text-slate-800 whitespace-nowrap">{product?.name ?? r.productId ?? '—'}</td>
-                        <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{nodeName}</td>
-                        <td className="px-4 py-3 text-right font-bold text-indigo-600 whitespace-nowrap">{r.quantity ?? 0} 件</td>
-                        {hasAnyPrice && <td className="px-4 py-3 text-right text-slate-700 whitespace-nowrap">{r.unitPrice != null && r.unitPrice > 0 ? r.unitPrice.toFixed(2) : '—'}</td>}
-                        {hasAnyPrice && <td className="px-4 py-3 text-right font-bold text-amber-600 whitespace-nowrap">{r.amount != null && r.amount > 0 ? r.amount.toFixed(2) : '—'}</td>}
-                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{r.operator || '—'}</td>
+                        <td className="px-4 py-3 text-slate-700 whitespace-nowrap max-w-[200px] truncate" title={nodeLabel}>{nodeLabel}</td>
+                        <td className="px-4 py-3 text-slate-700 whitespace-nowrap max-w-[160px] truncate" title={factoryLabel !== '—' ? factoryLabel : undefined}>{factoryLabel}</td>
+                        <td className="px-4 py-3 text-right font-bold text-indigo-600 whitespace-nowrap">{totalQty} 件</td>
+                        {hasAnyPrice && <td className="px-4 py-3 text-right text-slate-700 whitespace-nowrap">{unitLabel}</td>}
+                        {hasAnyPrice && <td className="px-4 py-3 text-right font-bold text-amber-600 whitespace-nowrap">{amtLabel}</td>}
+                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{opLabel}</td>
                         <td className="px-4 py-3">
                           {hasOpsPerm(tenantRole, userPermissions, 'production:rework_report_records:view') && (
                             <button type="button" onClick={() => onViewDetail(r)} className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all whitespace-nowrap shrink-0">
@@ -198,7 +279,7 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
                     );
                   })}
                   <tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold">
-                    <td className="px-4 py-3" colSpan={productionLinkMode === 'product' ? 4 : 5}></td>
+                    <td className="px-4 py-3" colSpan={productionLinkMode === 'product' ? 5 : 6}></td>
                     <td className="px-4 py-3 text-indigo-600 text-right">{totalQuantity} 件</td>
                     {hasAnyPrice && <td className="px-4 py-3"></td>}
                     {hasAnyPrice && <td className="px-4 py-3 text-amber-600 text-right">{totalAmount.toFixed(2)}</td>}

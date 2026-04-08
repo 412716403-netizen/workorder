@@ -51,6 +51,7 @@ export const PRODUCTION_SUB_MODULES: { key: string; label: string; actions: stri
   { key: 'rework_defective', label: '待处理不良', actions: ['allow'], group: '返工管理' },
   { key: 'rework_records', label: '处理不良流水', actions: ['view', 'edit', 'delete'], group: '返工管理' },
   { key: 'rework_report_records', label: '返工报工流水', actions: ['view', 'edit', 'delete'], group: '返工管理' },
+  { key: 'rework_outsource', label: '委外返工', actions: ['allow'], group: '返工管理' },
   { key: 'rework_detail', label: '详情', actions: ['allow'], group: '返工管理' },
   { key: 'rework_material', label: '物料', actions: ['allow'], group: '返工管理' },
 ];

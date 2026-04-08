@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { X, Check, Pencil, Trash2 } from 'lucide-react';
 import { ProductionOpRecord, ProductionOrder, Product, GlobalNodeTemplate, AppDictionaries, Worker } from '../../types';
 import { hasOpsPerm } from './types';
+import { formatTimestamp, timestampFromDatetimeLocal, nowTimestamp } from '../../utils/formatTime';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import WorkerSelector from '../../components/WorkerSelector';
 import EquipmentSelector from '../../components/EquipmentSelector';
@@ -62,7 +63,6 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
   const order = orders.find(o => o.id === first.orderId);
   const product = products.find(p => p.id === first.productId);
   const unitName = (product?.unitId && dictionaries?.units?.find(u => u.id === product.unitId)?.name) || '件';
-  const nodeName = first.nodeId ? globalNodes.find(n => n.id === first.nodeId)?.name : null;
   const reworkOrigin = (records || []).find(x => x.type === 'REWORK' && (x.orderId === first.orderId || (orders.find(o => o.id === first.orderId)?.parentOrderId === x.orderId)) && ((x.reworkNodeIds?.length ? x.reworkNodeIds : x.nodeId ? [x.nodeId] : []).includes(first.nodeId ?? '')));
   const resolvedSourceNodeId = (reworkOrigin?.sourceNodeId != null ? reworkOrigin.sourceNodeId : first.sourceNodeId) ?? undefined;
   const sourceNodeName = resolvedSourceNodeId ? globalNodes.find(n => n.id === resolvedSourceNodeId)?.name : null;
@@ -73,11 +73,62 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
     const v = product?.variants?.find((x: { id: string; skuSuffix?: string }) => x.id === rec.variantId);
     return (v as { skuSuffix?: string })?.skuSuffix ?? rec.variantId;
   };
+  const nodeNamesInBatch = [...new Set(detailBatch.map(x => x.nodeId ? (globalNodes.find(n => n.id === x.nodeId)?.name ?? '') : '').filter(Boolean))] as string[];
+  const nodeNamesLabel = nodeNamesInBatch.length === 0 ? '—' : nodeNamesInBatch.length === 1 ? nodeNamesInBatch[0]! : nodeNamesInBatch.join('、');
+  const latestBatchTimestamp = detailBatch.reduce<{ t: number; ts?: string }>((best, x) => {
+    const t = new Date(x.timestamp || 0).getTime();
+    if (isNaN(t)) return best;
+    return t >= best.t ? { t, ts: x.timestamp } : best;
+  }, { t: -1 }).ts;
+  const opsInBatch = [...new Set(detailBatch.map(x => (x.operator ?? '').trim()).filter(Boolean))];
+  const operatorsLabel = opsInBatch.length === 0 ? '—' : opsInBatch.length === 1 ? opsInBatch[0]! : `${opsInBatch[0]} 等${opsInBatch.length}人`;
+  const pricesInBatch = detailBatch.map(x => x.unitPrice).filter((p): p is number => p != null && p > 0);
+  const unitPriceLabel = pricesInBatch.length === 0 ? null : pricesInBatch.every(p => p === pricesInBatch[0]) ? pricesInBatch[0]! : null;
+  const batchTotalAmount = detailBatch.reduce((s, x) => {
+    if (x.amount != null && x.amount > 0) return s + x.amount;
+    const up = x.unitPrice ?? 0;
+    const q = x.quantity ?? 0;
+    return up > 0 ? s + q * up : s;
+  }, 0);
+  const showSpecTable =
+    hasColorSize || detailBatch.length > 1 || (() => {
+      const vids = new Set(detailBatch.map(x => x.variantId ?? ''));
+      return vids.size > 1;
+    })();
+  const displayVariantRows = useMemo(() => {
+    const labelFor = (rec: ProductionOpRecord) => {
+      if (!rec.variantId) return '未分规格';
+      const v = product?.variants?.find((x: { id: string; skuSuffix?: string }) => x.id === rec.variantId);
+      return (v as { skuSuffix?: string })?.skuSuffix ?? rec.variantId;
+    };
+    const byVariant = new Map<string, { variantId: string; label: string; quantity: number; lineAmount: number; recordIds: string[] }>();
+    for (const rec of detailBatch) {
+      const vid = rec.variantId ?? '';
+      const q = rec.quantity ?? 0;
+      const lineAmt =
+        rec.amount != null && rec.amount > 0 ? rec.amount : (rec.unitPrice != null && rec.unitPrice > 0 ? q * rec.unitPrice : 0);
+      const existing = byVariant.get(vid);
+      if (existing) {
+        existing.quantity += q;
+        existing.lineAmount += lineAmt;
+        existing.recordIds.push(rec.id);
+      } else {
+        byVariant.set(vid, {
+          variantId: vid,
+          label: labelFor(rec),
+          quantity: q,
+          lineAmount: lineAmt,
+          recordIds: [rec.id],
+        });
+      }
+    }
+    return [...byVariant.values()];
+  }, [detailBatch, product?.variants]);
 
   const handleSave = () => {
     if (!onUpdateRecord || !editing) return;
     const f = editing.form;
-    const tsStr = f.timestamp ? (() => { const d = new Date(f.timestamp); return isNaN(d.getTime()) ? new Date().toLocaleString() : d.toLocaleString(); })() : new Date().toLocaleString();
+    const tsStr = f.timestamp ? timestampFromDatetimeLocal(f.timestamp) : nowTimestamp();
     const opName = (workers?.find(w => w.id === f.workerId)?.name) ?? f.operator;
     const reworkDeltas = new Map<string, { reworkId: string; nodeId: string; delta: number }>();
     f.rowEdits.forEach(row => {
@@ -333,9 +384,9 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
           ) : (
             <>
               <div className="flex flex-wrap gap-4">
-                <div className="bg-slate-50 rounded-xl px-4 py-2">
+                <div className="bg-slate-50 rounded-xl px-4 py-2 min-w-0 max-w-full">
                   <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">工序</p>
-                  <p className="text-sm font-bold text-slate-800">{nodeName ?? first.nodeId ?? '—'}</p>
+                  <p className="text-sm font-bold text-slate-800 break-words" title={nodeNamesLabel}>{nodeNamesLabel}</p>
                 </div>
                 <div className="bg-slate-50 rounded-xl px-4 py-2">
                   <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">来源工序</p>
@@ -347,11 +398,11 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
                 </div>
                 <div className="bg-slate-50 rounded-xl px-4 py-2">
                   <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">返工时间</p>
-                  <p className="text-sm font-bold text-slate-800">{first.timestamp || '—'}</p>
+                  <p className="text-sm font-bold text-slate-800">{formatTimestamp(latestBatchTimestamp)}</p>
                 </div>
-                <div className="bg-slate-50 rounded-xl px-4 py-2">
+                <div className="bg-slate-50 rounded-xl px-4 py-2 min-w-0 max-w-full">
                   <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">操作人</p>
-                  <p className="text-sm font-bold text-slate-800">{first.operator ?? '—'}</p>
+                  <p className="text-sm font-bold text-slate-800 break-words" title={operatorsLabel}>{operatorsLabel}</p>
                 </div>
                 {first.reason && (
                   <div className="bg-slate-50 rounded-xl px-4 py-2">
@@ -359,54 +410,54 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
                     <p className="text-sm font-bold text-slate-800">{first.reason}</p>
                   </div>
                 )}
-                {first.unitPrice != null && first.unitPrice > 0 && (
+                {batchTotalAmount > 0 && (
                   <>
                     <div className="bg-slate-50 rounded-xl px-4 py-2">
                       <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">单价（元/件）</p>
-                      <p className="text-sm font-bold text-slate-800">{first.unitPrice.toFixed(2)}</p>
+                      <p className="text-sm font-bold text-slate-800">{unitPriceLabel != null ? unitPriceLabel.toFixed(2) : '—'}</p>
                     </div>
                     <div className="bg-amber-50 rounded-xl px-4 py-2">
                       <p className="text-[10px] text-amber-500 font-bold uppercase mb-0.5">金额（元）</p>
-                      <p className="text-sm font-bold text-amber-600">{(totalQty * first.unitPrice).toFixed(2)}</p>
+                      <p className="text-sm font-bold text-amber-600">{batchTotalAmount.toFixed(2)}</p>
                     </div>
                   </>
                 )}
               </div>
+              {showSpecTable && (
               <div className="border border-slate-200 rounded-2xl overflow-hidden">
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200">
                       <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">规格</th>
                       <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">数量</th>
-                      {first.unitPrice != null && first.unitPrice > 0 && (
+                      {batchTotalAmount > 0 && (
                         <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">金额</th>
                       )}
                     </tr>
                   </thead>
                   <tbody>
-                    {detailBatch.map(rec => (
-                      <tr key={rec.id} className="border-b border-slate-100">
-                        <td className="px-4 py-3 text-slate-800">{getVariantLabel(rec)}</td>
-                        <td className="px-4 py-3 font-bold text-indigo-600 text-right">{rec.quantity ?? 0} {unitName}</td>
-                        {first.unitPrice != null && first.unitPrice > 0 && (
-                          <td className="px-4 py-3 font-bold text-amber-600 text-right">{((rec.quantity ?? 0) * first.unitPrice).toFixed(2)}</td>
+                    {displayVariantRows.map(vr => (
+                      <tr key={vr.variantId || '_none'} className="border-b border-slate-100">
+                        <td className="px-4 py-3 text-slate-800">{vr.label}</td>
+                        <td className="px-4 py-3 font-bold text-indigo-600 text-right">{vr.quantity} {unitName}</td>
+                        {batchTotalAmount > 0 && (
+                          <td className="px-4 py-3 font-bold text-amber-600 text-right">{vr.lineAmount > 0 ? vr.lineAmount.toFixed(2) : '—'}</td>
                         )}
                       </tr>
                     ))}
                   </tbody>
-                  {hasColorSize || detailBatch.length > 1 ? (
-                    <tfoot>
-                      <tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold">
-                        <td className="px-4 py-3">合计</td>
-                        <td className="px-4 py-3 text-indigo-600 text-right">{totalQty} {unitName}</td>
-                        {first.unitPrice != null && first.unitPrice > 0 && (
-                          <td className="px-4 py-3 text-amber-600 text-right">{(totalQty * first.unitPrice).toFixed(2)}</td>
-                        )}
-                      </tr>
-                    </tfoot>
-                  ) : null}
+                  <tfoot>
+                    <tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold">
+                      <td className="px-4 py-3">合计</td>
+                      <td className="px-4 py-3 text-indigo-600 text-right">{totalQty} {unitName}</td>
+                      {batchTotalAmount > 0 && (
+                        <td className="px-4 py-3 text-amber-600 text-right">{batchTotalAmount.toFixed(2)}</td>
+                      )}
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
+              )}
               {(first.reworkNodeIds?.length ?? 0) > 0 && (
                 <div className="text-sm">
                   <span className="text-slate-400 font-bold">返工目标工序</span>

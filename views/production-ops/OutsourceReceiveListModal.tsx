@@ -110,14 +110,14 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
           <table className="w-full text-left border-collapse table-fixed">
             <thead>
               <tr className="bg-slate-100 border-b border-slate-200 sticky top-0 z-10">
-                <th className="w-12 px-4 py-3" />
-                {productionLinkMode !== 'product' && <th className="w-[18%] px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">工单号</th>}
-                <th className="w-[18%] px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">产品</th>
-                <th className="w-[14%] px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">工序</th>
-                <th className="w-[14%] px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">外协厂商</th>
-                <th className="w-[9%] px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">发出总量</th>
-                <th className="w-[9%] px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">已收总量</th>
-                <th className="w-[9%] px-6 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">待收数量</th>
+                <th className="w-12 px-3 py-3" />
+                {productionLinkMode !== 'product' && <th className="w-[18%] px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">工单号</th>}
+                <th className={`${productionLinkMode === 'product' ? 'w-[28%]' : 'w-[18%]'} px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest`}>产品</th>
+                <th className={`${productionLinkMode === 'product' ? 'w-[17%]' : 'w-[14%]'} px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest`}>工序</th>
+                <th className={`${productionLinkMode === 'product' ? 'w-[19%]' : 'w-[14%]'} px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest`}>外协厂商</th>
+                <th className={`${productionLinkMode === 'product' ? 'w-[12%]' : 'w-[9%]'} px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right`}>发出总量</th>
+                <th className={`${productionLinkMode === 'product' ? 'w-[12%]' : 'w-[9%]'} px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right`}>已收总量</th>
+                <th className={`${productionLinkMode === 'product' ? 'w-[12%]' : 'w-[9%]'} px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right`}>待收数量</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -129,7 +129,7 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
                   const checked = receiveSelectedKeys.has(key);
                   return (
                     <tr key={key} className="hover:bg-slate-50/50 bg-white">
-                      <td className="w-12 px-4 py-3 align-middle">
+                      <td className="w-12 px-3 py-3 align-middle">
                         <input type="checkbox" checked={checked} onChange={() => {
                           setReceiveSelectedKeys(prev => {
                             const next = new Set(prev);
@@ -147,18 +147,20 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
                           });
                         }} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                       </td>
-                      {productionLinkMode !== 'product' && <td className="px-6 py-3 text-sm font-bold text-slate-800 align-middle truncate" title={row.orderNumber}>{row.orderNumber}</td>}
-                      <td className="px-6 py-3 text-sm font-bold text-slate-800 align-middle truncate" title={row.productName}>{row.productName}</td>
-                      <td className="px-6 py-3 text-sm font-bold text-indigo-600 align-middle truncate" title={row.milestoneName}>{row.milestoneName}</td>
-                      <td className="px-6 py-3 text-sm font-bold text-slate-700 align-middle truncate" title={row.partner || '—'}>
+                      {productionLinkMode !== 'product' && <td className="px-4 py-3 text-sm font-bold text-slate-800 align-middle truncate" title={row.orderNumber}>{row.orderNumber}</td>}
+                      <td className="px-4 py-3 text-sm font-bold text-slate-800 align-middle truncate" title={row.productName}>
+                        {row.productName}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-bold text-indigo-600 align-middle truncate" title={row.milestoneName}>{row.milestoneName}</td>
+                      <td className="px-4 py-3 text-sm font-bold text-slate-700 align-middle truncate" title={row.partner || '—'}>
                         {row.partner || '—'}
                         {partners.find(p => p.name === row.partner)?.collaborationTenantId && (
                           <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-indigo-50 text-indigo-600 uppercase">协作</span>
                         )}
                       </td>
-                      <td className="px-6 py-3 text-right text-sm font-bold text-slate-700 align-middle">{row.dispatched}</td>
-                      <td className="px-6 py-3 text-right text-sm font-bold text-emerald-600 align-middle">{row.received}</td>
-                      <td className="px-6 py-3 text-right text-sm font-black text-amber-600 align-middle">{row.pending}</td>
+                      <td className="px-4 py-3 text-right text-sm font-bold text-slate-700 align-middle">{row.dispatched}</td>
+                      <td className="px-4 py-3 text-right text-sm font-bold text-emerald-600 align-middle">{row.received}</td>
+                      <td className="px-4 py-3 text-right text-sm font-black text-amber-600 align-middle">{row.pending}</td>
                     </tr>
                   );
                 })

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ClipboardList, X } from 'lucide-react';
+import { ClipboardList, ScrollText, X } from 'lucide-react';
 import { Product, ProductMilestoneProgress, ProductionOrder } from '../../types';
 import { ReworkPendingRow } from './types';
 
@@ -30,6 +30,8 @@ export interface ReworkPendingDefectiveModalProps {
   setReworkListSearchNodeId: (v: string) => void;
   onClose: () => void;
   onAction: (row: ReworkPendingRow) => void;
+  /** 有权限时展示，打开「处理不良品流水」弹窗 */
+  onOpenDefectTreatmentFlow?: () => void;
 }
 
 const ReworkPendingDefectiveModal: React.FC<ReworkPendingDefectiveModalProps> = ({
@@ -46,6 +48,7 @@ const ReworkPendingDefectiveModal: React.FC<ReworkPendingDefectiveModalProps> = 
   setReworkListSearchNodeId,
   onClose,
   onAction,
+  onOpenDefectTreatmentFlow,
 }) => {
   const filteredReworkPendingRows = React.useMemo(() => {
     const orderKw = (reworkListSearchOrder || '').trim().toLowerCase();
@@ -134,7 +137,20 @@ const ReworkPendingDefectiveModal: React.FC<ReworkPendingDefectiveModalProps> = 
                 : '扣除已返工/报损后的待处理数量；单号支持工单号或报工单号。按待返工数量优先显示。'}
             </p>
           </div>
-          <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 shrink-0"><X className="w-5 h-5" /></button>
+          <div className="flex items-center gap-2 shrink-0">
+            {onOpenDefectTreatmentFlow && (
+              <button
+                type="button"
+                onClick={onOpenDefectTreatmentFlow}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-all whitespace-nowrap"
+              >
+                <ScrollText className="w-4 h-4 shrink-0" /> 处理不良品流水
+              </button>
+            )}
+            <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 shrink-0" aria-label="关闭">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
         <div className="px-4 sm:px-6 py-3 border-b border-slate-100 bg-slate-50/80 shrink-0">
           <div className="flex flex-wrap items-end gap-3 sm:gap-4">

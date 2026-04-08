@@ -10,6 +10,7 @@ import {
   FileText,
   User,
   Package,
+  Truck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
@@ -227,7 +228,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
   }, [productionLinkMode, records, orders, products, globalNodes, productMilestoneProgresses, processSequenceMode, defectiveReworkByOrderForOutsource, idx]);
 
   const outsourceReceiveRows = useMemo(() => {
-    const outsourceRecords = records.filter(r => r.type === 'OUTSOURCE');
+    const outsourceRecords = records.filter(r => r.type === 'OUTSOURCE' && !r.sourceReworkId);
     const isProductMode = productionLinkMode === 'product';
 
     if (isProductMode) {
@@ -236,7 +237,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         if (r.orderId || !r.nodeId || !r.productId) return;
         const key = `${r.productId}|${r.nodeId}|${r.partner ?? ''}`;
         if (!byKey[key]) byKey[key] = { dispatched: 0, received: 0, partner: r.partner ?? '' };
-        if (r.status === '加工中') byKey[key].dispatched += r.quantity;
+        if (r.status === '加工中') { byKey[key].dispatched += r.quantity; }
         else if (r.status === '已收回') byKey[key].received += r.quantity;
       });
       const rows: { orderId?: string; nodeId: string; productId: string; orderNumber?: string; productName: string; milestoneName: string; partner: string; dispatched: number; received: number; pending: number }[] = [];
@@ -254,7 +255,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           partner: v.partner,
           dispatched: v.dispatched,
           received: v.received,
-          pending
+          pending,
         });
       });
       return rows.sort((a, b) => (a.productName || '').localeCompare(b.productName || ''));
@@ -265,7 +266,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
       if (!r.orderId || !r.nodeId) return;
       const key = `${r.orderId}|${r.nodeId}`;
       if (!byKey[key]) byKey[key] = { dispatched: 0, received: 0, partner: r.partner ?? '' };
-      if (r.status === '加工中') byKey[key].dispatched += r.quantity;
+      if (r.status === '加工中') { byKey[key].dispatched += r.quantity; }
       else if (r.status === '已收回') byKey[key].received += r.quantity;
     });
     const rows: { orderId?: string; nodeId: string; productId: string; orderNumber?: string; productName: string; milestoneName: string; partner: string; dispatched: number; received: number; pending: number }[] = [];
@@ -287,7 +288,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         partner: v.partner,
         dispatched: v.dispatched,
         received: v.received,
-        pending
+        pending,
       });
     });
     return rows;
@@ -296,13 +297,13 @@ const OutsourcePanel: React.FC<PanelProps> = ({
   const outsourceStatsByOrder = useMemo(() => {
     const isProductMode = productionLinkMode === 'product';
     if (isProductMode) {
-      const outsourceRecs = records.filter(r => r.type === 'OUTSOURCE' && !r.orderId && r.partner && r.productId);
+      const outsourceRecs = records.filter(r => r.type === 'OUTSOURCE' && !r.sourceReworkId && !r.orderId && r.partner && r.productId);
       const byKey: Record<string, { productId: string; partner: string; nodeId: string; dispatched: number; received: number }> = {};
       outsourceRecs.forEach(r => {
         const nodeId = r.nodeId ?? '';
         const key = `${r.productId}|${r.partner}|${nodeId}`;
         if (!byKey[key]) byKey[key] = { productId: r.productId, partner: r.partner, nodeId, dispatched: 0, received: 0 };
-        if (r.status === '加工中') byKey[key].dispatched += r.quantity;
+        if (r.status === '加工中') { byKey[key].dispatched += r.quantity; }
         else if (r.status === '已收回') byKey[key].received += r.quantity;
       });
       const byProduct = new Map<string, { partner: string; nodeId: string; nodeName: string; dispatched: number; received: number; pending: number }[]>();
@@ -333,13 +334,13 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         })
         .sort((a, b) => (a.productName || '').localeCompare(b.productName || ''));
     }
-    const outsourceRecs = records.filter(r => r.type === 'OUTSOURCE' && r.orderId && r.partner);
+    const outsourceRecs = records.filter(r => r.type === 'OUTSOURCE' && !r.sourceReworkId && r.orderId && r.partner);
     const byKey: Record<string, { orderId: string; partner: string; nodeId: string; dispatched: number; received: number }> = {};
     outsourceRecs.forEach(r => {
       const nodeId = r.nodeId ?? '';
       const key = `${r.orderId}|${r.partner}|${nodeId}`;
       if (!byKey[key]) byKey[key] = { orderId: r.orderId, partner: r.partner, nodeId, dispatched: 0, received: 0 };
-      if (r.status === '加工中') byKey[key].dispatched += r.quantity;
+      if (r.status === '加工中') { byKey[key].dispatched += r.quantity; }
       else if (r.status === '已收回') byKey[key].received += r.quantity;
     });
     const byOrder = new Map<string, { partner: string; nodeId: string; nodeName: string; dispatched: number; received: number; pending: number }[]>();
@@ -373,7 +374,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
 
   const outsourceFlowSummaryRows = useMemo(() => {
     const isProductMode = productionLinkMode === 'product';
-    const outsourceList = isProductMode ? records.filter(r => r.type === 'OUTSOURCE' && !r.orderId) : records.filter(r => r.type === 'OUTSOURCE');
+    const outsourceList = isProductMode ? records.filter(r => r.type === 'OUTSOURCE' && !r.sourceReworkId && !r.orderId) : records.filter(r => r.type === 'OUTSOURCE' && !r.sourceReworkId);
 
     if (isProductMode) {
       const key = (docNo: string, productId: string) => `${docNo}|${productId}`;
@@ -505,6 +506,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
     return `WX-R-${String(code).padStart(4, '0')}-${String(seq).padStart(4, '0')}`;
   };
 
+
   const handleDispatchFormSubmit = async () => {
     const partnerName = (dispatchPartnerName || '').trim();
     if (!partnerName) {
@@ -596,7 +598,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
       return;
     }
     const receiveDocNo = getNextReceiveDocNo(receiveModal.partner);
-    onAddRecord({
+    const receiveRec: ProductionOpRecord = {
       id: `rec-${Date.now()}-recv-${Math.random().toString(36).slice(2, 8)}`,
       type: 'OUTSOURCE',
       orderId: receiveModal.orderId,
@@ -607,8 +609,9 @@ const OutsourcePanel: React.FC<PanelProps> = ({
       status: '已收回',
       partner: receiveModal.partner,
       nodeId: receiveModal.nodeId,
-      docNo: receiveDocNo
-    });
+      docNo: receiveDocNo,
+    };
+    onAddRecord(receiveRec);
     setReceiveModal(null);
     setReceiveQty(0);
   };
@@ -725,7 +728,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           variantId: variantId || undefined,
           docNo: receiveDocNo,
           unitPrice: unitPrice || undefined,
-          amount: amount || undefined
+          amount: amount || undefined,
         });
       } else {
         const orderId = parts[0];
@@ -751,7 +754,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           variantId: variantId || undefined,
           docNo: receiveDocNo,
           unitPrice: unitPrice || undefined,
-          amount: amount || undefined
+          amount: amount || undefined,
         });
       }
     }
@@ -866,7 +869,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
                     {ptnrs.map(({ partner, nodeId, nodeName, dispatched, received, pending }) => (
                       <div
                         key={`${partner}|${nodeId}`}
-                        className="flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 hover:border-slate-200 transition-colors"
+                        className="flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 rounded-xl border transition-colors border-slate-100 bg-slate-50 hover:bg-slate-100 hover:border-slate-200"
                       >
                         <div className="mb-1 w-full text-center leading-tight">
                           <div className="text-[10px] font-bold text-emerald-600 truncate" title={nodeName}>{nodeName}</div>

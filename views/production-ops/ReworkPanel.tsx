@@ -31,6 +31,27 @@ import ReworkReportFlowDetailModal from './ReworkReportFlowDetailModal';
 import ReworkDefectiveActionModal from './ReworkDefectiveActionModal';
 import ReworkReportSubmitModal from './ReworkReportSubmitModal';
 
+const OUTSOURCE_REWORK_DOCNO_RE = /^WX-(\d+)-(\d+)$/;
+
+/** sourceReworkId → partner 的预建索引 */
+function buildReworkPartnerMap(allRecords: ProductionOpRecord[]): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const x of allRecords) {
+    if (x.type === 'OUTSOURCE' && x.sourceReworkId && (x.partner ?? '').trim()) {
+      m.set(String(x.sourceReworkId), (x.partner ?? '').trim());
+    }
+  }
+  return m;
+}
+
+/** REWORK 记录的外协工厂：优先 REWORK.partner，否则从预建索引反查 */
+function resolveReworkOutsourcePartner(r: ProductionOpRecord, partnerMap: Map<string, string>): string {
+  const fromRec = (r.partner ?? '').trim();
+  if (fromRec) return fromRec;
+  if (r.id) return partnerMap.get(String(r.id)) ?? '';
+  return '';
+}
+
 const ReworkPanel: React.FC<PanelProps> = ({
   productionLinkMode = 'order', productMilestoneProgresses = [], records, orders, products, warehouses = [], boms = [], dictionaries, onAddRecord, onAddRecordBatch, onUpdateRecord, onDeleteRecord, globalNodes = [], partners = [], categories = [], partnerCategories = [], workers = [], equipment = [], processSequenceMode = 'free',
   userPermissions, tenantRole
@@ -58,7 +79,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
   /** 返工管理：物料弹窗（该工单 BOM 领料，确认后写入生产物料并在领料退料流水中备注「来自于返工」） */
   const [reworkMaterialOrderId, setReworkMaterialOrderId] = useState<string | null>(null);
   /** 返工报工弹窗：点击工序标签打开，当前工单 + 工序 */
-  const [reworkReportModal, setReworkReportModal] = useState<{ order: ProductionOrder; nodeId: string; nodeName: string } | null>(null);
+  const [reworkReportModal, setReworkReportModal] = useState<{ order: ProductionOrder; nodeId: string; nodeName: string; outsourcePartner?: string } | null>(null);
 
   const REWORK_PAGE_SIZE = 10;
   const [reworkPage, setReworkPage] = useState(1);
@@ -206,67 +227,68 @@ const ReworkPanel: React.FC<PanelProps> = ({
   /** 返工管理·关联产品：按产品汇总各返工目标工序（不区分工单） */
   const reworkStatsByProductId = useMemo(() => {
     if (productionLinkMode !== 'product') {
-      return new Map<string, { nodeId: string; nodeName: string; totalQty: number; completedQty: number; pendingQty: number }[]>();
+      return new Map<string, { nodeId: string; nodeName: string; totalQty: number; completedQty: number; pendingQty: number; outsourcePartner?: string }[]>();
     }
+    const reworkPartnerMap = buildReworkPartnerMap(records);
     const reworkRecords = records.filter(r => r.type === 'REWORK');
     const parentIdSetByProduct = new Map<string, Set<string>>();
     parentOrders.forEach(o => {
       if (!parentIdSetByProduct.has(o.productId)) parentIdSetByProduct.set(o.productId, new Set());
       parentIdSetByProduct.get(o.productId)!.add(o.id);
     });
-    const byProduct = new Map<string, Map<string, { totalQty: number; completedQty: number; pendingSeq: number }>>();
+    const byProduct = new Map<string, Map<string, { nodeId: string; totalQty: number; completedQty: number; pendingSeq: number; outsourcePartner: string }>>();
     reworkRecords.forEach(r => {
       const pid = r.productId;
       if (!pid) return;
       const parents = parentIdSetByProduct.get(pid);
       if (!parents) return;
       if (r.orderId && !parents.has(r.orderId)) return;
-      const byNode = byProduct.get(pid) ?? new Map();
+      const byKey = byProduct.get(pid) ?? new Map();
       const targetNodes = (r.reworkNodeIds && r.reworkNodeIds.length > 0) ? r.reworkNodeIds : (r.nodeId ? [r.nodeId] : []);
       const completed =
         r.status === '已完成' ||
         (targetNodes.length > 0 && targetNodes.every(n => (r.reworkCompletedQuantityByNode?.[n] ?? 0) >= r.quantity));
+      const outsourcePartnerName = resolveReworkOutsourcePartner(r, reworkPartnerMap);
       targetNodes.forEach(nodeId => {
-        const cur = byNode.get(nodeId) ?? { totalQty: 0, completedQty: 0, pendingSeq: 0 };
+        const groupKey = `${nodeId}\0${outsourcePartnerName}`;
+        const cur = byKey.get(groupKey) ?? { nodeId, totalQty: 0, completedQty: 0, pendingSeq: 0, outsourcePartner: outsourcePartnerName };
         cur.totalQty += r.quantity;
         const doneAtNode =
           r.reworkCompletedQuantityByNode?.[nodeId] ?? ((r.completedNodeIds ?? []).includes(nodeId) || completed ? r.quantity : 0);
         cur.completedQty += Math.min(r.quantity, doneAtNode);
         cur.pendingSeq += reworkRemainingAtNode(r, nodeId);
-        byNode.set(nodeId, cur);
+        byKey.set(groupKey, cur);
       });
-      byProduct.set(pid, byNode);
+      byProduct.set(pid, byKey);
     });
-    const result = new Map<string, { nodeId: string; nodeName: string; totalQty: number; completedQty: number; pendingQty: number }[]>();
-    byProduct.forEach((byNode, pid) => {
+    const result = new Map<string, { nodeId: string; nodeName: string; totalQty: number; completedQty: number; pendingQty: number; outsourcePartner?: string }[]>();
+    byProduct.forEach((byKey, pid) => {
       const product = idx.productsById.get(pid);
       const seq = product?.milestoneNodeIds ?? [];
-      let list = Array.from(byNode.entries())
-        .filter(([, v]) => v.totalQty > 0)
-        .map(([nodeId, v]) => ({
-          nodeId,
-          nodeName: idx.nodesById.get(nodeId)?.name ?? nodeId,
+      let list = Array.from(byKey.values())
+        .filter(v => v.totalQty > 0)
+        .map(v => ({
+          nodeId: v.nodeId,
+          nodeName: idx.nodesById.get(v.nodeId)?.name ?? v.nodeId,
           totalQty: v.totalQty,
           completedQty: v.completedQty,
-          pendingQty: processSequenceMode === 'sequential' ? v.pendingSeq : v.totalQty - v.completedQty
+          pendingQty: processSequenceMode === 'sequential' ? v.pendingSeq : v.totalQty - v.completedQty,
+          outsourcePartner: v.outsourcePartner || undefined,
         }));
+      const sortByNodeThenPartner = (a: typeof list[0], b: typeof list[0], getIdx: (nid: string) => number) => {
+        const ia = getIdx(a.nodeId);
+        const ib = getIdx(b.nodeId);
+        if (ia !== ib) return ia - ib;
+        const ao = a.outsourcePartner ? 1 : 0;
+        const bo = b.outsourcePartner ? 1 : 0;
+        return ao - bo;
+      };
       if (seq.length) {
         const seqIndex = new Map<string, number>();
         for (let i = 0; i < seq.length; i++) seqIndex.set(seq[i], i);
-        list.sort((a, b) => {
-          const ia = seqIndex.get(a.nodeId) ?? -1;
-          const ib = seqIndex.get(b.nodeId) ?? -1;
-          if (ia === -1 && ib === -1) return (a.nodeName || '').localeCompare(b.nodeName || '');
-          if (ia === -1) return 1;
-          if (ib === -1) return -1;
-          return ia - ib;
-        });
+        list.sort((a, b) => sortByNodeThenPartner(a, b, nid => seqIndex.get(nid) ?? 999));
       } else {
-        list.sort((a, b) => {
-          const idxA = idx.nodeIndexMap.get(a.nodeId) ?? 999;
-          const idxB = idx.nodeIndexMap.get(b.nodeId) ?? 999;
-          return idxA - idxB;
-        });
+        list.sort((a, b) => sortByNodeThenPartner(a, b, nid => idx.nodeIndexMap.get(nid) ?? 999));
       }
       if (list.length > 0) result.set(pid, list);
     });
@@ -276,8 +298,9 @@ const ReworkPanel: React.FC<PanelProps> = ({
   /** 返工管理·关联工单：按单 + 目标工序聚合 */
   const reworkStatsByOrderId = useMemo(() => {
     if (productionLinkMode === 'product') {
-      return new Map<string, { nodeId: string; nodeName: string; totalQty: number; completedQty: number; pendingQty: number }[]>();
+      return new Map<string, { nodeId: string; nodeName: string; totalQty: number; completedQty: number; pendingQty: number; outsourcePartner?: string }[]>();
     }
+    const reworkPartnerMap = buildReworkPartnerMap(records);
     const reworkRecords = records.filter(r => r.type === 'REWORK');
     const reworkByOrderId = new Map<string, ProductionOpRecord[]>();
     for (const r of reworkRecords) {
@@ -286,39 +309,45 @@ const ReworkPanel: React.FC<PanelProps> = ({
       if (!arr) { arr = []; reworkByOrderId.set(r.orderId, arr); }
       arr.push(r);
     }
-    const result = new Map<string, { nodeId: string; nodeName: string; totalQty: number; completedQty: number; pendingQty: number }[]>();
+    const result = new Map<string, { nodeId: string; nodeName: string; totalQty: number; completedQty: number; pendingQty: number; outsourcePartner?: string }[]>();
     orders.forEach(order => {
       const orderReworks = reworkByOrderId.get(order.id);
       if (!orderReworks || orderReworks.length === 0) return;
-      const byNode = new Map<string, { totalQty: number; completedQty: number; pendingSeq: number }>();
+      const byKey = new Map<string, { nodeId: string; totalQty: number; completedQty: number; pendingSeq: number; outsourcePartner: string }>();
       orderReworks.forEach(r => {
         const targetNodes = (r.reworkNodeIds && r.reworkNodeIds.length > 0) ? r.reworkNodeIds : (r.nodeId ? [r.nodeId] : []);
         const completed =
           r.status === '已完成' ||
           (targetNodes.length > 0 && targetNodes.every(n => (r.reworkCompletedQuantityByNode?.[n] ?? 0) >= r.quantity));
+        const outsourcePartnerName = resolveReworkOutsourcePartner(r, reworkPartnerMap);
         targetNodes.forEach(nodeId => {
-          const cur = byNode.get(nodeId) ?? { totalQty: 0, completedQty: 0, pendingSeq: 0 };
+          const groupKey = `${nodeId}\0${outsourcePartnerName}`;
+          const cur = byKey.get(groupKey) ?? { nodeId, totalQty: 0, completedQty: 0, pendingSeq: 0, outsourcePartner: outsourcePartnerName };
           cur.totalQty += r.quantity;
           const doneAtNode =
             r.reworkCompletedQuantityByNode?.[nodeId] ?? ((r.completedNodeIds ?? []).includes(nodeId) || completed ? r.quantity : 0);
           cur.completedQty += Math.min(r.quantity, doneAtNode);
           cur.pendingSeq += reworkRemainingAtNode(r, nodeId);
-          byNode.set(nodeId, cur);
+          byKey.set(groupKey, cur);
         });
       });
-      const list = Array.from(byNode.entries())
-        .filter(([, v]) => v.totalQty > 0)
-        .map(([nodeId, v]) => ({
-          nodeId,
-          nodeName: idx.nodesById.get(nodeId)?.name ?? nodeId,
+      const list = Array.from(byKey.values())
+        .filter(v => v.totalQty > 0)
+        .map(v => ({
+          nodeId: v.nodeId,
+          nodeName: idx.nodesById.get(v.nodeId)?.name ?? v.nodeId,
           totalQty: v.totalQty,
           completedQty: v.completedQty,
-          pendingQty: processSequenceMode === 'sequential' ? v.pendingSeq : v.totalQty - v.completedQty
+          pendingQty: processSequenceMode === 'sequential' ? v.pendingSeq : v.totalQty - v.completedQty,
+          outsourcePartner: v.outsourcePartner || undefined,
         }))
         .sort((a, b) => {
           const idxA = idx.nodeIndexMap.get(a.nodeId) ?? 999;
           const idxB = idx.nodeIndexMap.get(b.nodeId) ?? 999;
-          return idxA - idxB;
+          if (idxA !== idxB) return idxA - idxB;
+          const ao = a.outsourcePartner ? 1 : 0;
+          const bo = b.outsourcePartner ? 1 : 0;
+          return ao - bo;
         });
       if (list.length > 0) result.set(order.id, list);
     });
@@ -345,6 +374,27 @@ const ReworkPanel: React.FC<PanelProps> = ({
     let next = 1;
     while (used.has(next)) next++;
     return `FG${todayStr}-${String(next).padStart(4, '0')}`;
+  };
+
+  const getNextOutsourceReworkDocNo = (partnerName: string): string => {
+    const partnerCodeByName = new Map<string, number>();
+    const seqsByCode = new Map<number, number[]>();
+    let maxCode = 0;
+    for (const r of records) {
+      if (r.type !== 'OUTSOURCE' || !r.docNo) continue;
+      const m = r.docNo.match(OUTSOURCE_REWORK_DOCNO_RE);
+      if (!m) continue;
+      const code = parseInt(m[1], 10);
+      const seq = parseInt(m[2], 10);
+      if (code > maxCode) maxCode = code;
+      if (r.partner && !partnerCodeByName.has(r.partner)) partnerCodeByName.set(r.partner, code);
+      if (!seqsByCode.has(code)) seqsByCode.set(code, []);
+      if (seq > 0) seqsByCode.get(code)!.push(seq);
+    }
+    const partnerCode = partnerCodeByName.get(partnerName) ?? maxCode + 1;
+    const existingSeqs = seqsByCode.get(partnerCode) ?? [];
+    const nextSeq = existingSeqs.length ? Math.max(...existingSeqs) + 1 : 1;
+    return `WX-${String(partnerCode).padStart(4, '0')}-${String(nextSeq).padStart(4, '0')}`;
   };
 
   /** 返工管理：工单模式=主/子分组；关联产品模式=仅按产品一条（工序汇总） */
@@ -396,14 +446,18 @@ const ReworkPanel: React.FC<PanelProps> = ({
             <ClipboardList className="w-4 h-4 shrink-0" /> 待处理不良
           </button>
           )}
-          {hasOpsPerm(tenantRole, userPermissions, 'production:rework_records:view') && (
-          <button
-            type="button"
-            onClick={() => { setDefectFlowModalOpen(true); setDefectFlowDetailRecord(null); }}
-            className={outlineToolbarButtonClass}
-          >
-            <ScrollText className="w-4 h-4 shrink-0" /> 处理不良品流水
-          </button>
+          {hasOpsPerm(tenantRole, userPermissions, 'production:rework_records:view') &&
+            !hasOpsPerm(tenantRole, userPermissions, 'production:rework_defective:allow') && (
+            <button
+              type="button"
+              onClick={() => {
+                setDefectFlowModalOpen(true);
+                setDefectFlowDetailRecord(null);
+              }}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-all"
+            >
+              <ScrollText className="w-4 h-4 shrink-0" /> 处理不良品流水
+            </button>
           )}
           {hasOpsPerm(tenantRole, userPermissions, 'production:rework_report_records:view') && (
           <button
@@ -480,23 +534,45 @@ const ReworkPanel: React.FC<PanelProps> = ({
                       {stats.length > 0 ? (
                         <div className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden scroll-smooth custom-scrollbar touch-pan-x -mx-0.5">
                           <div className="flex items-stretch gap-1.5 flex-nowrap py-0.5 w-max px-0.5">
-                            {stats.map(({ nodeId, nodeName, totalQty, completedQty, pendingQty }) => {
+                            {stats.map(({ nodeId, nodeName, totalQty, completedQty, pendingQty, outsourcePartner }) => {
                               const isAllDone = pendingQty <= 0;
+                              const isOutsource = !!outsourcePartner;
                               return (
                                 <button
-                                  key={nodeId}
+                                  key={`${nodeId}\0${outsourcePartner ?? ''}`}
                                   type="button"
-                                  title={`工序「${nodeName}」返工：总 ${totalQty}，已返工 ${completedQty}，${processSequenceMode === 'sequential' ? '可报 ' : '未返工 '}${pendingQty}${processSequenceMode === 'sequential' ? '（顺序模式：上道流入可报数）' : ''}（点击报工）`}
-                                  onClick={() => { setReworkReportModal({ order, nodeId, nodeName }); }}
-                                  className="flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 rounded-xl border bg-slate-50 border-slate-100 hover:bg-indigo-50 hover:border-indigo-200 transition-colors text-left cursor-pointer"
+                                  title={isOutsource
+                                    ? (isAllDone
+                                      ? `工序「${nodeName}」委外返工已收回·${outsourcePartner}：总 ${totalQty}，已返工 ${completedQty}（点击查看）`
+                                      : `工序「${nodeName}」委外返工中·${outsourcePartner}：总 ${totalQty}，已返工 ${completedQty}，待收回 ${pendingQty}（点击收回）`)
+                                    : `工序「${nodeName}」返工：总 ${totalQty}，已返工 ${completedQty}，${processSequenceMode === 'sequential' ? '可报 ' : '未返工 '}${pendingQty}${processSequenceMode === 'sequential' ? '（顺序模式：上道流入可报数）' : ''}（点击报工）`}
+                                  onClick={() => { setReworkReportModal({ order, nodeId, nodeName, outsourcePartner: outsourcePartner || undefined }); }}
+                                  className={`flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 rounded-xl border transition-colors text-left cursor-pointer ${isOutsource ? 'border-slate-100 bg-slate-50 hover:bg-slate-100 hover:border-slate-200' : 'bg-slate-50 border-slate-100 hover:bg-indigo-50 hover:border-indigo-200'}`}
                                 >
-                                  <span className="text-[10px] font-bold text-indigo-600 mb-1 leading-tight truncate w-full text-center">{nodeName}</span>
-                                  <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isAllDone ? 'border-emerald-400' : 'border-indigo-300'}`}>
-                                    <span className="text-base font-black text-slate-900 leading-none">{pendingQty}</span>
-                                  </div>
-                                  <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 leading-tight">
-                                    <span>{processSequenceMode === 'sequential' ? (pendingQty + completedQty) : totalQty} / <span className="text-slate-600">{completedQty}</span></span>
-                                  </div>
+                                  {isOutsource ? (
+                                    <>
+                                      <div className="mb-1 w-full text-center leading-tight">
+                                        <div className="text-[10px] font-bold text-emerald-600 truncate" title={nodeName}>{nodeName}</div>
+                                        <div className="text-[10px] font-bold text-slate-600 truncate" title={outsourcePartner}>{outsourcePartner}</div>
+                                      </div>
+                                      <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isAllDone ? 'border-emerald-400' : 'border-indigo-300'}`}>
+                                        <span className="text-base font-black text-slate-900 leading-none">{pendingQty}</span>
+                                      </div>
+                                      <div className="flex items-center justify-center gap-1.5 leading-tight">
+                                        <span className="text-[10px] font-bold text-slate-500 tabular-nums">{totalQty} / {completedQty}</span>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="text-[10px] font-bold text-indigo-600 mb-1 leading-tight truncate w-full text-center">{nodeName}</span>
+                                      <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isAllDone ? 'border-emerald-400' : 'border-indigo-300'}`}>
+                                        <span className="text-base font-black text-slate-900 leading-none">{pendingQty}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 leading-tight">
+                                        <span>{processSequenceMode === 'sequential' ? (pendingQty + completedQty) : totalQty} / <span className="text-slate-600">{completedQty}</span></span>
+                                      </div>
+                                    </>
+                                  )}
                                 </button>
                               );
                             })}
@@ -573,30 +649,50 @@ const ReworkPanel: React.FC<PanelProps> = ({
                       {stats.length > 0 ? (
                         <div className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden scroll-smooth custom-scrollbar touch-pan-x -mx-0.5">
                           <div className="flex items-stretch gap-1.5 flex-nowrap py-0.5 w-max px-0.5">
-                            {stats.map(({ nodeId, nodeName, totalQty, completedQty, pendingQty }) => {
+                            {stats.map(({ nodeId, nodeName, totalQty, completedQty, pendingQty, outsourcePartner }) => {
                               const isAllDone = pendingQty <= 0;
+                              const isOutsource = !!outsourcePartner;
                               return (
                                 <button
-                                  key={nodeId}
+                                  key={`${nodeId}\0${outsourcePartner ?? ''}`}
                                   type="button"
-                                  title={`工序「${nodeName}」返工（全产品汇总）：总 ${totalQty}，已返工 ${completedQty}，${processSequenceMode === 'sequential' ? '可报 ' : '未返工 '}${pendingQty}（点击报工，以首单为载体）`}
+                                  title={isOutsource
+                                    ? (isAllDone
+                                      ? `工序「${nodeName}」委外返工已收回·${outsourcePartner}：总 ${totalQty}，已返工 ${completedQty}（点击查看）`
+                                      : `工序「${nodeName}」委外返工中·${outsourcePartner}：总 ${totalQty}，已返工 ${completedQty}，待收回 ${pendingQty}（点击收回）`)
+                                    : `工序「${nodeName}」返工（全产品汇总）：总 ${totalQty}，已返工 ${completedQty}，${processSequenceMode === 'sequential' ? '可报 ' : '未返工 '}${pendingQty}（点击报工，以首单为载体）`}
                                   onClick={() => {
-                                    setReworkReportModal({ order: repOrder, nodeId, nodeName });
+                                    setReworkReportModal({ order: repOrder, nodeId, nodeName, outsourcePartner: outsourcePartner || undefined });
                                   }}
-                                  className="flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 rounded-xl border bg-slate-50 border-slate-100 hover:bg-indigo-50 hover:border-indigo-200 transition-colors text-left cursor-pointer"
+                                  className={`flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 rounded-xl border transition-colors text-left cursor-pointer ${isOutsource ? 'border-slate-100 bg-slate-50 hover:bg-slate-100 hover:border-slate-200' : 'bg-slate-50 border-slate-100 hover:bg-indigo-50 hover:border-indigo-200'}`}
                                 >
-                                  <span className="text-[10px] font-bold text-indigo-600 mb-1 leading-tight truncate w-full text-center">{nodeName}</span>
-                                  <div
-                                    className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isAllDone ? 'border-emerald-400' : 'border-indigo-300'}`}
-                                  >
-                                    <span className="text-base font-black text-slate-900 leading-none">{pendingQty}</span>
-                                  </div>
-                                  <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 leading-tight">
-                                    <span>
-                                      {processSequenceMode === 'sequential' ? pendingQty + completedQty : totalQty} /{' '}
-                                      <span className="text-slate-600">{completedQty}</span>
-                                    </span>
-                                  </div>
+                                  {isOutsource ? (
+                                    <>
+                                      <div className="mb-1 w-full text-center leading-tight">
+                                        <div className="text-[10px] font-bold text-emerald-600 truncate" title={nodeName}>{nodeName}</div>
+                                        <div className="text-[10px] font-bold text-slate-600 truncate" title={outsourcePartner}>{outsourcePartner}</div>
+                                      </div>
+                                      <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isAllDone ? 'border-emerald-400' : 'border-indigo-300'}`}>
+                                        <span className="text-base font-black text-slate-900 leading-none">{pendingQty}</span>
+                                      </div>
+                                      <div className="flex items-center justify-center gap-1.5 leading-tight">
+                                        <span className="text-[10px] font-bold text-slate-500 tabular-nums">{totalQty} / {completedQty}</span>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="text-[10px] font-bold text-indigo-600 mb-1 leading-tight truncate w-full text-center">{nodeName}</span>
+                                      <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isAllDone ? 'border-emerald-400' : 'border-indigo-300'}`}>
+                                        <span className="text-base font-black text-slate-900 leading-none">{pendingQty}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 leading-tight">
+                                        <span>
+                                          {processSequenceMode === 'sequential' ? pendingQty + completedQty : totalQty} /{' '}
+                                          <span className="text-slate-600">{completedQty}</span>
+                                        </span>
+                                      </div>
+                                    </>
+                                  )}
                                 </button>
                               );
                             })}
@@ -684,6 +780,14 @@ const ReworkPanel: React.FC<PanelProps> = ({
           setReworkListSearchNodeId={setReworkListSearchNodeId}
           onClose={() => setReworkPendingModalOpen(false)}
           onAction={setReworkActionRow}
+          onOpenDefectTreatmentFlow={
+            hasOpsPerm(tenantRole, userPermissions, 'production:rework_records:view')
+              ? () => {
+                  setDefectFlowModalOpen(true);
+                  setDefectFlowDetailRecord(null);
+                }
+              : undefined
+          }
         />
       )}
 
@@ -788,8 +892,14 @@ const ReworkPanel: React.FC<PanelProps> = ({
           dictionaries={dictionaries}
           categories={categories}
           productMilestoneProgresses={productMilestoneProgresses}
+          partners={partners}
+          partnerCategories={partnerCategories}
+          userPermissions={userPermissions}
+          tenantRole={tenantRole}
           onAddRecord={onAddRecord}
+          onAddRecordBatch={onAddRecordBatch}
           getNextReworkDocNo={getNextReworkDocNo}
+          getNextOutsourceReworkDocNo={getNextOutsourceReworkDocNo}
           onClose={() => { setReworkActionRow(null); }}
         />
       )}

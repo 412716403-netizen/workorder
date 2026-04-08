@@ -59,7 +59,7 @@ export async function createRecord(
 
   const record = await db.productionOpRecord.create({ data });
 
-  if (data.type === 'OUTSOURCE' && data.status === '已收回') {
+  if (data.type === 'OUTSOURCE' && data.status === '已收回' && !data.sourceReworkId) {
     await applyOutsourceProgress({ ...record, tenantId: tenantId ?? null });
   }
 
@@ -142,13 +142,15 @@ export async function applyOutsourceProgress(record: {
   timestamp?: Date | string | null;
   docNo?: string | null;
   tenantId?: string | null;
+  partner?: string | null;
 }) {
   if (!record.nodeId) return;
   const qty = Number(record.quantity);
   if (!qty || qty <= 0) return;
   const ts = record.timestamp ? new Date(record.timestamp as string) : new Date();
+  const partnerName = record.partner != null ? String(record.partner).trim() : '';
   const reportData = {
-    operator: '外协收回',
+    operator: partnerName || '外协收回',
     quantity: qty,
     defectiveQuantity: 0,
     variantId: record.variantId || null,

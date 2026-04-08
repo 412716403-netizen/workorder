@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Check, Pencil, Trash2 } from 'lucide-react';
 import { ProductionOpRecord, ProductionOrder, Product, GlobalNodeTemplate, AppDictionaries } from '../../types';
 import { hasOpsPerm } from './types';
+import { formatTimestamp, timestampFromDatetimeLocal, nowTimestamp } from '../../utils/formatTime';
 import { useConfirm } from '../../contexts/ConfirmContext';
 
 export interface DefectTreatmentFlowDetailModalProps {
@@ -35,10 +36,12 @@ const DefectTreatmentFlowDetailModal: React.FC<DefectTreatmentFlowDetailModalPro
 }) => {
   const confirm = useConfirm();
   const r = defectFlowDetailRecord;
+  const matchScope = (x: ProductionOpRecord) =>
+    productionLinkMode === 'product' ? x.productId === r.productId : x.orderId === r.orderId;
   const detailBatch = r.type === 'REWORK' && r.docNo
-    ? (records || []).filter((x): x is ProductionOpRecord => x.type === 'REWORK' && x.orderId === r.orderId && x.docNo === r.docNo)
+    ? (records || []).filter((x): x is ProductionOpRecord => x.type === 'REWORK' && matchScope(x) && x.docNo === r.docNo)
     : r.type === 'SCRAP' && r.docNo
-      ? (records || []).filter((x): x is ProductionOpRecord => x.type === 'SCRAP' && x.orderId === r.orderId && x.docNo === r.docNo)
+      ? (records || []).filter((x): x is ProductionOpRecord => x.type === 'SCRAP' && matchScope(x) && x.docNo === r.docNo)
       : [r];
   const first = detailBatch[0];
 
@@ -54,6 +57,33 @@ const DefectTreatmentFlowDetailModal: React.FC<DefectTreatmentFlowDetailModalPro
   const hasColorSize = Boolean(product?.variants?.length);
   const getVariantLabel = (rec: ProductionOpRecord) => { if (!rec.variantId) return '未分规格'; const v = product?.variants?.find((x: { id: string; skuSuffix?: string }) => x.id === rec.variantId); return (v as { skuSuffix?: string })?.skuSuffix ?? rec.variantId; };
   const typeLabel = first.type === 'REWORK' ? '返工' : '报损';
+
+  const displayVariantRows = React.useMemo(() => {
+    const labelFor = (rec: ProductionOpRecord) => {
+      if (!rec.variantId) return '未分规格';
+      const v = product?.variants?.find((x: { id: string; skuSuffix?: string }) => x.id === rec.variantId);
+      return (v as { skuSuffix?: string })?.skuSuffix ?? rec.variantId;
+    };
+    const byVariant = new Map<string, { variantId: string; label: string; quantity: number; recordIds: string[] }>();
+    for (const rec of detailBatch) {
+      const vid = rec.variantId ?? '';
+      const existing = byVariant.get(vid);
+      if (existing) {
+        existing.quantity += rec.quantity ?? 0;
+        existing.recordIds.push(rec.id);
+      } else {
+        byVariant.set(vid, { variantId: vid, label: labelFor(rec), quantity: rec.quantity ?? 0, recordIds: [rec.id] });
+      }
+    }
+    return [...byVariant.values()];
+  }, [detailBatch, product?.variants]);
+  const latestBatchTimestamp = detailBatch.reduce<{ t: number; ts?: string }>((best, x) => {
+    const t = new Date(x.timestamp || 0).getTime();
+    if (isNaN(t)) return best;
+    return t >= best.t ? { t, ts: x.timestamp } : best;
+  }, { t: -1 }).ts;
+  const opsInBatch = [...new Set(detailBatch.map(x => (x.operator ?? '').trim()).filter(Boolean))];
+  const operatorsLabel = opsInBatch.length === 0 ? '—' : opsInBatch.length === 1 ? opsInBatch[0]! : `${opsInBatch[0]} 等${opsInBatch.length}人`;
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
@@ -73,7 +103,7 @@ const DefectTreatmentFlowDetailModal: React.FC<DefectTreatmentFlowDetailModalPro
                 <button type="button" onClick={() => setEditing(null)} className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">取消</button>
                 <button type="button" onClick={() => {
                   if (!onUpdateRecord || !editing) return;
-                  const tsStr = editing.form.timestamp ? (() => { const d = new Date(editing.form.timestamp); return isNaN(d.getTime()) ? new Date().toLocaleString() : d.toLocaleString(); })() : new Date().toLocaleString();
+                  const tsStr = editing.form.timestamp ? timestampFromDatetimeLocal(editing.form.timestamp) : nowTimestamp();
                   editing.form.rowEdits.forEach(row => { const rec = detailBatch.find(x => x.id === row.recordId); if (!rec) return; onUpdateRecord({ ...rec, quantity: Math.max(0, row.quantity), timestamp: tsStr, operator: editing.form.operator, reason: editing.form.reason || undefined }); });
                   setEditing(null); onClose();
                 }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700"><Check className="w-4 h-4" /> 保存</button>
@@ -118,15 +148,15 @@ const DefectTreatmentFlowDetailModal: React.FC<DefectTreatmentFlowDetailModalPro
                 <div className="bg-slate-50 rounded-xl px-4 py-2"><p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">类型</p><p className="text-sm font-bold text-slate-800">{typeLabel}</p></div>
                 <div className="bg-slate-50 rounded-xl px-4 py-2"><p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">来源工序</p><p className="text-sm font-bold text-slate-800">{sourceNodeName}</p></div>
                 <div className="bg-slate-50 rounded-xl px-4 py-2"><p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">数量</p><p className="text-sm font-bold text-indigo-600">{totalQty} {unitName}</p></div>
-                <div className="bg-slate-50 rounded-xl px-4 py-2"><p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">时间</p><p className="text-sm font-bold text-slate-800">{first.timestamp || '—'}</p></div>
-                <div className="bg-slate-50 rounded-xl px-4 py-2"><p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">操作人</p><p className="text-sm font-bold text-slate-800">{first.operator ?? '—'}</p></div>
+                <div className="bg-slate-50 rounded-xl px-4 py-2"><p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">时间</p><p className="text-sm font-bold text-slate-800">{formatTimestamp(latestBatchTimestamp)}</p></div>
+                <div className="bg-slate-50 rounded-xl px-4 py-2 min-w-0 max-w-full"><p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">操作人</p><p className="text-sm font-bold text-slate-800 break-words" title={operatorsLabel}>{operatorsLabel}</p></div>
                 {first.reason && (<div className="bg-slate-50 rounded-xl px-4 py-2"><p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">原因/备注</p><p className="text-sm font-bold text-slate-800">{first.reason}</p></div>)}
               </div>
-              {(detailBatch.length > 1 || hasColorSize) && (
+              {(displayVariantRows.length > 1 || hasColorSize || displayVariantRows.some(v => v.recordIds.length > 1)) && (
                 <div className="border border-slate-200 rounded-2xl overflow-hidden">
                   <table className="w-full text-left text-sm">
                     <thead><tr className="bg-slate-50 border-b border-slate-200"><th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">规格</th><th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">数量</th></tr></thead>
-                    <tbody>{detailBatch.map(rec => (<tr key={rec.id} className="border-b border-slate-100"><td className="px-4 py-3 text-slate-800">{getVariantLabel(rec)}</td><td className="px-4 py-3 font-bold text-indigo-600 text-right">{rec.quantity ?? 0} {unitName}</td></tr>))}</tbody>
+                    <tbody>{displayVariantRows.map(vr => (<tr key={vr.variantId || '_none'} className="border-b border-slate-100"><td className="px-4 py-3 text-slate-800">{vr.label}</td><td className="px-4 py-3 font-bold text-indigo-600 text-right">{vr.quantity} {unitName}</td></tr>))}</tbody>
                     <tfoot><tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold"><td className="px-4 py-3">合计</td><td className="px-4 py-3 text-indigo-600 text-right">{totalQty} {unitName}</td></tr></tfoot>
                   </table>
                 </div>
