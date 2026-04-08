@@ -100,6 +100,9 @@ async function main() {
       ],
       customFields: [],
     },
+    materialPanelSettings: {
+      groupByOutsourcePartner: false,
+    },
   };
 
   for (const [key, value] of Object.entries(defaultSettings)) {

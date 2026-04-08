@@ -20,6 +20,7 @@ export interface StockConfirmModalProps {
   products: Product[];
   warehouses: Warehouse[];
   dictionaries?: AppDictionaries;
+  partnerLabel?: string;
 }
 
 const StockConfirmModal: React.FC<StockConfirmModalProps> = ({
@@ -40,6 +41,7 @@ const StockConfirmModal: React.FC<StockConfirmModalProps> = ({
   products,
   warehouses,
   dictionaries,
+  partnerLabel,
 }) => {
   if (!visible || (!stockSelectOrderId && !stockSelectSourceProductId) || !stockSelectMode) return null;
 
@@ -58,7 +60,10 @@ const StockConfirmModal: React.FC<StockConfirmModalProps> = ({
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
       <div className="relative bg-white w-full max-w-2xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-          <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+          <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 flex-wrap">
+            {partnerLabel && (
+              <span className="bg-amber-50 text-amber-800 px-3 py-1.5 rounded-lg text-base font-black tracking-tight border border-amber-200/80 max-w-[min(100%,14rem)] truncate" title={partnerLabel}>{partnerLabel}</span>
+            )}
             <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
               {srcProd ? srcProd.name : (order?.orderNumber ?? '')}
             </span>

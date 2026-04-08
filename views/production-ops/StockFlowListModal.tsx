@@ -119,7 +119,8 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
       warehouseId: first.warehouseId ?? '',
       lines: docRecords.map(r => ({ productId: r.productId, quantity: r.quantity })),
       reason: first.reason,
-      operator: first.operator
+      operator: '',
+      partner: first.partner,
     };
   };
 
@@ -244,7 +245,6 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">数量</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">外协工厂</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">原因/备注</th>
-                    <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">经办</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap w-24">操作</th>
                   </tr>
                 </thead>
@@ -285,7 +285,6 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
                         <td className="px-4 py-3 text-right font-black text-indigo-600">{rec.quantity}</td>
                         <td className="px-4 py-3 text-xs font-bold text-teal-700 whitespace-nowrap">{rec.partner ?? '—'}</td>
                         <td className="px-4 py-3 text-xs text-slate-500 max-w-[180px] truncate">{rec.reason ?? '—'}</td>
-                        <td className="px-4 py-3 text-right text-xs font-bold text-slate-600">{rec.operator}</td>
                         <td className="px-4 py-3">
                           {docNo && hasOpsPerm(tenantRole, userPermissions, 'production:material_records:view') ? (
                             <button

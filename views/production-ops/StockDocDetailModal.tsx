@@ -93,7 +93,10 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={handleClose} aria-hidden />
       <div className="relative bg-white w-full max-w-2xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-          <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+          <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 flex-wrap">
+            {stockDocDetail.partner && (
+              <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-[10px] font-black tracking-wider">{stockDocDetail.partner}</span>
+            )}
             <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
               {order
                 ? order.orderNumber
@@ -172,10 +175,12 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
                     <p className="text-sm font-bold text-slate-800">{warehouse.name}{warehouse.code ? ` (${warehouse.code})` : ''}</p>
                   </div>
                 )}
-                <div className="bg-slate-50 rounded-xl px-4 py-2">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">经办</p>
-                  <p className="text-sm font-bold text-slate-800">{stockDocDetail.operator}</p>
-                </div>
+                {stockDocDetail.partner && (
+                  <div className="bg-amber-50 rounded-xl px-4 py-2">
+                    <p className="text-[10px] text-amber-500 font-bold uppercase mb-0.5">外协工厂</p>
+                    <p className="text-sm font-bold text-amber-800">{stockDocDetail.partner}</p>
+                  </div>
+                )}
                 {stockDocDetail.reason && (
                   <div className="bg-slate-50 rounded-xl px-4 py-2">
                     <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">备注</p>

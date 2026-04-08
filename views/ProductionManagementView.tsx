@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { 
   PlanOrder, ProductionOrder, Product, BOM,
-  ProductionOpRecord, GlobalNodeTemplate, ProdOpType, ProductCategory, AppDictionaries, Worker, Equipment, PlanFormSettings, OrderFormSettings, Partner, PartnerCategory, ProductionLinkMode, ProductMilestoneProgress, ProcessSequenceMode, Warehouse, PrintTemplate
+  ProductionOpRecord, GlobalNodeTemplate, ProdOpType, ProductCategory, AppDictionaries, Worker, Equipment, PlanFormSettings, OrderFormSettings, MaterialPanelSettings, Partner, PartnerCategory, ProductionLinkMode, ProductMilestoneProgress, ProcessSequenceMode, Warehouse, PrintTemplate
 } from '../types';
 const PlanOrderListView = lazy(() => import('./PlanOrderListView'));
 const OrderListView = lazy(() => import('./OrderListView'));
@@ -55,6 +55,8 @@ interface ProductionManagementViewProps {
   onRefreshPrintTemplates?: () => void | Promise<void>;
   orderFormSettings: OrderFormSettings;
   onUpdateOrderFormSettings: (settings: OrderFormSettings) => void;
+  materialPanelSettings?: MaterialPanelSettings;
+  onUpdateMaterialPanelSettings?: (settings: MaterialPanelSettings) => void;
   onCreatePlan: (plan: PlanOrder) => void;
   onUpdateProduct: (product: Product) => Promise<boolean>;
   onUpdatePlan?: (planId: string, updates: Partial<PlanOrder>) => void;
@@ -86,7 +88,7 @@ type MainTab = 'plans' | 'orders' | ProdOpType;
 
 const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
   productionLinkMode = 'order', processSequenceMode = 'free', allowExceedMaxReportQty = true, plans, orders, products, categories, dictionaries, workers, equipment, prodRecords, psiRecords = [], warehouses = [], globalNodes, boms,   partners, partnerCategories,
-  planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orderFormSettings, onUpdateOrderFormSettings,
+  planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orderFormSettings, onUpdateOrderFormSettings, materialPanelSettings, onUpdateMaterialPanelSettings,
   onCreatePlan, onUpdateProduct, onUpdatePlan, onSplitPlan, onConvertToOrder, onDeletePlan, onAddRecord, onAddRecordBatch, onUpdateRecord, onDeleteRecord, onAddPSIRecord, onAddPSIRecordBatch, onReportSubmit, onCreateSubPlan, onCreateSubPlans, onUpdateOrder, onDeleteOrder, onUpdateReport, onDeleteReport,
   productMilestoneProgresses = [], onReportSubmitProduct, onUpdateReportProduct, onDeleteReportProduct,
   userPermissions, tenantRole
@@ -318,6 +320,8 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
             workers={workers}
             equipment={equipment}
             processSequenceMode={processSequenceMode}
+            materialPanelSettings={materialPanelSettings}
+            onUpdateMaterialPanelSettings={onUpdateMaterialPanelSettings}
             userPermissions={userPermissions}
             tenantRole={tenantRole}
           />

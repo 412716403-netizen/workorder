@@ -24,7 +24,9 @@ import type {
   GlobalNodeTemplate,
   BOM,
   PrintTemplate,
+  MaterialPanelSettings,
 } from '../types';
+import { DEFAULT_MATERIAL_PANEL_SETTINGS } from '../types';
 
 // ── Decimal normalizer ──
 
@@ -167,6 +169,8 @@ export interface AppDataContextValue {
   onUpdatePurchaseOrderFormSettings: (v: PurchaseOrderFormSettings) => Promise<void>;
   onUpdatePurchaseBillFormSettings: (v: PurchaseBillFormSettings) => Promise<void>;
   onUpdatePrintTemplates: (v: PrintTemplate[]) => Promise<void>;
+  materialPanelSettings: MaterialPanelSettings;
+  onUpdateMaterialPanelSettings: (v: MaterialPanelSettings) => Promise<void>;
   // Product / BOM
   /** 成功返回 true，失败已 toast 并返回 false */
   onUpdateProduct: (p: Product) => Promise<boolean>;
@@ -231,7 +235,7 @@ export type AppDataState = Pick<AppDataContextValue,
   'categories' | 'partnerCategories' | 'dictionaries' | 'globalNodes' | 'boms' |
   'partners' | 'workers' | 'equipment' | 'warehouses' |
   'financeCategories' | 'financeAccountTypes' |
-  'planFormSettings' | 'orderFormSettings' | 'purchaseOrderFormSettings' | 'purchaseBillFormSettings' |
+  'planFormSettings' | 'orderFormSettings' | 'purchaseOrderFormSettings' | 'purchaseBillFormSettings' | 'materialPanelSettings' |
   'printTemplates' |
   'productionLinkMode' | 'processSequenceMode' | 'allowExceedMaxReportQty' | 'productMilestoneProgresses'
 >;
@@ -261,6 +265,7 @@ export interface ConfigState {
   orderFormSettings: OrderFormSettings;
   purchaseOrderFormSettings: PurchaseOrderFormSettings;
   purchaseBillFormSettings: PurchaseBillFormSettings;
+  materialPanelSettings: MaterialPanelSettings;
   printTemplates: PrintTemplate[];
 }
 
@@ -317,6 +322,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [orderFormSettings, setOrderFormSettings] = useState<OrderFormSettings>(DEFAULT_ORDER_FORM_SETTINGS);
   const [purchaseOrderFormSettings, setPurchaseOrderFormSettings] = useState<PurchaseOrderFormSettings>(DEFAULT_PURCHASE_ORDER_FORM_SETTINGS);
   const [purchaseBillFormSettings, setPurchaseBillFormSettings] = useState<PurchaseBillFormSettings>(DEFAULT_PURCHASE_BILL_FORM_SETTINGS);
+  const [materialPanelSettings, setMaterialPanelSettings] = useState<MaterialPanelSettings>(DEFAULT_MATERIAL_PANEL_SETTINGS);
   const [printTemplates, setPrintTemplates] = useState<PrintTemplate[]>([]);
   const [productionLinkMode, setProductionLinkMode] = useState<ProductionLinkMode>('order');
   const [processSequenceMode, setProcessSequenceMode] = useState<ProcessSequenceMode>('free');
@@ -371,6 +377,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       setOrderFormSettings((cfg.orderFormSettings as OrderFormSettings) ?? DEFAULT_ORDER_FORM_SETTINGS);
       setPurchaseOrderFormSettings((cfg.purchaseOrderFormSettings as PurchaseOrderFormSettings) ?? DEFAULT_PURCHASE_ORDER_FORM_SETTINGS);
       setPurchaseBillFormSettings((cfg.purchaseBillFormSettings as PurchaseBillFormSettings) ?? DEFAULT_PURCHASE_BILL_FORM_SETTINGS);
+      setMaterialPanelSettings((cfg.materialPanelSettings as MaterialPanelSettings) ?? DEFAULT_MATERIAL_PANEL_SETTINGS);
       setPrintTemplates(Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : []);
       if (val(coreResults, 1))  setCategories(val(coreResults, 1) as ProductCategory[]);
       if (val(coreResults, 2))  setPartnerCategories(val(coreResults, 2) as PartnerCategory[]);
@@ -512,6 +519,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const onUpdateOrderFormSettings = useCallback(async (v: OrderFormSettings) => { await api.settings.updateConfig('orderFormSettings', v); setOrderFormSettings(v); }, []);
   const onUpdatePurchaseOrderFormSettings = useCallback(async (v: PurchaseOrderFormSettings) => { await api.settings.updateConfig('purchaseOrderFormSettings', v); setPurchaseOrderFormSettings(v); }, []);
   const onUpdatePurchaseBillFormSettings = useCallback(async (v: PurchaseBillFormSettings) => { await api.settings.updateConfig('purchaseBillFormSettings', v); setPurchaseBillFormSettings(v); }, []);
+  const onUpdateMaterialPanelSettings = useCallback(async (v: MaterialPanelSettings) => { await api.settings.updateConfig('materialPanelSettings', v); setMaterialPanelSettings(v); }, []);
   const onUpdatePrintTemplates = useCallback(async (v: PrintTemplate[]) => {
     await api.settings.updateConfig('printTemplates', v);
     setPrintTemplates(v);
@@ -783,8 +791,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const configValue: ConfigState = useMemo(() => ({
     productionLinkMode, processSequenceMode, allowExceedMaxReportQty,
     planFormSettings, orderFormSettings, purchaseOrderFormSettings, purchaseBillFormSettings,
-    printTemplates,
-  }), [productionLinkMode, processSequenceMode, allowExceedMaxReportQty, planFormSettings, orderFormSettings, purchaseOrderFormSettings, purchaseBillFormSettings, printTemplates]);
+    materialPanelSettings, printTemplates,
+  }), [productionLinkMode, processSequenceMode, allowExceedMaxReportQty, planFormSettings, orderFormSettings, purchaseOrderFormSettings, purchaseBillFormSettings, materialPanelSettings, printTemplates]);
 
   const ordersValue: OrdersState = useMemo(() => ({
     orders, plans, productMilestoneProgresses, prodRecords,
@@ -800,7 +808,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     onUpdateProductionLinkMode, onUpdateProcessSequenceMode, onUpdateAllowExceedMaxReportQty,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
     onUpdatePurchaseOrderFormSettings, onUpdatePurchaseBillFormSettings,
-    onUpdatePrintTemplates,
+    onUpdateMaterialPanelSettings, onUpdatePrintTemplates,
     onUpdateProduct, onDeleteProduct, onUpdateBOM,
     onCreatePlan, onUpdatePlan, onSplitPlan, onDeletePlan, onConvertToOrder,
     onCreateSubPlan, onCreateSubPlans,
@@ -820,7 +828,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     onUpdateProductionLinkMode, onUpdateProcessSequenceMode, onUpdateAllowExceedMaxReportQty,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
     onUpdatePurchaseOrderFormSettings, onUpdatePurchaseBillFormSettings,
-    onUpdatePrintTemplates,
+    onUpdateMaterialPanelSettings, onUpdatePrintTemplates,
     onUpdateProduct, onDeleteProduct, onUpdateBOM,
     onCreatePlan, onUpdatePlan, onSplitPlan, onDeletePlan, onConvertToOrder,
     onCreateSubPlan, onCreateSubPlans,

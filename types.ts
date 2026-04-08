@@ -326,6 +326,15 @@ export type PurchaseBillFormSettings = PlanFormSettings;
 /** 工单表单配置：结构同计划单，用于工单列表/新增/详情页字段显示控制 */
 export type OrderFormSettings = PlanFormSettings;
 
+/** 生产物料面板配置 */
+export interface MaterialPanelSettings {
+  /** 列表按 加工厂 → 成品/工单 → 物料 展示 */
+  groupByOutsourcePartner: boolean;
+}
+export const DEFAULT_MATERIAL_PANEL_SETTINGS: MaterialPanelSettings = {
+  groupByOutsourcePartner: false,
+};
+
 // ── 打印模板（标签 / 单据可视化设计） ──
 
 export type PrintBodyElementType = 'text' | 'qrcode' | 'line' | 'rect' | 'image' | 'dynamicTable' | 'dynamicList';

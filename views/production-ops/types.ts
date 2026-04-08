@@ -27,6 +27,7 @@ export interface StockDocDetail {
   lines: { productId: string; quantity: number }[];
   reason?: string;
   operator: string;
+  partner?: string;
 }
 
 export type ReworkPendingRow = {

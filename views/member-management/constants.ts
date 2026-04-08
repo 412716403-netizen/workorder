@@ -40,6 +40,7 @@ export const PRODUCTION_SUB_MODULES: { key: string; label: string; actions: stri
   { key: 'orders_rework', label: '返工', actions: ['allow'], group: '工单中心' },
   { key: 'material_list', label: '主列表', actions: ['allow'], group: '生产物料' },
   { key: 'material_records', label: '领料退料流水', actions: ['view', 'edit', 'delete'], group: '生产物料' },
+  { key: 'material_form_config', label: '表单配置', actions: ['allow'], group: '生产物料' },
   { key: 'material_issue', label: '领料发出', actions: ['allow'], group: '生产物料' },
   { key: 'material_return', label: '生产退料', actions: ['allow'], group: '生产物料' },
   { key: 'outsource_list', label: '主列表', actions: ['allow'], group: '外协管理' },

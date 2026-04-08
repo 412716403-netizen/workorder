@@ -14,6 +14,7 @@ import type {
   Worker,
   ProcessSequenceMode,
   ProductMilestoneProgress,
+  MaterialPanelSettings,
 } from '../types';
 import StockMaterialPanel from './production-ops/StockMaterialPanel';
 import OutsourcePanel from './production-ops/OutsourcePanel';
@@ -41,6 +42,8 @@ interface ProductionMgmtOpsViewProps {
   workers?: Worker[];
   equipment?: { id: string; name: string; code?: string; assignedMilestoneIds?: string[] }[];
   processSequenceMode?: ProcessSequenceMode;
+  materialPanelSettings?: MaterialPanelSettings;
+  onUpdateMaterialPanelSettings?: (settings: MaterialPanelSettings) => void;
   userPermissions?: string[];
   tenantRole?: string;
 }
@@ -66,6 +69,8 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
   workers = [],
   equipment = [],
   processSequenceMode = 'free',
+  materialPanelSettings,
+  onUpdateMaterialPanelSettings,
   userPermissions,
   tenantRole,
 }) => {
@@ -93,7 +98,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
     tenantRole,
   } as const;
 
-  if (limitType === 'STOCK_OUT') return <StockMaterialPanel {...panelProps} />;
+  if (limitType === 'STOCK_OUT') return <StockMaterialPanel {...panelProps} materialPanelSettings={materialPanelSettings} onUpdateMaterialPanelSettings={onUpdateMaterialPanelSettings} />;
   if (limitType === 'OUTSOURCE') return <OutsourcePanel {...panelProps} />;
   if (limitType === 'REWORK') return <ReworkPanel {...panelProps} />;
 

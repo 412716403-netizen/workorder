@@ -272,6 +272,7 @@ function ProductionRoute() {
       printTemplates={c.printTemplates} onUpdatePrintTemplates={a.onUpdatePrintTemplates}
       onRefreshPrintTemplates={a.refreshPrintTemplates}
       orderFormSettings={c.orderFormSettings} onUpdateOrderFormSettings={a.onUpdateOrderFormSettings}
+      materialPanelSettings={c.materialPanelSettings} onUpdateMaterialPanelSettings={a.onUpdateMaterialPanelSettings}
       onCreatePlan={a.onCreatePlan} onUpdateProduct={a.onUpdateProduct}
       onUpdatePlan={a.onUpdatePlan} onSplitPlan={a.onSplitPlan}
       onDeletePlan={a.onDeletePlan} onConvertToOrder={a.onConvertToOrder}
