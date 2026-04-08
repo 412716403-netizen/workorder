@@ -103,11 +103,11 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
             const variantIdsInOrder = new Set((order?.items ?? []).map(i => i.variantId).filter(Boolean));
             const variantsInOrder = hasColorSize && product?.variants ? (product.variants as ProductVariant[]).filter(v => variantIdsInOrder.has(v.id)) : [];
             const dispatchRecords = productionLinkMode === 'product'
-              ? records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId && (r.partner ?? '') === (row.partner ?? ''))
-              : records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && r.orderId === row.orderId && r.nodeId === row.nodeId);
+              ? records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && !r.sourceReworkId && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId && (r.partner ?? '') === (row.partner ?? ''))
+              : records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && !r.sourceReworkId && r.orderId === row.orderId && r.nodeId === row.nodeId);
             const receiveRecords = productionLinkMode === 'product'
-              ? records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId && (r.partner ?? '') === (row.partner ?? ''))
-              : records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && r.orderId === row.orderId && r.nodeId === row.nodeId);
+              ? records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && !r.sourceReworkId && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId && (r.partner ?? '') === (row.partner ?? ''))
+              : records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && !r.sourceReworkId && r.orderId === row.orderId && r.nodeId === row.nodeId);
             const getPendingForVariant = (variantId: string) => {
               const dispatched = dispatchRecords.filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + r.quantity, 0);
               const received = receiveRecords.filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + r.quantity, 0);

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ScrollText, X, Filter, ArrowUpFromLine, Undo2, FileText } from 'lucide-react';
 import type { ProductionOpRecord, GlobalNodeTemplate } from '../../types';
 import { hasOpsPerm } from './types';
@@ -18,6 +18,14 @@ interface FlowSummaryRow {
   typeStr: string;
 }
 
+/** 从外协主列表卡片打开流水时预填筛选；为 null 时表示从工具栏打开，清空筛选 */
+export type OutsourceFlowOpenSeed = {
+  orderKeyword: string;
+  productKeyword: string;
+  milestoneNodeId: string;
+  partnerKeyword: string;
+} | null;
+
 export interface OutsourceFlowListModalProps {
   productionLinkMode: 'order' | 'product';
   outsourceFlowSummaryRows: FlowSummaryRow[];
@@ -26,6 +34,10 @@ export interface OutsourceFlowListModalProps {
   tenantRole?: string;
   setFlowDetailKey: React.Dispatch<React.SetStateAction<string | null>>;
   onClose: () => void;
+  /** 打开流水时应用的筛选种子；配合 flowOpenNonce 在每次打开时生效 */
+  flowOpenSeed?: OutsourceFlowOpenSeed;
+  /** 每次打开外协流水时递增，用于在 seed 不变时也能重新应用 */
+  flowOpenNonce?: number;
 }
 
 const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
@@ -36,6 +48,8 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
   tenantRole,
   setFlowDetailKey,
   onClose,
+  flowOpenSeed = null,
+  flowOpenNonce = 0,
 }) => {
   const [flowFilterDateFrom, setFlowFilterDateFrom] = useState('');
   const [flowFilterDateTo, setFlowFilterDateTo] = useState('');
@@ -45,6 +59,24 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
   const [flowFilterOrder, setFlowFilterOrder] = useState('');
   const [flowFilterProduct, setFlowFilterProduct] = useState('');
   const [flowFilterMilestone, setFlowFilterMilestone] = useState('');
+
+  useEffect(() => {
+    if (flowOpenSeed == null) {
+      setFlowFilterDateFrom('');
+      setFlowFilterDateTo('');
+      setFlowFilterType('all');
+      setFlowFilterPartner('');
+      setFlowFilterDocNo('');
+      setFlowFilterOrder('');
+      setFlowFilterProduct('');
+      setFlowFilterMilestone('');
+    } else {
+      setFlowFilterOrder(flowOpenSeed.orderKeyword);
+      setFlowFilterProduct(flowOpenSeed.productKeyword);
+      setFlowFilterMilestone(flowOpenSeed.milestoneNodeId);
+      setFlowFilterPartner(flowOpenSeed.partnerKeyword);
+    }
+  }, [flowOpenNonce, flowOpenSeed]);
 
   const filteredOutsourceFlowRows = useMemo(() => {
     let list = outsourceFlowSummaryRows;

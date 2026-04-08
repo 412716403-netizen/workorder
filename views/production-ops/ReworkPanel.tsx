@@ -555,21 +555,27 @@ const ReworkPanel: React.FC<PanelProps> = ({
                                         <div className="text-[10px] font-bold text-emerald-600 truncate" title={nodeName}>{nodeName}</div>
                                         <div className="text-[10px] font-bold text-slate-600 truncate" title={outsourcePartner}>{outsourcePartner}</div>
                                       </div>
-                                      <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isAllDone ? 'border-emerald-400' : 'border-indigo-300'}`}>
-                                        <span className="text-base font-black text-slate-900 leading-none">{pendingQty}</span>
+                                      <div
+                                        className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isAllDone ? 'border-emerald-400' : 'border-indigo-300'}`}
+                                        title="已返工数量"
+                                      >
+                                        <span className="text-base font-black text-slate-900 leading-none">{completedQty}</span>
                                       </div>
                                       <div className="flex items-center justify-center gap-1.5 leading-tight">
-                                        <span className="text-[10px] font-bold text-slate-500 tabular-nums">{totalQty} / {completedQty}</span>
+                                        <span className="text-[10px] font-bold text-slate-500 tabular-nums" title="返工总量 / 可报">{totalQty} / {pendingQty}</span>
                                       </div>
                                     </>
                                   ) : (
                                     <>
                                       <span className="text-[10px] font-bold text-indigo-600 mb-1 leading-tight truncate w-full text-center">{nodeName}</span>
-                                      <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isAllDone ? 'border-emerald-400' : 'border-indigo-300'}`}>
-                                        <span className="text-base font-black text-slate-900 leading-none">{pendingQty}</span>
+                                      <div
+                                        className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isAllDone ? 'border-emerald-400' : 'border-indigo-300'}`}
+                                        title="已返工数量"
+                                      >
+                                        <span className="text-base font-black text-slate-900 leading-none">{completedQty}</span>
                                       </div>
                                       <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 leading-tight">
-                                        <span>{processSequenceMode === 'sequential' ? (pendingQty + completedQty) : totalQty} / <span className="text-slate-600">{completedQty}</span></span>
+                                        <span title="返工总量 / 可报">{totalQty} / {pendingQty}</span>
                                       </div>
                                     </>
                                   )}
@@ -672,24 +678,27 @@ const ReworkPanel: React.FC<PanelProps> = ({
                                         <div className="text-[10px] font-bold text-emerald-600 truncate" title={nodeName}>{nodeName}</div>
                                         <div className="text-[10px] font-bold text-slate-600 truncate" title={outsourcePartner}>{outsourcePartner}</div>
                                       </div>
-                                      <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isAllDone ? 'border-emerald-400' : 'border-indigo-300'}`}>
-                                        <span className="text-base font-black text-slate-900 leading-none">{pendingQty}</span>
+                                      <div
+                                        className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isAllDone ? 'border-emerald-400' : 'border-indigo-300'}`}
+                                        title="已返工数量"
+                                      >
+                                        <span className="text-base font-black text-slate-900 leading-none">{completedQty}</span>
                                       </div>
                                       <div className="flex items-center justify-center gap-1.5 leading-tight">
-                                        <span className="text-[10px] font-bold text-slate-500 tabular-nums">{totalQty} / {completedQty}</span>
+                                        <span className="text-[10px] font-bold text-slate-500 tabular-nums" title="返工总量 / 可报">{totalQty} / {pendingQty}</span>
                                       </div>
                                     </>
                                   ) : (
                                     <>
                                       <span className="text-[10px] font-bold text-indigo-600 mb-1 leading-tight truncate w-full text-center">{nodeName}</span>
-                                      <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isAllDone ? 'border-emerald-400' : 'border-indigo-300'}`}>
-                                        <span className="text-base font-black text-slate-900 leading-none">{pendingQty}</span>
+                                      <div
+                                        className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isAllDone ? 'border-emerald-400' : 'border-indigo-300'}`}
+                                        title="已返工数量"
+                                      >
+                                        <span className="text-base font-black text-slate-900 leading-none">{completedQty}</span>
                                       </div>
                                       <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 leading-tight">
-                                        <span>
-                                          {processSequenceMode === 'sequential' ? pendingQty + completedQty : totalQty} /{' '}
-                                          <span className="text-slate-600">{completedQty}</span>
-                                        </span>
+                                        <span title="返工总量 / 可报">{totalQty} / {pendingQty}</span>
                                       </div>
                                     </>
                                   )}

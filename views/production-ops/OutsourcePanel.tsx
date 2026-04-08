@@ -44,7 +44,7 @@ import OutsourceDispatchListModal from './OutsourceDispatchListModal';
 import OutsourceDispatchQuantityModal from './OutsourceDispatchQuantityModal';
 import OutsourceReceiveListModal from './OutsourceReceiveListModal';
 import OutsourceReceiveQuantityModal from './OutsourceReceiveQuantityModal';
-import OutsourceFlowListModal from './OutsourceFlowListModal';
+import OutsourceFlowListModal, { type OutsourceFlowOpenSeed } from './OutsourceFlowListModal';
 import OutsourceFlowDocumentDetailModal from './OutsourceFlowDocumentDetailModal';
 import OutsourceCollabSyncModal from './OutsourceCollabSyncModal';
 
@@ -94,6 +94,8 @@ const OutsourcePanel: React.FC<PanelProps> = ({
   const [receiveModal, setReceiveModal] = useState<{ orderId?: string; nodeId: string; productId: string; orderNumber?: string; productName: string; milestoneName: string; partner: string; pendingQty: number } | null>(null);
   const [receiveQty, setReceiveQty] = useState(0);
   const [flowDetailKey, setFlowDetailKey] = useState<string | null>(null);
+  const [flowOpenSeed, setFlowOpenSeed] = useState<OutsourceFlowOpenSeed>(null);
+  const [flowOpenNonce, setFlowOpenNonce] = useState(0);
   const [matDispatchOrderId, setMatDispatchOrderId] = useState<string | null>(null);
   const [matDispatchProductId, setMatDispatchProductId] = useState<string | null>(null);
   const [matDispatchPartnerOptions, setMatDispatchPartnerOptions] = useState<string[]>([]);
@@ -637,6 +639,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           rr =>
             rr.type === 'OUTSOURCE' &&
             rr.status === '加工中' &&
+            !rr.sourceReworkId &&
             !rr.orderId &&
             rr.productId === row.productId &&
             rr.nodeId === row.nodeId &&
@@ -646,6 +649,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           rr =>
             rr.type === 'OUTSOURCE' &&
             rr.status === '已收回' &&
+            !rr.sourceReworkId &&
             !rr.orderId &&
             rr.productId === row.productId &&
             rr.nodeId === row.nodeId &&
@@ -681,8 +685,8 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         const row = outsourceReceiveRows.find(r => r.orderId === orderId && r.nodeId === nodeId);
         if (!row) continue;
         if (parts.length === 3) {
-          const dispatchRecords = records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && r.orderId === orderId && r.nodeId === nodeId);
-          const receiveRecords = records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && r.orderId === orderId && r.nodeId === nodeId);
+          const dispatchRecords = records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && !r.sourceReworkId && r.orderId === orderId && r.nodeId === nodeId);
+          const receiveRecords = records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && !r.sourceReworkId && r.orderId === orderId && r.nodeId === nodeId);
           const dispatched = dispatchRecords.filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + r.quantity, 0);
           const received = receiveRecords.filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + r.quantity, 0);
           const maxQty = Math.max(0, dispatched - received);
@@ -794,7 +798,11 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           {hasOpsPerm(tenantRole, userPermissions, 'production:outsource_records:view') && (
             <button
               type="button"
-              onClick={() => setOutsourceModal('flow')}
+              onClick={() => {
+                setFlowOpenSeed(null);
+                setFlowOpenNonce(n => n + 1);
+                setOutsourceModal('flow');
+              }}
               className={outlineToolbarButtonClass}
             >
               <ScrollText className="w-4 h-4 shrink-0" /> 外协流水
@@ -875,19 +883,24 @@ const OutsourcePanel: React.FC<PanelProps> = ({
                           <div className="text-[10px] font-bold text-emerald-600 truncate" title={nodeName}>{nodeName}</div>
                           <div className="text-[10px] font-bold text-slate-600 truncate" title={partner}>{partner}</div>
                         </div>
-                        <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${pending > 0 ? 'border-indigo-300' : 'border-emerald-400'}`}>
-                          <span className="text-base font-black text-slate-900 leading-none">{pending}</span>
+                        <div
+                          className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${pending > 0 ? 'border-indigo-300' : 'border-emerald-400'}`}
+                          title="已收回数量"
+                        >
+                          <span className="text-base font-black text-slate-900 leading-none">{received}</span>
                         </div>
                         <div className="flex items-center justify-center gap-1.5 leading-tight">
-                          <span className="text-[10px] font-bold text-slate-500">{dispatched} / {received}</span>
+                          <span className="text-[10px] font-bold text-slate-500" title="发出 / 剩余">{dispatched} / {pending}</span>
                           <button
                             type="button"
                             onClick={() => {
-                              if (productionLinkMode === 'product') setFlowFilterOrder('');
-                              else setFlowFilterOrder(orderNumber ?? '');
-                              setFlowFilterProduct(productName);
-                              setFlowFilterMilestone(nodeId);
-                              setFlowFilterPartner(partner);
+                              setFlowOpenSeed({
+                                orderKeyword: productionLinkMode === 'product' ? '' : (orderNumber ?? ''),
+                                productKeyword: productName,
+                                milestoneNodeId: nodeId,
+                                partnerKeyword: partner,
+                              });
+                              setFlowOpenNonce(n => n + 1);
                               setOutsourceModal('flow');
                             }}
                             className="p-0.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
@@ -1118,9 +1131,12 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           userPermissions={userPermissions}
           tenantRole={tenantRole}
           setFlowDetailKey={setFlowDetailKey}
+          flowOpenSeed={flowOpenSeed}
+          flowOpenNonce={flowOpenNonce}
           onClose={() => {
             setOutsourceModal(null);
             setFlowDetailKey(null);
+            setFlowOpenSeed(null);
           }}
         />
       )}
