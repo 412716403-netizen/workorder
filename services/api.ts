@@ -80,7 +80,12 @@ async function request<T = unknown>(path: string, options: RequestInit = {}): Pr
     headers['Authorization'] = `Bearer ${memoryAccessToken}`;
   }
 
-  let res = await fetchWithTimeout(url, { ...options, headers, credentials: 'include' });
+  let res = await fetchWithTimeout(url, {
+    ...options,
+    headers,
+    credentials: 'include',
+    cache: options.cache ?? 'no-store',
+  });
 
   if (res.status === 401 || res.status === 403) {
     const refreshed = await tryRefresh();
@@ -88,7 +93,12 @@ async function request<T = unknown>(path: string, options: RequestInit = {}): Pr
       if (memoryAccessToken) {
         headers['Authorization'] = `Bearer ${memoryAccessToken}`;
       }
-      res = await fetchWithTimeout(url, { ...options, headers, credentials: 'include' });
+      res = await fetchWithTimeout(url, {
+        ...options,
+        headers,
+        credentials: 'include',
+        cache: options.cache ?? 'no-store',
+      });
     } else if (localStorage.getItem('isLoggedIn')) {
       clearTokens();
       localStorage.removeItem('currentUser');

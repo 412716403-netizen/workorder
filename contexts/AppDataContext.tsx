@@ -332,9 +332,39 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const val = (results: PromiseSettledResult<unknown>[], i: number) =>
     results[i]?.status === 'fulfilled' ? (results[i] as PromiseFulfilledResult<unknown>).value : undefined;
 
+  const activeTenantId = tenantCtx?.tenantId;
+
   // ── Initial data loading (core data only — heavy data loaded on demand) ──
+  // 依赖当前企业 ID：切换公司后必须清空并重新拉取，避免与进销存等数据错位（表现为「未知产品」等）
   useEffect(() => {
+    if (!activeTenantId) return;
     let cancelled = false;
+
+    setDataLoading(true);
+    setProducts([]);
+    setOrders([]);
+    setPlans([]);
+    setPsiRecords([]);
+    setFinanceRecords([]);
+    setProdRecords([]);
+    setCategories([]);
+    setPartnerCategories([]);
+    setDictionaries(EMPTY_DICTIONARIES);
+    setGlobalNodes([]);
+    setBoms([]);
+    setPartners([]);
+    setWorkers([]);
+    setEquipment([]);
+    setWarehouses([]);
+    setFinanceCategories([]);
+    setFinanceAccountTypes([]);
+    setPlanFormSettings(DEFAULT_PLAN_FORM_SETTINGS);
+    setOrderFormSettings(DEFAULT_ORDER_FORM_SETTINGS);
+    setPurchaseOrderFormSettings(DEFAULT_PURCHASE_ORDER_FORM_SETTINGS);
+    setPurchaseBillFormSettings(DEFAULT_PURCHASE_BILL_FORM_SETTINGS);
+    setMaterialPanelSettings(DEFAULT_MATERIAL_PANEL_SETTINGS);
+    setPrintTemplates([]);
+    setProductMilestoneProgresses([]);
 
     async function loadCore() {
       const coreResults = await Promise.allSettled([
@@ -349,7 +379,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         api.dictionaries.list(),                                // 8
         api.products.list(),                                    // 9
         api.boms.list(),                                        // 10
-        api.tenants.getReportableMembers(tenantCtx!.tenantId),  // 11
+        api.tenants.getReportableMembers(activeTenantId),       // 11
         api.equipment.list(),                                   // 12
       ]);
       if (cancelled) return;
@@ -404,7 +434,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [activeTenantId]);
 
   // ── Incremental sync timestamps ──
   const lastFetchTs = useRef<Record<string, string>>({});
@@ -412,6 +442,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   // ── Lazy load for heavy data (orders/plans/prodRecords/psiRecords/financeRecords) ──
   const deferredLoadState = useRef<'idle' | 'loading' | 'done'>('idle');
+
+  useEffect(() => {
+    deferredLoadState.current = 'idle';
+    lastFetchTs.current = {};
+  }, [activeTenantId]);
 
   const ensureDeferredLoaded = useCallback(async () => {
     if (deferredLoadState.current !== 'idle') return;

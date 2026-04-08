@@ -2,7 +2,26 @@ import type { TenantPrismaClient } from '../lib/prisma.js';
 import { genId } from '../utils/genId.js';
 import { sanitizeUpdate, sanitizeCreate, normalizeDates } from '../utils/request.js';
 
-const PSI_STRIP_KEYS = new Set(['_savedAtMs', 'receivedQty', 'remainingQty']);
+const PSI_STRIP_KEYS = new Set(['_savedAtMs', 'receivedQty', 'remainingQty', 'productName', 'productSku']);
+
+/** 列表/详情展示用：不依赖「产品档案」接口权限，由服务端按 tenant 关联 Product 表补全名称 */
+async function enrichPsiRecordsWithProductMeta(db: TenantPrismaClient, records: { productId?: string | null }[]) {
+  const ids = [...new Set(records.map(r => r.productId).filter((id): id is string => Boolean(id)))];
+  if (ids.length === 0) return;
+  const products = await db.product.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true, sku: true },
+  });
+  const m = new Map(products.map(p => [p.id, p]));
+  for (const r of records as any[]) {
+    if (!r.productId) continue;
+    const p = m.get(r.productId);
+    if (p) {
+      r.productName = p.name || p.sku || undefined;
+      r.productSku = p.sku || undefined;
+    }
+  }
+}
 
 function cleanPsi(data: Record<string, unknown>) {
   for (const k of PSI_STRIP_KEYS) delete data[k];
@@ -29,9 +48,12 @@ export async function listRecords(
       db.psiRecord.findMany({ where, orderBy, skip: (opts.page - 1) * opts.pageSize, take: opts.pageSize }),
       db.psiRecord.count({ where }),
     ]);
+    await enrichPsiRecordsWithProductMeta(db, data);
     return { data, total, page: opts.page, pageSize: opts.pageSize };
   }
-  return db.psiRecord.findMany({ where, orderBy });
+  const data = await db.psiRecord.findMany({ where, orderBy });
+  await enrichPsiRecordsWithProductMeta(db, data);
+  return data;
 }
 
 export async function createRecord(
@@ -41,7 +63,9 @@ export async function createRecord(
   const data = cleanPsi(sanitizeCreate(body));
   if (!data.id) data.id = genId('psi');
   normalizeDates(data);
-  return db.psiRecord.create({ data: data as any });
+  const created = await db.psiRecord.create({ data: data as any });
+  await enrichPsiRecordsWithProductMeta(db, [created]);
+  return created;
 }
 
 export async function createBatchRecords(
@@ -56,7 +80,9 @@ export async function createBatchRecords(
   });
   const ids = prepared.map((d: any) => d.id as string);
   await db.psiRecord.createMany({ data: prepared });
-  return db.psiRecord.findMany({ where: { id: { in: ids } }, orderBy: { createdAt: 'desc' } });
+  const createdRows = await db.psiRecord.findMany({ where: { id: { in: ids } }, orderBy: { createdAt: 'desc' } });
+  await enrichPsiRecordsWithProductMeta(db, createdRows);
+  return createdRows;
 }
 
 export async function updateRecord(
@@ -66,7 +92,9 @@ export async function updateRecord(
 ) {
   const data = cleanPsi(sanitizeUpdate(body));
   normalizeDates(data);
-  return db.psiRecord.update({ where: { id }, data });
+  const updated = await db.psiRecord.update({ where: { id }, data });
+  await enrichPsiRecordsWithProductMeta(db, [updated]);
+  return updated;
 }
 
 export async function replaceRecords(

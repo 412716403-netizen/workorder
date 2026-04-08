@@ -325,12 +325,13 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
       const first = g.records[0];
       const warehouse = warehouseMapPSI.get((first.allocationWarehouseId || first.warehouseId));
       const totalQuantity = g.records.reduce((s, r) => s + ((r.allocatedQuantity ?? 0) - (r.shippedQuantity ?? 0)), 0);
+      const firstRec = g.records[0];
       return {
         groupKey,
         docNumber: g.docNumber,
         productId: g.productId,
-        productName: product?.name ?? '—',
-        productSku: product?.sku ?? '—',
+        productName: product?.name ?? firstRec?.productName ?? '—',
+        productSku: product?.sku ?? firstRec?.productSku ?? '—',
         partner: first.partner ?? '—',
         warehouseId: first.allocationWarehouseId || first.warehouseId || '',
         warehouseName: warehouse?.name ?? '—',
@@ -679,6 +680,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                           return Object.entries(groups).map(([gid, grp]) => {
                             const first = grp[0];
                             const product = productMapPSI.get(first.productId);
+                            const rowProductName = product?.name || (first as any)?.productName;
+                            const rowProductSku = product?.sku || (first as any)?.productSku;
                             const warehouse = warehouseMapPSI.get(first.warehouseId);
                             const orderQty = grp.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
                             const allocatedQty = type === 'SALES_ORDER' ? grp.reduce((s, i) => s + (i.allocatedQuantity ?? 0), 0) : 0;
@@ -693,7 +696,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                             const variantParts = grp
                               .filter((i: any) => i.variantId && product?.variants)
                               .map((i: any) => {
-                                const v = product!.variants!.find((vv: ProductVariant) => vv.id === i.variantId);
+                                const v = product?.variants?.find((vv: ProductVariant) => vv.id === i.variantId);
                                 if (!v) return '';
                                 const c = dictionaries.colors.find(cc => cc.id === v.colorId)?.name ?? '';
                                 const sz = dictionaries.sizes.find(ss => ss.id === v.sizeId)?.name ?? '';
@@ -711,9 +714,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                 <div className="flex items-center gap-3">
                                   <div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-300"><Package className="w-4 h-4" /></div>
                                   <div>
-                                    <p className="text-sm font-bold text-slate-700">{product?.name || '未知产品'}</p>
+                                    <p className="text-sm font-bold text-slate-700">{rowProductName || '未知产品'}</p>
                                       <p className="text-[9px] text-slate-300 font-bold uppercase tracking-tight">
-                                        {product?.sku}
+                                        {rowProductSku}
                                         {variantLabel && type !== 'SALES_ORDER' && type !== 'SALES_BILL' && ` · ${variantLabel}`}
                                       </p>
                                   </div>
@@ -800,7 +803,20 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        setAllocationModal({ docNumber: docNum, lineGroupId: gid, product: product!, grp: grp });
+                                        setAllocationModal({
+                                          docNumber: docNum,
+                                          lineGroupId: gid,
+                                          product: product ?? {
+                                            id: first.productId,
+                                            sku: rowProductSku || '',
+                                            name: rowProductName || '未知产品',
+                                            colorIds: [],
+                                            sizeIds: [],
+                                            variants: [],
+                                            milestoneNodeIds: [],
+                                          } as Product,
+                                          grp,
+                                        });
                                         setAllocationWarehouseId(grp[0]?.allocationWarehouseId ?? warehouses[0]?.id ?? '');
                                         const hasVariants = grp.some((i: any) => i.variantId);
                                         if (hasVariants) {
