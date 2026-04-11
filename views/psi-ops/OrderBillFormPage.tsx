@@ -4,8 +4,52 @@ import PurchaseOrderFormSection from './PurchaseOrderFormSection';
 import SalesOrderFormSection from './SalesOrderFormSection';
 import SalesBillFormSection from './SalesBillFormSection';
 import PurchaseBillFormSection from './PurchaseBillFormSection';
+import { localTodayYmd, localCalendarYmdStartToIso, toLocalDateYmd } from '../../utils/localDateTime';
+import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
+import { nextPsiDocNumber } from '../../utils/partnerDocNumber';
+import { useAuth } from '../../contexts/AuthContext';
+import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 
 type FormType = 'PURCHASE_ORDER' | 'PURCHASE_BILL' | 'SALES_ORDER' | 'SALES_BILL';
+
+/** 新建用当前 UTC ISO；编辑保留原单据组内最早可解析时间，便于列表排序与展示一致（避免 toLocaleString 不可解析） */
+function psiDocTimestampIsoForSave(recordsList: any[], formType: FormType, editingDocNumber: string | null): string {
+  if (editingDocNumber) {
+    const lines = recordsList.filter((r: any) => r.type === formType && r.docNumber === editingDocNumber);
+    const ms = flowRecordsEarliestMs(lines);
+    if (ms > 0) return new Date(ms).toISOString();
+  }
+  return new Date().toISOString();
+}
+
+/**
+ * 重新保存销售订单时从原行带回已发、已配（待发）、配货仓；若订单数量改小则收敛到不超过新数量且已配 ≥ 已发。
+ */
+function preservedSalesOrderLinePsi(
+  recordsList: any[],
+  sourceRecordIds: string[] | undefined,
+  variantId: string | undefined,
+  newQty: number,
+): Partial<{ allocatedQuantity: number; shippedQuantity: number; allocationWarehouseId: string }> {
+  const ids = sourceRecordIds?.filter(Boolean);
+  if (!ids?.length || newQty <= 0) return {};
+  const idSet = new Set(ids);
+  const candidates = recordsList.filter(
+    (r: any) =>
+      r.type === 'SALES_ORDER' &&
+      idSet.has(r.id) &&
+      (variantId ? r.variantId === variantId : !r.variantId),
+  );
+  if (!candidates.length) return {};
+  const shippedRaw = candidates.reduce((s, r: any) => s + (Number(r.shippedQuantity) || 0), 0);
+  const allocatedRaw = candidates.reduce((s, r: any) => s + (Number(r.allocatedQuantity) || 0), 0);
+  const shipped = Math.min(shippedRaw, newQty);
+  const allocated = Math.min(Math.max(allocatedRaw, shipped), newQty);
+  const allocationWarehouseId = candidates.map((r: any) => r.allocationWarehouseId).find((w: any) => w != null && w !== '') as string | undefined;
+  const out: Record<string, unknown> = { shippedQuantity: shipped, allocatedQuantity: allocated };
+  if (allocationWarehouseId) out.allocationWarehouseId = allocationWarehouseId;
+  return out as Partial<{ allocatedQuantity: number; shippedQuantity: number; allocationWarehouseId: string }>;
+}
 
 interface OrderBillFormPageProps {
   formType: FormType;
@@ -25,7 +69,8 @@ interface OrderBillFormPageProps {
   getUnitName: (productId: string) => string;
   formatQtyDisplay: (q: number | string | undefined | null) => number;
   onBack: () => void;
-  onSave: (records: any[]) => void;
+  /** 单条进销存写入（须传一条记录对象，勿传数组） */
+  onSave: (record: any) => void;
   onSaveBatch: (records: any[]) => Promise<void>;
   onReplaceRecords?: (type: string, docNumber: string, newRecords: any[]) => void;
   onDeleteRecords?: (type: string, docNumber: string) => void;
@@ -66,6 +111,8 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   tenantRole,
   partnerLabel,
 }) => {
+  const { currentUser } = useAuth();
+  const docOperator = currentOperatorDisplayName(currentUser);
   const recordsList = records ?? [];
   const _isOwner = tenantRole === 'owner';
   const hasPsiPerm = (perm: string): boolean => {
@@ -94,7 +141,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       note: '',
       docNumber: '',
       dueDate: '',
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: localTodayYmd(),
       customData: {} as Record<string, any>,
     };
     if (editingDocNumber) {
@@ -107,7 +154,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         base.dueDate = first.dueDate ?? '';
         base.note = first.note ?? '';
         base.warehouseId = first.warehouseId ?? '';
-        base.createdAt = first.createdAt ?? new Date().toISOString().split('T')[0];
+        base.createdAt = toLocalDateYmd(first.createdAt) || localTodayYmd();
         base.customData = first.customData ?? {};
       }
     }
@@ -129,11 +176,12 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       const first = recs[0];
       const hasVar = recs.some((r: any) => r.variantId);
       const vq: Record<string, number> = {};
-      if (hasVar) recs.forEach((r: any) => { if (r.variantId) vq[r.variantId] = r.quantity ?? 0; });
+      if (hasVar) recs.forEach((r: any) => { if (r.variantId) vq[r.variantId] = (vq[r.variantId] ?? 0) + (Number(r.quantity) || 0); });
+      const lineQtyNoVar = recs.reduce((s, r: any) => s + (Number(r.quantity) || 0), 0);
       return {
         id: lgId,
         productId: first.productId,
-        quantity: hasVar ? undefined : (first.quantity ?? 0),
+        quantity: hasVar ? undefined : lineQtyNoVar,
         purchasePrice: first.purchasePrice ?? 0,
         variantQuantities: hasVar ? vq : undefined,
         sourceRecordIds: recs.map((r: any) => r.id),
@@ -156,11 +204,12 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       const first = recs[0];
       const hasVar = recs.some((r: any) => r.variantId);
       const vq: Record<string, number> = {};
-      if (hasVar) recs.forEach((r: any) => { if (r.variantId) vq[r.variantId] = r.quantity ?? 0; });
+      if (hasVar) recs.forEach((r: any) => { if (r.variantId) vq[r.variantId] = (vq[r.variantId] ?? 0) + (Number(r.quantity) || 0); });
+      const lineQtyNoVar = recs.reduce((s, r: any) => s + (Number(r.quantity) || 0), 0);
       return {
         id: lgId,
         productId: first.productId,
-        quantity: hasVar ? undefined : (first.quantity ?? 0),
+        quantity: hasVar ? undefined : lineQtyNoVar,
         purchasePrice: first.purchasePrice ?? 0,
         variantQuantities: hasVar ? vq : undefined,
         batch: first.batch,
@@ -183,11 +232,12 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       const first = recs[0];
       const hasVar = recs.some((r: any) => r.variantId);
       const vq: Record<string, number> = {};
-      if (hasVar) recs.forEach((r: any) => { if (r.variantId) vq[r.variantId] = r.quantity ?? 0; });
+      if (hasVar) recs.forEach((r: any) => { if (r.variantId) vq[r.variantId] = (vq[r.variantId] ?? 0) + (Number(r.quantity) || 0); });
+      const lineQtyNoVar = recs.reduce((s, r: any) => s + (Number(r.quantity) || 0), 0);
       return {
         id: lgId,
         productId: first.productId,
-        quantity: hasVar ? undefined : (first.quantity ?? 0),
+        quantity: hasVar ? undefined : lineQtyNoVar,
         salesPrice: first.salesPrice ?? 0,
         variantQuantities: hasVar ? vq : undefined,
         sourceRecordIds: recs.map((r: any) => r.id),
@@ -210,11 +260,12 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       const first = recs[0];
       const hasVar = recs.some((r: any) => r.variantId);
       const vq: Record<string, number> = {};
-      if (hasVar) recs.forEach((r: any) => { if (r.variantId) vq[r.variantId] = r.quantity ?? 0; });
+      if (hasVar) recs.forEach((r: any) => { if (r.variantId) vq[r.variantId] = (vq[r.variantId] ?? 0) + (Number(r.quantity) || 0); });
+      const lineQtyNoVar = recs.reduce((s, r: any) => s + (Number(r.quantity) || 0), 0);
       return {
         id: lgId,
         productId: first.productId,
-        quantity: hasVar ? undefined : (first.quantity ?? 0),
+        quantity: hasVar ? undefined : lineQtyNoVar,
         salesPrice: first.salesPrice ?? 0,
         variantQuantities: hasVar ? vq : undefined,
         sourceRecordIds: recs.map((r: any) => r.id),
@@ -229,55 +280,21 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
 
   // ── Doc number generators ──
   const generatePODocNumber = (): string => {
-    const partnerCode = (form.partnerId || partners.find(p => p.name === form.partner)?.id || '0').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || '0';
-    const existingForPartner = recordsList.filter((r: any) =>
-      r.type === 'PURCHASE_ORDER' && (r.partnerId === form.partnerId || r.partner === form.partner)
-    );
-    const seqNums = existingForPartner.map((r: any) => {
-      const m = r.docNumber?.match(new RegExp(`PO-${partnerCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)`));
-      return m ? parseInt(m[1], 10) : 0;
-    });
-    const nextSeq = seqNums.length > 0 ? Math.max(...seqNums) + 1 : 1;
-    return `PO-${partnerCode}-${String(nextSeq).padStart(3, '0')}`;
+    const pid = form.partnerId || partners.find(p => p.name === form.partner)?.id || '';
+    return nextPsiDocNumber('PO', 'PURCHASE_ORDER', partners, recordsList, pid, form.partner || '');
   };
 
-  const generatePBDocNumber = (partnerId: string, partnerName: string): string => {
-    const partnerCode = (partnerId || partners.find(p => p.name === partnerName)?.id || '0').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || '0';
-    const existingForPartner = recordsList.filter((r: any) =>
-      r.type === 'PURCHASE_BILL' && (r.partnerId === partnerId || r.partner === partnerName)
-    );
-    const seqNums = existingForPartner.map((r: any) => {
-      const m = r.docNumber?.match(new RegExp(`PB-${partnerCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)`));
-      return m ? parseInt(m[1], 10) : 0;
-    });
-    const nextSeq = seqNums.length > 0 ? Math.max(...seqNums) + 1 : 1;
-    return `PB-${partnerCode}-${String(nextSeq).padStart(3, '0')}`;
-  };
+  const generatePBDocNumber = (partnerId: string, partnerName: string): string =>
+    nextPsiDocNumber('PB', 'PURCHASE_BILL', partners, recordsList, partnerId || '', partnerName || '');
 
   const generateSODocNumber = (): string => {
-    const partnerCode = (form.partnerId || partners.find(p => p.name === form.partner)?.id || '0').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || '0';
-    const existingForPartner = recordsList.filter((r: any) =>
-      r.type === 'SALES_ORDER' && (r.partnerId === form.partnerId || r.partner === form.partner)
-    );
-    const seqNums = existingForPartner.map((r: any) => {
-      const m = r.docNumber?.match(new RegExp(`SO-${partnerCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)`));
-      return m ? parseInt(m[1], 10) : 0;
-    });
-    const nextSeq = seqNums.length > 0 ? Math.max(...seqNums) + 1 : 1;
-    return `SO-${partnerCode}-${String(nextSeq).padStart(3, '0')}`;
+    const pid = form.partnerId || partners.find(p => p.name === form.partner)?.id || '';
+    return nextPsiDocNumber('SO', 'SALES_ORDER', partners, recordsList, pid, form.partner || '');
   };
 
   const generateSBDocNumber = (): string => {
-    const partnerCode = (form.partnerId || partners.find(p => p.name === form.partner)?.id || '0').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || '0';
-    const existingForPartner = recordsList.filter((r: any) =>
-      r.type === 'SALES_BILL' && (r.partnerId === form.partnerId || r.partner === form.partner)
-    );
-    const seqNums = existingForPartner.map((r: any) => {
-      const m = r.docNumber?.match(new RegExp(`SB-${partnerCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)`));
-      return m ? parseInt(m[1], 10) : 0;
-    });
-    const nextSeq = seqNums.length > 0 ? Math.max(...seqNums) + 1 : 1;
-    return `SB-${partnerCode}-${String(nextSeq).padStart(3, '0')}`;
+    const pid = form.partnerId || partners.find(p => p.name === form.partner)?.id || '';
+    return nextPsiDocNumber('XS', 'SALES_BILL', partners, recordsList, pid, form.partner || '', ['SB']);
   };
 
   // ── Item CRUD helpers ──
@@ -345,7 +362,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
 
   // ── Reset form ──
   const resetForm = () => {
-    const t = new Date().toISOString().split('T')[0];
+    const t = localTodayYmd();
     setForm({ productId: '', warehouseId: '', fromWarehouseId: '', toWarehouseId: '', quantity: 0, actualQuantity: 0, purchasePrice: 0, partner: '', partnerId: '', note: '', docNumber: '', dueDate: '', createdAt: t, customData: {} });
     setPurchaseOrderItems([]);
     setPurchaseBillItems([]);
@@ -378,9 +395,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
           attempts++;
         }
       }
-      const timestamp = editingDocNumber
-        ? (recordsList.find((r: any) => r.type === 'PURCHASE_ORDER' && r.docNumber === editingDocNumber)?.timestamp ?? new Date().toLocaleString())
-        : new Date().toLocaleString();
+      const timestamp = psiDocTimestampIsoForSave(recordsList, 'PURCHASE_ORDER', editingDocNumber);
 
       const newRecords: any[] = [];
       let recIdx = 0;
@@ -406,9 +421,9 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
               amount,
               dueDate: form.dueDate,
               note: form.note,
-              operator: '张主管',
+              operator: docOperator,
               lineGroupId: item.id,
-              createdAt: form.createdAt || new Date().toISOString().split('T')[0],
+              createdAt: localCalendarYmdStartToIso(form.createdAt || localTodayYmd()),
               ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {})
             });
           });
@@ -428,9 +443,9 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
             amount,
             dueDate: form.dueDate,
             note: form.note,
-            operator: '张主管',
+            operator: docOperator,
             lineGroupId: item.id,
-            createdAt: form.createdAt || new Date().toISOString().split('T')[0],
+            createdAt: localCalendarYmdStartToIso(form.createdAt || localTodayYmd()),
             ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {})
           });
         }
@@ -442,7 +457,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         onReplaceRecords('PURCHASE_ORDER', originalDocNumber || docNumber, newRecords);
       } else {
         if (onSaveBatch) await onSaveBatch(newRecords);
-        else { for (const r of newRecords) onSave([r]); }
+        else { for (const r of newRecords) await onSave(r); }
       }
 
       onBack();
@@ -472,9 +487,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
           attempts++;
         }
       }
-      const timestamp = editingDocNumber
-        ? (recordsList.find((r: any) => r.type === 'PURCHASE_BILL' && r.docNumber === editingDocNumber)?.timestamp ?? new Date().toLocaleString())
-        : new Date().toLocaleString();
+      const timestamp = psiDocTimestampIsoForSave(recordsList, 'PURCHASE_BILL', editingDocNumber);
       const newRecords: any[] = [];
       let pbIdx = 0;
       purchaseBillItems.forEach((item) => {
@@ -498,9 +511,9 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
               amount: qty * price,
               warehouseId: form.warehouseId,
               note: form.note,
-              operator: '张主管',
+              operator: docOperator,
               lineGroupId: item.id,
-              createdAt: form.createdAt || new Date().toISOString().split('T')[0],
+              createdAt: localCalendarYmdStartToIso(form.createdAt || localTodayYmd()),
               ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
               ...(item.batch != null && item.batch !== '' && { batch: item.batch })
             });
@@ -520,9 +533,9 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
             amount: item.quantity! * price,
             warehouseId: form.warehouseId,
             note: form.note,
-            operator: '张主管',
+            operator: docOperator,
             lineGroupId: item.id,
-            createdAt: form.createdAt || new Date().toISOString().split('T')[0],
+            createdAt: localCalendarYmdStartToIso(form.createdAt || localTodayYmd()),
             ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
             ...(item.batch != null && item.batch !== '' && { batch: item.batch })
           });
@@ -532,7 +545,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         onReplaceRecords('PURCHASE_BILL', originalDocNumber || docNumber, newRecords);
       } else {
         if (onSaveBatch) await onSaveBatch(newRecords);
-        else { for (const r of newRecords) onSave([r]); }
+        else { for (const r of newRecords) await onSave(r); }
       }
       onBack();
       return;
@@ -561,9 +574,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
           attempts++;
         }
       }
-      const timestamp = editingDocNumber
-        ? (recordsList.find((r: any) => r.type === 'SALES_ORDER' && r.docNumber === editingDocNumber)?.timestamp ?? new Date().toLocaleString())
-        : new Date().toLocaleString();
+      const timestamp = psiDocTimestampIsoForSave(recordsList, 'SALES_ORDER', editingDocNumber);
       const newRecords: any[] = [];
       let recIdx = 0;
       salesOrderItems.forEach((item) => {
@@ -588,14 +599,16 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
               amount,
               dueDate: form.dueDate,
               note: form.note,
-              operator: '张主管',
+              operator: docOperator,
               lineGroupId: item.id,
-              createdAt: form.createdAt || new Date().toISOString().split('T')[0],
-              ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {})
+              createdAt: localCalendarYmdStartToIso(form.createdAt || localTodayYmd()),
+              ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
+              ...preservedSalesOrderLinePsi(recordsList, item.sourceRecordIds, variantId, Number(qty) || 0),
             });
           });
         } else if ((item.quantity ?? 0) > 0) {
           const amount = item.quantity! * price;
+          const q0 = Number(item.quantity) || 0;
           newRecords.push({
             id: `psi-so-${Date.now()}-${recIdx++}`,
             type: 'SALES_ORDER',
@@ -610,10 +623,11 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
             amount,
             dueDate: form.dueDate,
             note: form.note,
-            operator: '张主管',
+            operator: docOperator,
             lineGroupId: item.id,
-            createdAt: form.createdAt || new Date().toISOString().split('T')[0],
-            ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {})
+            createdAt: localCalendarYmdStartToIso(form.createdAt || localTodayYmd()),
+            ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
+            ...preservedSalesOrderLinePsi(recordsList, item.sourceRecordIds, undefined, q0),
           });
         }
       });
@@ -622,7 +636,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         onReplaceRecords('SALES_ORDER', originalDocNumber || docNumber, newRecords);
       } else {
         if (onSaveBatch) await onSaveBatch(newRecords);
-        else { for (const r of newRecords) onSave([r]); }
+        else { for (const r of newRecords) await onSave(r); }
       }
       onBack();
       return;
@@ -651,9 +665,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
           attempts++;
         }
       }
-      const timestamp = editingDocNumber
-        ? (recordsList.find((r: any) => r.type === 'SALES_BILL' && r.docNumber === editingDocNumber)?.timestamp ?? new Date().toLocaleString())
-        : new Date().toLocaleString();
+      const timestamp = psiDocTimestampIsoForSave(recordsList, 'SALES_BILL', editingDocNumber);
       const newRecords: any[] = [];
       let recIdx = 0;
       salesBillItems.forEach((item) => {
@@ -677,9 +689,9 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
               salesPrice: price,
               amount: qty * price,
               note: form.note,
-              operator: '张主管',
+              operator: docOperator,
               lineGroupId: item.id,
-              createdAt: form.createdAt || new Date().toISOString().split('T')[0],
+              createdAt: localCalendarYmdStartToIso(form.createdAt || localTodayYmd()),
               ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {})
             });
           });
@@ -698,9 +710,9 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
             salesPrice: price,
             amount: item.quantity! * price,
             note: form.note,
-            operator: '张主管',
+            operator: docOperator,
             lineGroupId: item.id,
-            createdAt: form.createdAt || new Date().toISOString().split('T')[0],
+            createdAt: localCalendarYmdStartToIso(form.createdAt || localTodayYmd()),
             ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {})
           });
         }
@@ -710,7 +722,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         onReplaceRecords('SALES_BILL', originalDocNumber || docNumber, newRecords);
       } else {
         if (onSaveBatch) await onSaveBatch(newRecords);
-        else { for (const r of newRecords) onSave([r]); }
+        else { for (const r of newRecords) await onSave(r); }
       }
       onBack();
       return;
@@ -819,6 +831,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         onSaveManual={() => handleSaveManual('PURCHASE_BILL')}
         onBack={onBack}
         onSaveRecord={onSave}
+        onSaveBatch={onSaveBatch}
         onDeleteRecords={onDeleteRecords}
         editingDocNumber={editingDocNumber}
         hasPsiPerm={hasPsiPerm}

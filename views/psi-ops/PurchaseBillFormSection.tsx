@@ -18,8 +18,11 @@ import { SearchableProductSelect } from '../../components/SearchableProductSelec
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
 import { Product, Warehouse, ProductCategory, Partner, PartnerCategory, AppDictionaries, ProductVariant } from '../../types';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import { localTodayYmd, localCalendarYmdStartToIso } from '../../utils/localDateTime';
 import { sectionTitleClass } from '../../styles/uiDensity';
 import { useConfirm } from '../../contexts/ConfirmContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 
 export interface PurchaseBillLineItem {
   id: string;
@@ -41,7 +44,10 @@ interface PurchaseBillFormSectionProps {
   onResetItems: () => void;
   onSaveManual: () => void;
   onBack: () => void;
-  onSaveRecord: (records: any[]) => void;
+  /** 单条写入（与进销存「添加一条」一致，须为对象不可传数组） */
+  onSaveRecord: (record: any) => void | Promise<void>;
+  /** 多条一次写入（推荐：由采购订单转化时整单批量保存） */
+  onSaveBatch?: (records: any[]) => Promise<void>;
   onDeleteRecords?: (type: string, docNumber: string) => void;
   editingDocNumber: string | null;
   hasPsiPerm: (perm: string) => boolean;
@@ -65,12 +71,14 @@ interface PurchaseBillFormSectionProps {
 const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
   form, setForm,
   purchaseBillItems, onAddItem, onUpdateItem, onUpdateVariantQty, onRemoveItem, onResetItems,
-  onSaveManual, onBack, onSaveRecord, onDeleteRecords,
+  onSaveManual, onBack, onSaveRecord, onSaveBatch, onDeleteRecords,
   editingDocNumber, hasPsiPerm,
   products, categories, partners, partnerCategories, dictionaries, warehouses,
   productMapPSI, categoryMapPSI, formatQtyDisplay, getUnitName,
   formSettings, partnerLabel, recordsList, receivedByOrderLine, generatePBDocNumber,
 }) => {
+  const { currentUser } = useAuth();
+  const docOperator = currentOperatorDisplayName(currentUser);
   const confirm = useConfirm();
 
   const [creationMethod, setCreationMethod] = useState<'MANUAL' | 'FROM_ORDER'>('MANUAL');
@@ -122,7 +130,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
     if (selectedPOItemIds.length === 0 || !form.warehouseId) return;
 
     const itemsToBill = availableItemsFromSelectedPOs.filter(item => selectedPOItemIds.includes(item.id));
-    const todayStr = new Date().toLocaleString();
+    const timestampIso = new Date().toISOString();
     const firstItem = itemsToBill[0];
     let pbDocNumber = form.docNumber?.trim() || generatePBDocNumber(firstItem?.partnerId || '', firstItem?.partner || '');
     const exists = (n: string) => recordsList.some((r: any) => r.type === 'PURCHASE_BILL' && r.docNumber === n);
@@ -140,8 +148,9 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
       if (qty <= 0) return;
       addedCount++;
       const batchVal = selectedPOItemBatches[item.id]?.trim();
+      const { receivedQty: _rq, remainingQty: _rm, ...poBase } = item;
       newRecords.push({
-        ...item,
+        ...poBase,
         id: `psi-pb-${baseId}-${idx}`,
         type: 'PURCHASE_BILL',
         docNumber: pbDocNumber,
@@ -149,20 +158,30 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
         sourceOrderNumber: item.docNumber,
         sourceLineId: item.id,
         warehouseId: form.warehouseId,
-        timestamp: todayStr,
+        timestamp: timestampIso,
         _savedAtMs: Date.now(),
         note: form.note || `由订单[${item.docNumber}]商品明细转化`,
-        operator: '张主管(订单转化)',
+        operator: `${docOperator}(订单转化)`,
         lineGroupId: item.lineGroupId ?? item.id,
-        createdAt: form.createdAt || new Date().toISOString().split('T')[0],
+        createdAt: localCalendarYmdStartToIso(form.createdAt || localTodayYmd()),
         ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
         ...(batchVal && { batch: batchVal })
       });
     });
 
-    for (const r of newRecords) onSaveRecord([r]);
-    onBack();
-    toast.success(`采购单 ${pbDocNumber} 已成功创建，包含 ${addedCount} 条入库明细`);
+    void (async () => {
+      try {
+        if (onSaveBatch && newRecords.length > 0) {
+          await onSaveBatch(newRecords);
+        } else {
+          for (const r of newRecords) await Promise.resolve(onSaveRecord(r));
+        }
+        onBack();
+        toast.success(`采购单 ${pbDocNumber} 已成功创建，包含 ${addedCount} 条入库明细`);
+      } catch {
+        /* onSaveBatch / onSaveRecord 已 toast */
+      }
+    })();
   };
 
   return (

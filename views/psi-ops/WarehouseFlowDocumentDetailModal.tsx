@@ -99,7 +99,6 @@ const WarehouseFlowDocumentDetailModal: React.FC<WarehouseFlowDocumentDetailModa
     const detailLines = Array.from(detailLinesByProductVariant.values()).map(item => {
       const product = productMapPSI.get(item.productId);
       const category = categoryMapPSI.get(product?.categoryId);
-      const hasColorSize = category?.hasColorSize && (product?.variants?.length ?? 0) > 0;
       let variantLabel = '';
       if (item.variantId && product?.variants) {
         const v = product.variants.find((vv: ProductVariant) => vv.id === item.variantId);
@@ -114,7 +113,6 @@ const WarehouseFlowDocumentDetailModal: React.FC<WarehouseFlowDocumentDetailModa
         productName: product?.name ?? '—',
         productSku: product?.sku ?? '—',
         unitName: item.productId ? getUnitName(item.productId) : 'PCS',
-        hasColorSize: !!variantLabel,
         variantLabel
       };
     });

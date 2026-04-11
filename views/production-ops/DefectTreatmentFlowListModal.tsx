@@ -3,6 +3,8 @@ import { ScrollText, X, Filter, FileText } from 'lucide-react';
 import { ProductionOpRecord, ProductionOrder, Product, GlobalNodeTemplate } from '../../types';
 import { hasOpsPerm } from './types';
 import { formatTimestamp } from '../../utils/formatTime';
+import { toLocalDateYmd } from '../../utils/localDateTime';
+import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 
 export interface DefectTreatmentFlowListModalProps {
   productionLinkMode: 'order' | 'product';
@@ -37,7 +39,7 @@ const DefectTreatmentFlowListModal: React.FC<DefectTreatmentFlowListModalProps> 
     const product = products.find(p => p.id === r.productId);
     const sourceNodeId = r.type === 'REWORK' ? (r.sourceNodeId ?? r.nodeId) : r.nodeId;
     const nodeName = sourceNodeId ? (globalNodes.find(n => n.id === sourceNodeId)?.name ?? '') : '';
-    if (f.dateFrom || f.dateTo) { const dateStr = r.timestamp ? new Date(r.timestamp).toISOString().split('T')[0] : ''; if (f.dateFrom && dateStr < f.dateFrom) return false; if (f.dateTo && dateStr > f.dateTo) return false; }
+    if (f.dateFrom || f.dateTo) { const dateStr = r.timestamp ? toLocalDateYmd(r.timestamp) : ''; if (f.dateFrom && dateStr < f.dateFrom) return false; if (f.dateTo && dateStr > f.dateTo) return false; }
     if (f.orderNumber && !(order?.orderNumber ?? '').toLowerCase().includes(f.orderNumber.toLowerCase())) return false;
     if (f.productId) { const name = (product?.name ?? '').toLowerCase(); const kw = f.productId.toLowerCase(); if (!name.includes(kw) && !(r.productId ?? '').toLowerCase().includes(kw)) return false; }
     if (f.nodeName && !nodeName.toLowerCase().includes(f.nodeName.toLowerCase())) return false;
@@ -49,7 +51,10 @@ const DefectTreatmentFlowListModal: React.FC<DefectTreatmentFlowListModalProps> 
     return true;
   }), [defectRecords, f, orders, products, globalNodes]);
 
-  const sorted = useMemo(() => [...filtered].sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()), [filtered]);
+  const sorted = useMemo(
+    () => [...filtered].sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()),
+    [filtered],
+  );
 
   const groupedRows = useMemo(() => {
     const groups = new Map<string, { key: string; records: ProductionOpRecord[]; totalQty: number; first: ProductionOpRecord }>();
@@ -63,7 +68,11 @@ const DefectTreatmentFlowListModal: React.FC<DefectTreatmentFlowListModalProps> 
         groups.set(gKey, { key: gKey, records: [r], totalQty: r.quantity ?? 0, first: r });
       }
     }
-    return [...groups.values()];
+    return [...groups.values()].sort((a, b) => {
+      const d = flowRecordsEarliestMs(b.records) - flowRecordsEarliestMs(a.records);
+      if (d !== 0) return d;
+      return (a.key || '').localeCompare(b.key || '');
+    });
   }, [sorted]);
 
   const totalQuantity = useMemo(() => groupedRows.reduce((s, g) => s + g.totalQty, 0), [groupedRows]);
@@ -80,7 +89,7 @@ const DefectTreatmentFlowListModal: React.FC<DefectTreatmentFlowListModalProps> 
           <h3 className="font-bold text-slate-800 flex items-center gap-2"><ScrollText className="w-5 h-5 text-indigo-600" /> 处理不良品流水</h3>
           <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
         </div>
-        <div className="px-6 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0"><p className="text-xs text-slate-500">生成返工、报损等处理不良品的记录。按时间倒序。</p></div>
+        <div className="px-6 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0"><p className="text-xs text-slate-500">生成返工、报损等处理不良品的记录。按单据创建时间倒序，编辑不改变顺序。</p></div>
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
           <div className="flex items-center gap-2 mb-3"><Filter className="w-4 h-4 text-slate-500" /><span className="text-xs font-bold text-slate-500 uppercase">筛选</span></div>
           <div className={`grid grid-cols-2 sm:grid-cols-3 gap-3 ${productionLinkMode === 'product' ? 'md:grid-cols-7' : 'md:grid-cols-8'}`}>

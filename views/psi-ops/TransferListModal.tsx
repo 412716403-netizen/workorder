@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Plus,
   X,
@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Product, Warehouse } from '../../types';
 import { useConfirm } from '../../contexts/ConfirmContext';
+import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 
 export interface TransferListModalProps {
   open: boolean;
@@ -38,6 +39,17 @@ const TransferListModal: React.FC<TransferListModalProps> = ({
 }) => {
   const confirm = useConfirm();
   const [detailDocNumber, setDetailDocNumber] = useState<string | null>(null);
+
+  const sortedTransferEntries = useMemo(
+    () =>
+      Object.entries(transferOrdersGrouped).sort(([docA, itemsA], [docB, itemsB]) => {
+        const ma = flowRecordsEarliestMs(itemsA as { timestamp?: string; createdAt?: string }[]);
+        const mb = flowRecordsEarliestMs(itemsB as { timestamp?: string; createdAt?: string }[]);
+        if (mb !== ma) return mb - ma;
+        return (docB || '').localeCompare(docA || '');
+      }),
+    [transferOrdersGrouped],
+  );
 
   if (!open) return null;
 
@@ -71,7 +83,7 @@ const TransferListModal: React.FC<TransferListModalProps> = ({
         </div>
         <div className="flex-1 overflow-auto p-4">
           {!detailDocNumber ? (
-            Object.keys(transferOrdersGrouped).length === 0 ? (
+            sortedTransferEntries.length === 0 ? (
               <div className="py-16 text-center text-slate-500">
                 <FileText className="w-12 h-12 mx-auto mb-3 text-slate-200" />
                 <p className="text-sm font-medium">暂无调拨单</p>
@@ -79,7 +91,7 @@ const TransferListModal: React.FC<TransferListModalProps> = ({
               </div>
             ) : (
               <div className="space-y-3">
-                {Object.entries(transferOrdersGrouped).map(([docNum, docItems]) => {
+                {sortedTransferEntries.map(([docNum, docItems]) => {
                   const first = docItems[0];
                   const totalQty = docItems.reduce((s: number, i: any) => s + (i.quantity ?? 0), 0);
                   const fromName = warehouseMapPSI.get(first.fromWarehouseId)?.name ?? '—';

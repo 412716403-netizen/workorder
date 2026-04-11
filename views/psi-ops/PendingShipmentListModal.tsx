@@ -2,6 +2,9 @@ import React, { useState, useMemo } from 'react';
 import { X, Filter, PackageCheck, FileText, ArrowDownToLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { Partner } from '../../types';
+import { localTodayYmd } from '../../utils/localDateTime';
+import { useAuth } from '../../contexts/AuthContext';
+import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 
 export interface PendingShipmentGroup {
   groupKey: string;
@@ -39,6 +42,8 @@ const PendingShipmentListModal: React.FC<PendingShipmentListModalProps> = ({
   onReplaceRecords,
   generateSBDocNumberForPartner,
 }) => {
+  const { currentUser } = useAuth();
+  const docOperator = currentOperatorDisplayName(currentUser);
   const [pendingShipSearchDoc, setPendingShipSearchDoc] = useState('');
   const [pendingShipSearchProduct, setPendingShipSearchProduct] = useState('');
   const [pendingShipSearchPartner, setPendingShipSearchPartner] = useState('');
@@ -91,7 +96,7 @@ const PendingShipmentListModal: React.FC<PendingShipmentListModalProps> = ({
             </div>
           </div>
           <div className="mt-2 flex items-center gap-4">
-            <span className="text-xs text-slate-400">已配货未出库的销售订单明细；勾选后点击「发货」生成销售单（仅可同时勾选同一客户、同一仓库的明细一起发货）。</span>
+            <span className="text-xs text-slate-400">待发数量 = 已配货 − 已发货；勾选后点击「发货」生成销售单（仅可同时勾选同一客户、同一仓库的明细一起发货）。</span>
             <span className="text-xs text-slate-400">共 {filteredPendingShipmentGroups.length} 项</span>
           </div>
         </div>
@@ -107,7 +112,10 @@ const PendingShipmentListModal: React.FC<PendingShipmentListModalProps> = ({
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">订单单号</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">商品名称</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">客户</th>
-                    <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">数量</th>
+                    <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">
+                      待发数量
+                      <span className="block font-bold normal-case text-[9px] text-slate-400 tracking-normal mt-0.5 font-sans">已配−已发</span>
+                    </th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">仓库</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap w-24">操作</th>
                   </tr>
@@ -191,10 +199,10 @@ const PendingShipmentListModal: React.FC<PendingShipmentListModalProps> = ({
                 }
                 const newDocNumber = generateSBDocNumberForPartner(partnerId, partnerName);
                 const timestamp = new Date().toLocaleString();
-                const createdAt = new Date().toISOString().split('T')[0];
+                const createdAt = localTodayYmd();
                 let recIdx = 0;
                 const newBillRecords = selectedRecords.map((r: any) => {
-                  const pendingQty = (r.allocatedQuantity ?? 0) - (r.shippedQuantity ?? 0);
+                  const pendingQty = Math.max(0, (Number(r.allocatedQuantity) || 0) - (Number(r.shippedQuantity) || 0));
                   const price = r.salesPrice ?? 0;
                   return {
                     id: `psi-sb-${Date.now()}-${recIdx++}`,
@@ -211,22 +219,26 @@ const PendingShipmentListModal: React.FC<PendingShipmentListModalProps> = ({
                     salesPrice: price,
                     amount: pendingQty * price,
                     note: '',
-                    operator: '张主管',
+                    operator: docOperator,
                     lineGroupId: r.lineGroupId ?? r.id,
                     createdAt,
                   };
                 });
                 if (onAddRecordBatch) await onAddRecordBatch(newBillRecords);
                 else { for (const r of newBillRecords) await onAddRecord(r); }
+                const shipTotalQty = newBillRecords.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+                toast.success('销售发货单已生成', {
+                  description: `单号 ${newDocNumber}，${newBillRecords.length} 条明细，合计 ${shipTotalQty} 件`,
+                });
                 if (onReplaceRecords) {
                   const docNumbersToUpdate = [...new Set(selectedRecords.map((r: any) => r.docNumber))];
                   docNumbersToUpdate.forEach(docNum => {
                     const docRecords = recordsList.filter((re: any) => re.type === 'SALES_ORDER' && re.docNumber === docNum);
                     const newRecords = docRecords.map((re: any) => {
                       if (!pendingShipSelectedIds.has(re.id)) return re;
-                      const allocated = re.allocatedQuantity ?? 0;
-                      const alreadyShipped = re.shippedQuantity ?? 0;
-                      const pending = allocated - alreadyShipped;
+                      const allocated = Number(re.allocatedQuantity) || 0;
+                      const alreadyShipped = Number(re.shippedQuantity) || 0;
+                      const pending = Math.max(0, allocated - alreadyShipped);
                       return { ...re, shippedQuantity: alreadyShipped + pending };
                     });
                     onReplaceRecords('SALES_ORDER', docNum, newRecords);

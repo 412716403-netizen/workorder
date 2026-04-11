@@ -92,3 +92,35 @@ export const deleteDispatch = asyncHandler(async (req, res) => {
 export const deleteReturn = asyncHandler(async (req, res) => {
   res.json(await collabService.deleteReturn(req.tenantId!, str(req.params.id)));
 });
+
+export const updateDispatchPayload = asyncHandler(async (req, res) => {
+  res.json(await collabService.updateDispatchPayload(req.tenantId!, str(req.params.id), req.body));
+});
+
+export const amendDispatch = asyncHandler(async (req, res) => {
+  res.json(await collabService.amendDispatch(req.tenantId!, str(req.params.id), req.body));
+});
+
+export const confirmDispatchAmendment = asyncHandler(async (req, res) => {
+  res.json(await collabService.confirmDispatchAmendment(req.tenantId!, str(req.params.id)));
+});
+
+export const rejectDispatchAmendment = asyncHandler(async (req, res) => {
+  res.json(await collabService.rejectDispatchAmendment(req.tenantId!, str(req.params.id)));
+});
+
+export const updateReturnPayload = asyncHandler(async (req, res) => {
+  res.json(await collabService.updateReturnPayload(req.tenantId!, str(req.params.id), req.body));
+});
+
+export const amendReturn = asyncHandler(async (req, res) => {
+  res.json(await collabService.amendReturn(req.tenantId!, str(req.params.id), req.body));
+});
+
+export const confirmReturnAmendment = asyncHandler(async (req, res) => {
+  res.json(await collabService.confirmReturnAmendment(req.tenantId!, str(req.params.id)));
+});
+
+export const rejectReturnAmendment = asyncHandler(async (req, res) => {
+  res.json(await collabService.rejectReturnAmendment(req.tenantId!, str(req.params.id)));
+});

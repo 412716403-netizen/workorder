@@ -9,6 +9,8 @@ import {
   ProductMilestoneProgress,
   ProductionOpRecord,
 } from '../../types';
+import { toLocalDateYmd } from '../../utils/localDateTime';
+import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 
 function fmtDT(ts: string | Date | undefined | null): string {
   if (!ts) return '—';
@@ -99,8 +101,7 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
         if (!key.includes(kw)) return false;
       }
       if (f.dateFrom || f.dateTo) {
-        const dt = new Date(report.timestamp);
-        const dateStr = dt.toISOString().split('T')[0];
+        const dateStr = toLocalDateYmd(report.timestamp);
         if (f.dateFrom && dateStr < f.dateFrom) return false;
         if (f.dateTo && dateStr > f.dateTo) return false;
       }
@@ -151,8 +152,7 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
           if (!key.includes(kw)) return false;
         }
         if (f.dateFrom || f.dateTo) {
-          const dt = new Date(report.timestamp);
-          const dateStr = dt.toISOString().split('T')[0];
+          const dateStr = toLocalDateYmd(report.timestamp);
           if (f.dateFrom && dateStr < f.dateFrom) return false;
           if (f.dateTo && dateStr > f.dateTo) return false;
         }
@@ -186,9 +186,13 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
         };
       });
     }
-    const batches: (OrderBatch | ProductBatch)[] = [...orderBatches, ...productBatches].sort((a, b) =>
-      new Date(b.first.report.timestamp).getTime() - new Date(a.first.report.timestamp).getTime()
-    );
+    const batchEarliestMs = (batch: OrderBatch | ProductBatch): number =>
+      flowRecordsEarliestMs(batch.rows.map(r => ({ timestamp: r.report.timestamp })));
+    const batches: (OrderBatch | ProductBatch)[] = [...orderBatches, ...productBatches].sort((a, b) => {
+      const d = batchEarliestMs(b) - batchEarliestMs(a);
+      if (d !== 0) return d;
+      return String(a.key).localeCompare(String(b.key));
+    });
     const totalGood = batches.reduce((s, b) => s + b.totalGood, 0);
     const totalDefective = batches.reduce((s, b) => s + b.totalDefective, 0);
     const totalAmount = batches.reduce((s, b) => s + b.totalAmount, 0);

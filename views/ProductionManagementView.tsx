@@ -29,6 +29,7 @@ import {
   subModuleTabPillClass,
 } from '../styles/uiDensity';
 import { useModulePermission, usePermFilteredTabs } from '../hooks/useModulePermission';
+import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
 
 interface ProductionManagementViewProps {
   productionLinkMode?: ProductionLinkMode;
@@ -123,6 +124,12 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
       setActiveTab(tab);
     }
   }, [location.state]);
+
+  const setScrollSegment = useSetMainScrollSegment();
+  useLayoutEffect(() => {
+    setScrollSegment?.(activeTab);
+  }, [activeTab, setScrollSegment]);
+
   const sentinelRef = useRef<HTMLDivElement>(null);
   const tabsWrapRef = useRef<HTMLDivElement>(null);
   const [isStuck, setIsStuck] = useState(false);

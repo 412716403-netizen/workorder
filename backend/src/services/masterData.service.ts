@@ -24,6 +24,9 @@ export async function createPartner(
 ) {
   const data = sanitizeCreate(body);
   if (!data.id) data.id = genId('partner');
+  delete data.partnerListNo;
+  const maxRow = await db.partner.aggregate({ _max: { partnerListNo: true } });
+  data.partnerListNo = (maxRow._max.partnerListNo ?? 0) + 1;
   return db.partner.create({ data });
 }
 

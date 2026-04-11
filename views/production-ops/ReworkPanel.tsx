@@ -21,6 +21,15 @@ import {
 } from '../../styles/uiDensity';
 import { PanelProps, hasOpsPerm, getOrderFamilyIds, getOrderFamilyWithDepth, ReworkPendingRow } from './types';
 import { useDataIndexes } from './useDataIndexes';
+import { toLocalCompactYmd } from '../../utils/localDateTime';
+import {
+  milestoneIndexInOrder,
+  milestoneIndexInProduct,
+  orderCreatedMs,
+  productNewestOrderCreatedMs,
+  reworkMainListBlockCreatedMs,
+  reworkMainListBlockTieId,
+} from '../../utils/orderCenterSort';
 import ReworkPendingDefectiveModal from './ReworkPendingDefectiveModal';
 import ReworkOrderDetailModal from './ReworkOrderDetailModal';
 import ReworkMaterialIssueModal from './ReworkMaterialIssueModal';
@@ -30,8 +39,7 @@ import ReworkReportFlowListModal from './ReworkReportFlowListModal';
 import ReworkReportFlowDetailModal from './ReworkReportFlowDetailModal';
 import ReworkDefectiveActionModal from './ReworkDefectiveActionModal';
 import ReworkReportSubmitModal from './ReworkReportSubmitModal';
-
-const OUTSOURCE_REWORK_DOCNO_RE = /^WX-(\d+)-(\d+)$/;
+import { nextOutsourceDocNumber } from '../../utils/partnerDocNumber';
 
 /** sourceReworkId → partner 的预建索引 */
 function buildReworkPartnerMap(allRecords: ProductionOpRecord[]): Map<string, string> {
@@ -135,7 +143,16 @@ const ReworkPanel: React.FC<PanelProps> = ({
           });
         });
       });
-      rows.sort((a, b) => (a.orderNumber || '').localeCompare(b.orderNumber || ''));
+      rows.sort((a, b) => {
+        const oa = idx.ordersById.get(a.orderId);
+        const ob = idx.ordersById.get(b.orderId);
+        const d = orderCreatedMs(ob!) - orderCreatedMs(oa!);
+        if (d !== 0) return d;
+        const ma = milestoneIndexInOrder(oa, a.nodeId);
+        const mb = milestoneIndexInOrder(ob, b.nodeId);
+        if (ma !== mb) return ma - mb;
+        return (a.orderNumber || '').localeCompare(b.orderNumber || '');
+      });
       return rows;
     }
     const prodKey = (productId: string, nodeId: string) => `${productId}|${nodeId}`;
@@ -206,9 +223,16 @@ const ReworkPanel: React.FC<PanelProps> = ({
         productOrdersTitle: parentNos.length ? productOrdersTitle : undefined
       });
     });
-    rows.sort((a, b) => (a.productName || '').localeCompare(b.productName || ''));
+    rows.sort((a, b) => {
+      const d = productNewestOrderCreatedMs(b.productId, orders) - productNewestOrderCreatedMs(a.productId, orders);
+      if (d !== 0) return d;
+      if (a.productId !== b.productId) return a.productId.localeCompare(b.productId);
+      const pa = idx.productsById.get(a.productId);
+      const pb = idx.productsById.get(b.productId);
+      return milestoneIndexInProduct(pa, a.nodeId) - milestoneIndexInProduct(pb, b.nodeId);
+    });
     return rows;
-  }, [productionLinkMode, records, orders, products, productMilestoneProgresses, globalNodes]);
+  }, [productionLinkMode, records, orders, products, productMilestoneProgresses, globalNodes, idx]);
 
   /** 顺序模式：单条返工记录在工序 nodeId 上的「剩余可报数」= 上道已完成流入本道 - 本道已完成 */
   const reworkRemainingAtNode = (r: ProductionOpRecord, nodeId: string): number => {
@@ -356,7 +380,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
 
   /** 处理不良品流水单号（生成返工 REWORK + 报损 SCRAP 共用）：FL + 日期(yyyyMMdd) + 序号(4位)，使两条流水单号连续 */
   const getNextReworkDocNo = () => {
-    const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const todayStr = toLocalCompactYmd(new Date());
     const pattern = `FL${todayStr}-`;
     const existing = records.filter(r => (r.type === 'REWORK' || r.type === 'SCRAP') && r.docNo && r.docNo.startsWith(pattern));
     const used = new Set(existing.map(r => parseInt((r.docNo ?? '').slice(pattern.length), 10)).filter(n => !isNaN(n) && n >= 1));
@@ -367,7 +391,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
 
   /** 返工报工流水单号（REWORK_REPORT）：FG + 日期(yyyyMMdd) + 序号(4位)；仅统计 REWORK_REPORT，使返工报工流水中单号连续 */
   const getNextReworkReportDocNo = () => {
-    const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const todayStr = toLocalCompactYmd(new Date());
     const pattern = `FG${todayStr}-`;
     const existing = records.filter(r => r.type === 'REWORK_REPORT' && r.docNo && r.docNo.startsWith(pattern));
     const used = new Set(existing.map(r => parseInt((r.docNo ?? '').slice(pattern.length), 10)).filter(n => !isNaN(n) && n >= 1));
@@ -376,34 +400,18 @@ const ReworkPanel: React.FC<PanelProps> = ({
     return `FG${todayStr}-${String(next).padStart(4, '0')}`;
   };
 
-  const getNextOutsourceReworkDocNo = (partnerName: string): string => {
-    const partnerCodeByName = new Map<string, number>();
-    const seqsByCode = new Map<number, number[]>();
-    let maxCode = 0;
-    for (const r of records) {
-      if (r.type !== 'OUTSOURCE' || !r.docNo) continue;
-      const m = r.docNo.match(OUTSOURCE_REWORK_DOCNO_RE);
-      if (!m) continue;
-      const code = parseInt(m[1], 10);
-      const seq = parseInt(m[2], 10);
-      if (code > maxCode) maxCode = code;
-      if (r.partner && !partnerCodeByName.has(r.partner)) partnerCodeByName.set(r.partner, code);
-      if (!seqsByCode.has(code)) seqsByCode.set(code, []);
-      if (seq > 0) seqsByCode.get(code)!.push(seq);
-    }
-    const partnerCode = partnerCodeByName.get(partnerName) ?? maxCode + 1;
-    const existingSeqs = seqsByCode.get(partnerCode) ?? [];
-    const nextSeq = existingSeqs.length ? Math.max(...existingSeqs) + 1 : 1;
-    return `WX-${String(partnerCode).padStart(4, '0')}-${String(nextSeq).padStart(4, '0')}`;
-  };
+  const getNextOutsourceReworkDocNo = (partnerName: string): string =>
+    nextOutsourceDocNumber('dispatch', partners, records, '', partnerName.trim());
 
   /** 返工管理：工单模式=主/子分组；关联产品模式=仅按产品一条（工序汇总） */
   const reworkListBlocks = useMemo(() => {
     if (productionLinkMode === 'product') {
       return (Array.from(reworkStatsByProductId.keys()) as string[])
-        .sort((a, b) =>
-          (idx.productsById.get(a)?.name || '').localeCompare(idx.productsById.get(b)?.name || '', 'zh-CN')
-        )
+        .sort((a, b) => {
+          const d = productNewestOrderCreatedMs(b, orders) - productNewestOrderCreatedMs(a, orders);
+          if (d !== 0) return d;
+          return a.localeCompare(b);
+        })
         .map(productId => ({ type: 'productAggregate' as const, productId }));
     }
     const reworkOrderIds = new Set(orders.filter(o => (reworkStatsByOrderId.get(o.id)?.length ?? 0) > 0).map(o => o.id));
@@ -425,8 +433,12 @@ const ReworkPanel: React.FC<PanelProps> = ({
         blocks.push({ type: 'single', order });
       }
     });
-    return blocks;
-  }, [productionLinkMode, parentOrders, orders, reworkStatsByOrderId, reworkStatsByProductId, products, idx]);
+    return blocks.sort(
+      (a, b) =>
+        reworkMainListBlockCreatedMs(b, idx.childrenByParentId) - reworkMainListBlockCreatedMs(a, idx.childrenByParentId) ||
+        reworkMainListBlockTieId(a).localeCompare(reworkMainListBlockTieId(b)),
+    );
+  }, [productionLinkMode, parentOrders, orders, reworkStatsByOrderId, reworkStatsByProductId, products, productMilestoneProgresses, idx]);
 
   // ── JSX ──────────────────────────────────────────────────────────────────
   return (
@@ -848,6 +860,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
           records={records}
           orders={orders}
           products={products}
+          categories={categories}
           globalNodes={globalNodes}
           dictionaries={dictionaries}
           userPermissions={userPermissions}
@@ -879,6 +892,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
           records={records}
           orders={orders}
           products={products}
+          categories={categories}
           globalNodes={globalNodes}
           dictionaries={dictionaries}
           workers={workers}
@@ -925,6 +939,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
           workers={workers}
           equipment={equipment}
           processSequenceMode={processSequenceMode}
+          partners={partners}
           onAddRecord={onAddRecord}
           onUpdateRecord={onUpdateRecord}
           getNextReworkReportDocNo={getNextReworkReportDocNo}

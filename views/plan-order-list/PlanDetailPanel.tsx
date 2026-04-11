@@ -58,25 +58,17 @@ import { formatBatchSerialLabel, formatItemCodeSerialLabel } from '../../utils/s
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
 import { SearchableMultiSelectWithProcessTabs } from '../../components/SearchableMultiSelect';
 import { getFileExtFromDataUrl } from '../../utils/fileHelpers';
+import { localTodayYmd, planIdToLocalYmd, toLocalDateYmd } from '../../utils/localDateTime';
+import { nextPsiDocNumber } from '../../utils/partnerDocNumber';
 
 function formatPlanDueDateList(dueDate: string | undefined | null): string {
   if (!dueDate) return '';
-  const s = String(dueDate).trim();
-  if (!s) return '';
-  if (s.includes('T')) return s.split('T')[0];
-  const sp = s.indexOf(' ');
-  if (sp > 0) return s.slice(0, sp);
-  return s.length >= 10 ? s.slice(0, 10) : s;
+  return toLocalDateYmd(dueDate) || String(dueDate).trim().slice(0, 10);
 }
 
 function formatPlanCreatedDateList(created: string | undefined | null): string {
   if (!created) return '';
-  const s = String(created).trim();
-  if (!s) return '';
-  if (s.includes('T')) return s.split('T')[0];
-  const sp = s.indexOf(' ');
-  if (sp > 0) return s.slice(0, sp);
-  return s.length >= 10 ? s.slice(0, 10) : s;
+  return toLocalDateYmd(created) || String(created).trim().slice(0, 10);
 }
 
 function collectSubtreePlanIdsForPlan(rootId: string, allPlans: PlanOrder[]): string[] {
@@ -600,7 +592,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   useEffect(() => {
     if (viewPlan) {
       setTempAssignments(viewPlan.assignments || {});
-      const createdDate = formatPlanCreatedDateList(viewPlan.createdAt || (() => { const m = viewPlan.id.match(/^plan-(\d+)/); return m ? new Date(parseInt(m[1], 10)).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]; })());
+      const createdDate = formatPlanCreatedDateList(viewPlan.createdAt || planIdToLocalYmd(viewPlan.id) || localTodayYmd());
       const dueDateOnly = formatPlanDueDateList(viewPlan.dueDate || '');
       setTempPlanInfo({
         customer: viewPlan.customer,
@@ -755,18 +747,6 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     }
 
     const groupedMap: Record<string, ProposedOrder> = {};
-    const getNextSeqForPartner = (partnerId: string, partnerName: string) => {
-      const partnerCode = (partnerId || '0').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || '0';
-      const existingForPartner = (psiRecords || []).filter((r: any) =>
-        r.type === 'PURCHASE_ORDER' && (r.partnerId === partnerId || r.partner === partnerName)
-      );
-      const seqNums = existingForPartner.map((r: any) => {
-        const m = r.docNumber?.match(new RegExp(`PO-${partnerCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)`));
-        return m ? parseInt(m[1], 10) : 0;
-      });
-      const nextSeq = seqNums.length > 0 ? Math.max(...seqNums) + 1 : 1;
-      return { partnerCode, nextSeq };
-    };
 
     leafWithShortage.forEach((item: any, index: number) => {
       const materialProduct = products.find(p => p.id === item.materialId);
@@ -774,8 +754,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
       const supplier = (supplierId && partners.find(p => p.id === supplierId)) || partners[0];
       if (!supplier) return;
       if (!groupedMap[supplier.id]) {
-        const { partnerCode, nextSeq } = getNextSeqForPartner(supplier.id, supplier.name);
-        groupedMap[supplier.id] = { orderNumber: `PO-${partnerCode}-${String(nextSeq).padStart(3, '0')}`, partnerId: supplier.id, partnerName: supplier.name, items: [] };
+        const orderNumber = nextPsiDocNumber('PO', 'PURCHASE_ORDER', partners, psiRecords || [], supplier.id, supplier.name);
+        groupedMap[supplier.id] = { orderNumber, partnerId: supplier.id, partnerName: supplier.name, items: [] };
       }
       const qtyRounded = Math.round(Number(item.plannedQty ?? item.shortage) * 100) / 100;
       groupedMap[supplier.id].items.push({
@@ -800,20 +780,12 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
         const existingDocNumbers = new Set(
           (psiRecords || []).filter((r: any) => r.type === 'PURCHASE_ORDER' && r.docNumber).map((r: any) => r.docNumber)
         );
-        const getNextSeqForPartner = (partnerId: string, partnerName: string) => {
-          const partnerCode = (partnerId || '0').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || '0';
-          const existingForPartner = (psiRecords || []).filter((r: any) =>
-            r.type === 'PURCHASE_ORDER' && (r.partnerId === partnerId || r.partner === partnerName)
-          );
-          const seqNums = existingForPartner.map((r: any) => {
-            const m = r.docNumber?.match(new RegExp(`PO-${partnerCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)`));
-            return m ? parseInt(m[1], 10) : 0;
-          });
-          let nextSeq = seqNums.length > 0 ? Math.max(...seqNums) + 1 : 1;
-          let cand = `PO-${partnerCode}-${String(nextSeq).padStart(3, '0')}`;
+        const getNextPoDocForPartner = (partnerId: string, partnerName: string) => {
+          const extra: Array<{ type: string; partnerId?: string; partner?: string; docNumber?: string }> = [];
+          let cand = nextPsiDocNumber('PO', 'PURCHASE_ORDER', partners, [...(psiRecords || []), ...extra], partnerId, partnerName);
           while (existingDocNumbers.has(cand)) {
-            nextSeq++;
-            cand = `PO-${partnerCode}-${String(nextSeq).padStart(3, '0')}`;
+            extra.push({ type: 'PURCHASE_ORDER', partnerId, partner: partnerName, docNumber: cand });
+            cand = nextPsiDocNumber('PO', 'PURCHASE_ORDER', partners, [...(psiRecords || []), ...extra], partnerId, partnerName);
           }
           existingDocNumbers.add(cand);
           return cand;
@@ -823,7 +795,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
         const baseId = Date.now();
         proposedOrders.forEach((order, oi) => {
             const docNum = existingDocNumbers.has(order.orderNumber)
-              ? getNextSeqForPartner(order.partnerId, order.partnerName)
+              ? getNextPoDocForPartner(order.partnerId, order.partnerName)
               : order.orderNumber;
             existingDocNumbers.add(docNum);
             order.items.forEach((item, ii) => {

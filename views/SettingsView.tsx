@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useLayoutEffect } from 'react';
 import { 
   Tag, 
   Shapes,
@@ -17,6 +17,7 @@ import {
   subModuleTabButtonClass,
   subModuleTabPillClass,
 } from '../styles/uiDensity';
+import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
 import CategoriesTab from './settings/CategoriesTab';
 import PartnerCategoriesTab from './settings/PartnerCategoriesTab';
 import NodesTab from './settings/NodesTab';
@@ -122,6 +123,12 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const visibleTabs = tabs.filter(t => canView(t.id));
   const activeTabMeta = visibleTabs.find(t => t.id === activeTab) || visibleTabs[0];
   const effectiveTab = activeTabMeta?.id as SettingsTab | undefined;
+
+  const setScrollSegment = useSetMainScrollSegment();
+  useLayoutEffect(() => {
+    const seg = effectiveTab ?? activeTab;
+    setScrollSegment?.(String(seg));
+  }, [effectiveTab, activeTab, setScrollSegment]);
 
   return (
     <div className="space-y-0">

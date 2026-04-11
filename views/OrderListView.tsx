@@ -20,6 +20,7 @@ import {
   pmpCompletedAtTemplate,
   productGroupMaxReportableSum,
 } from '../utils/productReportAggregates';
+import { computePendingStockOrders } from '../utils/pendingStockCompute';
 import { buildDefectiveReworkByOrderMilestone } from '../utils/defectiveReworkByOrderMilestone';
 import {
   moduleHeaderRowClass,
@@ -29,6 +30,12 @@ import {
   secondaryToolbarButtonClass,
 } from '../styles/uiDensity';
 import { useConfirm } from '../contexts/ConfirmContext';
+import {
+  blockOrderCreatedMs,
+  blockSortTieId,
+  orderCreatedMs,
+  type OrderCenterListBlock as OrderListBlock,
+} from '../utils/orderCenterSort';
 
 interface OrderListViewProps {
   productionLinkMode?: 'order' | 'product';
@@ -170,7 +177,10 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   }, []);
 
   useEffect(() => { setCurrentPage(1); }, [debouncedSearch]);
-  useEffect(() => { fetchPagedOrders(currentPage, debouncedSearch); }, [currentPage, debouncedSearch, fetchPagedOrders]);
+  // 条数变化（下达工单、删单等）须重拉当前页；条数不变时仅依赖下方 displayOrders 与 context 按 id 合并，避免每次报工都触发分页请求
+  useEffect(() => {
+    fetchPagedOrders(currentPage, debouncedSearch);
+  }, [currentPage, debouncedSearch, fetchPagedOrders, orders.length]);
 
   /** 分页接口的工单与上下文 orders 合并：报工后父级会更新 orders，避免列表仍显示旧工序完成量 */
   const displayOrders = useMemo(() => {
@@ -298,7 +308,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
       if (!map.has(pid)) map.set(pid, []);
       map.get(pid)!.push(o);
     });
-    map.forEach(arr => arr.sort((a, b) => (a.orderNumber || '').localeCompare(b.orderNumber || '')));
+    map.forEach(arr => arr.sort((a, b) => orderCreatedMs(b) - orderCreatedMs(a) || (a.orderNumber || '').localeCompare(b.orderNumber || '')));
     return map;
   }, [displayOrders]);
 
@@ -338,12 +348,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   }, [displayOrders, productionLinkMode]);
 
   /** 列表展示块：单条 或 原单分组（同一计划拆出的多工单） 或 主工单+子工单分组 或 按产品分组（product 模式） */
-  type ListBlock =
-    | { type: 'single'; order: ProductionOrder }
-    | { type: 'orderGroup'; groupKey: string; orders: ProductionOrder[] }
-    | { type: 'parentChild'; parent: ProductionOrder; children: ProductionOrder[] }
-    | { type: 'productGroup'; productId: string; productName: string; orders: ProductionOrder[] };
-  const listBlocks = useMemo((): ListBlock[] => {
+  const listBlocks = useMemo((): OrderListBlock[] => {
+    const pmps = productMilestoneProgresses ?? [];
     if (productionLinkMode === 'product') {
       const byProduct = new Map<string, ProductionOrder[]>();
       for (const order of displayOrders) {
@@ -352,15 +358,24 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         byProduct.get(pid)!.push(order);
       }
       return Array.from(byProduct.entries())
-        .map(([productId, orders]) => ({
-          type: 'productGroup' as const,
-          productId,
-          productName: orders[0]?.productName || productMap.get(productId)?.name || '未知产品',
-          orders
-        }))
-        .sort((a, b) => (b.productName || '').localeCompare(a.productName || ''));
+        .map(([productId, ords]) => {
+          const sortedOrds = [...ords].sort(
+            (a, b) => orderCreatedMs(b) - orderCreatedMs(a) || (a.orderNumber || '').localeCompare(b.orderNumber || ''),
+          );
+          return {
+            type: 'productGroup' as const,
+            productId,
+            productName: sortedOrds[0]?.productName || productMap.get(productId)?.name || '未知产品',
+            orders: sortedOrds,
+          };
+        })
+        .sort(
+          (a, b) =>
+            Math.max(0, ...b.orders.map(orderCreatedMs)) - Math.max(0, ...a.orders.map(orderCreatedMs)) ||
+            (a.productId || '').localeCompare(b.productId || ''),
+        );
     }
-    const blocks: ListBlock[] = [];
+    const blocks: OrderListBlock[] = [];
     const used = new Set<string>();
     for (const order of displayOrders) {
       if (used.has(order.id)) continue;
@@ -369,7 +384,13 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
       if (rootToOrders.has(root)) {
         const groupOrders = rootToOrders.get(root)!;
         groupOrders.forEach(o => used.add(o.id));
-        blocks.push({ type: 'orderGroup', groupKey: root, orders: [...groupOrders].sort((a, b) => (a.orderNumber || '').localeCompare(b.orderNumber || '')) });
+        blocks.push({
+          type: 'orderGroup',
+          groupKey: root,
+          orders: [...groupOrders].sort(
+            (a, b) => orderCreatedMs(b) - orderCreatedMs(a) || (a.orderNumber || '').localeCompare(b.orderNumber || ''),
+          ),
+        });
       } else {
         const children = parentToSubOrders.get(order.id) || [];
         if (children.length > 0) {
@@ -382,67 +403,36 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         }
       }
     }
-    return blocks;
-  }, [displayOrders, parentToSubOrders, rootToOrders, productionLinkMode, products]);
+    return blocks.sort(
+      (a, b) =>
+        blockOrderCreatedMs(b, parentToSubOrders) - blockOrderCreatedMs(a, parentToSubOrders) ||
+        blockSortTieId(a).localeCompare(blockSortTieId(b)),
+    );
+  }, [displayOrders, parentToSubOrders, rootToOrders, productionLinkMode, products, productMap, productMilestoneProgresses]);
 
 
-  /** 待入库清单：有完成数量即可显示。可入库数量 = 最后一道工序的完成量 - 已入库量；有颜色尺码时按规格取最后一道工序报工汇总。 */
+  /** 待入库清单：有完成数量即可显示。关联工单：最后一道工序完成量 − 已入库；关联产品：同产品 PMP 最后一道工序完成量按工单（规格）数量占比分摊 − 已入库。 */
   type PendingStockItem = {
+    rowKey: string;
+    ordersInRow: ProductionOrder[];
     order: ProductionOrder;
     orderTotal: number;
+    productBlockOrderTotal: number;
     alreadyIn: number;
     pendingTotal: number;
     alreadyInByVariant: Record<string, number>;
     /** 每规格待入库 = 该规格最后一道工序报工合计 - 该规格已入库（与成衣报工一致） */
     pendingByVariant: Record<string, number>;
+    productTotalStockIn?: number;
   };
-  const pendingStockOrders = useMemo((): PendingStockItem[] => {
-    const list: PendingStockItem[] = [];
-    for (const order of orders) {
-      if (!order.milestones?.length) continue;
-      const orderTotal = order.items.reduce((s, i) => s + i.quantity, 0);
-      const lastMilestone = order.milestones[order.milestones.length - 1];
-      /** 最后一道工序按规格汇总的完成量（成衣报工按 variantId 汇总） */
-      const completedByVariant: Record<string, number> = {};
-      (lastMilestone?.reports ?? []).forEach(r => {
-        const vid = r.variantId ?? '';
-        completedByVariant[vid] = (completedByVariant[vid] ?? 0) + r.quantity;
-      });
-      const hasVariantBreakdown = Object.keys(completedByVariant).some(k => k !== '');
-      /** 总完成量：有按规格报工时用汇总值，否则用工序的 completedQuantity */
-      const completedProduced = hasVariantBreakdown
-        ? Object.values(completedByVariant).reduce((s, q) => s + q, 0)
-        : (lastMilestone?.completedQuantity ?? 0);
-      const stockInRecords = (prodRecords || []).filter(r => r.type === 'STOCK_IN' && r.orderId === order.id);
-      const alreadyIn = stockInRecords.reduce((s, r) => s + r.quantity, 0);
-      const alreadyInByVariant: Record<string, number> = {};
-      stockInRecords.forEach(r => {
-        const vid = r.variantId ?? '';
-        alreadyInByVariant[vid] = (alreadyInByVariant[vid] ?? 0) + r.quantity;
-      });
-      /** 待入库总量 = 已完成产量 - 已入库 */
-      const pendingTotal = Math.max(0, completedProduced - alreadyIn);
-      if (pendingTotal <= 0) continue;
-      /** 每规格待入库 = 该规格完成量 - 该规格已入库（与成衣报工数量一致） */
-      const pendingByVariant: Record<string, number> = {};
-      if (hasVariantBreakdown) {
-        Object.entries(completedByVariant).forEach(([vid, qty]) => {
-          const inV = alreadyInByVariant[vid] ?? 0;
-          const p = Math.max(0, qty - inV);
-          pendingByVariant[vid] = p;
-        });
-      }
-      list.push({
-        order,
-        orderTotal,
-        alreadyIn,
-        pendingTotal,
-        alreadyInByVariant,
-        pendingByVariant: Object.keys(pendingByVariant).length > 0 ? pendingByVariant : { '': pendingTotal }
-      });
-    }
-    return list.sort((a, b) => (b.order.orderNumber || '').localeCompare(a.order.orderNumber || ''));
-  }, [orders, prodRecords]);
+  const pendingStockOrders = useMemo(
+    (): PendingStockItem[] =>
+      computePendingStockOrders(orders, prodRecords || [], {
+        productionLinkMode,
+        productMilestoneProgresses,
+      }),
+    [orders, prodRecords, productionLinkMode, productMilestoneProgresses],
+  );
 
   /** 待入库清单弹窗 & 选择入库表单 */
   const [showPendingStockModal, setShowPendingStockModal] = useState(false);

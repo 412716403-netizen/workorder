@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { X, Check, Pencil, Trash2 } from 'lucide-react';
-import { ProductionOpRecord, ProductionOrder, Product, GlobalNodeTemplate, AppDictionaries } from '../../types';
+import { ProductionOpRecord, ProductionOrder, Product, ProductCategory, GlobalNodeTemplate, AppDictionaries } from '../../types';
+import { productHasColorSizeMatrix } from '../../utils/productColorSize';
+import { groupProductionOpBatchByVariant, mapGroupedOpQuantitiesToRecordIds } from '../../utils/groupProductionOpBatchByVariant';
 import { hasOpsPerm } from './types';
 import { formatTimestamp, timestampFromDatetimeLocal, nowTimestamp } from '../../utils/formatTime';
 import { useConfirm } from '../../contexts/ConfirmContext';
@@ -11,6 +13,7 @@ export interface DefectTreatmentFlowDetailModalProps {
   records: ProductionOpRecord[];
   orders: ProductionOrder[];
   products: Product[];
+  categories?: ProductCategory[];
   globalNodes: GlobalNodeTemplate[];
   dictionaries?: AppDictionaries;
   userPermissions?: string[];
@@ -26,6 +29,7 @@ const DefectTreatmentFlowDetailModal: React.FC<DefectTreatmentFlowDetailModalPro
   records,
   orders,
   products,
+  categories = [],
   globalNodes,
   dictionaries,
   userPermissions,
@@ -45,38 +49,31 @@ const DefectTreatmentFlowDetailModal: React.FC<DefectTreatmentFlowDetailModalPro
       : [r];
   const first = detailBatch[0];
 
-  const [editing, setEditing] = useState<{ form: { timestamp: string; operator: string; reason: string; rowEdits: { recordId: string; quantity: number }[] }; firstRecord: ProductionOpRecord } | null>(null);
+  const [editing, setEditing] = useState<{
+    form: {
+      timestamp: string;
+      operator: string;
+      reason: string;
+      rowEdits: { variantId: string; label: string; quantity: number; recordIds: string[] }[];
+    };
+    firstRecord: ProductionOpRecord;
+  } | null>(null);
 
   if (!first) return null;
   const order = orders.find(o => o.id === first.orderId);
   const product = products.find(p => p.id === first.productId);
+  const productCategory = product ? categories.find(c => c.id === product.categoryId) : undefined;
   const unitName = (product?.unitId && dictionaries?.units?.find(u => u.id === product.unitId)?.name) || '件';
   const sourceNodeId = first.type === 'REWORK' ? (first.sourceNodeId ?? first.nodeId) : first.nodeId;
   const sourceNodeName = sourceNodeId ? globalNodes.find(n => n.id === sourceNodeId)?.name ?? sourceNodeId : '—';
   const totalQty = detailBatch.reduce((s, x) => s + (x.quantity ?? 0), 0);
-  const hasColorSize = Boolean(product?.variants?.length);
-  const getVariantLabel = (rec: ProductionOpRecord) => { if (!rec.variantId) return '未分规格'; const v = product?.variants?.find((x: { id: string; skuSuffix?: string }) => x.id === rec.variantId); return (v as { skuSuffix?: string })?.skuSuffix ?? rec.variantId; };
+  const hasColorSize = productHasColorSizeMatrix(product, productCategory);
   const typeLabel = first.type === 'REWORK' ? '返工' : '报损';
 
-  const displayVariantRows = React.useMemo(() => {
-    const labelFor = (rec: ProductionOpRecord) => {
-      if (!rec.variantId) return '未分规格';
-      const v = product?.variants?.find((x: { id: string; skuSuffix?: string }) => x.id === rec.variantId);
-      return (v as { skuSuffix?: string })?.skuSuffix ?? rec.variantId;
-    };
-    const byVariant = new Map<string, { variantId: string; label: string; quantity: number; recordIds: string[] }>();
-    for (const rec of detailBatch) {
-      const vid = rec.variantId ?? '';
-      const existing = byVariant.get(vid);
-      if (existing) {
-        existing.quantity += rec.quantity ?? 0;
-        existing.recordIds.push(rec.id);
-      } else {
-        byVariant.set(vid, { variantId: vid, label: labelFor(rec), quantity: rec.quantity ?? 0, recordIds: [rec.id] });
-      }
-    }
-    return [...byVariant.values()];
-  }, [detailBatch, product?.variants]);
+  const displayVariantRows = React.useMemo(
+    () => groupProductionOpBatchByVariant(detailBatch, product),
+    [detailBatch, product],
+  );
   const latestBatchTimestamp = detailBatch.reduce<{ t: number; ts?: string }>((best, x) => {
     const t = new Date(x.timestamp || 0).getTime();
     if (isNaN(t)) return best;
@@ -104,14 +101,19 @@ const DefectTreatmentFlowDetailModal: React.FC<DefectTreatmentFlowDetailModalPro
                 <button type="button" onClick={() => {
                   if (!onUpdateRecord || !editing) return;
                   const tsStr = editing.form.timestamp ? timestampFromDatetimeLocal(editing.form.timestamp) : nowTimestamp();
-                  editing.form.rowEdits.forEach(row => { const rec = detailBatch.find(x => x.id === row.recordId); if (!rec) return; onUpdateRecord({ ...rec, quantity: Math.max(0, row.quantity), timestamp: tsStr, operator: editing.form.operator, reason: editing.form.reason || undefined }); });
+                  const newQtyByRecordId = mapGroupedOpQuantitiesToRecordIds(detailBatch, editing.form.rowEdits);
+                  detailBatch.forEach(rec => {
+                    const newQty = newQtyByRecordId.get(rec.id);
+                    if (newQty === undefined) return;
+                    onUpdateRecord({ ...rec, quantity: newQty, timestamp: tsStr, operator: editing.form.operator, reason: editing.form.reason || undefined });
+                  });
                   setEditing(null); onClose();
                 }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700"><Check className="w-4 h-4" /> 保存</button>
               </>
             ) : (
               <>
                 {onUpdateRecord && detailBatch.length > 0 && hasOpsPerm(tenantRole, userPermissions, 'production:rework_records:edit') && (
-                  <button type="button" onClick={() => { const rec = detailBatch[0]; let dt = new Date(rec.timestamp || undefined); if (isNaN(dt.getTime())) dt = new Date(); const tsStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}T${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`; setEditing({ firstRecord: rec, form: { timestamp: tsStr, operator: rec.operator ?? '', reason: rec.reason ?? '', rowEdits: detailBatch.map(x => ({ recordId: x.id, quantity: x.quantity ?? 0 })) } }); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200"><Pencil className="w-4 h-4" /> 编辑</button>
+                  <button type="button" onClick={() => { const rec = detailBatch[0]; let dt = new Date(rec.timestamp || undefined); if (isNaN(dt.getTime())) dt = new Date(); const tsStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}T${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`; setEditing({ firstRecord: rec, form: { timestamp: tsStr, operator: rec.operator ?? '', reason: rec.reason ?? '', rowEdits: groupProductionOpBatchByVariant(detailBatch, product).map(g => ({ variantId: g.variantId, label: g.label, quantity: g.quantity, recordIds: [...g.recordIds] })) } }); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200"><Pencil className="w-4 h-4" /> 编辑</button>
                 )}
                 {onDeleteRecord && hasOpsPerm(tenantRole, userPermissions, 'production:rework_records:delete') && (
                   <button type="button" onClick={() => { void confirm({ message: '确定删除该记录？', danger: true }).then((ok) => { if (!ok) return; detailBatch.forEach(x => onDeleteRecord(x.id)); onClose(); }); }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-rose-600 bg-rose-50 hover:bg-rose-100"><Trash2 className="w-4 h-4" /> 删除</button>
@@ -134,9 +136,36 @@ const DefectTreatmentFlowDetailModal: React.FC<DefectTreatmentFlowDetailModalPro
                 <table className="w-full text-left text-sm">
                   <thead><tr className="bg-slate-50 border-b border-slate-200"><th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">规格</th><th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">数量</th></tr></thead>
                   <tbody>
-                    {editing.form.rowEdits.map((rowEdit) => { const rec = detailBatch.find(x => x.id === rowEdit.recordId); if (!rec) return null; return (
-                      <tr key={rec.id} className="border-b border-slate-100"><td className="px-4 py-3 text-slate-800">{getVariantLabel(rec)}</td><td className="px-4 py-3 text-right"><input type="number" min={0} value={rowEdit.quantity} onChange={e => { const v = Math.max(0, Number(e.target.value) || 0); setEditing(prev => prev ? { ...prev, form: { ...prev.form, rowEdits: prev.form.rowEdits.map(re => re.recordId === rec.id ? { ...re, quantity: v } : re) } } : prev); }} className="w-20 bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200" /><span className="text-slate-600 text-sm ml-1">{unitName}</span></td></tr>
-                    ); })}
+                    {editing.form.rowEdits.map(rowEdit => (
+                      <tr key={rowEdit.variantId || '_none'} className="border-b border-slate-100">
+                        <td className="px-4 py-3 text-slate-800">{rowEdit.label}</td>
+                        <td className="px-4 py-3 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            value={rowEdit.quantity}
+                            onChange={e => {
+                              const v = Math.max(0, Number(e.target.value) || 0);
+                              setEditing(prev =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      form: {
+                                        ...prev.form,
+                                        rowEdits: prev.form.rowEdits.map(re =>
+                                          re.variantId === rowEdit.variantId ? { ...re, quantity: v } : re,
+                                        ),
+                                      },
+                                    }
+                                  : prev,
+                              );
+                            }}
+                            className="w-20 bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200"
+                          />
+                          <span className="text-slate-600 text-sm ml-1">{unitName}</span>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                   <tfoot><tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold"><td className="px-4 py-3">合计</td><td className="px-4 py-3 text-indigo-600 text-right">{editing.form.rowEdits.reduce((s, r) => s + r.quantity, 0)} {unitName}</td></tr></tfoot>
                 </table>

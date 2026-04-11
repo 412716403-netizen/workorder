@@ -48,13 +48,14 @@ const PendingShipDetailModal: React.FC<PendingShipDetailModalProps> = ({
       const inGroup = g.records.some((r: any) => r.id === re.id);
       if (!inGroup) return re;
       const base = { ...re, allocationWarehouseId: editWarehouseId || re.allocationWarehouseId };
+      const shipped = Number(re.shippedQuantity) || 0;
       if (hasVariants && re.variantId != null) {
-        const qty = (editQuantities as Record<string, number>)[re.variantId] ?? re.allocatedQuantity ?? 0;
-        return { ...base, allocatedQuantity: Math.max(0, qty) };
+        const pendingEdit = (editQuantities as Record<string, number>)[re.variantId] ?? 0;
+        return { ...base, allocatedQuantity: shipped + Math.max(0, pendingEdit) };
       }
       if (!hasVariants) {
-        const qty = typeof editQuantities === 'number' ? editQuantities : (editQuantities as Record<string, number>)._single ?? re.allocatedQuantity ?? 0;
-        return { ...base, allocatedQuantity: Math.max(0, qty) };
+        const pendingEdit = (editQuantities as Record<string, number>)._single ?? 0;
+        return { ...base, allocatedQuantity: shipped + Math.max(0, pendingEdit) };
       }
       return base;
     });
@@ -84,6 +85,9 @@ const PendingShipDetailModal: React.FC<PendingShipDetailModalProps> = ({
     onClose();
   };
 
+  /** 与待发货清单一致：待发 = 已配 − 已发 */
+  const pendingShipQty = (r: any) => Math.max(0, (Number(r.allocatedQuantity) || 0) - (Number(r.shippedQuantity) || 0));
+
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={handleClose} aria-hidden />
@@ -109,10 +113,10 @@ const PendingShipDetailModal: React.FC<PendingShipDetailModalProps> = ({
                     setPendingShipDetailEditWarehouseId(g.warehouseId);
                     if (hasVariants) {
                       const next: Record<string, number> = {};
-                      g.records.forEach((r: any) => { next[r.variantId] = r.allocatedQuantity ?? 0; });
+                      g.records.forEach((r: any) => { next[r.variantId] = pendingShipQty(r); });
                       setPendingShipDetailEdit(next);
                     } else {
-                      setPendingShipDetailEdit(g.records[0]?.allocatedQuantity ?? 0);
+                      setPendingShipDetailEdit(g.records[0] ? pendingShipQty(g.records[0]) : 0);
                     }
                   }}
                   className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -157,7 +161,15 @@ const PendingShipDetailModal: React.FC<PendingShipDetailModalProps> = ({
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200">
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">规格 / 颜色尺码</th>
-                    <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">已配数量</th>
+                    <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">
+                      待发数量
+                      {!isEditing && (
+                        <span className="block font-bold normal-case text-[9px] text-slate-400 tracking-normal mt-0.5">与待发货清单一致（已配−已发）</span>
+                      )}
+                      {isEditing && (
+                        <span className="block font-bold normal-case text-[9px] text-slate-400 tracking-normal mt-0.5">保存后：已发 + 本列 = 新已配</span>
+                      )}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -167,9 +179,10 @@ const PendingShipDetailModal: React.FC<PendingShipDetailModalProps> = ({
                         const colorName = v?.colorId ? (dictionaries.colors.find(c => c.id === v.colorId)?.name ?? '') : '';
                         const sizeName = v?.sizeId ? (dictionaries.sizes.find(s => s.id === v.sizeId)?.name ?? '') : '';
                         const specLabel = [colorName, sizeName].filter(Boolean).join(' / ') || (r.variantId ?? '—');
-                        const qty = isEditing && editQuantities && typeof editQuantities === 'object' && !('_single' in editQuantities)
-                          ? (editQuantities as Record<string, number>)[r.variantId] ?? r.allocatedQuantity ?? 0
-                          : r.allocatedQuantity ?? 0;
+                        const pendingEditVal = isEditing && editQuantities && typeof editQuantities === 'object' && !('_single' in editQuantities)
+                          ? (editQuantities as Record<string, number>)[r.variantId] ?? pendingShipQty(r)
+                          : pendingShipQty(r);
+                        const pending = pendingShipQty(r);
                         return (
                           <tr key={r.id} className="border-b border-slate-100">
                             <td className="px-4 py-3 font-bold text-slate-800">{specLabel}</td>
@@ -178,7 +191,7 @@ const PendingShipDetailModal: React.FC<PendingShipDetailModalProps> = ({
                                 <input
                                   type="number"
                                   min={0}
-                                  value={qty}
+                                  value={pendingEditVal}
                                   onChange={e => setPendingShipDetailEdit((prev: Record<string, number> | number | null) => {
                                     const next = prev as Record<string, number>;
                                     return { ...next, [r.variantId]: Math.max(0, parseInt(e.target.value, 10) || 0) };
@@ -186,7 +199,12 @@ const PendingShipDetailModal: React.FC<PendingShipDetailModalProps> = ({
                                   className="w-24 text-right py-1.5 px-2 rounded-lg border border-slate-200 text-sm font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none"
                                 />
                               ) : (
-                                <span className="font-black text-indigo-600">{qty.toLocaleString()} {unitName}</span>
+                                <div>
+                                  <span className="font-black text-indigo-600">{pending.toLocaleString()} {unitName}</span>
+                                  <span className="block text-[10px] text-slate-400 font-medium mt-0.5">
+                                    已配 {(Number(r.allocatedQuantity) || 0).toLocaleString()} · 已发 {(Number(r.shippedQuantity) || 0).toLocaleString()}
+                                  </span>
+                                </div>
                               )}
                             </td>
                           </tr>
@@ -200,12 +218,19 @@ const PendingShipDetailModal: React.FC<PendingShipDetailModalProps> = ({
                             <input
                               type="number"
                               min={0}
-                              value={typeof editQuantities === 'number' ? editQuantities : (editQuantities as Record<string, number>)?._single ?? g.totalQuantity}
+                              value={typeof pendingShipDetailEdit === 'number' ? pendingShipDetailEdit : (g.records[0] ? pendingShipQty(g.records[0]) : 0)}
                               onChange={e => setPendingShipDetailEdit(Math.max(0, parseInt(e.target.value, 10) || 0))}
                               className="w-24 text-right py-1.5 px-2 rounded-lg border border-slate-200 text-sm font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none"
                             />
                           ) : (
-                            <span className="font-black text-indigo-600">{g.totalQuantity.toLocaleString()} {unitName}</span>
+                            <div>
+                              <span className="font-black text-indigo-600">{g.totalQuantity.toLocaleString()} {unitName}</span>
+                              {g.records[0] && (
+                                <span className="block text-[10px] text-slate-400 font-medium mt-0.5">
+                                  已配 {(Number(g.records[0].allocatedQuantity) || 0).toLocaleString()} · 已发 {(Number(g.records[0].shippedQuantity) || 0).toLocaleString()}
+                                </span>
+                              )}
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -214,11 +239,25 @@ const PendingShipDetailModal: React.FC<PendingShipDetailModalProps> = ({
                     <td className="px-4 py-3 text-slate-700">合计</td>
                     <td className="px-4 py-3 text-right text-indigo-600">
                       {isEditing && hasVariants && editQuantities && typeof editQuantities === 'object' && !('_single' in editQuantities)
-                        ? (Object.values(editQuantities) as number[]).reduce((s, n) => s + (n || 0), 0).toLocaleString()
-                        : isEditing && !hasVariants && typeof editQuantities === 'number'
-                          ? (editQuantities as number).toLocaleString()
-                          : g.totalQuantity.toLocaleString()}{' '}
-                      {unitName}
+                        ? (
+                          <>
+                            <span>{(Object.values(editQuantities) as number[]).reduce((s, n) => s + (n || 0), 0).toLocaleString()} {unitName}</span>
+                            <span className="block text-[10px] text-slate-500 font-bold normal-case">（待发合计）</span>
+                          </>
+                        )
+                        : isEditing && !hasVariants && typeof pendingShipDetailEdit === 'number'
+                          ? (
+                            <>
+                              <span>{(pendingShipDetailEdit as number).toLocaleString()} {unitName}</span>
+                              <span className="block text-[10px] text-slate-500 font-bold normal-case">（待发合计）</span>
+                            </>
+                          )
+                          : (
+                            <>
+                              <span>{g.totalQuantity.toLocaleString()} {unitName}</span>
+                              <span className="block text-[10px] text-slate-500 font-bold normal-case">（待发合计）</span>
+                            </>
+                          )}
                     </td>
                   </tr>
                 </tbody>

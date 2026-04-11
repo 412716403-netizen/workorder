@@ -18,6 +18,7 @@ import {
   Search,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { comparePlansNewestFirst, planNumberSeqForSort, planOrderListSortMs } from '../utils/planOrderSort';
 import {
   PlanOrder,
   Product,
@@ -53,26 +54,17 @@ import PlanDetailPanel from './plan-order-list/PlanDetailPanel';
 import { getFileExtFromDataUrl } from '../utils/fileHelpers';
 import { plans as plansApi } from '../services/api';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { planIdToLocalYmd, toLocalDateYmd } from '../utils/localDateTime';
 
-/** 列表交期展示：仅日期，不含时间 */
+/** 列表交期展示：本地日历日 */
 function formatPlanDueDateList(due: string): string {
-  const s = String(due).trim();
-  if (!s) return '';
-  if (s.includes('T')) return s.split('T')[0];
-  const sp = s.indexOf(' ');
-  if (sp > 0) return s.slice(0, sp);
-  return s.length >= 10 ? s.slice(0, 10) : s;
+  return toLocalDateYmd(due) || String(due).trim().slice(0, 10);
 }
 
-/** 列表添加日期展示：仅日期，不含时间 */
+/** 列表添加日期展示：本地日历日 */
 function formatPlanCreatedDateList(created: string | undefined | null): string {
   if (!created) return '';
-  const s = String(created).trim();
-  if (!s) return '';
-  if (s.includes('T')) return s.split('T')[0];
-  const sp = s.indexOf(' ');
-  if (sp > 0) return s.slice(0, sp);
-  return s.length >= 10 ? s.slice(0, 10) : s;
+  return toLocalDateYmd(created) || String(created).trim().slice(0, 10);
 }
 
 interface PlanOrderListViewProps {
@@ -167,15 +159,17 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   }, []);
 
   useEffect(() => { setPlanPage(1); }, [debouncedPlanSearch]);
-  useEffect(() => { fetchPagedPlans(planPage, debouncedPlanSearch); }, [planPage, debouncedPlanSearch, fetchPagedPlans]);
+  // 列表数据以分页接口为准；Context 中 plans 在增删改后会变，须同步重拉当前页，否则界面仍显示旧的 fetchedPlans
+  useEffect(() => {
+    fetchPagedPlans(planPage, debouncedPlanSearch);
+  }, [planPage, debouncedPlanSearch, fetchPagedPlans, plans]);
 
   const displayPlans = fetchedPlans.length > 0 || debouncedPlanSearch || planPage > 1 ? fetchedPlans : plans;
+  /** 列表统一按单据生成时间新在前（与后端分页 orderBy 一致，并修正子计划与父计划交错时的展示顺序） */
+  const plansForView = useMemo(() => [...displayPlans].sort(comparePlansNewestFirst), [displayPlans]);
   const totalPlanPages = Math.max(1, Math.ceil(totalPlans / PLAN_PAGE_SIZE));
 
   const splitPlan = splitPlanId ? plans.find(p => p.id === splitPlanId) ?? null : null;
-  const openSplit = (plan: PlanOrder) => {
-    setSplitPlanId(plan.id);
-  };
   /** 从计划单号解析拆分组：仅当单号形如「原单-1」「原单-2」…「原单-99」时视为拆分单（本系统拆分生成），避免把 PLN-327611 等普通编号误判为拆分组 */
   const getSplitGroupKey = (planNumber: string): string | null => {
     const m = planNumber.match(/^(.+)-([1-9]\d?)$/);
@@ -193,7 +187,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   /** 根单号 → 该原单下所有计划单（含多次拆单后的 PLN1-1-1、PLN1-1-2、PLN1-2 等，仅包含至少有 2 条的同组） */
   const rootToPlans = useMemo(() => {
     const map = new Map<string, PlanOrder[]>();
-    displayPlans.forEach(p => {
+    plansForView.forEach(p => {
       const root = getRootPlanNumber(p.planNumber);
       if (!map.has(root)) map.set(root, []);
       map.get(root)!.push(p);
@@ -201,19 +195,19 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
     const multi = new Map<string, PlanOrder[]>();
     map.forEach((arr, root) => { if (arr.length >= 2) multi.set(root, arr); });
     return multi;
-  }, [displayPlans]);
+  }, [plansForView]);
 
   /** 父子计划分组：父计划 id → 子计划列表 */
   const parentToSubPlans = useMemo(() => {
     const map = new Map<string, PlanOrder[]>();
-    displayPlans.filter(p => p.parentPlanId).forEach(p => {
+    plansForView.filter(p => p.parentPlanId).forEach(p => {
       const pid = p.parentPlanId!;
       if (!map.has(pid)) map.set(pid, []);
       map.get(pid)!.push(p);
     });
-    map.forEach(arr => arr.sort((a, b) => (a.planNumber || '').localeCompare(b.planNumber || '')));
+    map.forEach(arr => arr.sort(comparePlansNewestFirst));
     return map;
-  }, [displayPlans]);
+  }, [plansForView]);
 
   const showPlanListPrintButton = planFormSettings.listPrint?.showPrintButton !== false;
   const planListPrintPickerTemplates = useMemo(() => {
@@ -296,14 +290,18 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   const listBlocks = useMemo((): ListBlock[] => {
     const blocks: ListBlock[] = [];
     const used = new Set<string>();
-    for (const plan of displayPlans) {
+    for (const plan of plansForView) {
       if (used.has(plan.id)) continue;
       if (plan.parentPlanId) continue;
       const root = getRootPlanNumber(plan.planNumber);
       if (rootToPlans.has(root)) {
         const groupPlans = rootToPlans.get(root)!;
         groupPlans.forEach(p => used.add(p.id));
-        blocks.push({ type: 'group', groupKey: root, plans: [...groupPlans].sort((a, b) => (a.planNumber || '').localeCompare(b.planNumber || '')) });
+        blocks.push({
+          type: 'group',
+          groupKey: root,
+          plans: [...groupPlans].sort(comparePlansNewestFirst),
+        });
       } else {
         const children = parentToSubPlans.get(plan.id) || [];
         if (children.length > 0) {
@@ -317,8 +315,40 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
         }
       }
     }
-    return blocks;
-  }, [displayPlans, rootToPlans, parentToSubPlans]);
+    const maxPlanSubtreeListSortMs = (root: PlanOrder, subMap: Map<string, PlanOrder[]>): number => {
+      let m = planOrderListSortMs(root);
+      const stack = [...(subMap.get(root.id) ?? [])];
+      while (stack.length) {
+        const c = stack.pop()!;
+        m = Math.max(m, planOrderListSortMs(c));
+        for (const x of subMap.get(c.id) ?? []) stack.push(x);
+      }
+      return m;
+    };
+    const blockCreatedMs = (b: ListBlock): number => {
+      switch (b.type) {
+        case 'single':
+          return planOrderListSortMs(b.plan);
+        case 'group':
+          return Math.max(0, ...b.plans.map(planOrderListSortMs));
+        case 'parentChild':
+          return maxPlanSubtreeListSortMs(b.parent, parentToSubPlans);
+        default:
+          return 0;
+      }
+    };
+    const blockPrimaryPlanNumber = (b: ListBlock): string =>
+      b.type === 'single' ? b.plan.planNumber : b.type === 'group' ? b.groupKey : b.parent.planNumber;
+    const blockTieId = (b: ListBlock): string =>
+      b.type === 'single' ? b.plan.id : b.type === 'group' ? b.groupKey : b.parent.id;
+    return blocks.sort((a, b) => {
+      const n = planNumberSeqForSort(blockPrimaryPlanNumber(b)) - planNumberSeqForSort(blockPrimaryPlanNumber(a));
+      if (n !== 0) return n;
+      const d = blockCreatedMs(b) - blockCreatedMs(a);
+      if (d !== 0) return d;
+      return blockTieId(a).localeCompare(blockTieId(b));
+    });
+  }, [plansForView, rootToPlans, parentToSubPlans]);
 
   return (
     <>
@@ -355,8 +385,8 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4">
-          {plans.length === 0 ? (
+      <div className="grid grid-cols-1 gap-2">
+          {plansForView.length === 0 ? (
             <div className="bg-white border-2 border-dashed border-slate-100 rounded-[32px] p-20 text-center">
               <CalendarRange className="w-12 h-12 text-slate-200 mx-auto mb-4" />
               <p className="text-slate-400 font-medium">暂无生产计划数据</p>
@@ -370,10 +400,10 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
               const assignedCount = plan.assignments ? Object.values(plan.assignments).filter(a => (a as NodeAssignment).workerIds && (a as NodeAssignment).workerIds.length > 0).length : 0;
                 const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
                 const customListFields = planFormSettings.customFields.filter(f => f.showInList);
-                const createdDateRaw = plan.createdAt || (() => { const m = plan.id.match(/^plan-(\d+)/); return m ? new Date(parseInt(m[1], 10)).toISOString().split('T')[0] : ''; })();
+                const createdDateRaw = plan.createdAt || planIdToLocalYmd(plan.id);
                 const createdDate = formatPlanCreatedDateList(createdDateRaw);
               return (
-                <div key={plan.id} className="bg-white p-6 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group flex items-center justify-between">
+                <div key={plan.id} className="bg-white px-5 py-2 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group flex items-center justify-between">
                   <div className="flex items-center gap-4">
                       {product?.imageUrl ? (
                         <button type="button" onClick={() => setImagePreviewUrl(product.imageUrl)} className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
@@ -427,36 +457,29 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => setViewDetailPlanId(plan.id)} className="flex items-center gap-2 px-5 py-2.5 bg-slate-50 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl text-xs font-bold transition-all border border-slate-100">
-                        <Edit3 className="w-4 h-4" /> 详情
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setViewDetailPlanId(plan.id)} className="flex items-center gap-1.5 px-4 py-2 bg-slate-50 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl text-xs font-bold transition-all border border-slate-100">
+                        <Edit3 className="w-3.5 h-3.5" /> 详情
                     </button>
                     {showPlanListPrintButton && (
                       <button
                         type="button"
                         onClick={() => openPlanPrintPicker(plan)}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all border border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50"
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all border border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50"
                       >
-                        <Printer className="w-4 h-4" /> 打印
+                        <Printer className="w-3.5 h-3.5" /> 打印
                       </button>
                     )}
                     {plan.status !== PlanStatus.CONVERTED ? (
-                        <>
-                          {(parentToSubPlans.get(plan.id)?.length ?? 0) === 0 && (
-                            <button onClick={() => openSplit(plan)} className="flex items-center gap-2 px-5 py-2.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-bold transition-all border border-slate-200">
-                              <Split className="w-4 h-4" /> 拆分
-                            </button>
-                          )}
-                      <button onClick={() => onConvertToOrder(plan.id)} className="bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-black transition-all flex items-center gap-2">
-                          <ArrowRightCircle className="w-4 h-4" /> 下达工单
+                      <button onClick={() => onConvertToOrder(plan.id)} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-black transition-all flex items-center gap-1.5">
+                          <ArrowRightCircle className="w-3.5 h-3.5" /> 下达工单
                       </button>
-                        </>
                     ) : hasUnconvertedSubPlans(plan.id) ? (
-                      <button onClick={() => onConvertToOrder(plan.id)} className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 text-white hover:bg-amber-600 rounded-xl text-xs font-bold transition-all border border-amber-400">
-                        <ArrowRightCircle className="w-4 h-4" /> 补充下达子工单
+                      <button onClick={() => onConvertToOrder(plan.id)} className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white hover:bg-amber-600 rounded-xl text-xs font-bold transition-all border border-amber-400">
+                        <ArrowRightCircle className="w-3.5 h-3.5" /> 补充下达子工单
                       </button>
                     ) : (
-                      <div className="px-5 py-2.5 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold border border-emerald-200">已转正式工单</div>
+                      <div className="px-4 py-2 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold border border-emerald-200">已转正式工单</div>
                     )}
                     </div>
                   </div>
@@ -472,7 +495,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                       <Plus className="w-4 h-4 text-slate-600" />
                       <span className="text-sm font-bold text-slate-800">主计划及子计划（共 {allPlans.length} 条）</span>
                     </div>
-                    <div className="p-4 space-y-3">
+                    <div className="p-2.5 space-y-1.5">
                       {allWithDepth.map(({ plan, depth }, idx) => {
                         const product = products.find(p => p.id === plan.productId);
                         const totalQty = plan.items && Array.isArray(plan.items) ? plan.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) : 0;
@@ -481,11 +504,11 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         const assignedCount = plan.assignments ? Object.values(plan.assignments).filter(a => (a as NodeAssignment).workerIds && (a as NodeAssignment).workerIds.length > 0).length : 0;
                         const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
                         const customListFields = planFormSettings.customFields.filter(f => f.showInList);
-                        const createdDateRaw = plan.createdAt || (() => { const m = plan.id.match(/^plan-(\d+)/); return m ? new Date(parseInt(m[1], 10)).toISOString().split('T')[0] : ''; })();
+                        const createdDateRaw = plan.createdAt || planIdToLocalYmd(plan.id);
                         const createdDate = formatPlanCreatedDateList(createdDateRaw);
                         return (
-                          <div key={plan.id} className={`bg-white p-5 rounded-2xl border transition-all flex items-center justify-between ${isChild ? 'border-l-4 border-l-slate-300 border-slate-200' : 'border-slate-200'} hover:shadow-lg hover:border-slate-300`} style={indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
-                            <div className="flex items-center gap-5">
+                          <div key={plan.id} className={`bg-white px-5 py-2 rounded-2xl border transition-all flex items-center justify-between ${isChild ? 'border-l-4 border-l-slate-300 border-slate-200' : 'border-slate-200'} hover:shadow-lg hover:border-slate-300`} style={indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
+                            <div className="flex items-center gap-4">
                               {product?.imageUrl ? (
                                 <button type="button" onClick={() => setImagePreviewUrl(product.imageUrl)} className="w-12 h-12 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0"><img loading="lazy" decoding="async" src={product.imageUrl} alt={product.name} className="w-full h-full object-cover block" /></button>
                               ) : (
@@ -523,12 +546,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                 </button>
                               )}
                               {!isChild && plan.status !== PlanStatus.CONVERTED && (
-                                <>
-                                  {children.length === 0 && (
-                                    <button onClick={() => openSplit(plan)} className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-bold border border-slate-200"><Split className="w-3.5 h-3.5" /> 拆分</button>
-                                  )}
-                                  <button onClick={() => onConvertToOrder(plan.id)} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-black flex items-center gap-1.5"><ArrowRightCircle className="w-3.5 h-3.5" /> 下达工单</button>
-                                </>
+                                <button onClick={() => onConvertToOrder(plan.id)} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-black flex items-center gap-1.5"><ArrowRightCircle className="w-3.5 h-3.5" /> 下达工单</button>
                               )}
                               {!isChild && plan.status === PlanStatus.CONVERTED && hasUnconvertedSubPlans(plan.id) && (
                                 <button onClick={() => onConvertToOrder(plan.id)} className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white hover:bg-amber-600 rounded-xl text-xs font-bold border border-amber-400"><ArrowRightCircle className="w-3.5 h-3.5" /> 补充下达子工单</button>
@@ -551,7 +569,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                     <Split className="w-4 h-4 text-slate-600" />
                     <span className="text-sm font-bold text-slate-800">原单 {groupKey} 拆分（共 {allPlansInGroup.length} 条）</span>
                   </div>
-                  <div className="p-4 space-y-3">
+                  <div className="p-3 space-y-2">
                     {groupPlans.flatMap(plan => {
                       const plansWithDepth = [{ plan, depth: 0 }, ...getAllDescendantsWithDepth(plan.id, 1)];
                       return plansWithDepth.map(({ plan: p, depth }) => {
@@ -562,12 +580,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         const assignedCount = plan.assignments ? Object.values(plan.assignments).filter(a => (a as NodeAssignment).workerIds && (a as NodeAssignment).workerIds.length > 0).length : 0;
                         const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
                         const customListFields = planFormSettings.customFields.filter(f => f.showInList);
-                        const createdDateRaw = plan.createdAt || (() => { const m = plan.id.match(/^plan-(\d+)/); return m ? new Date(parseInt(m[1], 10)).toISOString().split('T')[0] : ''; })();
+                        const createdDateRaw = plan.createdAt || planIdToLocalYmd(plan.id);
                         const createdDate = formatPlanCreatedDateList(createdDateRaw);
                         const indentPx = isChild ? 24 * depth : 0;
                         return (
-                          <div key={plan.id} className={`bg-white p-5 rounded-2xl border transition-all flex items-center justify-between ${isChild ? 'border-l-4 border-l-slate-300 border-slate-200' : 'border-slate-200'} hover:shadow-lg hover:border-slate-300`} style={indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
-                          <div className="flex items-center gap-5">
+                          <div key={plan.id} className={`bg-white px-5 py-2 rounded-2xl border transition-all flex items-center justify-between ${isChild ? 'border-l-4 border-l-slate-300 border-slate-200' : 'border-slate-200'} hover:shadow-lg hover:border-slate-300`} style={indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
+                          <div className="flex items-center gap-4">
                             {product?.imageUrl ? (
                               <button type="button" onClick={() => setImagePreviewUrl(product.imageUrl)} className="w-12 h-12 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none">
                                 <img loading="lazy" decoding="async" src={product.imageUrl} alt={product.name} className="w-full h-full object-cover block" />
@@ -635,16 +653,9 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                 </button>
                               )}
                               {!isChild && plan.status !== PlanStatus.CONVERTED && (
-                                <>
-                                  {(parentToSubPlans.get(plan.id)?.length ?? 0) === 0 && (
-                                    <button onClick={() => openSplit(plan)} className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-bold border border-slate-200">
-                                      <Split className="w-3.5 h-3.5" /> 拆分
-                                    </button>
-                                  )}
-                                  <button onClick={() => onConvertToOrder(plan.id)} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-black flex items-center gap-1.5">
-                                    <ArrowRightCircle className="w-3.5 h-3.5" /> 下达工单
-                                  </button>
-                                </>
+                                <button onClick={() => onConvertToOrder(plan.id)} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-black flex items-center gap-1.5">
+                                  <ArrowRightCircle className="w-3.5 h-3.5" /> 下达工单
+                                </button>
                               )}
                               {!isChild && plan.status === PlanStatus.CONVERTED && hasUnconvertedSubPlans(plan.id) && (
                                 <button onClick={() => onConvertToOrder(plan.id)} className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white hover:bg-amber-600 rounded-xl text-xs font-bold border border-amber-400"><ArrowRightCircle className="w-3.5 h-3.5" /> 补充下达子工单</button>

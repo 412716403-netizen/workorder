@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect } from 'react';
+import React, { Suspense, useEffect, useRef, useLayoutEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Link, Navigate, useParams, useLocation } from 'react-router-dom';
 import {
   Layout, LayoutDashboard, ClipboardList, Settings as SettingsIcon,
@@ -24,6 +24,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppDataProvider, useDataLoading, useMasterData, useConfigData, useOrdersData, usePsiData, useFinanceData, useAppActions } from './contexts/AppDataContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ConfirmProvider } from './contexts/ConfirmContext';
+import { MainScrollSegmentProvider } from './contexts/MainScrollSegmentContext';
 
 const RouteFallback = () => (
   <div className="flex items-center justify-center py-32">
@@ -105,6 +106,32 @@ function AppLayout() {
   const dataLoading = useDataLoading();
   const location = useLocation();
   const printEditorFullscreen = location.pathname.startsWith('/print-editor');
+
+  const mainContentRef = useRef<HTMLDivElement>(null);
+  const scrollPositions = useRef<Record<string, number>>({});
+  const prevScrollKey = useRef('');
+  const pathAnchorRef = useRef(location.pathname);
+  const [scrollSegment, setScrollSegment] = useState('');
+
+  useLayoutEffect(() => {
+    const el = mainContentRef.current;
+    if (!el || printEditorFullscreen) return;
+
+    const pathChanged = pathAnchorRef.current !== location.pathname;
+    if (pathChanged) {
+      pathAnchorRef.current = location.pathname;
+    }
+    const segmentForKey = pathChanged ? '' : scrollSegment;
+    const key = `${location.pathname}|${segmentForKey}`;
+
+    if (prevScrollKey.current !== key) {
+      if (prevScrollKey.current) {
+        scrollPositions.current[prevScrollKey.current] = el.scrollTop;
+      }
+      el.scrollTop = scrollPositions.current[key] ?? 0;
+      prevScrollKey.current = key;
+    }
+  }, [location.pathname, scrollSegment, printEditorFullscreen]);
 
   const { currentUser, tenantCtx, hasPerm, handleLogout, handleSwitchTenant } = auth;
   const { profileOpen, setProfileOpen, onProfileUpdate, onTenantCtxUpdate } = auth;
@@ -222,6 +249,7 @@ function AppLayout() {
 
       {/* Main Content */}
       <div
+        ref={mainContentRef}
         className={
           printEditorFullscreen
             ? 'flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-100 p-3'
@@ -230,13 +258,15 @@ function AppLayout() {
       >
         <ErrorBoundary>
           <Suspense fallback={<RouteFallback />}>
-            {printEditorFullscreen ? (
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <MainScrollSegmentProvider setScrollSegment={setScrollSegment}>
+              {printEditorFullscreen ? (
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                  <AppRoutes />
+                </div>
+              ) : (
                 <AppRoutes />
-              </div>
-            ) : (
-              <AppRoutes />
-            )}
+              )}
+            </MainScrollSegmentProvider>
           </Suspense>
         </ErrorBoundary>
       </div>
@@ -326,6 +356,7 @@ function FinanceRoute() {
     <FinanceView
       orders={o.orders} records={f.financeRecords} psiRecords={psiRecords}
       prodRecords={o.prodRecords}
+      productMilestoneProgresses={o.productMilestoneProgresses}
       onAddRecord={a.onAddFinanceRecord} onUpdateRecord={a.onUpdateFinanceRecord}
       onDeleteRecord={a.onDeleteFinanceRecord}
       financeCategories={f.financeCategories} financeAccountTypes={f.financeAccountTypes}

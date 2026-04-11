@@ -45,6 +45,7 @@ import {
   subModuleTabButtonClass,
   subModuleTabPillClass,
 } from '../styles/uiDensity';
+import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
 
 interface BasicInfoViewProps {
   products: Product[];
@@ -116,6 +117,11 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
   const locState = location.state as { editProductId?: string } | null;
 
   const [activeTab, setActiveTab] = useState<BasicTab>(locState?.editProductId ? 'PRODUCTS' : 'PRODUCTS');
+  const setScrollSegment = useSetMainScrollSegment();
+  useLayoutEffect(() => {
+    setScrollSegment?.(activeTab);
+  }, [activeTab, setScrollSegment]);
+
   const [initialProductId, setInitialProductId] = useState<string | null>(locState?.editProductId ?? null);
   const clearInitialProductId = useCallback(() => {
     setInitialProductId(null);
@@ -367,9 +373,14 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
   const savePartner = async () => {
     try {
       if (editingId) {
+        if (editPartner.partnerListNo == null || editPartner.partnerListNo < 1) {
+          toast.error('请填写有效的单位编号（1–9999）');
+          return;
+        }
         await api.partners.update(editingId, editPartner);
       } else {
-        await api.partners.create(editPartner);
+        const { partnerListNo: _n, ...createPayload } = editPartner;
+        await api.partners.create(createPayload);
       }
       setShowModal(null);
       await onRefreshPartners();
@@ -548,6 +559,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50/80 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                         <th className="py-3 pl-4 pr-2 w-12"></th>
+                        <th className="py-3 px-2 w-[4.5rem] text-center">编号</th>
                         <th className="py-3 px-3">单位名称</th>
                         <th className="py-3 px-3 hidden sm:table-cell">联系人</th>
                         <th className="py-3 px-3 hidden md:table-cell">电话</th>
@@ -572,6 +584,11 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                               <div className="w-9 h-9 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
                                 <Building2 className="w-4 h-4" />
                               </div>
+                            </td>
+                            <td className="py-3 px-2 text-center">
+                              <span className="text-xs font-mono font-bold text-slate-600 tabular-nums">
+                                {p.partnerListNo != null ? String(p.partnerListNo).padStart(4, '0') : '—'}
+                              </span>
                             </td>
                             <td className="py-3 px-3">
                               <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors truncate max-w-[200px]">{p.name}</p>
@@ -1089,6 +1106,30 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                       <option value="">点击选择分类...</option>
                       {partnerCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
+                  </div>
+                  <div className="space-y-1 md:col-span-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单位编号（销售单 XS-0001-xxx）</label>
+                    {editingId ? (
+                      <>
+                        <input
+                          type="number"
+                          min={1}
+                          max={9999}
+                          value={editPartner.partnerListNo ?? ''}
+                          onChange={e => {
+                            const v = e.target.value;
+                            setEditPartner({
+                              ...editPartner,
+                              partnerListNo: v === '' ? undefined : Math.min(9999, Math.max(1, parseInt(v, 10) || 1)),
+                            });
+                          }}
+                          className="w-full max-w-[200px] bg-slate-50 border-none rounded-xl py-3 px-4 font-mono font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px] tabular-nums"
+                        />
+                        <p className="text-[10px] text-slate-400 font-medium mt-1 ml-1">租户内唯一；中间四位与流水共同组成单号，勿与其他单位重复</p>
+                      </>
+                    ) : (
+                      <p className="text-sm font-bold text-slate-500 py-3">保存后按创建顺序自动分配（0001 起）</p>
+                    )}
                   </div>
                 </div>
 

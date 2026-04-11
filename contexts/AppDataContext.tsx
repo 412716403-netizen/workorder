@@ -27,6 +27,8 @@ import type {
   MaterialPanelSettings,
 } from '../types';
 import { DEFAULT_MATERIAL_PANEL_SETTINGS } from '../types';
+import { normalizePartnersFromApi } from '../utils/partnerNormalize';
+import { currentOperatorDisplayName } from '../utils/currentOperatorDisplayName';
 
 // ── Decimal normalizer ──
 
@@ -415,7 +417,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       if (val(coreResults, 4))  setWarehouses(val(coreResults, 4) as Warehouse[]);
       if (val(coreResults, 5))  setFinanceCategories(val(coreResults, 5) as FinanceCategory[]);
       if (val(coreResults, 6))  setFinanceAccountTypes(val(coreResults, 6) as FinanceAccountType[]);
-      if (val(coreResults, 7))  setPartners(val(coreResults, 7) as any[]);
+      if (val(coreResults, 7)) setPartners(normalizePartnersFromApi(val(coreResults, 7) as any[]) as any[]);
       if (val(coreResults, 8))  setDictionaries(val(coreResults, 8) as AppDictionaries);
       if (val(coreResults, 9))  setProducts(normalizeDecimals(val(coreResults, 9) as Product[]));
       if (val(coreResults, 10)) setBoms(normalizeDecimals(val(coreResults, 10) as BOM[]));
@@ -504,16 +506,16 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const refreshProducts = useCallback(async () => { setProducts(normalizeDecimals(await api.products.list() as Product[])); markFetched('products'); }, []);
   const refreshBoms = useCallback(async () => setBoms(normalizeDecimals(await api.boms.list() as BOM[])), []);
+  /** 生产记录列表接口始终返回全量；mergeById 无法剔除服务端已删行，会导致编辑协作回传等删旧建新后界面仍显示旧数量 */
   const refreshProdRecords = useCallback(async () => {
-    const ts = lastFetchTs.current['prodRecords'];
-    const data = normalizeDecimals(await api.production.list(ts ? { updatedAfter: ts } : undefined) as ProductionOpRecord[]);
-    setProdRecords(prev => ts ? mergeById(prev, data) : data);
+    const data = normalizeDecimals(await api.production.list() as ProductionOpRecord[]);
+    setProdRecords(data);
     markFetched('prodRecords');
   }, []);
+  /** 进销存列表接口当前始终返回全量；mergeById 无法剔除服务端已删行，替换单据（删旧建新）后若再 merge 会残留旧行，列表合计与编辑首行数量会不一致 */
   const refreshPsiRecords = useCallback(async () => {
-    const ts = lastFetchTs.current['psiRecords'];
-    const data = normalizeDecimals(await api.psi.list(ts ? { updatedAfter: ts } : undefined) as any[]);
-    setPsiRecords(prev => ts ? mergeById(prev, data) : data);
+    const data = normalizeDecimals(await api.psi.list() as any[]);
+    setPsiRecords(data);
     markFetched('psiRecords');
   }, []);
   const refreshFinanceRecords = useCallback(async () => {
@@ -529,7 +531,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const refreshWarehouses = useCallback(async () => setWarehouses(await api.settings.warehouses.list() as Warehouse[]), []);
   const refreshFinanceCategories = useCallback(async () => setFinanceCategories(await api.settings.financeCategories.list() as FinanceCategory[]), []);
   const refreshFinanceAccountTypes = useCallback(async () => setFinanceAccountTypes(await api.settings.financeAccountTypes.list() as FinanceAccountType[]), []);
-  const refreshPartners = useCallback(async () => setPartners(await api.partners.list() as any[]), []);
+  const refreshPartners = useCallback(async () => setPartners(normalizePartnersFromApi(await api.partners.list() as any[]) as any[]), []);
   const refreshWorkers = useCallback(async () => setWorkers(await api.tenants.getReportableMembers(tenantCtx!.tenantId) as any[]), [tenantCtx?.tenantId]);
   const refreshEquipment = useCallback(async () => setEquipment(await api.equipment.list() as any[]), []);
   const refreshDictionaries = useCallback(async () => setDictionaries(await api.dictionaries.list() as AppDictionaries), []);
@@ -653,7 +655,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   // ── Order / report handlers ──
   const onReportSubmit = useCallback(async (oId: string, mId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string) => {
     try {
-      const operatorName = workerId ? (workers.find((w: any) => w.id === workerId)?.name ?? '未知') : ((currentUser as any)?.displayName || (currentUser as any)?.username || '操作员');
+      const operatorName = workerId ? (workers.find((w: any) => w.id === workerId)?.name ?? '未知') : currentOperatorDisplayName(currentUser);
       const order = orders.find(o => o.id === oId);
       const rate = products.find(p => p.id === order?.productId)?.nodeRates?.[order?.milestones.find(m => m.id === mId)?.templateId ?? ''];
       await api.orders.createReport(oId, mId, {
@@ -669,7 +671,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const onReportSubmitProduct = useCallback(async (productId: string, milestoneTemplateId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string) => {
     try {
-      const operatorName = workerId ? (workers.find((w: any) => w.id === workerId)?.name ?? '未知') : ((currentUser as any)?.displayName || (currentUser as any)?.username || '操作员');
+      const operatorName = workerId ? (workers.find((w: any) => w.id === workerId)?.name ?? '未知') : currentOperatorDisplayName(currentUser);
       const rate = products.find(p => p.id === productId)?.nodeRates?.[milestoneTemplateId];
       await api.orders.createProductReport({
         productId, milestoneTemplateId, quantity: qty, operator: operatorName,
@@ -773,12 +775,20 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     try {
       const created = await api.psi.create(record);
       setPsiRecords(prev => [...prev, ...normalizeDecimals([created])]);
-    } catch (err: any) { toast.error(err.message || '添加记录失败'); }
+    } catch (err: any) {
+      toast.error(err.message || '添加记录失败');
+      throw err;
+    }
   }, []);
 
   const onAddPSIRecordBatch = useCallback(async (records: any[]) => {
-    try { await api.psi.createBatch(records); await refreshPsiRecords(); }
-    catch (err: any) { toast.error(err.message || '批量添加记录失败'); }
+    try {
+      await api.psi.createBatch(records);
+      await refreshPsiRecords();
+    } catch (err: any) {
+      toast.error(err.message || '批量添加记录失败');
+      throw err;
+    }
   }, [refreshPsiRecords]);
 
   const onReplacePSIRecords = useCallback(async (type: string, docNumber: string, newRecords: any[]) => {

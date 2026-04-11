@@ -26,6 +26,9 @@ import PendingShipmentListModal, { PendingShipmentGroup } from './psi-ops/Pendin
 import PendingShipDetailModal from './psi-ops/PendingShipDetailModal';
 import AllocationModal from './psi-ops/AllocationModal';
 import FormConfigModal from './psi-ops/FormConfigModal';
+import { flowRecordsEarliestMs, formatPsiDocListTime, recordDocLineTimeMs } from '../utils/flowDocSort';
+import { nextSalesBillDocNumber } from '../utils/partnerDocNumber';
+import { effectiveAllocatedQuantity } from '../utils/psiAllocationDisplay';
 
 interface PSIOpsViewProps {
   type: string;
@@ -124,7 +127,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
     'PURCHASE_ORDER': { label: '采购订单', color: 'bg-indigo-600', partnerLabel: '供应商', prefix: 'PO', hideWarehouse: true },
     'PURCHASE_BILL': { label: '采购单', color: 'bg-indigo-600', partnerLabel: '供应商', prefix: 'PB' },
     'SALES_ORDER': { label: '销售订单', color: 'bg-indigo-600', partnerLabel: '客户', prefix: 'SO', hideWarehouse: true },
-    'SALES_BILL': { label: '销售单', color: 'bg-indigo-600', partnerLabel: '客户', prefix: 'SB' },
+    'SALES_BILL': { label: '销售单', color: 'bg-indigo-600', partnerLabel: '客户', prefix: 'XS' },
     'WAREHOUSE_MGMT': { label: '仓库管理', color: 'bg-indigo-600', sub: '全方位的仓库业务控制中心' },
   };
 
@@ -135,15 +138,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
   /** 待发货清单 - 详情弹窗：当前选中的分组 */
   const [pendingShipDetailGroup, setPendingShipDetailGroup] = useState<PendingShipmentGroup | null>(null);
 
-  // 解析记录时间戳（用于排序和比较）：优先 _savedAtMs（可靠毫秒戳），其次尝试解析 createdAt（ISO 日期）
-  const parseRecordTime = useCallback((r: any): number => {
-    if (typeof r._savedAtMs === 'number') return r._savedAtMs;
-    for (const key of ['timestamp', 'createdAt']) {
-      const t = r[key];
-      if (t) { const d = new Date(t); if (!isNaN(d.getTime())) return d.getTime(); }
-    }
-    return 0;
-  }, []);
+  /** 与 flowDocSort.recordDocLineTimeMs 一致，用于库存流水等排序 */
+  const parseRecordTime = useCallback((r: any): number => recordDocLineTimeMs(r), []);
 
   // ── 库存预聚合索引：一次遍历 recordsList + prodRecords，后续 O(1) 查询 ──
   type WhBucket = { psiIn: number; psiOut: number; transferIn: number; transferOut: number; prodIn: number; prodOut: number; stocktakeAdj: number; stocktakeByDoc: Map<string, number> };
@@ -166,11 +162,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
       if (!b) { b = { psiIn: 0, psiOut: 0, transferIn: 0, transferOut: 0, prodIn: 0, prodOut: 0, stocktakeRecords: [], psiInRecords: [], psiOutRecords: [], prodInRecords: [], prodOutRecords: [] }; varMap.set(k, b); }
       return b;
     };
-    const pTime = (r: any): number => {
-      if (typeof r._savedAtMs === 'number') return r._savedAtMs;
-      for (const key of ['timestamp', 'createdAt']) { const t = r[key]; if (t) { const d = new Date(t); if (!isNaN(d.getTime())) return d.getTime(); } }
-      return 0;
-    };
+    const pTime = (r: any): number => recordDocLineTimeMs(r);
 
     for (const r of recordsList) {
       const pId = r.productId;
@@ -266,18 +258,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
       .reduce((s, r) => s + (r.qty - r.sysQty), 0);
     return latest.qty + insAfter - outsAfter + adjustAfter;
   }, [stockIndex, getStockVariant]);
-  const generateSBDocNumberForPartner = (partnerId: string, partnerName: string): string => {
-    const partnerCode = (partnerId || partners.find(p => p.name === partnerName)?.id || '0').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || '0';
-    const existingForPartner = recordsList.filter((r: any) =>
-      r.type === 'SALES_BILL' && (r.partnerId === partnerId || r.partner === partnerName)
-    );
-    const seqNums = existingForPartner.map((r: any) => {
-      const m = r.docNumber?.match(new RegExp(`SB-${partnerCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)`));
-      return m ? parseInt(m[1], 10) : 0;
-    });
-    const nextSeq = seqNums.length > 0 ? Math.max(...seqNums) + 1 : 1;
-    return `SB-${partnerCode}-${String(nextSeq).padStart(3, '0')}`;
-  };
+  const generateSBDocNumberForPartner = (partnerId: string, partnerName: string): string =>
+    nextSalesBillDocNumber(partners, recordsList, partnerId, partnerName);
   const allPOByGroups = useMemo(() => {
     const filtered = recordsList.filter(r => r.type === 'PURCHASE_ORDER');
     const groups: Record<string, any[]> = {};
@@ -301,15 +283,14 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
 
 
 
-
   // 待发货清单：已配货且未发走的销售订单（待发 = 已配 - 已发），按 (docNumber, lineGroupId) 分组
   const pendingShipmentGroups = useMemo(() => {
+    const linePending = (r: any) =>
+      Math.max(0, (Number(r?.allocatedQuantity) || 0) - (Number(r?.shippedQuantity) || 0));
     if (type !== 'SALES_ORDER') return [];
     const list = recordsList.filter((r: any) => {
       if (r.type !== 'SALES_ORDER') return false;
-      const allocated = r.allocatedQuantity ?? 0;
-      const shipped = r.shippedQuantity ?? 0;
-      return allocated - shipped > 0;
+      return linePending(r) > 0;
     });
     const groups: Record<string, { docNumber: string; productId: string; records: any[] }> = {};
     list.forEach((r: any) => {
@@ -324,7 +305,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
       const product = productMapPSI.get(g.productId);
       const first = g.records[0];
       const warehouse = warehouseMapPSI.get((first.allocationWarehouseId || first.warehouseId));
-      const totalQuantity = g.records.reduce((s, r) => s + ((r.allocatedQuantity ?? 0) - (r.shippedQuantity ?? 0)), 0);
+      const totalQuantity = g.records.reduce((s, r) => s + linePending(r), 0);
       const firstRec = g.records[0];
       return {
         groupKey,
@@ -352,10 +333,18 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
     return groups;
   }, [recordsList, type]);
 
-  /** 单据列表排序：按单据号倒序（003、002、001），新单在上，001 不会因时间戳排到第一条 */
+  /** 单据列表：按组内制单时间（最早一行）倒序，无有效时间殿后，再按单号 */
   const sortedGroupedEntries = useMemo(() => {
     const entries = Object.entries(groupedRecords);
-    return entries.sort(([docNumA], [docNumB]) => (docNumB || '').localeCompare(docNumA || ''));
+    return entries.sort(([docA, recsA], [docB, recsB]) => {
+      const ma = flowRecordsEarliestMs(recsA as { timestamp?: string; createdAt?: string; _savedAtMs?: number }[]);
+      const mb = flowRecordsEarliestMs(recsB as { timestamp?: string; createdAt?: string; _savedAtMs?: number }[]);
+      const ha = ma > 0;
+      const hb = mb > 0;
+      if (ha !== hb) return ha ? -1 : 1;
+      if (ha && hb && mb !== ma) return mb - ma;
+      return (docB || '').localeCompare(docA || '');
+    });
   }, [groupedRecords]);
 
   const PSI_PAGE_SIZE = 20;
@@ -558,7 +547,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                           {isConverted && <span className="text-[10px] font-black text-emerald-500 uppercase tracking-tighter bg-white px-2 py-0.5 rounded-full border border-emerald-50 shadow-sm">已入库完成</span>}
                         </div>
                         <div className="flex items-center gap-4 mt-1 text-[10px] font-bold text-slate-400 uppercase flex-wrap">
-                          <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {mainInfo.timestamp}</span>
+                          <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatPsiDocListTime(docItems as any[])}</span>
                           <span className="flex items-center gap-1"><User className="w-3 h-3" /> 经办: {mainInfo.operator}</span>
                           {type === 'PURCHASE_ORDER' && safePurchaseOrderFormSettings.standardFields.find(f => f.id === 'note')?.showInList && mainInfo.note && (
                             <span className="flex items-center gap-1 text-slate-500" title={mainInfo.note}>备注: {mainInfo.note.length > 30 ? mainInfo.note.slice(0, 30) + '…' : mainInfo.note}</span>
@@ -685,6 +674,10 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                             const warehouse = warehouseMapPSI.get(first.warehouseId);
                             const orderQty = grp.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
                             const allocatedQty = type === 'SALES_ORDER' ? grp.reduce((s, i) => s + (i.allocatedQuantity ?? 0), 0) : 0;
+                            const shippedQty = type === 'SALES_ORDER' ? grp.reduce((s, i) => s + (Number(i.shippedQuantity) || 0), 0) : 0;
+                            /** 待发 = 总已配 − 总已发（与待发货清单、靛色条一致） */
+                            const allocPendingQty =
+                              type === 'SALES_ORDER' ? Math.max(0, allocatedQty - shippedQty) : 0;
                             const received = type === 'PURCHASE_ORDER'
                               ? grp.reduce((s, i) => s + (receivedByOrderLine[`${docNum}::${i.id}`] ?? 0), 0)
                               : 0;
@@ -708,6 +701,22 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                               : variantParts[0]
                                 ? variantParts[0]
                                 : '';
+                            let soBarShipPct = 0;
+                            let soBarAllocPct = 0;
+                            let soBarRosePct = 0;
+                            if (type === 'SALES_ORDER' && orderQty > 0) {
+                              const ac = Math.min(allocatedQty, orderQty);
+                              const shipCap = Math.min(shippedQty, ac);
+                              const allocRemain = Math.max(0, ac - shipCap);
+                              if (allocatedQty > orderQty) {
+                                soBarShipPct = (Math.min(shippedQty, orderQty) / allocatedQty) * 100;
+                                soBarAllocPct = (allocRemain / allocatedQty) * 100;
+                                soBarRosePct = ((allocatedQty - orderQty) / allocatedQty) * 100;
+                              } else {
+                                soBarShipPct = (Math.min(shippedQty, orderQty) / orderQty) * 100;
+                                soBarAllocPct = (allocRemain / orderQty) * 100;
+                              }
+                            }
                           return (
                               <tr key={gid} className="hover:bg-slate-50/30 transition-colors">
                                 <td className="py-4 pr-6">
@@ -780,20 +789,24 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                   <td className="py-4 px-3">
                                     <div className="flex flex-col gap-2">
                                       <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-full flex">
-                                        {allocatedQty > orderQty ? (
+                                        {orderQty <= 0 ? null : (
                                           <>
-                                            <div className="h-full bg-emerald-500" style={{ width: `${orderQty > 0 ? (orderQty / allocatedQty) * 100 : 0}%` }} />
-                                            <div className="h-full bg-rose-500" style={{ width: `${orderQty > 0 ? ((allocatedQty - orderQty) / allocatedQty) * 100 : 0}%` }} />
+                                            <div className="h-full bg-sky-500 shrink-0 transition-all" title="已发" style={{ width: `${soBarShipPct}%` }} />
+                                            <div className="h-full bg-indigo-500 shrink-0 transition-all" title="待发（已配−已发）" style={{ width: `${soBarAllocPct}%` }} />
+                                            {soBarRosePct > 0 && (
+                                              <div className="h-full bg-rose-500 shrink-0" title="超配" style={{ width: `${soBarRosePct}%` }} />
+                                            )}
                                           </>
-                                        ) : (
-                                          <div
-                                            className={`h-full rounded-full transition-all ${orderQty > 0 && allocatedQty >= orderQty ? 'bg-emerald-500' : 'bg-indigo-500'}`}
-                                            style={{ width: `${orderQty > 0 ? Math.min(100, (allocatedQty / orderQty) * 100) : 0}%` }}
-                                          />
                                         )}
                                       </div>
-                                      <span className="text-[10px] font-bold text-slate-400">
-                                        {allocatedQty > orderQty ? `已配 ${allocatedQty} / ${orderQty}（已超配）` : orderQty > 0 && allocatedQty >= orderQty ? '已完成' : `已配 ${allocatedQty} / ${orderQty}`}
+                                      <span className="text-[10px] font-bold text-slate-500 leading-snug">
+                                        <span className="text-sky-600">已发 {shippedQty}</span>
+                                        <span className="text-slate-300 mx-1">/</span>
+                                        <span className="text-indigo-600">待发 {allocPendingQty}</span>
+                                        {allocatedQty > orderQty && <span className="text-rose-600 ml-1">（超配）</span>}
+                                        {orderQty > 0 && shippedQty >= orderQty && (
+                                          <span className="text-emerald-600 ml-1">· 已发齐</span>
+                                        )}
                                       </span>
                                     </div>
                                   </td>
@@ -820,19 +833,27 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                                         setAllocationWarehouseId(grp[0]?.allocationWarehouseId ?? warehouses[0]?.id ?? '');
                                         const hasVariants = grp.some((i: any) => i.variantId);
                                         if (hasVariants) {
-                                          const next: Record<string, number> = {};
+                                          const agg: Record<string, { order: number; allocated: number; shipped: number }> = {};
                                           grp.forEach((i: any) => {
-                                            if (i.variantId) {
-                                              const order = i.quantity ?? 0;
-                                              const allocated = i.allocatedQuantity ?? 0;
-                                              next[i.variantId] = Math.max(0, order - allocated);
-                                            }
+                                            if (!i.variantId) return;
+                                            if (!agg[i.variantId]) agg[i.variantId] = { order: 0, allocated: 0, shipped: 0 };
+                                            agg[i.variantId].order += Number(i.quantity) || 0;
+                                            agg[i.variantId].allocated += Number(i.allocatedQuantity) || 0;
+                                            agg[i.variantId].shipped += Number(i.shippedQuantity) || 0;
+                                          });
+                                          const next: Record<string, number> = {};
+                                          Object.keys(agg).forEach(vid => {
+                                            const e = agg[vid];
+                                            const eff = effectiveAllocatedQuantity(e.allocated, e.shipped);
+                                            next[vid] = Math.max(0, e.order - eff);
                                           });
                                           setAllocationQuantities(next);
                                         } else {
-                                          const order = grp[0]?.quantity ?? 0;
-                                          const allocated = grp[0]?.allocatedQuantity ?? 0;
-                                          setAllocationQuantities(Math.max(0, order - allocated));
+                                          const order = grp.reduce((s: number, i: any) => s + (Number(i.quantity) || 0), 0);
+                                          const allocated = grp.reduce((s: number, i: any) => s + (Number(i.allocatedQuantity) || 0), 0);
+                                          const shipped = grp.reduce((s: number, i: any) => s + (Number(i.shippedQuantity) || 0), 0);
+                                          const eff = effectiveAllocatedQuantity(allocated, shipped);
+                                          setAllocationQuantities(Math.max(0, order - eff));
                                         }
                                       }}
                                       className="px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1 inline-flex whitespace-nowrap"

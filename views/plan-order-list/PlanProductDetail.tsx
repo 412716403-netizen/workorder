@@ -9,6 +9,7 @@ import type {
   BOM,
 } from '../../types';
 import { getFileExtFromDataUrl } from '../../utils/fileHelpers';
+import { productColorSizeEnabled } from '../../utils/productColorSize';
 
 interface PlanProductDetailProps {
   viewProductId: string;
@@ -211,7 +212,7 @@ const PlanProductDetail: React.FC<PlanProductDetailProps> = ({
               </div>
             ) : null;
           })()}
-          {cat?.hasColorSize && (
+          {productColorSizeEnabled(p, cat) && (
             <div className="space-y-3">
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Tag className="w-3.5 h-3.5" /> 颜色尺码</h3>
               <div className="space-y-2">

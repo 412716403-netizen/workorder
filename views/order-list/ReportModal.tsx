@@ -12,6 +12,7 @@ import {
   ProductMilestoneProgress,
   ProductionOpRecord,
   ProcessSequenceMode,
+  ProductVariant,
 } from '../../types';
 import WorkerSelector from '../../components/WorkerSelector';
 import EquipmentSelector from '../../components/EquipmentSelector';
@@ -22,6 +23,9 @@ import {
 } from '../../utils/productReportAggregates';
 import { buildDefectiveReworkByOrderMilestone } from '../../utils/defectiveReworkByOrderMilestone';
 import { toast } from 'sonner';
+import { toLocalCompactYmd } from '../../utils/localDateTime';
+import { productHasColorSizeMatrix } from '../../utils/productColorSize';
+import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 
 export interface ReportModalData {
   order: ProductionOrder;
@@ -120,12 +124,12 @@ const ReportModal: React.FC<ReportModalProps> = ({
     });
     const product = products.find(p => p.id === reportModal.order.productId);
     const category = categories.find(c => c.id === product?.categoryId);
-    const hasColorSize = Boolean(product?.colorIds?.length && product?.sizeIds?.length) || Boolean(category?.hasColorSize);
+    const showVariantMatrix = productHasColorSizeMatrix(product, category);
     const items = reportModal.productItems ?? reportModal.order.items;
     const singleVariant = items.length === 1 ? (items[0].variantId || '') : '';
     const variantQuantities: Record<string, number> = {};
     const variantDefective: Record<string, number> = {};
-    if (hasColorSize && product?.variants?.length) {
+    if (showVariantMatrix && product?.variants?.length) {
       product.variants.forEach(v => {
         variantQuantities[v.id] = 0;
         variantDefective[v.id] = 0;
@@ -138,8 +142,8 @@ const ReportModal: React.FC<ReportModalProps> = ({
       workerId: '',
       equipmentId: '',
       customData: initialData,
-      variantQuantities: hasColorSize && product?.variants?.length ? variantQuantities : undefined,
-      variantDefectiveQuantities: hasColorSize && product?.variants?.length ? variantDefective : undefined,
+      variantQuantities: showVariantMatrix && product?.variants?.length ? variantQuantities : undefined,
+      variantDefectiveQuantities: showVariantMatrix && product?.variants?.length ? variantDefective : undefined,
     };
   });
 
@@ -239,15 +243,13 @@ const ReportModal: React.FC<ReportModalProps> = ({
   ]);
 
   const getNextReportNo = () => {
-    const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const todayStr = toLocalCompactYmd(new Date());
     const keys = new Set<string>();
     orders.forEach(o => {
       o.milestones?.forEach(m => {
         (m.reports || []).forEach(r => {
-          const dt = new Date(r.timestamp);
-          if (isNaN(dt.getTime())) return;
-          const ds = dt.toISOString().split('T')[0].replace(/-/g, '');
-          if (ds !== todayStr) return;
+          const ds = toLocalCompactYmd(r.timestamp);
+          if (!ds || ds !== todayStr) return;
           const key = r.reportBatchId || r.reportNo || r.id;
           keys.add(key);
         });
@@ -255,10 +257,8 @@ const ReportModal: React.FC<ReportModalProps> = ({
     });
     productMilestoneProgresses.forEach(p => {
       (p.reports || []).forEach(r => {
-        const dt = new Date(r.timestamp);
-        if (isNaN(dt.getTime())) return;
-        const ds = dt.toISOString().split('T')[0].replace(/-/g, '');
-        if (ds !== todayStr) return;
+        const ds = toLocalCompactYmd(r.timestamp);
+        if (!ds || ds !== todayStr) return;
         const key = r.reportBatchId || r.reportNo || r.id;
         keys.add(key);
       });
@@ -288,10 +288,10 @@ const ReportModal: React.FC<ReportModalProps> = ({
     const milestoneTemplateId = reportModal.milestone.templateId;
     const product = productMap.get(productId);
     const category = categoryMap.get(product?.categoryId);
-    const hasColorSize = Boolean(product?.colorIds?.length && product?.sizeIds?.length) || Boolean(category?.hasColorSize);
+    const showVariantMatrix = productHasColorSizeMatrix(product, category);
 
     if (productionLinkMode === 'product' && onReportSubmitProduct) {
-      if (hasColorSize && reportForm.variantQuantities) {
+      if (showVariantMatrix && reportForm.variantQuantities) {
         const entries = Object.entries(reportForm.variantQuantities).filter(([vId, q]) => {
           const def = reportForm.variantDefectiveQuantities?.[vId] ?? 0;
           return q > 0 || def > 0;
@@ -321,7 +321,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
     }
 
     if (!onReportSubmit) return;
-    if (hasColorSize && reportForm.variantQuantities) {
+    if (showVariantMatrix && reportForm.variantQuantities) {
       const entries = Object.entries(reportForm.variantQuantities).filter(([vId, q]) => {
         const def = reportForm.variantDefectiveQuantities?.[vId] ?? 0;
         return q > 0 || def > 0;
@@ -367,7 +367,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
   const isMatrixMode = (() => {
     const product = productMap.get(reportModal.order.productId);
     const category = categoryMap.get(product?.categoryId);
-    return Boolean((product?.colorIds?.length && product?.sizeIds?.length) || category?.hasColorSize);
+    return productHasColorSizeMatrix(product, category);
   })();
 
   const matrixTotalQty = reportForm.variantQuantities
@@ -413,20 +413,29 @@ const ReportModal: React.FC<ReportModalProps> = ({
   const totalCompleted = useProductPmp
     ? pmpCompletedAtTemplate(productMilestoneProgresses, pid, tid)
     : ordersInModal.reduce((s, o) => s + (o.milestones.find(m => m.templateId === tid)?.completedQuantity ?? 0), 0);
-  const outsourcePendingRecords = useProductPmp
-    ? prodRecords.filter(
-        r => r.type === 'OUTSOURCE' && r.status === '加工中' && !r.orderId && r.productId === pid && r.nodeId === tid,
-      )
-    : prodRecords.filter(
-        r => r.type === 'OUTSOURCE' && r.status === '加工中' && r.nodeId === tid && orderIdsInModal.includes(r.orderId ?? ''),
-      );
-  const totalOutsourcedAtNode = outsourcePendingRecords.reduce((s, r) => s + (r.quantity ?? 0), 0);
-  const outsourcedByVariantId: Record<string, number> = {};
-  outsourcePendingRecords.forEach(r => {
+  const outsourceFilter = useProductPmp
+    ? (r: ProductionOpRecord) => r.type === 'OUTSOURCE' && !r.sourceReworkId && !r.orderId && r.productId === pid && r.nodeId === tid
+    : (r: ProductionOpRecord) => r.type === 'OUTSOURCE' && !r.sourceReworkId && r.nodeId === tid && orderIdsInModal.includes(r.orderId ?? '');
+  const outsourceDispatchedByVariant: Record<string, number> = {};
+  const outsourceReceivedByVariant: Record<string, number> = {};
+  let totalDispatched = 0;
+  let totalReceived = 0;
+  prodRecords.filter(outsourceFilter).forEach(r => {
     const vid = r.variantId ?? '';
-    if (!vid) return;
-    outsourcedByVariantId[vid] = (outsourcedByVariantId[vid] ?? 0) + (r.quantity ?? 0);
+    if (r.status === '加工中') {
+      totalDispatched += r.quantity ?? 0;
+      outsourceDispatchedByVariant[vid] = (outsourceDispatchedByVariant[vid] ?? 0) + (r.quantity ?? 0);
+    } else if (r.status === '已收回') {
+      totalReceived += r.quantity ?? 0;
+      outsourceReceivedByVariant[vid] = (outsourceReceivedByVariant[vid] ?? 0) + (r.quantity ?? 0);
+    }
   });
+  const totalOutsourcedAtNode = Math.max(0, totalDispatched - totalReceived);
+  const outsourcedByVariantId: Record<string, number> = {};
+  for (const vid of new Set([...Object.keys(outsourceDispatchedByVariant), ...Object.keys(outsourceReceivedByVariant)])) {
+    const net = (outsourceDispatchedByVariant[vid] ?? 0) - (outsourceReceivedByVariant[vid] ?? 0);
+    if (net > 0) outsourcedByVariantId[vid] = net;
+  }
   const effectiveRemainingForModal = useProductPmp
     ? Math.max(0, totalBase - totalCompleted - totalOutsourcedAtNode)
     : Math.max(0, totalBase - totalDefective + totalRework - totalCompleted - totalOutsourcedAtNode);
@@ -513,88 +522,121 @@ const ReportModal: React.FC<ReportModalProps> = ({
               <div className="space-y-3 bg-slate-50/50 rounded-2xl p-3">
                 {(() => {
                   const product = productMap.get(reportModal.order.productId);
-                  if (!product?.colorIds?.length || !product?.sizeIds?.length || !dictionaries?.colors || !dictionaries?.sizes) return null;
+                  const category = categoryMap.get(product?.categoryId);
+                  if (!product || !productHasColorSizeMatrix(product, category) || !dictionaries) return null;
                   const currentOrder = ordersInModal[0];
                   const currentMs = currentOrder?.milestones.find(m => m.templateId === tid);
                   const { reworkByVariant } = currentOrder ? getDefectiveRework(currentOrder.id, tid) : { reworkByVariant: {} as Record<string, number> };
                   const itemsSource = currentOrder?.items ?? reportModal.productItems ?? reportModal.order.items ?? [];
                   const milestoneNodeIds = product.milestoneNodeIds || [];
                   const variantRemainingBaseMap = new Map<string, number>();
-                  product.colorIds.forEach(colorId => {
-                    product.sizeIds.forEach(sizeId => {
-                      const variant = product.variants?.find(v => v.colorId === colorId && v.sizeId === sizeId);
-                      if (!variant) return;
-                      if (productionLinkMode === 'product' && productMilestoneProgresses.length > 0) {
-                        const rawMax =
-                          variantMaxGoodProductMode(
-                            variant.id,
-                            tid,
-                            reportModal.order.productId,
-                            ordersInModal,
-                            productMilestoneProgresses,
-                            processSequenceMode,
-                            milestoneNodeIds,
-                            (oid, t) => getDefectiveRework(oid, t),
-                          ) - (outsourcedByVariantId[variant.id] ?? 0);
-                        variantRemainingBaseMap.set(variant.id, Math.max(0, rawMax));
-                        return;
-                      }
-                      const item = Array.isArray(itemsSource) ? itemsSource.find((i: { variantId?: string }) => (i.variantId || '') === variant.id) : undefined;
-                      const completedInMilestone = (currentMs?.reports || []).filter((r: { variantId?: string }) => (r.variantId || '') === variant.id).reduce((s: number, r: { quantity?: number }) => s + (r.quantity ?? 0), 0);
-                      const defectiveForThisVariant = (currentMs?.reports || []).filter((r: { variantId?: string; defectiveQuantity?: number }) => (r.variantId || '') === variant.id).reduce((s: number, r: { defectiveQuantity?: number }) => s + (r.defectiveQuantity ?? 0), 0);
-                      const base = processSequenceMode === 'sequential'
-                        ? Math.max(0, getSeqRemainingForVariant(variant.id) - defectiveForThisVariant)
-                        : (item ? Math.max(0, (item.quantity ?? 0) - completedInMilestone - defectiveForThisVariant) : 0);
-                      const reworkForVariant = reworkByVariant[variant.id] ?? 0;
-                      const outsourcedForVariant = outsourcedByVariantId[variant.id] ?? 0;
-                      variantRemainingBaseMap.set(variant.id, Math.max(0, base + reworkForVariant - outsourcedForVariant));
+                  for (const variant of product.variants ?? []) {
+                    if (productionLinkMode === 'product' && productMilestoneProgresses.length > 0) {
+                      const rawMax =
+                        variantMaxGoodProductMode(
+                          variant.id,
+                          tid,
+                          reportModal.order.productId,
+                          ordersInModal,
+                          productMilestoneProgresses,
+                          processSequenceMode,
+                          milestoneNodeIds,
+                          (oid, t) => getDefectiveRework(oid, t),
+                        ) - (outsourcedByVariantId[variant.id] ?? 0);
+                      variantRemainingBaseMap.set(variant.id, Math.max(0, rawMax));
+                      continue;
+                    }
+                    const item = Array.isArray(itemsSource) ? itemsSource.find((i: { variantId?: string }) => (i.variantId || '') === variant.id) : undefined;
+                    const completedInMilestone = (currentMs?.reports || []).filter((r: { variantId?: string }) => (r.variantId || '') === variant.id).reduce((s: number, r: { quantity?: number }) => s + (r.quantity ?? 0), 0);
+                    const defectiveForThisVariant = (currentMs?.reports || []).filter((r: { variantId?: string; defectiveQuantity?: number }) => (r.variantId || '') === variant.id).reduce((s: number, r: { defectiveQuantity?: number }) => s + (r.defectiveQuantity ?? 0), 0);
+                    const base = processSequenceMode === 'sequential'
+                      ? Math.max(0, getSeqRemainingForVariant(variant.id) - defectiveForThisVariant)
+                      : (item ? Math.max(0, (item.quantity ?? 0) - completedInMilestone - defectiveForThisVariant) : 0);
+                    const reworkForVariant = reworkByVariant[variant.id] ?? 0;
+                    const outsourcedForVariant = outsourcedByVariantId[variant.id] ?? 0;
+                    variantRemainingBaseMap.set(variant.id, Math.max(0, base + reworkForVariant - outsourcedForVariant));
+                  }
+                  const renderVariantCell = (variant: ProductVariant, colLabel: string) => {
+                    const qty = reportForm.variantQuantities?.[variant.id] ?? 0;
+                    const remaining = Math.max(0, variantRemainingBaseMap.get(variant.id) ?? 0);
+                    const currentCellQty = reportForm.variantQuantities?.[variant.id] ?? 0;
+                    const otherTotal = matrixTotalQty - currentCellQty;
+                    const maxAllowed = Math.max(0, allowExceedMaxReportQty ? remaining : Math.min(remaining, effectiveRemainingForModal - otherTotal));
+                    return (
+                      <div key={variant.id} className="flex flex-col gap-1 min-w-[64px]">
+                        <span className="text-[10px] font-bold text-slate-400">{colLabel}</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={qty === 0 ? '' : qty}
+                          onChange={e => {
+                            const raw = parseInt(e.target.value) || 0;
+                            const next = allowExceedMaxReportQty ? raw : Math.min(raw, maxAllowed);
+                            handleVariantQuantityChange(variant.id, next);
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200 placeholder:text-[10px] placeholder:text-slate-400"
+                          placeholder={`最多${maxAllowed}`}
+                        />
+                        <input
+                          type="number"
+                          min={0}
+                          tabIndex={-1}
+                          value={(reportForm.variantDefectiveQuantities?.[variant.id] ?? 0) === 0 ? '' : (reportForm.variantDefectiveQuantities?.[variant.id] ?? 0)}
+                          onChange={e => handleVariantDefectiveChange(variant.id, parseInt(e.target.value) || 0)}
+                          className="w-full bg-amber-50/80 border border-amber-100 rounded-lg px-2 py-1 text-[10px] text-amber-800 text-right outline-none placeholder:text-amber-400"
+                          placeholder="不良"
+                        />
+                      </div>
+                    );
+                  };
+                  const hasFullColorSizeGrid =
+                    Boolean(product.colorIds?.length && product.sizeIds?.length && dictionaries.colors?.length && dictionaries.sizes?.length);
+                  if (hasFullColorSizeGrid) {
+                    return product.colorIds!.map(colorId => {
+                      const color = dictionaries.colors!.find((c: { id: string; name: string; value: string }) => c.id === colorId);
+                      if (!color) return null;
+                      return (
+                        <div key={colorId} className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex items-center gap-4 flex-wrap">
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="w-4 h-4 rounded-full border border-slate-200" style={{ backgroundColor: color.value }} />
+                            <span className="text-sm font-bold text-slate-800">{color.name}</span>
+                          </div>
+                          <div className="flex items-center gap-3 flex-1 flex-wrap">
+                            {product.sizeIds!.map(sizeId => {
+                              const size = dictionaries.sizes!.find((s: { id: string; name: string }) => s.id === sizeId);
+                              const variant = product.variants?.find(v => v.colorId === colorId && v.sizeId === sizeId);
+                              if (!size || !variant) return null;
+                              return renderVariantCell(variant, size.name);
+                            })}
+                          </div>
+                        </div>
+                      );
                     });
-                  });
-                  return product.colorIds.map(colorId => {
-                    const color = dictionaries.colors.find((c: { id: string; name: string; value: string }) => c.id === colorId);
-                    if (!color) return null;
+                  }
+                  const groupedByColor: Record<string, ProductVariant[]> = {};
+                  for (const v of product.variants ?? []) {
+                    const cid = v.colorId || '_';
+                    if (!groupedByColor[cid]) groupedByColor[cid] = [];
+                    groupedByColor[cid].push(v);
+                  }
+                  return sortedVariantColorEntries(groupedByColor, product.colorIds, product.sizeIds).map(([colorId, colorVariants]) => {
+                    const color = colorId !== '_' ? dictionaries.colors?.find((c: { id: string; name: string; value: string }) => c.id === colorId) : undefined;
                     return (
                       <div key={colorId} className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex items-center gap-4 flex-wrap">
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="w-4 h-4 rounded-full border border-slate-200" style={{ backgroundColor: color.value }} />
-                          <span className="text-sm font-bold text-slate-800">{color.name}</span>
+                          {color ? (
+                            <>
+                              <span className="w-4 h-4 rounded-full border border-slate-200" style={{ backgroundColor: color.value }} />
+                              <span className="text-sm font-bold text-slate-800">{color.name}</span>
+                            </>
+                          ) : (
+                            <span className="text-sm font-bold text-slate-800">{colorId === '_' ? '规格' : colorId}</span>
+                          )}
                         </div>
-                        <div className="flex items-center gap-3 flex-1">
-                          {product.sizeIds.map(sizeId => {
-                            const size = dictionaries.sizes.find((s: { id: string; name: string }) => s.id === sizeId);
-                            const variant = product.variants?.find(v => v.colorId === colorId && v.sizeId === sizeId);
-                            if (!size || !variant) return null;
-                            const qty = reportForm.variantQuantities?.[variant.id] ?? 0;
-                            const remaining = Math.max(0, variantRemainingBaseMap.get(variant.id) ?? 0);
-                            const currentCellQty = reportForm.variantQuantities?.[variant.id] ?? 0;
-                            const otherTotal = matrixTotalQty - currentCellQty;
-                            const maxAllowed = Math.max(0, allowExceedMaxReportQty ? remaining : Math.min(remaining, effectiveRemainingForModal - otherTotal));
-                            return (
-                              <div key={sizeId} className="flex flex-col gap-1 min-w-[64px]">
-                                <span className="text-[10px] font-bold text-slate-400">{size.name}</span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={qty === 0 ? '' : qty}
-                                  onChange={e => {
-                                    const raw = parseInt(e.target.value) || 0;
-                                    const next = allowExceedMaxReportQty ? raw : Math.min(raw, maxAllowed);
-                                    handleVariantQuantityChange(variant.id, next);
-                                  }}
-                                  className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200 placeholder:text-[10px] placeholder:text-slate-400"
-                                  placeholder={`最多${maxAllowed}`}
-                                />
-                                <input
-                                  type="number"
-                                  min={0}
-                                  tabIndex={-1}
-                                  value={(reportForm.variantDefectiveQuantities?.[variant.id] ?? 0) === 0 ? '' : (reportForm.variantDefectiveQuantities?.[variant.id] ?? 0)}
-                                  onChange={e => handleVariantDefectiveChange(variant.id, parseInt(e.target.value) || 0)}
-                                  className="w-full bg-amber-50/80 border border-amber-100 rounded-lg px-2 py-1 text-[10px] text-amber-800 text-right outline-none placeholder:text-amber-400"
-                                  placeholder="不良"
-                                />
-                              </div>
-                            );
+                        <div className="flex items-center gap-3 flex-1 flex-wrap">
+                          {colorVariants.map(v => {
+                            const size = dictionaries.sizes?.find((s: { id: string; name: string }) => s.id === v.sizeId);
+                            return renderVariantCell(v, (size?.name ?? v.sizeId) || '—');
                           })}
                         </div>
                       </div>

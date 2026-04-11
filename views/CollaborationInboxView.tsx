@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Package, Route, Settings2, Link2, ChevronRight } from 'lucide-react';
+import { Package, Route, Settings2, Link2, ChevronRight, Truck, X } from 'lucide-react';
 import { toast } from 'sonner';
 import * as api from '../services/api';
 import { moduleHeaderRowClass, outlineToolbarButtonClass, pageSubtitleClass, pageTitleClass } from '../styles/uiDensity';
 import type { Product, Partner, PartnerCategory, ProductionOpRecord, Warehouse, ProductionOrder, AppDictionaries, GlobalNodeTemplate } from '../types';
-import { statusLabel } from './collaboration/collabHelpers';
+import { statusLabel, buildReturnDocNoMetaMap } from './collaboration/collabHelpers';
 import CollabSettingsPanel from './collaboration/CollabSettingsPanel';
 import CollabRoutesPanel from './collaboration/CollabRoutesPanel';
 import CollabProductMapsPanel from './collaboration/CollabProductMapsPanel';
 import CollabTransferDetailPanel from './collaboration/CollabTransferDetailPanel';
+import CollabReturnFlowPanel from './collaboration/CollabReturnFlowPanel';
 
 interface CollaborationInboxViewProps {
   products: Product[];
@@ -28,7 +29,7 @@ interface CollaborationInboxViewProps {
   userPermissions?: string[];
 }
 
-type ViewMode = 'inbox' | 'detail' | 'maps' | 'settings' | 'routes';
+type ViewMode = 'inbox' | 'detail' | 'maps';
 
 const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({
   products, partners, partnerCategories, orders, prodRecords, warehouses, dictionaries, nodeTemplates,
@@ -40,6 +41,9 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({
   const [selectedTransfer, setSelectedTransfer] = useState<any>(null);
   const [collabs, setCollabs] = useState<any[]>([]);
   const [roleFilter, setRoleFilter] = useState<'all' | 'sender' | 'receiver'>('all');
+  const [returnFlowModalOpen, setReturnFlowModalOpen] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [routesModalOpen, setRoutesModalOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -88,6 +92,8 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({
     transfers.filter(t => t.originTenantId && t.chainStep > 0 && !t.originConfirmedAt && t.senderTenantName === '本企业').length,
   [transfers]);
 
+  const returnDocMetaByDocNo = useMemo(() => buildReturnDocNoMetaMap(transfers), [transfers]);
+
   const openDetail = async (t: any) => {
     try {
       const detail = await api.collaboration.getTransfer(t.id);
@@ -100,30 +106,6 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({
 
   // ---- VIEW MODE ROUTING ----
 
-  if (viewMode === 'settings') {
-    return (
-      <CollabSettingsPanel
-        onBack={() => setViewMode('inbox')}
-        activeCollabs={activeCollabs}
-        partners={partners}
-        partnerCategories={partnerCategories}
-        onRefreshPartners={onRefreshPartners}
-        onRefreshCollabs={() => refreshCollabs(true)}
-      />
-    );
-  }
-
-  if (viewMode === 'routes') {
-    return (
-      <CollabRoutesPanel
-        onBack={() => setViewMode('inbox')}
-        nodeTemplates={nodeTemplates}
-        activeCollabs={activeCollabs}
-        partners={partners}
-      />
-    );
-  }
-
   if (viewMode === 'maps') {
     return (
       <CollabProductMapsPanel
@@ -133,26 +115,155 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({
     );
   }
 
+  const collabUtilityModals = (
+    <>
+      {returnFlowModalOpen && (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="collab-return-flow-modal-title">
+          <button
+            type="button"
+            aria-label="关闭"
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => setReturnFlowModalOpen(false)}
+          />
+          <div
+            className="relative w-full max-w-6xl max-h-[92vh] flex flex-col rounded-2xl shadow-2xl border border-slate-200 bg-slate-50 overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-200 bg-white shrink-0">
+              <h2 id="collab-return-flow-modal-title" className="text-lg font-black text-slate-900 flex items-center gap-2 min-w-0">
+                <Truck className="w-5 h-5 text-emerald-600 shrink-0" /> 回传流水
+              </h2>
+              <button
+                type="button"
+                onClick={() => setReturnFlowModalOpen(false)}
+                className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors shrink-0"
+                aria-label="关闭"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4">
+              <CollabReturnFlowPanel
+                embeddedInModal
+                onBack={() => setReturnFlowModalOpen(false)}
+                returnDocMetaByDocNo={returnDocMetaByDocNo}
+                prodRecords={prodRecords}
+                products={products}
+                warehouses={warehouses}
+                dictionaries={dictionaries}
+                onRefreshProdRecords={onRefreshProdRecords}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {settingsModalOpen && (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="collab-settings-modal-title">
+          <button
+            type="button"
+            aria-label="关闭"
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => setSettingsModalOpen(false)}
+          />
+          <div
+            className="relative w-full max-w-[min(96rem,calc(100vw-1.5rem))] max-h-[92vh] flex flex-col rounded-2xl shadow-2xl border border-slate-200 bg-slate-50 overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-200 bg-white shrink-0">
+              <h2 id="collab-settings-modal-title" className="text-xl font-black text-slate-900 flex items-center gap-2 min-w-0">
+                <Settings2 className="w-5 h-5 text-indigo-600 shrink-0" /> 协作设置
+              </h2>
+              <button
+                type="button"
+                onClick={() => setSettingsModalOpen(false)}
+                className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors shrink-0"
+                aria-label="关闭"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
+              <CollabSettingsPanel
+                embeddedInModal
+                onBack={() => setSettingsModalOpen(false)}
+                activeCollabs={activeCollabs}
+                partners={partners}
+                partnerCategories={partnerCategories}
+                onRefreshPartners={onRefreshPartners}
+                onRefreshCollabs={() => refreshCollabs(true)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {routesModalOpen && (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="collab-routes-modal-title">
+          <button
+            type="button"
+            aria-label="关闭"
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => setRoutesModalOpen(false)}
+          />
+          <div
+            className="relative w-full max-w-3xl max-h-[92vh] flex flex-col rounded-2xl shadow-2xl border border-slate-200 bg-slate-50 overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-200 bg-white shrink-0">
+              <h2 id="collab-routes-modal-title" className="text-lg font-black text-slate-900 flex items-center gap-2 min-w-0">
+                <Route className="w-5 h-5 text-orange-500 shrink-0" /> 外协路线
+              </h2>
+              <button
+                type="button"
+                onClick={() => setRoutesModalOpen(false)}
+                className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors shrink-0"
+                aria-label="关闭"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4">
+              <CollabRoutesPanel
+                embeddedInModal
+                onBack={() => setRoutesModalOpen(false)}
+                nodeTemplates={nodeTemplates}
+                activeCollabs={activeCollabs}
+                partners={partners}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
   if (viewMode === 'detail' && selectedTransfer) {
     return (
-      <CollabTransferDetailPanel
-        initialTransfer={selectedTransfer}
-        onBack={() => { setViewMode('inbox'); setSelectedTransfer(null); }}
-        onRefreshList={refresh}
-        warehouses={warehouses}
-        products={products}
-        prodRecords={prodRecords}
-        dictionaries={dictionaries}
-        onRefreshProdRecords={onRefreshProdRecords}
-        onRefreshOrders={onRefreshOrders}
-        onRefreshPMP={onRefreshPMP}
-        onRefreshProducts={onRefreshProducts}
-      />
+      <>
+        <CollabTransferDetailPanel
+          initialTransfer={selectedTransfer}
+          onBack={() => { setViewMode('inbox'); setSelectedTransfer(null); }}
+          onRefreshList={refresh}
+          warehouses={warehouses}
+          products={products}
+          partners={partners}
+          onOpenCollabSettings={() => setSettingsModalOpen(true)}
+          prodRecords={prodRecords}
+          dictionaries={dictionaries}
+          onRefreshProdRecords={onRefreshProdRecords}
+          onRefreshOrders={onRefreshOrders}
+          onRefreshPMP={onRefreshPMP}
+          onRefreshProducts={onRefreshProducts}
+        />
+        {collabUtilityModals}
+      </>
     );
   }
 
   // ---- INBOX LIST ----
   return (
+    <>
     <div className="w-full min-w-0 space-y-4">
       <div className={moduleHeaderRowClass}>
         <div>
@@ -185,18 +296,21 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <button type="button" onClick={() => setViewMode('settings')} className={outlineToolbarButtonClass}>
+          <button type="button" onClick={() => setSettingsModalOpen(true)} className={outlineToolbarButtonClass}>
             <Settings2 className="w-4 h-4 shrink-0" /> 协作设置
           </button>
           <button
             type="button"
-            onClick={() => setViewMode('routes')}
+            onClick={() => setRoutesModalOpen(true)}
             className={outlineToolbarButtonClass}
           >
             <Route className="w-4 h-4 shrink-0" /> 外协路线
           </button>
           <button type="button" onClick={() => setViewMode('maps')} className={outlineToolbarButtonClass}>
             <Link2 className="w-4 h-4 shrink-0" /> 对照表
+          </button>
+          <button type="button" onClick={() => setReturnFlowModalOpen(true)} className={outlineToolbarButtonClass}>
+            <Truck className="w-4 h-4 shrink-0" /> 回传流水
           </button>
         </div>
       </div>
@@ -265,6 +379,9 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({
         </div>
       )}
     </div>
+
+    {collabUtilityModals}
+    </>
   );
 };
 

@@ -36,7 +36,11 @@ const ProductFlowDetailModal: React.FC<ProductFlowDetailModalProps> = ({
         return (r.warehouseId || rec.warehouseId) === whId;
       });
     }
-    return rows.sort((a: any, b: any) => parseRecordTime(b.record) - parseRecordTime(a.record));
+    const sortTs = (r: any) =>
+      typeof r._sortTs === 'number' && r._sortTs > 0 ? r._sortTs : parseRecordTime(r.record);
+    return rows.sort(
+      (a: any, b: any) => sortTs(b) - sortTs(a) || String(a.id).localeCompare(String(b.id)),
+    );
   }, [warehouseFlowRows, productFlowDetail, parseRecordTime]);
 
   const filteredRows = useMemo(() => {

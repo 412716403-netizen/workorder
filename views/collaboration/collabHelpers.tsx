@@ -56,7 +56,7 @@ export function computeCollaborationReturnableRows(
 
   const dispatchedBySpec = new Map<string, { colorName: string | null; sizeName: string | null; qty: number }>();
   for (const d of transfer.dispatches || []) {
-    if (d.status !== 'ACCEPTED') continue;
+    if (d.status !== 'ACCEPTED' && d.status !== 'FORWARDED') continue;
     for (const it of d.payload?.items ?? []) {
       const k = collabVariantKey(it);
       const prev = dispatchedBySpec.get(k);
@@ -152,3 +152,29 @@ export const returnStatusLabel = (s: string) => {
   if (s === 'WITHDRAWN') return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-slate-100 text-slate-500">已撤回</span>;
   return <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-50 text-emerald-600">已收回</span>;
 };
+
+/** 协作回传出库单号 → 回传记录状态（来自 listTransfers 的 returns[].payload.stockOutDocNo） */
+export type ReturnDocMeta = { status: string; amendmentStatus?: string | null };
+
+export function buildReturnDocNoMetaMap(transfers: any[]): Map<string, ReturnDocMeta> {
+  const map = new Map<string, ReturnDocMeta>();
+  for (const t of transfers || []) {
+    for (const r of t.returns || []) {
+      const docNo = (r.payload as any)?.stockOutDocNo;
+      if (docNo && typeof docNo === 'string') {
+        map.set(docNo, { status: r.status, amendmentStatus: r.amendmentStatus ?? null });
+      }
+    }
+  }
+  return map;
+}
+
+/** 回传流水列表「状态」列文案 */
+export function returnFlowDocStatusLabel(meta: ReturnDocMeta | undefined): string {
+  if (!meta) return '—';
+  if (meta.amendmentStatus === 'PENDING_A_CONFIRM') return '待甲方确认';
+  if (meta.status === 'PENDING_A_RECEIVE') return '待甲方确认';
+  if (meta.status === 'A_RECEIVED') return '已收回';
+  if (meta.status === 'WITHDRAWN') return '已撤回';
+  return meta.status || '—';
+}

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   UserCog,
@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { adminUsers, adminTenants, type AdminUserRow, type AdminTenantRow } from '../services/api';
 import { pageSubtitleClass, pageTitleClass, primaryToolbarButtonClass } from '../styles/uiDensity';
+import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
 
 interface UserAdminViewProps {
   currentUserId: string;
@@ -58,6 +59,10 @@ function isExpiredAt(iso: string | null) {
 
 export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
   const [tab, setTab] = useState<'users' | 'tenants'>('users');
+  const setScrollSegment = useSetMainScrollSegment();
+  useLayoutEffect(() => {
+    setScrollSegment?.(tab);
+  }, [tab, setScrollSegment]);
 
   const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [loading, setLoading] = useState(true);

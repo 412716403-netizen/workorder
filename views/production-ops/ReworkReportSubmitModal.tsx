@@ -1,10 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { FileText, X, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
-import { ProductionOpRecord, ProductionOrder, Product, GlobalNodeTemplate, AppDictionaries, ProductCategory, ProductVariant, Worker, ProcessSequenceMode } from '../../types';
+import { ProductionOpRecord, ProductionOrder, Product, GlobalNodeTemplate, AppDictionaries, ProductCategory, ProductVariant, Worker, ProcessSequenceMode, Partner } from '../../types';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import WorkerSelector from '../../components/WorkerSelector';
 import EquipmentSelector from '../../components/EquipmentSelector';
+import { nextOutsourceDocNumber } from '../../utils/partnerDocNumber';
+import { useAuth } from '../../contexts/AuthContext';
+import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 
 export interface ReworkReportSubmitModalProps {
   reworkReportModal: { order: ProductionOrder; nodeId: string; nodeName: string; outsourcePartner?: string };
@@ -17,6 +21,7 @@ export interface ReworkReportSubmitModalProps {
   workers: Worker[];
   equipment: { id: string; name: string; code?: string; assignedMilestoneIds?: string[] }[];
   processSequenceMode: ProcessSequenceMode;
+  partners: Partner[];
   onAddRecord: (record: ProductionOpRecord) => void;
   onUpdateRecord: (record: ProductionOpRecord) => void;
   getNextReworkReportDocNo: () => string;
@@ -34,11 +39,14 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
   workers,
   equipment,
   processSequenceMode,
+  partners,
   onAddRecord,
   onUpdateRecord,
   getNextReworkReportDocNo,
   onClose,
 }) => {
+  const { currentUser } = useAuth();
+  const docOperatorFallback = currentOperatorDisplayName(currentUser);
   const [reworkReportQuantities, setReworkReportQuantities] = useState<Record<string, number>>({});
   const [reworkReportWorkerId, setReworkReportWorkerId] = useState('');
   const [reworkReportEquipmentId, setReworkReportEquipmentId] = useState('');
@@ -106,7 +114,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
 
   const reworkReportProduct = useMemo(() => products.find(p => p.id === order.productId) ?? null, [order, products]);
   const reworkReportCategory = useMemo(() => reworkReportProduct ? categories.find(c => c.id === reworkReportProduct.categoryId) : null, [reworkReportProduct, categories]);
-  const reworkReportHasColorSize = Boolean(reworkReportCategory?.hasColorSize && reworkReportProduct?.variants && reworkReportProduct.variants.length > 0);
+  const reworkReportHasColorSize = productHasColorSizeMatrix(reworkReportProduct ?? undefined, reworkReportCategory ?? undefined);
   const reworkReportGroupedVariants = useMemo((): Record<string, ProductVariant[]> => {
     if (!reworkReportProduct?.variants?.length) return {};
     const groups: Record<string, ProductVariant[]> = {};
@@ -155,7 +163,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
     let batchDocNo = '';
     let reportSeq = 0;
     let appliedReportQty = 0;
-    const resolveOpName = (fallback?: string) => workers?.find((w: Worker) => w.id === reworkReportWorkerId)?.name ?? fallback ?? '张主管';
+    const resolveOpName = (fallback?: string) => workers?.find((w: Worker) => w.id === reworkReportWorkerId)?.name ?? fallback ?? docOperatorFallback;
     const pushReworkReport = (qty: number, variantId: string | undefined, src: ProductionOpRecord) => {
       if (qty <= 0) return;
       if (!batchDocNo) batchDocNo = getNextReworkReportDocNo();
@@ -307,13 +315,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
       return;
     }
     if (isOutsourceRework && appliedReportQty > 0) {
-      const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
-      const existingReceiveDocs = records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && r.docNo);
-      const receivePattern = `WX-R-${todayStr}-`;
-      const usedSeqs = new Set(existingReceiveDocs.filter(r => (r.docNo ?? '').startsWith(receivePattern)).map(r => parseInt((r.docNo ?? '').slice(receivePattern.length), 10)).filter(n => !isNaN(n) && n >= 1));
-      let nextSeq = 1;
-      while (usedSeqs.has(nextSeq)) nextSeq++;
-      const receiveDocNo = `${receivePattern}${String(nextSeq).padStart(4, '0')}`;
+      const receiveDocNo = nextOutsourceDocNumber('receive', partners, records, '', (outsourcePartner || '').trim());
       const ts = new Date().toLocaleString();
       const firstDispatch = records.find(r =>
         r.type === 'OUTSOURCE' && r.status === '加工中' && r.sourceReworkId &&

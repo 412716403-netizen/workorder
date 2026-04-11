@@ -2,32 +2,44 @@ import React, { useMemo, useState } from 'react';
 import { ScrollText, FileText, Package, Search } from 'lucide-react';
 import { ProductionOrder, Product, OrderStatus } from '../types';
 import { STATUS_COLORS, ORDER_STATUS_MAP } from '../constants';
+import { formatLocalDateTimeZh, localTodayYmd, toLocalDateYmd } from '../utils/localDateTime';
 
-/** 从工单获取创建日期：优先 createdAt，否则从 id 解析时间戳 */
-function getOrderDate(order: ProductionOrder): string {
-  if (order.createdAt) return order.createdAt;
-  const m = order.id.match(/ord-(\d+)-/);
+/** 用于筛选/排序的本地日历日（YYYY-MM-DD） */
+function getOrderDateYmd(order: ProductionOrder): string {
+  if (order.createdAt) return toLocalDateYmd(order.createdAt);
+  const m = order.id.match(/^ord-([^-]+)-/);
   if (m) {
-    const d = new Date(parseInt(m[1], 10));
-    return d.toISOString().split('T')[0];
+    const ts = parseInt(m[1], 36);
+    if (!Number.isNaN(ts)) return toLocalDateYmd(new Date(ts));
   }
-  return order.startDate || '';
+  return order.startDate ? toLocalDateYmd(order.startDate) : '';
+}
+
+/** 列表展示：本地日期+时间 */
+function getOrderPlacedDisplay(order: ProductionOrder): string {
+  if (order.createdAt) return formatLocalDateTimeZh(order.createdAt);
+  const m = order.id.match(/^ord-([^-]+)-/);
+  if (m) {
+    const ts = parseInt(m[1], 36);
+    if (!Number.isNaN(ts)) return formatLocalDateTimeZh(new Date(ts));
+  }
+  if (order.startDate) return toLocalDateYmd(order.startDate) || order.startDate;
+  return '';
 }
 
 type DateFilter = 'today' | 'week' | 'month' | 'all';
 
 function getDateRange(filter: DateFilter): { start: string; end: string } | null {
   const today = new Date();
+  const todayStr = localTodayYmd();
   const y = today.getFullYear();
   const m = String(today.getMonth() + 1).padStart(2, '0');
-  const d = String(today.getDate()).padStart(2, '0');
-  const todayStr = `${y}-${m}-${d}`;
 
   if (filter === 'today') return { start: todayStr, end: todayStr };
   if (filter === 'week') {
     const weekAgo = new Date(today);
     weekAgo.setDate(weekAgo.getDate() - 6);
-    const start = weekAgo.toISOString().split('T')[0];
+    const start = toLocalDateYmd(weekAgo);
     return { start, end: todayStr };
   }
   if (filter === 'month') {
@@ -73,7 +85,7 @@ const OrderFlowView: React.FC<OrderFlowViewProps> = ({ orders, products, embedde
 
   const filteredOrders = useMemo(() => {
     let list = [...orders];
-    list = list.filter(o => isDateInRange(getOrderDate(o), range));
+    list = list.filter(o => isDateInRange(getOrderDateYmd(o), range));
     if (initialProductId) {
       list = list.filter(o => o.productId === initialProductId);
     }
@@ -87,9 +99,12 @@ const OrderFlowView: React.FC<OrderFlowViewProps> = ({ orders, products, embedde
       );
     }
     list.sort((a, b) => {
-      const da = getOrderDate(a);
-      const db = getOrderDate(b);
+      const da = getOrderDateYmd(a);
+      const db = getOrderDateYmd(b);
       if (da !== db) return db.localeCompare(da);
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (ta !== tb) return tb - ta;
       return (b.id || '').localeCompare(a.id || '');
     });
     return list;
@@ -169,7 +184,7 @@ const OrderFlowView: React.FC<OrderFlowViewProps> = ({ orders, products, embedde
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80">
-                  <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider">下单日期</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider">下单时间</th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider">工单号</th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider">产品</th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-500 uppercase tracking-wider text-right">数量</th>
@@ -180,7 +195,7 @@ const OrderFlowView: React.FC<OrderFlowViewProps> = ({ orders, products, embedde
               </thead>
               <tbody>
                 {filteredOrders.map(order => {
-                  const orderDate = getOrderDate(order);
+                  const orderPlaced = getOrderPlacedDisplay(order);
                   const totalQty = order.items.reduce((s, i) => s + i.quantity, 0);
                   const product = products.find(p => p.id === order.productId);
                   return (
@@ -189,7 +204,7 @@ const OrderFlowView: React.FC<OrderFlowViewProps> = ({ orders, products, embedde
                       className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors group"
                     >
                       <td className="px-6 py-4">
-                        <span className="text-sm font-bold text-slate-700">{orderDate}</span>
+                        <span className="text-sm font-bold text-slate-700 whitespace-nowrap">{orderPlaced}</span>
                       </td>
                       <td className="px-6 py-4">
                         <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-wider">
@@ -233,7 +248,7 @@ const OrderFlowView: React.FC<OrderFlowViewProps> = ({ orders, products, embedde
                       {showDueDate && (
                         <td className="px-6 py-4">
                           {order.dueDate ? (
-                            <span className="text-sm font-bold text-slate-600">{order.dueDate}</span>
+                            <span className="text-sm font-bold text-slate-600">{toLocalDateYmd(order.dueDate) || order.dueDate}</span>
                           ) : null}
                         </td>
                       )}

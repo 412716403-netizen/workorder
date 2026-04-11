@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, BOMItem, AppDictionaries, ProductVariant, DictionaryItem, Partner } from '../../types';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import { productColorSizeEnabled } from '../../utils/productColorSize';
 import { toast } from 'sonner';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import * as api from '../../services/api';
@@ -706,13 +707,13 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   };
 
   useEffect(() => {
-    if (workingProduct && activeCategory?.hasColorSize) {
+    if (workingProduct && productColorSizeEnabled(workingProduct, activeCategory)) {
       const newVariants = generateVariants(workingProduct.colorIds, workingProduct.sizeIds, workingProduct.variants);
       const currentHash = workingProduct.variants.map(v => `${v.colorId}-${v.sizeId}`).sort().join(',');
       const nextHash = newVariants.map(v => `${v.colorId}-${v.sizeId}`).sort().join(',');
       if (currentHash !== nextHash) setWorkingProduct({ ...workingProduct, variants: newVariants });
     }
-  }, [workingProduct?.colorIds, workingProduct?.sizeIds]);
+  }, [workingProduct?.colorIds, workingProduct?.sizeIds, activeCategory?.hasColorSize, activeCategory?.id]);
 
   const toggleAttribute = (type: 'color' | 'size', id: string) => {
     if (!workingProduct) return;
@@ -1262,7 +1263,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
         </div>
 
         {/* 2. 颜色尺码配置 */}
-        {activeCategory?.hasColorSize && (
+        {workingProduct && productColorSizeEnabled(workingProduct, activeCategory) && (
           <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden">
             <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] divide-x divide-slate-100">
                <div className="px-4 sm:px-8 py-4 bg-slate-50/50 text-xs font-semibold text-slate-500 flex items-center justify-center">规格名</div>

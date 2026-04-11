@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { ClipboardList, X, Check } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Product } from '../../types';
+import type { Product, ProductCategory } from '../../types';
+import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 
 export interface DispatchRow {
   orderId?: string;
@@ -20,6 +21,7 @@ export interface OutsourceDispatchListModalProps {
   productionLinkMode: 'order' | 'product';
   outsourceDispatchRows: DispatchRow[];
   products: Product[];
+  categories: ProductCategory[];
   dispatchSelectedKeys: Set<string>;
   setDispatchSelectedKeys: React.Dispatch<React.SetStateAction<Set<string>>>;
   onDispatchFormOpen: () => void;
@@ -30,6 +32,7 @@ const OutsourceDispatchListModal: React.FC<OutsourceDispatchListModalProps> = ({
   productionLinkMode,
   outsourceDispatchRows,
   products,
+  categories,
   dispatchSelectedKeys,
   setDispatchSelectedKeys,
   onDispatchFormOpen,
@@ -78,8 +81,8 @@ const OutsourceDispatchListModal: React.FC<OutsourceDispatchListModalProps> = ({
         <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/50 shrink-0">
           <p className="text-xs text-slate-500">
             {productionLinkMode === 'product'
-              ? '仅显示工序节点中已开启「可外协」的工序；可委外数量 = 产品该工序报工完成量 − 已委外发出。同一批次只能选择同一工序同时发出。'
-              : '仅显示工序节点中已开启「可外协」的工序；可委外数量 = 工单总量 − 该工序已报工 − 已委外发出。同一批次只能选择同一工序的工单同时发出。'}
+              ? '仅显示工序节点中已开启「可外协」的工序；可委外数量 = 产品该工序报工完成量 − 已委外发出。同一批次只能选择同一工序同时发出。多规格（颜色尺码）产品在下一步「外协发出」中按规格填写数量。'
+              : '仅显示工序节点中已开启「可外协」的工序；可委外数量 = 工单总量 − 该工序已报工 − 已委外发出。同一批次只能选择同一工序的工单同时发出。多规格（颜色尺码）工单在下一步按规格填写发出数量。'}
           </p>
         </div>
         <div className="px-6 py-3 border-b border-slate-100 bg-white shrink-0 flex flex-wrap items-center gap-3">
@@ -121,6 +124,9 @@ const OutsourceDispatchListModal: React.FC<OutsourceDispatchListModalProps> = ({
                 filteredRows.map(row => {
                   const key = row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}`;
                   const checked = dispatchSelectedKeys.has(key);
+                  const product = products.find(p => p.id === row.productId);
+                  const category = categories.find(c => c.id === product?.categoryId);
+                  const showVariantBadge = productHasColorSizeMatrix(product, category);
                   return (
                     <tr key={key} className="hover:bg-slate-50/50 bg-white">
                       <td className="w-12 px-4 py-3 align-middle">
@@ -138,7 +144,14 @@ const OutsourceDispatchListModal: React.FC<OutsourceDispatchListModalProps> = ({
                         }} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                       </td>
                       {productionLinkMode !== 'product' && <td className="px-6 py-3 text-sm font-bold text-slate-800 align-middle truncate" title={row.orderNumber}>{row.orderNumber}</td>}
-                      <td className="px-6 py-3 text-sm font-bold text-slate-800 align-middle truncate" title={row.productName}>{row.productName}</td>
+                      <td className="px-6 py-3 align-middle min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-sm font-bold text-slate-800 truncate" title={row.productName}>{row.productName}</span>
+                          {showVariantBadge && (
+                            <span className="shrink-0 text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded whitespace-nowrap">颜色尺码</span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-6 py-3 text-sm font-bold text-indigo-600 align-middle truncate" title={row.milestoneName}>{row.milestoneName}</td>
                       <td className="px-6 py-3 text-right text-sm font-bold text-slate-700 align-middle">{row.availableQty}</td>
                     </tr>

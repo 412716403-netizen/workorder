@@ -17,6 +17,7 @@ import { Product, Warehouse, ProductCategory, Partner, AppDictionaries } from '.
 import { sortedColorEntries } from '../../utils/sortVariantsByProduct';
 import { useProgressiveList } from '../../hooks/useProgressiveList';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import { localTodayYmd, toLocalDateYmd } from '../../utils/localDateTime';
 import StocktakeListModal from './StocktakeListModal';
 import TransferListModal from './TransferListModal';
 import TransferOrderModal from './TransferOrderModal';
@@ -101,7 +102,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   const debouncedSearchTerm = useDebouncedValue(searchTerm);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
   const [transferForm, setTransferForm] = useState<{ fromWarehouseId: string; toWarehouseId: string; transferDate: string; note: string }>({
-    fromWarehouseId: '', toWarehouseId: '', transferDate: new Date().toISOString().split('T')[0], note: ''
+    fromWarehouseId: '', toWarehouseId: '', transferDate: localTodayYmd(), note: ''
   });
   const [transferItems, setTransferItems] = useState<{ id: string; productId: string; quantity?: number; variantQuantities?: Record<string, number> }[]>([]);
   const [editingTransferDocNumber, setEditingTransferDocNumber] = useState<string | null>(null);
@@ -109,7 +110,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   const [stocktakeListModalOpen, setStocktakeListModalOpen] = useState(false);
   const [stocktakeModalOpen, setStocktakeModalOpen] = useState(false);
   const [stocktakeForm, setStocktakeForm] = useState<{ warehouseId: string; stocktakeDate: string; note: string }>({
-    warehouseId: '', stocktakeDate: new Date().toISOString().split('T')[0], note: ''
+    warehouseId: '', stocktakeDate: localTodayYmd(), note: ''
   });
   const [stocktakeItems, setStocktakeItems] = useState<{ id: string; productId: string; quantity?: number; variantQuantities?: Record<string, number> }[]>([]);
   const [editingStocktakeDocNumber, setEditingStocktakeDocNumber] = useState<string | null>(null);
@@ -194,7 +195,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
     const timestamp = editingTransferDocNumber
       ? (recordsList.find((r: any) => r.type === 'TRANSFER' && r.docNumber === editingTransferDocNumber)?.timestamp ?? new Date().toLocaleString())
       : new Date().toLocaleString();
-    const createdAt = transferForm.transferDate || new Date().toISOString().split('T')[0];
+    const createdAt = transferForm.transferDate || localTodayYmd();
     const newRecords: any[] = [];
     let trIdx = 0;
     transferItems.forEach((item) => {
@@ -244,7 +245,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
     }
     setTransferModalOpen(false);
     setEditingTransferDocNumber(null);
-    setTransferForm({ fromWarehouseId: '', toWarehouseId: '', transferDate: new Date().toISOString().split('T')[0], note: '' });
+    setTransferForm({ fromWarehouseId: '', toWarehouseId: '', transferDate: localTodayYmd(), note: '' });
     setTransferItems([]);
   };
 
@@ -268,7 +269,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
     const timestamp = editingStocktakeDocNumber
       ? (recordsList.find((r: any) => r.type === 'STOCKTAKE' && r.docNumber === editingStocktakeDocNumber)?.timestamp ?? new Date().toLocaleString())
       : new Date().toLocaleString();
-    const createdAt = stocktakeForm.stocktakeDate || new Date().toISOString().split('T')[0];
+    const createdAt = stocktakeForm.stocktakeDate || localTodayYmd();
     const newRecords: any[] = [];
     let stIdx = 0;
     stocktakeItems.forEach((item) => {
@@ -336,14 +337,14 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
     }
     setStocktakeModalOpen(false);
     setEditingStocktakeDocNumber(null);
-    setStocktakeForm({ warehouseId: '', stocktakeDate: new Date().toISOString().split('T')[0], note: '' });
+    setStocktakeForm({ warehouseId: '', stocktakeDate: localTodayYmd(), note: '' });
     setStocktakeItems([]);
   };
 
   // ── 列表弹层回调 ──
   const handleCreateStocktake = useCallback(() => {
     setEditingStocktakeDocNumber(null);
-    setStocktakeForm({ warehouseId: '', stocktakeDate: new Date().toISOString().split('T')[0], note: '' });
+    setStocktakeForm({ warehouseId: '', stocktakeDate: localTodayYmd(), note: '' });
     setStocktakeItems([]);
     setStocktakeListModalOpen(false);
     setStocktakeModalOpen(true);
@@ -354,7 +355,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
     const first = docItems[0];
     setStocktakeForm({
       warehouseId: first.warehouseId || '',
-      stocktakeDate: (first.createdAt || '').toString().slice(0, 10) || new Date().toISOString().split('T')[0],
+      stocktakeDate: toLocalDateYmd(first.createdAt) || localTodayYmd(),
       note: first.note || ''
     });
     const groups: Record<string, any[]> = {};
@@ -385,7 +386,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
 
   const handleCreateTransfer = useCallback(() => {
     setEditingTransferDocNumber(null);
-    setTransferForm({ fromWarehouseId: '', toWarehouseId: '', transferDate: new Date().toISOString().split('T')[0], note: '' });
+    setTransferForm({ fromWarehouseId: '', toWarehouseId: '', transferDate: localTodayYmd(), note: '' });
     setTransferItems([]);
     setTransferListModalOpen(false);
     setTransferModalOpen(true);
@@ -397,7 +398,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
     setTransferForm({
       fromWarehouseId: first.fromWarehouseId || '',
       toWarehouseId: first.toWarehouseId || '',
-      transferDate: (first.createdAt || '').toString().slice(0, 10) || new Date().toISOString().split('T')[0],
+      transferDate: toLocalDateYmd(first.createdAt) || localTodayYmd(),
       note: first.note || ''
     });
     const groups: Record<string, any[]> = {};
@@ -617,21 +618,26 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
       };
     });
     const allRows = [...psiRows, ...stockInRows, ...stockReturnRows, ...stockOutRows];
-    const byKey = new Map<string, { row: typeof allRows[0]; totalQty: number; maxTs: number }>();
+    type FlowAggRow = (typeof allRows)[number];
+    const groups = new Map<string, FlowAggRow[]>();
     allRows.forEach(r => {
       const key = `${r.type}|${r.docNumber}|${r.productId}`;
-      const ts = parseRecordTime(r.record);
-      const existing = byKey.get(key);
-      if (!existing) {
-        byKey.set(key, { row: r, totalQty: r.quantity, maxTs: ts });
-      } else {
-        existing.totalQty += r.quantity;
-        if (ts > existing.maxTs) { existing.maxTs = ts; existing.row = r; }
-      }
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(r);
     });
-    return Array.from(byKey.entries())
-      .map(([key, { row, totalQty, maxTs }]) => ({ ...row, id: key, quantity: totalQty, _sortTs: maxTs }))
-      .sort((a, b) => (b as any)._sortTs - (a as any)._sortTs);
+    return Array.from(groups.entries()).map(([key, rows]) => {
+      const tsList = rows.map(r => parseRecordTime(r.record)).filter(t => !Number.isNaN(t) && t > 0);
+      const minTs = tsList.length ? Math.min(...tsList) : 0;
+      const displayRow = rows.reduce((best, cur) => {
+        const tb = parseRecordTime(best.record);
+        const tc = parseRecordTime(cur.record);
+        if (Number.isNaN(tc) || tc <= 0) return best;
+        if (Number.isNaN(tb) || tb <= 0) return cur;
+        return tc < tb ? cur : best;
+      }, rows[0]);
+      const totalQty = rows.reduce((s, r) => s + r.quantity, 0);
+      return { ...displayRow, id: key, quantity: totalQty, _sortTs: minTs };
+    }).sort((a, b) => (b as { _sortTs: number })._sortTs - (a as { _sortTs: number })._sortTs || String(a.id).localeCompare(String(b.id)));
   }, [recordsList, prodRecords, products, warehouses, ordersList, parseRecordTime, productMapPSI, warehouseMapPSI]);
 
   // ── 按仓库聚合的库存列表 ──

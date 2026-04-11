@@ -1,12 +1,12 @@
 import React, { useState, useCallback } from 'react';
 import {
   Package, Check, X, ArrowLeft, Truck, RotateCcw,
-  ChevronRight, RefreshCw, Forward, CheckCircle2, Trash2
+  ChevronRight, RefreshCw, Forward, CheckCircle2, Trash2, Settings2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import * as api from '../../services/api';
-import type { Product, ProductionOpRecord, AppDictionaries, Warehouse } from '../../types';
+import type { Partner, Product, ProductionOpRecord, AppDictionaries, Warehouse } from '../../types';
 import { statusLabel, dispatchStatusLabel, returnStatusLabel } from './collabHelpers';
 import CollabAcceptModal from './CollabAcceptModal';
 import CollabReturnModal from './CollabReturnModal';
@@ -18,6 +18,9 @@ interface CollabTransferDetailPanelProps {
   onRefreshList: () => void;
   warehouses: Warehouse[];
   products: Product[];
+  partners: Partner[];
+  /** 打开协作设置弹窗（合作单位绑定） */
+  onOpenCollabSettings?: () => void;
   prodRecords: ProductionOpRecord[];
   dictionaries: AppDictionaries;
   onRefreshProdRecords?: () => Promise<void>;
@@ -28,7 +31,8 @@ interface CollabTransferDetailPanelProps {
 
 const CollabTransferDetailPanel: React.FC<CollabTransferDetailPanelProps> = ({
   initialTransfer, onBack, onRefreshList,
-  warehouses, products, prodRecords, dictionaries,
+  warehouses, products, partners, onOpenCollabSettings,
+  prodRecords, dictionaries,
   onRefreshProdRecords, onRefreshOrders, onRefreshPMP, onRefreshProducts,
 }) => {
   const confirm = useConfirm();
@@ -37,6 +41,7 @@ const CollabTransferDetailPanel: React.FC<CollabTransferDetailPanelProps> = ({
   const [acceptOpen, setAcceptOpen] = useState(false);
   const [returnOpen, setReturnOpen] = useState(false);
   const [forwardOpen, setForwardOpen] = useState(false);
+  const [returnBindBlockedOpen, setReturnBindBlockedOpen] = useState(false);
 
   const [withdrawing, setWithdrawing] = useState(false);
   const [receiving, setReceiving] = useState(false);
@@ -164,6 +169,64 @@ const CollabTransferDetailPanel: React.FC<CollabTransferDetailPanelProps> = ({
     }
   };
 
+  // ── 修订相关 handlers ──
+
+  const handleConfirmDispatchAmendment = async (dispatchId: string) => {
+    const ok = await confirm({ message: '确认接受甲方的发出修订？修订后将更新对应工单明细。' });
+    if (!ok) return;
+    try {
+      const res = await api.collaboration.confirmDispatchAmendment(dispatchId);
+      toast.success(res.quantityWarning ? `已确认修订（注意：${res.quantityWarning}）` : '已确认发出修订');
+      await refreshSelf();
+      onRefreshList();
+      onRefreshOrders?.();
+    } catch (err: any) {
+      toast.error(err.message || '确认失败');
+    }
+  };
+
+  const handleRejectDispatchAmendment = async (dispatchId: string) => {
+    const ok = await confirm({ message: '拒绝甲方的发出修订？拒绝后将保持原有数据不变。' });
+    if (!ok) return;
+    try {
+      await api.collaboration.rejectDispatchAmendment(dispatchId);
+      toast.success('已拒绝修订');
+      await refreshSelf();
+      onRefreshList();
+    } catch (err: any) {
+      toast.error(err.message || '操作失败');
+    }
+  };
+
+  const handleConfirmReturnAmendment = async (returnId: string) => {
+    const ok = await confirm({ message: '确认接受乙方的回传修订？确认后将重建外协收回记录和生产进度。' });
+    if (!ok) return;
+    try {
+      const res = await api.collaboration.confirmReturnAmendment(returnId);
+      toast.success(res.receiptDocNo ? `已确认回传修订，新单号: ${res.receiptDocNo}` : '已确认回传修订');
+      await refreshSelf();
+      onRefreshList();
+      onRefreshProdRecords?.();
+      onRefreshOrders?.();
+      onRefreshPMP?.();
+    } catch (err: any) {
+      toast.error(err.message || '确认失败');
+    }
+  };
+
+  const handleRejectReturnAmendment = async (returnId: string) => {
+    const ok = await confirm({ message: '拒绝乙方的回传修订？拒绝后将保持原有数据不变。' });
+    if (!ok) return;
+    try {
+      await api.collaboration.rejectReturnAmendment(returnId);
+      toast.success('已拒绝修订');
+      await refreshSelf();
+      onRefreshList();
+    } catch (err: any) {
+      toast.error(err.message || '操作失败');
+    }
+  };
+
   const handleReceive = async (returnId: string) => {
     setReceiving(true);
     try {
@@ -184,6 +247,11 @@ const CollabTransferDetailPanel: React.FC<CollabTransferDetailPanelProps> = ({
   const openReturnModal = () => {
     if (!transfer?.receiverProductId) {
       toast.warning('缺少乙方产品信息，无法回传');
+      return;
+    }
+    const sid = transfer?.senderTenantId as string | undefined;
+    if (sid && !partners.some(p => p.collaborationTenantId === sid)) {
+      setReturnBindBlockedOpen(true);
       return;
     }
     setReturnOpen(true);
@@ -274,12 +342,12 @@ const CollabTransferDetailPanel: React.FC<CollabTransferDetailPanelProps> = ({
           )}
           {!isSender && t.outsourceRouteSnapshot && Array.isArray(t.outsourceRouteSnapshot) &&
             (t.outsourceRouteSnapshot as any[]).some((s: any) => s.stepOrder > t.chainStep) &&
-            t.status !== 'CLOSED' && (t.dispatches || []).some((d: any) => d.status === 'ACCEPTED') && (
+            t.status !== 'CLOSED' && (t.dispatches || []).some((d: any) => d.status === 'ACCEPTED' || d.status === 'FORWARDED') && (
             <button onClick={() => setForwardOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-600 transition-all">
               <Forward className="w-4 h-4" /> 转发到下一站
             </button>
           )}
-          {!isSender && t.status !== 'CLOSED' && t.status !== 'CANCELLED' && (t.dispatches || []).some((d: any) => d.status === 'ACCEPTED') &&
+          {!isSender && t.status !== 'CLOSED' && t.status !== 'CANCELLED' && (t.dispatches || []).some((d: any) => d.status === 'ACCEPTED' || d.status === 'FORWARDED') &&
             (!t.outsourceRouteSnapshot || !Array.isArray(t.outsourceRouteSnapshot) ||
               !(t.outsourceRouteSnapshot as any[]).some((s: any) => s.stepOrder > t.chainStep)) && (
             <button onClick={openReturnModal} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all">
@@ -309,42 +377,72 @@ const CollabTransferDetailPanel: React.FC<CollabTransferDetailPanelProps> = ({
             const items = d.payload?.items ?? [];
             const qty = items.reduce((s: number, i: any) => s + (Number(i.quantity) || 0), 0);
             return (
-              <div key={d.id} className="px-6 py-4 flex items-center justify-between gap-4 min-w-0">
-                <div className="space-y-1 min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    {dispatchStatusLabel(d.status)}
-                    <span className="text-sm font-bold text-slate-800">数量 {qty}</span>
+              <div key={d.id} className="px-6 py-4 space-y-2">
+                <div className="flex items-center justify-between gap-4 min-w-0">
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      {dispatchStatusLabel(d.status)}
+                      <span className="text-sm font-bold text-slate-800">数量 {qty}</span>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {items.map((i: any) => {
+                        const parts = [i.colorName, i.sizeName].filter(Boolean).join('/');
+                        return parts ? `${parts}: ${i.quantity}` : `${i.quantity}`;
+                      }).join('  ')}
+                    </p>
+                    <p className="text-[10px] text-slate-400">{new Date(d.createdAt).toLocaleString()}</p>
                   </div>
-                  <p className="text-xs text-slate-500">
-                    {items.map((i: any) => {
-                      const parts = [i.colorName, i.sizeName].filter(Boolean).join('/');
-                      return parts ? `${parts}: ${i.quantity}` : `${i.quantity}`;
-                    }).join('  ')}
-                  </p>
-                  <p className="text-[10px] text-slate-400">{new Date(d.createdAt).toLocaleString()}</p>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {d.receiverProductionOrderId && (
+                      <span className="text-xs text-indigo-600 font-bold">工单: {d.receiverProductionOrderId.slice(0, 16)}...</span>
+                    )}
+                    {isSender && d.status === 'PENDING' && !(t._chainTransfers && d.transferId && (t._chainTransfers as any[]).some((ct: any) => ct.id === d.transferId && ct.chainStep > 0)) && (
+                      <button
+                        disabled={withdrawing}
+                        onClick={e => { e.stopPropagation(); handleWithdrawDispatch(d.id); }}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold hover:bg-slate-200 disabled:opacity-50 transition-all"
+                      >
+                        <RotateCcw className="w-3 h-3" /> 撤回
+                      </button>
+                    )}
+                    {isSender && d.status === 'WITHDRAWN' && !(t._chainTransfers && d.transferId && (t._chainTransfers as any[]).some((ct: any) => ct.id === d.transferId && ct.chainStep > 0)) && (
+                      <button
+                        onClick={e => { e.stopPropagation(); handleDeleteDispatch(d.id); }}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-rose-50 text-rose-500 rounded-lg text-[10px] font-bold hover:bg-rose-100 transition-all"
+                      >
+                        <Trash2 className="w-3 h-3" /> 删除
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {d.receiverProductionOrderId && (
-                    <span className="text-xs text-indigo-600 font-bold">工单: {d.receiverProductionOrderId.slice(0, 16)}...</span>
-                  )}
-                  {isSender && d.status === 'PENDING' && !(t._chainTransfers && d.transferId && (t._chainTransfers as any[]).some((ct: any) => ct.id === d.transferId && ct.chainStep > 0)) && (
-                    <button
-                      disabled={withdrawing}
-                      onClick={e => { e.stopPropagation(); handleWithdrawDispatch(d.id); }}
-                      className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold hover:bg-slate-200 disabled:opacity-50 transition-all"
-                    >
-                      <RotateCcw className="w-3 h-3" /> 撤回
-                    </button>
-                  )}
-                  {isSender && d.status === 'WITHDRAWN' && !(t._chainTransfers && d.transferId && (t._chainTransfers as any[]).some((ct: any) => ct.id === d.transferId && ct.chainStep > 0)) && (
-                    <button
-                      onClick={e => { e.stopPropagation(); handleDeleteDispatch(d.id); }}
-                      className="flex items-center gap-1 px-2.5 py-1 bg-rose-50 text-rose-500 rounded-lg text-[10px] font-bold hover:bg-rose-100 transition-all"
-                    >
-                      <Trash2 className="w-3 h-3" /> 删除
-                    </button>
-                  )}
-                </div>
+                {d.amendmentStatus === 'PENDING_B_CONFIRM' && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 bg-amber-400 text-white text-[10px] font-black rounded">待确认修订</span>
+                      {d.amendmentNote && <span className="text-xs text-amber-700">备注: {d.amendmentNote}</span>}
+                    </div>
+                    <div className="text-xs text-amber-800">
+                      <span className="font-bold">修订内容: </span>
+                      {(d.amendmentPayload?.items ?? []).map((ai: any, ai_idx: number) => {
+                        const parts = [ai.colorName, ai.sizeName].filter(Boolean).join('/');
+                        return <span key={ai_idx} className="mr-2">{parts ? `${parts}: ${ai.quantity}` : ai.quantity}</span>;
+                      })}
+                    </div>
+                    {!isSender && (
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => handleConfirmDispatchAmendment(d.id)} className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all">
+                          <Check className="w-3.5 h-3.5" /> 确认修订
+                        </button>
+                        <button onClick={() => handleRejectDispatchAmendment(d.id)} className="flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all">
+                          <X className="w-3.5 h-3.5" /> 拒绝
+                        </button>
+                      </div>
+                    )}
+                    {isSender && (
+                      <p className="text-[10px] text-amber-600 font-bold">等待乙方确认修订中...</p>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -364,61 +462,123 @@ const CollabTransferDetailPanel: React.FC<CollabTransferDetailPanelProps> = ({
               const items = r.payload?.items ?? [];
               const qty = items.reduce((s: number, i: any) => s + (Number(i.quantity) || 0), 0);
               return (
-                <div key={r.id} className="px-6 py-4 flex items-center justify-between gap-4 min-w-0">
-                  <div className="space-y-1 flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {returnStatusLabel(r.status)}
-                      <span className="text-sm font-bold text-slate-800">合计 {qty}</span>
+                <div key={r.id} className="px-6 py-4 space-y-2">
+                  <div className="flex items-center justify-between gap-4 min-w-0">
+                    <div className="space-y-1 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {returnStatusLabel(r.status)}
+                        <span className="text-sm font-bold text-slate-800">合计 {qty}</span>
+                      </div>
+                      {items.length > 0 && (
+                        <ul className="text-xs text-slate-600 space-y-0.5 mt-1">
+                          {items.map((it: any, i: number) => (
+                            <li key={i}>
+                              {[it.colorName, it.sizeName].filter(Boolean).join('/') || '无规格'}：{it.quantity}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {r.payload?.note && <p className="text-xs text-slate-500">备注: {r.payload.note}</p>}
+                      {r.payload?.receiptDocNo && (
+                        <p className="text-[10px] font-bold text-emerald-600">回收单号: {r.payload.receiptDocNo}</p>
+                      )}
+                      <p className="text-[10px] text-slate-400">{new Date(r.createdAt).toLocaleString()}</p>
                     </div>
-                    {items.length > 0 && (
-                      <ul className="text-xs text-slate-600 space-y-0.5 mt-1">
-                        {items.map((it: any, i: number) => (
-                          <li key={i}>
-                            {[it.colorName, it.sizeName].filter(Boolean).join('/') || '无规格'}：{it.quantity}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {r.payload?.note && <p className="text-xs text-slate-500">备注: {r.payload.note}</p>}
-                    {r.payload?.receiptDocNo && (
-                      <p className="text-[10px] font-bold text-emerald-600">回收单号: {r.payload.receiptDocNo}</p>
-                    )}
-                    <p className="text-[10px] text-slate-400">{new Date(r.createdAt).toLocaleString()}</p>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {isSender && r.status === 'PENDING_A_RECEIVE' && (
+                        <button
+                          disabled={receiving}
+                          onClick={() => handleReceive(r.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all"
+                        >
+                          <Check className="w-3.5 h-3.5" /> 确认收回
+                        </button>
+                      )}
+                      {!isSender && r.status === 'PENDING_A_RECEIVE' && (
+                        <button
+                          disabled={withdrawing}
+                          onClick={e => { e.stopPropagation(); handleWithdrawReturn(r.id); }}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold hover:bg-slate-200 disabled:opacity-50 transition-all"
+                        >
+                          <RotateCcw className="w-3 h-3" /> 撤回
+                        </button>
+                      )}
+                      {!isSender && r.status === 'WITHDRAWN' && (
+                        <button
+                          onClick={e => { e.stopPropagation(); handleDeleteReturn(r.id); }}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-rose-50 text-rose-500 rounded-lg text-[10px] font-bold hover:bg-rose-100 transition-all"
+                        >
+                          <Trash2 className="w-3 h-3" /> 删除
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {isSender && r.status === 'PENDING_A_RECEIVE' && (
-                      <button
-                        disabled={receiving}
-                        onClick={() => handleReceive(r.id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all"
-                      >
-                        <Check className="w-3.5 h-3.5" /> 确认收回
-                      </button>
-                    )}
-                    {!isSender && r.status === 'PENDING_A_RECEIVE' && (
-                      <button
-                        disabled={withdrawing}
-                        onClick={e => { e.stopPropagation(); handleWithdrawReturn(r.id); }}
-                        className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold hover:bg-slate-200 disabled:opacity-50 transition-all"
-                      >
-                        <RotateCcw className="w-3 h-3" /> 撤回
-                      </button>
-                    )}
-                    {!isSender && r.status === 'WITHDRAWN' && (
-                      <button
-                        onClick={e => { e.stopPropagation(); handleDeleteReturn(r.id); }}
-                        className="flex items-center gap-1 px-2.5 py-1 bg-rose-50 text-rose-500 rounded-lg text-[10px] font-bold hover:bg-rose-100 transition-all"
-                      >
-                        <Trash2 className="w-3 h-3" /> 删除
-                      </button>
-                    )}
-                  </div>
+                  {r.amendmentStatus === 'PENDING_A_CONFIRM' && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 bg-amber-400 text-white text-[10px] font-black rounded">待甲方确认修订</span>
+                        {r.amendmentNote && <span className="text-xs text-amber-700">备注: {r.amendmentNote}</span>}
+                      </div>
+                      <div className="text-xs text-amber-800">
+                        <span className="font-bold">修订内容: </span>
+                        {(r.amendmentPayload?.items ?? []).map((ai: any, ai_idx: number) => {
+                          const parts = [ai.colorName, ai.sizeName].filter(Boolean).join('/');
+                          return <span key={ai_idx} className="mr-2">{parts ? `${parts}: ${ai.quantity}` : ai.quantity}</span>;
+                        })}
+                      </div>
+                      {isSender && (
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => handleConfirmReturnAmendment(r.id)} className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all">
+                            <Check className="w-3.5 h-3.5" /> 确认修订
+                          </button>
+                          <button onClick={() => handleRejectReturnAmendment(r.id)} className="flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all">
+                            <X className="w-3.5 h-3.5" /> 拒绝
+                          </button>
+                        </div>
+                      )}
+                      {!isSender && (
+                        <p className="text-[10px] text-amber-600 font-bold">等待甲方确认修订中...</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {returnBindBlockedOpen && (
+        <div className="fixed inset-0 z-[92] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="collab-return-bind-title">
+          <button type="button" aria-label="关闭" className="absolute inset-0 bg-slate-900/50" onClick={() => setReturnBindBlockedOpen(false)} />
+          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <h3 id="collab-return-bind-title" className="text-base font-black text-slate-900">需先绑定合作单位</h3>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              提交回传前，请先在<strong className="text-slate-800">协作设置</strong>中将本企业的<strong className="text-slate-800">合作单位</strong>绑定到该委托方（甲方）企业，回传流水才能正确显示合作单位并完成出库。
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setReturnBindBlockedOpen(false)}
+                className="flex-1 min-w-[100px] py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setReturnBindBlockedOpen(false);
+                  onOpenCollabSettings?.();
+                }}
+                disabled={!onOpenCollabSettings}
+                className="flex-1 min-w-[140px] flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+              >
+                <Settings2 className="w-4 h-4 shrink-0" /> 打开协作设置
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <CollabAcceptModal
         open={acceptOpen}

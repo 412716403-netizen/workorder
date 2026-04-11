@@ -4,7 +4,7 @@ import {
   ArrowUpCircle, 
   Scale
 } from 'lucide-react';
-import { ProductionOrder, FinanceRecord, FinanceOpType, FinanceCategory, FinanceAccountType, Partner, Worker, Product, AppDictionaries } from '../types';
+import { ProductionOrder, FinanceRecord, FinanceOpType, FinanceCategory, FinanceAccountType, Partner, Worker, Product, AppDictionaries, ProductMilestoneProgress } from '../types';
 import { PartnerCategory, ProductCategory, GlobalNodeTemplate } from '../types';
 import FinanceOpsView from './FinanceOpsView';
 import {
@@ -16,12 +16,14 @@ import {
   subModuleTabPillClass,
 } from '../styles/uiDensity';
 import { useModulePermission } from '../hooks/useModulePermission';
+import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
 
 interface FinanceViewProps {
   orders: ProductionOrder[];
   records: FinanceRecord[];
   psiRecords?: any[];
   prodRecords?: any[];
+  productMilestoneProgresses?: ProductMilestoneProgress[];
   onAddRecord: (record: FinanceRecord) => void;
   onUpdateRecord: (record: FinanceRecord) => void;
   onDeleteRecord: (id: string) => void;
@@ -38,8 +40,13 @@ interface FinanceViewProps {
   tenantRole?: string;
 }
 
-const FinanceView: React.FC<FinanceViewProps> = ({ orders, records, psiRecords = [], prodRecords = [], onAddRecord, onUpdateRecord, onDeleteRecord, financeCategories, financeAccountTypes, partners, workers, products, partnerCategories, categories, globalNodes, dictionaries, userPermissions, tenantRole }) => {
+const FinanceView: React.FC<FinanceViewProps> = ({ orders, records, psiRecords = [], prodRecords = [], productMilestoneProgresses = [], onAddRecord, onUpdateRecord, onDeleteRecord, financeCategories, financeAccountTypes, partners, workers, products, partnerCategories, categories, globalNodes, dictionaries, userPermissions, tenantRole }) => {
   const [activeTab, setActiveTab] = useState<FinanceOpType>('RECEIPT');
+  const setScrollSegment = useSetMainScrollSegment();
+  useLayoutEffect(() => {
+    setScrollSegment?.(activeTab);
+  }, [activeTab, setScrollSegment]);
+
   const sentinelRef = useRef<HTMLDivElement>(null);
   const tabsWrapRef = useRef<HTMLDivElement>(null);
   const [isStuck, setIsStuck] = useState(false);
@@ -142,6 +149,7 @@ const FinanceView: React.FC<FinanceViewProps> = ({ orders, records, psiRecords =
           allRecords={records}
           psiRecords={psiRecords}
           prodRecords={prodRecords}
+          productMilestoneProgresses={productMilestoneProgresses}
           onAddRecord={onAddRecord}
           onUpdateRecord={onUpdateRecord}
           onDeleteRecord={onDeleteRecord}

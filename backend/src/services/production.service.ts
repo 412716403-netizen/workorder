@@ -1,6 +1,7 @@
 import type { TenantPrismaClient } from '../lib/prisma.js';
 import { prisma as basePrisma } from '../lib/prisma.js';
 import { generateDocNo } from '../utils/docNumber.js';
+import { nextOutsourceDocNoForPartner } from '../utils/partnerDocNumberServer.js';
 import { genId } from '../utils/genId.js';
 import { sanitizeUpdate, sanitizeCreate, normalizeDates } from '../utils/request.js';
 
@@ -48,13 +49,18 @@ export async function createRecord(
   normalizeDates(data);
   if (!data.timestamp) data.timestamp = new Date();
 
-  if (!data.docNo && DOC_PREFIX[data.type as string]) {
-    data.docNo = await generateDocNo(
-      DOC_PREFIX[data.type as string],
-      'production_op_records',
-      'doc_no',
-      tenantId,
-    );
+  if (!data.docNo) {
+    if (data.type === 'OUTSOURCE' && data.partner && tenantId) {
+      const kind = data.status === '已收回' ? 'receive' : 'dispatch';
+      data.docNo = await nextOutsourceDocNoForPartner(tenantId, kind, String(data.partner));
+    } else if (DOC_PREFIX[data.type as string]) {
+      data.docNo = await generateDocNo(
+        DOC_PREFIX[data.type as string],
+        'production_op_records',
+        'doc_no',
+        tenantId,
+      );
+    }
   }
 
   const record = await db.productionOpRecord.create({ data });

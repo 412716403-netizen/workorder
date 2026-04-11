@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { ScrollText, X, Filter, ArrowUpFromLine, Undo2, FileText } from 'lucide-react';
 import type { ProductionOpRecord, GlobalNodeTemplate } from '../../types';
 import { hasOpsPerm } from './types';
+import { toLocalDateYmd } from '../../utils/localDateTime';
 
 interface FlowSummaryRow {
   docNo: string;
@@ -84,7 +85,7 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
       const from = flowFilterDateFrom.trim();
       list = list.filter(row => {
         const ts = row.records.length ? row.records[row.records.length - 1]?.timestamp : '';
-        const d = ts ? new Date(ts).toISOString().split('T')[0] : '';
+        const d = ts ? toLocalDateYmd(ts) : '';
         return d >= from;
       });
     }
@@ -92,7 +93,7 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
       const to = flowFilterDateTo.trim();
       list = list.filter(row => {
         const ts = row.records.length ? row.records[row.records.length - 1]?.timestamp : '';
-        const d = ts ? new Date(ts).toISOString().split('T')[0] : '';
+        const d = ts ? toLocalDateYmd(ts) : '';
         return d <= to;
       });
     }

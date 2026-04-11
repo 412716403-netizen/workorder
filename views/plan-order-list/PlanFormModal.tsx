@@ -21,9 +21,11 @@ import type {
 } from '../../types';
 import { PlanStatus } from '../../types';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
 import { sectionTitleClass } from '../../styles/uiDensity';
+import { localTodayYmd } from '../../utils/localDateTime';
 
 export interface PlanFormModalProps {
   open: boolean;
@@ -56,7 +58,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
   onImagePreview,
   onFilePreview,
 }) => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localTodayYmd();
   const [form, setForm] = useState<{
     categoryId: string;
     productId: string;
@@ -79,6 +81,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
 
   const selectedProduct = products.find(p => p.id === form.productId);
   const activeCategory = categories.find(c => c.id === form.categoryId);
+  const usePlanVariantMatrix = productHasColorSizeMatrix(selectedProduct, activeCategory);
 
   const groupedVariants = useMemo((): Record<string, ProductVariant[]> => {
     if (!selectedProduct || !selectedProduct.variants) return {};
@@ -92,9 +95,9 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
 
   const canSave = useMemo(() => {
     if (!form.productId) return false;
-    if (activeCategory?.hasColorSize) return (Object.values(form.variantQuantities) as number[]).some(q => (q as number) > 0);
+    if (usePlanVariantMatrix) return (Object.values(form.variantQuantities) as number[]).some(q => (q as number) > 0);
     return (form.singleQuantity as number) > 0;
-  }, [form, activeCategory]);
+  }, [form, usePlanVariantMatrix]);
 
   const getUnitName = (productId: string) => {
     const p = products.find(x => x.id === productId);
@@ -128,7 +131,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
       return;
     }
     const items: PlanItem[] = [];
-    if (activeCategory?.hasColorSize && selectedProduct.variants && selectedProduct.variants.length > 0) {
+    if (usePlanVariantMatrix && selectedProduct.variants && selectedProduct.variants.length > 0) {
       (Object.entries(form.variantQuantities) as [string, number][]).forEach(([vId, qty]) => {
         if (qty > 0) items.push({ variantId: vId, quantity: qty });
       });
@@ -142,19 +145,19 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
       planNumber: getNextPlanNumber(),
       productId: form.productId,
       items,
-      startDate: new Date().toISOString().split('T')[0],
+      startDate: localTodayYmd(),
       dueDate: form.dueDate,
       status: PlanStatus.APPROVED,
       customer: form.customer,
       priority: 'Medium',
       assignments: {},
       customData: Object.keys(form.customData || {}).length ? form.customData : undefined,
-      createdAt: form.createdAt || new Date().toISOString().split('T')[0],
+      createdAt: form.createdAt || localTodayYmd(),
     };
 
     onSave(newPlan);
     onClose();
-    const nextToday = new Date().toISOString().split('T')[0];
+    const nextToday = localTodayYmd();
     setForm({ categoryId: '', productId: '', customer: '', dueDate: '', createdAt: nextToday, variantQuantities: {}, singleQuantity: 0, customData: {} });
   };
 
@@ -281,7 +284,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
                   <h3 className={sectionTitleClass}>2. 生产数量明细录入</h3>
                 </div>
 
-                {activeCategory?.hasColorSize && selectedProduct.variants && selectedProduct.variants.length > 0 ? (
+                {usePlanVariantMatrix && selectedProduct.variants && selectedProduct.variants.length > 0 ? (
                   <div className="space-y-4">
                     {sortedVariantColorEntries(groupedVariants, selectedProduct?.colorIds, selectedProduct?.sizeIds).map(([colorId, colorVariants]) => {
                       const color = dictionaries.colors.find(c => c.id === colorId);

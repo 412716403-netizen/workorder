@@ -37,7 +37,15 @@ import {
   pageTitleClass,
 } from '../../styles/uiDensity';
 import { productGroupMaxReportableSum, pmpCompletedAtTemplate } from '../../utils/productReportAggregates';
+import {
+  milestoneIndexInOrder,
+  milestoneIndexInProduct,
+  orderCreatedMs,
+  productNewestOrderCreatedMs,
+} from '../../utils/orderCenterSort';
 import { buildDefectiveReworkByOrderMilestone } from '../../utils/defectiveReworkByOrderMilestone';
+import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
+import { nextOutsourceDocNumber } from '../../utils/partnerDocNumber';
 import OutsourceMaterialDispatchModal from './OutsourceMaterialDispatchModal';
 import OutsourceMaterialReturnModal from './OutsourceMaterialReturnModal';
 import OutsourceDispatchListModal from './OutsourceDispatchListModal';
@@ -47,6 +55,8 @@ import OutsourceReceiveQuantityModal from './OutsourceReceiveQuantityModal';
 import OutsourceFlowListModal, { type OutsourceFlowOpenSeed } from './OutsourceFlowListModal';
 import OutsourceFlowDocumentDetailModal from './OutsourceFlowDocumentDetailModal';
 import OutsourceCollabSyncModal from './OutsourceCollabSyncModal';
+import { useAuth } from '../../contexts/AuthContext';
+import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 
 const OutsourcePanel: React.FC<PanelProps> = ({
   productionLinkMode,
@@ -71,6 +81,8 @@ const OutsourcePanel: React.FC<PanelProps> = ({
   userPermissions,
   tenantRole,
 }) => {
+  const { currentUser } = useAuth();
+  const docOperator = currentOperatorDisplayName(currentUser);
   const canViewMainList = hasOpsPerm(tenantRole, userPermissions, 'production:outsource_list:allow');
 
   const [outsourceModal, setOutsourceModal] = useState<OutsourceModalType | null>(null);
@@ -177,7 +189,14 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           });
         });
       }
-      return rows.sort((a, b) => (a.productName || '').localeCompare(b.productName || ''));
+      return rows.sort((a, b) => {
+        const d = productNewestOrderCreatedMs(b.productId, orders) - productNewestOrderCreatedMs(a.productId, orders);
+        if (d !== 0) return d;
+        if (a.productId !== b.productId) return a.productId.localeCompare(b.productId);
+        const pa = idx.productsById.get(a.productId);
+        const pb = idx.productsById.get(b.productId);
+        return milestoneIndexInProduct(pa, a.nodeId) - milestoneIndexInProduct(pb, b.nodeId);
+      });
     }
 
     const dispatchedByKey: Record<string, number> = {};
@@ -226,7 +245,16 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         });
       });
     });
-    return rows;
+    return rows.sort((a, b) => {
+      const oa = a.orderId ? idx.ordersById.get(a.orderId) : undefined;
+      const ob = b.orderId ? idx.ordersById.get(b.orderId) : undefined;
+      const d = orderCreatedMs(ob!) - orderCreatedMs(oa!);
+      if (d !== 0) return d;
+      const ma = milestoneIndexInOrder(oa, a.nodeId);
+      const mb = milestoneIndexInOrder(ob, b.nodeId);
+      if (ma !== mb) return ma - mb;
+      return (a.orderNumber || '').localeCompare(b.orderNumber || '');
+    });
   }, [productionLinkMode, records, orders, products, globalNodes, productMilestoneProgresses, processSequenceMode, defectiveReworkByOrderForOutsource, idx]);
 
   const outsourceReceiveRows = useMemo(() => {
@@ -260,7 +288,16 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           pending,
         });
       });
-      return rows.sort((a, b) => (a.productName || '').localeCompare(b.productName || ''));
+      return rows.sort((a, b) => {
+        const d = productNewestOrderCreatedMs(b.productId, orders) - productNewestOrderCreatedMs(a.productId, orders);
+        if (d !== 0) return d;
+        if (a.productId !== b.productId) return a.productId.localeCompare(b.productId);
+        const pa = idx.productsById.get(a.productId);
+        const pb = idx.productsById.get(b.productId);
+        const ni = milestoneIndexInProduct(pa, a.nodeId) - milestoneIndexInProduct(pb, b.nodeId);
+        if (ni !== 0) return ni;
+        return (a.partner || '').localeCompare(b.partner || '');
+      });
     }
 
     const byKey: Record<string, { dispatched: number; received: number; partner: string }> = {};
@@ -293,8 +330,17 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         pending,
       });
     });
-    return rows;
-  }, [productionLinkMode, records, orders, products, globalNodes, idx]);
+    return rows.sort((a, b) => {
+      const oa = a.orderId ? idx.ordersById.get(a.orderId) : undefined;
+      const ob = b.orderId ? idx.ordersById.get(b.orderId) : undefined;
+      const d = orderCreatedMs(ob!) - orderCreatedMs(oa!);
+      if (d !== 0) return d;
+      const ma = milestoneIndexInOrder(oa, a.nodeId);
+      const mb = milestoneIndexInOrder(ob, b.nodeId);
+      if (ma !== mb) return ma - mb;
+      return (a.orderNumber || '').localeCompare(b.orderNumber || '');
+    });
+  }, [productionLinkMode, records, orders, products, globalNodes, productMilestoneProgresses, idx]);
 
   const outsourceStatsByOrder = useMemo(() => {
     const isProductMode = productionLinkMode === 'product';
@@ -334,7 +380,11 @@ const OutsourcePanel: React.FC<PanelProps> = ({
             partners: sortedPartners
           };
         })
-        .sort((a, b) => (a.productName || '').localeCompare(b.productName || ''));
+        .sort((a, b) => {
+          const d = productNewestOrderCreatedMs(b.productId, orders) - productNewestOrderCreatedMs(a.productId, orders);
+          if (d !== 0) return d;
+          return a.productId.localeCompare(b.productId);
+        });
     }
     const outsourceRecs = records.filter(r => r.type === 'OUTSOURCE' && !r.sourceReworkId && r.orderId && r.partner);
     const byKey: Record<string, { orderId: string; partner: string; nodeId: string; dispatched: number; received: number }> = {};
@@ -371,8 +421,14 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           partners: sortedPartners
         };
       })
-      .sort((a, b) => (a.orderNumber || '').localeCompare(b.orderNumber || ''));
-  }, [productionLinkMode, records, orders, products, globalNodes, idx]);
+      .sort((a, b) => {
+        const oa = idx.ordersById.get(a.orderId);
+        const ob = idx.ordersById.get(b.orderId);
+        const d = orderCreatedMs(ob!) - orderCreatedMs(oa!);
+        if (d !== 0) return d;
+        return (a.orderNumber || '').localeCompare(b.orderNumber || '');
+      });
+  }, [productionLinkMode, records, orders, products, globalNodes, productMilestoneProgresses, idx]);
 
   const outsourceFlowSummaryRows = useMemo(() => {
     const isProductMode = productionLinkMode === 'product';
@@ -393,8 +449,14 @@ const OutsourcePanel: React.FC<PanelProps> = ({
       });
       return Array.from(byKey.values())
         .map(row => {
-          const sorted = [...row.records].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-          const earliest = sorted[sorted.length - 1];
+          const sorted = [...row.records].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+          const earliest = sorted.reduce((best, cur) => {
+            const tb = new Date(best.timestamp).getTime();
+            const tc = new Date(cur.timestamp).getTime();
+            if (Number.isNaN(tb)) return cur;
+            if (Number.isNaN(tc)) return best;
+            return tc < tb ? cur : best;
+          }, sorted[0]);
           const dateStr = earliest?.timestamp ? (() => { try { const d = new Date(earliest.timestamp); return isNaN(d.getTime()) ? earliest.timestamp : d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); } catch { return earliest.timestamp; } })() : '—';
           const partner = row.records[0]?.partner ?? '—';
           const totalQuantity = row.records.reduce((s, r) => s + r.quantity, 0);
@@ -407,9 +469,10 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           return { ...row, orderId: '', orderNumber: '', records: sorted, dateStr, partner, totalQuantity, remark, milestoneStr, typeStr };
         })
         .sort((a, b) => {
-          const tA = a.records[0]?.timestamp ?? '';
-          const tB = b.records[0]?.timestamp ?? '';
-          return new Date(tB).getTime() - new Date(tA).getTime();
+          const ta = flowRecordsEarliestMs(a.records);
+          const tb = flowRecordsEarliestMs(b.records);
+          if (tb !== ta) return tb - ta;
+          return (a.docNo || '').localeCompare(b.docNo || '');
         });
     }
 
@@ -436,8 +499,14 @@ const OutsourcePanel: React.FC<PanelProps> = ({
     });
     return Array.from(byKey.values())
       .map(row => {
-        const sorted = [...row.records].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        const earliest = sorted[sorted.length - 1];
+        const sorted = [...row.records].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+        const earliest = sorted.reduce((best, cur) => {
+          const tb = new Date(best.timestamp).getTime();
+          const tc = new Date(cur.timestamp).getTime();
+          if (Number.isNaN(tb)) return cur;
+          if (Number.isNaN(tc)) return best;
+          return tc < tb ? cur : best;
+        }, sorted[0]);
         const dateStr = earliest?.timestamp ? (() => { try { const d = new Date(earliest.timestamp); return isNaN(d.getTime()) ? earliest.timestamp : d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); } catch { return earliest.timestamp; } })() : '—';
         const partner = row.records[0]?.partner ?? '—';
         const totalQuantity = row.records.reduce((s, r) => s + r.quantity, 0);
@@ -450,63 +519,18 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         return { ...row, records: sorted, dateStr, partner, totalQuantity, remark, milestoneStr, typeStr };
       })
       .sort((a, b) => {
-        const tA = a.records[0]?.timestamp ?? '';
-        const tB = b.records[0]?.timestamp ?? '';
-        return new Date(tB).getTime() - new Date(tA).getTime();
+        const ta = flowRecordsEarliestMs(a.records);
+        const tb = flowRecordsEarliestMs(b.records);
+        if (tb !== ta) return tb - ta;
+        return (a.docNo || '').localeCompare(b.docNo || '');
       });
-  }, [productionLinkMode, records, orders, products, globalNodes, idx]);
+  }, [productionLinkMode, records, orders, products, globalNodes, productMilestoneProgresses, idx]);
 
-  const OUTSOURCE_DOCNO_REGEX = /^WX-(\d+)-(\d+)$/;
-  const getPartnerCodeFromName = (partnerName: string): number => {
-    const withCode = records.filter(r => r.type === 'OUTSOURCE' && r.partner === partnerName && r.docNo && OUTSOURCE_DOCNO_REGEX.test(r.docNo));
-    if (withCode.length > 0) {
-      const m = withCode[0].docNo!.match(OUTSOURCE_DOCNO_REGEX);
-      if (m) return parseInt(m[1], 10);
-    }
-    const allNew = records.filter(r => r.type === 'OUTSOURCE' && r.docNo && OUTSOURCE_DOCNO_REGEX.test(r.docNo));
-    const codes = allNew.map(r => { const m = r.docNo!.match(OUTSOURCE_DOCNO_REGEX); return m ? parseInt(m[1], 10) : 0; }).filter(n => n > 0);
-    return codes.length ? Math.max(...codes) + 1 : 1;
-  };
-  const getNextSeqForPartner = (partnerCodeNum: number): number => {
-    const withNewFormat = records.filter(r => r.type === 'OUTSOURCE' && r.docNo && OUTSOURCE_DOCNO_REGEX.test(r.docNo!));
-    const samePartner = withNewFormat.filter(r => {
-      const m = r.docNo!.match(OUTSOURCE_DOCNO_REGEX);
-      return m && parseInt(m[1], 10) === partnerCodeNum;
-    });
-    const seqs = samePartner.map(r => { const m = r.docNo!.match(OUTSOURCE_DOCNO_REGEX); return m ? parseInt(m[2], 10) : 0; }).filter(n => n > 0);
-    return seqs.length ? Math.max(...seqs) + 1 : 1;
-  };
-  const getNextOutsourceDocNo = (partnerName: string): string => {
-    const code = getPartnerCodeFromName(partnerName);
-    const seq = getNextSeqForPartner(code);
-    return `WX-${String(code).padStart(4, '0')}-${String(seq).padStart(4, '0')}`;
-  };
+  const getNextOutsourceDocNo = (partnerName: string): string =>
+    nextOutsourceDocNumber('dispatch', partners, records, '', partnerName.trim());
 
-  const OUTSOURCE_RECEIVE_DOCNO_REGEX = /^WX-R-(\d+)-(\d+)$/;
-  const getPartnerCodeFromNameForReceive = (partnerName: string): number => {
-    const withCode = records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && r.partner === partnerName && r.docNo && OUTSOURCE_RECEIVE_DOCNO_REGEX.test(r.docNo));
-    if (withCode.length > 0) {
-      const m = withCode[0].docNo!.match(OUTSOURCE_RECEIVE_DOCNO_REGEX);
-      if (m) return parseInt(m[1], 10);
-    }
-    const allReceive = records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && r.docNo && OUTSOURCE_RECEIVE_DOCNO_REGEX.test(r.docNo));
-    const codes = allReceive.map(r => { const m = r.docNo!.match(OUTSOURCE_RECEIVE_DOCNO_REGEX); return m ? parseInt(m[1], 10) : 0; }).filter(n => n > 0);
-    return codes.length ? Math.max(...codes) + 1 : 1;
-  };
-  const getNextSeqForPartnerReceive = (partnerCodeNum: number): number => {
-    const withFormat = records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && r.docNo && OUTSOURCE_RECEIVE_DOCNO_REGEX.test(r.docNo!));
-    const samePartner = withFormat.filter(r => {
-      const m = r.docNo!.match(OUTSOURCE_RECEIVE_DOCNO_REGEX);
-      return m && parseInt(m[1], 10) === partnerCodeNum;
-    });
-    const seqs = samePartner.map(r => { const m = r.docNo!.match(OUTSOURCE_RECEIVE_DOCNO_REGEX); return m ? parseInt(m[2], 10) : 0; }).filter(n => n > 0);
-    return seqs.length ? Math.max(...seqs) + 1 : 1;
-  };
-  const getNextReceiveDocNo = (partnerName: string): string => {
-    const code = getPartnerCodeFromNameForReceive(partnerName);
-    const seq = getNextSeqForPartnerReceive(code);
-    return `WX-R-${String(code).padStart(4, '0')}-${String(seq).padStart(4, '0')}`;
-  };
+  const getNextReceiveDocNo = (partnerName: string): string =>
+    nextOutsourceDocNumber('receive', partners, records, '', partnerName.trim());
 
 
   const handleDispatchFormSubmit = async () => {
@@ -538,7 +562,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           productId,
           quantity: qty,
           reason: dispatchRemark.trim() || undefined,
-          operator: '张主管',
+          operator: docOperator,
           timestamp,
           status: '加工中',
           partner: partnerName,
@@ -557,7 +581,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           productId: order.productId,
           quantity: qty,
           reason: dispatchRemark.trim() || undefined,
-          operator: '张主管',
+          operator: docOperator,
           timestamp,
           status: '加工中',
           partner: partnerName,
@@ -606,7 +630,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
       orderId: receiveModal.orderId,
       productId: receiveModal.productId,
       quantity: receiveQty,
-      operator: '张主管',
+      operator: docOperator,
       timestamp: new Date().toLocaleString(),
       status: '已收回',
       partner: receiveModal.partner,
@@ -614,6 +638,9 @@ const OutsourcePanel: React.FC<PanelProps> = ({
       docNo: receiveDocNo,
     };
     onAddRecord(receiveRec);
+    toast.success('收货已保存', {
+      description: `收回单号 ${receiveDocNo}，本次收回 ${receiveQty} 件`,
+    });
     setReceiveModal(null);
     setReceiveQty(0);
   };
@@ -724,7 +751,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           productId,
           quantity: qty,
           reason: receiveFormRemark.trim() || undefined,
-          operator: '张主管',
+          operator: docOperator,
           timestamp,
           status: '已收回',
           partner: partnerName,
@@ -750,7 +777,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           productId: order.productId,
           quantity: qty,
           reason: receiveFormRemark.trim() || undefined,
-          operator: '张主管',
+          operator: docOperator,
           timestamp,
           status: '已收回',
           partner: partnerName,
@@ -762,6 +789,10 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         });
       }
     }
+    const receiveTotalQty = entries.reduce((s, [, q]) => s + q, 0);
+    toast.success('收货已保存', {
+      description: `收回单号 ${receiveDocNo}，${entries.length} 条明细，合计 ${receiveTotalQty} 件`,
+    });
     setReceiveFormQuantities({});
     setReceiveFormUnitPrices({});
     setReceiveFormRemark('');
@@ -1055,6 +1086,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           productionLinkMode={productionLinkMode}
           outsourceDispatchRows={outsourceDispatchRows}
           products={products}
+          categories={categories}
           dispatchSelectedKeys={dispatchSelectedKeys}
           setDispatchSelectedKeys={setDispatchSelectedKeys}
           onDispatchFormOpen={() => setDispatchFormModalOpen(true)}
@@ -1118,6 +1150,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           categories={categories}
           dictionaries={dictionaries}
           records={records}
+          productMilestoneProgresses={productMilestoneProgresses}
           onSubmit={handleReceiveFormSubmit}
           onClose={() => setReceiveFormModalOpen(false)}
         />

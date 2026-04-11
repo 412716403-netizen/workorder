@@ -9,13 +9,14 @@ import type { Partner, GlobalNodeTemplate, OutsourceRoute, OutsourceRouteStep } 
 
 interface CollabRoutesPanelProps {
   onBack: () => void;
+  embeddedInModal?: boolean;
   nodeTemplates?: GlobalNodeTemplate[];
   activeCollabs: any[];
   partners: Partner[];
 }
 
 const CollabRoutesPanel: React.FC<CollabRoutesPanelProps> = ({
-  onBack, nodeTemplates, activeCollabs, partners,
+  onBack, embeddedInModal = false, nodeTemplates, activeCollabs, partners,
 }) => {
   const confirm = useConfirm();
 
@@ -115,18 +116,20 @@ const CollabRoutesPanel: React.FC<CollabRoutesPanelProps> = ({
   };
 
   return (
-    <div className="w-full min-w-0 space-y-4 animate-in slide-in-from-bottom-4">
-      <div className="flex items-center justify-between">
-        <button onClick={onBack} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
-          <ArrowLeft className="w-4 h-4" /> 返回收件箱
-        </button>
+    <div className={`w-full min-w-0 space-y-4 ${embeddedInModal ? '' : 'animate-in slide-in-from-bottom-4'}`}>
+      <div className={`flex items-center ${embeddedInModal ? 'justify-end' : 'justify-between'}`}>
+        {!embeddedInModal && (
+          <button type="button" onClick={onBack} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
+            <ArrowLeft className="w-4 h-4" /> 返回收件箱
+          </button>
+        )}
         <div className="flex items-center gap-3">
-          <button onClick={() => startEditRoute()} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all">
+          <button type="button" onClick={() => startEditRoute()} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all">
             <Plus className="w-4 h-4" /> 新建路线
           </button>
         </div>
       </div>
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className={`bg-white border border-slate-200 shadow-sm overflow-hidden ${embeddedInModal ? 'rounded-xl' : 'rounded-2xl'}`}>
         <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
           <Route className="w-5 h-5 text-indigo-600" />
           <div>
@@ -172,8 +175,8 @@ const CollabRoutesPanel: React.FC<CollabRoutesPanelProps> = ({
 
       {/* 路线编辑弹窗 */}
       {routeEditOpen && (
-        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4" onClick={() => setRouteEditOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/30 z-[95] flex items-center justify-center p-4" onClick={() => setRouteEditOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] overflow-y-auto z-[96]" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
               <h3 className="text-lg font-black text-slate-900">{editingRoute ? '编辑路线' : '新建路线'}</h3>
               <button onClick={() => setRouteEditOpen(false)}><X className="w-5 h-5 text-slate-400 hover:text-slate-600" /></button>

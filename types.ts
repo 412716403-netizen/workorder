@@ -242,6 +242,10 @@ export interface Equipment {
 export interface Partner {
   id: string;
   name: string;
+  /** 租户内单位序号，销售单号 XS-0001-001 的中间段 */
+  partnerListNo?: number;
+  /** 接口返回，用于在后端未带 partnerListNo 时按创建顺序兜底推算序号 */
+  createdAt?: string;
   categoryId?: string;
   contact: string;
   customData?: Record<string, any>;
@@ -277,6 +281,8 @@ export interface PlanOrder {
   customData?: Record<string, any>;
   /** 单据添加日期（列表/详情可配置显示），格式 YYYY-MM-DD */
   createdAt?: string;
+  /** 服务端 @updatedAt，保存/编辑会刷新；列表排序在仅日期 createdAt 相同时可作补充 */
+  updatedAt?: string;
   /** 本计划单各工序计价方式（仅本单使用，不同步到商品）；未设时用产品的 nodePricingModes 或计件 */
   nodePricingModes?: Record<string, ProcessPricingMode>;
 }
@@ -615,6 +621,8 @@ export interface ProductionOrder {
   priority: 'High' | 'Medium' | 'Low';
   /** 工单创建/下达日期，YYYY-MM-DD，用于工单流水统计 */
   createdAt?: string;
+  /** 服务端 @updatedAt，报工等会刷新；用于列表「最近活动」排序 */
+  updatedAt?: string;
 }
 
 export type ProdOpType = 'STOCK_IN' | 'STOCK_OUT' | 'STOCK_RETURN' | 'OUTSOURCE' | 'REWORK' | 'REWORK_REPORT' | 'SCRAP';
@@ -658,6 +666,8 @@ export interface ProductionOpRecord {
   unitPrice?: number;
   /** 外协收回：金额（加工费，元），一般为 quantity * unitPrice */
   amount?: number;
+  /** 协作同步元数据：标识记录来源（syncDispatch / collaborationReturn / chainForward 等） */
+  collabData?: { source?: string; transferId?: string; dispatchId?: string; returnId?: string; [key: string]: any };
 }
 
 export type FinanceOpType = 'RECEIPT' | 'PAYMENT' | 'RECONCILIATION' | 'SETTLEMENT';

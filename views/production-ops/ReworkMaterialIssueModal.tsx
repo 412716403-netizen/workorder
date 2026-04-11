@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { ArrowUpFromLine, Package, X } from 'lucide-react';
 import { ProductionOpRecord, ProductionOrder, Product, Warehouse, BOM, GlobalNodeTemplate } from '../../types';
+import { toLocalCompactYmd } from '../../utils/localDateTime';
+import { useAuth } from '../../contexts/AuthContext';
+import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 
 export interface ReworkMaterialIssueModalProps {
   reworkMaterialOrderId: string;
@@ -27,6 +30,8 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
   onAddRecordBatch,
   onClose,
 }) => {
+  const { currentUser } = useAuth();
+  const docOperator = currentOperatorDisplayName(currentUser);
   const [reworkMaterialQty, setReworkMaterialQty] = useState<Record<string, number>>({});
   const [reworkMaterialWarehouseId, setReworkMaterialWarehouseId] = useState<string>(() => warehouses[0]?.id ?? '');
 
@@ -81,7 +86,7 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
 
   const getNextStockDocNoLocal = () => {
     const prefix = 'LL';
-    const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const todayStr = toLocalCompactYmd(new Date());
     const pattern = `${prefix}${todayStr}-`;
     const existing = records.filter(r => r.type === 'STOCK_OUT' && r.docNo && r.docNo.startsWith(pattern));
     const seqs = existing.map(r => parseInt((r.docNo ?? '').slice(pattern.length), 10)).filter(n => !isNaN(n));
@@ -97,7 +102,7 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
     const batch: ProductionOpRecord[] = toIssue.map(m => ({
       id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       type: 'STOCK_OUT' as const, orderId: order.id, productId: m.productId,
-      quantity: reworkMaterialQty[m.productId], operator: '张主管',
+      quantity: reworkMaterialQty[m.productId], operator: docOperator,
       timestamp: new Date().toLocaleString(), status: '已完成',
       warehouseId: warehouseId || undefined, docNo, reason: '来自于返工'
     } as ProductionOpRecord));

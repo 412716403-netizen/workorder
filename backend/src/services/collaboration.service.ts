@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client';
 import { prisma as basePrisma } from '../lib/prisma.js';
 import { genId } from '../utils/genId.js';
 import { getNextWorkOrderNumber, generateDocNo } from '../utils/docNumber.js';
+import { nextOutsourceDocNoForPartner } from '../utils/partnerDocNumberServer.js';
 import { applyOutsourceProgress } from './production.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 
@@ -39,12 +40,59 @@ function collabVariantKey(i: { colorName?: string | null; sizeName?: string | nu
   return JSON.stringify({ c: i.colorName ?? null, s: i.sizeName ?? null });
 }
 
+const HC_DOCNO_REGEX = /^HC-(\d+)-(\d+)$/;
+
+async function generateReturnFlowDocNo(tenantId: string, partnerName: string): Promise<string> {
+  const allHcRecords = await basePrisma.productionOpRecord.findMany({
+    where: { tenantId, type: 'STOCK_OUT', operator: '协作回传出库' },
+    select: { docNo: true, partner: true },
+  });
+  const withSamePartner = allHcRecords.filter(r => r.partner === partnerName && r.docNo && HC_DOCNO_REGEX.test(r.docNo));
+  let partnerCode: number;
+  if (withSamePartner.length > 0) {
+    const m = withSamePartner[0].docNo!.match(HC_DOCNO_REGEX);
+    partnerCode = m ? parseInt(m[1], 10) : 1;
+  } else {
+    const allCodes = allHcRecords
+      .filter(r => r.docNo && HC_DOCNO_REGEX.test(r.docNo))
+      .map(r => { const m = r.docNo!.match(HC_DOCNO_REGEX); return m ? parseInt(m[1], 10) : 0; })
+      .filter(n => n > 0);
+    partnerCode = allCodes.length ? Math.max(...allCodes) + 1 : 1;
+  }
+  const samePartnerDocs = allHcRecords.filter(r => {
+    if (!r.docNo || !HC_DOCNO_REGEX.test(r.docNo)) return false;
+    const m = r.docNo.match(HC_DOCNO_REGEX);
+    return m && parseInt(m[1], 10) === partnerCode;
+  });
+  const seqs = samePartnerDocs.map(r => { const m = r.docNo!.match(HC_DOCNO_REGEX); return m ? parseInt(m[2], 10) : 0; }).filter(n => n > 0);
+  const nextSeq = seqs.length ? Math.max(...seqs) + 1 : 1;
+  return `HC-${String(partnerCode).padStart(4, '0')}-${String(nextSeq).padStart(4, '0')}`;
+}
+
+async function getSenderPartnerName(tenantId: string, senderTenantId: string): Promise<string> {
+  const partnerRow = await basePrisma.partner.findFirst({ where: { tenantId, collaborationTenantId: senderTenantId }, select: { name: true } });
+  if (partnerRow?.name) return partnerRow.name;
+  const tenant = await basePrisma.tenant.findUnique({ where: { id: senderTenantId }, select: { name: true } });
+  return tenant?.name ?? '';
+}
+
+/** 乙方回传出库须已绑定：本租户合作单位 → 甲方租户 */
+async function assertReceiverPartnerBindingForReturn(tenantId: string, senderTenantId: string) {
+  const row = await basePrisma.partner.findFirst({
+    where: { tenantId, collaborationTenantId: senderTenantId },
+    select: { id: true },
+  });
+  if (!row) {
+    throw new AppError(400, '请先在「协作管理 → 协作设置」中将合作单位绑定到该委托方企业后，再提交回传');
+  }
+}
+
 function aggregateDispatchedByVariant(
   dispatches: { status: string; payload: unknown }[],
 ): Map<string, number> {
   const map = new Map<string, number>();
   for (const d of dispatches) {
-    if (d.status !== 'ACCEPTED') continue;
+    if (d.status !== 'ACCEPTED' && d.status !== 'FORWARDED') continue;
     for (const it of ((d.payload as any)?.items ?? [])) {
       const k = collabVariantKey(it);
       map.set(k, (map.get(k) || 0) + (Number(it.quantity) || 0));
@@ -78,9 +126,12 @@ async function updateTransferStatus(transferId: string) {
       const items = (r.payload as any)?.items ?? [];
       return sum + items.reduce((s: number, i: any) => s + (Number(i.quantity) || 0), 0);
     }, 0);
+  const hasPending = transfer.dispatches.some(d => d.status === 'PENDING');
   let newStatus = transfer.status;
-  if (totalReceivedByA > 0 && totalReceivedByA >= totalDispatched) newStatus = 'CLOSED';
-  else if (totalReceivedByA > 0) newStatus = 'PARTIALLY_RECEIVED';
+  if (totalDispatched > 0 && totalReceivedByA >= totalDispatched && !hasPending) newStatus = 'CLOSED';
+  else if (totalReceivedByA > 0 && totalReceivedByA < totalDispatched) newStatus = 'PARTIALLY_RECEIVED';
+  else if (totalDispatched > 0 && totalReceivedByA < totalDispatched) newStatus = 'OPEN';
+  else if (totalDispatched === 0 && transfer.status === 'CLOSED') newStatus = 'OPEN';
   if (newStatus !== transfer.status) {
     await basePrisma.interTenantSubcontractTransfer.update({
       where: { id: transferId }, data: { status: newStatus },
@@ -113,7 +164,12 @@ function mergeTransferGroup(group: any[]): any {
   const isChain = group.some((t: any) => t.outsourceRouteSnapshot);
   if (isChain) {
     const sorted = [...group].sort((a: any, b: any) => (a.chainStep ?? 0) - (b.chainStep ?? 0));
-    const active = sorted.find((t: any) => t.status !== 'CLOSED' && t.status !== 'CANCELLED') ?? sorted[sorted.length - 1];
+    const active = sorted.find((t: any) => {
+      if (t.status === 'CLOSED' || t.status === 'CANCELLED') return false;
+      const ds = t.dispatches || [];
+      if (ds.length > 0 && ds.every((d: any) => d.status === 'FORWARDED')) return false;
+      return true;
+    }) ?? sorted[sorted.length - 1];
     const origin = sorted[0];
     const allDispatches = group.flatMap((t: any) => (t.dispatches || []).map((d: any) => ({ ...d, transferId: t.id }))).sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     const allReturns = group.flatMap((t: any) => (t.returns || []).map((r: any) => ({ ...r, transferId: t.id }))).sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -440,17 +496,19 @@ export async function acceptTransfer(tenantId: string, transferId: string, body:
   if (effectiveMode === 'product') {
     let existingOrderId = transfer.dispatches.find(d => d.receiverProductionOrderId)?.receiverProductionOrderId;
     if (!existingOrderId) {
-      const orderId = genId('ord'); const orderNumber = await getNextWorkOrderNumber(tenantId); const totalItems = aggregateDispatchItems(toAccept); const milestones = buildMilestones();
+      const orderId = genId('ord'); const orderNumber = await getNextWorkOrderNumber(tenantId); const milestones = buildMilestones();
       await basePrisma.productionOrder.create({ data: { id: orderId, tenantId, orderNumber, productId: finalProductId, productName: displayName, sku: displaySku, status: orderStatus, ...(milestones.length > 0 ? { milestones: { create: milestones } } : {}) } });
-      await createOrderItems(orderId, tenantId, finalProductId, totalItems);
+      for (const d of toAccept) await createOrderItemsWithSource(orderId, tenantId, finalProductId, (d.payload as any)?.items ?? [], d.id);
       existingOrderId = orderId; createdOrders.push(orderId);
-    } else { await createOrderItems(existingOrderId, tenantId, finalProductId, aggregateDispatchItems(toAccept)); }
+    } else {
+      for (const d of toAccept) await createOrderItemsWithSource(existingOrderId, tenantId, finalProductId, (d.payload as any)?.items ?? [], d.id);
+    }
     for (const d of toAccept) await basePrisma.subcontractCollaborationDispatch.update({ where: { id: d.id }, data: { status: 'ACCEPTED', receiverProductionOrderId: existingOrderId } });
   } else {
     for (const d of toAccept) {
       const orderId = genId('ord'); const orderNumber = await getNextWorkOrderNumber(tenantId); const items = (d.payload as any)?.items ?? []; const milestones = buildMilestones();
       await basePrisma.productionOrder.create({ data: { id: orderId, tenantId, orderNumber, productId: finalProductId, productName: displayName, sku: displaySku, status: orderStatus, ...(milestones.length > 0 ? { milestones: { create: milestones } } : {}) } });
-      await createOrderItems(orderId, tenantId, finalProductId, items);
+      await createOrderItemsWithSource(orderId, tenantId, finalProductId, items, d.id);
       await basePrisma.subcontractCollaborationDispatch.update({ where: { id: d.id }, data: { status: 'ACCEPTED', receiverProductionOrderId: orderId } });
       createdOrders.push(orderId);
     }
@@ -478,7 +536,9 @@ export async function createReturn(tenantId: string, transferId: string, body: {
     if (already + q > cap) throw new AppError(400, `规格「${[it.colorName, it.sizeName].filter(Boolean).join('/') || '无规格'}」回传超限：已回 ${already}，本次 ${q}，可回上限 ${cap}`);
   }
   if (alreadyReturnedTotal + thisReturn > totalDispatchedAccepted) throw new AppError(400, `回传数量超限：已回传 ${alreadyReturnedTotal} + 本次 ${thisReturn} > 已接受发出总量 ${totalDispatchedAccepted}`);
-  const stockOutDocNo = await generateDocNo('CK', 'production_op_records', 'doc_no', tenantId);
+  await assertReceiverPartnerBindingForReturn(tenantId, transfer.senderTenantId);
+  const partnerName = await getSenderPartnerName(tenantId, transfer.senderTenantId);
+  const stockOutDocNo = await generateReturnFlowDocNo(tenantId, partnerName);
   const receiverProductId = transfer.receiverProductId;
   const dictItems = receiverProductId ? await basePrisma.dictionaryItem.findMany({ where: { tenantId } }) : [];
   const dictByName = new Map(dictItems.map(d => [`${d.type}:${d.name}`, d.id]));
@@ -496,7 +556,7 @@ export async function createReturn(tenantId: string, transferId: string, body: {
         const sizeId = sn ? dictByName.get(`size:${sn}`) ?? null : null;
         variantId = variants.find(v => (colorId ? v.colorId === colorId : !v.colorId) && (sizeId ? v.sizeId === sizeId : !v.sizeId))?.id ?? null;
       }
-      await basePrisma.productionOpRecord.create({ data: { id: genId('prodop'), tenantId, type: 'STOCK_OUT', productId: receiverProductId, variantId, orderId: firstOrderId, quantity: qty, operator: '协作回传出库', timestamp: new Date(), status: '已完成', warehouseId: body.warehouseId ?? null, docNo: stockOutDocNo } });
+      await basePrisma.productionOpRecord.create({ data: { id: genId('prodop'), tenantId, type: 'STOCK_OUT', productId: receiverProductId, variantId, orderId: firstOrderId, quantity: qty, operator: '协作回传出库', timestamp: new Date(), status: '已完成', warehouseId: body.warehouseId ?? null, docNo: stockOutDocNo, partner: partnerName || null, collabData: { source: 'collaborationReturn', returnId: ret.id, transferId } } });
     }
   }
   return ret;
@@ -538,7 +598,7 @@ export async function receiveReturn(tenantId: string, returnId: string) {
     const partnerRow = await basePrisma.partner.findFirst({ where: { tenantId, collaborationTenantId: transfer.receiverTenantId }, select: { name: true } });
     localPartnerName = partnerRow ? partnerRow.name : ((await basePrisma.tenant.findUnique({ where: { id: transfer.receiverTenantId }, select: { name: true } }))?.name ?? '');
   } else if (!localPartnerName) { localPartnerName = (await basePrisma.tenant.findUnique({ where: { id: transfer.receiverTenantId }, select: { name: true } }))?.name ?? ''; }
-  const receiptDocNo = await generateDocNo('WXR', 'production_op_records', 'doc_no', tenantId);
+  const receiptDocNo = await nextOutsourceDocNoForPartner(tenantId, 'receive', localPartnerName);
   for (const item of returnItems) {
     const qty = Number(item.quantity) || 0; if (qty <= 0) continue;
     const key = collabVariantKey(item); const dInfo = dispatchLookup.get(key);
@@ -554,7 +614,20 @@ export async function receiveReturn(tenantId: string, returnId: string) {
   await basePrisma.subcontractCollaborationReturn.update({ where: { id: returnId }, data: { status: 'A_RECEIVED', payload: updatedPayload } });
   await updateTransferStatus(ret.transferId);
   if (transfer.originTransferId) {
-    await basePrisma.interTenantSubcontractTransfer.updateMany({ where: { OR: [{ id: transfer.originTransferId }, { originTransferId: transfer.originTransferId }], status: { not: 'CLOSED' } }, data: { status: 'CLOSED' } });
+    // Re-evaluate the entire chain: only close origin/siblings if ALL dispatched qty has been received
+    const chainTransfers = await basePrisma.interTenantSubcontractTransfer.findMany({
+      where: { OR: [{ id: transfer.originTransferId }, { originTransferId: transfer.originTransferId }] },
+      include: { dispatches: true, returns: true },
+    });
+    const allChainFullyClosed = chainTransfers.every(ct => {
+      const dTotal = aggregateDispatchedByVariant(ct.dispatches);
+      const dispatched = [...dTotal.values()].reduce((a, b) => a + b, 0);
+      const received = ct.returns.filter(r => r.status === 'A_RECEIVED').reduce((s, r) => s + ((r.payload as any)?.items ?? []).reduce((a: number, i: any) => a + (Number(i.quantity) || 0), 0), 0);
+      return dispatched > 0 && received >= dispatched;
+    });
+    if (allChainFullyClosed) {
+      await basePrisma.interTenantSubcontractTransfer.updateMany({ where: { OR: [{ id: transfer.originTransferId }, { originTransferId: transfer.originTransferId }], status: { not: 'CLOSED' } }, data: { status: 'CLOSED' } });
+    }
   }
   return { success: true, receiptDocNo };
 }
@@ -570,20 +643,20 @@ export async function forwardTransfer(tenantId: string, transferId: string, body
   const nextStepIdx = transfer.chainStep + 1;
   const nextStep = route.find((s: any) => s.stepOrder === nextStepIdx);
   if (!nextStep) throw new AppError(400, '已是路线最后一站，请使用回传功能');
-  const acceptedDispatches = transfer.dispatches.filter(d => d.status === 'ACCEPTED');
+  const acceptedDispatches = transfer.dispatches.filter(d => d.status === 'ACCEPTED' || d.status === 'FORWARDED');
   if (!acceptedDispatches.length) throw new AppError(400, '没有已接受的 Dispatch 可转发');
   // validate capacity
   const dispatchedBySpec = new Map<string, number>();
   for (const d of acceptedDispatches) for (const it of ((d.payload as any)?.items ?? [])) { const cn = normalizeSpecLabel(it.colorName); const sn = normalizeSpecLabel(it.sizeName); const k = `${cn ?? ''}\t${sn ?? ''}`; dispatchedBySpec.set(k, (dispatchedBySpec.get(k) || 0) + (Number(it.quantity) || 0)); }
   const returnedBySpec = new Map<string, number>();
-  for (const r of transfer.returns || []) for (const it of ((r.payload as any)?.items ?? [])) { const cn = normalizeSpecLabel(it.colorName); const sn = normalizeSpecLabel(it.sizeName); const k = `${cn ?? ''}\t${sn ?? ''}`; returnedBySpec.set(k, (returnedBySpec.get(k) || 0) + (Number(it.quantity) || 0)); }
+  for (const r of (transfer.returns || []).filter(r => r.status !== 'WITHDRAWN')) for (const it of ((r.payload as any)?.items ?? [])) { const cn = normalizeSpecLabel(it.colorName); const sn = normalizeSpecLabel(it.sizeName); const k = `${cn ?? ''}\t${sn ?? ''}`; returnedBySpec.set(k, (returnedBySpec.get(k) || 0) + (Number(it.quantity) || 0)); }
   for (const it of body.items) { const cn = normalizeSpecLabel(it.colorName); const sn = normalizeSpecLabel(it.sizeName); const k = `${cn ?? ''}\t${sn ?? ''}`; const max = (dispatchedBySpec.get(k) || 0) - (returnedBySpec.get(k) || 0); if (Number(it.quantity) > max) throw new AppError(400, `「${[cn, sn].filter(Boolean).join('/') || '无规格'}」转发数量 ${it.quantity} 超过可转发上限 ${max}`); }
   const originTenantId = transfer.originTenantId ?? transfer.senderTenantId;
   const originTransferId = transfer.originTransferId ?? transfer.id;
   const collab = await findCollaboration(originTenantId, nextStep.receiverTenantId);
   if (!collab) throw new AppError(400, `甲方与「${nextStep.receiverTenantName || ''}」未建立协作关系`);
   for (const d of acceptedDispatches) await basePrisma.subcontractCollaborationDispatch.update({ where: { id: d.id }, data: { status: 'FORWARDED' } });
-  await basePrisma.interTenantSubcontractTransfer.update({ where: { id: transferId }, data: { status: 'CLOSED' } });
+  await updateTransferStatus(transferId);
   const forwardItems = body.items.map((it: any) => ({ colorName: normalizeSpecLabel(it.colorName), sizeName: normalizeSpecLabel(it.sizeName), quantity: Number(it.quantity) }));
   let forwardStockOutDocNo: string | null = null;
   const receiverProductId = transfer.receiverProductId;
@@ -630,8 +703,8 @@ export async function confirmForward(tenantId: string, transferId: string) {
   const senderDictItems = senderProduct ? await basePrisma.dictionaryItem.findMany({ where: { tenantId } }) : [];
   const senderDictById = Object.fromEntries(senderDictItems.map(d => [d.id, d.name]));
   const resolveVariantId = (cn: string | null, sn: string | null): string | null => { if (!senderProduct?.variants?.length) return null; return senderProduct.variants.find(v => { const vc = v.colorId ? (senderDictById[v.colorId] ?? null) : null; const vs = v.sizeId ? (senderDictById[v.sizeId] ?? null) : null; return (vc ?? null) === (cn ?? null) && (vs ?? null) === (sn ?? null); })?.id ?? null; };
-  const receiveDocNo = await generateDocNo('WXR', 'production_op_records', 'doc_no', tenantId);
-  const dispatchDocNo = await generateDocNo('WX', 'production_op_records', 'doc_no', tenantId);
+  const receiveDocNo = await nextOutsourceDocNoForPartner(tenantId, 'receive', prevPartnerName);
+  const dispatchDocNo = await nextOutsourceDocNoForPartner(tenantId, 'dispatch', currPartnerName);
   for (const item of dispatchItems) {
     const qty = Number(item.quantity) || 0; if (qty <= 0) continue;
     const variantId = item.variantId ?? resolveVariantId(item.colorName ?? null, item.sizeName ?? null);
@@ -727,4 +800,404 @@ export async function deleteReturn(tenantId: string, returnId: string) {
   if (ret.status !== 'WITHDRAWN') throw new AppError(400, '仅已撤回的回传可以删除');
   await basePrisma.subcontractCollaborationReturn.delete({ where: { id: returnId } });
   return { success: true };
+}
+
+// ── Dispatch edit-sync (1a: PENDING direct update, 1b: ACCEPTED amendment) ──
+
+export async function updateDispatchPayload(tenantId: string, dispatchId: string, body: { recordIds: string[] }) {
+  if (!body.recordIds?.length) throw new AppError(400, '请提供新的记录 ID 列表');
+  const dispatch = await basePrisma.subcontractCollaborationDispatch.findUnique({ where: { id: dispatchId }, include: { transfer: true } });
+  if (!dispatch) throw new AppError(404, 'Dispatch 不存在');
+  assertTenantIs(tenantId, dispatch.transfer.senderTenantId);
+  if (dispatch.status !== 'PENDING') throw new AppError(400, '仅待接受状态的发出可以直接更新');
+
+  const oldRecordIds = jsonToStringIds(dispatch.senderDispatchRecordIds);
+  if (oldRecordIds.length > 0) {
+    await basePrisma.productionOpRecord.updateMany({ where: { id: { in: oldRecordIds } }, data: { collabData: Prisma.DbNull } });
+  }
+
+  const records = await basePrisma.productionOpRecord.findMany({ where: { id: { in: body.recordIds }, tenantId, type: 'OUTSOURCE' } });
+  if (records.length !== body.recordIds.length) throw new AppError(400, `部分记录不存在（找到 ${records.length}/${body.recordIds.length}）`);
+
+  const aLinkMode = await getProductionLinkMode(tenantId);
+  const productIds = [...new Set(records.map(r => r.productId))];
+  const products = await basePrisma.product.findMany({ where: { id: { in: productIds } }, include: { variants: true, category: true } });
+  const productMap = Object.fromEntries(products.map(p => [p.id, p]));
+  const dictItems = await basePrisma.dictionaryItem.findMany({ where: { tenantId } });
+  const dictById = Object.fromEntries(dictItems.map(d => [d.id, d.name]));
+
+  const firstProduct = productMap[records[0].productId];
+  if (!firstProduct) throw new AppError(400, '关联产品不存在');
+  const payload = buildDispatchPayload(firstProduct, records, aLinkMode, dictById);
+
+  await basePrisma.subcontractCollaborationDispatch.update({
+    where: { id: dispatchId },
+    data: { payload: payload as Prisma.InputJsonValue, senderDispatchRecordIds: body.recordIds },
+  });
+  for (const r of records) {
+    await basePrisma.productionOpRecord.update({ where: { id: r.id }, data: { collabData: { transferId: dispatch.transferId, dispatchId } } });
+  }
+  return { success: true };
+}
+
+export async function amendDispatch(tenantId: string, dispatchId: string, body: { recordIds: string[]; note?: string }) {
+  if (!body.recordIds?.length) throw new AppError(400, '请提供新的记录 ID 列表');
+  const dispatch = await basePrisma.subcontractCollaborationDispatch.findUnique({ where: { id: dispatchId }, include: { transfer: true } });
+  if (!dispatch) throw new AppError(404, 'Dispatch 不存在');
+  assertTenantIs(tenantId, dispatch.transfer.senderTenantId);
+  if (dispatch.status !== 'ACCEPTED' && dispatch.status !== 'FORWARDED') throw new AppError(400, '仅已接受/已转发状态的发出可以发起修订');
+
+  const records = await basePrisma.productionOpRecord.findMany({ where: { id: { in: body.recordIds }, tenantId, type: 'OUTSOURCE' } });
+  if (records.length !== body.recordIds.length) throw new AppError(400, `部分记录不存在（找到 ${records.length}/${body.recordIds.length}）`);
+
+  const aLinkMode = await getProductionLinkMode(tenantId);
+  const productIds = [...new Set(records.map(r => r.productId))];
+  const products = await basePrisma.product.findMany({ where: { id: { in: productIds } }, include: { variants: true, category: true } });
+  const productMap = Object.fromEntries(products.map(p => [p.id, p]));
+  const dictItems = await basePrisma.dictionaryItem.findMany({ where: { tenantId } });
+  const dictById = Object.fromEntries(dictItems.map(d => [d.id, d.name]));
+
+  const firstProduct = productMap[records[0].productId];
+  if (!firstProduct) throw new AppError(400, '关联产品不存在');
+  const amendmentPayload = buildDispatchPayload(firstProduct, records, aLinkMode, dictById);
+
+  const oldRecordIds = jsonToStringIds(dispatch.senderDispatchRecordIds);
+  if (oldRecordIds.length > 0) {
+    await basePrisma.productionOpRecord.updateMany({ where: { id: { in: oldRecordIds } }, data: { collabData: Prisma.DbNull } });
+  }
+
+  await basePrisma.subcontractCollaborationDispatch.update({
+    where: { id: dispatchId },
+    data: {
+      amendmentPayload: amendmentPayload as Prisma.InputJsonValue,
+      amendmentSenderRecordIds: body.recordIds,
+      amendmentStatus: 'PENDING_B_CONFIRM',
+      amendmentNote: body.note ?? null,
+      senderDispatchRecordIds: body.recordIds,
+    },
+  });
+
+  for (const r of records) {
+    await basePrisma.productionOpRecord.update({ where: { id: r.id }, data: { collabData: { transferId: dispatch.transferId, dispatchId } } });
+  }
+  return { success: true };
+}
+
+export async function confirmDispatchAmendment(tenantId: string, dispatchId: string) {
+  const dispatch = await basePrisma.subcontractCollaborationDispatch.findUnique({ where: { id: dispatchId }, include: { transfer: true } });
+  if (!dispatch) throw new AppError(404, 'Dispatch 不存在');
+  assertTenantIs(tenantId, dispatch.transfer.receiverTenantId);
+  if (dispatch.amendmentStatus !== 'PENDING_B_CONFIRM') throw new AppError(400, '该发出没有待确认的修订');
+
+  const newPayload = dispatch.amendmentPayload as any;
+  const newSenderRecordIds = dispatch.amendmentSenderRecordIds as string[] ?? [];
+
+  await basePrisma.subcontractCollaborationDispatch.update({
+    where: { id: dispatchId },
+    data: {
+      payload: newPayload as Prisma.InputJsonValue,
+      senderDispatchRecordIds: newSenderRecordIds,
+      amendmentPayload: Prisma.DbNull,
+      amendmentSenderRecordIds: Prisma.DbNull,
+      amendmentStatus: null,
+      amendmentNote: null,
+    },
+  });
+
+  let updatedOrderId: string | null = null;
+  let orderItemsChanged = false;
+  let quantityWarning: string | null = null;
+
+  if (dispatch.receiverProductionOrderId && newPayload?.items) {
+    const orderId = dispatch.receiverProductionOrderId;
+    updatedOrderId = orderId;
+
+    const transfer = dispatch.transfer;
+    const receiverProductId = transfer.receiverProductId;
+    if (receiverProductId) {
+      // Delete ALL order items for this order, then rebuild from every dispatch's current payload.
+      // This handles legacy items that lack sourceDispatchId (created before the field existed).
+      await basePrisma.orderItem.deleteMany({ where: { productionOrderId: orderId } });
+
+      const allDispatches = await basePrisma.subcontractCollaborationDispatch.findMany({
+        where: { receiverProductionOrderId: orderId, status: { in: ['ACCEPTED', 'FORWARDED'] } },
+      });
+      for (const d of allDispatches) {
+        const payload = d.payload as any;
+        const items = payload?.items ?? [];
+        if (items.length > 0) {
+          await createOrderItemsWithSource(orderId, tenantId, receiverProductId, items, d.id);
+        }
+      }
+      orderItemsChanged = true;
+
+      const order = await basePrisma.productionOrder.findUnique({ where: { id: orderId }, include: { milestones: true } });
+      if (order?.milestones) {
+        for (const ms of order.milestones) {
+          const completed = Number(ms.completedQuantity);
+          const allItems = await basePrisma.orderItem.findMany({ where: { productionOrderId: orderId } });
+          const totalPlanned = allItems.reduce((s, i) => s + Number(i.quantity), 0);
+          if (completed > totalPlanned && totalPlanned > 0) {
+            quantityWarning = `工单 ${order.orderNumber} 的工序「${ms.name}」已完成 ${completed}，但修订后计划量仅 ${totalPlanned}`;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  return { success: true, updatedOrderId, orderItemsChanged, quantityWarning };
+}
+
+export async function rejectDispatchAmendment(tenantId: string, dispatchId: string) {
+  const dispatch = await basePrisma.subcontractCollaborationDispatch.findUnique({ where: { id: dispatchId }, include: { transfer: true } });
+  if (!dispatch) throw new AppError(404, 'Dispatch 不存在');
+  assertTenantIs(tenantId, dispatch.transfer.receiverTenantId);
+  if (dispatch.amendmentStatus !== 'PENDING_B_CONFIRM') throw new AppError(400, '该发出没有待确认的修订');
+
+  await basePrisma.subcontractCollaborationDispatch.update({
+    where: { id: dispatchId },
+    data: { amendmentPayload: Prisma.DbNull, amendmentSenderRecordIds: Prisma.DbNull, amendmentStatus: null, amendmentNote: null },
+  });
+  return { success: true };
+}
+
+// ── Return edit-sync (2a: PENDING_A_RECEIVE direct update, 2b: A_RECEIVED amendment) ──
+
+export async function updateReturnPayload(tenantId: string, returnId: string, body: { items: any[]; note?: string; warehouseId?: string }) {
+  if (!Array.isArray(body.items) || body.items.length === 0) throw new AppError(400, '请提供回传明细');
+  const ret = await basePrisma.subcontractCollaborationReturn.findUnique({ where: { id: returnId }, include: { transfer: { include: { dispatches: true } } } });
+  if (!ret) throw new AppError(404, 'Return 不存在');
+  assertTenantIs(tenantId, ret.transfer.receiverTenantId);
+  if (ret.status !== 'PENDING_A_RECEIVE') throw new AppError(400, '仅待甲方收回状态的回传可以直接更新');
+  await assertReceiverPartnerBindingForReturn(tenantId, ret.transfer.senderTenantId);
+
+  const oldPayload = ret.payload as any;
+  const oldStockOutDocNo = oldPayload?.stockOutDocNo;
+  if (oldStockOutDocNo) {
+    await basePrisma.productionOpRecord.deleteMany({ where: { tenantId, docNo: oldStockOutDocNo, type: 'STOCK_OUT', operator: '协作回传出库' } });
+  }
+
+  const cleanItems = body.items.filter((i: any) => (Number(i.quantity) || 0) > 0);
+  const partnerName = await getSenderPartnerName(tenantId, ret.transfer.senderTenantId);
+  const stockOutDocNo =
+    oldStockOutDocNo && HC_DOCNO_REGEX.test(String(oldStockOutDocNo))
+      ? String(oldStockOutDocNo)
+      : await generateReturnFlowDocNo(tenantId, partnerName);
+  const receiverProductId = ret.transfer.receiverProductId;
+
+  if (receiverProductId) {
+    const dictItems = await basePrisma.dictionaryItem.findMany({ where: { tenantId } });
+    const dictByName = new Map(dictItems.map(d => [`${d.type}:${d.name}`, d.id]));
+    const variants = await basePrisma.productVariant.findMany({ where: { productId: receiverProductId } });
+    const orderIds = ret.transfer.dispatches.map(d => d.receiverProductionOrderId).filter((v): v is string => !!v);
+    const firstOrderId = orderIds[0] ?? null;
+
+    for (const item of cleanItems) {
+      const qty = Number(item.quantity) || 0;
+      if (qty <= 0) continue;
+      const cn = normalizeSpecLabel(item.colorName);
+      const sn = normalizeSpecLabel(item.sizeName);
+      let variantId: string | null = null;
+      if (cn || sn) {
+        const colorId = cn ? dictByName.get(`color:${cn}`) ?? null : null;
+        const sizeId = sn ? dictByName.get(`size:${sn}`) ?? null : null;
+        variantId = variants.find(v => (colorId ? v.colorId === colorId : !v.colorId) && (sizeId ? v.sizeId === sizeId : !v.sizeId))?.id ?? null;
+      }
+      await basePrisma.productionOpRecord.create({ data: { id: genId('prodop'), tenantId, type: 'STOCK_OUT', productId: receiverProductId, variantId, orderId: firstOrderId, quantity: qty, operator: '协作回传出库', timestamp: new Date(), status: '已完成', warehouseId: body.warehouseId ?? null, docNo: stockOutDocNo, partner: partnerName || null, collabData: { source: 'collaborationReturn', returnId, transferId: ret.transferId } } });
+    }
+  }
+
+  const newPayload = {
+    items: cleanItems,
+    note: body.note !== undefined ? body.note : oldPayload?.note,
+    stockOutDocNo,
+    warehouseId: body.warehouseId !== undefined ? body.warehouseId : oldPayload?.warehouseId,
+  };
+  await basePrisma.subcontractCollaborationReturn.update({ where: { id: returnId }, data: { payload: newPayload as Prisma.InputJsonValue } });
+  return { success: true };
+}
+
+export async function amendReturn(tenantId: string, returnId: string, body: { items: any[]; note?: string }) {
+  if (!Array.isArray(body.items) || body.items.length === 0) throw new AppError(400, '请提供修订明细');
+  const ret = await basePrisma.subcontractCollaborationReturn.findUnique({ where: { id: returnId }, include: { transfer: true } });
+  if (!ret) throw new AppError(404, 'Return 不存在');
+  assertTenantIs(tenantId, ret.transfer.receiverTenantId);
+  if (ret.status !== 'A_RECEIVED') throw new AppError(400, '仅已收回状态的回传可以发起修订');
+  if (ret.amendmentStatus === 'PENDING_A_CONFIRM') throw new AppError(400, '已有待确认的修订，请等待甲方处理');
+
+  const cleanItems = body.items.filter((i: any) => (Number(i.quantity) || 0) > 0);
+  await basePrisma.subcontractCollaborationReturn.update({
+    where: { id: returnId },
+    data: {
+      amendmentPayload: { items: cleanItems, note: body.note } as Prisma.InputJsonValue,
+      amendmentStatus: 'PENDING_A_CONFIRM',
+      amendmentNote: body.note ?? null,
+    },
+  });
+  return { success: true };
+}
+
+export async function confirmReturnAmendment(tenantId: string, returnId: string) {
+  const ret = await basePrisma.subcontractCollaborationReturn.findUnique({
+    where: { id: returnId },
+    include: { transfer: { include: { dispatches: true } } },
+  });
+  if (!ret) throw new AppError(404, 'Return 不存在');
+  assertTenantIs(tenantId, ret.transfer.senderTenantId);
+  if (ret.amendmentStatus !== 'PENDING_A_CONFIRM') throw new AppError(400, '该回传没有待确认的修订');
+
+  const oldPayload = ret.payload as any;
+  const receiptDocNo = oldPayload?.receiptDocNo;
+  const amendPayload = ret.amendmentPayload as any;
+  const newItems: any[] = amendPayload?.items ?? [];
+
+  // Collect nodeId/orderId/variantId/partner from existing receipt records before deleting them.
+  // These are authoritative for the sender side and independent of colorName/sizeName matching.
+  let oldRecordsByVariant = new Map<string, { nodeId: string | null; orderId: string | null; variantId: string | null }>();
+  let localPartnerName = '';
+  if (receiptDocNo) {
+    const oldRecords = await basePrisma.productionOpRecord.findMany({ where: { tenantId, docNo: receiptDocNo, type: 'OUTSOURCE', status: '已收回' } });
+    for (const rec of oldRecords) {
+      const vk = rec.variantId ?? '__none';
+      if (!oldRecordsByVariant.has(vk)) oldRecordsByVariant.set(vk, { nodeId: rec.nodeId, orderId: rec.orderId, variantId: rec.variantId });
+      if (!localPartnerName && rec.partner) localPartnerName = rec.partner;
+      await removeOutsourceProgress({ orderId: rec.orderId, productId: rec.productId, nodeId: rec.nodeId, docNo: rec.docNo, variantId: rec.variantId });
+    }
+    await basePrisma.productionOpRecord.deleteMany({ where: { tenantId, docNo: receiptDocNo, type: 'OUTSOURCE', status: '已收回' } });
+  }
+
+  const transfer = ret.transfer;
+  const dispatchLookup = new Map<string, { nodeId: string | null; variantId: string | null }>();
+  const allSenderRecordIds: string[] = [];
+  for (const d of transfer.dispatches) {
+    if (d.status !== 'ACCEPTED' && d.status !== 'FORWARDED') continue;
+    for (const item of ((d.payload as any)?.items ?? []) as any[]) {
+      const key = collabVariantKey(item);
+      if (!dispatchLookup.has(key)) dispatchLookup.set(key, { nodeId: item.nodeId ?? null, variantId: item.variantId ?? null });
+    }
+    allSenderRecordIds.push(...((d.senderDispatchRecordIds as string[]) ?? []));
+  }
+
+  let orderIdByVariant = new Map<string, string>();
+  if (allSenderRecordIds.length > 0) {
+    const origRecs = await basePrisma.productionOpRecord.findMany({ where: { id: { in: allSenderRecordIds } }, select: { orderId: true, variantId: true, partner: true } });
+    for (const r of origRecs) {
+      if (r.orderId && r.variantId && !orderIdByVariant.has(r.variantId)) orderIdByVariant.set(r.variantId, r.orderId);
+      if (!localPartnerName && r.partner) localPartnerName = r.partner;
+    }
+  }
+  if (!localPartnerName) {
+    const partnerRow = await basePrisma.partner.findFirst({ where: { tenantId, collaborationTenantId: transfer.receiverTenantId }, select: { name: true } });
+    localPartnerName = partnerRow?.name ?? (await basePrisma.tenant.findUnique({ where: { id: transfer.receiverTenantId }, select: { name: true } }))?.name ?? '';
+  }
+
+  const finalReceiptDocNo = receiptDocNo ?? await nextOutsourceDocNoForPartner(tenantId, 'receive', localPartnerName);
+  for (const item of newItems) {
+    const qty = Number(item.quantity) || 0;
+    if (qty <= 0) continue;
+    const key = collabVariantKey(item);
+    const dInfo = dispatchLookup.get(key);
+    let variantId = dInfo?.variantId ?? null;
+    let orderId = (variantId && orderIdByVariant.get(variantId)) ?? null;
+    let nodeId = dInfo?.nodeId ?? null;
+
+    // Prefer data from old receipt records — avoids mismatches when colorName/sizeName
+    // differs between sender and receiver dictionaries or is absent in amendment items.
+    const vk = variantId ?? '__none';
+    const oldRec = oldRecordsByVariant.get(vk);
+    if (oldRec) {
+      if (!nodeId) nodeId = oldRec.nodeId;
+      if (!orderId) orderId = oldRec.orderId;
+      if (!variantId) variantId = oldRec.variantId;
+    }
+    // Last resort: if still no nodeId, inherit from any old record (single-variant products)
+    if (!nodeId && oldRecordsByVariant.size > 0) {
+      const fallback = oldRecordsByVariant.values().next().value;
+      if (fallback) { nodeId = fallback.nodeId; if (!orderId) orderId = fallback.orderId; if (!variantId) variantId = fallback.variantId; }
+    }
+
+    const data = { id: genId('prodop'), tenantId, type: 'OUTSOURCE', productId: transfer.senderProductId, variantId, quantity: qty, operator: '协作回收', timestamp: new Date(), status: '已收回', partner: localPartnerName, nodeId, orderId, docNo: finalReceiptDocNo, collabData: { source: 'collaborationReturn', returnId: ret.id, transferId: transfer.id } };
+    await basePrisma.productionOpRecord.create({ data });
+    await applyOutsourceProgress({ ...data, tenantId });
+  }
+
+  const updatedPayload = { ...oldPayload, items: newItems, note: amendPayload?.note ?? oldPayload?.note, receiptDocNo: finalReceiptDocNo };
+  await basePrisma.subcontractCollaborationReturn.update({
+    where: { id: returnId },
+    data: {
+      payload: updatedPayload as Prisma.InputJsonValue,
+      amendmentPayload: Prisma.DbNull,
+      amendmentStatus: null,
+      amendmentNote: null,
+    },
+  });
+
+  return { success: true, receiptDocNo: finalReceiptDocNo };
+}
+
+export async function rejectReturnAmendment(tenantId: string, returnId: string) {
+  const ret = await basePrisma.subcontractCollaborationReturn.findUnique({ where: { id: returnId }, include: { transfer: true } });
+  if (!ret) throw new AppError(404, 'Return 不存在');
+  assertTenantIs(tenantId, ret.transfer.senderTenantId);
+  if (ret.amendmentStatus !== 'PENDING_A_CONFIRM') throw new AppError(400, '该回传没有待确认的修订');
+
+  await basePrisma.subcontractCollaborationReturn.update({
+    where: { id: returnId },
+    data: { amendmentPayload: Prisma.DbNull, amendmentStatus: null, amendmentNote: null },
+  });
+  return { success: true };
+}
+
+// ── helper: createOrderItems with sourceDispatchId ──
+
+async function createOrderItemsWithSource(orderId: string, tenantId: string, productId: string, items: any[], sourceDispatchId: string) {
+  const dictItems = await basePrisma.dictionaryItem.findMany({ where: { tenantId } });
+  const dictByName = new Map(dictItems.map(d => [`${d.type}:${d.name}`, d.id]));
+  const variants = await basePrisma.productVariant.findMany({ where: { productId } });
+  for (const item of items) {
+    if (!item.quantity || item.quantity <= 0) continue;
+    let variantId: string | null = null;
+    const itemColor = normalizeSpecLabel(item.colorName);
+    const itemSize = normalizeSpecLabel(item.sizeName);
+    if (itemColor || itemSize) {
+      const colorId = itemColor ? dictByName.get(`color:${itemColor}`) ?? null : null;
+      const sizeId = itemSize ? dictByName.get(`size:${itemSize}`) ?? null : null;
+      variantId = variants.find(v => (colorId ? v.colorId === colorId : !v.colorId) && (sizeId ? v.sizeId === sizeId : !v.sizeId))?.id ?? null;
+    }
+    await basePrisma.orderItem.create({ data: { productionOrderId: orderId, variantId, quantity: item.quantity, sourceDispatchId } });
+  }
+}
+
+// ── helper: removeOutsourceProgress (re-export for use in amendment) ──
+
+async function removeOutsourceProgress(record: { orderId: string | null; productId?: string | null; nodeId: string | null; docNo?: string | null; variantId?: string | null }) {
+  if (!record.docNo) return;
+  if (record.orderId && record.nodeId) {
+    const milestone = await basePrisma.milestone.findFirst({ where: { productionOrderId: record.orderId, templateId: record.nodeId } });
+    if (!milestone) return;
+    const reports = await basePrisma.milestoneReport.findMany({ where: { milestoneId: milestone.id, reportNo: record.docNo } });
+    if (reports.length === 0) return;
+    const totalQty = reports.reduce((s, r) => s + Number(r.quantity), 0);
+    await basePrisma.$transaction([
+      basePrisma.milestoneReport.deleteMany({ where: { milestoneId: milestone.id, reportNo: record.docNo } }),
+      basePrisma.milestone.update({ where: { id: milestone.id }, data: { completedQuantity: Math.max(0, Number(milestone.completedQuantity) - totalQty) } }),
+    ]);
+    return;
+  }
+  if (record.productId && record.nodeId) {
+    const vid = record.variantId || undefined;
+    const pmps: any[] = await basePrisma.productMilestoneProgress.findMany({
+      where: { productId: record.productId, milestoneTemplateId: record.nodeId!, ...(vid ? { variantId: vid } : {}) },
+      include: { reports: { where: { reportNo: record.docNo } } },
+    });
+    for (const pmp of pmps) {
+      if (!pmp.reports?.length) continue;
+      const totalQty = pmp.reports.reduce((s: number, r: any) => s + Number(r.quantity), 0);
+      await basePrisma.$transaction([
+        basePrisma.productProgressReport.deleteMany({ where: { progressId: pmp.id, reportNo: record.docNo } }),
+        basePrisma.productMilestoneProgress.update({ where: { id: pmp.id }, data: { completedQuantity: Math.max(0, Number(pmp.completedQuantity) - totalQty) } }),
+      ]);
+    }
+  }
 }

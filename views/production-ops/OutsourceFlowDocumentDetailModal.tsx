@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ScrollText, X, Check, Pencil, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import type {
   ProductionOpRecord,
   ProductionOrder,
@@ -15,6 +16,10 @@ import { hasOpsPerm } from './types';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import { productHasColorSizeMatrix } from '../../utils/productColorSize';
+import * as api from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
+import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 
 export interface OutsourceFlowDocumentDetailModalProps {
   productionLinkMode: 'order' | 'product';
@@ -55,6 +60,8 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   onDeleteRecord,
   onClose,
 }) => {
+  const { currentUser } = useAuth();
+  const flowDetailOperatorFallback = currentOperatorDisplayName(currentUser);
   const confirm = useConfirm();
   const [flowDetailEditMode, setFlowDetailEditMode] = useState(false);
   const [flowDetailEditPartner, setFlowDetailEditPartner] = useState('');
@@ -66,6 +73,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   if (docRecords.length === 0) return null;
   const first = docRecords[0];
   const isReceiveDoc = first.status === '已收回';
+  const isFromCollabReturn = docRecords.some(r => (r as any).collabData?.source === 'collaborationReturn');
   const totalAmount = isReceiveDoc ? docRecords.reduce((s, r) => s + (r.amount ?? 0), 0) : 0;
   const docDateStr = first.timestamp ? (() => { try { const d = new Date(first.timestamp); return isNaN(d.getTime()) ? first.timestamp : d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); } catch { return first.timestamp; } })() : '—';
   const docPartner = first.partner ?? '—';
@@ -105,6 +113,8 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                   const entries = (Object.entries(flowDetailQuantities) as [string, number][]).filter(([, qty]) => qty > 0);
                   if (entries.length === 0) { return; }
                   const toDelete = isReceiveDoc ? docRecords : docRecords.filter(r => r.status !== '已收回');
+                  let preservedCollabData: any;
+                  for (const rec of toDelete) { const cd = (rec as any).collabData; if (cd) { preservedCollabData = cd; break; } }
                   for (const rec of toDelete) await onDeleteRecord(rec.id);
                   const timestamp = first.timestamp || new Date().toLocaleString();
                   const newStatus = isReceiveDoc ? '已收回' : '加工中';
@@ -118,7 +128,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                       const bk = parts.length >= 2 ? `${productId}|${nodeId}` : key;
                       const unitPrice = isReceiveDoc ? (flowDetailUnitPrices[key] ?? flowDetailUnitPrices[bk] ?? 0) : undefined;
                       const amount = isReceiveDoc && unitPrice != null ? Number(qty) * unitPrice : undefined;
-                      batch.push({ id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, type: 'OUTSOURCE', productId, quantity: qty, reason: flowDetailEditRemark.trim() || undefined, operator: first.operator || '张主管', timestamp, status: newStatus, partner: partnerName, docNo: flowDetailKey, nodeId, variantId: variantId || undefined, unitPrice: unitPrice || undefined, amount: amount ?? undefined } as ProductionOpRecord);
+                      batch.push({ id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, type: 'OUTSOURCE', productId, quantity: qty, reason: flowDetailEditRemark.trim() || undefined, operator: first.operator || flowDetailOperatorFallback, timestamp, status: newStatus, partner: partnerName, docNo: flowDetailKey, nodeId, variantId: variantId || undefined, unitPrice: unitPrice || undefined, amount: amount ?? undefined, ...(preservedCollabData ? { collabData: preservedCollabData } : {}) } as ProductionOpRecord);
                       return;
                     }
                     const orderId = parts[0];
@@ -127,9 +137,39 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                     if (!order) return;
                     const unitPrice = isReceiveDoc ? (flowDetailUnitPrices[key] ?? flowDetailUnitPrices[bk] ?? 0) : undefined;
                     const amount = isReceiveDoc && unitPrice != null ? Number(qty) * unitPrice : undefined;
-                    batch.push({ id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, type: 'OUTSOURCE', orderId, productId: order.productId, quantity: qty, reason: flowDetailEditRemark.trim() || undefined, operator: first.operator || '张主管', timestamp, status: newStatus, partner: partnerName, docNo: flowDetailKey, nodeId, variantId: variantId || undefined, unitPrice: unitPrice || undefined, amount: amount ?? undefined } as ProductionOpRecord);
+                    batch.push({ id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, type: 'OUTSOURCE', orderId, productId: order.productId, quantity: qty, reason: flowDetailEditRemark.trim() || undefined, operator: first.operator || flowDetailOperatorFallback, timestamp, status: newStatus, partner: partnerName, docNo: flowDetailKey, nodeId, variantId: variantId || undefined, unitPrice: unitPrice || undefined, amount: amount ?? undefined, ...(preservedCollabData ? { collabData: preservedCollabData } : {}) } as ProductionOpRecord);
                   });
                   if (onAddRecordBatch && batch.length > 1) { await onAddRecordBatch(batch); } else { for (const rec of batch) await onAddRecord(rec); }
+
+                  const collabDispatchIds = new Set<string>();
+                  for (const rec of toDelete) {
+                    const cd = (rec as any).collabData;
+                    if (cd?.dispatchId) collabDispatchIds.add(cd.dispatchId);
+                  }
+                  if (collabDispatchIds.size > 0) {
+                    const newRecordIds = batch.map(r => r.id);
+                    const doSync = await confirm({ message: '此单据关联协作发出（已同步给乙方）。是否将编辑后的数据同步给乙方？\n\n选择"确认"将推送修订给乙方确认。' });
+                    if (doSync) {
+                      for (const dispatchId of collabDispatchIds) {
+                        try {
+                          await api.collaboration.updateDispatchPayload(dispatchId, { recordIds: newRecordIds });
+                          toast.success('已更新同步数据');
+                        } catch (err: any) {
+                          if (err.message?.includes('仅待接受')) {
+                            try {
+                              await api.collaboration.amendDispatch(dispatchId, { recordIds: newRecordIds });
+                              toast.success('已向乙方推送修订');
+                            } catch (e2: any) {
+                              toast.error(`同步失败: ${e2.message || '未知错误'}`);
+                            }
+                          } else {
+                            toast.error(`同步失败: ${err.message || '未知错误'}`);
+                          }
+                        }
+                      }
+                    }
+                  }
+
                   setFlowDetailEditMode(false);
                   setFlowDetailUnitPrices({});
                 }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700">
@@ -173,6 +213,12 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
             <button type="button" onClick={() => { onClose(); setFlowDetailEditMode(false); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
           </div>
         </div>
+        {flowDetailEditMode && isFromCollabReturn && (
+          <div className="px-6 py-3 border-b border-amber-200 bg-amber-50 shrink-0 flex items-start gap-2">
+            <span className="text-amber-500 text-sm mt-0.5">⚠</span>
+            <p className="text-xs text-amber-700 leading-relaxed">此单据来源于协作回传，本地修改<strong>不会</strong>同步到乙方。如需双方数据一致，请通知乙方在协作管理中编辑并重新同步。</p>
+          </div>
+        )}
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">单据基本信息</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -213,16 +259,17 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
           <div className="space-y-8">
             {detailLines.map(({ key, order, product, orderNumber, productName, nodeName, records: lineRecords, variantQty }) => {
               const category = categories.find(c => c.id === product?.categoryId);
-              const hasColorSizeCategory = !!category?.hasColorSize;
+              const matrixEnabled = productHasColorSizeMatrix(product, category);
               const allProductVariants = (product?.variants as ProductVariant[]) ?? [];
               const variantIdsInOrder = new Set((order?.items ?? []).map(i => i.variantId).filter(Boolean));
               const variantIdsFromRecords = new Set(Object.entries(variantQty).filter(([vid, q]) => vid !== '' && (Number(q) || 0) !== 0).map(([vid]) => vid));
               let variantsForDetail: ProductVariant[] = [];
-              if (hasColorSizeCategory && allProductVariants.length > 0) {
+              if (matrixEnabled && allProductVariants.length > 0) {
                 if (variantIdsInOrder.size > 0) variantsForDetail = allProductVariants.filter(v => variantIdsInOrder.has(v.id));
                 if (variantsForDetail.length === 0 && variantIdsFromRecords.size > 0) variantsForDetail = allProductVariants.filter(v => variantIdsFromRecords.has(v.id));
+                if (variantsForDetail.length === 0) variantsForDetail = [...allProductVariants];
               }
-              const showVariantQtyGrid = hasColorSizeCategory && variantsForDetail.length > 0;
+              const showVariantQtyGrid = matrixEnabled && variantsForDetail.length > 0;
               if (showVariantQtyGrid) {
                 const groupedByColor: Record<string, ProductVariant[]> = {};
                 variantsForDetail.forEach(v => { if (!groupedByColor[v.colorId]) groupedByColor[v.colorId] = []; groupedByColor[v.colorId].push(v); });

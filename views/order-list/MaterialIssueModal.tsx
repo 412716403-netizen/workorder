@@ -11,6 +11,9 @@ import {
   ProdOpType,
   GlobalNodeTemplate,
 } from '../../types';
+import { toLocalCompactYmd } from '../../utils/localDateTime';
+import { useAuth } from '../../contexts/AuthContext';
+import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 
 interface MaterialIssueModalProps {
   orderId: string | null;
@@ -50,6 +53,8 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
   onAddRecord,
   onClose,
 }) => {
+  const { currentUser } = useAuth();
+  const docOperator = currentOperatorDisplayName(currentUser);
   const [materialIssueQty, setMaterialIssueQty] = useState<Record<string, number>>({});
   const [materialIssueWarehouseId, setMaterialIssueWarehouseId] = useState<string>(warehouses[0]?.id ?? '');
 
@@ -64,7 +69,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
 
   const getNextStockDocNo = () => {
     const prefix = 'LL';
-    const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const todayStr = toLocalCompactYmd(new Date());
     const pattern = `${prefix}${todayStr}-`;
     const existing = prodRecords.filter(r => r.type === 'STOCK_OUT' && r.docNo && r.docNo.startsWith(pattern));
     const seqs = existing.map(r => parseInt(r.docNo!.slice(pattern.length), 10)).filter(n => !isNaN(n));
@@ -135,7 +140,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
       bomMaterials.push({ productId, ...v, nodeNames: Array.from(v.nodeNames) });
     });
     const issuedMap = new Map<string, number>();
-    prodRecords.filter(r => r.type === 'STOCK_OUT' && r.orderId === order.id && r.reason !== '来自于返工').forEach(r => {
+    prodRecords.filter(r => r.type === 'STOCK_OUT' && !r.partner && r.orderId === order.id && r.reason !== '来自于返工').forEach(r => {
       issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
     });
     const handleIssueMaterials = () => {
@@ -149,7 +154,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
           orderId: order.id,
           productId: m.productId,
           quantity: materialIssueQty[m.productId],
-          operator: '张主管',
+          operator: docOperator,
           timestamp: new Date().toLocaleString(),
           status: '已完成',
           warehouseId: materialIssueWarehouseId || undefined,
@@ -369,7 +374,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
     const familyIds = new Set(groupOrders.map(o => o.id));
     const issuedMap = new Map<string, number>();
     prodRecords
-      .filter(r => r.type === 'STOCK_OUT' && r.reason !== '来自于返工')
+      .filter(r => r.type === 'STOCK_OUT' && !r.partner && r.reason !== '来自于返工')
       .forEach(r => {
         const hit =
           r.sourceProductId === sourceProductId ||
@@ -386,7 +391,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
           type: 'STOCK_OUT' as ProdOpType,
           productId: m.productId,
           quantity: materialIssueQty[m.productId],
-          operator: '张主管',
+          operator: docOperator,
           timestamp: new Date().toLocaleString(),
           status: '已完成',
           warehouseId: materialIssueWarehouseId || undefined,

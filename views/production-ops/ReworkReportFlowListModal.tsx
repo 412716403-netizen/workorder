@@ -3,6 +3,8 @@ import { History, X, Filter, FileText } from 'lucide-react';
 import { ProductionOpRecord, ProductionOrder, Product, GlobalNodeTemplate } from '../../types';
 import { hasOpsPerm } from './types';
 import { formatTimestamp } from '../../utils/formatTime';
+import { toLocalCompactYmd, toLocalDateYmd } from '../../utils/localDateTime';
+import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 
 export interface ReworkReportFlowListModalProps {
   productionLinkMode: 'order' | 'product';
@@ -33,8 +35,8 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
 
   const validDocNoRe = /^FG\d{8}-\d{4}$/;
   const getDateStr = (r: ProductionOpRecord) => {
-    const d = r.timestamp ? new Date(r.timestamp) : new Date();
-    return isNaN(d.getTime()) ? new Date().toISOString().split('T')[0].replace(/-/g, '') : d.toISOString().split('T')[0].replace(/-/g, '');
+    const ds = toLocalCompactYmd(r.timestamp || new Date());
+    return ds || toLocalCompactYmd(new Date());
   };
 
   const reworkDisplayDocNoMap = useMemo(() => {
@@ -59,8 +61,7 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
   const getDisplayDocNo = (r: ProductionOpRecord) => {
     if (r.docNo && validDocNoRe.test(r.docNo)) return r.docNo;
     return reworkDisplayDocNoMap.get(r.id) ?? (() => {
-      const d = r.timestamp ? new Date(r.timestamp) : new Date();
-      const dateStr = isNaN(d.getTime()) ? new Date().toISOString().split('T')[0].replace(/-/g, '') : d.toISOString().split('T')[0].replace(/-/g, '');
+      const dateStr = toLocalCompactYmd(r.timestamp || new Date()) || toLocalCompactYmd(new Date());
       return `FG${dateStr}-0001`;
     })();
   };
@@ -91,7 +92,7 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
     const product = products.find(p => p.id === r.productId);
     const nodeName = r.nodeId ? (globalNodes.find(n => n.id === r.nodeId)?.name ?? '') : '';
     if (f.dateFrom || f.dateTo) {
-      const dateStr = r.timestamp ? new Date(r.timestamp).toISOString().split('T')[0] : '';
+      const dateStr = r.timestamp ? toLocalDateYmd(r.timestamp) : '';
       if (f.dateFrom && dateStr < f.dateFrom) return false;
       if (f.dateTo && dateStr > f.dateTo) return false;
     }
@@ -117,7 +118,10 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
     return true;
   }), [reworkRecords, f, orders, products, globalNodes, reworkDisplayDocNoMap, reworkById]);
 
-  const sorted = useMemo(() => [...filtered].sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()), [filtered]);
+  const sorted = useMemo(
+    () => [...filtered].sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()),
+    [filtered],
+  );
 
   /** 标准 FG 单号 + 同一产品合并为一行（与返工报工详情批次一致） */
   const groupedRows = useMemo(() => {
@@ -135,12 +139,11 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
         groups.set(gKey, { records: [r], totalQty: r.quantity ?? 0, totalAmount: amt, first: r });
       }
     }
-    const maxTime = (recs: ProductionOpRecord[]) =>
-      recs.reduce((m, x) => {
-        const t = new Date(x.timestamp || 0).getTime();
-        return isNaN(t) ? m : Math.max(m, t);
-      }, 0);
-    return [...groups.values()].sort((a, b) => maxTime(b.records) - maxTime(a.records));
+    return [...groups.values()].sort((a, b) => {
+      const d = flowRecordsEarliestMs(b.records) - flowRecordsEarliestMs(a.records);
+      if (d !== 0) return d;
+      return (a.first.id || '').localeCompare(b.first.id || '');
+    });
   }, [sorted]);
 
   const totalQuantity = useMemo(() => groupedRows.reduce((s, g) => s + g.totalQty, 0), [groupedRows]);
@@ -157,7 +160,7 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
           <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
         </div>
         <div className="px-6 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0">
-          <p className="text-xs text-slate-500">返工报工流水；同一报工单号（FG）且同一产品的多条明细合并为一行显示。按最近时间排序。</p>
+          <p className="text-xs text-slate-500">返工报工流水；同一报工单号（FG）且同一产品的多条明细合并为一行显示。按单据创建时间倒序，编辑不改变顺序。</p>
         </div>
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
           <div className="flex items-center gap-2 mb-3">

@@ -10,6 +10,9 @@ import type {
   GlobalNodeTemplate,
   Warehouse,
 } from '../../types';
+import { toLocalCompactYmd } from '../../utils/localDateTime';
+import { useAuth } from '../../contexts/AuthContext';
+import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 
 export interface OutsourceMaterialDispatchModalProps {
   productionLinkMode: 'order' | 'product';
@@ -58,6 +61,8 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
   onAddRecordBatch,
   onClose,
 }) => {
+  const { currentUser } = useAuth();
+  const docOperator = currentOperatorDisplayName(currentUser);
   const isProductMode = productionLinkMode === 'product';
   const targetOrder = !isProductMode && matDispatchOrderId ? orders.find(o => o.id === matDispatchOrderId) : undefined;
   const targetProductId = isProductMode ? matDispatchProductId : targetOrder?.productId;
@@ -80,82 +85,59 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
       }
     });
   };
-  if (isProductMode && targetProduct) {
-    const relatedOrders = orders.filter(o => o.productId === targetProduct.id);
-    const variants = targetProduct.variants ?? [];
-    relatedOrders.forEach(ord => {
-      const oQty = ord.items?.reduce((s, i) => s + i.quantity, 0) ?? 0;
-      if (variants.length > 0) {
-        ord.items?.forEach(item => {
-          const v = variants.find(vx => vx.id === item.variantId) ?? variants[0];
-          const lineQty = item.quantity;
-          const seenBomIds = new Set<string>();
-          if (v?.nodeBoms && Object.keys(v.nodeBoms).length > 0) {
-            (Object.entries(v.nodeBoms) as [string, string][]).forEach(([nodeId, bomId]) => {
-              if (seenBomIds.has(bomId)) return;
-              seenBomIds.add(bomId);
-              const nodeName = globalNodes.find(n => n.id === nodeId)?.name ?? '';
-              const bom = boms.find(b => b.id === bomId);
-              if (bom) addBomItems(bom, lineQty, nodeName);
-            });
-          } else {
-            boms.filter(b => b.parentProductId === targetProduct.id && b.variantId === v.id && b.nodeId).forEach(bom => {
-              if (seenBomIds.has(bom.id)) return;
-              seenBomIds.add(bom.id);
-              const nodeName = globalNodes.find(n => n.id === bom.nodeId)?.name ?? '';
-              addBomItems(bom, lineQty, nodeName);
-            });
-          }
-        });
-      }
-      if (matMap.size === 0) {
-        const seenBomIds = new Set<string>();
-        boms.filter(b => b.parentProductId === targetProduct.id && b.nodeId).forEach(bom => {
-          if (seenBomIds.has(bom.id)) return;
-          seenBomIds.add(bom.id);
-          const nodeName = globalNodes.find(n => n.id === bom.nodeId)?.name ?? '';
-          const qty = bom.variantId
-            ? (ord.items?.find(i => i.variantId === bom.variantId)?.quantity ?? 0)
-            : oQty;
-          addBomItems(bom, qty, nodeName);
-        });
+  const outsourceQtyByNode = new Map<string, number>();
+  const outsourceQtyByNodeVar = new Map<string, number>();
+  {
+    const relOrderIds = isProductMode
+      ? new Set(orders.filter(o => o.productId === targetProductId).map(o => o.id))
+      : undefined;
+    records.forEach(r => {
+      if (r.type !== 'OUTSOURCE' || !r.nodeId || r.sourceReworkId) return;
+      if (r.status !== '加工中') return;
+      const match = isProductMode
+        ? ((r.productId === targetProductId && !r.orderId) || (r.orderId && relOrderIds!.has(r.orderId)))
+        : (r.orderId === targetOrder?.id);
+      if (!match) return;
+      outsourceQtyByNode.set(r.nodeId, (outsourceQtyByNode.get(r.nodeId) ?? 0) + r.quantity);
+      if (r.variantId) {
+        const vk = `${r.nodeId}|${r.variantId}`;
+        outsourceQtyByNodeVar.set(vk, (outsourceQtyByNodeVar.get(vk) ?? 0) + r.quantity);
       }
     });
-  } else if (targetOrder && targetProduct) {
+  }
+  if (targetProduct) {
     const variants = targetProduct.variants ?? [];
     if (variants.length > 0) {
-      targetOrder.items?.forEach(item => {
-        const v = variants.find(vx => vx.id === item.variantId) ?? variants[0];
-        const lineQty = item.quantity;
+      for (const v of variants) {
         const seenBomIds = new Set<string>();
-        if (v?.nodeBoms && Object.keys(v.nodeBoms).length > 0) {
+        if (v.nodeBoms && Object.keys(v.nodeBoms).length > 0) {
           (Object.entries(v.nodeBoms) as [string, string][]).forEach(([nodeId, bomId]) => {
             if (seenBomIds.has(bomId)) return;
             seenBomIds.add(bomId);
             const nodeName = globalNodes.find(n => n.id === nodeId)?.name ?? '';
             const bom = boms.find(b => b.id === bomId);
-            if (bom) addBomItems(bom, lineQty, nodeName);
+            const qty = outsourceQtyByNodeVar.get(`${nodeId}|${v.id}`) ?? 0;
+            if (bom && qty > 0) addBomItems(bom, qty, nodeName);
           });
         } else {
           boms.filter(b => b.parentProductId === targetProduct.id && b.variantId === v.id && b.nodeId).forEach(bom => {
             if (seenBomIds.has(bom.id)) return;
             seenBomIds.add(bom.id);
             const nodeName = globalNodes.find(n => n.id === bom.nodeId)?.name ?? '';
-            addBomItems(bom, lineQty, nodeName);
+            const qty = outsourceQtyByNodeVar.get(`${bom.nodeId!}|${v.id}`) ?? 0;
+            if (qty > 0) addBomItems(bom, qty, nodeName);
           });
         }
-      });
+      }
     }
     if (matMap.size === 0) {
-      const seenBomIds = new Set<string>();
       boms.filter(b => b.parentProductId === targetProduct.id && b.nodeId).forEach(bom => {
-        if (seenBomIds.has(bom.id)) return;
-        seenBomIds.add(bom.id);
-        const nodeName = globalNodes.find(n => n.id === bom.nodeId)?.name ?? '';
+        const nodeId = bom.nodeId!;
+        const nodeName = globalNodes.find(n => n.id === nodeId)?.name ?? '';
         const qty = bom.variantId
-          ? (targetOrder.items?.find(i => i.variantId === bom.variantId)?.quantity ?? 0)
-          : orderQty;
-        addBomItems(bom, qty, nodeName);
+          ? (outsourceQtyByNodeVar.get(`${nodeId}|${bom.variantId}`) ?? 0)
+          : (outsourceQtyByNode.get(nodeId) ?? 0);
+        if (qty > 0) addBomItems(bom, qty, nodeName);
       });
     }
   }
@@ -164,21 +146,21 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
   });
   const issuedMap = new Map<string, number>();
   if (isProductMode) {
-    records.filter(r => r.type === 'STOCK_OUT' && r.productId && (r.sourceProductId === targetProductId || (!r.orderId && !r.sourceProductId && r.productId))).forEach(r => {
+    records.filter(r => r.type === 'STOCK_OUT' && r.partner && r.productId && (r.sourceProductId === targetProductId || (!r.orderId && !r.sourceProductId && r.productId))).forEach(r => {
       issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
     });
     const relatedOrderIds = new Set(orders.filter(o => o.productId === targetProductId).map(o => o.id));
-    records.filter(r => r.type === 'STOCK_OUT' && r.orderId && relatedOrderIds.has(r.orderId)).forEach(r => {
+    records.filter(r => r.type === 'STOCK_OUT' && r.partner && r.orderId && relatedOrderIds.has(r.orderId)).forEach(r => {
       issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
     });
   } else if (targetOrder) {
-    records.filter(r => r.type === 'STOCK_OUT' && r.orderId === targetOrder.id && r.reason !== '来自于返工').forEach(r => {
+    records.filter(r => r.type === 'STOCK_OUT' && r.partner && r.orderId === targetOrder.id && r.reason !== '来自于返工').forEach(r => {
       issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
     });
   }
   const getNextWfDocNo = () => {
     const prefix = 'WF';
-    const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const todayStr = toLocalCompactYmd(new Date());
     const pattern = `${prefix}${todayStr}-`;
     const existing = records.filter(r => r.type === 'STOCK_OUT' && r.docNo && r.docNo.startsWith(pattern));
     const seqs = existing.map(r => parseInt(r.docNo!.slice(pattern.length), 10)).filter(n => !isNaN(n));
@@ -203,7 +185,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
       orderId: isProductMode ? undefined : (matDispatchOrderId ?? undefined),
       productId: m.productId,
       quantity: matDispatchQty[m.productId],
-      operator: '张主管',
+      operator: docOperator,
       timestamp,
       status: '已完成',
       partner: matDispatchPartner,

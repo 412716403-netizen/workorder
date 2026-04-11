@@ -16,6 +16,7 @@ import type {
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 import { variantMaxGoodProductMode } from '../../utils/productReportAggregates';
+import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 
 export interface DispatchRow {
   orderId?: string;
@@ -124,21 +125,63 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
             const blockOrders = isProductBlock ? orders.filter(o => o.productId === row.productId) : [];
             const variantIdsInBlock = new Set<string>();
             blockOrders.forEach(o => { (o.items ?? []).forEach(i => { if ((i.quantity ?? 0) > 0 && i.variantId) variantIdsInBlock.add(i.variantId); }); });
-            const variantIdsInOrder = new Set((order?.items ?? []).map(i => i.variantId).filter(Boolean));
-            const hasMultiVariantProduct = (product?.variants?.length ?? 0) > 1;
-            const hasColorSizeOrder = productionLinkMode === 'order' && category?.hasColorSize && hasMultiVariantProduct;
-            const hasColorSizeProduct = isProductBlock && category?.hasColorSize && hasMultiVariantProduct;
+            const variantIdsInOrderItems = new Set((order?.items ?? []).map(i => i.variantId).filter(Boolean));
+            const variantIdsFromOrderMilestone = new Set<string>();
+            const msRow = order?.milestones?.find(m => m.templateId === row.nodeId);
+            (msRow?.reports ?? []).forEach(r => { if (r.variantId) variantIdsFromOrderMilestone.add(r.variantId); });
+            const variantIdsForOrderGrid = new Set([...variantIdsInOrderItems, ...variantIdsFromOrderMilestone]);
+            const orderHasSpecBreakdown = variantIdsForOrderGrid.size > 0;
+            const hasColorSizeMatrix = productHasColorSizeMatrix(product, category);
+            const hasColorSizeOrder = productionLinkMode === 'order' && hasColorSizeMatrix;
+            const hasColorSizeProduct = isProductBlock && hasColorSizeMatrix;
             const baseKey = dispatchRowKey;
-            const variantsInOrder = hasColorSizeOrder && product?.variants ? (product.variants as ProductVariant[]).filter(v => variantIdsInOrder.has(v.id)) : [];
-            const variantsInProductBlock = hasColorSizeProduct && product?.variants ? (product.variants as ProductVariant[]).filter(v => variantIdsInBlock.has(v.id)) : [];
+            let variantsInOrder =
+              hasColorSizeOrder && product?.variants
+                ? (product.variants as ProductVariant[]).filter(v => variantIdsForOrderGrid.has(v.id))
+                : [];
+            if (hasColorSizeOrder && product?.variants && product.variants.length > 0 && variantsInOrder.length === 0) {
+              variantsInOrder = [...(product.variants as ProductVariant[])];
+            }
+            const aggregateOrderVariantDispatch = hasColorSizeOrder && variantsInOrder.length > 0 && !orderHasSpecBreakdown;
+
+            let variantsInProductBlock: ProductVariant[] = [];
+            const variantIdsFromProgress = new Set<string>();
+            if (hasColorSizeProduct) {
+              (productMilestoneProgresses ?? []).forEach(pmp => {
+                if (pmp.productId !== row.productId || pmp.milestoneTemplateId !== row.nodeId) return;
+                if (pmp.variantId) variantIdsFromProgress.add(pmp.variantId);
+                (pmp.reports ?? []).forEach(r => { if (r.variantId) variantIdsFromProgress.add(r.variantId); });
+              });
+              blockOrders.forEach(o => {
+                const ms = o.milestones?.find(m => m.templateId === row.nodeId);
+                (ms?.reports ?? []).forEach(r => { if (r.variantId) variantIdsFromProgress.add(r.variantId); });
+              });
+            }
+            const variantIdsForProductBlockSet = new Set([...variantIdsInBlock, ...variantIdsFromProgress]);
+            if (hasColorSizeProduct && product?.variants) {
+              variantsInProductBlock = (product.variants as ProductVariant[]).filter(v => variantIdsForProductBlockSet.has(v.id));
+            }
+            if (hasColorSizeProduct && product?.variants && product.variants.length > 0 && variantsInProductBlock.length === 0) {
+              variantsInProductBlock = [...(product.variants as ProductVariant[])];
+            }
+            const aggregateProductVariantDispatch =
+              hasColorSizeProduct && variantsInProductBlock.length > 0 && variantIdsForProductBlockSet.size === 0;
 
             if (variantsInOrder.length > 0) {
-              const ms = order?.milestones?.find(m => m.templateId === row.nodeId);
+              const ms = msRow;
               const msIdx = order?.milestones?.findIndex(m => m.templateId === row.nodeId) ?? -1;
               const prevMs = (processSequenceMode === 'sequential' && msIdx > 0) ? order?.milestones?.[msIdx - 1] : undefined;
               const outsourceDispatchedForNode = records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && r.orderId === row.orderId && r.nodeId === row.nodeId);
               const drForNode = row.orderId ? (defectiveReworkByOrderForOutsource.get(`${row.orderId}|${row.nodeId}`) ?? { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> }) : { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> };
+              const sumOtherVariantQtyOrder = (currentId: string) =>
+                variantsInOrder.reduce(
+                  (s, v) => (v.id === currentId ? s : s + (dispatchFormQuantities[`${baseKey}|${v.id}`] ?? 0)),
+                  0,
+                );
               const getAvailableForVariant = (variantId: string) => {
+                if (aggregateOrderVariantDispatch) {
+                  return Math.max(0, row.availableQty - sumOtherVariantQtyOrder(variantId));
+                }
                 const completedInMs = (ms?.reports ?? []).filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + Number(r.quantity), 0);
                 const defectiveForVariant = (ms?.reports ?? []).filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + Number(r.defectiveQuantity ?? 0), 0);
                 let seqRemaining: number;
@@ -163,6 +206,9 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
                     <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">颜色尺码</span>
                     <span className="text-sm font-bold text-slate-800">{row.productName}</span>
                     <span className="text-sm font-bold text-indigo-600">{row.milestoneName}</span>
+                    {aggregateOrderVariantDispatch && (
+                      <span className="text-xs text-slate-500">（工单未按规格拆行或报工未选规格：各规格合计不超过可委外 {row.availableQty}）</span>
+                    )}
                   </div>
                   <div className="space-y-4">
                     {sortedVariantColorEntries(groupedByColor, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
@@ -200,7 +246,15 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
               const milestoneNodeIds = product?.milestoneNodeIds || [];
               const seq = (processSequenceMode ?? 'free') as ProcessSequenceMode;
               const outsourcedProductNode = records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId);
+              const sumOtherVariantQtyProduct = (currentId: string) =>
+                variantsInProductBlock.reduce(
+                  (s, v) => (v.id === currentId ? s : s + (dispatchFormQuantities[`${baseKey}|${v.id}`] ?? 0)),
+                  0,
+                );
               const getAvailableForVariantProduct = (variantId: string) => {
+                if (aggregateProductVariantDispatch) {
+                  return Math.max(0, row.availableQty - sumOtherVariantQtyProduct(variantId));
+                }
                 const maxGood = variantMaxGoodProductMode(variantId, row.nodeId, row.productId, blockOrders, productMilestoneProgresses || [], seq, milestoneNodeIds, getDr);
                 const dispatched = outsourcedProductNode.filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + r.quantity, 0);
                 return Math.max(0, maxGood - dispatched);
@@ -213,7 +267,11 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
                     <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">关联产品 · 颜色尺码</span>
                     <span className="text-sm font-bold text-slate-800">{row.productName}</span>
                     <span className="text-sm font-bold text-indigo-600">{row.milestoneName}</span>
-                    <span className="text-xs text-slate-500">（合计可委外 {row.availableQty}，按规格之和填写）</span>
+                    <span className="text-xs text-slate-500">
+                      {aggregateProductVariantDispatch
+                        ? `（工单/报工未带规格：各规格合计不超过可委外 ${row.availableQty}）`
+                        : `（合计可委外 ${row.availableQty}，按规格之和填写）`}
+                    </span>
                   </div>
                   <div className="space-y-4">
                     {sortedVariantColorEntries(groupedByColor, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {

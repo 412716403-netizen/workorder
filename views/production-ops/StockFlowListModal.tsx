@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import type { ProductionOpRecord, ProductionOrder, Product } from '../../types';
 import { hasOpsPerm, type StockDocDetail } from './types';
+import { formatLocalDateTimeZh, parseProductionOpTimestampMs, toLocalDateYmdFromProductionTimestamp } from '../../utils/localDateTime';
+import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 
 export interface StockFlowListModalProps {
   visible: boolean;
@@ -41,9 +43,23 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
   const [stockFlowFilterDateFrom, setStockFlowFilterDateFrom] = useState('');
   const [stockFlowFilterDateTo, setStockFlowFilterDateTo] = useState('');
 
-  const stockFlowRecords = useMemo(() =>
-    records.filter(r => r.type === 'STOCK_OUT' || r.type === 'STOCK_RETURN').sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-  , [records]);
+  /** 按单据号聚合：整张单按组内最早时间倒序，单内明细按 id 稳定序 */
+  const stockFlowRecords = useMemo(() => {
+    const list = records.filter(r => r.type === 'STOCK_OUT' || r.type === 'STOCK_RETURN');
+    const byDoc = new Map<string, ProductionOpRecord[]>();
+    for (const r of list) {
+      const k = (r.docNo && String(r.docNo).trim()) ? String(r.docNo) : r.id;
+      if (!byDoc.has(k)) byDoc.set(k, []);
+      byDoc.get(k)!.push(r);
+    }
+    const entries = [...byDoc.entries()].sort(([ka, ra], [kb, rb]) => {
+      const da = flowRecordsEarliestMs(ra);
+      const db = flowRecordsEarliestMs(rb);
+      if (db !== da) return db - da;
+      return ka.localeCompare(kb);
+    });
+    return entries.flatMap(([, rs]) => [...rs].sort((a, b) => (a.id || '').localeCompare(b.id || '')));
+  }, [records]);
 
   const { filteredStockFlowRecords, totalIssueQty, totalReturnQty, countIssue, countReturn } = useMemo(() => {
     let list = stockFlowRecords;
@@ -82,14 +98,14 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
     if (stockFlowFilterDateFrom) {
       const from = stockFlowFilterDateFrom;
       list = list.filter(r => {
-        const d = r.timestamp ? new Date(r.timestamp).toISOString().split('T')[0] : '';
+        const d = r.timestamp ? toLocalDateYmdFromProductionTimestamp(r.timestamp) : '';
         return d >= from;
       });
     }
     if (stockFlowFilterDateTo) {
       const to = stockFlowFilterDateTo;
       list = list.filter(r => {
-        const d = r.timestamp ? new Date(r.timestamp).toISOString().split('T')[0] : '';
+        const d = r.timestamp ? toLocalDateYmdFromProductionTimestamp(r.timestamp) : '';
         return d <= to;
       });
     }
@@ -254,7 +270,8 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
                     const matProduct = products.find(p => p.id === rec.productId);
                     const sourceProd = rec.sourceProductId ? products.find(p => p.id === rec.sourceProductId) : null;
                     const isReturn = rec.type === 'STOCK_RETURN';
-                    const isOutsourceDispatch = rec.type === 'STOCK_OUT' && !!rec.partner;
+                    const isCollabReturn = rec.type === 'STOCK_OUT' && rec.operator === '协作回传出库';
+                    const isOutsourceDispatch = rec.type === 'STOCK_OUT' && !!rec.partner && !isCollabReturn;
                     const isOutsourceReturn = rec.type === 'STOCK_RETURN' && !!rec.partner;
                     const docNo = rec.docNo ?? '';
                     const openDetail = () => {
@@ -268,18 +285,25 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
                         : rec.orderId
                           ? order?.orderNumber ?? '—'
                           : matProduct?.name ?? '—';
-                    const typeLabel = isOutsourceReturn ? '外退' : isReturn ? '退料' : isOutsourceDispatch ? '外发' : '领料';
-                    const typeClass = isOutsourceReturn ? 'bg-orange-100 text-orange-800' : isReturn ? 'bg-amber-100 text-amber-800' : isOutsourceDispatch ? 'bg-teal-100 text-teal-800' : 'bg-indigo-100 text-indigo-800';
+                    const typeLabel = isCollabReturn ? '协作回传' : isOutsourceReturn ? '外退' : isReturn ? '退料' : isOutsourceDispatch ? '外发' : '领料';
+                    const typeClass = isCollabReturn ? 'bg-emerald-100 text-emerald-800' : isOutsourceReturn ? 'bg-orange-100 text-orange-800' : isReturn ? 'bg-amber-100 text-amber-800' : isOutsourceDispatch ? 'bg-teal-100 text-teal-800' : 'bg-indigo-100 text-indigo-800';
                     return (
                       <tr key={rec.id} className="border-b border-slate-100 hover:bg-slate-50/50">
                         <td className="px-4 py-3 text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">{rec.docNo ?? '—'}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${typeClass}`}>
-                            {isOutsourceReturn ? <Undo2 className="w-3 h-3" /> : isReturn ? <Undo2 className="w-3 h-3" /> : isOutsourceDispatch ? <Truck className="w-3 h-3" /> : <ArrowUpFromLine className="w-3 h-3" />}
+                            {isCollabReturn ? <Truck className="w-3 h-3" /> : isOutsourceReturn ? <Undo2 className="w-3 h-3" /> : isReturn ? <Undo2 className="w-3 h-3" /> : isOutsourceDispatch ? <Truck className="w-3 h-3" /> : <ArrowUpFromLine className="w-3 h-3" />}
                             {typeLabel}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{rec.timestamp}</td>
+                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                          {(() => {
+                            const ms = parseProductionOpTimestampMs(rec.timestamp);
+                            if (ms > 0) return formatLocalDateTimeZh(new Date(ms));
+                            const raw = rec.timestamp?.trim();
+                            return raw || '—';
+                          })()}
+                        </td>
                         <td className="px-4 py-3 text-[10px] font-black text-indigo-600">{linkCol}</td>
                         <td className="px-4 py-3 font-bold text-slate-800">{matProduct?.name ?? '未知物料'}</td>
                         <td className="px-4 py-3 text-right font-black text-indigo-600">{rec.quantity}</td>

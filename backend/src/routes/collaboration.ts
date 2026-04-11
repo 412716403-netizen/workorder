@@ -80,6 +80,18 @@ router.patch('/subcontract-transfers/:id/withdraw-forward', ctrl.withdrawForward
 router.delete('/subcontract-dispatches/:id', ctrl.deleteDispatch);
 router.delete('/subcontract-returns/:id', ctrl.deleteReturn);
 
+// Dispatch 编辑同步
+router.put('/subcontract-dispatches/:id/payload', ctrl.updateDispatchPayload);
+router.post('/subcontract-dispatches/:id/amend', ctrl.amendDispatch);
+router.patch('/subcontract-dispatches/:id/confirm-amendment', ctrl.confirmDispatchAmendment);
+router.patch('/subcontract-dispatches/:id/reject-amendment', ctrl.rejectDispatchAmendment);
+
+// Return 编辑同步
+router.put('/subcontract-returns/:id/payload', ctrl.updateReturnPayload);
+router.post('/subcontract-returns/:id/amend', ctrl.amendReturn);
+router.patch('/subcontract-returns/:id/confirm-amendment', ctrl.confirmReturnAmendment);
+router.patch('/subcontract-returns/:id/reject-amendment', ctrl.rejectReturnAmendment);
+
 // 对照表 CRUD
 router.get('/collaboration-product-maps', ctrl.listProductMaps);
 router.put('/collaboration-product-maps/:id', ctrl.updateProductMap);

@@ -1,10 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { X, Truck } from 'lucide-react';
+import { toast } from 'sonner';
 import { ProductionOpRecord, ProductionOrder, Product, GlobalNodeTemplate, AppDictionaries, ProductCategory, ProductVariant, ProductMilestoneProgress, Partner, PartnerCategory } from '../../types';
 import { splitQtyBySourceDefectiveAcrossParentOrders } from '../../utils/reworkSplitByProductOrders';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
 import { hasOpsPerm } from './types';
+import { useAuth } from '../../contexts/AuthContext';
+import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 
 export interface ReworkDefectiveActionModalProps {
   reworkActionRow: {
@@ -57,6 +61,8 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
   getNextOutsourceReworkDocNo,
   onClose,
 }) => {
+  const { currentUser } = useAuth();
+  const docOperator = currentOperatorDisplayName(currentUser);
   const canOutsourceRework = hasOpsPerm(tenantRole, userPermissions, 'production:rework_outsource:allow');
   const [reworkActionMode, setReworkActionMode] = useState<'scrap' | 'rework' | 'outsource_rework' | null>(null);
   const [reworkActionQty, setReworkActionQty] = useState(0);
@@ -67,7 +73,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
 
   const reworkActionProduct = useMemo(() => products.find(p => p.id === reworkActionRow.productId) ?? null, [reworkActionRow, products]);
   const reworkActionCategory = useMemo(() => (reworkActionProduct ? categories.find(c => c.id === reworkActionProduct.categoryId) : null), [reworkActionProduct, categories]);
-  const reworkActionHasColorSize = Boolean(reworkActionCategory?.hasColorSize && reworkActionProduct?.variants && reworkActionProduct.variants.length > 0);
+  const reworkActionHasColorSize = productHasColorSizeMatrix(reworkActionProduct ?? undefined, reworkActionCategory ?? undefined);
 
   const reworkActionPendingByVariant = useMemo((): Record<string, number> => {
     const defectiveByVariant: Record<string, number> = {};
@@ -159,14 +165,18 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
 
   const handleScrapSubmit = () => {
     const reason = reworkActionReason || undefined;
-    const operator = '张主管';
+    const operator = docOperator;
     const timestamp = new Date().toLocaleString();
     const nodeIdSc = reworkActionRow.nodeId;
     const scrapDocNo = getNextReworkDocNo();
     const parentsSc = orders.filter(o => !o.parentOrderId && o.productId === reworkActionRow.productId);
     const splitProductSc = reworkActionRow.scope === 'product' && parentsSc.length > 0;
+    let scrapSavedLines = 0;
+    let scrapSavedQty = 0;
     const pushScrap = (oid: string, vid: string | undefined, q: number, rid: string) => {
       if (q <= 0) return;
+      scrapSavedLines += 1;
+      scrapSavedQty += q;
       onAddRecord({
         id: rid, type: 'SCRAP', orderId: oid, productId: reworkActionRow.productId, variantId: vid, quantity: q,
         reason, operator, timestamp, nodeId: nodeIdSc, docNo: scrapDocNo
@@ -203,12 +213,17 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
         pushScrap(reworkActionRow.orderId, undefined, reworkActionQty, `rec-${Date.now()}-sc-${Math.random().toString(36).slice(2, 8)}`);
       }
     }
+    if (scrapSavedLines > 0) {
+      toast.success('报损已保存', {
+        description: `处理单号 ${scrapDocNo}，${scrapSavedLines} 条明细，合计 ${scrapSavedQty} 件`,
+      });
+    }
     resetAndClose();
   };
 
   const handleReworkSubmit = () => {
     const reason = reworkActionReason || undefined;
-    const operator = '张主管';
+    const operator = docOperator;
     const timestamp = new Date().toLocaleString();
     const sourceNodeId = reworkActionRow.nodeId;
     const reworkDocNo = getNextReworkDocNo();
@@ -228,8 +243,12 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
     const nodeIdFirst = sortedPath[0];
     const parentsRw = orders.filter(o => !o.parentOrderId && o.productId === reworkActionRow.productId);
     const splitProductRw = reworkActionRow.scope === 'product' && parentsRw.length > 0;
+    let reworkSavedLines = 0;
+    let reworkSavedQty = 0;
     const pushRework = (oid: string, vid: string | undefined, q: number, rid: string) => {
       if (q <= 0) return;
+      reworkSavedLines += 1;
+      reworkSavedQty += q;
       onAddRecord({
         id: rid, type: 'REWORK', orderId: oid, productId: reworkActionRow.productId, variantId: vid, quantity: q,
         reason, operator, timestamp, status: '待返工', sourceNodeId, nodeId: nodeIdFirst, reworkNodeIds: reworkNodeIdsSorted, docNo: reworkDocNo
@@ -267,6 +286,11 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
         pushRework(reworkActionRow.orderId, undefined, reworkActionQty, `rec-${Date.now()}-rw-${Math.random().toString(36).slice(2, 8)}`);
       }
     }
+    if (reworkSavedLines > 0) {
+      toast.success('返工已保存', {
+        description: `处理单号 ${reworkDocNo}，${reworkSavedLines} 条明细，合计 ${reworkSavedQty} 件`,
+      });
+    }
     resetAndClose();
   };
 
@@ -274,7 +298,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
     const partnerName = (outsourcePartnerName || '').trim();
     if (!partnerName) return;
     const reason = reworkActionReason || undefined;
-    const operator = '张主管';
+    const operator = docOperator;
     const timestamp = new Date().toLocaleString();
     const sourceNodeId = reworkActionRow.nodeId;
     const reworkDocNo = getNextReworkDocNo();
@@ -356,6 +380,11 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
     } else {
       for (const rec of batch) onAddRecord(rec);
     }
+    const reworkRecs = batch.filter(r => r.type === 'REWORK');
+    const outsourceReworkQty = reworkRecs.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+    toast.success('委外返工已保存', {
+      description: `返工单号 ${reworkDocNo}，委外单号 ${outsourceDocNo}，${reworkRecs.length} 组，合计 ${outsourceReworkQty} 件`,
+    });
     resetAndClose();
   };
 

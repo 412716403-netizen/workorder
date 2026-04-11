@@ -257,6 +257,8 @@ model Partner {
   tenantId   String   @map("tenant_id") @db.Uuid
   name       String   @db.VarChar(200)
   categoryId String?  @map("category_id") @db.VarChar(50)
+  /** 租户内合作单位序号，用于销售单号 XS-0001-001 的中间段 */
+  partnerListNo         Int      @map("partner_list_no")
   contact               String?  @db.VarChar(200)
   customData            Json     @default("{}") @map("custom_data")
   collaborationTenantId String?  @map("collaboration_tenant_id") @db.Uuid
@@ -265,6 +267,7 @@ model Partner {
 
   category PartnerCategory? @relation(fields: [categoryId], references: [id])
 
+  @@unique([tenantId, partnerListNo])
   @@index([tenantId])
   @@index([categoryId])
   @@map("partners")
@@ -529,6 +532,7 @@ model OrderItem {
   variantId         String? @map("variant_id") @db.VarChar(50)
   quantity          Decimal @db.Decimal(12, 2)
   completedQuantity Decimal @default(0) @map("completed_quantity") @db.Decimal(12, 2)
+  sourceDispatchId  String? @map("source_dispatch_id") @db.Uuid
 
   productionOrder ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
 
@@ -829,14 +833,18 @@ model InterTenantSubcontractTransfer {
 }
 
 model SubcontractCollaborationDispatch {
-  id                        String   @id @default(uuid()) @db.Uuid
-  transferId                String   @map("transfer_id") @db.Uuid
-  status                    String   @default("PENDING") @db.VarChar(20)
-  payload                   Json
-  senderDispatchRecordIds   Json     @map("sender_dispatch_record_ids")
-  receiverProductionOrderId String?  @map("receiver_production_order_id") @db.VarChar(50)
-  createdAt                 DateTime @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt                 DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+  id                          String   @id @default(uuid()) @db.Uuid
+  transferId                  String   @map("transfer_id") @db.Uuid
+  status                      String   @default("PENDING") @db.VarChar(20)
+  payload                     Json
+  senderDispatchRecordIds     Json     @map("sender_dispatch_record_ids")
+  receiverProductionOrderId   String?  @map("receiver_production_order_id") @db.VarChar(50)
+  amendmentPayload            Json?    @map("amendment_payload")
+  amendmentSenderRecordIds    Json?    @map("amendment_sender_record_ids")
+  amendmentStatus             String?  @map("amendment_status") @db.VarChar(30)
+  amendmentNote               String?  @map("amendment_note") @db.Text
+  createdAt                   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt                   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
   transfer InterTenantSubcontractTransfer @relation(fields: [transferId], references: [id])
 
@@ -852,6 +860,9 @@ model SubcontractCollaborationReturn {
   receiverProductionOrderId String?  @map("receiver_production_order_id") @db.VarChar(50)
   payload                   Json
   status                    String   @default("PENDING_A_RECEIVE") @db.VarChar(30)
+  amendmentPayload          Json?    @map("amendment_payload")
+  amendmentStatus           String?  @map("amendment_status") @db.VarChar(30)
+  amendmentNote             String?  @map("amendment_note") @db.Text
   createdAt                 DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt                 DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 

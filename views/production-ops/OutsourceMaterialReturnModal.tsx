@@ -10,6 +10,9 @@ import type {
   GlobalNodeTemplate,
   Warehouse,
 } from '../../types';
+import { toLocalCompactYmd } from '../../utils/localDateTime';
+import { useAuth } from '../../contexts/AuthContext';
+import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 
 export interface OutsourceMaterialReturnModalProps {
   productionLinkMode: 'order' | 'product';
@@ -56,6 +59,8 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
   onAddRecordBatch,
   onClose,
 }) => {
+  const { currentUser } = useAuth();
+  const docOperator = currentOperatorDisplayName(currentUser);
   const isProductMode = productionLinkMode === 'product';
   const targetOrder = !isProductMode && matReturnOrderId ? orders.find(o => o.id === matReturnOrderId) : undefined;
   const targetProductId = isProductMode ? matReturnProductId : targetOrder?.productId;
@@ -99,28 +104,47 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
   }
   const consumedByPartnerMat = new Map<string, number>();
   (() => {
-    const receivedByNode = new Map<string, number>();
+    const receivedByNodeVar = new Map<string, number>();
     const outsourceFilter = (r: ProductionOpRecord) => {
       if (isProductMode) {
         return !r.orderId && r.productId === targetProductId;
       }
       return r.orderId === matReturnOrderId;
     };
-    records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && r.partner === matReturnPartner && r.nodeId && outsourceFilter(r)).forEach(r => {
-      receivedByNode.set(r.nodeId!, (receivedByNode.get(r.nodeId!) ?? 0) + r.quantity);
-    });
+    const accum = (r: ProductionOpRecord) => {
+      const key = r.variantId ? `${r.nodeId!}|${r.variantId}` : r.nodeId!;
+      receivedByNodeVar.set(key, (receivedByNodeVar.get(key) ?? 0) + r.quantity);
+    };
+    records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && r.partner === matReturnPartner && r.nodeId && outsourceFilter(r)).forEach(accum);
     if (isProductMode) {
       const relatedOrderIds = new Set(orders.filter(o => o.productId === targetProductId).map(o => o.id));
-      records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && r.partner === matReturnPartner && r.nodeId && r.orderId && relatedOrderIds.has(r.orderId)).forEach(r => {
-        receivedByNode.set(r.nodeId!, (receivedByNode.get(r.nodeId!) ?? 0) + r.quantity);
-      });
+      records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && r.partner === matReturnPartner && r.nodeId && r.orderId && relatedOrderIds.has(r.orderId)).forEach(accum);
     }
-    receivedByNode.forEach((recvQty, nodeId) => {
-      const nodeBoms = boms.filter(b => b.parentProductId === targetProductId && b.nodeId === nodeId);
-      nodeBoms.forEach(bom => {
+    const variants = targetProduct?.variants ?? [];
+    receivedByNodeVar.forEach((recvQty, key) => {
+      const sepIdx = key.indexOf('|');
+      const nodeId = sepIdx >= 0 ? key.slice(0, sepIdx) : key;
+      const variantId = sepIdx >= 0 ? key.slice(sepIdx + 1) : undefined;
+      let matchedBoms: BOM[] = [];
+      if (variantId) {
+        const v = variants.find(vx => vx.id === variantId);
+        if (v?.nodeBoms) {
+          const bomId = (v.nodeBoms as Record<string, string>)[nodeId];
+          if (bomId) {
+            const b = boms.find(bx => bx.id === bomId);
+            if (b) matchedBoms = [b];
+          }
+        }
+        if (matchedBoms.length === 0) {
+          matchedBoms = boms.filter(b => b.parentProductId === targetProductId && b.nodeId === nodeId && b.variantId === variantId);
+        }
+      }
+      if (matchedBoms.length === 0) {
+        matchedBoms = boms.filter(b => b.parentProductId === targetProductId && b.nodeId === nodeId && !b.variantId);
+      }
+      matchedBoms.forEach(bom => {
         bom.items.forEach(bi => {
-          const matConsumption = Number(bi.quantity) * recvQty;
-          consumedByPartnerMat.set(bi.productId, (consumedByPartnerMat.get(bi.productId) ?? 0) + matConsumption);
+          consumedByPartnerMat.set(bi.productId, (consumedByPartnerMat.get(bi.productId) ?? 0) + Number(bi.quantity) * recvQty);
         });
       });
     });
@@ -135,7 +159,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
   })).filter(m => m.dispatched > 0);
   const getNextWtDocNo = () => {
     const prefix = 'WT';
-    const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const todayStr = toLocalCompactYmd(new Date());
     const pattern = `${prefix}${todayStr}-`;
     const existing = records.filter(r => r.type === 'STOCK_RETURN' && r.docNo && r.docNo.startsWith(pattern));
     const seqs = existing.map(r => parseInt(r.docNo!.slice(pattern.length), 10)).filter(n => !isNaN(n));
@@ -146,7 +170,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
     if (!matReturnPartner) { toast.warning('请选择外协工厂'); return; }
     const toReturn = returnableMaterials.filter(m => (matReturnQty[m.productId] ?? 0) > 0);
     if (toReturn.length === 0) { toast.warning('请至少填写一项退回数量'); return; }
-    const overItems = toReturn.filter(m => (matReturnQty[m.productId] ?? 0) > Math.max(0, m.dispatched - m.consumed - m.returned));
+    const overItems = toReturn.filter(m => (matReturnQty[m.productId] ?? 0) > Math.max(0, Math.round((m.dispatched - m.consumed - m.returned) * 100) / 100));
     if (overItems.length > 0) { toast.warning(`「${overItems[0].name}」退回数量超过可退回数量`); return; }
     const docNo = getNextWtDocNo();
     const timestamp = new Date().toLocaleString();
@@ -156,7 +180,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
       orderId: isProductMode ? undefined : (matReturnOrderId ?? undefined),
       productId: m.productId,
       quantity: matReturnQty[m.productId],
-      operator: '张主管',
+      operator: docOperator,
       timestamp,
       status: '已完成',
       partner: matReturnPartner,
@@ -223,12 +247,13 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {returnableMaterials.map(m => {
-                  const remaining = Math.max(0, m.dispatched - m.consumed - m.returned);
+                  const consumedDisplay = Math.round(m.consumed * 100) / 100;
+                  const remaining = Math.max(0, Math.round((m.dispatched - m.consumed - m.returned) * 100) / 100);
                   return (
                     <tr key={m.productId} className="hover:bg-slate-50/50">
                       <td className="px-4 py-3"><p className="text-sm font-bold text-slate-800">{m.name}</p>{m.sku && <p className="text-[10px] text-slate-400 mt-0.5">{m.sku}</p>}</td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-indigo-600">{m.dispatched}</td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-rose-600">{m.consumed}</td>
+                      <td className="px-4 py-3 text-right text-sm font-bold text-rose-600">{consumedDisplay}</td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-amber-600">{m.returned}</td>
                       <td className="px-4 py-3 text-right text-sm font-black text-emerald-600">{remaining}</td>
                       <td className="px-4 py-3">

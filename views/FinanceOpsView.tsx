@@ -1,11 +1,13 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { Plus, X, Clock, DollarSign, Search, ChevronDown, Building2, User, FileText, Pencil, Trash2 } from 'lucide-react';
-import { FinanceRecord, FinanceOpType, ProductionOrder, FinanceCategory, FinanceAccountType, Partner, Worker, Product, ReportFieldDefinition, PartnerCategory, ProductCategory, GlobalNodeTemplate, AppDictionaries, FINANCE_DOC_NO_PREFIX } from '../types';
+import { FinanceRecord, FinanceOpType, ProductionOrder, FinanceCategory, FinanceAccountType, Partner, Worker, Product, ReportFieldDefinition, PartnerCategory, ProductCategory, GlobalNodeTemplate, AppDictionaries, FINANCE_DOC_NO_PREFIX, ProductMilestoneProgress } from '../types';
 import { SearchableProductSelect } from '../components/SearchableProductSelect';
 import { SearchablePartnerSelect } from '../components/SearchablePartnerSelect';
 import type { ProductionOpRecord } from '../types';
 import { moduleHeaderRowClass, pageSubtitleClass, pageTitleClass, primaryToolbarButtonClass } from '../styles/uiDensity';
 import { useConfirm } from '../contexts/ConfirmContext';
+import { toLocalCompactYmd, toLocalDateYmd } from '../utils/localDateTime';
+import { productHasColorSizeMatrix } from '../utils/productColorSize';
 
 function CustomFieldInput({ field, value, onChange }: { field: ReportFieldDefinition; value: any; onChange: (v: any) => void }) {
   const v = value ?? '';
@@ -187,6 +189,8 @@ interface FinanceOpsViewProps {
   psiRecords?: any[];
   /** 生产操作记录（外协收回等），用于合作单位对账汇总 */
   prodRecords?: ProductionOpRecord[];
+  /** 关联产品模式下报工写入此处，报工结算需与工单 milestones.reports 一并汇总 */
+  productMilestoneProgresses?: ProductMilestoneProgress[];
   onAddRecord: (record: FinanceRecord) => void;
   onUpdateRecord?: (record: FinanceRecord) => void;
   onDeleteRecord?: (id: string) => void;
@@ -245,7 +249,7 @@ function getFinanceRecordFromDetail(d: DetailTarget): FinanceRecord | null {
   return null;
 }
 
-const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, allRecords, psiRecords = [], prodRecords = [], onAddRecord, onUpdateRecord, onDeleteRecord, financeCategories, financeAccountTypes, partners, workers, products, partnerCategories, categories, globalNodes, dictionaries, userPermissions, tenantRole }) => {
+const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, allRecords, psiRecords = [], prodRecords = [], productMilestoneProgresses = [], onAddRecord, onUpdateRecord, onDeleteRecord, financeCategories, financeAccountTypes, partners, workers, products, partnerCategories, categories, globalNodes, dictionaries, userPermissions, tenantRole }) => {
   const _isOwner = tenantRole === 'owner';
   const hasFinancePerm = (permKey: string): boolean => {
     if (_isOwner) return true;
@@ -292,13 +296,11 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
 
   /** 参照报工单：前缀 + yyyyMMdd + '-' + 4位序号，按同类型当日已有记录数+1 */
   const getNextDocNo = useCallback(() => {
-    const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const todayStr = toLocalCompactYmd(new Date());
     const keys = new Set<string>();
     allRecords.filter(r => r.type === type).forEach(r => {
-      const dt = new Date(r.timestamp);
-      if (isNaN(dt.getTime())) return;
-      const ds = dt.toISOString().split('T')[0].replace(/-/g, '');
-      if (ds !== todayStr) return;
+      const ds = toLocalCompactYmd(r.timestamp);
+      if (!ds || ds !== todayStr) return;
       keys.add(r.docNo || r.id);
     });
     const seq = keys.size + 1;
@@ -400,9 +402,8 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
   const reconQueryDateFromT = reconQueryDateFrom.trim();
   const reconQueryDateToT = reconQueryDateTo.trim();
   const inFinanceDateRangeQuery = useCallback((ts: string, from: string, to: string) => {
-    const t = new Date(ts);
-    if (isNaN(t.getTime())) return false;
-    const d = t.toISOString().split('T')[0];
+    const d = toLocalDateYmd(ts);
+    if (!d) return false;
     if (from && d < from) return false;
     if (to && d > to) return false;
     return true;
@@ -420,7 +421,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
     const psiFiltered = (psiRecords as any[]).filter((r: any) => psiTypes.includes(r.type) && (r.partner === partnerName || r.partnerId === reconQueryPartnerId));
     const psiByDoc = new Map<string, { type: string; timestamp: string; partner: string; amount: number; operator?: string; note?: string }>();
     psiFiltered.forEach((r: any) => {
-      const dateStr = r.createdAt || (r.timestamp ? new Date(r.timestamp).toISOString().split('T')[0] : '') || '';
+      const dateStr = r.createdAt ? toLocalDateYmd(r.createdAt) : (r.timestamp ? toLocalDateYmd(r.timestamp) : '') || '';
       if (from && dateStr < from) return;
       if (to && dateStr > to) return;
       const docKey = `${r.type}|${r.docNumber || r.id}`;
@@ -436,7 +437,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
     });
     const prodByDoc = new Map<string, { status: string; timestamp: string; partner: string; amount: number; operator?: string; count: number }>();
     (prodRecords as ProductionOpRecord[]).filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && r.partner === partnerName).forEach(rec => {
-      const d = rec.timestamp ? new Date(rec.timestamp).toISOString().split('T')[0] : '';
+      const d = rec.timestamp ? toLocalDateYmd(rec.timestamp) : '';
       if (from && d < from) return;
       if (to && d > to) return;
       const docKey = rec.docNo || rec.id;
@@ -475,6 +476,14 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
     const rows: SettlementReconRow[] = [];
     const reportToWorkerId = (r: any) => (r.workerId ?? r.customData?.workerId ?? '') as string;
     const workReportGroups = new Map<string, { timestamp: string; workerId: string; workerName: string; amount: number; items: { orderNumber: string; productName: string; milestoneName: string; quantity: number; rate: number; amount: number }[] }>();
+    const variantDisplay = (product: Product | undefined, variantId?: string) => {
+      if (!variantId || !product?.variants?.length) return '';
+      const v = product.variants.find(x => x.id === variantId);
+      if (!v) return variantId;
+      const color = dictionaries?.colors?.find(c => c.id === v.colorId)?.name;
+      const size = dictionaries?.sizes?.find(s => s.id === v.sizeId)?.name;
+      return [color, size].filter(Boolean).join(' / ') || v.skuSuffix || variantId;
+    };
     orders.forEach(order => {
       const nodeRates = productMap.get(order.productId)?.nodeRates;
       order.milestones?.forEach(milestone => {
@@ -482,7 +491,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
         (milestone.reports || []).forEach((r: any) => {
           const wid = reportToWorkerId(r);
           if (wid !== reconQueryWorkerId) return;
-          const dateStr = r.timestamp ? new Date(r.timestamp).toISOString().split('T')[0] : '';
+          const dateStr = r.timestamp ? toLocalDateYmd(r.timestamp) : '';
           if (from && dateStr < from) return;
           if (to && dateStr > to) return;
           const qty = Number(r.quantity) || 0;
@@ -500,11 +509,46 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
         });
       });
     });
+    productMilestoneProgresses.forEach(pmp => {
+      const prod = productMap.get(pmp.productId);
+      const nodeRates = prod?.nodeRates;
+      const milestoneName = globalNodes.find(n => n.id === pmp.milestoneTemplateId)?.name ?? '';
+      const defaultRate = nodeRates?.[pmp.milestoneTemplateId] ?? 0;
+      const baseProductName = prod?.name ?? '';
+      (pmp.reports || []).forEach((r: any) => {
+        const wid = reportToWorkerId(r);
+        if (wid !== reconQueryWorkerId) return;
+        const dateStr = r.timestamp ? toLocalDateYmd(r.timestamp) : '';
+        if (from && dateStr < from) return;
+        if (to && dateStr > to) return;
+        const qty = Number(r.quantity) || 0;
+        const unitRate = r.rate != null ? Number(r.rate) : defaultRate;
+        const amt = qty * unitRate;
+        const key = r.reportNo || r.reportBatchId || r.id;
+        const existing = workReportGroups.get(key);
+        const vid = (r.variantId ?? pmp.variantId) as string | undefined;
+        const vLabel = variantDisplay(prod, vid);
+        const item = {
+          orderNumber: '关联产品',
+          productName: vLabel ? `${baseProductName}（${vLabel}）` : baseProductName,
+          milestoneName,
+          quantity: qty,
+          rate: unitRate,
+          amount: amt,
+        };
+        if (!existing) {
+          workReportGroups.set(key, { timestamp: r.timestamp || '', workerId: wid, workerName, amount: amt, items: [item] });
+        } else {
+          existing.amount += amt;
+          existing.items.push(item);
+        }
+      });
+    });
     workReportGroups.forEach((v, reportNo) => {
       rows.push({ source: 'work_report', reportNo: reportNo || '—', timestamp: v.timestamp, workerId: v.workerId, workerName: v.workerName, amount: v.amount, items: v.items });
     });
     (prodRecords as ProductionOpRecord[]).filter(r => r.type === 'REWORK_REPORT' && r.workerId === reconQueryWorkerId).forEach(rec => {
-      const d = rec.timestamp ? new Date(rec.timestamp).toISOString().split('T')[0] : '';
+      const d = rec.timestamp ? toLocalDateYmd(rec.timestamp) : '';
       if (from && d < from) return;
       if (to && d > to) return;
       rows.push({ source: 'rework_report', rec });
@@ -518,7 +562,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
       return new Date(ta).getTime() - new Date(tb).getTime();
     });
     return rows;
-  }, [type, reconciliationSubTab, reconQueryWorkerId, reconQueryDateFromT, reconQueryDateToT, orders, productMap, workerMap, prodRecords, allRecords, inFinanceDateRangeQuery]);
+  }, [type, reconciliationSubTab, reconQueryWorkerId, reconQueryDateFromT, reconQueryDateToT, orders, productMilestoneProgresses, productMap, workerMap, prodRecords, allRecords, inFinanceDateRangeQuery, globalNodes, dictionaries]);
 
   const FIN_PAGE_SIZE = 20;
   const [finPage, setFinPage] = useState(1);
@@ -1025,7 +1069,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                               {Array.from(byProduct.entries()).map(([pid, { product: prod, lines }]) => {
                                 const productName = prod?.name ?? lines[0]?.productName ?? pid;
                                 const category = prod ? categories.find(c => c.id === prod.categoryId) : null;
-                                const hasColorSize = !!(category?.hasColorSize && prod?.variants?.length && prod.variants.length > 1);
+                                const hasColorSize = productHasColorSizeMatrix(prod, category ?? undefined);
                                 const totalQty = lines.reduce((s: number, r: any) => s + (Number(r.quantity) || 0), 0);
                                 const unitPrice = Number(lines[0]?.purchasePrice ?? lines[0]?.salesPrice ?? 0);
                                 const totalAmt = lines.reduce((s: number, r: any) => s + (Number(r.amount) || (Number(r.quantity) || 0) * Number(r.purchasePrice ?? r.salesPrice ?? 0)), 0);
@@ -1104,7 +1148,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                     r.type === 'OUTSOURCE' && r.status === '已收回' && r.docNo === rec.docNo
                   );
                   const category = product ? categories.find(c => c.id === product.categoryId) : null;
-                  const hasColorSize = !!(category?.hasColorSize && product?.variants?.length && product.variants.length > 1);
+                  const hasColorSize = productHasColorSizeMatrix(product ?? undefined, category ?? undefined);
                   const totalQty = relatedRecs.length > 1
                     ? relatedRecs.reduce((s, r) => s + Number(r.quantity), 0)
                     : Number(rec.quantity);

@@ -6,9 +6,11 @@ import type {
   Product,
   ProductCategory,
   ProductVariant,
+  ProductMilestoneProgress,
   AppDictionaries,
 } from '../../types';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 
 export interface ReceiveRow {
   orderId?: string;
@@ -40,6 +42,7 @@ export interface OutsourceReceiveQuantityModalProps {
   categories: ProductCategory[];
   dictionaries?: AppDictionaries;
   records: ProductionOpRecord[];
+  productMilestoneProgresses?: ProductMilestoneProgress[];
   onSubmit: () => void;
   onClose: () => void;
 }
@@ -59,6 +62,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
   categories,
   dictionaries,
   records,
+  productMilestoneProgresses = [],
   onSubmit,
   onClose,
 }) => {
@@ -98,17 +102,38 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
             const order = row.orderId != null ? orders.find(o => o.id === row.orderId) : undefined;
             const product = products.find(p => p.id === row.productId);
             const category = categories.find(c => c.id === product?.categoryId);
-            const hasColorSize = productionLinkMode === 'order' && category?.hasColorSize && (product?.variants?.length ?? 0) > 1;
+            const hasColorSizeMatrix = productHasColorSizeMatrix(product, category);
+            const hasColorSizeOrderRecv = productionLinkMode === 'order' && hasColorSizeMatrix;
             const baseKey = receiveRowKey;
-            const variantIdsInOrder = new Set((order?.items ?? []).map(i => i.variantId).filter(Boolean));
-            const variantsInOrder = hasColorSize && product?.variants ? (product.variants as ProductVariant[]).filter(v => variantIdsInOrder.has(v.id)) : [];
+            const variantIdsInOrderItems = new Set((order?.items ?? []).map(i => i.variantId).filter(Boolean));
+            const variantIdsFromOrderMilestone = new Set<string>();
+            const msRecv = order?.milestones?.find(m => m.templateId === row.nodeId);
+            (msRecv?.reports ?? []).forEach(r => { if (r.variantId) variantIdsFromOrderMilestone.add(r.variantId); });
+            const variantIdsForOrderRecv = new Set([...variantIdsInOrderItems, ...variantIdsFromOrderMilestone]);
+            const orderRecvHasSpecBreakdown = variantIdsForOrderRecv.size > 0;
+            let variantsInOrder =
+              hasColorSizeOrderRecv && product?.variants
+                ? (product.variants as ProductVariant[]).filter(v => variantIdsForOrderRecv.has(v.id))
+                : [];
+            if (hasColorSizeOrderRecv && product?.variants && product.variants.length > 0 && variantsInOrder.length === 0) {
+              variantsInOrder = [...(product.variants as ProductVariant[])];
+            }
+            const aggregateOrderReceive = hasColorSizeOrderRecv && variantsInOrder.length > 0 && !orderRecvHasSpecBreakdown;
             const dispatchRecords = productionLinkMode === 'product'
               ? records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && !r.sourceReworkId && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId && (r.partner ?? '') === (row.partner ?? ''))
               : records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && !r.sourceReworkId && r.orderId === row.orderId && r.nodeId === row.nodeId);
             const receiveRecords = productionLinkMode === 'product'
               ? records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && !r.sourceReworkId && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId && (r.partner ?? '') === (row.partner ?? ''))
               : records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && !r.sourceReworkId && r.orderId === row.orderId && r.nodeId === row.nodeId);
+            const sumOtherVariantQtyRecvOrder = (currentId: string) =>
+              variantsInOrder.reduce(
+                (s, v) => (v.id === currentId ? s : s + (receiveFormQuantities[`${baseKey}|${v.id}`] ?? 0)),
+                0,
+              );
             const getPendingForVariant = (variantId: string) => {
+              if (aggregateOrderReceive) {
+                return Math.max(0, row.pending - sumOtherVariantQtyRecvOrder(variantId));
+              }
               const dispatched = dispatchRecords.filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + r.quantity, 0);
               const received = receiveRecords.filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + r.quantity, 0);
               return Math.max(0, dispatched - received);
@@ -117,17 +142,51 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
             const blockOrdersRecv = isProductBlockRecv ? orders.filter(o => o.productId === row.productId) : [];
             const variantIdsInBlockRecv = new Set<string>();
             blockOrdersRecv.forEach(o => { (o.items ?? []).forEach(i => { if ((i.quantity ?? 0) > 0 && i.variantId) variantIdsInBlockRecv.add(i.variantId); }); });
-            const hasMultiVariantRecv = (product?.variants?.length ?? 0) > 1;
-            const variantsInProductBlockRecv = isProductBlockRecv && category?.hasColorSize && hasMultiVariantRecv && product?.variants ? (product.variants as ProductVariant[]).filter(v => variantIdsInBlockRecv.has(v.id)) : [];
+            const variantIdsFromProgressRecv = new Set<string>();
+            if (isProductBlockRecv && hasColorSizeMatrix) {
+              productMilestoneProgresses.forEach(pmp => {
+                if (pmp.productId !== row.productId || pmp.milestoneTemplateId !== row.nodeId) return;
+                if (pmp.variantId) variantIdsFromProgressRecv.add(pmp.variantId);
+                (pmp.reports ?? []).forEach(r => { if (r.variantId) variantIdsFromProgressRecv.add(r.variantId); });
+              });
+              blockOrdersRecv.forEach(o => {
+                const ms = o.milestones?.find(m => m.templateId === row.nodeId);
+                (ms?.reports ?? []).forEach(r => { if (r.variantId) variantIdsFromProgressRecv.add(r.variantId); });
+              });
+            }
+            const variantIdsForProductRecvSet = new Set([...variantIdsInBlockRecv, ...variantIdsFromProgressRecv]);
+            let variantsInProductBlockRecv: ProductVariant[] = [];
+            if (isProductBlockRecv && hasColorSizeMatrix && product?.variants) {
+              variantsInProductBlockRecv = (product.variants as ProductVariant[]).filter(v => variantIdsForProductRecvSet.has(v.id));
+            }
+            if (isProductBlockRecv && hasColorSizeMatrix && product?.variants && product.variants.length > 0 && variantsInProductBlockRecv.length === 0) {
+              variantsInProductBlockRecv = [...(product.variants as ProductVariant[])];
+            }
+            const aggregateProductReceive =
+              isProductBlockRecv && variantsInProductBlockRecv.length > 0 && variantIdsForProductRecvSet.size === 0;
             const hasVariantProductDispatchesRecv = dispatchRecords.some(r => !!r.variantId);
             const dispNoVarRecv = dispatchRecords.filter(r => !r.variantId).reduce((s, r) => s + r.quantity, 0);
             const recNoVarRecv = receiveRecords.filter(r => !r.variantId).reduce((s, r) => s + r.quantity, 0);
             const pendingNoVarRecv = Math.max(0, dispNoVarRecv - recNoVarRecv);
 
-            if (isProductBlockRecv && variantsInProductBlockRecv.length > 0 && hasVariantProductDispatchesRecv) {
+            const sumOtherVariantQtyRecvProduct = (currentId: string) =>
+              variantsInProductBlockRecv.reduce(
+                (s, v) => (v.id === currentId ? s : s + (receiveFormQuantities[`${baseKey}${RECEIVE_VARIANT_SEP}${v.id}`] ?? 0)),
+                0,
+              );
+            const getPendingForVariantProduct = (variantId: string) => {
+              if (aggregateProductReceive) {
+                return Math.max(0, row.pending - sumOtherVariantQtyRecvProduct(variantId));
+              }
+              const dispatched = dispatchRecords.filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + r.quantity, 0);
+              const received = receiveRecords.filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + r.quantity, 0);
+              return Math.max(0, dispatched - received);
+            };
+
+            if (isProductBlockRecv && variantsInProductBlockRecv.length > 0 && (hasVariantProductDispatchesRecv || aggregateProductReceive)) {
               const groupedPb: Record<string, ProductVariant[]> = {};
               variantsInProductBlockRecv.forEach(v => { if (!groupedPb[v.colorId]) groupedPb[v.colorId] = []; groupedPb[v.colorId].push(v); });
-              const rowTotalPb = variantsInProductBlockRecv.reduce((s, v) => s + (receiveFormQuantities[`${baseKey}${RECEIVE_VARIANT_SEP}${v.id}`] ?? 0), 0) + (pendingNoVarRecv > 0 ? receiveFormQuantities[baseKey] ?? 0 : 0);
+              const rowTotalPb = variantsInProductBlockRecv.reduce((s, v) => s + (receiveFormQuantities[`${baseKey}${RECEIVE_VARIANT_SEP}${v.id}`] ?? 0), 0) + (pendingNoVarRecv > 0 && !aggregateProductReceive ? receiveFormQuantities[baseKey] ?? 0 : 0);
               const rowUnitPb = receiveFormUnitPrices[baseKey] ?? 0;
               const rowAmountPb = rowTotalPb * rowUnitPb;
               return (
@@ -136,7 +195,11 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                     <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">关联产品 · 颜色尺码</span>
                     <span className="text-sm font-bold text-slate-800">{row.productName}</span>
                     <span className="text-sm font-bold text-indigo-600">{row.milestoneName}</span>
-                    <span className="text-xs text-slate-500">待收回合计 {row.pending} 件</span>
+                    <span className="text-xs text-slate-500">
+                      {aggregateProductReceive
+                        ? `待收回 ${row.pending} 件（发出未带规格：各格合计不超过此数）`
+                        : `待收回合计 ${row.pending} 件`}
+                    </span>
                   </div>
                   <div className="space-y-4">
                     {sortedVariantColorEntries(groupedPb, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
@@ -151,7 +214,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                             {colorVariants.map(v => {
                               const size = dictionaries?.sizes?.find(s => s.id === v.sizeId);
                               const qtyKey = `${baseKey}${RECEIVE_VARIANT_SEP}${v.id}`;
-                              const maxV = getPendingForVariant(v.id);
+                              const maxV = getPendingForVariantProduct(v.id);
                               const cellQ = receiveFormQuantities[qtyKey] ?? 0;
                               return (
                                 <div key={v.id} className="flex flex-col gap-1 min-w-[64px]">
@@ -165,7 +228,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                       );
                     })}
                   </div>
-                  {pendingNoVarRecv > 0 && (
+                  {pendingNoVarRecv > 0 && !aggregateProductReceive && (
                     <div className="p-4 bg-white rounded-xl border border-dashed border-slate-200 flex flex-wrap items-center gap-4">
                       <span className="text-sm font-bold text-slate-600">未按规格发出的待收回</span>
                       <div className="flex flex-col gap-1">
@@ -198,8 +261,12 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                 <div key={baseKey} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-4 space-y-4">
                   <div className="flex items-center gap-3 flex-wrap">
                     {productionLinkMode !== 'product' && row.orderNumber != null && <span className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">{row.orderNumber}</span>}
+                    <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">颜色尺码</span>
                     <span className="text-sm font-bold text-slate-800">{row.productName}</span>
                     <span className="text-sm font-bold text-indigo-600">{row.milestoneName}</span>
+                    {aggregateOrderReceive && (
+                      <span className="text-xs text-slate-500">（发出未带规格：各规格合计不超过待收回 {row.pending}）</span>
+                    )}
                   </div>
                   <div className="space-y-4">
                     {sortedVariantColorEntries(groupedByColor, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {

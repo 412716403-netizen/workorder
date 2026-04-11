@@ -15,6 +15,7 @@ import {
 import WorkerSelector from '../../components/WorkerSelector';
 import { buildDefectiveReworkByOrderMilestone } from '../../utils/defectiveReworkByOrderMilestone';
 import { useConfirm } from '../../contexts/ConfirmContext';
+import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 
 function fmtDT(ts: string | Date | undefined | null): string {
   if (!ts) return '—';
@@ -721,9 +722,9 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                       const productId = reportDetailBatch.source === 'order' ? reportDetailBatch.first.order.productId : reportDetailBatch.productId;
                       const p = products.find(px => px.id === productId);
                       const cat = categoryMap.get(p?.categoryId);
-                      const hasColorSize = Boolean(p?.colorIds?.length && p?.sizeIds?.length) || Boolean(cat?.hasColorSize);
+                      const showSpecFooter = productHasColorSizeMatrix(p, cat);
                       const detailUnit = (p?.unitId && dictionaries?.units?.find(u => u.id === p.unitId)?.name) || '件';
-                      if (!hasColorSize) return null;
+                      if (!showSpecFooter) return null;
                       return (
                         <tfoot>
                           <tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold">

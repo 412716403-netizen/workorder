@@ -20,6 +20,8 @@ import type {
 } from '../../types';
 import { DEFAULT_MATERIAL_PANEL_SETTINGS } from '../../types';
 import { PanelProps, hasOpsPerm, getOrderFamilyIds, type StockDocDetail } from './types';
+import { toLocalCompactYmd } from '../../utils/localDateTime';
+import { orderCreatedMs } from '../../utils/orderCenterSort';
 
 type MatRow = { productId: string; issue: number; returnQty: number; theoryCost: number };
 
@@ -234,33 +236,28 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
     parentList.forEach(parent => {
       const familyIds = new Set(getOrderFamilyIds(orders, parent.id, childrenByParentId));
       const prodMap = new Map<string, { issue: number; returnQty: number; theoryCost: number }>();
+      const addTheory = (bi: { productId: string; quantity: number }, qty: number) => {
+        const theory = Number(bi.quantity) * qty;
+        if (!prodMap.has(bi.productId)) prodMap.set(bi.productId, { issue: 0, returnQty: 0, theoryCost: 0 });
+        prodMap.get(bi.productId)!.theoryCost += theory;
+      };
       const familyOrders = orders.filter(o => familyIds.has(o.id));
       familyOrders.forEach(ord => {
         const ordProduct = productsById.get(ord.productId);
         const variants = ordProduct?.variants ?? [];
-        const variantCompletedMap = new Map<string, number>();
-        ord.milestones.forEach(ms => {
-          (ms.reports || []).forEach(r => {
-            const vid = r.variantId ?? '';
-            variantCompletedMap.set(vid, (variantCompletedMap.get(vid) ?? 0) + Number(r.quantity));
-          });
-        });
+        // 基于报工流水（milestone reports）计算完成量，包含工单报工 + 外协收回
         const bestMsIdx = ord.milestones.reduce((bi, ms, i) => ms.completedQuantity > (ord.milestones[bi]?.completedQuantity ?? 0) ? i : bi, 0);
         const bestMs = ord.milestones[bestMsIdx];
+        const variantCompletedMap = new Map<string, number>();
         if (bestMs) {
-          variantCompletedMap.clear();
           (bestMs.reports || []).forEach(r => {
             const vid = r.variantId ?? '';
             variantCompletedMap.set(vid, (variantCompletedMap.get(vid) ?? 0) + Number(r.quantity));
           });
         }
-        const totalCompleted = ord.milestones.reduce((max, ms) => Math.max(max, ms.completedQuantity), 0);
-
-        const addTheory = (bi: { productId: string; quantity: number }, qty: number) => {
-          const theory = Number(bi.quantity) * qty;
-          if (!prodMap.has(bi.productId)) prodMap.set(bi.productId, { issue: 0, returnQty: 0, theoryCost: 0 });
-          prodMap.get(bi.productId)!.theoryCost += theory;
-        };
+        const totalCompleted = bestMs
+          ? (bestMs.reports || []).reduce((s, r) => s + Number(r.quantity), 0)
+          : ord.milestones.reduce((max, ms) => Math.max(max, ms.completedQuantity), 0);
 
         if (variants.length > 0 && variantCompletedMap.size > 0) {
           variants.forEach(v => {
@@ -305,6 +302,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
           });
         }
       });
+
       familyIds.forEach(fid => {
         const recs = stockRecordsByOrder.get(fid);
         if (!recs) return;
@@ -358,77 +356,100 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
       const allFamilyIds = new Set<string>();
       roots.forEach(p => getOrderFamilyIds(orders, p.id, childrenByParentId).forEach(id => allFamilyIds.add(id)));
       const prodMap = new Map<string, { issue: number; returnQty: number; theoryCost: number }>();
-      roots.forEach(parent => {
-        const familyIds = new Set(getOrderFamilyIds(orders, parent.id, childrenByParentId));
-        const familyOrders = orders.filter(o => familyIds.has(o.id));
-        familyOrders.forEach(ord => {
-          const ordProduct = productsById.get(ord.productId);
-          const variants = ordProduct?.variants ?? [];
-          let totalCompleted = ord.milestones.reduce((max, ms) => Math.max(max, ms.completedQuantity), 0);
-          if (totalCompleted <= 0 && productMilestoneProgresses.length > 0) {
-            totalCompleted = pmpByProduct.get(fpId) ?? 0;
-          }
+      const addTheory2 = (bi: { productId: string; quantity: number }, qty: number) => {
+        const theory = Number(bi.quantity) * qty;
+        if (!prodMap.has(bi.productId)) prodMap.set(bi.productId, { issue: 0, returnQty: 0, theoryCost: 0 });
+        prodMap.get(bi.productId)!.theoryCost += theory;
+      };
+      // 基于报工流水（PMP reports + 工单 milestone reports）计算完成量，包含工单报工 + 外协收回
+      const fpProduct = productsById.get(fpId);
+      const fpVariants = fpProduct?.variants ?? [];
+      const variantCompletedMap2 = new Map<string, number>();
+      let totalCompleted2 = 0;
+      let usedPmp = false;
 
-          const variantCompletedMap = new Map<string, number>();
-          const bestMsIdx = ord.milestones.reduce((bi, ms, i) => ms.completedQuantity > (ord.milestones[bi]?.completedQuantity ?? 0) ? i : bi, 0);
-          const bestMs = ord.milestones[bestMsIdx];
-          if (bestMs) {
-            (bestMs.reports || []).forEach(r => {
-              const vid = r.variantId ?? '';
-              variantCompletedMap.set(vid, (variantCompletedMap.get(vid) ?? 0) + Number(r.quantity));
-            });
-          }
+      // 优先使用 PMP reports（关联产品模式的权威数据源，含工单报工 + 外协收回）
+      if (productMilestoneProgresses.length > 0) {
+        const pmpForProduct = productMilestoneProgresses.filter(p => p.productId === fpId);
+        pmpForProduct.forEach(p => {
+          (p.reports ?? []).forEach(r => {
+            const qty = Number(r.quantity);
+            totalCompleted2 += qty;
+            const vid = r.variantId ?? p.variantId ?? '';
+            if (vid) variantCompletedMap2.set(vid, (variantCompletedMap2.get(vid) ?? 0) + qty);
+          });
+        });
+        if (totalCompleted2 > 0) usedPmp = true;
+      }
 
-          const addTheory2 = (bi: { productId: string; quantity: number }, qty: number) => {
-            const theory = Number(bi.quantity) * qty;
-            if (!prodMap.has(bi.productId)) prodMap.set(bi.productId, { issue: 0, returnQty: 0, theoryCost: 0 });
-            prodMap.get(bi.productId)!.theoryCost += theory;
-          };
+      // PMP 无数据时回退到工单 milestone reports
+      if (!usedPmp) {
+        roots.forEach(parent => {
+          const familyIds = new Set(getOrderFamilyIds(orders, parent.id, childrenByParentId));
+          orders.filter(o => familyIds.has(o.id)).forEach(ord => {
+            const bestMsIdx = ord.milestones.reduce((bi, ms, i) => ms.completedQuantity > (ord.milestones[bi]?.completedQuantity ?? 0) ? i : bi, 0);
+            const bestMs = ord.milestones[bestMsIdx];
+            if (bestMs) {
+              (bestMs.reports || []).forEach(r => {
+                const qty = Number(r.quantity);
+                totalCompleted2 += qty;
+                const vid = r.variantId ?? '';
+                if (vid) variantCompletedMap2.set(vid, (variantCompletedMap2.get(vid) ?? 0) + qty);
+              });
+            } else {
+              const msMax = ord.milestones.reduce((max, ms) => Math.max(max, ms.completedQuantity), 0);
+              totalCompleted2 += msMax;
+            }
+          });
+        });
+      }
 
-          if (variants.length > 0 && variantCompletedMap.size > 0) {
-            variants.forEach(v => {
-              const vCompleted = variantCompletedMap.get(v.id) ?? 0;
-              if (vCompleted <= 0) return;
-              const seenBomIds = new Set<string>();
-              if (v.nodeBoms && Object.keys(v.nodeBoms).length > 0) {
+      // BOM 理论耗材 = 报工流水完成量 × 单位 BOM 用量
+      if (totalCompleted2 > 0 && fpProduct) {
+        if (fpVariants.length > 0 && variantCompletedMap2.size > 0) {
+          fpVariants.forEach(v => {
+            const vCompleted = variantCompletedMap2.get(v.id) ?? 0;
+            if (vCompleted <= 0) return;
+            const seenBomIds = new Set<string>();
+            if (v.nodeBoms && Object.keys(v.nodeBoms).length > 0) {
+              (Object.values(v.nodeBoms) as string[]).forEach(bomId => {
+                if (seenBomIds.has(bomId)) return;
+                seenBomIds.add(bomId);
+                const bom = bomsById.get(bomId);
+                bom?.items.forEach(bi => addTheory2(bi, vCompleted));
+              });
+            } else {
+              (bomsByParentProduct.get(fpProduct.id) ?? []).filter(b => b.variantId === v.id && b.nodeId).forEach(bom => {
+                if (seenBomIds.has(bom.id)) return;
+                seenBomIds.add(bom.id);
+                bom.items.forEach(bi => addTheory2(bi, vCompleted));
+              });
+            }
+          });
+        } else {
+          const bomItems: { productId: string; quantity: number }[] = [];
+          if (fpVariants.length > 0) {
+            fpVariants.forEach(v => {
+              if (v.nodeBoms) {
+                const seenBomIds = new Set<string>();
                 (Object.values(v.nodeBoms) as string[]).forEach(bomId => {
                   if (seenBomIds.has(bomId)) return;
                   seenBomIds.add(bomId);
                   const bom = bomsById.get(bomId);
-                  bom?.items.forEach(bi => addTheory2(bi, vCompleted));
-                });
-              } else {
-                (bomsByParentProduct.get(ordProduct!.id) ?? []).filter(b => b.variantId === v.id && b.nodeId).forEach(bom => {
-                  if (seenBomIds.has(bom.id)) return;
-                  seenBomIds.add(bom.id);
-                  bom.items.forEach(bi => addTheory2(bi, vCompleted));
+                  bom?.items.forEach(bi => bomItems.push({ productId: bi.productId, quantity: Number(bi.quantity) }));
                 });
               }
             });
-          } else if (ordProduct) {
-            const bomItems: { productId: string; quantity: number }[] = [];
-            if (variants.length > 0) {
-              variants.forEach(v => {
-                if (v.nodeBoms) {
-                  const seenBomIds = new Set<string>();
-                  (Object.values(v.nodeBoms) as string[]).forEach(bomId => {
-                    if (seenBomIds.has(bomId)) return;
-                    seenBomIds.add(bomId);
-                    const bom = bomsById.get(bomId);
-                    bom?.items.forEach(bi => bomItems.push({ productId: bi.productId, quantity: Number(bi.quantity) }));
-                  });
-                }
-              });
-            }
-            if (bomItems.length === 0) {
-              (bomsByParentProduct.get(ordProduct.id) ?? []).filter(b => b.nodeId).forEach(bom => {
-                bom.items.forEach(bi => bomItems.push({ productId: bi.productId, quantity: Number(bi.quantity) }));
-              });
-            }
-            bomItems.forEach(bi => addTheory2(bi, totalCompleted));
           }
-        });
-      });
+          if (bomItems.length === 0) {
+            (bomsByParentProduct.get(fpProduct.id) ?? []).filter(b => b.nodeId).forEach(bom => {
+              bom.items.forEach(bi => bomItems.push({ productId: bi.productId, quantity: Number(bi.quantity) }));
+            });
+          }
+          bomItems.forEach(bi => addTheory2(bi, totalCompleted2));
+        }
+      }
+
       records.forEach(r => {
         if (r.type !== 'STOCK_OUT' && r.type !== 'STOCK_RETURN') return;
         const bySource = r.sourceProductId === fpId;
@@ -612,8 +633,14 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
 
   const productEntriesForDisplay = useMemo(() => {
     if (!productMaterialStatsByProduct) return null;
-    if (!materialKw) return Array.from(productMaterialStatsByProduct.entries());
-    return Array.from(productMaterialStatsByProduct.entries()).filter(([fpId, materials]) => {
+    const sortByNewest = (entries: [string, MatRow[]][]) =>
+      entries.sort((a, b) => {
+        const aMax = Math.max(0, ...(idx.rootOrdersByProductId.get(a[0]) ?? []).map(orderCreatedMs));
+        const bMax = Math.max(0, ...(idx.rootOrdersByProductId.get(b[0]) ?? []).map(orderCreatedMs));
+        return bMax - aMax;
+      });
+    if (!materialKw) return sortByNewest(Array.from(productMaterialStatsByProduct.entries()));
+    return sortByNewest(Array.from(productMaterialStatsByProduct.entries()).filter(([fpId, materials]) => {
       if (materials.some(m => {
         const p = idx.productsById.get(m.productId);
         return (p?.name ?? '').toLowerCase().includes(materialKw) || (p?.sku ?? '').toLowerCase().includes(materialKw);
@@ -626,12 +653,14 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         (o.customer ?? '').toLowerCase().includes(materialKw) ||
         (o.productName ?? '').toLowerCase().includes(materialKw)
       );
-    });
+    }));
   }, [productMaterialStatsByProduct, materialKw, idx]);
 
   const parentOrdersForDisplay = useMemo(() => {
-    if (!materialKw) return parentOrders;
-    return parentOrders.filter(parent => {
+    const sortByNewest = (list: typeof parentOrders) =>
+      [...list].sort((a, b) => orderCreatedMs(b) - orderCreatedMs(a));
+    if (!materialKw) return sortByNewest(parentOrders);
+    return sortByNewest(parentOrders.filter(parent => {
       const materials = parentMaterialStats.get(parent.id) ?? [];
       if (materials.some(m => {
         const p = idx.productsById.get(m.productId);
@@ -645,7 +674,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         (prod?.name ?? '').toLowerCase().includes(materialKw) ||
         (prod?.sku ?? '').toLowerCase().includes(materialKw)
       );
-    });
+    }));
   }, [parentOrders, parentMaterialStats, materialKw, idx]);
 
   /** 有搜索词时表格内只显示名称/SKU 含关键词的物料行；若当前卡片因工单/产品名等命中、但物料名都不含关键词，则仍显示全部行 */
@@ -661,7 +690,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   /** 领料/退料单据号：领料 LLyyyyMMdd-0001，退料 TLyyyyMMdd-0001，当日同类型顺序递增 */
   const getNextStockDocNo = (type: 'STOCK_OUT' | 'STOCK_RETURN') => {
     const prefix = type === 'STOCK_OUT' ? 'LL' : 'TL';
-    const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const todayStr = toLocalCompactYmd(new Date());
     const pattern = `${prefix}${todayStr}-`;
     const existing = records.filter(r => r.type === type && r.docNo && r.docNo.startsWith(pattern));
     const seqs = existing.map(r => parseInt(r.docNo!.slice(pattern.length), 10)).filter(n => !isNaN(n));

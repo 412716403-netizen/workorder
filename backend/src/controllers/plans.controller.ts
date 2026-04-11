@@ -63,7 +63,7 @@ export const splitPlan = asyncHandler(async (req, res) => {
   const results = await basePrisma.$transaction(async (tx) => {
     const created = [];
     for (const plan of planDataList) {
-      const planNumber = await getNextPlanNumber(tenantId);
+      const planNumber = await getNextPlanNumber(tenantId, tx);
       const p = await tx.planOrder.create({
         data: {
           id: genId('plan'),

@@ -1,3 +1,4 @@
+import type { PrismaClient } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 
 function todayStr() {
@@ -72,32 +73,36 @@ export async function generateDocNo(
   return `${prefix}${dateStr}-${String(seq).padStart(4, '0')}`;
 }
 
-export async function getNextPlanNumber(tenantId?: string): Promise<string> {
+/**
+ * @param db 默认用全局 prisma；在事务内批量生成单号时必须传入事务 client（tx），否则读不到本事务内已插入的行，会重复单号并触发唯一约束。
+ */
+export async function getNextPlanNumber(
+  tenantId?: string,
+  db: Pick<PrismaClient, 'planOrder'> = prisma,
+): Promise<string> {
   const where = tenantId ? { tenantId } : {};
-  const latest = await prisma.planOrder.findFirst({
+  const rows = await db.planOrder.findMany({
     where,
     select: { planNumber: true },
-    orderBy: { planNumber: 'desc' },
   });
   let maxNum = 0;
-  if (latest) {
-    const m = latest.planNumber.match(/^PLN-?(\d+)/);
-    if (m) maxNum = parseInt(m[1]);
+  for (const r of rows) {
+    const m = r.planNumber.match(/^PLN-?(\d+)/);
+    if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
   }
   return `PLN${maxNum + 1}`;
 }
 
 export async function getNextOrderNumber(tenantId?: string): Promise<string> {
   const where = tenantId ? { tenantId } : {};
-  const latest = await prisma.productionOrder.findFirst({
+  const rows = await prisma.productionOrder.findMany({
     where,
     select: { orderNumber: true },
-    orderBy: { orderNumber: 'desc' },
   });
   let maxNum = 0;
-  if (latest) {
-    const m = latest.orderNumber.match(/^WO-?(\d+)/);
-    if (m) maxNum = parseInt(m[1]);
+  for (const r of rows) {
+    const m = r.orderNumber.match(/^WO-?(\d+)/);
+    if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
   }
   return `WO${maxNum + 1}`;
 }

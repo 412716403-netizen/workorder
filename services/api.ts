@@ -544,6 +544,26 @@ export const collaboration = {
   deleteReturn: (id: string) =>
     request<any>(`/collaboration/subcontract-returns/${id}`, { method: 'DELETE' }),
 
+  // Dispatch 编辑同步
+  updateDispatchPayload: (id: string, data: { recordIds: string[] }) =>
+    request<any>(`/collaboration/subcontract-dispatches/${id}/payload`, { method: 'PUT', body: JSON.stringify(data) }),
+  amendDispatch: (id: string, data: { recordIds: string[]; note?: string }) =>
+    request<any>(`/collaboration/subcontract-dispatches/${id}/amend`, { method: 'POST', body: JSON.stringify(data) }),
+  confirmDispatchAmendment: (id: string) =>
+    request<any>(`/collaboration/subcontract-dispatches/${id}/confirm-amendment`, { method: 'PATCH' }),
+  rejectDispatchAmendment: (id: string) =>
+    request<any>(`/collaboration/subcontract-dispatches/${id}/reject-amendment`, { method: 'PATCH' }),
+
+  // Return 编辑同步
+  updateReturnPayload: (id: string, data: { items: any[]; note?: string; warehouseId?: string }) =>
+    request<any>(`/collaboration/subcontract-returns/${id}/payload`, { method: 'PUT', body: JSON.stringify(data) }),
+  amendReturn: (id: string, data: { items: any[]; note?: string }) =>
+    request<any>(`/collaboration/subcontract-returns/${id}/amend`, { method: 'POST', body: JSON.stringify(data) }),
+  confirmReturnAmendment: (id: string) =>
+    request<any>(`/collaboration/subcontract-returns/${id}/confirm-amendment`, { method: 'PATCH' }),
+  rejectReturnAmendment: (id: string) =>
+    request<any>(`/collaboration/subcontract-returns/${id}/reject-amendment`, { method: 'PATCH' }),
+
   listOutsourceRoutes: () =>
     request<any[]>('/collaboration/outsource-routes'),
   createOutsourceRoute: (data: { name: string; steps: any[] }) =>

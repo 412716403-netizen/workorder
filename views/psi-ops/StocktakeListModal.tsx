@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Plus,
   X,
@@ -11,6 +11,7 @@ import {
 import { Product, Warehouse, AppDictionaries, ProductVariant } from '../../types';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 import { useConfirm } from '../../contexts/ConfirmContext';
+import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 
 export interface StocktakeListModalProps {
   open: boolean;
@@ -41,6 +42,17 @@ const StocktakeListModal: React.FC<StocktakeListModalProps> = ({
 }) => {
   const confirm = useConfirm();
   const [detailDocNumber, setDetailDocNumber] = useState<string | null>(null);
+
+  const sortedStocktakeEntries = useMemo(
+    () =>
+      Object.entries(stocktakeOrdersGrouped).sort(([docA, itemsA], [docB, itemsB]) => {
+        const ma = flowRecordsEarliestMs(itemsA as { timestamp?: string; createdAt?: string }[]);
+        const mb = flowRecordsEarliestMs(itemsB as { timestamp?: string; createdAt?: string }[]);
+        if (mb !== ma) return mb - ma;
+        return (docB || '').localeCompare(docA || '');
+      }),
+    [stocktakeOrdersGrouped],
+  );
 
   if (!open) return null;
 
@@ -74,7 +86,7 @@ const StocktakeListModal: React.FC<StocktakeListModalProps> = ({
         </div>
         <div className="flex-1 overflow-auto p-4">
           {!detailDocNumber ? (
-            Object.keys(stocktakeOrdersGrouped).length === 0 ? (
+            sortedStocktakeEntries.length === 0 ? (
               <div className="py-16 text-center text-slate-500">
                 <FileText className="w-12 h-12 mx-auto mb-3 text-slate-200" />
                 <p className="text-sm font-medium">暂无盘点单</p>
@@ -82,7 +94,7 @@ const StocktakeListModal: React.FC<StocktakeListModalProps> = ({
               </div>
             ) : (
               <div className="space-y-3">
-                {Object.entries(stocktakeOrdersGrouped).map(([docNum, docItems]) => {
+                {sortedStocktakeEntries.map(([docNum, docItems]) => {
                   const first = docItems[0];
                   const totalQty = docItems.reduce((s: number, i: any) => s + (i.quantity ?? 0), 0);
                   const whName = warehouseMapPSI.get(first.warehouseId)?.name ?? '—';

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import type { ProductionOpRecord, ProductionOrder, Product, Warehouse, ProdOpType } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
+import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 
 export interface StockMaterialFormModalProps {
   visible: boolean;
@@ -24,6 +26,8 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
   onAddRecord,
   getNextStockDocNo,
 }) => {
+  const { currentUser } = useAuth();
+  const docOperator = currentOperatorDisplayName(currentUser);
   const [form, setForm] = useState({
     orderId: '',
     productId: '',
@@ -47,7 +51,7 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
       quantity: form.quantity,
       reason: form.reason,
       partner: form.partner,
-      operator: '张主管',
+      operator: docOperator,
       timestamp: new Date().toLocaleString(),
       status: '已完成',
       warehouseId: form.warehouseId || undefined,

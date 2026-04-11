@@ -23,6 +23,7 @@ import {
   subModuleTabPillClass,
 } from '../styles/uiDensity';
 import { useModulePermission, usePermFilteredTabs } from '../hooks/useModulePermission';
+import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
 
 interface PSIViewProps {
   products: Product[];
@@ -63,6 +64,11 @@ const TAB_PERM_GROUPS: Record<string, string[]> = {
 
 const PSIView: React.FC<PSIViewProps> = ({ products, records, prodRecords = [], orders = [], warehouses, categories, partners, partnerCategories, dictionaries, purchaseOrderFormSettings, onUpdatePurchaseOrderFormSettings, purchaseBillFormSettings, onUpdatePurchaseBillFormSettings, onAddRecord, onAddRecordBatch, onReplaceRecords, onDeleteRecords, userPermissions, tenantRole }) => {
   const [activeTab, setActiveTab] = useState<PSITab>('PURCHASE_ORDER');
+  const setScrollSegment = useSetMainScrollSegment();
+  useLayoutEffect(() => {
+    setScrollSegment?.(activeTab);
+  }, [activeTab, setScrollSegment]);
+
   const [hideTabs, setHideTabs] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const tabsWrapRef = useRef<HTMLDivElement>(null);

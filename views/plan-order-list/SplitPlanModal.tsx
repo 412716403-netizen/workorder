@@ -3,6 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { Split, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { PlanOrder, Product, AppDictionaries, PlanItem } from '../../types';
+import { localTodayYmd } from '../../utils/localDateTime';
 
 export interface SplitPlanModalProps {
   plan: PlanOrder;
@@ -72,7 +73,7 @@ const SplitPlanModal: React.FC<SplitPlanModalProps> = ({ plan, products, diction
         planNumber: `${plan.planNumber}-${j + 1}`,
         items: partItems,
         assignments: {},
-        createdAt: new Date().toISOString().split('T')[0],
+        createdAt: localTodayYmd(),
       });
     }
     if (newPlans.length < 2) {

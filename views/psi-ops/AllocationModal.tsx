@@ -2,6 +2,7 @@ import React from 'react';
 import { X, PackageCheck } from 'lucide-react';
 import { Product, Warehouse, AppDictionaries, ProductVariant } from '../../types';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import { effectiveAllocatedQuantity } from '../../utils/psiAllocationDisplay';
 
 interface AllocationModalData {
   docNumber: string;
@@ -67,26 +68,22 @@ const AllocationModal: React.FC<AllocationModalProps> = ({
             </select>
           </div>
           {(() => {
-            const orderTotal = allocationModal.grp.reduce((s: number, i: any) => s + (i.quantity ?? 0), 0);
-            const allocatedTotal = allocationModal.grp.reduce((s: number, i: any) => s + (i.allocatedQuantity ?? 0), 0);
-            const remainingTotal = typeof allocationQuantities === 'object'
-              ? (Object.values(allocationQuantities) as number[]).reduce((a, b) => a + b, 0)
-              : (allocationQuantities ?? 0);
-            const unallocatedTotal = Math.max(0, orderTotal - allocatedTotal - remainingTotal);
+            const orderTotal = allocationModal.grp.reduce((s: number, i: any) => s + (Number(i.quantity) || 0), 0);
+            const displayAllocatedTotal = allocationModal.grp.reduce(
+              (s: number, i: any) => s + effectiveAllocatedQuantity(i.allocatedQuantity, i.shippedQuantity),
+              0,
+            );
+            const gapTotal = Math.max(0, orderTotal - displayAllocatedTotal);
             return (
               <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
                 <span className="text-slate-500">订单数量：<strong className="text-slate-800">{orderTotal.toLocaleString()}</strong></span>
-                <span className="text-slate-500">已配货数量：<strong className="text-slate-700">{allocatedTotal.toLocaleString()}</strong></span>
-                <span className="text-slate-500">本次剩余待配：<strong className="text-indigo-600">{remainingTotal.toLocaleString()}</strong></span>
-                {unallocatedTotal > 0 && (
-                  <span className="text-slate-500">未配货：<strong className="text-amber-600">{unallocatedTotal.toLocaleString()}</strong></span>
-                )}
+                <span className="text-slate-500">已配货数量：<strong className="text-slate-700">{displayAllocatedTotal.toLocaleString()}</strong></span>
+                <span className="text-slate-500">本次剩余待配：<strong className="text-indigo-600">{gapTotal.toLocaleString()}</strong></span>
               </div>
             );
           })()}
           {allocationModal.grp.some((i: any) => i.variantId) ? (
             <div className="space-y-4 overflow-auto">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">数量明细（有颜色尺码）· 输入为剩余配货数量</p>
               {(() => {
                 const groupedByColor: Record<string, ProductVariant[]> = {};
                 const grpVariantIds = new Set(allocationModal.grp.map((i: any) => i.variantId).filter(Boolean));
@@ -95,22 +92,8 @@ const AllocationModal: React.FC<AllocationModalProps> = ({
                   if (!groupedByColor[v.colorId]) groupedByColor[v.colorId] = [];
                   groupedByColor[v.colorId].push(v);
                 });
-                const orderByVariant: Record<string, number> = {};
-                const allocatedByVariant: Record<string, number> = {};
-                allocationModal.grp.forEach((i: any) => {
-                  if (i.variantId) {
-                    orderByVariant[i.variantId] = (orderByVariant[i.variantId] ?? 0) + (i.quantity ?? 0);
-                    allocatedByVariant[i.variantId] = (allocatedByVariant[i.variantId] ?? 0) + (i.allocatedQuantity ?? 0);
-                  }
-                });
                 return sortedVariantColorEntries(groupedByColor, allocationModal.product?.colorIds, allocationModal.product?.sizeIds).map(([colorId, colorVariants]) => {
                   const color = dictionaries.colors.find(c => c.id === colorId);
-                  const orderSum = (colorVariants as ProductVariant[]).reduce((s, v) => s + (orderByVariant[v.id] ?? 0), 0);
-                  const allocatedSum = (colorVariants as ProductVariant[]).reduce((s, v) => s + (allocatedByVariant[v.id] ?? 0), 0);
-                  const remainingSum = typeof allocationQuantities === 'object'
-                    ? (colorVariants as ProductVariant[]).reduce((s, v) => s + (allocationQuantities[v.id] ?? 0), 0)
-                    : 0;
-                  const unallocSum = Math.max(0, orderSum - allocatedSum - remainingSum);
                   return (
                     <div key={colorId} className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-[20px] border border-slate-100 shadow-sm">
                       <div className="flex items-center gap-2 w-28 shrink-0">
@@ -120,10 +103,7 @@ const AllocationModal: React.FC<AllocationModalProps> = ({
                       <div className="flex flex-wrap gap-3">
                         {colorVariants.map(v => {
                           const size = dictionaries.sizes.find(s => s.id === v.sizeId);
-                          const orderQty = orderByVariant[v.id] ?? 0;
-                          const allocatedQty = allocatedByVariant[v.id] ?? 0;
                           const remainingQty = typeof allocationQuantities === 'object' ? (allocationQuantities[v.id] ?? 0) : 0;
-                          const unallocated = Math.max(0, orderQty - allocatedQty - remainingQty);
                           return (
                             <div key={v.id} className="flex flex-col gap-0.5 w-20">
                               <span className="text-[9px] font-black text-slate-400 uppercase">{size?.name || v.skuSuffix}</span>
@@ -138,12 +118,8 @@ const AllocationModal: React.FC<AllocationModalProps> = ({
                                   onQuantityChange({ ...allocationQuantities, [v.id]: isNaN(val) ? 0 : val });
                                 }}
                                 className="w-full bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-sm font-black text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500 text-center"
-                                title="剩余配货数量"
+                                title="本次配货数量"
                               />
-                              <div className="flex justify-between text-[9px] text-slate-400">
-                                <span>已配 {allocatedQty}</span>
-                                {unallocated > 0 && <span className="text-amber-600">未配 {unallocated}</span>}
-                              </div>
                             </div>
                           );
                         })}
@@ -155,7 +131,7 @@ const AllocationModal: React.FC<AllocationModalProps> = ({
             </div>
           ) : (
             <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">剩余配货数量</label>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">本次配货数量</label>
               <input
                 type="number"
                 min={0}
@@ -167,9 +143,6 @@ const AllocationModal: React.FC<AllocationModalProps> = ({
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-200"
                 placeholder="本次配货数量"
               />
-              {allocationModal.grp[0] && (allocationModal.grp[0].allocatedQuantity ?? 0) > 0 && (
-                <p className="text-xs text-slate-500 mt-1">已配货：{(allocationModal.grp[0].allocatedQuantity ?? 0).toLocaleString()}</p>
-              )}
             </div>
           )}
         </div>
