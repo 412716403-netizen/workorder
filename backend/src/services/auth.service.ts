@@ -171,6 +171,7 @@ export async function login(username: string, password: string) {
   };
   const tokens = generateTokens(payload);
 
+  console.warn(`[auth:login] user=${user.id} (${user.username}) tenantId=${tenantInfo.tenantId ?? 'none'}`);
   await prisma.refreshToken.create({
     data: { userId: user.id, token: hashToken(tokens.refreshToken), expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
   });
@@ -220,7 +221,8 @@ export async function selectTenant(userId: string, tenantId: string) {
     permissions,
   };
 
-  await prisma.refreshToken.deleteMany({ where: { userId } });
+  const deletedCount = await prisma.refreshToken.deleteMany({ where: { userId } });
+  console.warn(`[auth:selectTenant] deleted ${deletedCount.count} refresh tokens for user=${userId} tenant=${tenantId}`);
   const tokens = generateTokens(payload);
   await prisma.refreshToken.create({
     data: { userId: user.id, token: hashToken(tokens.refreshToken), expiresAt: parseExpiry(env.JWT_REFRESH_EXPIRES_IN) },
@@ -240,6 +242,11 @@ export async function refresh(oldRefreshToken: string) {
   const tokenHash = hashToken(oldRefreshToken);
   const stored = await prisma.refreshToken.findUnique({ where: { token: tokenHash } });
   if (!stored || stored.expiresAt < new Date()) {
+    const allForDebug = stored
+      ? []
+      : await prisma.refreshToken.findMany({ where: { userId: stored?.userId }, select: { id: true, createdAt: true, expiresAt: true } }).catch(() => []);
+    console.warn('[auth:refresh] FAIL —', stored ? `token expired (exp=${stored.expiresAt.toISOString()})` : 'token hash NOT found in DB',
+      `| hash_prefix=${tokenHash.slice(0, 12)}… | other_tokens_for_user=${JSON.stringify(allForDebug)}`);
     if (stored) await prisma.refreshToken.delete({ where: { id: stored.id } });
     throw new AppError(401, 'Refresh token 无效或已过期');
   }
