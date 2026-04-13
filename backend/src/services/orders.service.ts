@@ -173,9 +173,11 @@ export async function updateReport(
   body: Record<string, unknown>,
 ) {
   await verifyMilestoneTenant(milestoneId, tenantId);
+  const data = sanitizeUpdate(body);
+  normalizeDates(data);
   const report = await basePrisma.milestoneReport.update({
     where: { id: reportId },
-    data: sanitizeUpdate(body),
+    data,
   });
   await recalcMilestoneCompleted(milestoneId);
   return report;
@@ -308,9 +310,11 @@ export async function updateProductReport(
   });
   if (!progress) throw new AppError(404, '报工记录不存在');
 
+  const updateData = sanitizeUpdate(body);
+  normalizeDates(updateData);
   const updated = await basePrisma.productProgressReport.update({
     where: { id: reportId },
-    data: sanitizeUpdate(body),
+    data: updateData,
   });
   await recalcProgressCompleted(report.progressId);
   return updated;

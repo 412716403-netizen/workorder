@@ -178,7 +178,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
       scrapSavedLines += 1;
       scrapSavedQty += q;
       onAddRecord({
-        id: rid, type: 'SCRAP', orderId: oid, productId: reworkActionRow.productId, variantId: vid, quantity: q,
+        id: rid, type: 'SCRAP', orderId: oid || undefined, productId: reworkActionRow.productId, variantId: vid, quantity: q,
         reason, operator, timestamp, nodeId: nodeIdSc, docNo: scrapDocNo
       });
     };
@@ -250,7 +250,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
       reworkSavedLines += 1;
       reworkSavedQty += q;
       onAddRecord({
-        id: rid, type: 'REWORK', orderId: oid, productId: reworkActionRow.productId, variantId: vid, quantity: q,
+        id: rid, type: 'REWORK', orderId: oid || undefined, productId: reworkActionRow.productId, variantId: vid, quantity: q,
         reason, operator, timestamp, status: '待返工', sourceNodeId, nodeId: nodeIdFirst, reworkNodeIds: reworkNodeIdsSorted, docNo: reworkDocNo
       });
     };

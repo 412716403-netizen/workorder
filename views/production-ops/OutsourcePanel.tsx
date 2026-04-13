@@ -141,11 +141,13 @@ const OutsourcePanel: React.FC<PanelProps> = ({
 
     if (isProductMode) {
       const dispatchedByKey: Record<string, number> = {};
+      const receivedByKey: Record<string, number> = {};
       outsourceRecords.forEach(r => {
-        if (r.status !== '加工中' || !r.nodeId) return;
+        if (!r.nodeId) return;
         if (r.orderId) return;
         const key = `${r.productId}|${r.nodeId}`;
-        dispatchedByKey[key] = (dispatchedByKey[key] ?? 0) + r.quantity;
+        if (r.status === '加工中') dispatchedByKey[key] = (dispatchedByKey[key] ?? 0) + r.quantity;
+        else if (r.status === '已收回') receivedByKey[key] = (receivedByKey[key] ?? 0) + r.quantity;
       });
       const rows: { orderId?: string; orderNumber?: string; productId: string; productName: string; nodeId: string; milestoneName: string; orderTotalQty: number; reportedQty: number; dispatchedQty: number; availableQty: number }[] = [];
       const getDr = (oid: string, tid: string) =>
@@ -174,7 +176,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
               : 0;
           const reportedQty = pmpCompletedAtTemplate(productMilestoneProgresses || [], productId, nodeId, pmpByKey);
           const key = `${productId}|${nodeId}`;
-          const dispatchedQty = dispatchedByKey[key] ?? 0;
+          const dispatchedQty = Math.max(0, (dispatchedByKey[key] ?? 0) - (receivedByKey[key] ?? 0));
           const availableQty = Math.max(0, maxReportable - reportedQty - dispatchedQty);
           if (availableQty <= 0) return;
           rows.push({
@@ -200,10 +202,12 @@ const OutsourcePanel: React.FC<PanelProps> = ({
     }
 
     const dispatchedByKey: Record<string, number> = {};
+    const receivedByKey: Record<string, number> = {};
     outsourceRecords.forEach(r => {
-      if (r.status !== '加工中' || !r.nodeId) return;
+      if (!r.nodeId) return;
       const key = `${r.orderId}|${r.nodeId}`;
-      dispatchedByKey[key] = (dispatchedByKey[key] ?? 0) + r.quantity;
+      if (r.status === '加工中') dispatchedByKey[key] = (dispatchedByKey[key] ?? 0) + r.quantity;
+      else if (r.status === '已收回') receivedByKey[key] = (receivedByKey[key] ?? 0) + r.quantity;
     });
     const rows: { orderId?: string; orderNumber?: string; productId: string; productName: string; nodeId: string; milestoneName: string; orderTotalQty: number; reportedQty: number; dispatchedQty: number; availableQty: number }[] = [];
     const getDr = (oid: string, tid: string) =>
@@ -227,7 +231,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         const { defective, rework } = getDr(order.id, ms.templateId);
         const maxReportable = Math.max(0, baseQty - defective + rework);
         const key = `${order.id}|${ms.templateId}`;
-        const dispatchedQty = dispatchedByKey[key] ?? 0;
+        const dispatchedQty = Math.max(0, (dispatchedByKey[key] ?? 0) - (receivedByKey[key] ?? 0));
         const reportedQty = ms.completedQuantity ?? 0;
         const availableQty = Math.max(0, maxReportable - reportedQty - dispatchedQty);
         if (availableQty <= 0) return;
