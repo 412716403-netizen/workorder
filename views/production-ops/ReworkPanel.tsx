@@ -195,7 +195,9 @@ const ReworkPanel: React.FC<PanelProps> = ({
       const pendingQty = defectiveTotal - reworkTotal - scrapTotal;
       if (pendingQty <= 0) return;
       const product = idx.productsById.get(productId);
-      const parents = idx.rootOrdersByProductId.get(productId) ?? [];
+      const parents = idx.rootOrdersByProductId.get(productId)
+        ?? idx.ordersByProductId.get(productId)
+        ?? [];
       const cnt = parents.length;
       const parentNos = parents.map(o => o.orderNumber).filter(Boolean) as string[];
       const productOrdersTitle = parentNos.join('、');
@@ -255,18 +257,18 @@ const ReworkPanel: React.FC<PanelProps> = ({
     }
     const reworkPartnerMap = buildReworkPartnerMap(records);
     const reworkRecords = records.filter(r => r.type === 'REWORK');
-    const parentIdSetByProduct = new Map<string, Set<string>>();
-    parentOrders.forEach(o => {
-      if (!parentIdSetByProduct.has(o.productId)) parentIdSetByProduct.set(o.productId, new Set());
-      parentIdSetByProduct.get(o.productId)!.add(o.id);
+    const orderIdSetByProduct = new Map<string, Set<string>>();
+    orders.forEach(o => {
+      if (!orderIdSetByProduct.has(o.productId)) orderIdSetByProduct.set(o.productId, new Set());
+      orderIdSetByProduct.get(o.productId)!.add(o.id);
     });
     const byProduct = new Map<string, Map<string, { nodeId: string; totalQty: number; completedQty: number; pendingSeq: number; outsourcePartner: string }>>();
     reworkRecords.forEach(r => {
       const pid = r.productId;
       if (!pid) return;
-      const parents = parentIdSetByProduct.get(pid);
-      if (!parents) return;
-      if (r.orderId && !parents.has(r.orderId)) return;
+      const knownOrders = orderIdSetByProduct.get(pid);
+      if (!knownOrders) return;
+      if (r.orderId && !knownOrders.has(r.orderId)) return;
       const byKey = byProduct.get(pid) ?? new Map();
       const targetNodes = (r.reworkNodeIds && r.reworkNodeIds.length > 0) ? r.reworkNodeIds : (r.nodeId ? [r.nodeId] : []);
       const completed =
@@ -629,10 +631,12 @@ const ReworkPanel: React.FC<PanelProps> = ({
               if (block.type === 'productAggregate') {
                 const fp = idx.productsById.get(block.productId);
                 const stats = reworkStatsByProductId.get(block.productId) ?? [];
-                const productParents = idx.rootOrdersByProductId.get(block.productId) ?? [];
-                const repOrder = [...productParents]
+                const productOrders = idx.rootOrdersByProductId.get(block.productId)
+                  ?? idx.ordersByProductId.get(block.productId)
+                  ?? [];
+                const repOrder = [...productOrders]
                   .sort((a, b) => (a.orderNumber || '').localeCompare(b.orderNumber || ''))[0];
-                const totalQtyAll = productParents
+                const totalQtyAll = productOrders
                   .reduce((s, o) => s + o.items.reduce((t, i) => t + i.quantity, 0), 0);
                 if (!repOrder) return null;
                 return (
