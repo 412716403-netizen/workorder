@@ -188,10 +188,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [isLoggedIn]);
 
+  /**
+   * 后端 access 默认约 15m（JWT_EXPIRES_IN）。原先每 8m 刷新一次：若某次失败，下次已到 16m 之后，令牌已过期，仍在操作也会被踢。
+   * 改为约 4m 一次，并网络恢复时再试，给足重试窗口。
+   */
   useEffect(() => {
     if (!isLoggedIn) return;
-    const t = window.setInterval(() => void refreshSessionSilently(), 8 * 60 * 1000);
-    return () => window.clearInterval(t);
+    const tick = () => void refreshSessionSilently();
+    const t = window.setInterval(tick, 4 * 60 * 1000);
+    window.addEventListener('online', tick);
+    return () => {
+      window.clearInterval(t);
+      window.removeEventListener('online', tick);
+    };
   }, [isLoggedIn]);
 
   useEffect(() => {

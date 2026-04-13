@@ -1,0 +1,47 @@
+<scroll-view class="apple-scroll" scroll-y show-scrollbar="{{false}}">
+  <view class="apple-page">
+    <view wx:if="{{loading}}" class="apple-muted">加载中…</view>
+    <view wx:elif="{{error}}" class="apple-error">{{error}}</view>
+    <block wx:else>
+      <view class="apple-large-title" style="font-size: 56rpx">工作台</view>
+      <view class="apple-footnote">当前账号与企业信息</view>
+
+      <view class="apple-section-label">企业</view>
+      <view class="apple-group">
+        <view class="apple-cell" wx:if="{{tenantName}}">
+          <view class="apple-cell__body">
+            <view class="apple-cell__title">{{tenantName}}</view>
+            <view class="apple-cell__subtitle">当前进入的企业</view>
+          </view>
+        </view>
+        <view class="apple-cell" wx:else>
+          <view class="apple-cell__body">
+            <view class="apple-cell__title">未选择企业</view>
+            <view class="apple-cell__subtitle">请返回选择企业</view>
+          </view>
+        </view>
+      </view>
+
+      <view class="apple-section-label">账户</view>
+      <view class="apple-group">
+        <view class="apple-cell">
+          <view class="apple-cell__body">
+            <view class="apple-cell__title">{{user.displayName || user.username}}</view>
+            <view class="apple-cell__subtitle">显示名称 / 用户名</view>
+          </view>
+        </view>
+        <view class="apple-cell" wx:if="{{user.phone}}">
+          <view class="apple-cell__body">
+            <view class="apple-cell__title">{{user.phone}}</view>
+            <view class="apple-cell__subtitle">手机号</view>
+          </view>
+        </view>
+      </view>
+
+      <button wx:if="{{tenantCount > 1}}" class="apple-btn-muted" style="margin-top: 32rpx" bindtap="onSwitchTenant">
+        切换企业
+      </button>
+      <button class="apple-btn-danger" style="margin-top: 20rpx" bindtap="onLogout">退出登录</button>
+    </block>
+  </view>
+</scroll-view>

@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# 小程序本地 AppID（复制 project.private.config.json.example 为 project.private.config.json）
+miniprogram/project.private.config.json

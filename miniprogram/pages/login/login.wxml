@@ -1,0 +1,21 @@
+<scroll-view class="apple-scroll" scroll-y show-scrollbar="{{false}}">
+  <view class="apple-page">
+    <view class="apple-large-title">登录</view>
+    <view class="apple-footnote">使用手机号或用户名与密码，与网页端相同。</view>
+
+    <view class="apple-group apple-group--padded" style="margin-top: 48rpx">
+      <view class="apple-field-label">手机号或用户名</view>
+      <view class="apple-input-wrap">
+        <input class="apple-input" value="{{username}}" bindinput="onUser" placeholder="必填" placeholder-class="apple-ph" />
+      </view>
+      <view class="apple-field-label">密码</view>
+      <view class="apple-input-wrap" style="margin-bottom: 8rpx">
+        <input class="apple-input" password value="{{password}}" bindinput="onPass" placeholder="必填" placeholder-class="apple-ph" />
+      </view>
+    </view>
+
+    <button class="apple-btn-fill" style="margin-top: 40rpx" loading="{{loading}}" disabled="{{loading}}" bindtap="onLogin">
+      登录
+    </button>
+  </view>
+</scroll-view>

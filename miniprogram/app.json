@@ -1,0 +1,18 @@
+{
+  "pages": [
+    "pages/login/login",
+    "pages/tenant-select/tenant-select",
+    "pages/no-tenant/no-tenant",
+    "pages/onboarding/onboarding",
+    "pages/home/home"
+  ],
+  "window": {
+    "navigationBarTitleText": "生产报工",
+    "navigationBarBackgroundColor": "#f2f2f7",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f2f2f7",
+    "backgroundTextStyle": "dark"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

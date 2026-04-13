@@ -1,0 +1,86 @@
+<scroll-view class="apple-scroll" scroll-y show-scrollbar="{{false}}">
+  <!-- 等待审核 -->
+  <view wx:if="{{mode === 'pending'}}" class="apple-page">
+    <view class="apple-large-title" style="font-size: 48rpx">等待审核</view>
+    <view class="apple-footnote" style="margin-top: 16rpx">
+      加入申请已提交，企业管理员通过后将自动进入系统。
+    </view>
+    <view wx:if="{{applications.length}}" class="apple-group" style="margin-top: 40rpx">
+      <view wx:for="{{applications}}" wx:key="id" class="apple-cell">
+        <view class="apple-cell__body">
+          <view class="apple-cell__title">{{item.tenant.name}}</view>
+          <view class="apple-cell__subtitle">申请状态</view>
+        </view>
+        <view class="apple-pill apple-pill--{{item._pill}}">{{item._label}}</view>
+      </view>
+    </view>
+    <button class="apple-btn-muted" style="margin-top: 48rpx" bindtap="onBackPending">返回</button>
+  </view>
+
+  <!-- 创建已提交 -->
+  <view wx:elif="{{mode === 'createDone'}}" class="apple-page">
+    <view class="apple-large-title" style="font-size: 48rpx">已提交审核</view>
+    <view class="apple-footnote" style="margin-top: 16rpx">
+      企业创建申请已提交，平台管理员通过后即可在「选择企业」中看到。
+    </view>
+    <button class="apple-btn-fill" style="margin-top: 56rpx" bindtap="onAfterCreate">完成</button>
+  </view>
+
+  <!-- 创建企业 -->
+  <view wx:elif="{{mode === 'create'}}" class="apple-page">
+    <view class="apple-large-title" style="font-size: 48rpx">创建企业</view>
+    <view class="apple-footnote" style="margin-top: 12rpx">提交后由平台审核</view>
+    <view class="apple-group apple-group--padded" style="margin-top: 40rpx">
+      <view class="apple-field-label">企业名称</view>
+      <input class="apple-input" value="{{createName}}" bindinput="onCreateName" placeholder="请输入企业名称" placeholder-class="apple-ph-onboard" />
+    </view>
+    <button class="apple-btn-fill" style="margin-top: 36rpx" loading="{{loading}}" disabled="{{loading}}" bindtap="onSubmitCreate">提交申请</button>
+    <button class="apple-btn-muted" style="margin-top: 20rpx" bindtap="onModeChoose">取消</button>
+  </view>
+
+  <!-- 加入企业 -->
+  <view wx:elif="{{mode === 'join'}}" class="apple-page">
+    <view class="apple-large-title" style="font-size: 48rpx">加入企业</view>
+    <view class="apple-footnote" style="margin-top: 12rpx">输入企业邀请码查询后加入</view>
+    <view class="apple-group apple-group--padded" style="margin-top: 40rpx">
+      <view class="apple-field-label">邀请码</view>
+      <view style="display: flex; align-items: center; gap: 16rpx">
+        <input class="apple-input" style="flex: 1" value="{{inviteCode}}" bindinput="onInviteCode" placeholder="输入邀请码" placeholder-class="apple-ph-onboard" />
+        <button class="apple-btn-compact" loading="{{lookupLoading}}" disabled="{{lookupLoading}}" bindtap="onLookup">查询</button>
+      </view>
+      <view wx:if="{{lookupResult}}" class="apple-inset">
+        <view class="apple-inset-row">
+          <text class="apple-inset-name">{{lookupResult.name}}</text>
+          <text class="apple-inset-meta">{{lookupResult.memberCount}} 位成员</text>
+        </view>
+        <button class="apple-btn-fill" style="margin-top: 24rpx" loading="{{loading}}" disabled="{{loading}}" bindtap="onApplyJoin">申请加入</button>
+      </view>
+    </view>
+    <button class="apple-btn-muted" style="margin-top: 28rpx" bindtap="onJoinBack">返回</button>
+  </view>
+
+  <!-- 选择入口 -->
+  <view wx:else class="apple-page">
+    <view class="apple-large-title" style="font-size: 48rpx">企业入驻</view>
+    <view class="apple-footnote" style="margin-top: 12rpx">创建新企业或通过邀请码加入已有企业</view>
+
+    <view class="apple-group" style="margin-top: 40rpx">
+      <view class="apple-cell" bindtap="onModeCreate">
+        <view class="apple-cell__body">
+          <view class="apple-cell__title">创建企业</view>
+          <view class="apple-cell__subtitle">新建企业空间，您将成为创建者</view>
+        </view>
+        <view class="apple-chevron">›</view>
+      </view>
+      <view class="apple-cell" bindtap="onModeJoin">
+        <view class="apple-cell__body">
+          <view class="apple-cell__title">加入企业</view>
+          <view class="apple-cell__subtitle">使用邀请码申请加入</view>
+        </view>
+        <view class="apple-chevron">›</view>
+      </view>
+    </view>
+
+    <button class="apple-btn-muted" style="margin-top: 40rpx" bindtap="onBackChoose">返回</button>
+  </view>
+</scroll-view>

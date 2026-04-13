@@ -21,15 +21,42 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<Respons
 /**
  * Token 存储在 httpOnly Cookie 中由服务端管理。
  * 内存变量仅作为兼容回退（例如 SSR 或无 Cookie 环境）。
+ * 另将 access 同步到 sessionStorage：F5 后内存清空时仍能带 Authorization，减轻跨子域 Cookie 未带上时的误登出。
  */
+const ACCESS_SESSION_KEY = 'st_api_access_v1';
+
 let memoryAccessToken: string | null = null;
 
-export function setTokens(access: string, _refresh?: string) {
+function persistAccessToken(access: string | null) {
   memoryAccessToken = access;
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    if (access) sessionStorage.setItem(ACCESS_SESSION_KEY, access);
+    else sessionStorage.removeItem(ACCESS_SESSION_KEY);
+  } catch {
+    /* 无痕/禁用存储 */
+  }
+}
+
+function restoreAccessFromSessionIfLoggedIn() {
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    if (!localStorage.getItem('isLoggedIn')) return;
+    const s = sessionStorage.getItem(ACCESS_SESSION_KEY);
+    if (s) memoryAccessToken = s;
+  } catch {
+    /* */
+  }
+}
+
+restoreAccessFromSessionIfLoggedIn();
+
+export function setTokens(access: string, _refresh?: string) {
+  persistAccessToken(access);
 }
 
 export function clearTokens() {
-  memoryAccessToken = null;
+  persistAccessToken(null);
   localStorage.removeItem('isLoggedIn');
 }
 
@@ -52,8 +79,8 @@ async function tryRefresh(): Promise<boolean> {
       });
       if (!res.ok) return false;
       const data = await res.json();
-      if (data.accessToken) memoryAccessToken = data.accessToken;
-      return true;
+      if (data.accessToken) persistAccessToken(data.accessToken);
+      return !!data.accessToken;
     } catch {
       return false;
     } finally {
@@ -87,7 +114,8 @@ async function request<T = unknown>(path: string, options: RequestInit = {}): Pr
     cache: options.cache ?? 'no-store',
   });
 
-  if (res.status === 401 || res.status === 403) {
+  /* 仅 401 触发换票：403 多为权限/业务（如无权、企业到期），不应与「登录态失效」混同 */
+  if (res.status === 401) {
     const refreshed = await tryRefresh();
     if (refreshed) {
       if (memoryAccessToken) {
@@ -157,7 +185,7 @@ export const auth = {
       method: 'POST',
       body: JSON.stringify(data),
     });
-    if (result.accessToken) memoryAccessToken = result.accessToken;
+    if (result.accessToken) persistAccessToken(result.accessToken);
     return result;
   },
 
@@ -165,13 +193,13 @@ export const auth = {
     const result = await request<LoginResult>('/auth/login', {
       method: 'POST', body: JSON.stringify({ username, password }),
     });
-    if (result.accessToken) memoryAccessToken = result.accessToken;
+    if (result.accessToken) persistAccessToken(result.accessToken);
     return result;
   },
 
   async logout() {
     await request('/auth/logout', { method: 'POST', body: JSON.stringify({}) }).catch(() => {});
-    memoryAccessToken = null;
+    persistAccessToken(null);
   },
 
   async me() {
@@ -188,7 +216,7 @@ export const auth = {
       accessToken?: string;
       refreshToken?: string;
     }>('/auth/me', { method: 'PUT', body: JSON.stringify(data) });
-    if (result.accessToken) memoryAccessToken = result.accessToken;
+    if (result.accessToken) persistAccessToken(result.accessToken);
     return result;
   },
 
@@ -222,7 +250,7 @@ export const auth = {
       method: 'POST',
       body: JSON.stringify({ phaseToken, newPhone, code }),
     });
-    if (result.accessToken) memoryAccessToken = result.accessToken;
+    if (result.accessToken) persistAccessToken(result.accessToken);
     return result;
   },
 };
@@ -475,7 +503,7 @@ export const tenants = {
     request<{ tenant: { id: string; name: string; status: string }; message: string }>('/tenants', { method: 'POST', body: JSON.stringify(data) }),
   select: async (id: string) => {
     const result = await request<{ tenantId: string; tenantName: string; tenantRole: string; permissions: string[]; expiresAt?: string | null; accessToken: string; refreshToken: string }>(`/tenants/${id}/select`, { method: 'POST' });
-    if (result.accessToken) memoryAccessToken = result.accessToken;
+    if (result.accessToken) persistAccessToken(result.accessToken);
     return result;
   },
   get: (id: string) => request<{ id: string; name: string; logo?: string; inviteCode: string; expiresAt?: string | null }>(`/tenants/${id}`),

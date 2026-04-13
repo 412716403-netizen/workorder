@@ -1,0 +1,26 @@
+.apple-scroll {
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+.apple-tenant-icon {
+  width: 72rpx;
+  height: 72rpx;
+  margin-right: 24rpx;
+  border-radius: 18rpx;
+  background: #e5e5ea;
+  color: #007aff;
+  font-size: 30rpx;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.apple-spinner {
+  margin-left: 12rpx;
+  font-size: 32rpx;
+  color: #007aff;
+  font-weight: 600;
+}

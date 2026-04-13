@@ -1,0 +1,8 @@
+.apple-scroll {
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+.apple-ph {
+  color: rgba(60, 60, 67, 0.35);
+}

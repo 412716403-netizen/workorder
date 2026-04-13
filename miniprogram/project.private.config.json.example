@@ -1,0 +1,4 @@
+{
+  "description": "复制本文件为 project.private.config.json 并填写 appid；private 文件已在 .gitignore 中勿提交",
+  "appid": "wx你的AppID共18位"
+}

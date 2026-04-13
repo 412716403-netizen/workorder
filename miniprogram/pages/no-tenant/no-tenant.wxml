@@ -1,0 +1,11 @@
+<view class="apple-page apple-page--center">
+  <view style="width: 100%; max-width: 680rpx">
+    <view class="apple-large-title" style="font-size: 48rpx; text-align: center">尚未加入企业</view>
+    <view class="apple-footnote" style="text-align: center; margin-top: 20rpx">
+      可创建新企业或通过邀请码加入；也可稍后在「选择企业」中处理。
+    </view>
+
+    <button class="apple-btn-fill" style="margin-top: 56rpx" bindtap="onOnboarding">创建或加入企业</button>
+    <button class="apple-btn-muted" style="margin-top: 20rpx" bindtap="onLogout">退出登录</button>
+  </view>
+</view>

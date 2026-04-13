@@ -1,0 +1,36 @@
+.apple-scroll {
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+.apple-ph-onboard {
+  color: rgba(60, 60, 67, 0.35);
+}
+
+.apple-inset {
+  margin-top: 28rpx;
+  padding: 28rpx;
+  background: #f2f2f7;
+  border-radius: 20rpx;
+}
+
+.apple-inset-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 24rpx;
+}
+
+.apple-inset-name {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #000000;
+  flex: 1;
+  min-width: 0;
+}
+
+.apple-inset-meta {
+  font-size: 26rpx;
+  color: rgba(60, 60, 67, 0.6);
+  flex-shrink: 0;
+}
