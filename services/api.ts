@@ -64,6 +64,30 @@ export function isAuthenticated(): boolean {
   return !!localStorage.getItem('isLoggedIn');
 }
 
+/* ── JWT 过期检测（仅解析 payload，不做签名验证） ── */
+
+function decodeJwtExp(token: string): number | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]!.replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof payload.exp === 'number' ? payload.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+const REFRESH_MARGIN_S = 120;
+
+function isAccessTokenExpiringSoon(): boolean {
+  if (!memoryAccessToken) return true;
+  const exp = decodeJwtExp(memoryAccessToken);
+  if (!exp) return true;
+  return exp - Date.now() / 1000 < REFRESH_MARGIN_S;
+}
+
+/* ── Token refresh ── */
+
 let refreshPromise: Promise<boolean> | null = null;
 
 async function tryRefresh(): Promise<boolean> {
@@ -77,11 +101,19 @@ async function tryRefresh(): Promise<boolean> {
         credentials: 'include',
         body: JSON.stringify({}),
       });
-      if (!res.ok) return false;
+      if (!res.ok) {
+        console.warn('[auth] refresh failed, status', res.status);
+        return false;
+      }
       const data = await res.json();
-      if (data.accessToken) persistAccessToken(data.accessToken);
-      return !!data.accessToken;
-    } catch {
+      if (data.accessToken) {
+        persistAccessToken(data.accessToken);
+        return true;
+      }
+      console.warn('[auth] refresh response missing accessToken');
+      return false;
+    } catch (e) {
+      console.warn('[auth] refresh error', e);
       return false;
     } finally {
       refreshPromise = null;
@@ -98,6 +130,12 @@ export async function refreshSessionSilently(): Promise<boolean> {
 
 async function request<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE}${path}`;
+
+  /* ── 请求前主动续期：不依赖定时器，每次调用都检查令牌剩余时间 ── */
+  if (localStorage.getItem('isLoggedIn') && isAccessTokenExpiringSoon()) {
+    await tryRefresh();
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> || {}),
@@ -128,6 +166,7 @@ async function request<T = unknown>(path: string, options: RequestInit = {}): Pr
         cache: options.cache ?? 'no-store',
       });
     } else if (localStorage.getItem('isLoggedIn')) {
+      console.warn('[auth] refresh failed after 401 — logging out');
       clearTokens();
       localStorage.removeItem('currentUser');
       localStorage.removeItem('tenantCtx');
