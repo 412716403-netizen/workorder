@@ -37,6 +37,7 @@ import {
 import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, BOMItem, AppDictionaries, ProductVariant, DictionaryItem, Partner } from '../../types';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 import { productColorSizeEnabled } from '../../utils/productColorSize';
+import { bomHasConfiguredItems } from '../../utils/bomEffective';
 import { toast } from 'sonner';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import * as api from '../../services/api';
@@ -890,7 +891,18 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
         purchasePrice: resolved.purchasePrice ?? 0,
       });
       if (!productOk) return;
-      const bomOk = await onUpdateBOM(workingBOM);
+      const persistedBom = boms.some(bx => bx.id === workingBOM.id);
+      const hasConfiguredItems = bomHasConfiguredItems(workingBOM);
+      let bomOk = false;
+      if (!hasConfiguredItems) {
+        if (persistedBom) {
+          bomOk = await onUpdateBOM({ ...workingBOM, items: [] });
+        } else {
+          bomOk = true;
+        }
+      } else {
+        bomOk = await onUpdateBOM(workingBOM);
+      }
       if (bomOk) closeBOMEditor();
     } finally {
       setBomSaving(false);
@@ -940,11 +952,11 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
 
   const singleSkuVariantId = `single-${workingProduct.id}`;
   const singleSkuNodeBOMs: Record<string, string> = Object.fromEntries(
-    boms.filter(b => b.parentProductId === workingProduct.id && b.variantId === singleSkuVariantId && b.nodeId).map(b => [b.nodeId!, b.id])
+    boms.filter(b => b.parentProductId === workingProduct.id && b.variantId === singleSkuVariantId && b.nodeId && bomHasConfiguredItems(b)).map(b => [b.nodeId!, b.id])
   );
   const availableBOMSources = workingProduct.variants.filter(srcV => {
     if (!activeVariantIdForBOM || !activeNodeIdForBOM) return false;
-    return srcV.id !== activeVariantIdForBOM && boms.some(b => b.variantId === srcV.id && b.nodeId === activeNodeIdForBOM);
+    return srcV.id !== activeVariantIdForBOM && boms.some(b => b.variantId === srcV.id && b.nodeId === activeNodeIdForBOM && bomHasConfiguredItems(b));
   });
 
   return (
@@ -1704,7 +1716,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                                    const size = dictionaries.sizes.find(s => s.id === v.sizeId);
                                    const sizeTitle = (size?.name != null && String(size.name).trim() !== '') ? String(size.name).trim() : '（未命名尺码）';
                                    const nodeBoms = Object.fromEntries(
-                                     boms.filter(b => b.parentProductId === workingProduct.id && b.variantId === v.id && b.nodeId).map(b => [b.nodeId!, b.id])
+                                     boms.filter(b => b.parentProductId === workingProduct.id && b.variantId === v.id && b.nodeId && bomHasConfiguredItems(b)).map(b => [b.nodeId!, b.id])
                                    );
                                    return (
                                      <tr key={v.id} className="hover:bg-indigo-50/30 transition-colors">

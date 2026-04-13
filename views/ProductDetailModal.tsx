@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Package, Tag, Wrench, Boxes, ArrowLeft } from 'lucide-react';
 import { Product, ProductCategory, AppDictionaries, Partner, GlobalNodeTemplate, BOM } from '../types';
 import { productColorSizeEnabled } from '../utils/productColorSize';
+import { bomHasConfiguredItems } from '../utils/bomEffective';
 
 function getFileExtFromDataUrl(dataUrl: string): string {
   const m = dataUrl.match(/^data:([^;]+);/);
@@ -168,6 +169,7 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             </div>
             {(() => {
               const productBoms = boms.filter(b => b.parentProductId === p.id);
+              const productBomsWithItems = productBoms.filter(bomHasConfiguredItems);
               const hasBomNodes = (p.milestoneNodeIds || []).some(nid => globalNodes.find(n => n.id === nid)?.hasBOM);
               const singleSkuId = `single-${p.id}`;
               const skuOptions: { id: string; label: string }[] = p.variants && p.variants.length > 0
@@ -176,8 +178,8 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                     label: [dictionaries.colors?.find(c => c.id === v.colorId)?.name, dictionaries.sizes?.find(s => s.id === v.sizeId)?.name].filter(Boolean).join(' / ') || v.skuSuffix
                   }))
                 : [{ id: singleSkuId, label: '单 SKU' }];
-              const selectedSkuBoms = bomSkuId ? productBoms.filter(b => b.variantId === bomSkuId) : [];
-              return (productBoms.length > 0 || hasBomNodes) ? (
+              const selectedSkuBoms = bomSkuId ? productBomsWithItems.filter(b => b.variantId === bomSkuId) : [];
+              return (productBomsWithItems.length > 0 || hasBomNodes) ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Boxes className="w-3.5 h-3.5" /> 工艺 BOM</h3>
@@ -192,7 +194,7 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                       <p className="text-sm text-slate-500">点击 SKU 查看该规格的 BOM 明细</p>
                       <div className="flex flex-wrap gap-2">
                         {skuOptions.map(opt => {
-                          const hasBom = productBoms.some(b => b.variantId === opt.id);
+                          const hasBom = productBomsWithItems.some(b => b.variantId === opt.id);
                           return (
                             <button
                               key={opt.id}

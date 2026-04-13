@@ -13,6 +13,7 @@ import ProductImportModal from './ProductImportModal';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { pageSubtitleClass, pageTitleClass } from '../styles/uiDensity';
 import ProductEditForm from './product-management/ProductEditForm';
+import { bomHasConfiguredItems } from '../utils/bomEffective';
 
 const PRODUCT_ARCHIVE_ALL = '__all__';
 
@@ -71,7 +72,10 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
 
   const bomCountMap = useMemo(() => {
     const m = new Map<string, number>();
-    for (const b of boms) { m.set(b.parentProductId, (m.get(b.parentProductId) || 0) + 1); }
+    for (const b of boms) {
+      if (!bomHasConfiguredItems(b)) continue;
+      m.set(b.parentProductId, (m.get(b.parentProductId) || 0) + 1);
+    }
     return m;
   }, [boms]);
 
