@@ -58,7 +58,7 @@ interface ProductionManagementViewProps {
   onUpdateOrderFormSettings: (settings: OrderFormSettings) => void;
   materialPanelSettings?: MaterialPanelSettings;
   onUpdateMaterialPanelSettings?: (settings: MaterialPanelSettings) => void;
-  onCreatePlan: (plan: PlanOrder) => void;
+  onCreatePlan: (plan: PlanOrder) => void | Promise<void>;
   onUpdateProduct: (product: Product) => Promise<boolean>;
   onUpdatePlan?: (planId: string, updates: Partial<PlanOrder>) => void;
   onSplitPlan: (planId: string, newPlans: PlanOrder[]) => void;

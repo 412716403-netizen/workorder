@@ -764,6 +764,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   };
 
   const [saveProductBusy, setSaveProductBusy] = useState(false);
+  const saveProductInFlightRef = useRef(false);
   const saveProduct = async () => {
     if (!workingProduct) return;
     const resolved = resolveProductSkuForSave(workingProduct, products);
@@ -771,6 +772,8 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
       setWorkingProduct(resolved);
     }
     if (!validateProductForSave(resolved, products)) return;
+    if (saveProductInFlightRef.current) return;
+    saveProductInFlightRef.current = true;
     const toSave: Product = {
       ...resolved,
       name: resolved.name.trim(),
@@ -787,6 +790,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
         setRouteReportFieldValues({});
       }
     } finally {
+      saveProductInFlightRef.current = false;
       setSaveProductBusy(false);
     }
   };
@@ -874,6 +878,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   }, [activeVariantIdForBOM, activeNodeIdForBOM, workingBOM, closeBOMEditor]);
 
   const [bomSaving, setBomSaving] = useState(false);
+  const saveBomInFlightRef = useRef(false);
   const saveBOM = async () => {
     if (!workingBOM || !workingProduct || !activeVariantIdForBOM || !activeNodeIdForBOM) return;
     const resolved = resolveProductSkuForSave(workingProduct, products);
@@ -881,6 +886,8 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
       setWorkingProduct(resolved);
     }
     if (!validateProductForSave(resolved, products)) return;
+    if (saveBomInFlightRef.current) return;
+    saveBomInFlightRef.current = true;
     setBomSaving(true);
     try {
       const productOk = await onUpdateProduct({
@@ -905,6 +912,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
       }
       if (bomOk) closeBOMEditor();
     } finally {
+      saveBomInFlightRef.current = false;
       setBomSaving(false);
     }
   };
@@ -1919,7 +1927,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
 
                     <div className="flex-shrink-0 flex justify-end gap-3 p-6 pt-4 border-t border-slate-100 bg-white rounded-b-[28px]">
                       <button type="button" onClick={closeBOMEditor} disabled={bomSaving} className="px-5 py-3 rounded-2xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all disabled:opacity-50">取消</button>
-                      <button type="button" onClick={saveBOM} disabled={bomSaving} className="bg-indigo-600 text-white px-10 py-3 rounded-2xl font-black text-xs shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed">{bomSaving ? '保存中…' : '保存此节点的 BOM 方案'}</button>
+                      <button type="button" onClick={() => void saveBOM()} disabled={bomSaving} className="bg-indigo-600 text-white px-10 py-3 rounded-2xl font-black text-xs shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed">{bomSaving ? '保存中…' : '保存此节点的 BOM 方案'}</button>
                     </div>
                   </div>
                 </div>,

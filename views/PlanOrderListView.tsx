@@ -88,7 +88,7 @@ interface PlanOrderListViewProps {
   onRefreshPrintTemplates?: () => void | Promise<void>;
   /** 用于打印模板预览示例数据 */
   orders?: ProductionOrder[];
-  onCreatePlan: (plan: PlanOrder) => void;
+  onCreatePlan: (plan: PlanOrder) => void | Promise<void>;
   onSplitPlan: (planId: string, newPlans: PlanOrder[]) => void;
   onConvertToOrder: (planId: string) => void;
   onDeletePlan?: (planId: string) => void;
@@ -691,7 +691,9 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
         planFormSettings={planFormSettings}
         plans={plans}
         productionLinkMode={productionLinkMode}
-        onSave={(plan) => { onCreatePlan(plan); }}
+        onSave={async (plan) => {
+          await Promise.resolve(onCreatePlan(plan));
+        }}
         onImagePreview={(url) => setImagePreviewUrl(url)}
         onFilePreview={(url, type) => { setFilePreviewUrl(url); setFilePreviewType(type); }}
       />

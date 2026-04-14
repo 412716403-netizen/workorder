@@ -1,5 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
+import { useAsyncSubmitLock } from '../../hooks/useAsyncSubmitLock';
 import {
   FileText,
   Layers,
@@ -38,7 +39,7 @@ export interface PlanFormModalProps {
   planFormSettings: PlanFormSettings;
   plans: PlanOrder[];
   productionLinkMode?: 'order' | 'product';
-  onSave: (plan: PlanOrder) => void;
+  onSave: (plan: PlanOrder) => void | Promise<void>;
   onImagePreview?: (url: string) => void;
   onFilePreview?: (url: string, type: 'image' | 'pdf') => void;
 }
@@ -59,6 +60,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
   onFilePreview,
 }) => {
   const today = localTodayYmd();
+  const createLock = useAsyncSubmitLock();
   const [form, setForm] = useState<{
     categoryId: string;
     productId: string;
@@ -124,7 +126,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
     }));
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!selectedProduct) return;
     if ((selectedProduct.milestoneNodeIds?.length ?? 0) === 0) {
       toast.error('该产品未配置工序，不允许创建生产计划。请先在产品管理中为该产品添加工序。');
@@ -155,7 +157,11 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
       createdAt: form.createdAt || localTodayYmd(),
     };
 
-    onSave(newPlan);
+    const ok = await createLock.run(async () => {
+      await Promise.resolve(onSave(newPlan));
+      return true;
+    });
+    if (!ok) return;
     onClose();
     const nextToday = localTodayYmd();
     setForm({ categoryId: '', productId: '', customer: '', dueDate: '', createdAt: nextToday, variantQuantities: {}, singleQuantity: 0, customData: {} });
@@ -194,11 +200,11 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
             </button>
             <button
               type="button"
-              onClick={handleCreate}
-              disabled={!canSave}
-              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50"
+              onClick={() => void handleCreate()}
+              disabled={!canSave || createLock.busy}
+              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Save className="w-4 h-4 shrink-0" /> 确认保存计划单
+              <Save className="w-4 h-4 shrink-0" /> {createLock.busy ? '提交中…' : '确认保存计划单'}
             </button>
           </div>
         </div>
