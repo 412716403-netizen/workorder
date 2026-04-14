@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAsyncSubmitLock } from '../../hooks/useAsyncSubmitLock';
 import {
   X,
   FileText,
@@ -28,14 +29,17 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({
   const [newAccountTypeName, setNewAccountTypeName] = useState('');
   const [editingAccountTypeId, setEditingAccountTypeId] = useState<string | null>(null);
   const [editingAccountTypeName, setEditingAccountTypeName] = useState('');
+  const addLock = useAsyncSubmitLock();
 
   const addFinanceAccountType = async () => {
     if (!newAccountTypeName.trim()) return;
-    try {
-      await api.settings.financeAccountTypes.create({ name: newAccountTypeName.trim() });
-      setNewAccountTypeName('');
-      await onRefreshFinanceAccountTypes();
-    } catch (err: any) { toast.error(err.message || '操作失败'); }
+    await addLock.run(async () => {
+      try {
+        await api.settings.financeAccountTypes.create({ name: newAccountTypeName.trim() });
+        setNewAccountTypeName('');
+        await onRefreshFinanceAccountTypes();
+      } catch (err: any) { toast.error(err.message || '操作失败'); }
+    });
   };
 
   const removeFinanceAccountType = async (id: string) => {
@@ -75,8 +79,8 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({
                 onChange={e => setNewAccountTypeName(e.target.value)}
                 className="flex-1 bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
               />
-              <button type="button" onClick={addFinanceAccountType} disabled={!newAccountTypeName.trim()} className="px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all shrink-0">
-                确认添加
+              <button type="button" onClick={() => void addFinanceAccountType()} disabled={!newAccountTypeName.trim() || addLock.busy} className="px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shrink-0">
+                {addLock.busy ? '提交中…' : '确认添加'}
               </button>
             </div>
           </div>

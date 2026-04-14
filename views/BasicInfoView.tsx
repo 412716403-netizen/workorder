@@ -37,6 +37,7 @@ import { Product, GlobalNodeTemplate, ProductCategory, BOM, AppDictionaries, Par
 import { toast } from 'sonner';
 import * as api from '../services/api';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { useAsyncSubmitLock } from '../hooks/useAsyncSubmitLock';
 import {
   subModuleMainContentTopClass,
   subModuleTabBarBackdropClass,
@@ -150,7 +151,9 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
   const [dictAddName, setDictAddName] = useState('');
   /** 色值 / 编码等；为空保存时用名称填充 */
   const [dictAddValue, setDictAddValue] = useState('');
-  const [dictSaving, setDictSaving] = useState(false);
+  const dictSubmit = useAsyncSubmitLock();
+  const partnerSubmit = useAsyncSubmitLock();
+  const eqSubmit = useAsyncSubmitLock();
   /** 公共字典列表：类型筛选（与合作单位分类条同级） */
   const [activeDictKindFilter, setActiveDictKindFilter] = useState<'all' | 'color' | 'size' | 'unit'>('all');
   const [productDetailVisible, setProductDetailVisible] = useState(false);
@@ -248,19 +251,18 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
         toast.warning(`${typeLabel}「${val}」已存在`);
         return;
       }
-      setDictSaving(true);
-      try {
-        await api.dictionaries.update(dictEditingId, { name: val, value: valuePayload });
-        setDictAddName('');
-        setDictAddValue('');
-        closeDictionaryModal();
-        await onRefreshDictionaries();
-        toast.success('已保存');
-      } catch (err: any) {
-        toast.error(err.message || '操作失败');
-      } finally {
-        setDictSaving(false);
-      }
+      await dictSubmit.run(async () => {
+        try {
+          await api.dictionaries.update(dictEditingId, { name: val, value: valuePayload });
+          setDictAddName('');
+          setDictAddValue('');
+          closeDictionaryModal();
+          await onRefreshDictionaries();
+          toast.success('已保存');
+        } catch (err: any) {
+          toast.error(err.message || '操作失败');
+        }
+      });
       return;
     }
 
@@ -276,19 +278,18 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
       toast.warning(`${typeLabel}「${val}」已存在`);
       return;
     }
-    setDictSaving(true);
-    try {
-      await api.dictionaries.create({ type: dictAddType, name: val, value: valuePayload });
-      setDictAddName('');
-      setDictAddValue('');
-      closeDictionaryModal();
-      await onRefreshDictionaries();
-      toast.success('已添加');
-    } catch (err: any) {
-      toast.error(err.message || '操作失败');
-    } finally {
-      setDictSaving(false);
-    }
+    await dictSubmit.run(async () => {
+      try {
+        await api.dictionaries.create({ type: dictAddType, name: val, value: valuePayload });
+        setDictAddName('');
+        setDictAddValue('');
+        closeDictionaryModal();
+        await onRefreshDictionaries();
+        toast.success('已添加');
+      } catch (err: any) {
+        toast.error(err.message || '操作失败');
+      }
+    });
   };
 
   const handleDeleteDictionary = async (id: string) => {
@@ -371,20 +372,32 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
   };
 
   const savePartner = async () => {
-    try {
-      if (editingId) {
-        if (editPartner.partnerListNo == null || editPartner.partnerListNo < 1) {
-          toast.error('请填写有效的单位编号（1–9999）');
-          return;
+    if (!editPartner.name?.trim()) {
+      toast.warning('请填写单位名称');
+      return;
+    }
+    if (!editingId && !editPartner.categoryId) {
+      toast.warning('请选择单位分类');
+      return;
+    }
+    await partnerSubmit.run(async () => {
+      try {
+        if (editingId) {
+          if (editPartner.partnerListNo == null || editPartner.partnerListNo < 1) {
+            toast.error('请填写有效的单位编号（1–9999）');
+            return;
+          }
+          await api.partners.update(editingId, editPartner);
+        } else {
+          const { partnerListNo: _n, ...createPayload } = editPartner;
+          await api.partners.create(createPayload);
         }
-        await api.partners.update(editingId, editPartner);
-      } else {
-        const { partnerListNo: _n, ...createPayload } = editPartner;
-        await api.partners.create(createPayload);
+        setShowModal(null);
+        await onRefreshPartners();
+      } catch (err: any) {
+        toast.error(err.message || '操作失败');
       }
-      setShowModal(null);
-      await onRefreshPartners();
-    } catch (err: any) { toast.error(err.message || '操作失败'); }
+    });
   };
 
   const handleOpenEq = (e?: Equipment) => {
@@ -394,15 +407,23 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
   };
 
   const saveEq = async () => {
-    try {
-      if (editingId) {
-        await api.equipment.update(editingId, editEq);
-      } else {
-        await api.equipment.create(editEq);
+    if (!editEq.name?.trim()) {
+      toast.warning('请填写设备名称');
+      return;
+    }
+    await eqSubmit.run(async () => {
+      try {
+        if (editingId) {
+          await api.equipment.update(editingId, editEq);
+        } else {
+          await api.equipment.create(editEq);
+        }
+        setShowModal(null);
+        await onRefreshEquipment();
+      } catch (err: any) {
+        toast.error(err.message || '操作失败');
       }
-      setShowModal(null);
-      await onRefreshEquipment();
-    } catch (err: any) { toast.error(err.message || '操作失败'); }
+    });
   };
 
   const renderHeader = (title: string, sub: string, onAdd: (() => void) | null, btnLabel: string) => (
@@ -1023,10 +1044,10 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
               <button
                 type="button"
                 onClick={saveDictionaryItem}
-                disabled={dictSaving || !dictAddName.trim()}
+                disabled={dictSubmit.busy || !dictAddName.trim()}
                 className="bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Save className="w-4 h-4" /> {dictSaving ? '保存中…' : '保存'}
+                <Save className="w-4 h-4" /> {dictSubmit.busy ? '保存中…' : '保存'}
               </button>
             </div>
 
@@ -1085,8 +1106,13 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                <button onClick={() => setShowModal(null)} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
                  <ArrowLeft className="w-4 h-4" /> 返回列表
                </button>
-               <button onClick={savePartner} className="bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">
-                 <Save className="w-4 h-4" /> 保存资料
+               <button
+                 type="button"
+                 onClick={() => void savePartner()}
+                 disabled={partnerSubmit.busy}
+                 className="bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+               >
+                 <Save className="w-4 h-4" /> {partnerSubmit.busy ? '保存中…' : '保存资料'}
                </button>
              </div>
 
@@ -1182,8 +1208,13 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
                <button onClick={() => setShowModal(null)} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
                  <ArrowLeft className="w-4 h-4" /> 返回列表
                </button>
-               <button onClick={saveEq} className="bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">
-                 <Save className="w-4 h-4" /> 保存档案
+               <button
+                 type="button"
+                 onClick={() => void saveEq()}
+                 disabled={eqSubmit.busy}
+                 className="bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+               >
+                 <Save className="w-4 h-4" /> {eqSubmit.busy ? '保存中…' : '保存档案'}
                </button>
              </div>
              <div className="bg-white rounded-[40px] p-8 border border-slate-200 shadow-sm space-y-8">

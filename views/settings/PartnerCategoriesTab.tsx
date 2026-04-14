@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAsyncSubmitLock } from '../../hooks/useAsyncSubmitLock';
 import {
   Shapes,
   ArrowRight,
@@ -28,17 +29,20 @@ const PartnerCategoriesTab: React.FC<PartnerCategoriesTabProps> = ({
   const [newPCatName, setNewPCatName] = useState('');
   const [editingPCatId, setEditingPCatId] = useState<string | null>(null);
   const [partnerCatNameDraft, setPartnerCatNameDraft] = useState('');
+  const addLock = useAsyncSubmitLock();
 
   const addPartnerCategory = async () => {
     if (!newPCatName.trim()) return;
     if (partnerCategories.some(c => c.name === newPCatName.trim())) { toast.warning(`分类"${newPCatName.trim()}"已存在`); return; }
-    try {
-      const created = await api.settings.partnerCategories.create({ name: newPCatName, customFields: [] }) as PartnerCategory;
-      setNewPCatName('');
-      setEditingPCatId(created.id);
-      setPartnerCatNameDraft((created as PartnerCategory).name || newPCatName.trim());
-      await onRefreshPartnerCategories();
-    } catch (err: any) { toast.error(err.message || '操作失败'); }
+    await addLock.run(async () => {
+      try {
+        const created = await api.settings.partnerCategories.create({ name: newPCatName, customFields: [] }) as PartnerCategory;
+        setNewPCatName('');
+        setEditingPCatId(created.id);
+        setPartnerCatNameDraft((created as PartnerCategory).name || newPCatName.trim());
+        await onRefreshPartnerCategories();
+      } catch (err: any) { toast.error(err.message || '操作失败'); }
+    });
   };
 
   const removePartnerCategory = async (id: string) => {
@@ -113,7 +117,7 @@ const PartnerCategoriesTab: React.FC<PartnerCategoriesTabProps> = ({
             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">快速新增单位分类</h3>
             <div className="space-y-4">
               <input type="text" placeholder="分类名称 (如：核心供应商)" value={newPCatName} onChange={e => setNewPCatName(e.target.value)} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
-              <button onClick={addPartnerCategory} disabled={!newPCatName.trim()} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50">确认添加</button>
+              <button type="button" onClick={() => void addPartnerCategory()} disabled={!newPCatName.trim() || addLock.busy} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed">{addLock.busy ? '提交中…' : '确认添加'}</button>
             </div>
           </div>
           )}

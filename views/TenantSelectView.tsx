@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Building2, ChevronRight, Loader2, Plus, CalendarClock, LogOut, Clock, XCircle } from 'lucide-react';
 import * as api from '../services/api';
 import type { TenantInfo } from '../services/api';
@@ -18,8 +18,11 @@ interface TenantSelectViewProps {
 
 export default function TenantSelectView({ tenants, onSelect, onCreateOrJoin, onLogout }: TenantSelectViewProps) {
   const [loading, setLoading] = useState<string | null>(null);
+  const selectLockRef = useRef(false);
 
   async function handleSelect(tenantId: string) {
+    if (selectLockRef.current) return;
+    selectLockRef.current = true;
     setLoading(tenantId);
     try {
       const result = await api.tenants.select(tenantId);
@@ -27,6 +30,7 @@ export default function TenantSelectView({ tenants, onSelect, onCreateOrJoin, on
     } catch (err: any) {
       toast.error(err.message || '切换企业失败');
     } finally {
+      selectLockRef.current = false;
       setLoading(null);
     }
   }

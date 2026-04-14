@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAsyncSubmitLock } from '../../hooks/useAsyncSubmitLock';
 import {
   Database,
   ArrowRight,
@@ -35,22 +36,25 @@ const NodesTab: React.FC<NodesTabProps> = ({
   const [newNodeName, setNewNodeName] = useState('');
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [nodeNameDraft, setNodeNameDraft] = useState('');
+  const addLock = useAsyncSubmitLock();
 
   const handleQuickAddNode = async () => {
     if (!newNodeName.trim()) return;
     if (globalNodes.some(n => n.name === newNodeName.trim())) { toast.warning(`工序"${newNodeName.trim()}"已存在`); return; }
-    try {
-      const created = await api.settings.nodes.create({
-        name: newNodeName, reportTemplate: [], hasBOM: false,
-        enableAssignment: false, enableWorkerAssignment: false,
-        enableEquipmentAssignment: false, enableEquipmentOnReport: false,
-        enablePieceRate: false, allowOutsource: false,
-      }) as GlobalNodeTemplate;
-      setNewNodeName('');
-      setEditingNodeId(created.id);
-      setNodeNameDraft((created as GlobalNodeTemplate).name || newNodeName.trim());
-      await onRefreshGlobalNodes();
-    } catch (err: any) { toast.error(err.message || '操作失败'); }
+    await addLock.run(async () => {
+      try {
+        const created = await api.settings.nodes.create({
+          name: newNodeName, reportTemplate: [], hasBOM: false,
+          enableAssignment: false, enableWorkerAssignment: false,
+          enableEquipmentAssignment: false, enableEquipmentOnReport: false,
+          enablePieceRate: false, allowOutsource: false,
+        }) as GlobalNodeTemplate;
+        setNewNodeName('');
+        setEditingNodeId(created.id);
+        setNodeNameDraft((created as GlobalNodeTemplate).name || newNodeName.trim());
+        await onRefreshGlobalNodes();
+      } catch (err: any) { toast.error(err.message || '操作失败'); }
+    });
   };
 
   const removeNode = async (id: string) => {
@@ -125,7 +129,7 @@ const NodesTab: React.FC<NodesTabProps> = ({
             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">快速录入新工序</h3>
             <div className="space-y-4">
               <input type="text" placeholder="工序名称" value={newNodeName} onChange={e => setNewNodeName(e.target.value)} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
-              <button onClick={handleQuickAddNode} disabled={!newNodeName.trim()} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50">保存并配置</button>
+              <button type="button" onClick={() => void handleQuickAddNode()} disabled={!newNodeName.trim() || addLock.busy} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed">{addLock.busy ? '提交中…' : '保存并配置'}</button>
             </div>
           </div>
           )}

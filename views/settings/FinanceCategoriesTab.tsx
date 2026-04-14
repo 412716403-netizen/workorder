@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAsyncSubmitLock } from '../../hooks/useAsyncSubmitLock';
 import {
   Wallet,
   ArrowRight,
@@ -36,20 +37,23 @@ const FinanceCategoriesTab: React.FC<FinanceCategoriesTabProps> = ({
   const [newFinanceCatName, setNewFinanceCatName] = useState('');
   const [editingFinanceCatId, setEditingFinanceCatId] = useState<string | null>(null);
   const [financeCatNameDraft, setFinanceCatNameDraft] = useState('');
+  const addLock = useAsyncSubmitLock();
 
   const addFinanceCategory = async () => {
     if (!newFinanceCatName.trim()) return;
-    try {
-      const created = await api.settings.financeCategories.create({
-        kind: 'RECEIPT', name: newFinanceCatName.trim(), linkOrder: false,
-        linkPartner: false, selectPaymentAccount: false, linkWorker: false,
-        linkProduct: false, customFields: []
-      }) as FinanceCategory;
-      setNewFinanceCatName('');
-      setEditingFinanceCatId(created.id);
-      setFinanceCatNameDraft((created as FinanceCategory).name || newFinanceCatName.trim());
-      await onRefreshFinanceCategories();
-    } catch (err: any) { toast.error(err.message || '操作失败'); }
+    await addLock.run(async () => {
+      try {
+        const created = await api.settings.financeCategories.create({
+          kind: 'RECEIPT', name: newFinanceCatName.trim(), linkOrder: false,
+          linkPartner: false, selectPaymentAccount: false, linkWorker: false,
+          linkProduct: false, customFields: []
+        }) as FinanceCategory;
+        setNewFinanceCatName('');
+        setEditingFinanceCatId(created.id);
+        setFinanceCatNameDraft((created as FinanceCategory).name || newFinanceCatName.trim());
+        await onRefreshFinanceCategories();
+      } catch (err: any) { toast.error(err.message || '操作失败'); }
+    });
   };
 
   const removeFinanceCategory = async (id: string) => {
@@ -125,7 +129,7 @@ const FinanceCategoriesTab: React.FC<FinanceCategoriesTabProps> = ({
             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">快速新增收付款类型</h3>
             <div className="space-y-4">
               <input type="text" placeholder="分类名称" value={newFinanceCatName} onChange={e => setNewFinanceCatName(e.target.value)} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
-              <button onClick={addFinanceCategory} disabled={!newFinanceCatName.trim()} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50">确认添加</button>
+              <button type="button" onClick={() => void addFinanceCategory()} disabled={!newFinanceCatName.trim() || addLock.busy} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed">{addLock.busy ? '提交中…' : '确认添加'}</button>
             </div>
           </div>
           )}

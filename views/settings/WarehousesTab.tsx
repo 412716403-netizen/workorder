@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAsyncSubmitLock } from '../../hooks/useAsyncSubmitLock';
 import {
   Warehouse as WarehouseIcon,
   ArrowRight,
@@ -25,22 +26,25 @@ const WarehousesTab: React.FC<WarehousesTabProps> = ({
   const [newWhName, setNewWhName] = useState('');
   const [editingWhId, setEditingWhId] = useState<string | null>(null);
   const [whDraft, setWhDraft] = useState({ name: '', location: '' });
+  const addLock = useAsyncSubmitLock();
 
   const handleAddWarehouse = async () => {
     if (!newWhName.trim()) return;
     if (warehouses.some(w => w.name === newWhName.trim())) { toast.warning(`仓库"${newWhName.trim()}"已存在`); return; }
-    try {
-      const created = await api.settings.warehouses.create({
-        name: newWhName.trim(),
-      }) as Warehouse;
-      setNewWhName('');
-      setEditingWhId(created.id);
-      setWhDraft({
-        name: (created as Warehouse).name || newWhName.trim(),
-        location: (created as Warehouse).location || '',
-      });
-      await onRefreshWarehouses();
-    } catch (err: any) { toast.error(err.message || '操作失败'); }
+    await addLock.run(async () => {
+      try {
+        const created = await api.settings.warehouses.create({
+          name: newWhName.trim(),
+        }) as Warehouse;
+        setNewWhName('');
+        setEditingWhId(created.id);
+        setWhDraft({
+          name: (created as Warehouse).name || newWhName.trim(),
+          location: (created as Warehouse).location || '',
+        });
+        await onRefreshWarehouses();
+      } catch (err: any) { toast.error(err.message || '操作失败'); }
+    });
   };
 
   const removeWarehouse = async (id: string) => {
@@ -86,7 +90,7 @@ const WarehousesTab: React.FC<WarehousesTabProps> = ({
             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">快速录入新仓库</h3>
             <div className="space-y-4">
               <input type="text" placeholder="仓库名称" value={newWhName} onChange={e => setNewWhName(e.target.value)} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
-              <button onClick={handleAddWarehouse} disabled={!newWhName.trim()} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50">确认添加</button>
+              <button type="button" onClick={() => void handleAddWarehouse()} disabled={!newWhName.trim() || addLock.busy} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed">{addLock.busy ? '提交中…' : '确认添加'}</button>
             </div>
           </div>
           )}
