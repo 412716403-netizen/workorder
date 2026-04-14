@@ -265,10 +265,11 @@ const ReworkPanel: React.FC<PanelProps> = ({
     const byProduct = new Map<string, Map<string, { nodeId: string; totalQty: number; completedQty: number; pendingSeq: number; outsourcePartner: string }>>();
     reworkRecords.forEach(r => {
       const pid = r.productId;
-      if (!pid) return;
-      const knownOrders = orderIdSetByProduct.get(pid);
-      if (!knownOrders) return;
-      if (r.orderId && !knownOrders.has(r.orderId)) return;
+      if (!pid || !idx.productsById.has(pid)) return;
+      if (r.orderId) {
+        const knownOrders = orderIdSetByProduct.get(pid);
+        if (knownOrders && !knownOrders.has(r.orderId)) return;
+      }
       const byKey = byProduct.get(pid) ?? new Map();
       const targetNodes = (r.reworkNodeIds && r.reworkNodeIds.length > 0) ? r.reworkNodeIds : (r.nodeId ? [r.nodeId] : []);
       const completed =
@@ -319,7 +320,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
       if (list.length > 0) result.set(pid, list);
     });
     return result;
-  }, [productionLinkMode, records, parentOrders, products, globalNodes, processSequenceMode]);
+  }, [productionLinkMode, records, orders, products, globalNodes, processSequenceMode, idx]);
 
   /** 返工管理·关联工单：按单 + 目标工序聚合 */
   const reworkStatsByOrderId = useMemo(() => {
@@ -638,7 +639,6 @@ const ReworkPanel: React.FC<PanelProps> = ({
                   .sort((a, b) => (a.orderNumber || '').localeCompare(b.orderNumber || ''))[0];
                 const totalQtyAll = productOrders
                   .reduce((s, o) => s + o.items.reduce((t, i) => t + i.quantity, 0), 0);
-                if (!repOrder) return null;
                 return (
                   <div
                     key={`rework-prod-${block.productId}`}
@@ -684,7 +684,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
                                       : `工序「${nodeName}」委外返工中·${outsourcePartner}：总 ${totalQty}，已返工 ${completedQty}，待收回 ${pendingQty}（点击收回）`)
                                     : `工序「${nodeName}」返工（全产品汇总）：总 ${totalQty}，已返工 ${completedQty}，${processSequenceMode === 'sequential' ? '可报 ' : '未返工 '}${pendingQty}（点击报工，以首单为载体）`}
                                   onClick={() => {
-                                    setReworkReportModal({ order: repOrder, nodeId, nodeName, outsourcePartner: outsourcePartner || undefined });
+                                    if (repOrder) setReworkReportModal({ order: repOrder, nodeId, nodeName, outsourcePartner: outsourcePartner || undefined });
                                   }}
                                   className={`flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 rounded-xl border transition-colors text-left cursor-pointer ${isOutsource ? 'border-slate-100 bg-slate-50 hover:bg-slate-100 hover:border-slate-200' : 'bg-slate-50 border-slate-100 hover:bg-indigo-50 hover:border-indigo-200'}`}
                                 >
@@ -729,7 +729,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
                     </div>
                     {(hasOpsPerm(tenantRole, userPermissions, 'production:rework_detail:allow') || hasOpsPerm(tenantRole, userPermissions, 'production:rework_material:allow')) && (
                       <div className="flex flex-col gap-2 shrink-0 pt-0.5">
-                        {hasOpsPerm(tenantRole, userPermissions, 'production:rework_detail:allow') && (
+                        {hasOpsPerm(tenantRole, userPermissions, 'production:rework_detail:allow') && repOrder && (
                         <button
                           type="button"
                           onClick={() => setReworkDetailOrderId(repOrder.id)}
@@ -738,7 +738,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
                           <FileText className="w-3.5 h-3.5" /> 详情
                         </button>
                         )}
-                        {hasOpsPerm(tenantRole, userPermissions, 'production:rework_material:allow') && (
+                        {hasOpsPerm(tenantRole, userPermissions, 'production:rework_material:allow') && repOrder && (
                         <button
                           type="button"
                           onClick={() => { setReworkMaterialOrderId(repOrder.id); }}
