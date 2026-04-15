@@ -191,9 +191,9 @@ export interface AppDataContextValue {
   // Orders / reports
   onReportSubmit: (oId: string, mId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string) => Promise<void>;
   onReportSubmitProduct: (productId: string, milestoneTemplateId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string) => Promise<void>;
-  onUpdateReport: (data: { orderId: string; milestoneId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneId?: string }) => Promise<void>;
+  onUpdateReport: (data: { orderId: string; milestoneId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneId?: string; customData?: Record<string, unknown> }) => Promise<void>;
   onDeleteReport: (data: { orderId: string; milestoneId: string; reportId: string }) => Promise<void>;
-  onUpdateReportProduct: (data: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string }) => Promise<void>;
+  onUpdateReportProduct: (data: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string; customData?: Record<string, unknown> }) => Promise<void>;
   onDeleteReportProduct: (data: { progressId: string; reportId: string }) => Promise<void>;
   onUpdateOrder: (orderId: string, updates: Partial<ProductionOrder>) => Promise<void>;
   onDeleteOrder: (orderId: string) => Promise<void>;
@@ -683,14 +683,16 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     } catch (err: any) { toast.error(err.message || '报工失败'); }
   }, [workers, currentUser, products, refreshPMP, refreshProdRecords]);
 
-  const onUpdateReport = useCallback(async ({ orderId, milestoneId, reportId, quantity, defectiveQuantity, timestamp, operator, newMilestoneId }: { orderId: string; milestoneId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneId?: string }) => {
+  const onUpdateReport = useCallback(async ({ orderId, milestoneId, reportId, quantity, defectiveQuantity, timestamp, operator, newMilestoneId, customData }: { orderId: string; milestoneId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneId?: string; customData?: Record<string, unknown> }) => {
     try {
       const targetMilestoneId = newMilestoneId || milestoneId;
+      const finalCustomData = customData ?? {};
+      const payload = { quantity, defectiveQuantity: defectiveQuantity || 0, timestamp, operator, customData: finalCustomData };
       if (targetMilestoneId !== milestoneId) {
         await api.orders.deleteReport(orderId, milestoneId, reportId);
-        await api.orders.createReport(orderId, targetMilestoneId, { quantity, defectiveQuantity: defectiveQuantity || 0, timestamp, operator });
+        await api.orders.createReport(orderId, targetMilestoneId, payload);
       } else {
-        await api.orders.updateReport(orderId, milestoneId, reportId, { quantity, defectiveQuantity: defectiveQuantity || 0, timestamp, operator });
+        await api.orders.updateReport(orderId, milestoneId, reportId, payload);
       }
       const updated = await api.orders.get(orderId) as ProductionOrder;
       setOrders(prev => prev.map(o => o.id === orderId ? norm1(updated) : o));
@@ -705,19 +707,21 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     } catch (err: any) { toast.error(err.message || '删除报工失败'); }
   }, []);
 
-  const onUpdateReportProduct = useCallback(async ({ progressId, reportId, quantity, defectiveQuantity, timestamp, operator, newMilestoneTemplateId }: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string }) => {
+  const onUpdateReportProduct = useCallback(async ({ progressId, reportId, quantity, defectiveQuantity, timestamp, operator, newMilestoneTemplateId, customData }: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string; customData?: Record<string, unknown> }) => {
     try {
+      const finalCustomData = customData ?? {};
+      const payload = { quantity, defectiveQuantity: defectiveQuantity || 0, timestamp, operator, customData: finalCustomData };
       if (newMilestoneTemplateId) {
         const srcProgress = productMilestoneProgresses.find(p => p.id === progressId);
-        if (!srcProgress) return;
+        if (!srcProgress) { toast.error('找不到源进度记录'); return; }
         await api.orders.deleteProductReport(reportId);
         await api.orders.createProductReport({
           productId: srcProgress.productId, variantId: srcProgress.variantId,
           milestoneTemplateId: newMilestoneTemplateId,
-          quantity, defectiveQuantity: defectiveQuantity || 0, timestamp, operator,
+          ...payload,
         });
       } else {
-        await api.orders.updateProductReport(reportId, { quantity, defectiveQuantity: defectiveQuantity || 0, timestamp, operator });
+        await api.orders.updateProductReport(reportId, payload);
       }
       await refreshPMP();
     } catch (err: any) { toast.error(err.message || '更新报工失败'); }

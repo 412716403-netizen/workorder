@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { FileText, X, Check, UserPlus, BookOpen } from 'lucide-react';
 import {
   ProductionOrder,
@@ -26,7 +26,9 @@ import { toast } from 'sonner';
 import { toLocalCompactYmd } from '../../utils/localDateTime';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
-import { parseRouteReportFileUrls } from '../../utils/routeReportFileUrls';
+import { parseRouteReportFileUrls, dataUrlToBlobUrl } from '../../utils/routeReportFileUrls';
+import { coerceRouteReportDefaultForField, getEffectiveReportTemplate } from '../../utils/effectiveReportTemplate';
+import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
 
 export interface ReportModalData {
   order: ProductionOrder;
@@ -122,11 +124,10 @@ const ReportModal: React.FC<ReportModalProps> = ({
     const initialData: Record<string, any> = {};
     const product = products.find(p => p.id === reportModal.order.productId);
     const defaults = product?.routeReportValues?.[reportModal.milestone.templateId] ?? {};
-    reportModal.milestone.reportTemplate.forEach(f => {
+    getEffectiveReportTemplate(reportModal.milestone, globalNodes).forEach(f => {
       const raw = defaults[f.id];
       if (raw !== undefined && raw !== '') {
-        if (f.type === 'boolean') initialData[f.id] = raw === 'true' || raw === '1';
-        else initialData[f.id] = raw;
+        initialData[f.id] = coerceRouteReportDefaultForField(f, raw);
       } else {
         initialData[f.id] = f.type === 'boolean' ? false : '';
       }
@@ -154,6 +155,67 @@ const ReportModal: React.FC<ReportModalProps> = ({
       variantDefectiveQuantities: showVariantMatrix && product?.variants?.length ? variantDefective : undefined,
     };
   });
+
+  const effectiveReportTemplate = useMemo(
+    () => getEffectiveReportTemplate(reportModal.milestone, globalNodes),
+    [
+      reportModal.order.id,
+      reportModal.milestone.id,
+      reportModal.milestone.templateId,
+      reportModal.milestone.reportTemplate,
+      globalNodes,
+    ],
+  );
+
+  /**
+   * 本工序展示：图片用弹层大图；PDF 用新标签页打开。
+   * Chrome 在带 sandbox 的 iframe 里常拦截内置 PDF 查看器，出现「此页面已被 Chrome 屏蔽」，故 PDF 不走 iframe。
+   */
+  const pdfBlobRevokeRef = useRef<(() => void) | undefined>(undefined);
+  const [displayImagePreview, setDisplayImagePreview] = useState<string | null>(null);
+
+  const cleanupPdfBlobUrl = useCallback(() => {
+    pdfBlobRevokeRef.current?.();
+    pdfBlobRevokeRef.current = undefined;
+  }, []);
+
+  const closeDisplayImagePreview = useCallback(() => {
+    setDisplayImagePreview(null);
+  }, []);
+
+  const openDisplayFilePreview = useCallback((url: string, kind: 'image' | 'pdf') => {
+    if (kind === 'pdf') {
+      cleanupPdfBlobUrl();
+      let openUrl = url;
+      if (url.startsWith('data:')) {
+        const conv = dataUrlToBlobUrl(url);
+        if (conv) {
+          pdfBlobRevokeRef.current = conv.revoke;
+          openUrl = conv.url;
+        }
+      }
+      // 勿在第三个参数里加 noopener：含 noopener 时 window.open 按规范固定返回 null，
+      // 即使新标签已打开，会误触发「弹窗被拦截」提示。
+      const win = window.open(openUrl, '_blank');
+      if (!win) {
+        toast.error('无法打开新窗口，请检查浏览器是否拦截了弹窗');
+        cleanupPdfBlobUrl();
+      }
+      return;
+    }
+    setDisplayImagePreview(url);
+  }, [cleanupPdfBlobUrl]);
+
+  useEffect(() => {
+    if (!open) {
+      closeDisplayImagePreview();
+      cleanupPdfBlobUrl();
+    }
+  }, [open, closeDisplayImagePreview, cleanupPdfBlobUrl]);
+
+  useEffect(() => () => {
+    cleanupPdfBlobUrl();
+  }, [cleanupPdfBlobUrl]);
 
   const handleReportFieldChange = (fieldId: string, value: any) => {
     setReportForm(prev => ({ ...prev, customData: { ...prev.customData, [fieldId]: value } }));
@@ -277,7 +339,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
   };
 
   const submitReport = async () => {
-    const tmpl = reportModal.milestone.reportTemplate || [];
+    const tmpl = effectiveReportTemplate;
     for (const f of tmpl) {
       if (!f.required) continue;
       const v = reportForm.customData[f.id];
@@ -451,12 +513,13 @@ const ReportModal: React.FC<ReportModalProps> = ({
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
-      <div className="relative bg-white w-full max-w-lg rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+      <div className="relative bg-white w-full max-w-lg min-h-0 max-h-[min(90vh,calc(100dvh-2rem))] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
           <h3 className="font-bold text-slate-800 flex items-center gap-2"><FileText className="w-5 h-5 text-indigo-600" /> {reportModal.milestone.name} · 报工</h3>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
+          <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
         </div>
-        <div className="p-4 space-y-4">
+        <form className="flex flex-col flex-1 min-h-0" autoComplete="off" onSubmit={e => e.preventDefault()}>
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-4">
           <div className="text-xs text-slate-500 font-medium">
             <span className="font-bold text-slate-700">{reportModal.order.productName}</span>
             {reportModal.productTotalQty != null ? (
@@ -495,61 +558,79 @@ const ReportModal: React.FC<ReportModalProps> = ({
             })()}
           </div>
           {(() => {
-            const displayTpl = reportModal.milestone.reportDisplayTemplate ?? [];
+            const tid = reportModal.milestone.templateId;
+            const nodeDef = globalNodes.find(n => n.id === tid);
+            const fromMilestone = reportModal.milestone.reportDisplayTemplate;
+            const displayTpl =
+              (fromMilestone?.length ?? 0) > 0 ? fromMilestone : (nodeDef?.reportDisplayTemplate ?? []);
             if (displayTpl.length === 0) return null;
             const product = productMap.get(reportModal.order.productId);
-            const displayVals = product?.routeReportDisplayValues?.[reportModal.milestone.templateId] ?? {};
+            const displayVals = product?.routeReportDisplayValues?.[tid] ?? {};
+
+            type VisibleDisplayRow =
+              | { field: (typeof displayTpl)[number]; kind: 'file'; urls: string[] }
+              | { field: (typeof displayTpl)[number]; kind: 'text'; text: string };
+            const visibleRows: VisibleDisplayRow[] = [];
+            for (const field of displayTpl) {
+              const raw = displayVals[field.id] ?? '';
+              if (field.type === 'file') {
+                const urls = parseRouteReportFileUrls(raw);
+                if (urls.length === 0) continue;
+                visibleRows.push({ field, kind: 'file', urls });
+              } else if (String(raw).trim()) {
+                visibleRows.push({ field, kind: 'text', text: String(raw) });
+              }
+            }
+            if (visibleRows.length === 0) return null;
+
             return (
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 px-3 py-3 space-y-3">
-                <div className="flex items-center gap-2 text-emerald-900">
-                  <BookOpen className="w-4 h-4 shrink-0" />
-                  <span className="text-[10px] font-black uppercase tracking-wider">本工序展示（只读）</span>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/50 px-3 py-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 shrink-0 text-slate-500" />
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">本工序展示（只读）</span>
                 </div>
-                {displayTpl.map(field => {
-                  const raw = displayVals[field.id] ?? '';
-                  if (field.type === 'file') {
-                    const urls = parseRouteReportFileUrls(raw);
-                    return (
-                      <div key={field.id} className="rounded-xl border border-emerald-100/80 bg-white/90 p-2.5">
-                        <p className="text-[10px] font-bold text-slate-500 mb-2">{field.label}</p>
-                        {urls.length === 0 ? (
-                          <p className="text-xs text-slate-400 italic">（未上传）</p>
-                        ) : (
-                          <div className="flex flex-wrap gap-2">
-                            {urls.map((url, fi) => (
-                              <div key={`${field.id}-${fi}`} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/80 p-1.5">
-                                {url.startsWith('data:image/') ? (
-                                  <img src={url} alt="" className="h-16 w-16 rounded-md object-cover border border-slate-200 shrink-0" />
-                                ) : url.startsWith('data:application/pdf') ? (
-                                  <a
-                                    href={url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:underline"
-                                  >
-                                    <FileText className="w-4 h-4 text-rose-500 shrink-0" /> 查看 PDF
-                                  </a>
-                                ) : (
-                                  <span className="text-xs text-slate-600">附件 {fi + 1}</span>
-                                )}
-                              </div>
-                            ))}
+                {visibleRows.map(row => (
+                  <div key={row.field.id} className="rounded-xl border border-slate-200 bg-white p-2.5">
+                    <p className="text-[10px] font-bold text-slate-500 mb-1.5">{row.field.label}</p>
+                    {row.kind === 'file' ? (
+                      <div className="flex flex-wrap gap-2">
+                        {row.urls.map((url, fi) => (
+                          <div key={`${row.field.id}-${fi}`} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/80 p-1.5">
+                            {url.startsWith('data:image/') ? (
+                              <button
+                                type="button"
+                                onClick={() => openDisplayFilePreview(url, 'image')}
+                                className="rounded-md border border-slate-200 overflow-hidden shrink-0 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer hover:opacity-90"
+                                title="点击查看大图"
+                              >
+                                <img src={url} alt="" className="h-16 w-16 object-cover pointer-events-none" />
+                              </button>
+                            ) : url.startsWith('data:application/pdf') || /\.pdf(\?|$)/i.test(url) ? (
+                              <button
+                                type="button"
+                                onClick={() => openDisplayFilePreview(url, 'pdf')}
+                                className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:underline focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-lg px-1 py-0.5"
+                              >
+                                <FileText className="w-4 h-4 text-rose-500 shrink-0" /> 查看 PDF
+                              </button>
+                            ) : (
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs font-bold text-indigo-600 hover:underline"
+                              >
+                                附件 {fi + 1}
+                              </a>
+                            )}
                           </div>
-                        )}
+                        ))}
                       </div>
-                    );
-                  }
-                  return (
-                    <div key={field.id} className="rounded-xl border border-emerald-100/80 bg-white/90 p-2.5">
-                      <p className="text-[10px] font-bold text-slate-500 mb-1">{field.label}</p>
-                      {raw.trim() ? (
-                        <p className="text-sm text-slate-800 whitespace-pre-wrap">{raw}</p>
-                      ) : (
-                        <p className="text-xs text-slate-400 italic">（未填写）</p>
-                      )}
-                    </div>
-                  );
-                })}
+                    ) : (
+                      <p className="text-sm text-slate-800 whitespace-pre-wrap">{row.text}</p>
+                    )}
+                  </div>
+                ))}
               </div>
             );
           })()}
@@ -769,71 +850,48 @@ const ReportModal: React.FC<ReportModalProps> = ({
               </div>
             </>
           )}
-          {reportModal.milestone.reportTemplate.map(field => (
-            <div key={field.id} className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">{field.label} {field.required && <span className="text-rose-500">*</span>}</label>
-              {field.type === 'text' && <input tabIndex={-1} type="text" value={reportForm.customData[field.id] || ''} onChange={(e) => handleReportFieldChange(field.id, e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm outline-none" />}
-              {field.type === 'number' && <input tabIndex={-1} type="number" value={reportForm.customData[field.id] ?? ''} onChange={(e) => handleReportFieldChange(field.id, e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm outline-none" />}
-              {field.type === 'select' && (
-                <select tabIndex={-1} value={reportForm.customData[field.id] || ''} onChange={(e) => handleReportFieldChange(field.id, e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm outline-none">
-                  <option value="">请选择...</option>
-                  {(field.options || []).map((opt: string) => <option key={opt} value={opt}>{opt}</option>)}
-                </select>
-              )}
-              {field.type === 'boolean' && (
-                <div className="flex items-center gap-3 py-1">
-                  <button tabIndex={-1} type="button" onClick={() => handleReportFieldChange(field.id, !reportForm.customData[field.id])} className={`w-10 h-5 rounded-full relative transition-colors ${reportForm.customData[field.id] ? 'bg-indigo-600' : 'bg-slate-300'}`}>
-                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${reportForm.customData[field.id] ? 'left-5.5' : 'left-0.5'}`} />
-                  </button>
-                  <span className="text-[10px] font-bold text-slate-500">{reportForm.customData[field.id] ? '是' : '否'}</span>
-                </div>
-              )}
-              {field.type === 'date' && (
-                <input
-                  tabIndex={-1}
-                  type="date"
-                  value={reportForm.customData[field.id] || ''}
-                  onChange={(e) => handleReportFieldChange(field.id, e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm outline-none"
-                />
-              )}
-              {field.type === 'file' && (
-                <div className="space-y-2">
-                  <input
-                    tabIndex={-1}
-                    type="file"
-                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) {
-                        handleReportFieldChange(field.id, '');
-                        return;
-                      }
-                      const reader = new FileReader();
-                      reader.onload = () => handleReportFieldChange(field.id, reader.result as string);
-                      reader.readAsDataURL(file);
-                    }}
-                    className="w-full text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-indigo-700"
-                  />
-                  {typeof reportForm.customData[field.id] === 'string' &&
-                    String(reportForm.customData[field.id]).startsWith('data:image') && (
-                      <img src={reportForm.customData[field.id]} alt="" className="max-h-28 rounded-lg border border-slate-200 object-contain" />
-                    )}
-                  {typeof reportForm.customData[field.id] === 'string' &&
-                    String(reportForm.customData[field.id]).startsWith('data:') &&
-                    !String(reportForm.customData[field.id]).startsWith('data:image') && (
-                      <p className="text-[10px] text-slate-500">已选择文件，将随报工一并提交</p>
-                    )}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-        <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
-          <button onClick={onClose} className="px-5 py-2 text-sm font-bold text-slate-500 hover:text-slate-800">取消</button>
-          <button onClick={submitReport} disabled={!canSubmitMatrix || !reportForm.workerId || (needEquipment && !reportForm.equipmentId) || (!isMatrixMode && ((reportModal.productItems ?? reportModal.order.items).length > 1) && !reportForm.variantId)} className="px-6 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50"><Check className="w-4 h-4" /> 确认提交</button>
+          <ReportCustomFieldsEditor
+            fields={effectiveReportTemplate}
+            values={reportForm.customData}
+            onChange={handleReportFieldChange}
+            namePrefix="stp-report"
+          />
+          </div>
+        </form>
+        <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0 bg-white">
+          <button type="button" onClick={onClose} className="px-5 py-2 text-sm font-bold text-slate-500 hover:text-slate-800">取消</button>
+          <button type="button" onClick={submitReport} disabled={!canSubmitMatrix || !reportForm.workerId || (needEquipment && !reportForm.equipmentId) || (!isMatrixMode && ((reportModal.productItems ?? reportModal.order.items).length > 1) && !reportForm.variantId)} className="px-6 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50"><Check className="w-4 h-4" /> 确认提交</button>
         </div>
       </div>
+      {displayImagePreview && (
+        <div
+          className="absolute inset-0 z-[100] flex items-center justify-center p-4 sm:p-8 bg-slate-900/80 backdrop-blur-sm"
+          onClick={closeDisplayImagePreview}
+          role="presentation"
+        >
+          <button
+            type="button"
+            onClick={closeDisplayImagePreview}
+            className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/15 hover:bg-white/25 text-white transition-colors"
+            aria-label="关闭预览"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <div
+            className="relative z-[1] w-full max-w-4xl max-h-[90vh] rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col"
+            onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="图片预览"
+          >
+            <img
+              src={displayImagePreview}
+              alt="预览"
+              className="max-h-[85vh] w-full object-contain bg-slate-900"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

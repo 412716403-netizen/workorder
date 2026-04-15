@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { X, Trash2, Check, Pencil } from 'lucide-react';
+import { X, Trash2, Check, Pencil, UserPlus } from 'lucide-react';
 import {
   ProductionOrder,
   Product,
@@ -15,7 +15,10 @@ import {
 import WorkerSelector from '../../components/WorkerSelector';
 import { buildDefectiveReworkByOrderMilestone } from '../../utils/defectiveReworkByOrderMilestone';
 import { useConfirm } from '../../contexts/ConfirmContext';
+import { toast } from 'sonner';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
+import { getEffectiveReportTemplate, getReportCustomDataDisplayEntries, mergeCustomDataForTemplate } from '../../utils/effectiveReportTemplate';
+import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
 
 function fmtDT(ts: string | Date | undefined | null): string {
   if (!ts) return '—';
@@ -49,6 +52,7 @@ type ReportUpdateParams = {
   operator?: string;
   newOrderId?: string;
   newMilestoneId?: string;
+  customData?: Record<string, any>;
 };
 
 interface ReportBatchDetailModalProps {
@@ -66,7 +70,7 @@ interface ReportBatchDetailModalProps {
   productionLinkMode: 'order' | 'product';
   onUpdateReport?: (params: ReportUpdateParams) => void;
   onDeleteReport?: (params: { orderId: string; milestoneId: string; reportId: string }) => void;
-  onUpdateReportProduct?: (params: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string }) => void;
+  onUpdateReportProduct?: (params: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string; customData?: Record<string, any> }) => void;
   onDeleteReportProduct?: (params: { progressId: string; reportId: string }) => void;
   onUpdateProduct?: (product: Product) => Promise<boolean>;
   hasOrderPerm: (permKey: string) => boolean;
@@ -113,6 +117,7 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
       operator: string;
       workerId: string;
       rate: number;
+      customData: Record<string, any>;
       rowEdits: {
         reportId: string;
         orderId: string;
@@ -144,6 +149,7 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                     const f = editingReport.form;
                     const ts = new Date(f.timestamp);
                     const tsStr = isNaN(ts.getTime()) ? new Date().toLocaleString() : ts.toLocaleString();
+                    const customDataPayload = f.customData;
                     if (reportDetailBatch.source === 'order' && onUpdateReport) {
                       const origMilestoneId = reportDetailBatch.first.milestone.id;
                       const changedMilestone = editingReport.milestoneId !== origMilestoneId;
@@ -156,7 +162,8 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                           defectiveQuantity: Math.max(0, row.defectiveQuantity),
                           timestamp: tsStr,
                           operator: f.operator,
-                          newMilestoneId: changedMilestone ? editingReport.milestoneId : undefined
+                          newMilestoneId: changedMilestone ? editingReport.milestoneId : undefined,
+                          customData: customDataPayload,
                         });
                       });
                     } else if (reportDetailBatch.source === 'product' && onUpdateReportProduct) {
@@ -171,7 +178,8 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                           defectiveQuantity: Math.max(0, row.defectiveQuantity),
                           timestamp: tsStr,
                           operator: f.operator,
-                          newMilestoneTemplateId: changedTemplate ? editingReport.templateId : undefined
+                          newMilestoneTemplateId: changedTemplate ? editingReport.templateId : undefined,
+                          customData: customDataPayload,
                         });
                       });
                     }
@@ -206,6 +214,19 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                       const product = productMap.get(order.productId);
                       const rate = product?.nodeRates?.[milestone.templateId] ?? 0;
                       const matchingWorker = workers.find(w => w.name === report.operator);
+                      const msFull = order.milestones?.find(m => m.templateId === milestone.templateId);
+                      const customData = mergeCustomDataForTemplate(
+                        report.customData,
+                        milestone.templateId,
+                        msFull?.reportTemplate,
+                        product?.routeReportValues?.[milestone.templateId],
+                        globalNodes,
+                      );
+                      if (reportDetailBatch.rows.length > 1) {
+                        const first = JSON.stringify(report.customData ?? {});
+                        const hasDiff = reportDetailBatch.rows.some(r => JSON.stringify(r.report.customData ?? {}) !== first);
+                        if (hasDiff) toast.warning('批次内各行的填报项数据不一致，编辑后将统一为同一份填报项');
+                      }
                       setEditingReport({
                         orderId: order.id,
                         milestoneId: milestone.id,
@@ -216,6 +237,7 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                           operator: report.operator,
                           workerId: matchingWorker?.id || '',
                           rate,
+                          customData,
                           rowEdits: reportDetailBatch.rows.map(({ order: o, milestone: m, report: r }) => ({
                             reportId: r.id,
                             orderId: o.id,
@@ -243,6 +265,18 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                       const product = productMap.get(progress.productId);
                       const rate = product?.nodeRates?.[progress.milestoneTemplateId] ?? 0;
                       const matchingWorker = workers.find(w => w.name === report.operator);
+                      const customData = mergeCustomDataForTemplate(
+                        report.customData,
+                        progress.milestoneTemplateId,
+                        undefined,
+                        product?.routeReportValues?.[progress.milestoneTemplateId],
+                        globalNodes,
+                      );
+                      if (reportDetailBatch.rows.length > 1) {
+                        const first = JSON.stringify(report.customData ?? {});
+                        const hasDiff = reportDetailBatch.rows.some(r => JSON.stringify(r.report.customData ?? {}) !== first);
+                        if (hasDiff) toast.warning('批次内各行的填报项数据不一致，编辑后将统一为同一份填报项');
+                      }
                       setEditingReport({
                         orderId: '',
                         milestoneId: '',
@@ -253,6 +287,7 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                           operator: report.operator,
                           workerId: matchingWorker?.id || '',
                           rate,
+                          customData,
                           rowEdits: reportDetailBatch.rows.map(({ progress: pr, report: r }) => ({
                             reportId: r.id,
                             orderId: '',
@@ -337,11 +372,13 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                   本工序可报最多 <span className="font-bold text-indigo-600">{effectiveRemainingSaved}</span> 件（已扣不良、加返工）；当前批良品合计不超过 <span className="font-bold text-indigo-600">{Math.max(0, maxBatchGood)}</span> 件
                 </div>
               )}
-              <div className="grid grid-cols-[1fr_1.5fr_2.5fr] gap-3">
-                <div className="bg-slate-50 rounded-xl px-4 py-2">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">工序</p>
-                  <select
-                    value={editingReport.templateId}
+              <div className="space-y-2">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">报工信息</p>
+                <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-3 space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">工序</label>
+                    <select
+                      value={editingReport.templateId}
                     onChange={e => {
                       const newTemplateId = e.target.value;
                       const product = productMap.get(editingReport.productId);
@@ -349,52 +386,91 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                       if (reportDetailBatch.source === 'order') {
                         const order = orders.find(o => o.id === editingReport.orderId);
                         const newMilestone = order?.milestones.find(m => m.templateId === newTemplateId);
+                        const newCd = mergeCustomDataForTemplate(
+                          editingReport.form.customData,
+                          newTemplateId,
+                          newMilestone?.reportTemplate,
+                          product?.routeReportValues?.[newTemplateId],
+                          globalNodes,
+                        );
                         setEditingReport(prev => prev ? {
                           ...prev,
                           templateId: newTemplateId,
                           milestoneId: newMilestone?.id || prev.milestoneId,
-                          form: { ...prev.form, rate: newRate }
+                          form: { ...prev.form, rate: newRate, customData: newCd }
                         } : prev);
                       } else {
+                        const newCd = mergeCustomDataForTemplate(
+                          editingReport.form.customData,
+                          newTemplateId,
+                          undefined,
+                          product?.routeReportValues?.[newTemplateId],
+                          globalNodes,
+                        );
                         setEditingReport(prev => prev ? {
                           ...prev,
                           templateId: newTemplateId,
-                          form: { ...prev.form, rate: newRate }
+                          form: { ...prev.form, rate: newRate, customData: newCd }
                         } : prev);
                       }
                     }}
-                    className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-200"
-                  >
-                    {globalNodes.map(n => (
-                      <option key={n.id} value={n.id}>{n.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="bg-slate-50 rounded-xl px-4 py-2">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">报工时间</p>
-                  <input
-                    type="datetime-local"
-                    value={editingReport.form.timestamp}
-                    onChange={e => setEditingReport(prev => prev ? { ...prev, form: { ...prev.form, timestamp: e.target.value } } : prev)}
-                    className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-200"
-                  />
-                </div>
-                <div className="bg-slate-50 rounded-xl px-4 py-2">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">操作人</p>
-                  <WorkerSelector
-                    options={workers.filter(w => w.status === 'ACTIVE').map(w => ({ id: w.id, name: w.name, sub: w.groupName, assignedMilestoneIds: w.assignedMilestoneIds }))}
-                    processNodes={globalNodes}
-                    currentNodeId={editingReport.templateId}
-                    value={editingReport.form.workerId}
-                    onChange={(id) => {
-                      const w = workers.find(wx => wx.id === id);
-                      setEditingReport(prev => prev ? { ...prev, form: { ...prev.form, workerId: id, operator: w?.name || prev.form.operator } } : prev);
-                    }}
-                    placeholder="选择操作人..."
-                    variant="compact"
-                  />
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-200"
+                    >
+                      {globalNodes.map(n => (
+                        <option key={n.id} value={n.id}>{n.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">报工时间</label>
+                    <input
+                      type="datetime-local"
+                      value={editingReport.form.timestamp}
+                      onChange={e => setEditingReport(prev => prev ? { ...prev, form: { ...prev.form, timestamp: e.target.value } } : prev)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-200"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">操作人</label>
+                    <WorkerSelector
+                      options={workers.filter(w => w.status === 'ACTIVE').map(w => ({ id: w.id, name: w.name, sub: w.groupName, assignedMilestoneIds: w.assignedMilestoneIds }))}
+                      processNodes={globalNodes}
+                      currentNodeId={editingReport.templateId}
+                      value={editingReport.form.workerId}
+                      onChange={(id) => {
+                        const w = workers.find(wx => wx.id === id);
+                        setEditingReport(prev => prev ? { ...prev, form: { ...prev.form, workerId: id, operator: w?.name || prev.form.operator } } : prev);
+                      }}
+                      placeholder="选择操作人..."
+                      variant="default"
+                      icon={UserPlus}
+                    />
+                  </div>
                 </div>
               </div>
+              {(() => {
+                const editTmpl = getEffectiveReportTemplate(
+                  milestone ?? { templateId: editingReport.templateId, reportTemplate: [] },
+                  globalNodes,
+                );
+                if (editTmpl.length === 0) return null;
+                const cd = editingReport.form.customData;
+                return (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">填报项 / 备注</p>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-3 space-y-3">
+                      <ReportCustomFieldsEditor
+                        fields={editTmpl}
+                        values={cd}
+                        onChange={(fieldId, value) => setEditingReport(prev => prev ? { ...prev, form: { ...prev.form, customData: { ...prev.form.customData, [fieldId]: value } } } : prev)}
+                        namePrefix="stp-batch-edit"
+                        inputClassName="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-sm outline-none"
+                        fileHint="已选择文件，保存后生效"
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="border border-slate-200 rounded-2xl overflow-hidden">
                 <table className="w-full text-left text-sm">
                   <thead>
@@ -649,7 +725,34 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                   );
                 })()}
               </div>
-              <div className="flex-1 overflow-auto px-6 pb-6 -mt-2">
+              {(() => {
+                const tid =
+                  reportDetailBatch.source === 'order'
+                    ? reportDetailBatch.first.milestone.templateId
+                    : reportDetailBatch.milestoneTemplateId;
+                const ms =
+                  reportDetailBatch.source === 'order'
+                    ? reportDetailBatch.first.order.milestones?.find(m => m.templateId === tid)
+                    : undefined;
+                const tmpl = getEffectiveReportTemplate(ms ?? { templateId: tid, reportTemplate: [] }, globalNodes);
+                const cd = reportDetailBatch.first.report?.customData;
+                const entries = getReportCustomDataDisplayEntries(cd, tmpl);
+                if (entries.length === 0) return null;
+                return (
+                  <div className="space-y-2 shrink-0">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">报工填报项</p>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 space-y-1.5">
+                      {entries.map(e => (
+                        <p key={e.fieldId} className="text-xs leading-relaxed">
+                          <span className="font-bold text-slate-600">{e.label}：</span>
+                          <span className="text-slate-800 break-all">{e.display}</span>
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+              <div className="flex-1 overflow-auto pb-4 -mt-1">
                 <div className="border border-slate-200 rounded-2xl overflow-hidden">
                   <table className="w-full text-left text-sm">
                     <thead>

@@ -118,6 +118,8 @@ const EntitySelector: React.FC<EntitySelectorProps> = ({
             <input
               autoFocus
               type="text"
+              name="stp-entity-search"
+              autoComplete="off"
               className="w-full bg-slate-50 border-none rounded-lg py-1.5 pl-8 pr-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-indigo-500"
               placeholder="搜索..."
               value={search}

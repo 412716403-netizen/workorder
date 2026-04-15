@@ -75,11 +75,11 @@ interface ProductionManagementViewProps {
   onCreateSubPlans?: (params: { planId: string; items: Array<{ productId: string; quantity: number; bomNodeId: string; parentProductId?: string; parentNodeId?: string }> }) => void;
   onUpdateOrder?: (orderId: string, updates: Partial<ProductionOrder>) => void;
   onDeleteOrder?: (orderId: string) => void;
-  onUpdateReport?: (params: { orderId: string; milestoneId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string }) => void;
+  onUpdateReport?: (params: { orderId: string; milestoneId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; customData?: Record<string, any> }) => void;
   onDeleteReport?: (params: { orderId: string; milestoneId: string; reportId: string }) => void;
   productMilestoneProgresses?: ProductMilestoneProgress[];
   onReportSubmitProduct?: (productId: string, milestoneTemplateId: string, quantity: number, customData: any, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string) => void;
-  onUpdateReportProduct?: (params: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string }) => void;
+  onUpdateReportProduct?: (params: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; customData?: Record<string, any> }) => void;
   onDeleteReportProduct?: (params: { progressId: string; reportId: string }) => void;
   userPermissions?: string[];
   tenantRole?: string;

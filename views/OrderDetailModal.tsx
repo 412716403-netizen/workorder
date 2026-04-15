@@ -5,6 +5,14 @@ import { ProductionOrder, Product, OrderFormSettings, ProductionOpRecord, OrderI
 import { useConfirm } from '../contexts/ConfirmContext';
 import { productHasColorSizeMatrix } from '../utils/productColorSize';
 import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
+import { getEffectiveReportTemplate, getReportCustomDataDisplayEntries } from '../utils/effectiveReportTemplate';
+
+function fmtReportDetailTs(ts: string | Date | undefined | null): string {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return String(ts);
+  return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+}
 
 interface OrderDetailModalProps {
   orderId: string | null;
@@ -511,6 +519,55 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                     })}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {productionLinkMode !== 'product' && order.milestones.some(m => (m.reports?.length ?? 0) > 0) && (
+            <div className="mt-6">
+              <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-3">
+                <ClipboardList className="w-3.5 h-3.5" /> 报工明细（含填报项）
+              </h4>
+              <div className="space-y-4">
+                {order.milestones.map(m => {
+                  const reports = m.reports || [];
+                  if (reports.length === 0) return null;
+                  const tmpl = getEffectiveReportTemplate(m, globalNodes);
+                  return (
+                    <div key={m.id} className="border border-slate-200 rounded-2xl overflow-hidden bg-white">
+                      <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 text-xs font-black text-slate-700">{m.name}</div>
+                      <div className="divide-y divide-slate-100">
+                        {reports.map(r => {
+                          const entries = getReportCustomDataDisplayEntries(r.customData, tmpl);
+                          return (
+                            <div key={r.id} className="px-4 py-3 space-y-2">
+                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-600">
+                                <span>{fmtReportDetailTs(r.timestamp)}</span>
+                                <span>操作人：{r.operator}</span>
+                                <span className="font-bold text-emerald-600">良品 {r.quantity} {unitName}</span>
+                                {(r.defectiveQuantity ?? 0) > 0 && (
+                                  <span className="font-bold text-amber-600">不良 {(r.defectiveQuantity ?? 0)} {unitName}</span>
+                                )}
+                                {r.reportNo && <span className="text-slate-500">单号 {r.reportNo}</span>}
+                              </div>
+                              {entries.length > 0 && (
+                                <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-3 py-2 space-y-1">
+                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">填报项</p>
+                                  {entries.map(e => (
+                                    <p key={e.fieldId} className="text-xs leading-relaxed">
+                                      <span className="font-bold text-slate-600">{e.label}：</span>
+                                      <span className="text-slate-800 break-all">{e.display}</span>
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

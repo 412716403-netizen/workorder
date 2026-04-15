@@ -69,6 +69,7 @@ type ReportUpdateParams = {
   operator?: string;
   newOrderId?: string;
   newMilestoneId?: string;
+  customData?: Record<string, any>;
 };
 
 interface OrderListViewExtendedProps extends OrderListViewProps {
@@ -84,7 +85,7 @@ interface OrderListViewExtendedProps extends OrderListViewProps {
   onDeleteRecord?: (recordId: string) => void;
   productMilestoneProgresses?: ProductMilestoneProgress[];
   onReportSubmitProduct?: (productId: string, milestoneTemplateId: string, quantity: number, customData: any, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string) => void;
-  onUpdateReportProduct?: (params: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string }) => void;
+  onUpdateReportProduct?: (params: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string; customData?: Record<string, any> }) => void;
   onDeleteReportProduct?: (params: { progressId: string; reportId: string }) => void;
   onNavigateToProductEdit?: (productId: string) => void;
   userPermissions?: string[];
@@ -212,6 +213,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   >(null);
   const [viewProductId, setViewProductId] = useState<string | null>(null);
   const [showOrderFormConfigModal, setShowOrderFormConfigModal] = useState(false);
+  /** 每次打开报工弹窗递增，用于 ReportModal key，避免关闭再开后仍保留上次输入/旧默认值表现 */
+  const [reportModalSession, setReportModalSession] = useState(0);
   const [reportModal, setReportModal] = useState<{
     order: ProductionOrder;
     milestone: Milestone;
@@ -481,6 +484,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
       } else if (!canReportMilestone(order, ms)) return;
     }
     if (!onReportSubmit && !(productionLinkMode === 'product' && onReportSubmitProduct)) return;
+    setReportModalSession(s => s + 1);
     setReportModal({
       order,
       milestone: ms,
@@ -1079,6 +1083,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
       {reportModal && (onReportSubmit || (productionLinkMode === 'product' && onReportSubmitProduct)) && (
         <ReportModal
+          key={`${reportModal.order.id}-${reportModal.milestone.id}-${reportModalSession}`}
           reportModal={reportModal}
           open={true}
           onClose={() => setReportModal(null)}

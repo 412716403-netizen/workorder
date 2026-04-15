@@ -41,11 +41,31 @@ const createProductReportSchema = z.object({
   timestamp: z.string().optional(),
 }).passthrough();
 
+const updateReportSchema = z.object({
+  quantity: z.number().optional(),
+  operator: z.string().optional(),
+  defectiveQuantity: z.number().min(0).optional(),
+  customData: z.record(z.unknown()).optional(),
+  notes: z.string().optional(),
+  rate: z.number().optional(),
+  timestamp: z.string().optional(),
+}).passthrough();
+
+const updateProductReportSchema = z.object({
+  quantity: z.number().optional(),
+  operator: z.string().optional(),
+  defectiveQuantity: z.number().min(0).optional(),
+  customData: z.record(z.unknown()).optional(),
+  notes: z.string().optional(),
+  rate: z.number().optional(),
+  timestamp: z.string().optional(),
+}).passthrough();
+
 router.get('/', ctrl.listOrders);
 
 router.get('/product-progress', ctrl.listProductProgress);
 router.post('/product-progress/report', validate(createProductReportSchema), ctrl.createProductReport);
-router.put('/product-progress/report/:reportId', ctrl.updateProductReport);
+router.put('/product-progress/report/:reportId', validate(updateProductReportSchema), ctrl.updateProductReport);
 router.delete('/product-progress/report/:reportId', ctrl.deleteProductReport);
 
 router.get('/:id', ctrl.getOrder);
@@ -53,7 +73,7 @@ router.put('/:id', validate(updateOrderSchema), ctrl.updateOrder);
 router.delete('/:id', ctrl.deleteOrder);
 
 router.post('/:id/milestones/:milestoneId/reports', validate(createReportSchema), ctrl.createReport);
-router.put('/:id/milestones/:milestoneId/reports/:reportId', ctrl.updateReport);
+router.put('/:id/milestones/:milestoneId/reports/:reportId', validate(updateReportSchema), ctrl.updateReport);
 router.delete('/:id/milestones/:milestoneId/reports/:reportId', ctrl.deleteReport);
 
 router.get('/:id/reportable', ctrl.getReportable);
