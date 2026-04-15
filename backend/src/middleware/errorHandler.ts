@@ -33,14 +33,25 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
 
   if (err instanceof Prisma.PrismaClientValidationError) {
     const msg = err.message;
-    if (
-      msg.includes('routeReportValues') || msg.includes('route_report_values')
-      || msg.includes('routeReportDisplayValues') || msg.includes('route_report_display_values')
-      || msg.includes('reportDisplayTemplate') || msg.includes('report_display_template')
-    ) {
+    // 按字段语义拆分提示：避免「工序 reportDisplayTemplate」误报成「产品 route_report_values」
+    if (msg.includes('routeReportDisplayValues') || msg.includes('route_report_display_values')) {
       res.status(500).json({
         error:
-          '产品表缺少「标准生产路线填报」存储列。请在 backend 目录执行：npx prisma migrate deploy，并重启 API 服务。',
+          '产品表缺少「报工页展示内容」存储列（route_report_display_values）。请在 backend 目录执行：npx prisma migrate deploy，并重启 API 服务。',
+      });
+      return;
+    }
+    if (msg.includes('routeReportValues') || msg.includes('route_report_values')) {
+      res.status(500).json({
+        error:
+          '产品表缺少「标准生产路线填报」存储列（route_report_values）。请在 backend 目录执行：npx prisma migrate deploy，并重启 API 服务。',
+      });
+      return;
+    }
+    if (msg.includes('reportDisplayTemplate') || msg.includes('report_display_template')) {
+      res.status(500).json({
+        error:
+          '数据库缺少「报工页展示模板」相关列（工序节点库 global_node_templates 或工单 milestones 的 report_display_template）。请在 backend 目录执行：npx prisma migrate deploy，并重启 API 服务。',
       });
       return;
     }
@@ -57,12 +68,36 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
       case 'P2003':
         res.status(409).json({ error: '无法操作，存在关联数据' });
         return;
-      case 'P2022':
-        res.status(500).json({
-          error:
-            '数据库结构与当前代码不一致（例如缺少 route_report_values 等列）。请在服务器 backend 目录执行：npx prisma migrate deploy',
-        });
+      case 'P2022': {
+        const pe = err as Prisma.PrismaClientKnownRequestError;
+        const msg = pe.message;
+        const meta = pe.meta as { column?: string } | undefined;
+        const col = typeof meta?.column === 'string' ? meta.column : '';
+        const hit = (s: string) => msg.includes(s) || col.includes(s);
+
+        let error =
+          '数据库结构与当前代码不一致。请在 backend 目录执行：npx prisma migrate deploy，并重启 API 服务。';
+        if (hit('report_display_template')) {
+          error =
+            '数据库缺少列 report_display_template（工序节点库 global_node_templates 或工单 milestones）。请在 backend 目录执行：npx prisma migrate deploy，并重启 API 服务。';
+        } else if (hit('route_report_display_values')) {
+          error =
+            '产品表缺少列 route_report_display_values（报工页展示内容存档）。请在 backend 目录执行：npx prisma migrate deploy，并重启 API 服务。';
+        } else if (hit('route_report_values')) {
+          error =
+            '产品表缺少列 route_report_values（标准生产路线填报）。请在 backend 目录执行：npx prisma migrate deploy，并重启 API 服务。';
+        } else {
+          error =
+            '数据库结构与当前代码不一致（例如缺少 route_report_values、route_report_display_values、report_display_template 等列）。请在 backend 目录执行：npx prisma migrate deploy，并重启 API 服务。';
+        }
+
+        if (process.env.NODE_ENV !== 'production') {
+          res.status(500).json({ error, detail: msg });
+          return;
+        }
+        res.status(500).json({ error });
         return;
+      }
     }
   }
 
