@@ -161,6 +161,8 @@ model GlobalNodeTemplate {
   tenantId                  String   @map("tenant_id") @db.Uuid
   name                      String   @db.VarChar(100)
   reportTemplate            Json     @default("[]") @map("report_template")
+  /** 报工页只读展示项（工艺说明、标准文件等），结构快照到工单工序 */
+  reportDisplayTemplate     Json     @default("[]") @map("report_display_template")
   hasBom                    Boolean  @default(false) @map("has_bom")
   category                  String?  @db.VarChar(50)
   enableWorkerAssignment    Boolean  @default(false) @map("enable_worker_assignment")
@@ -319,7 +321,9 @@ model Product {
   categoryCustomData Json     @default("{}") @map("category_custom_data")
   milestoneNodeIds   Json     @default("[]") @map("milestone_node_ids")
   /** 标准生产路线报工填报项：nodeId -> fieldId -> 值（文本/JSON 数组多附件等） */
-  routeReportValues  Json     @default("{}") @map("route_report_values")
+  routeReportValues         Json     @default("{}") @map("route_report_values")
+  /** 报工页只读展示项内容：nodeId -> fieldId -> 值（与工序 reportDisplayTemplate 对应） */
+  routeReportDisplayValues  Json     @default("{}") @map("route_report_display_values")
   nodeRates          Json     @default("{}") @map("node_rates")
   nodePricingModes   Json     @default("{}") @map("node_pricing_modes")
   createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz()
@@ -550,6 +554,7 @@ model Milestone {
   actualDate           DateTime? @map("actual_date") @db.Date
   completedQuantity    Decimal   @default(0) @map("completed_quantity") @db.Decimal(12, 2)
   reportTemplate       Json      @default("[]") @map("report_template")
+  reportDisplayTemplate Json     @default("[]") @map("report_display_template")
   weight               Decimal   @default(1) @db.Decimal(5, 2)
   assignedWorkerIds    Json      @default("[]") @map("assigned_worker_ids")
   assignedEquipmentIds Json      @default("[]") @map("assigned_equipment_ids")

@@ -22,6 +22,7 @@ function makeOrder(id: string, milestones: { templateId: string; defective?: num
       status: MilestoneStatus.IN_PROGRESS,
       plannedDate: '2026-01-15',
       completedQuantity: 0,
+      reportDisplayTemplate: [],
       reportTemplate: [],
       reports: m.defective
         ? [{ id: 'r1', timestamp: '2026-01-10', operator: 'op', quantity: 50, defectiveQuantity: m.defective, customData: {} }]

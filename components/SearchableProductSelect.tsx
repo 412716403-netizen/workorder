@@ -18,6 +18,8 @@ export function SearchableProductSelect({
   categories = [],
   compact = false,
   unavailableProductIds = [],
+  disabledProductIds = [],
+  disabledProductReason = '该产品含颜色/尺码，不可作为 BOM 子件',
   onFilePreview,
   triggerClassName,
 }: {
@@ -29,6 +31,9 @@ export function SearchableProductSelect({
   categories?: ProductCategory[];
   compact?: boolean;
   unavailableProductIds?: string[];
+  /** 策略禁用（如 BOM 不可选带颜色尺码的产品）；当前行已选中的 id 仍可显示，不阻止换选 */
+  disabledProductIds?: string[];
+  disabledProductReason?: string;
   /** 传入后，下拉列表中文件类自定义字段会显示缩略图/预览/下载，而非仅「已上传」文案 */
   onFilePreview?: (url: string, type: 'image' | 'pdf') => void;
   /** 追加到触发按钮的 className，用于外部覆盖高度/圆角等 */
@@ -135,6 +140,7 @@ export function SearchableProductSelect({
       : `px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all whitespace-nowrap ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`;
 
   const unavailableSet = useMemo(() => new Set(unavailableProductIds.filter(Boolean)), [unavailableProductIds]);
+  const disabledProductSet = useMemo(() => new Set(disabledProductIds.filter(Boolean)), [disabledProductIds]);
 
   const rowBtnCls = (selected: boolean, unavailable: boolean) => {
     const pad = compact ? 'py-2 px-2.5 rounded-xl' : 'p-3 rounded-2xl';
@@ -181,13 +187,20 @@ export function SearchableProductSelect({
       <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar space-y-0.5">
         {filteredOptions.map(p => {
           const cat = categories.find(c => c.id === p.categoryId);
-          const unavailable = unavailableSet.has(p.id) && p.id !== value;
+          const duplicateUnavailable = unavailableSet.has(p.id) && p.id !== value;
+          const policyDisabled = disabledProductSet.has(p.id) && p.id !== value;
+          const unavailable = duplicateUnavailable || policyDisabled;
+          const rowTitle = duplicateUnavailable
+            ? '已在其他行添加，不可重复选择'
+            : policyDisabled
+              ? disabledProductReason
+              : undefined;
           return (
             <button
               key={p.id}
               type="button"
               disabled={unavailable}
-              title={unavailable ? '已在其他行添加，不可重复选择' : undefined}
+              title={rowTitle}
               onClick={() => {
                 if (unavailable) return;
                 onChange(p.id);

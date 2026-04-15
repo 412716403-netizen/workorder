@@ -8,14 +8,8 @@ import { Labeled } from './Labeled';
 const PAPER_PRESETS: { label: string; w: number; h: number }[] = [
   { label: 'A4 (210×297 mm)', w: PRINT_PAPER_A4_MM.widthMm, h: PRINT_PAPER_A4_MM.heightMm },
   { label: 'A5 (148×210 mm)', w: PRINT_PAPER_A5_MM.widthMm, h: PRINT_PAPER_A5_MM.heightMm },
-  { label: '30×40 mm', w: 30, h: 40 },
-  { label: '40×30 mm', w: 40, h: 30 },
-  { label: '50×30 mm', w: 50, h: 30 },
-  { label: '60×40 mm', w: 60, h: 40 },
-  { label: '80×60 mm', w: 80, h: 60 },
-  { label: '60×80 mm', w: 60, h: 80 },
-  { label: '80×100 mm', w: 80, h: 100 },
-  { label: '100×150 mm', w: 100, h: 150 },
+  { label: '241×93 mm（三等分）', w: 241, h: 93 },
+  { label: '241×140 mm（二等分）', w: 241, h: 140 },
 ];
 
 function TemplatePaperSettingsInner({

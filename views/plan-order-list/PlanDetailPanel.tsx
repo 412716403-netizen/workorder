@@ -57,7 +57,6 @@ import { buildVirtualBatchPrintRow } from '../../utils/printVirtualBatch';
 import { formatBatchSerialLabel, formatItemCodeSerialLabel } from '../../utils/serialLabels';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
 import { SearchableMultiSelectWithProcessTabs } from '../../components/SearchableMultiSelect';
-import { getFileExtFromDataUrl } from '../../utils/fileHelpers';
 import { localTodayYmd, planIdToLocalYmd, toLocalDateYmd } from '../../utils/localDateTime';
 import { nextPsiDocNumber } from '../../utils/partnerDocNumber';
 
@@ -1068,30 +1067,6 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                      <h2 className="text-2xl font-black text-slate-900 tracking-tight">查看生产计划</h2>
                   <p className="text-sm font-bold text-slate-400 mt-0.5 tracking-tighter uppercase flex flex-wrap items-center gap-2">
                     {viewPlan.planNumber} — 关联：{viewProduct.name}
-                    {categories.find(c => c.id === viewProduct.categoryId)?.customFields?.filter(f => f.showInForm !== false && f.type !== 'file').map(f => {
-                      const val = viewProduct.categoryCustomData?.[f.id];
-                      if (val == null || val === '') return null;
-                      if (f.type === 'file' && typeof val === 'string' && val.startsWith('data:')) {
-                        const isImg = val.startsWith('data:image/');
-                        const isPdf = val.startsWith('data:application/pdf');
-                        if (isImg) return (
-                          <span key={f.id} className="inline-flex items-center gap-1.5 align-middle">
-                            <img src={val} alt={f.label} className="h-6 w-6 object-cover rounded border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400" onClick={e => { e.stopPropagation(); onFilePreview(val, 'image'); }} />
-                            <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[10px] font-bold text-indigo-500 px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
-                     </span>
-                        );
-                        if (isPdf) return (
-                          <span key={f.id} className="inline-flex items-center gap-1.5 align-middle">
-                            <button type="button" onClick={e => { e.stopPropagation(); onFilePreview(val, 'pdf'); }} className="text-[10px] font-bold text-indigo-500 px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">在线查看</button>
-                            <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[10px] font-bold text-indigo-500 px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
-                          </span>
-                        );
-                        return (
-                          <a key={f.id} href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[10px] font-bold text-indigo-500 px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
-                        );
-                      }
-                      return <span key={f.id} className="text-[10px] font-bold text-slate-500 px-2 py-0.5 rounded bg-slate-100">{f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}</span>;
-                    })}
                   </p>
                 </div>
              </div>

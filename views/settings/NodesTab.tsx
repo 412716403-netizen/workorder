@@ -14,6 +14,7 @@ import {
   FileText,
   PlusCircle,
   Trash2,
+  BookOpen,
 } from 'lucide-react';
 import { GlobalNodeTemplate, ReportFieldDefinition, FieldType } from '../../types';
 import { toast } from 'sonner';
@@ -44,7 +45,7 @@ const NodesTab: React.FC<NodesTabProps> = ({
     await addLock.run(async () => {
       try {
         const created = await api.settings.nodes.create({
-          name: newNodeName, reportTemplate: [], hasBOM: false,
+          name: newNodeName, reportTemplate: [], reportDisplayTemplate: [], hasBOM: false,
           enableAssignment: false, enableWorkerAssignment: false,
           enableEquipmentAssignment: false, enableEquipmentOnReport: false,
           enablePieceRate: false, allowOutsource: false,
@@ -92,6 +93,35 @@ const NodesTab: React.FC<NodesTabProps> = ({
     const node = globalNodes.find(n => n.id === nodeId);
     if (node) {
       updateNodeConfig(nodeId, { reportTemplate: node.reportTemplate.filter(f => f.id !== fieldId) });
+    }
+  };
+
+  const displayTpl = (node: GlobalNodeTemplate) => node.reportDisplayTemplate ?? [];
+
+  const addDisplayFieldToNode = (nodeId: string) => {
+    const node = globalNodes.find(n => n.id === nodeId);
+    if (node) {
+      const newField: ReportFieldDefinition = {
+        id: `d-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+        label: '新展示项',
+        type: 'text',
+      };
+      updateNodeConfig(nodeId, { reportDisplayTemplate: [...displayTpl(node), newField] });
+    }
+  };
+
+  const updateDisplayNodeField = (nodeId: string, fieldId: string, updates: Partial<ReportFieldDefinition>) => {
+    const node = globalNodes.find(n => n.id === nodeId);
+    if (node) {
+      const newFields = displayTpl(node).map(f => (f.id === fieldId ? { ...f, ...updates } : f));
+      updateNodeConfig(nodeId, { reportDisplayTemplate: newFields });
+    }
+  };
+
+  const removeDisplayNodeField = (nodeId: string, fieldId: string) => {
+    const node = globalNodes.find(n => n.id === nodeId);
+    if (node) {
+      updateNodeConfig(nodeId, { reportDisplayTemplate: displayTpl(node).filter(f => f.id !== fieldId) });
     }
   };
 
@@ -272,11 +302,57 @@ const NodesTab: React.FC<NodesTabProps> = ({
 
                        <div className="space-y-4 pt-4 border-t border-slate-100">
                           <div className="flex items-center justify-between">
-                             <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><FileText className="w-4 h-4" /> 报工表单模板配置</h3>
-                             <button onClick={() => addFieldToNode(node.id)} className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black hover:bg-black transition-all">
+                             <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><BookOpen className="w-4 h-4" /> 报工页展示内容</h3>
+                             <button type="button" onClick={() => addDisplayFieldToNode(node.id)} className="flex items-center gap-2 px-4 py-1.5 bg-slate-700 text-white rounded-xl text-[10px] font-black hover:bg-slate-800 transition-all">
+                                <PlusCircle className="w-3.5 h-3.5" /> 增加展示项
+                             </button>
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-medium -mt-2">在产品工序中维护具体内容（如工艺说明、标准 PDF）；报工弹窗顶部只读展示，不参与报工校验。</p>
+                          <div className="space-y-3">
+                             {displayTpl(node).length === 0 && (
+                               <p className="text-center py-8 text-xs text-slate-300 italic border-2 border-dashed border-slate-100 rounded-2xl">暂无展示项</p>
+                             )}
+                             {displayTpl(node).map((field, idx) => (
+                               <div key={field.id} className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-3">
+                                  <div className="flex flex-col md:flex-row md:items-start gap-4">
+                                     <div className="w-6 h-6 bg-white rounded-lg flex items-center justify-center text-[10px] font-black text-slate-400 shadow-sm shrink-0">{idx + 1}</div>
+                                     <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                        <ExtFieldLabelInput
+                                          inputKey={`node-dt-${node.id}-${field.id}`}
+                                          label={field.label}
+                                          placeholder="标签名称"
+                                          onPersist={(t) => updateDisplayNodeField(node.id, field.id, { label: t })}
+                                          className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold outline-none"
+                                        />
+                                        <select
+                                          value={field.type === 'file' ? 'file' : 'text'}
+                                          onChange={(e) => {
+                                            const v = e.target.value as 'text' | 'file';
+                                            updateDisplayNodeField(node.id, field.id, { type: v, options: undefined });
+                                          }}
+                                          className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold outline-none"
+                                        >
+                                          <option value="text">文本说明</option>
+                                          <option value="file">文件 / PDF / 图片</option>
+                                        </select>
+                                        <div className="flex items-center gap-4 px-2 flex-wrap md:col-span-1">
+                                           <button type="button" onClick={() => removeDisplayNodeField(node.id, field.id)} className="ml-auto p-1.5 text-rose-300 hover:text-rose-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                        </div>
+                                     </div>
+                                  </div>
+                               </div>
+                             ))}
+                          </div>
+                       </div>
+
+                       <div className="space-y-4 pt-4 border-t border-slate-100">
+                          <div className="flex items-center justify-between">
+                             <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><FileText className="w-4 h-4" /> 报工填报项</h3>
+                             <button type="button" onClick={() => addFieldToNode(node.id)} className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black hover:bg-black transition-all">
                                 <PlusCircle className="w-3.5 h-3.5" /> 增加填报项
                              </button>
                           </div>
+                          <p className="text-[10px] text-slate-400 font-medium -mt-2">报工时由工人填写，写入报工记录的自定义字段。</p>
                           <div className="space-y-3">
                              {node.reportTemplate.length === 0 && <p className="text-center py-10 text-xs text-slate-300 italic border-2 border-dashed border-slate-100 rounded-2xl">暂无表单项，工人只需上报完工数量</p>}
                              {node.reportTemplate.map((field, idx) => {

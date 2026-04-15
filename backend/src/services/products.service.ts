@@ -3,13 +3,14 @@ import type { TenantPrismaClient } from '../lib/prisma.js';
 import { prisma as basePrisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { genId } from '../utils/genId.js';
+import { isProductBlockedAsBomMaterialDb } from '../utils/productBomMaterial.js';
 import { sanitizeUpdate, sanitizeCreate, sanitizeItems } from '../utils/request.js';
 
 // ── JSON field coercion ──
 
 const PRODUCT_JSON_FIELDS = [
   'colorIds', 'sizeIds', 'categoryCustomData', 'milestoneNodeIds',
-  'routeReportValues', 'nodeRates', 'nodePricingModes',
+  'routeReportValues', 'routeReportDisplayValues', 'nodeRates', 'nodePricingModes',
 ] as const;
 
 function coerceProductJsonFields(data: Record<string, unknown>): void {
@@ -237,6 +238,27 @@ export async function syncVariants(
 
 // ── BOM ──
 
+async function assertBomItemsNotColorSizeProducts(
+  db: TenantPrismaClient,
+  items: { productId?: string }[] | undefined,
+) {
+  if (!items?.length) return;
+  const ids = [...new Set(items.map((i) => String(i.productId ?? '').trim()).filter(Boolean))];
+  if (ids.length === 0) return;
+  const rows = await db.product.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true, sku: true, colorIds: true, sizeIds: true, variants: { select: { id: true }, take: 1 } },
+  });
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  for (const id of ids) {
+    const row = byId.get(id);
+    if (!row) throw new AppError(400, `BOM 子件产品不存在：${id}`);
+    if (isProductBlockedAsBomMaterialDb(row)) {
+      throw new AppError(400, `BOM 子件不能使用带颜色/尺码的产品：${row.name}（${row.sku}）`);
+    }
+  }
+}
+
 export async function listBoms(db: TenantPrismaClient, opts: { parentProductId?: string }) {
   const where: Record<string, unknown> = {};
   if (opts.parentProductId) where.parentProductId = opts.parentProductId;
@@ -263,6 +285,7 @@ export async function createBom(db: TenantPrismaClient, body: Record<string, unk
   const cleanItems = items
     ? sanitizeItems(items as Record<string, unknown>[], ['quantityInput', 'bomId'])
     : undefined;
+  await assertBomItemsNotColorSizeProducts(db, cleanItems);
   return db.bom.create({
     data: { ...data, items: cleanItems ? { create: cleanItems } : undefined },
     include: { items: true },
@@ -282,10 +305,11 @@ export async function updateBom(
   await basePrisma.$transaction(async (tx) => {
     await tx.bom.update({ where: { id: bomId }, data });
     if (items) {
-      await tx.bomItem.deleteMany({ where: { bomId } });
       const cleanItems = sanitizeItems(items as Record<string, unknown>[], ['quantityInput']).map(
         (item) => ({ ...item, bomId }),
       );
+      await assertBomItemsNotColorSizeProducts(db, cleanItems);
+      await tx.bomItem.deleteMany({ where: { bomId } });
       await tx.bomItem.createMany({ data: cleanItems });
     }
   });
@@ -363,7 +387,9 @@ export async function importProducts(
         unitId: row.unitId || null,
         colorIds: colorIds as Prisma.InputJsonValue, sizeIds: sizeIds as Prisma.InputJsonValue,
         categoryCustomData: (row.categoryCustomData ?? {}) as Prisma.InputJsonValue,
-        milestoneNodeIds: [] as Prisma.InputJsonValue, routeReportValues: {} as Prisma.InputJsonValue,
+        milestoneNodeIds: [] as Prisma.InputJsonValue,
+        routeReportValues: {} as Prisma.InputJsonValue,
+        routeReportDisplayValues: {} as Prisma.InputJsonValue,
         nodeRates: {} as Prisma.InputJsonValue, nodePricingModes: {} as Prisma.InputJsonValue,
       };
 
@@ -415,6 +441,7 @@ async function backfillPendingProcessOrders(
         id: genId('ms'), templateId: nodeId, name: node?.name || nodeId,
         status: 'PENDING', completedQuantity: 0,
         reportTemplate: (node as any)?.reportTemplate || [],
+        reportDisplayTemplate: (node as any)?.reportDisplayTemplate ?? [],
         weight: 1, assignedWorkerIds: [], assignedEquipmentIds: [],
         sortOrder: idx, productionOrderId: order.id,
       };

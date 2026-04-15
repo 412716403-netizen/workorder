@@ -65,7 +65,7 @@ export interface ReportFieldDefinition {
   required?: boolean;
   options?: string[];
   placeholder?: string;
-  /** 产品分类专属扩展字段：是否在表单中显示（新增、列表、详情页），默认 true */
+  /** 产品分类扩展字段：是否在工单列表、外协列表等场景展示（非文件字段）；合作单位分类下表示是否在表单中显示。默认 true */
   showInForm?: boolean;
 }
 
@@ -93,6 +93,8 @@ export type ProcessSequenceMode = 'free' | 'sequential';
 export interface GlobalNodeTemplate {
   id: string;
   name: string;
+  /** 报工页只读展示项（工艺说明、标准 PDF 等），内容由产品 routeReportDisplayValues 维护 */
+  reportDisplayTemplate?: ReportFieldDefinition[];
   reportTemplate: ReportFieldDefinition[];
   hasBOM?: boolean;
   category?: string;
@@ -204,6 +206,8 @@ export interface Product {
   variants: ProductVariant[];
   categoryCustomData?: Record<string, any>; 
   milestoneNodeIds: string[];
+  /** 报工页只读展示项内容：工序节点 id -> 展示字段 id -> 字符串值（与 reportDisplayTemplate 对应） */
+  routeReportDisplayValues?: Record<string, Record<string, string>>;
   /** 标准生产路线报工填报项存档：工序节点 id -> 字段 id -> 字符串值 */
   routeReportValues?: Record<string, Record<string, string>>;
   /** 各工序工价（元/件 或 元/时，由 nodePricingModes 决定），key 为工序节点 id */
@@ -589,6 +593,8 @@ export interface Milestone {
   plannedDate: string;
   actualDate?: string;
   completedQuantity: number;
+  /** 报工页只读展示项结构快照（与 GlobalNodeTemplate.reportDisplayTemplate 一致） */
+  reportDisplayTemplate?: ReportFieldDefinition[];
   reportTemplate: ReportFieldDefinition[];
   reports: MilestoneReport[];
   weight: number;

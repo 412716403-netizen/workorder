@@ -112,7 +112,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
       id: newId, sku: '', name: '',
       categoryId: activeCategoryFilter === PRODUCT_ARCHIVE_ALL ? (categories[0]?.id ?? '') : activeCategoryFilter,
       milestoneNodeIds: [],
-      categoryCustomData: {}, routeReportValues: {}, salesPrice: undefined, purchasePrice: undefined,
+      categoryCustomData: {}, routeReportValues: {}, routeReportDisplayValues: {}, salesPrice: undefined, purchasePrice: undefined,
       unitId: undefined,
       colorIds: [], sizeIds: [], variants: [], imageUrl: ''
     });

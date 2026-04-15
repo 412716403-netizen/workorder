@@ -33,11 +33,19 @@ import {
   Download,
   Upload,
   ListChecks,
+  BookOpen,
 } from 'lucide-react';
 import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, BOMItem, AppDictionaries, ProductVariant, DictionaryItem, Partner } from '../../types';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 import { productColorSizeEnabled } from '../../utils/productColorSize';
 import { bomHasConfiguredItems } from '../../utils/bomEffective';
+import { isProductBlockedAsBomMaterial } from '../../utils/productBomMaterial';
+import {
+  getFileExtFromDataUrl,
+  parseRouteReportFileUrls,
+  stringifyRouteReportFileUrls,
+  dataUrlToBlobUrl,
+} from '../../utils/routeReportFileUrls';
 import { toast } from 'sonner';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import * as api from '../../services/api';
@@ -65,62 +73,6 @@ function resolveProductSkuForSave(p: Product, catalog: Product[]): Product {
     if (!catalog.some(o => o.id !== p.id && (o.sku ?? '').trim() === candidate)) break;
   }
   return { ...p, sku: candidate };
-}
-
-function getFileExtFromDataUrl(dataUrl: string): string {
-  const m = dataUrl.match(/^data:([^;]+);/);
-  if (!m) return 'bin';
-  const map: Record<string, string> = {
-    'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp',
-    'application/pdf': 'pdf',
-  };
-  return map[m[1]] || 'bin';
-}
-
-/** 标准生产路线试填：多附件存 JSON 数组，兼容历史单条 data URL */
-function parseRouteReportFileUrls(val: string): string[] {
-  if (!val) return [];
-  const s = val.trim();
-  if (s.startsWith('[')) {
-    try {
-      const arr = JSON.parse(s) as unknown;
-      if (Array.isArray(arr)) return arr.filter((x): x is string => typeof x === 'string' && x.startsWith('data:'));
-    } catch {
-      return [];
-    }
-  }
-  if (s.startsWith('data:')) return [val];
-  return [];
-}
-
-function stringifyRouteReportFileUrls(urls: string[]): string {
-  return urls.length === 0 ? '' : JSON.stringify(urls);
-}
-
-/** 将 data URL 转为 Blob URL，便于在 iframe 中预览 PDF（部分浏览器禁止 data: PDF） */
-function dataUrlToBlobUrl(dataUrl: string): { url: string; revoke: () => void } | null {
-  try {
-    const comma = dataUrl.indexOf(',');
-    if (comma < 0 || !dataUrl.startsWith('data:')) return null;
-    const header = dataUrl.slice(0, comma);
-    const body = dataUrl.slice(comma + 1);
-    const isBase64 = /;base64/i.test(header);
-    const mimeMatch = header.match(/data:([^;,]+)/);
-    const mime = mimeMatch?.[1] || 'application/octet-stream';
-    let bytes: Uint8Array;
-    if (isBase64) {
-      const binary = atob(body);
-      bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    } else {
-      bytes = new TextEncoder().encode(decodeURIComponent(body));
-    }
-    const blob = new Blob([bytes], { type: mime });
-    const url = URL.createObjectURL(blob);
-    return { url, revoke: () => URL.revokeObjectURL(url) };
-  } catch {
-    return null;
-  }
 }
 
 function normalizeRouteReportValuesFromApi(raw: unknown): Record<string, Record<string, string>> {
@@ -391,6 +343,7 @@ const BomBatchAddPanel = ({
   options,
   categories,
   alreadyUsedProductIds,
+  blockedProductIds,
   parentProductId,
   onConfirm,
 }: {
@@ -399,6 +352,8 @@ const BomBatchAddPanel = ({
   options: Product[];
   categories: ProductCategory[];
   alreadyUsedProductIds: string[];
+  /** 含颜色/尺码的产品，不可批量加入 BOM */
+  blockedProductIds: string[];
   parentProductId: string;
   onConfirm: (rows: { productId: string; categoryId?: string }[]) => void;
 }) => {
@@ -415,6 +370,7 @@ const BomBatchAddPanel = ({
   }, [open]);
 
   const usedSet = useMemo(() => new Set(alreadyUsedProductIds.filter(Boolean)), [alreadyUsedProductIds]);
+  const blockedSet = useMemo(() => new Set(blockedProductIds.filter(Boolean)), [blockedProductIds]);
 
   const pool = useMemo(
     () => options.filter(p => p.id !== parentProductId),
@@ -437,7 +393,7 @@ const BomBatchAddPanel = ({
     `px-2 py-1 rounded-md text-[9px] font-black uppercase transition-all whitespace-nowrap shrink-0 ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`;
 
   const toggle = (id: string) => {
-    if (usedSet.has(id)) return;
+    if (usedSet.has(id) || blockedSet.has(id)) return;
     setPicked(prev => {
       const n = new Set(prev);
       if (n.has(id)) n.delete(id);
@@ -450,7 +406,7 @@ const BomBatchAddPanel = ({
     setPicked(prev => {
       const n = new Set(prev);
       for (const p of filtered) {
-        if (!usedSet.has(p.id)) n.add(p.id);
+        if (!usedSet.has(p.id) && !blockedSet.has(p.id)) n.add(p.id);
       }
       return n;
     });
@@ -459,7 +415,7 @@ const BomBatchAddPanel = ({
   const clearPicked = () => setPicked(new Set());
 
   const handleConfirm = () => {
-    const ids = [...picked].filter(id => !usedSet.has(id));
+    const ids = [...picked].filter(id => !usedSet.has(id) && !blockedSet.has(id));
     if (ids.length === 0) return;
     onConfirm(
       ids.map(id => {
@@ -470,8 +426,8 @@ const BomBatchAddPanel = ({
     onClose();
   };
 
-  const pickedValid = [...picked].filter(id => !usedSet.has(id));
-  const visibleSelectable = filtered.filter(p => !usedSet.has(p.id)).length;
+  const pickedValid = [...picked].filter(id => !usedSet.has(id) && !blockedSet.has(id));
+  const visibleSelectable = filtered.filter(p => !usedSet.has(p.id) && !blockedSet.has(p.id)).length;
 
   if (!open) return null;
 
@@ -483,7 +439,7 @@ const BomBatchAddPanel = ({
             <ListChecks className="w-3.5 h-3.5" /> 批量勾选添加
           </p>
           <p className="text-[10px] text-slate-500 mt-1 leading-relaxed max-w-md">
-            勾选多个物料后一次加入下方清单，再逐行填写用量；已在本 BOM 中的不可重复勾选。仍可用「添加物料清单行」逐条搜索单选。
+            勾选多个物料后一次加入下方清单，再逐行填写用量；已在本 BOM 中的不可重复勾选。带颜色/尺码的产品不可作 BOM 子件。仍可用「添加物料清单行」逐条搜索单选。
           </p>
         </div>
         <button type="button" onClick={onClose} className="text-[10px] font-bold text-slate-500 hover:text-slate-800 shrink-0">
@@ -530,18 +486,20 @@ const BomBatchAddPanel = ({
       <div className="max-h-52 overflow-y-auto custom-scrollbar rounded-xl border border-slate-200 bg-white divide-y divide-slate-50">
         {filtered.map(p => {
           const used = usedSet.has(p.id);
+          const blocked = blockedSet.has(p.id);
           const checked = picked.has(p.id);
           const cat = categories.find(c => c.id === p.categoryId);
+          const rowDisabled = used || blocked;
           return (
             <label
               key={p.id}
-              className={`flex items-start gap-2.5 px-3 py-2.5 ${used ? 'opacity-45 cursor-not-allowed bg-slate-50' : 'cursor-pointer hover:bg-slate-50/80'}`}
+              className={`flex items-start gap-2.5 px-3 py-2.5 ${rowDisabled ? 'opacity-45 cursor-not-allowed bg-slate-50' : 'cursor-pointer hover:bg-slate-50/80'}`}
             >
               <input
                 type="checkbox"
                 className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                 checked={checked}
-                disabled={used}
+                disabled={rowDisabled}
                 onChange={() => toggle(p.id)}
               />
               <div className="min-w-0 flex-1">
@@ -553,6 +511,7 @@ const BomBatchAddPanel = ({
                 </div>
                 <p className="text-[9px] font-bold text-slate-400 mt-0.5">{p.sku}</p>
                 {used && <p className="text-[9px] text-amber-600 font-bold mt-0.5">已在清单中</p>}
+                {blocked && !used && <p className="text-[9px] text-slate-500 font-bold mt-0.5">含颜色/尺码，不可作 BOM 子件</p>}
               </div>
             </label>
           );
@@ -648,8 +607,12 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
 
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const routeReportFileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const routeReportDisplayFileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [routeReportFieldValues, setRouteReportFieldValues] = useState<Record<string, Record<string, string>>>(
     () => normalizeRouteReportValuesFromApi(initialProduct.routeReportValues)
+  );
+  const [routeReportDisplayFieldValues, setRouteReportDisplayFieldValues] = useState<Record<string, Record<string, string>>>(
+    () => normalizeRouteReportValuesFromApi(initialProduct.routeReportDisplayValues)
   );
   const [activeVariantIdForBOM, setActiveVariantIdForBOM] = useState<string | null>(null);
   const [activeNodeIdForBOM, setActiveNodeIdForBOM] = useState<string | null>(null);
@@ -781,6 +744,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
       salesPrice: workingProduct.salesPrice ?? 0,
       purchasePrice: workingProduct.purchasePrice ?? 0,
       routeReportValues: routeReportFieldValues,
+      routeReportDisplayValues: routeReportDisplayFieldValues,
     };
     setSaveProductBusy(true);
     try {
@@ -788,6 +752,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
       if (ok) {
         onBack();
         setRouteReportFieldValues({});
+        setRouteReportDisplayFieldValues({});
       }
     } finally {
       saveProductInFlightRef.current = false;
@@ -898,6 +863,15 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
         purchasePrice: resolved.purchasePrice ?? 0,
       });
       if (!productOk) return;
+      for (const it of workingBOM.items) {
+        const pid = it.productId?.trim();
+        if (!pid) continue;
+        const p = products.find(x => x.id === pid);
+        if (p && isProductBlockedAsBomMaterial(p)) {
+          toast.error(`BOM 不能使用带颜色/尺码的产品：${p.name}`);
+          return;
+        }
+      }
       const persistedBom = boms.some(bx => bx.id === workingBOM.id);
       const hasConfiguredItems = bomHasConfiguredItems(workingBOM);
       let bomOk = false;
@@ -924,6 +898,8 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
       const merged = new Map<string, BOMItem>();
       for (const it of raw) {
         if (!it.productId?.trim()) continue;
+        const srcP = products.find(x => x.id === it.productId);
+        if (srcP && isProductBlockedAsBomMaterial(srcP)) continue;
         const q = typeof it.quantity === 'number' && !Number.isNaN(it.quantity) ? it.quantity : Number(it.quantity) || 0;
         const prev = merged.get(it.productId);
         if (prev) {
@@ -953,6 +929,11 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
     });
     return groups;
   }, [workingProduct?.variants]);
+
+  const bomBlockedProductIds = useMemo(
+    () => products.filter(isProductBlockedAsBomMaterial).map(p => p.id),
+    [products],
+  );
 
   const nodeIds = (workingProduct.milestoneNodeIds as string[]);
   const selectedNodesOrdered = nodeIds.map(id => globalNodes.find(gn => gn.id === id)).filter(Boolean) as GlobalNodeTemplate[];
@@ -1433,12 +1414,163 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                             )}
                           </div>
                         </div>
+                        {(node.reportDisplayTemplate?.length ?? 0) > 0 && (
+                        <div className="mx-3 mb-3 rounded-xl border border-emerald-100 bg-emerald-50/40 px-3 py-2">
+                          <div className="flex flex-wrap items-center gap-2 mb-2">
+                            <BookOpen className="w-3 h-3 text-emerald-600 shrink-0" />
+                            <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">报工页展示内容</span>
+                            <span className="text-[10px] text-emerald-700/80">（工序库配置项；此处维护本产品在报工弹窗中只读展示的内容）</span>
+                          </div>
+                          <div className="space-y-2">
+                            {(node.reportDisplayTemplate ?? []).map(field => {
+                              const rk = `d:${node.id}:${field.id}`;
+                              const val = routeReportDisplayFieldValues[node.id]?.[field.id] ?? '';
+                              const setVal = (v: string) => {
+                                setRouteReportDisplayFieldValues(prev => ({
+                                  ...prev,
+                                  [node.id]: { ...prev[node.id], [field.id]: v },
+                                }));
+                              };
+                              return (
+                                <div key={field.id} className="rounded-lg border border-emerald-100/80 bg-white/90 px-2.5 py-2">
+                                  <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                                    {field.label}
+                                    <span className="text-slate-300 font-normal mx-1">·</span>
+                                    <span className="text-slate-400 font-normal">{field.type === 'file' ? '文件/PDF' : '文本'}</span>
+                                  </label>
+                                  {field.type !== 'file' && (
+                                    <textarea
+                                      value={val}
+                                      onChange={e => setVal(e.target.value)}
+                                      placeholder={field.placeholder || '工艺说明、注意事项等'}
+                                      rows={3}
+                                      className="route-report-control w-full box-border bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none resize-y min-h-[4rem]"
+                                    />
+                                  )}
+                                  {field.type === 'file' && (() => {
+                                    const fileUrls = parseRouteReportFileUrls(val);
+                                    const maxSize = 5 * 1024 * 1024;
+                                    const acceptFiles = 'image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar';
+                                    const appendFiles = (fileList: FileList | null) => {
+                                      const files = Array.from(fileList || []);
+                                      if (files.length === 0) return;
+                                      const overs = files.filter(f => f.size > maxSize);
+                                      if (overs.length > 0) {
+                                        toast.error(`有 ${overs.length} 个文件超过 5MB 上限，已跳过`);
+                                      }
+                                      const ok = files.filter(f => f.size <= maxSize);
+                                      if (ok.length === 0) return;
+                                      Promise.all(
+                                        ok.map(
+                                          f =>
+                                            new Promise<string | null>(resolve => {
+                                              const reader = new FileReader();
+                                              reader.onload = () => resolve(reader.result as string);
+                                              reader.onerror = () => resolve(null);
+                                              reader.readAsDataURL(f);
+                                            })
+                                        )
+                                      ).then(parts => {
+                                        const next = [...fileUrls, ...parts.filter((x): x is string => !!x)];
+                                        setVal(stringifyRouteReportFileUrls(next));
+                                      });
+                                    };
+                                    return (
+                                      <div className="space-y-1.5">
+                                        <input
+                                          ref={el => { routeReportDisplayFileInputRefs.current[rk] = el; }}
+                                          type="file"
+                                          multiple
+                                          accept={acceptFiles}
+                                          className="hidden"
+                                          onChange={e => {
+                                            appendFiles(e.target.files);
+                                            e.target.value = '';
+                                          }}
+                                        />
+                                        <div className="flex flex-wrap gap-2">
+                                          {fileUrls.map((url, fi) => (
+                                            <div
+                                              key={`${rk}-${fi}`}
+                                              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 pl-1 pr-1 py-1"
+                                            >
+                                              {url.startsWith('data:image/') ? (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => { openFilePreview(url, 'image'); }}
+                                                  className="h-12 w-12 rounded-md border border-slate-200 overflow-hidden shrink-0 focus:ring-2 focus:ring-emerald-500"
+                                                >
+                                                  <img src={url} alt="" className="h-full w-full object-cover pointer-events-none" />
+                                                </button>
+                                              ) : url.startsWith('data:application/pdf') ? (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => { openFilePreview(url, 'pdf'); }}
+                                                  className="h-12 w-12 rounded-md border border-slate-200 bg-white flex items-center justify-center shrink-0 focus:ring-2 focus:ring-emerald-500"
+                                                  title="查看 PDF"
+                                                >
+                                                  <FileText className="w-5 h-5 text-rose-500 pointer-events-none" />
+                                                </button>
+                                              ) : (
+                                                <div className="h-12 w-12 rounded-md border border-slate-200 bg-white flex items-center justify-center shrink-0" title="附件">
+                                                  <FileText className="w-5 h-5 text-slate-500" />
+                                                </div>
+                                              )}
+                                              <div className="flex flex-col gap-0.5 min-w-0">
+                                                <a
+                                                  href={url}
+                                                  download={`${field.label}-${fi + 1}.${getFileExtFromDataUrl(url)}`}
+                                                  className="flex items-center gap-0.5 text-xs font-bold text-indigo-600 hover:underline truncate max-w-[120px]"
+                                                >
+                                                  <Download className="w-3 h-3 shrink-0" /> 下载
+                                                </a>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const next = fileUrls.filter((_, i) => i !== fi);
+                                                    setVal(stringifyRouteReportFileUrls(next));
+                                                  }}
+                                                  className="text-left text-xs font-bold text-rose-500 hover:text-rose-700"
+                                                >
+                                                  移除
+                                                </button>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => routeReportDisplayFileInputRefs.current[rk]?.click()}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-bold text-slate-600 hover:bg-emerald-50 hover:text-emerald-700"
+                                          >
+                                            <ImagePlus className="w-3.5 h-3.5" /> 添加图片或文件
+                                          </button>
+                                          {fileUrls.length > 0 && (
+                                            <button
+                                              type="button"
+                                              onClick={() => setVal('')}
+                                              className="px-2 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-xs font-bold hover:bg-rose-100"
+                                            >
+                                              全部清除
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        )}
                         {Array.isArray(node.reportTemplate) && node.reportTemplate.length > 0 && (
                         <div className="mx-3 mb-3 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2">
                           <div className="flex flex-wrap items-center gap-2 mb-2">
                             <FileText className="w-3 h-3 text-slate-400 shrink-0" />
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">报工填报项</span>
-                            <span className="text-[10px] text-slate-400">（模板在「系统设置 → 工序节点库」配置；填写内容会随产品保存）</span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">报工填报项（默认值可选）</span>
+                            <span className="text-[10px] text-slate-400">（模板在「系统设置 → 工序节点库」配置；可填默认内容，报工弹窗会预填）</span>
                           </div>
                           <div className="space-y-2">
                             {(node.reportTemplate || []).map(field => {
@@ -1855,6 +1987,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                                 categories={categories}
                                 value={item.productId}
                                 unavailableProductIds={unavailableProductIds}
+                                disabledProductIds={bomBlockedProductIds}
                                 onChange={val => {
                                   const p = products.find(x => x.id === val);
                                   updateBOMItem(idx, { productId: val, categoryId: p?.categoryId });
@@ -1907,6 +2040,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                         options={products.filter(p => p.id !== workingProduct?.id)}
                         categories={categories}
                         alreadyUsedProductIds={workingBOM.items.map(i => i.productId).filter(Boolean)}
+                        blockedProductIds={bomBlockedProductIds}
                         parentProductId={workingProduct?.id ?? ''}
                         onConfirm={rows => {
                           setWorkingBOM({

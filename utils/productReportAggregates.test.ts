@@ -28,6 +28,7 @@ function makeOrder(id: string, items: { quantity: number; variantId?: string }[]
       status: MilestoneStatus.PENDING,
       plannedDate: '2026-01-15',
       completedQuantity: m.completedQuantity ?? 0,
+      reportDisplayTemplate: [],
       reportTemplate: [],
       reports: [],
       weight: 1,

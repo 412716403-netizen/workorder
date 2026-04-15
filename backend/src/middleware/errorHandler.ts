@@ -33,7 +33,11 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
 
   if (err instanceof Prisma.PrismaClientValidationError) {
     const msg = err.message;
-    if (msg.includes('routeReportValues') || msg.includes('route_report_values')) {
+    if (
+      msg.includes('routeReportValues') || msg.includes('route_report_values')
+      || msg.includes('routeReportDisplayValues') || msg.includes('route_report_display_values')
+      || msg.includes('reportDisplayTemplate') || msg.includes('report_display_template')
+    ) {
       res.status(500).json({
         error:
           '产品表缺少「标准生产路线填报」存储列。请在 backend 目录执行：npx prisma migrate deploy，并重启 API 服务。',

@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { ChevronDown, Copy, Plus, Trash2 } from 'lucide-react';
+import { Copy, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { PlanFormSettings, PlanOrder, PrintTemplate, ProductionOrder, Product } from '../types';
 import { PrintPaper } from './print-editor/PrintPaper';
 import { buildPrintFieldOptions } from './print-editor/printFieldOptions';
-import { createPresetLabelTemplate, duplicatePrintTemplate } from '../utils/printTemplateDefaults';
+import { duplicatePrintTemplate } from '../utils/printTemplateDefaults';
 
 function openEditor(id: string) {
   const base = import.meta.env.BASE_URL || '/';
@@ -66,7 +66,6 @@ export const PrintTemplateManager: React.FC<PrintTemplateManagerProps> = ({
 }) => {
   const [selectedId, setSelectedId] = useState<string | null>(() => printTemplates[0]?.id ?? null);
   const [draft, setDraft] = useState<PrintTemplate | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
 
   const selected = printTemplates.find(t => t.id === selectedId) ?? null;
 
@@ -125,51 +124,17 @@ export const PrintTemplateManager: React.FC<PrintTemplateManagerProps> = ({
     setSelectedId(copy.id);
   };
 
-  const addPreset = async (preset: '30x40' | '80x60' | '80x100') => {
-    const t = createPresetLabelTemplate(preset);
-    await persist([...printTemplates, t]);
-    setSelectedId(t.id);
-    setCreateOpen(false);
-  };
-
-  const addCustom = () => {
-    setCreateOpen(false);
-    openEditor('new');
-  };
-
   if (!draft && printTemplates.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
         <p className="text-sm font-bold text-slate-500">暂无打印模板</p>
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setCreateOpen(o => !o)}
-            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-indigo-700"
-          >
-            <Plus className="h-4 w-4" /> 创建模板
-            <ChevronDown className="h-4 w-4 opacity-80" />
-          </button>
-          {createOpen && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setCreateOpen(false)} aria-hidden />
-              <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
-                <button type="button" className="block w-full px-4 py-2.5 text-left text-sm font-bold hover:bg-slate-50" onClick={() => void addPreset('30x40')}>
-                  30×40 mm
-                </button>
-                <button type="button" className="block w-full px-4 py-2.5 text-left text-sm font-bold hover:bg-slate-50" onClick={() => void addPreset('80x60')}>
-                  80×60 mm
-                </button>
-                <button type="button" className="block w-full px-4 py-2.5 text-left text-sm font-bold hover:bg-slate-50" onClick={() => void addPreset('80x100')}>
-                  80×100 mm
-                </button>
-                <button type="button" className="block w-full px-4 py-2.5 text-left text-sm font-bold text-indigo-600 hover:bg-indigo-50" onClick={addCustom}>
-                  自定义标签模板
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={() => openEditor('new')}
+          className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-indigo-700"
+        >
+          <Plus className="h-4 w-4" /> 创建模板
+        </button>
       </div>
     );
   }
@@ -177,33 +142,14 @@ export const PrintTemplateManager: React.FC<PrintTemplateManagerProps> = ({
   return (
     <div className="grid min-h-0 w-full min-w-0 grid-cols-1 gap-4 max-lg:h-auto lg:h-full lg:min-h-0 lg:flex-1 lg:grid-cols-[220px_1fr_280px] lg:grid-rows-[minmax(0,1fr)]">
       <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-slate-50/80 p-3 lg:min-h-0 lg:h-full lg:max-h-full">
-        <div className="relative mb-3 shrink-0">
+        <div className="mb-3 shrink-0">
           <button
             type="button"
-            onClick={() => setCreateOpen(o => !o)}
+            onClick={() => openEditor('new')}
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-indigo-300 bg-white py-2.5 text-sm font-bold text-indigo-600 hover:bg-indigo-50"
           >
             <Plus className="h-4 w-4" /> 创建模板
           </button>
-          {createOpen && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setCreateOpen(false)} aria-hidden />
-              <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
-                <button type="button" className="block w-full px-3 py-2 text-left text-xs font-bold hover:bg-slate-50" onClick={() => void addPreset('30x40')}>
-                  30×40 mm
-                </button>
-                <button type="button" className="block w-full px-3 py-2 text-left text-xs font-bold hover:bg-slate-50" onClick={() => void addPreset('80x60')}>
-                  80×60 mm
-                </button>
-                <button type="button" className="block w-full px-3 py-2 text-left text-xs font-bold hover:bg-slate-50" onClick={() => void addPreset('80x100')}>
-                  80×100 mm
-                </button>
-                <button type="button" className="block w-full px-3 py-2 text-left text-xs font-bold text-indigo-600 hover:bg-indigo-50" onClick={addCustom}>
-                  自定义标签模板
-                </button>
-              </div>
-            </>
-          )}
         </div>
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-0.5 custom-scrollbar">
           {printTemplates.map(t => (

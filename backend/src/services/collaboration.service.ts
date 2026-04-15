@@ -479,17 +479,42 @@ export async function acceptTransfer(tenantId: string, transferId: string, body:
   const displaySku = transfer.senderProductSku || '';
   const product = await basePrisma.product.findUnique({ where: { id: finalProductId } });
   let milestoneNodeIds = (product?.milestoneNodeIds as string[]) || [];
-  let fallbackMilestones: Array<{ templateId: string; name: string; reportTemplate: any; sortOrder: number }> | null = null;
+  let fallbackMilestones: Array<{ templateId: string; name: string; reportTemplate: any; reportDisplayTemplate?: any; sortOrder: number }> | null = null;
   if (milestoneNodeIds.length === 0) {
     const existingOrder = await basePrisma.productionOrder.findFirst({ where: { productId: finalProductId, tenantId, milestones: { some: {} } }, include: { milestones: { orderBy: { sortOrder: 'asc' } } } });
-    if (existingOrder?.milestones?.length) fallbackMilestones = existingOrder.milestones.map(m => ({ templateId: m.templateId, name: m.name, reportTemplate: m.reportTemplate, sortOrder: m.sortOrder }));
+    if (existingOrder?.milestones?.length) {
+      fallbackMilestones = existingOrder.milestones.map(m => ({
+        templateId: m.templateId,
+        name: m.name,
+        reportTemplate: m.reportTemplate,
+        reportDisplayTemplate: (m as { reportDisplayTemplate?: unknown }).reportDisplayTemplate ?? [],
+        sortOrder: m.sortOrder,
+      }));
+    }
   }
   const nodes = milestoneNodeIds.length > 0 ? await basePrisma.globalNodeTemplate.findMany({ where: { tenantId } }) : [];
   const hasProcesses = milestoneNodeIds.length > 0 || fallbackMilestones !== null;
   const orderStatus = hasProcesses ? 'IN_PROGRESS' : 'PENDING_PROCESS';
   const buildMilestones = () => {
-    if (milestoneNodeIds.length > 0) return milestoneNodeIds.map((nodeId, idx) => { const node = nodes.find(n => n.id === nodeId); return { id: genId('ms'), templateId: nodeId, name: node?.name || nodeId, status: 'PENDING', completedQuantity: 0, reportTemplate: (node as any)?.reportTemplate || [], weight: 1, assignedWorkerIds: [], assignedEquipmentIds: [], sortOrder: idx }; });
-    if (fallbackMilestones) return fallbackMilestones.map(fm => ({ id: genId('ms'), templateId: fm.templateId, name: fm.name, status: 'PENDING', completedQuantity: 0, reportTemplate: fm.reportTemplate || [], weight: 1, assignedWorkerIds: [], assignedEquipmentIds: [], sortOrder: fm.sortOrder }));
+    if (milestoneNodeIds.length > 0) {
+      return milestoneNodeIds.map((nodeId, idx) => {
+        const node = nodes.find(n => n.id === nodeId);
+        return {
+          id: genId('ms'), templateId: nodeId, name: node?.name || nodeId, status: 'PENDING', completedQuantity: 0,
+          reportTemplate: (node as any)?.reportTemplate || [],
+          reportDisplayTemplate: (node as any)?.reportDisplayTemplate ?? [],
+          weight: 1, assignedWorkerIds: [], assignedEquipmentIds: [], sortOrder: idx,
+        };
+      });
+    }
+    if (fallbackMilestones) {
+      return fallbackMilestones.map(fm => ({
+        id: genId('ms'), templateId: fm.templateId, name: fm.name, status: 'PENDING', completedQuantity: 0,
+        reportTemplate: fm.reportTemplate || [],
+        reportDisplayTemplate: fm.reportDisplayTemplate ?? [],
+        weight: 1, assignedWorkerIds: [], assignedEquipmentIds: [], sortOrder: fm.sortOrder,
+      }));
+    }
     return [];
   };
   const createdOrders: string[] = [];

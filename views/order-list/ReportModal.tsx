@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { FileText, X, Check, UserPlus } from 'lucide-react';
+import { FileText, X, Check, UserPlus, BookOpen } from 'lucide-react';
 import {
   ProductionOrder,
   Milestone,
@@ -26,6 +26,7 @@ import { toast } from 'sonner';
 import { toLocalCompactYmd } from '../../utils/localDateTime';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import { parseRouteReportFileUrls } from '../../utils/routeReportFileUrls';
 
 export interface ReportModalData {
   order: ProductionOrder;
@@ -119,10 +120,17 @@ const ReportModal: React.FC<ReportModalProps> = ({
     variantDefectiveQuantities?: Record<string, number>;
   }>(() => {
     const initialData: Record<string, any> = {};
-    reportModal.milestone.reportTemplate.forEach(f => {
-      initialData[f.id] = f.type === 'boolean' ? false : '';
-    });
     const product = products.find(p => p.id === reportModal.order.productId);
+    const defaults = product?.routeReportValues?.[reportModal.milestone.templateId] ?? {};
+    reportModal.milestone.reportTemplate.forEach(f => {
+      const raw = defaults[f.id];
+      if (raw !== undefined && raw !== '') {
+        if (f.type === 'boolean') initialData[f.id] = raw === 'true' || raw === '1';
+        else initialData[f.id] = raw;
+      } else {
+        initialData[f.id] = f.type === 'boolean' ? false : '';
+      }
+    });
     const category = categories.find(c => c.id === product?.categoryId);
     const showVariantMatrix = productHasColorSizeMatrix(product, category);
     const items = reportModal.productItems ?? reportModal.order.items;
@@ -486,6 +494,65 @@ const ReportModal: React.FC<ReportModalProps> = ({
               );
             })()}
           </div>
+          {(() => {
+            const displayTpl = reportModal.milestone.reportDisplayTemplate ?? [];
+            if (displayTpl.length === 0) return null;
+            const product = productMap.get(reportModal.order.productId);
+            const displayVals = product?.routeReportDisplayValues?.[reportModal.milestone.templateId] ?? {};
+            return (
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 px-3 py-3 space-y-3">
+                <div className="flex items-center gap-2 text-emerald-900">
+                  <BookOpen className="w-4 h-4 shrink-0" />
+                  <span className="text-[10px] font-black uppercase tracking-wider">本工序展示（只读）</span>
+                </div>
+                {displayTpl.map(field => {
+                  const raw = displayVals[field.id] ?? '';
+                  if (field.type === 'file') {
+                    const urls = parseRouteReportFileUrls(raw);
+                    return (
+                      <div key={field.id} className="rounded-xl border border-emerald-100/80 bg-white/90 p-2.5">
+                        <p className="text-[10px] font-bold text-slate-500 mb-2">{field.label}</p>
+                        {urls.length === 0 ? (
+                          <p className="text-xs text-slate-400 italic">（未上传）</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {urls.map((url, fi) => (
+                              <div key={`${field.id}-${fi}`} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/80 p-1.5">
+                                {url.startsWith('data:image/') ? (
+                                  <img src={url} alt="" className="h-16 w-16 rounded-md object-cover border border-slate-200 shrink-0" />
+                                ) : url.startsWith('data:application/pdf') ? (
+                                  <a
+                                    href={url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:underline"
+                                  >
+                                    <FileText className="w-4 h-4 text-rose-500 shrink-0" /> 查看 PDF
+                                  </a>
+                                ) : (
+                                  <span className="text-xs text-slate-600">附件 {fi + 1}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={field.id} className="rounded-xl border border-emerald-100/80 bg-white/90 p-2.5">
+                      <p className="text-[10px] font-bold text-slate-500 mb-1">{field.label}</p>
+                      {raw.trim() ? (
+                        <p className="text-sm text-slate-800 whitespace-pre-wrap">{raw}</p>
+                      ) : (
+                        <p className="text-xs text-slate-400 italic">（未填写）</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
           <div className="space-y-1">
             <label className="text-[10px] font-bold text-slate-400 uppercase">生产人员 <span className="text-rose-500">*</span></label>
             <WorkerSelector

@@ -232,7 +232,7 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
                                   onChange={(e) => {
                                     const v = e.target.value as FieldType;
                                     if (v === 'file') {
-                                      updateCustomField(cat.id, field.id, { type: v, showInForm: false, options: undefined });
+                                      updateCustomField(cat.id, field.id, { type: v, options: undefined });
                                     } else if (v === 'select') {
                                       updateCustomField(cat.id, field.id, {
                                         type: v,
@@ -248,9 +248,6 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
                                 </select>
                                 <div className="flex items-center gap-4 px-2 flex-wrap">
                                   <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={field.required} onChange={e => updateCustomField(cat.id, field.id, { required: e.target.checked })} className="w-4 h-4 rounded text-indigo-600" /><span className="text-[10px] font-black text-slate-400 uppercase">必填</span></label>
-                                  {field.type !== 'file' && (
-                                    <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={field.showInForm !== false} onChange={e => updateCustomField(cat.id, field.id, { showInForm: e.target.checked })} className="w-4 h-4 rounded text-indigo-600" /><span className="text-[10px] font-black text-slate-400 uppercase">生产/进销存列表中显示</span></label>
-                                  )}
                                 </div>
                               </div>
                               <button type="button" onClick={() => removeCustomField(cat.id, field.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-all self-start md:self-center shrink-0"><Trash2 className="w-4 h-4" /></button>

@@ -51,7 +51,6 @@ import {
 import PlanFormModal from './plan-order-list/PlanFormModal';
 import PlanProductDetail from './plan-order-list/PlanProductDetail';
 import PlanDetailPanel from './plan-order-list/PlanDetailPanel';
-import { getFileExtFromDataUrl } from '../utils/fileHelpers';
 import { plans as plansApi } from '../services/api';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { planIdToLocalYmd, toLocalDateYmd } from '../utils/localDateTime';
@@ -422,30 +421,6 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                               {product.name || '未知产品'}
                             </button>
                           )}
-                          {product && categories.find(c => c.id === product.categoryId)?.customFields?.filter(f => f.showInForm !== false && f.type !== 'file').map(f => {
-                            const val = product.categoryCustomData?.[f.id];
-                            if (val == null || val === '') return null;
-                            if (f.type === 'file' && typeof val === 'string' && val.startsWith('data:')) {
-                              const isImg = val.startsWith('data:image/');
-                              const isPdf = val.startsWith('data:application/pdf');
-                              if (isImg) return (
-                                <span key={f.id} className="inline-flex items-center gap-1">
-                                  <img src={val} alt={f.label} className="h-6 w-6 object-cover rounded border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400" onClick={e => { e.stopPropagation(); setFilePreviewUrl(val); setFilePreviewType('image'); }} />
-                                  <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[9px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
-                                </span>
-                              );
-                              if (isPdf) return (
-                                <span key={f.id} className="inline-flex items-center gap-1">
-                                  <button type="button" onClick={e => { e.stopPropagation(); setFilePreviewUrl(val); setFilePreviewType('pdf'); }} className="text-[9px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">在线查看</button>
-                                  <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[9px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
-                                </span>
-                              );
-                              return (
-                                <a key={f.id} href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[9px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
-                              );
-                            }
-                            return <span key={f.id} className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">{f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}</span>;
-                          })}
                           {showInList('assignedCount') && assignedCount > 0 && <span className="text-[9px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">已派发 {assignedCount} 工序</span>}
                       </div>
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
@@ -604,30 +579,6 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                     {product.name || '未知产品'}
                                   </button>
                                 )}
-                                {product && categories.find(c => c.id === product.categoryId)?.customFields?.filter(f => f.showInForm !== false && f.type !== 'file').map(f => {
-                                  const val = product.categoryCustomData?.[f.id];
-                                  if (val == null || val === '') return null;
-                                  if (f.type === 'file' && typeof val === 'string' && val.startsWith('data:')) {
-                                    const isImg = val.startsWith('data:image/');
-                                    const isPdf = val.startsWith('data:application/pdf');
-                                    if (isImg) return (
-                                      <span key={f.id} className="inline-flex items-center gap-1">
-                                        <img src={val} alt={f.label} className="h-5 w-5 object-cover rounded border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400" onClick={e => { e.stopPropagation(); setFilePreviewUrl(val); setFilePreviewType('image'); }} />
-                                        <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[9px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
-                                      </span>
-                                    );
-                                    if (isPdf) return (
-                                      <span key={f.id} className="inline-flex items-center gap-1">
-                                        <button type="button" onClick={e => { e.stopPropagation(); setFilePreviewUrl(val); setFilePreviewType('pdf'); }} className="text-[9px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">在线查看</button>
-                                        <a href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[9px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
-                                      </span>
-                                    );
-                                    return (
-                                      <a key={f.id} href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[9px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
-                                    );
-                                  }
-                                  return <span key={f.id} className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">{f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}</span>;
-                                })}
                                 {showInList('assignedCount') && assignedCount > 0 && <span className="text-[9px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">已派发 {assignedCount} 工序</span>}
                               </div>
                               <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">

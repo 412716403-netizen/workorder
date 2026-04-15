@@ -107,8 +107,10 @@ const PlanFormConfigModal: React.FC<PlanFormConfigModalProps> = ({
           </button>
         </div>
         {tab === 'print' ? (
-          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4">
-            <div className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
+              <div className="flex flex-col gap-4">
+                <div className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
               <h4 className="text-sm font-black text-slate-800">列表打印</h4>
               <p className="mt-1 text-xs text-slate-500">
                 控制计划单列表是否显示「打印」按钮及可选模版（不勾选任何模版表示可选全部）。此处仅用于计划单列表样式打印，不含单品码标签。
@@ -175,8 +177,8 @@ const PlanFormConfigModal: React.FC<PlanFormConfigModalProps> = ({
                   })
                 )}
               </div>
-            </div>
-            <div className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
+                </div>
+                <div className="shrink-0 rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
               <h4 className="text-sm font-black text-slate-800">标签打印</h4>
               <p className="mt-1 text-xs text-slate-500">
                 用于<strong className="text-slate-600">计划详情 → 单品码一览 → 打印单品码</strong>，以及批次码行的「打印批次标签」。不勾选任何模版表示可选全部；标签模版建议使用小尺寸纸张，并在动态列表中使用单品码或批次码占位符。
@@ -221,17 +223,17 @@ const PlanFormConfigModal: React.FC<PlanFormConfigModalProps> = ({
                   })
                 )}
               </div>
-            </div>
-            <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto lg:min-h-0 lg:overflow-hidden">
-              <div className="min-h-0 w-full flex-1 lg:flex lg:min-h-0 lg:flex-col">
-                <PrintTemplateManager
-                  printTemplates={printTemplates}
-                  onUpdatePrintTemplates={onUpdatePrintTemplates}
-                  planFormSettings={planFormSettings}
-                  plans={plans}
-                  orders={orders}
-                  products={products}
-                />
+                </div>
+                <div className="min-h-0 min-w-0">
+                  <PrintTemplateManager
+                    printTemplates={printTemplates}
+                    onUpdatePrintTemplates={onUpdatePrintTemplates}
+                    planFormSettings={planFormSettings}
+                    plans={plans}
+                    orders={orders}
+                    products={products}
+                  />
+                </div>
               </div>
             </div>
           </div>
