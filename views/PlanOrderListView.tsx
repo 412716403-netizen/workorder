@@ -51,6 +51,7 @@ import {
 import PlanFormModal from './plan-order-list/PlanFormModal';
 import PlanProductDetail from './plan-order-list/PlanProductDetail';
 import PlanDetailPanel from './plan-order-list/PlanDetailPanel';
+import { PlanPrintTemplateManageDialog } from '../components/plan-print/PlanPrintTemplateManageDialog';
 import { plans as plansApi } from '../services/api';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { planIdToLocalYmd, toLocalDateYmd } from '../utils/localDateTime';
@@ -128,6 +129,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   const [showPlanFormConfigModal, setShowPlanFormConfigModal] = useState(false);
   const [planPrintPickerOpen, setPlanPrintPickerOpen] = useState(false);
   const [planPrintPickerPlan, setPlanPrintPickerPlan] = useState<PlanOrder | null>(null);
+  const [planPrintTemplateManageScope, setPlanPrintTemplateManageScope] = useState<'planList' | 'planLabel' | null>(null);
   const [planListPrintRun, setPlanListPrintRun] = useState<{ template: PrintTemplate; plan: PlanOrder } | null>(null);
   const [splitPlanId, setSplitPlanId] = useState<string | null>(null);
   /** 点击图片查看大图：url 为要放大的图片地址 */
@@ -251,16 +253,39 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
     return () => { cancelled = true; clearTimeout(timer); };
   }, [planListPrintRun, handlePlanListPrint]);
 
-  const openPlanPrintPicker = useCallback(
-    (plan: PlanOrder) => {
-      if (!planListPrintPickerTemplates.length) {
-        toast.error('暂无可用打印模板，请先在「表单配置 → 打印模版」中创建模板');
+  const openPlanPrintPicker = useCallback((plan: PlanOrder) => {
+    setPlanPrintPickerPlan(plan);
+    setPlanPrintPickerOpen(true);
+  }, []);
+
+  const mergePlanPrintWhitelist = useCallback(
+    (scope: 'planList' | 'planLabel', templateId: string) => {
+      if (scope === 'planList') {
+        const prev = planFormSettings.listPrint?.allowedTemplateIds;
+        const allowedTemplateIds = prev?.length
+          ? Array.from(new Set([...prev, templateId]))
+          : [templateId];
+        onUpdatePlanFormSettings({
+          ...planFormSettings,
+          listPrint: {
+            ...planFormSettings.listPrint,
+            showPrintButton: planFormSettings.listPrint?.showPrintButton !== false,
+            allowedTemplateIds,
+          },
+        });
         return;
       }
-      setPlanPrintPickerPlan(plan);
-      setPlanPrintPickerOpen(true);
+      const prev = planFormSettings.labelPrint?.allowedTemplateIds;
+      const allowedTemplateIds = prev?.length ? Array.from(new Set([...prev, templateId])) : [templateId];
+      onUpdatePlanFormSettings({
+        ...planFormSettings,
+        labelPrint: {
+          ...planFormSettings.labelPrint,
+          allowedTemplateIds,
+        },
+      });
     },
-    [planListPrintPickerTemplates],
+    [planFormSettings, onUpdatePlanFormSettings],
   );
 
   const labelPrintPickerTemplates = useMemo(() => {
@@ -681,6 +706,9 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
           onPrintRun={setPlanListPrintRun}
           labelPrintPickerTemplates={labelPrintPickerTemplates}
           printTemplates={printTemplates}
+          onUpdatePrintTemplates={onUpdatePrintTemplates}
+          onRefreshPrintTemplates={onRefreshPrintTemplates}
+          onMergeLabelPrintWhitelist={id => mergePlanPrintWhitelist('planLabel', id)}
         />
       )}
 
@@ -740,22 +768,38 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
 
             <ul className="max-h-[min(40vh,280px)] divide-y divide-slate-100 overflow-y-auto p-2">
               {planListPrintPickerTemplates.length === 0 ? (
-                <li className="text-center py-6 text-xs text-slate-400">暂无可用模版</li>
-              ) : planListPrintPickerTemplates.map(t => (
-                <li key={t.id}>
-                  <button
-                    type="button"
-                    onClick={() => handlePickListTemplate(t)}
-                    className="flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold text-slate-800 hover:bg-indigo-50"
-                  >
-                    <span className="min-w-0 truncate">{t.name}</span>
-                    <span className="shrink-0 text-xs font-bold text-indigo-600">
-                      {t.paperSize.widthMm}×{t.paperSize.heightMm} mm
-                    </span>
-                  </button>
+                <li className="px-4 py-6 text-center text-xs leading-relaxed text-slate-400">
+                  暂无可用模版。请点击下方「增加模版」创建或加入白名单；若已限制列表可选模版，请先在「表单配置 → 打印模版」中勾选。
                 </li>
-              ))}
+              ) : (
+                planListPrintPickerTemplates.map(t => (
+                  <li key={t.id}>
+                    <button
+                      type="button"
+                      onClick={() => handlePickListTemplate(t)}
+                      className="flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold text-slate-800 hover:bg-indigo-50"
+                    >
+                      <span className="min-w-0 truncate">{t.name}</span>
+                      <span className="shrink-0 text-xs font-bold text-indigo-600">
+                        {t.paperSize.widthMm}×{t.paperSize.heightMm} mm
+                      </span>
+                    </button>
+                  </li>
+                ))
+              )}
             </ul>
+            <div className="flex justify-end border-t border-slate-100 px-3 py-3">
+              <button
+                type="button"
+                onClick={() => {
+                  void onRefreshPrintTemplates?.();
+                  setPlanPrintTemplateManageScope('planList');
+                }}
+                className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-100"
+              >
+                <Plus className="h-4 w-4" /> 增加模版
+              </button>
+            </div>
           </div>
         </div>
         );
@@ -801,6 +845,22 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
             )}
           </div>
         </div>
+      )}
+
+      {planPrintTemplateManageScope && (
+        <PlanPrintTemplateManageDialog
+          open
+          onClose={() => setPlanPrintTemplateManageScope(null)}
+          scope={planPrintTemplateManageScope}
+          printTemplates={printTemplates}
+          onUpdatePrintTemplates={onUpdatePrintTemplates}
+          planFormSettings={planFormSettings}
+          onMergePrintWhitelist={id => mergePlanPrintWhitelist(planPrintTemplateManageScope, id)}
+          onRefreshPrintTemplates={onRefreshPrintTemplates}
+          plans={plans}
+          orders={orders}
+          products={products}
+        />
       )}
 
       {viewProductId && (

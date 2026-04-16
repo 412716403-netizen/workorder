@@ -88,13 +88,21 @@ const DEFAULT_PLAN_FORM_SETTINGS: PlanFormSettings = {
 
 function normalizePlanFormSettings(raw: PlanFormSettings | null | undefined): PlanFormSettings {
   const s = raw ?? DEFAULT_PLAN_FORM_SETTINGS;
-  const allowed = s.listPrint?.allowedTemplateIds?.filter(Boolean) ?? [];
+  const allowedList = s.listPrint?.allowedTemplateIds?.filter(Boolean) ?? [];
+  const allowedLabel = s.labelPrint?.allowedTemplateIds?.filter(Boolean) ?? [];
   return {
     ...s,
     listPrint: {
       showPrintButton: s.listPrint?.showPrintButton !== false,
-      allowedTemplateIds: allowed.length > 0 ? allowed : undefined,
+      allowedTemplateIds: allowedList.length > 0 ? allowedList : undefined,
     },
+    labelPrint: s.labelPrint
+      ? {
+          ...s.labelPrint,
+          allowedTemplateIds: allowedLabel.length > 0 ? allowedLabel : undefined,
+          showPlanDetailTraceSection: s.labelPrint.showPlanDetailTraceSection !== false,
+        }
+      : s.labelPrint,
   };
 }
 

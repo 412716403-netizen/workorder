@@ -59,6 +59,7 @@ import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelec
 import { SearchableMultiSelectWithProcessTabs } from '../../components/SearchableMultiSelect';
 import { localTodayYmd, planIdToLocalYmd, toLocalDateYmd } from '../../utils/localDateTime';
 import { nextPsiDocNumber } from '../../utils/partnerDocNumber';
+import { PlanPrintTemplateManageDialog } from '../../components/plan-print/PlanPrintTemplateManageDialog';
 
 function formatPlanDueDateList(dueDate: string | undefined | null): string {
   if (!dueDate) return '';
@@ -145,6 +146,10 @@ export interface PlanDetailPanelProps {
   onPrintRun: (run: { template: PrintTemplate; plan: PlanOrder } | null) => void;
   labelPrintPickerTemplates: PrintTemplate[];
   printTemplates: PrintTemplate[];
+  onUpdatePrintTemplates: (list: PrintTemplate[]) => void | Promise<void>;
+  onRefreshPrintTemplates?: () => void | Promise<void>;
+  /** 将模版 id 合并进计划单「标签可选模版」白名单（仅当已处于限制模式时生效） */
+  onMergeLabelPrintWhitelist: (templateId: string) => void;
 }
 
 const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
@@ -178,8 +183,12 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   onPrintRun,
   labelPrintPickerTemplates,
   printTemplates,
+  onUpdatePrintTemplates,
+  onRefreshPrintTemplates,
+  onMergeLabelPrintWhitelist,
 }) => {
   const confirm = useConfirm();
+  const [labelPrintTemplateManageOpen, setLabelPrintTemplateManageOpen] = useState(false);
 
   // --- State ---
   const [tempAssignments, setTempAssignments] = useState<Record<string, NodeAssignment>>({});
@@ -1015,12 +1024,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     [loadVirtualBatches, loadItemCodes, itemCodesPage, itemCodesVariantFilter, itemCodesBatchFilter],
   );
 
-  const openItemCodePrintPicker = useCallback(
-    (plan: PlanOrder, variantFilter: string, batchFilter: string) => {
-      if (!labelPrintPickerTemplates.length) {
-        toast.error('暂无标签打印模版，请在「表单配置 → 打印模版」中配置标签白名单或取消白名单限制');
-        return;
-      }
+  const openItemCodePrintPicker = useCallback((plan: PlanOrder, variantFilter: string, batchFilter: string) => {
       setItemCodePrintPlan(plan);
       setItemCodePrintOpen(true);
       setItemCodePrintLoading(true);
@@ -1040,12 +1044,12 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
         })
         .catch(() => toast.error('加载单品码失败'))
         .finally(() => setItemCodePrintLoading(false));
-    },
-    [labelPrintPickerTemplates],
-  );
+    }, []);
 
   // --- Guard: bail out if plan or product not found ---
   if (!viewPlan || !viewProduct) return null;
+
+  const showPlanDetailTraceSection = planFormSettings.labelPrint?.showPlanDetailTraceSection !== false;
 
   // --- Render ---
   return (
@@ -1087,9 +1091,11 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
             <button type="button" onClick={() => sectionMaterialRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/80 transition-colors">
               生产用料
             </button>
-            <button type="button" onClick={() => sectionTraceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/80 transition-colors">
-              <span className="inline-flex items-center gap-1"><QrCode className="w-3.5 h-3.5" />追溯码</span>
-            </button>
+            {showPlanDetailTraceSection && (
+              <button type="button" onClick={() => sectionTraceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/80 transition-colors">
+                <span className="inline-flex items-center gap-1"><QrCode className="w-3.5 h-3.5" />追溯码</span>
+              </button>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar p-10 space-y-12 bg-slate-50/30">
@@ -1626,6 +1632,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
              </div>
 
              {/* 5. 追溯码 */}
+             {showPlanDetailTraceSection && (
              <div ref={sectionTraceRef} className="space-y-4 scroll-mt-4">
                 <div className="flex items-center gap-3 border-b border-slate-100 pb-4 ml-2">
                   <QrCode className="w-5 h-5 text-indigo-600" />
@@ -2101,6 +2108,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                   )}
                 </div>
              </div>
+             )}
 
 
           </div>
@@ -2332,24 +2340,38 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
 
             <ul className="max-h-[min(40vh,280px)] divide-y divide-slate-100 overflow-y-auto p-2">
               {labelPrintPickerTemplates.length === 0 ? (
-                <li className="text-center py-6 text-xs text-slate-400">
-                  暂无标签打印模版，请在「表单配置 → 打印模版」中配置标签白名单
+                <li className="px-4 py-6 text-center text-xs leading-relaxed text-slate-400">
+                  暂无标签打印模版。请点击下方「增加模版」创建或加入白名单；若已限制标签可选模版，请先在「表单配置 → 打印模版」中勾选。
                 </li>
-              ) : labelPrintPickerTemplates.map(t => (
-                <li key={t.id}>
-                  <button
-                    type="button"
-                    onClick={() => handleItemCodeTemplatePick(t)}
-                    className="flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold text-slate-800 hover:bg-indigo-50"
-                  >
-                    <span className="min-w-0 truncate">{t.name}</span>
-                    <span className="shrink-0 text-xs font-bold text-indigo-600">
-                      {t.paperSize.widthMm}×{t.paperSize.heightMm} mm
-                    </span>
-                  </button>
-                </li>
-              ))}
+              ) : (
+                labelPrintPickerTemplates.map(t => (
+                  <li key={t.id}>
+                    <button
+                      type="button"
+                      onClick={() => handleItemCodeTemplatePick(t)}
+                      className="flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold text-slate-800 hover:bg-indigo-50"
+                    >
+                      <span className="min-w-0 truncate">{t.name}</span>
+                      <span className="shrink-0 text-xs font-bold text-indigo-600">
+                        {t.paperSize.widthMm}×{t.paperSize.heightMm} mm
+                      </span>
+                    </button>
+                  </li>
+                ))
+              )}
             </ul>
+            <div className="flex justify-end border-t border-slate-100 px-3 py-3">
+              <button
+                type="button"
+                onClick={() => {
+                  void onRefreshPrintTemplates?.();
+                  setLabelPrintTemplateManageOpen(true);
+                }}
+                className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-100"
+              >
+                <Plus className="h-4 w-4" /> 增加模版
+              </button>
+            </div>
           </div>
         </div>
         );
@@ -2414,8 +2436,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
               </div>
               <ul className="max-h-[min(40vh,280px)] divide-y divide-slate-100 overflow-y-auto p-2">
                 {labelPrintPickerTemplates.length === 0 ? (
-                  <li className="text-center py-6 text-xs text-slate-400">
-                    暂无标签打印模版，请在「表单配置 → 打印模版」中配置标签白名单
+                  <li className="px-4 py-6 text-center text-xs leading-relaxed text-slate-400">
+                    暂无标签打印模版。请点击下方「增加模版」创建或加入白名单；若已限制标签可选模版，请先在「表单配置 → 打印模版」中勾选。
                   </li>
                 ) : (
                   labelPrintPickerTemplates.map(t => (
@@ -2434,10 +2456,38 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                   ))
                 )}
               </ul>
+              <div className="flex justify-end border-t border-slate-100 px-3 py-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void onRefreshPrintTemplates?.();
+                    setLabelPrintTemplateManageOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-100"
+                >
+                  <Plus className="h-4 w-4" /> 增加模版
+                </button>
+              </div>
             </div>
           </div>
         );
       })()}
+
+      {labelPrintTemplateManageOpen && (
+        <PlanPrintTemplateManageDialog
+          open
+          onClose={() => setLabelPrintTemplateManageOpen(false)}
+          scope="planLabel"
+          printTemplates={printTemplates}
+          onUpdatePrintTemplates={onUpdatePrintTemplates}
+          planFormSettings={planFormSettings}
+          onMergePrintWhitelist={onMergeLabelPrintWhitelist}
+          onRefreshPrintTemplates={onRefreshPrintTemplates}
+          plans={plans}
+          orders={orders ?? []}
+          products={products}
+        />
+      )}
     </>
   );
 };

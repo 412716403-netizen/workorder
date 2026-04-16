@@ -1,10 +1,16 @@
 import React, { useMemo, useState } from 'react';
-import { Copy, Plus, Trash2 } from 'lucide-react';
+import { Copy, Plus, RotateCcw, Search, Trash2, ZoomIn, ZoomOut } from 'lucide-react';
 import { toast } from 'sonner';
-import type { PlanFormSettings, PlanOrder, PrintTemplate, ProductionOrder, Product } from '../types';
+import type { PlanOrder, PrintTemplate, ProductionOrder, Product } from '../types';
 import { PrintPaper } from './print-editor/PrintPaper';
-import { buildPrintFieldOptions } from './print-editor/printFieldOptions';
 import { duplicatePrintTemplate } from '../utils/printTemplateDefaults';
+import { augmentPrintPreviewContext } from '../utils/printPreviewSampleContext';
+
+/** 预览区 scale（相对纸张原始 CSS 尺寸），默认 100%，最大可放大到 200% */
+const PREVIEW_SCALE_DEFAULT = 1;
+const PREVIEW_SCALE_MIN = 0.16;
+const PREVIEW_SCALE_MAX = 2;
+const PREVIEW_SCALE_STEP = 0.07;
 
 function openEditor(id: string) {
   const base = import.meta.env.BASE_URL || '/';
@@ -13,59 +19,31 @@ function openEditor(id: string) {
   window.open(path, '_blank', 'noopener,noreferrer');
 }
 
-function firstQrField(t: PrintTemplate): string {
-  const q = t.elements.find(e => e.type === 'qrcode');
-  if (q && q.type === 'qrcode') return (q.config as { content: string }).content;
-  return '{{计划.planNumber}}';
-}
-
-function setQrField(t: PrintTemplate, content: string): PrintTemplate {
-  const idx = t.elements.findIndex(e => e.type === 'qrcode');
-  if (idx < 0) return t;
-  const elements = t.elements.map((e, i) =>
-    i === idx && e.type === 'qrcode' ? { ...e, config: { ...e.config, content } } : e,
-  );
-  return { ...t, elements, updatedAt: new Date().toISOString() };
-}
-
-function firstTextContents(t: PrintTemplate): [string, string] {
-  const texts = t.elements.filter(e => e.type === 'text');
-  const c0 = texts[0]?.type === 'text' ? (texts[0].config as { content: string }).content : '{{产品.name}}';
-  const c1 = texts[1]?.type === 'text' ? (texts[1].config as { content: string }).content : '{{计划.planNumber}}';
-  return [c0, c1];
-}
-
-function setTextLines(t: PrintTemplate, line1: string, line2: string): PrintTemplate {
-  let n = 0;
-  const elements = t.elements.map(e => {
-    if (e.type !== 'text') return e;
-    const cfg = e.config as { content: string };
-    const content = n === 0 ? line1 : n === 1 ? line2 : cfg.content;
-    n += 1;
-    return { ...e, config: { ...cfg, content } };
-  });
-  return { ...t, elements, updatedAt: new Date().toISOString() };
-}
-
 export interface PrintTemplateManagerProps {
   printTemplates: PrintTemplate[];
   onUpdatePrintTemplates: (list: PrintTemplate[]) => void | Promise<void>;
-  planFormSettings: PlanFormSettings;
   plans: PlanOrder[];
   orders: ProductionOrder[];
   products: Product[];
+  /** 保存/删除/复制成功后调用，便于外层同步白名单等 */
+  onAfterPersist?: (nextList: PrintTemplate[], prevList: PrintTemplate[]) => void;
+  /** 左侧选中模版变化 */
+  onSelectionChange?: (templateId: string | null) => void;
 }
 
 export const PrintTemplateManager: React.FC<PrintTemplateManagerProps> = ({
   printTemplates,
   onUpdatePrintTemplates,
-  planFormSettings,
   plans,
   orders,
   products,
+  onAfterPersist,
+  onSelectionChange,
 }) => {
   const [selectedId, setSelectedId] = useState<string | null>(() => printTemplates[0]?.id ?? null);
   const [draft, setDraft] = useState<PrintTemplate | null>(null);
+  const [listSearch, setListSearch] = useState('');
+  const [previewScale, setPreviewScale] = useState(PREVIEW_SCALE_DEFAULT);
 
   const selected = printTemplates.find(t => t.id === selectedId) ?? null;
 
@@ -74,7 +52,11 @@ export const PrintTemplateManager: React.FC<PrintTemplateManagerProps> = ({
     else setDraft(null);
   }, [selected]);
 
-  const previewCtx = useMemo(() => {
+  React.useEffect(() => {
+    setPreviewScale(PREVIEW_SCALE_DEFAULT);
+  }, [selectedId]);
+
+  const basePreviewCtx = useMemo(() => {
     const plan = plans[0];
     const order = orders[0];
     const product = products.find(p => p.id === (plan?.productId || order?.productId)) ?? products[0];
@@ -87,24 +69,25 @@ export const PrintTemplateManager: React.FC<PrintTemplateManagerProps> = ({
     };
   }, [plans, orders, products]);
 
-  const fieldOptions = useMemo(() => buildPrintFieldOptions(planFormSettings.customFields), [planFormSettings.customFields]);
-
-  const qrOptions = useMemo(() => fieldOptions.filter(o => o.group !== '工序'), [fieldOptions]);
-  const lineOptions = fieldOptions;
+  const listQuery = listSearch.trim().toLowerCase();
+  const filteredTemplates = useMemo(() => {
+    if (!listQuery) return printTemplates;
+    return printTemplates.filter(t => {
+      const name = (t.name || '').toLowerCase();
+      const paper = `${t.paperSize.widthMm}×${t.paperSize.heightMm}`.toLowerCase();
+      return name.includes(listQuery) || paper.includes(listQuery) || t.id.toLowerCase().includes(listQuery);
+    });
+  }, [printTemplates, listQuery]);
 
   const persist = async (list: PrintTemplate[]) => {
+    const prevList = printTemplates;
     try {
       await onUpdatePrintTemplates(list);
+      onAfterPersist?.(list, prevList);
       toast.success('已保存');
     } catch {
       toast.error('保存失败');
     }
-  };
-
-  const saveDraft = async () => {
-    if (!draft) return;
-    const others = printTemplates.filter(t => t.id !== draft.id);
-    await persist([...others, draft]);
   };
 
   const removeSelected = async () => {
@@ -117,6 +100,10 @@ export const PrintTemplateManager: React.FC<PrintTemplateManagerProps> = ({
   React.useEffect(() => {
     if (selectedId == null && printTemplates.length > 0) setSelectedId(printTemplates[0].id);
   }, [printTemplates, selectedId]);
+
+  React.useEffect(() => {
+    onSelectionChange?.(selectedId);
+  }, [selectedId, onSelectionChange]);
 
   const copyOne = async (t: PrintTemplate) => {
     const copy = duplicatePrintTemplate(t);
@@ -140,9 +127,9 @@ export const PrintTemplateManager: React.FC<PrintTemplateManagerProps> = ({
   }
 
   return (
-    <div className="grid min-h-0 w-full min-w-0 grid-cols-1 gap-4 max-lg:h-auto lg:h-full lg:min-h-0 lg:flex-1 lg:grid-cols-[220px_1fr_280px] lg:grid-rows-[minmax(0,1fr)]">
+    <div className="grid min-h-0 w-full min-w-0 grid-cols-1 gap-4 max-lg:h-auto lg:h-full lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(180px,240px)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]">
       <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-slate-50/80 p-3 lg:min-h-0 lg:h-full lg:max-h-full">
-        <div className="mb-3 shrink-0">
+        <div className="mb-2 shrink-0">
           <button
             type="button"
             onClick={() => openEditor('new')}
@@ -151,171 +138,116 @@ export const PrintTemplateManager: React.FC<PrintTemplateManagerProps> = ({
             <Plus className="h-4 w-4" /> 创建模板
           </button>
         </div>
+        <div className="relative mb-2 shrink-0">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            value={listSearch}
+            onChange={e => setListSearch(e.target.value)}
+            placeholder="搜索模版名称、纸张…"
+            className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-xs font-bold text-slate-800 placeholder:text-slate-400 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+          />
+        </div>
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-0.5 custom-scrollbar">
-          {printTemplates.map(t => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setSelectedId(t.id)}
-              className={`w-full rounded-xl border p-3 text-left transition-all ${selectedId === t.id ? 'border-indigo-400 bg-white shadow-md ring-2 ring-indigo-100' : 'border-slate-200 bg-white hover:border-slate-300'}`}
-            >
-              <div className="mb-2 flex h-16 items-center justify-center overflow-hidden rounded-lg bg-slate-100">
-                <div className="origin-top scale-[0.22]">
-                  <PrintPaper template={t} ctx={previewCtx} />
+          {filteredTemplates.length === 0 ? (
+            <p className="px-1 py-6 text-center text-xs font-bold text-slate-400">
+              {printTemplates.length === 0 ? '暂无模版' : '无匹配模版，请调整关键词'}
+            </p>
+          ) : (
+            filteredTemplates.map(t => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setSelectedId(t.id)}
+                className={`w-full rounded-xl border px-3 py-2.5 text-left transition-all ${selectedId === t.id ? 'border-indigo-400 bg-white shadow-sm ring-2 ring-indigo-100' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/80'}`}
+              >
+                <div className="truncate text-sm font-black text-slate-800">{t.name}</div>
+                <div className="mt-0.5 truncate text-[11px] font-bold tabular-nums text-slate-400">
+                  {t.paperSize.widthMm}×{t.paperSize.heightMm} mm
                 </div>
-              </div>
-              <div className="truncate text-xs font-black text-slate-800">{t.name}</div>
-              <div className="text-[10px] font-bold text-slate-400">
-                {t.paperSize.widthMm}×{t.paperSize.heightMm} mm
-              </div>
-              <div className="mt-2 flex gap-2 text-[10px] font-bold">
-                <span
-                  role="button"
-                  tabIndex={0}
-                  className="text-indigo-600 hover:underline"
-                  onClick={e => {
-                    e.stopPropagation();
-                    openEditor(t.id);
-                  }}
-                  onKeyDown={e => e.key === 'Enter' && openEditor(t.id)}
-                >
-                  编辑
-                </span>
-                <span
-                  role="button"
-                  tabIndex={0}
-                  className="text-slate-500 hover:underline"
-                  onClick={e => {
-                    e.stopPropagation();
-                    void copyOne(t);
-                  }}
-                >
-                  复制
-                </span>
-              </div>
-            </button>
-          ))}
+              </button>
+            ))
+          )}
         </div>
       </div>
 
-      <div className="min-h-0 overflow-y-auto overscroll-contain rounded-2xl border border-slate-100 bg-white p-5 lg:h-full lg:min-h-0 lg:max-h-full">
-        {draft ? (
-          <>
-            <h4 className="mb-1 text-sm font-black text-slate-800">
-              配置打印模板 {draft.paperSize.widthMm}×{draft.paperSize.heightMm} mm
-            </h4>
-            <p className="mb-4 text-xs text-slate-500">选择要打印的字段；复杂排版请点「编辑」打开可视化编辑器。</p>
-            <div className="space-y-4">
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-400">模板名称</label>
-                <input
-                  value={draft.name}
-                  onChange={e => setDraft({ ...draft, name: e.target.value })}
-                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-400">二维码内容</label>
-                <select
-                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
-                  value={(() => {
-                    const raw = firstQrField(draft).replace(/^\{\{|\}\}$/g, '');
-                    const hit = qrOptions.find(o => `{{${o.value}}}` === firstQrField(draft) || raw === o.value);
-                    return hit?.value ?? '计划.planNumber';
-                  })()}
-                  onChange={e => {
-                    const v = e.target.value;
-                    setDraft(setQrField(draft, `{{${v}}}`));
-                  }}
+      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-slate-50/80 p-4 lg:h-full lg:min-h-0 lg:max-h-full">
+        <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
+          <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">模板效果预览</h4>
+          {draft && (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-white p-0.5">
+                <button
+                  type="button"
+                  title="缩小"
+                  aria-label="缩小预览"
+                  onClick={() => setPreviewScale(s => Math.max(PREVIEW_SCALE_MIN, Math.round((s - PREVIEW_SCALE_STEP) * 100) / 100))}
+                  disabled={previewScale <= PREVIEW_SCALE_MIN + 1e-6}
+                  className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-30"
                 >
-                  {qrOptions.map(o => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-400">第一行取值</label>
-                <select
-                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
-                  value={(() => {
-                    const [a] = firstTextContents(draft);
-                    const raw = a.replace(/^\{\{|\}\}$/g, '');
-                    const hit = lineOptions.find(o => `{{${o.value}}}` === a || raw === o.value);
-                    return hit?.value ?? '产品.name';
-                  })()}
-                  onChange={e => {
-                    const v = e.target.value;
-                    const [, b] = firstTextContents(draft);
-                    setDraft(setTextLines(draft, `{{${v}}}`, b));
-                  }}
+                  <ZoomOut className="h-4 w-4" />
+                </button>
+                <span className="min-w-[2.75rem] select-none text-center text-[11px] font-black tabular-nums text-slate-500">
+                  {Math.round(previewScale * 100)}%
+                </span>
+                <button
+                  type="button"
+                  title="放大"
+                  aria-label="放大预览"
+                  onClick={() => setPreviewScale(s => Math.min(PREVIEW_SCALE_MAX, Math.round((s + PREVIEW_SCALE_STEP) * 100) / 100))}
+                  disabled={previewScale >= PREVIEW_SCALE_MAX - 1e-6}
+                  className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-30"
                 >
-                  {lineOptions.map(o => (
-                    <option key={`l1-${o.value}`} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] font-black uppercase text-slate-400">第二行取值</label>
-                <select
-                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
-                  value={(() => {
-                    const [, b] = firstTextContents(draft);
-                    const raw = b.replace(/^\{\{|\}\}$/g, '');
-                    const hit = lineOptions.find(o => `{{${o.value}}}` === b || raw === o.value);
-                    return hit?.value ?? '计划.planNumber';
-                  })()}
-                  onChange={e => {
-                    const v = e.target.value;
-                    const [a] = firstTextContents(draft);
-                    setDraft(setTextLines(draft, a, `{{${v}}}`));
-                  }}
+                  <ZoomIn className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  title="恢复默认缩放"
+                  aria-label="预览缩放恢复默认"
+                  onClick={() => setPreviewScale(PREVIEW_SCALE_DEFAULT)}
+                  className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
                 >
-                  {lineOptions.map(o => (
-                    <option key={`l2-${o.value}`} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
+                  <RotateCcw className="h-4 w-4" />
+                </button>
               </div>
-            </div>
-            <div className="mt-6 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => void saveDraft()}
-                className="rounded-xl bg-indigo-600 px-5 py-2 text-sm font-bold text-white hover:bg-indigo-700"
-              >
-                保存
-              </button>
               <button
                 type="button"
                 onClick={() => selected && void copyOne(selected)}
-                className="flex items-center gap-1 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+                className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50"
               >
-                <Copy className="h-4 w-4" /> 复制
+                <Copy className="h-3.5 w-3.5" /> 复制
               </button>
-              <button type="button" onClick={() => void removeSelected()} className="flex items-center gap-1 rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50">
-                <Trash2 className="h-4 w-4" /> 删除
+              <button
+                type="button"
+                onClick={() => void removeSelected()}
+                className="flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> 删除
               </button>
-              <button type="button" onClick={() => selectedId && openEditor(selectedId)} className="ml-auto rounded-xl border border-indigo-200 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-50">
+              <button
+                type="button"
+                onClick={() => selectedId && openEditor(selectedId)}
+                className="rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-[11px] font-bold text-indigo-700 hover:bg-indigo-50"
+              >
                 可视化编辑
               </button>
             </div>
-          </>
+          )}
+        </div>
+        {draft ? (
+          <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto rounded-xl bg-white px-3 py-4">
+            <div
+              className="shrink-0"
+              style={{
+                transform: `scale(${previewScale})`,
+                transformOrigin: 'top center',
+              }}
+            >
+              <PrintPaper template={draft} ctx={augmentPrintPreviewContext(basePreviewCtx, draft)} />
+            </div>
+          </div>
         ) : (
           <p className="text-sm text-slate-500">请从左侧选择一个模板</p>
-        )}
-      </div>
-
-      <div className="min-h-0 overflow-y-auto overscroll-contain rounded-2xl border border-slate-100 bg-slate-50/80 p-4 lg:h-full lg:min-h-0 lg:max-h-full">
-        <h4 className="mb-3 text-xs font-black uppercase tracking-widest text-slate-500">模板效果预览</h4>
-        {draft && (
-          <div className="flex justify-center overflow-auto rounded-xl bg-white p-4">
-            <PrintPaper template={draft} ctx={previewCtx} />
-          </div>
         )}
       </div>
     </div>

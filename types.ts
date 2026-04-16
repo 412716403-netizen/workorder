@@ -304,17 +304,20 @@ export interface PlanFormFieldConfig {
   showInDetail: boolean;
 }
 
-/** 计划单「列表上打印」：是否显示入口、可选模板范围（空数组表示全部模板） */
+/** 计划单「列表上打印」：是否显示入口、可选模板范围 */
 export interface PlanListPrintSettings {
   /** 在计划单列表显示「打印」按钮，默认 true */
   showPrintButton?: boolean;
-  /** 勾选后仅这些模板出现在选择器中；空数组或未设置表示不限制（全部模板） */
+  /** 仅这些模板出现在列表打印选择器中；未设置或空数组表示不限制（全部模板）。表单配置中仅维护已加入项，删空即恢复全部可用。 */
   allowedTemplateIds?: string[];
 }
 
 /** 标签打印模版白名单（独立于列表打印） */
 export interface PlanLabelPrintSettings {
+  /** 仅这些模板出现在标签打印选择器中；未设置或空数组表示不限制。表单配置中仅维护已加入项，删空即恢复全部可用。 */
   allowedTemplateIds?: string[];
+  /** 为 false 时计划详情不显示「追溯码」区块（单品码/批次码等）；默认 true */
+  showPlanDetailTraceSection?: boolean;
 }
 
 /** 计划单表单配置：列表/新增/详情页显示哪些字段，及自定义项 */
