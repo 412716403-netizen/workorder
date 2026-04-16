@@ -2,6 +2,7 @@ import React from 'react';
 import type { PrintBodyElement, PrintTextElementConfig } from '../../types';
 import type { PrintFieldOption } from './printFieldOptions';
 import { FieldPicker } from './FieldPicker';
+import { FontSizePtInput } from './FontSizePtInput';
 import { Labeled } from './Labeled';
 
 function TextPropertyEditorInner({
@@ -29,11 +30,13 @@ function TextPropertyEditorInner({
       </div>
       <div className="grid grid-cols-2 gap-2">
         <Labeled label="字号 pt">
-          <input
-            type="number"
-            value={c.fontSizePt}
-            onChange={e => onUpdateElementConfig(el.id, { ...c, fontSizePt: Number(e.target.value) || 8 })}
+          <FontSizePtInput
+            id={`${el.id}-text-pt`}
+            value={c.fontSizePt ?? 8}
+            min={4}
+            max={40}
             className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+            onCommit={n => onUpdateElementConfig(el.id, { ...c, fontSizePt: n })}
           />
         </Labeled>
         <Labeled label="字重">

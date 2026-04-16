@@ -6,6 +6,7 @@ import type {
 } from '../../types';
 import type { PrintFieldOption } from './printFieldOptions';
 import { FieldPicker } from './FieldPicker';
+import { FontSizePtInput } from './FontSizePtInput';
 import { Labeled } from './Labeled';
 
 function HeaderFooterEditorInner({
@@ -102,12 +103,14 @@ function HeaderFooterEditorInner({
               <FieldPicker options={fieldOptions} onPick={ph => patchItem(slot, { content: it.content + ph })} />
             </div>
             <div className="flex flex-wrap gap-2">
-              <input
-                type="number"
+              <FontSizePtInput
+                id={`${title}-${slot}-pt`}
+                value={it.fontSizePt ?? 8}
+                min={6}
+                max={20}
                 title="字号 pt"
-                value={it.fontSizePt}
-                onChange={e => patchItem(slot, { fontSizePt: Number(e.target.value) || 8 })}
                 className="w-16 rounded border border-slate-200 px-1 py-1 text-xs"
+                onCommit={n => patchItem(slot, { fontSizePt: n })}
               />
               <select
                 value={it.fontWeight}

@@ -4,6 +4,7 @@ import type {
   Product,
   PrintImageElementConfig,
   PrintRenderContext,
+  SalesBillPrintDoc,
   OrderStatus,
   PlanStatus,
 } from '../types';
@@ -104,6 +105,30 @@ function productField(product: Product, key: string): unknown {
   }
 }
 
+function fmtMoney(n: number): string {
+  if (!Number.isFinite(n)) return '0';
+  const s = n.toFixed(2);
+  return s.endsWith('.00') ? String(Math.round(n)) : s;
+}
+
+function salesBillField(sb: SalesBillPrintDoc, key: string): unknown {
+  switch (key) {
+    case 'title': return sb.title;
+    case 'docNumber': return sb.docNumber;
+    case 'partner': return sb.partner;
+    case 'partnerId': return sb.partnerId ?? '';
+    case 'warehouseName': return sb.warehouseName;
+    case 'createdAtDisplay': return sb.createdAtDisplay;
+    case 'note': return sb.note;
+    case 'docTotalQty': return String(Math.round(sb.docTotalQty || 0));
+    case 'docTotalAmount': return fmtMoney(Number(sb.docTotalAmount) || 0);
+    case 'previousBalance': return fmtMoney(Number(sb.previousBalance) || 0);
+    case 'currentDebt': return fmtMoney(Number(sb.currentDebt) || 0);
+    case 'accumulatedDebt': return fmtMoney(Number(sb.accumulatedDebt) || 0);
+    default: return undefined;
+  }
+}
+
 function resolvePath(ctx: PrintRenderContext, path: string): unknown {
   const trimmed = path.trim();
   const [ns, ...rest] = trimmed.split('.');
@@ -128,6 +153,11 @@ function resolvePath(ctx: PrintRenderContext, path: string): unknown {
   if (ns === '计划' && ctx.plan) return planField(ctx.plan, sub, ctx);
   if (ns === '工单' && ctx.order) return orderField(ctx.order, sub);
   if (ns === '产品' && ctx.product) return productField(ctx.product, sub);
+  if (ns === '销售单') {
+    if (!ctx.salesBill) return '';
+    const v = salesBillField(ctx.salesBill, sub);
+    return v === undefined ? '' : v;
+  }
   if (ns === '工序') {
     if (sub === 'name') return ctx.milestoneName ?? '';
     if (sub === 'completedQuantity') return ctx.completedQuantity != null ? String(ctx.completedQuantity) : '';
@@ -142,6 +172,7 @@ export function resolvePrintPlaceholders(text: string, ctx: PrintRenderContext):
     const trimmed = raw.trim();
     const v = resolvePath(ctx, trimmed);
     if (trimmed.startsWith('批次.') && (v === '' || v === undefined)) return '';
+    if (trimmed.startsWith('销售单.') && (v === '' || v === undefined)) return '';
     return v != null && v !== '' ? String(v) : `${open}${raw}${close}`;
   };
   return text

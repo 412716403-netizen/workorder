@@ -1,5 +1,5 @@
 import type { PrintRenderContext, PrintTemplate } from '../../types';
-import { getListDrivenPageCount } from '../../utils/printListPagination';
+import { getListDrivenPageCount, getMatrixDrivenPageCount } from '../../utils/printListPagination';
 
 const zeroMargins = { top: 0, bottom: 0, left: 0, right: 0 };
 
@@ -14,8 +14,10 @@ export function getPrintOutputPageCount(template: PrintTemplate, ctx: PrintRende
     const n = Math.floor(raw);
     if (n >= 1) base = n;
   }
-  const listPages = getListDrivenPageCount(template, ctx, false);
-  return Math.min(MAX_PRINT_OUTPUT_PAGES, Math.max(base, listPages));
+  const { bodyH, innerH } = getPrintLayoutMetrics(template);
+  const listPages = getListDrivenPageCount(template, ctx, false, bodyH);
+  const matrixPages = getMatrixDrivenPageCount(template, ctx, false, bodyH, innerH);
+  return Math.min(MAX_PRINT_OUTPUT_PAGES, Math.max(base, listPages, matrixPages));
 }
 
 export function getPaperMarginsMm(t: PrintTemplate) {

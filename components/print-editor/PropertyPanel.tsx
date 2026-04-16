@@ -8,6 +8,7 @@ import type {
   PrintLineElementConfig,
   PrintQRCodeElementConfig,
   PrintRectElementConfig,
+  PrintSalesBillMatrixElementConfig,
   PrintTableElementConfig,
   PrintTemplate,
   PrintTextElementConfig,
@@ -15,6 +16,7 @@ import type {
 import type { PrintSelection } from './usePrintEditor';
 import type { PrintFieldOption } from './printFieldOptions';
 import { TemplatePaperSettings } from './TemplatePaperSettings';
+import { FontSizePtInput } from './FontSizePtInput';
 import { HeaderFooterEditor } from './HeaderFooterEditor';
 import { ElementCommonProperties } from './ElementCommonProperties';
 import { TextPropertyEditor } from './TextPropertyEditor';
@@ -24,6 +26,7 @@ import { ImagePropertyEditor } from './ImagePropertyEditor';
 import { RectPropertyEditor } from './RectPropertyEditor';
 import { DynamicTableGridEditor } from './DynamicTableGridEditor';
 import { DynamicListPropertyEditor } from './DynamicListPropertyEditor';
+import { Labeled } from './Labeled';
 
 export function PropertyPanel({
   template,
@@ -151,6 +154,27 @@ export function PropertyPanel({
     specific = (
       <DynamicListPropertyEditor el={el} c={c} fieldOptions={fieldOptions} onUpdateElementConfig={onUpdateElementConfig} />
     );
+  } else if (el.type === 'salesBillMatrix') {
+    const c = el.config as PrintSalesBillMatrixElementConfig;
+    const pt = c.fontSizePt ?? 7;
+    specific = (
+      <div className="space-y-3 text-xs font-bold text-slate-700">
+        <p className="text-[10px] font-semibold leading-relaxed text-slate-500">
+          数据来自打印上下文中的 <code className="rounded bg-slate-100 px-1">salesBillMatrix</code>（销售单预览/打印时注入）。表格线为黑色、表头无底色；分页按组件高度自动估算（每块约 11mm）。
+        </p>
+        <Labeled label="字号 (pt)">
+          <FontSizePtInput
+            id={`${el.id}-matrix-pt`}
+            value={pt}
+            min={5}
+            max={14}
+            roundToHalf
+            className="w-full rounded-lg border border-slate-200 px-2 py-2"
+            onCommit={n => onUpdateElementConfig(el.id, { fontSizePt: n })}
+          />
+        </Labeled>
+      </div>
+    );
   }
 
   return (
@@ -167,8 +191,10 @@ export function PropertyPanel({
                 : el.type === 'image'
                   ? '图片'
                   : el.type === 'dynamicList'
-                  ? '动态列表'
-                  : '表格'}
+                    ? '动态列表'
+                    : el.type === 'salesBillMatrix'
+                      ? '销售单矩阵表'
+                      : '表格'}
       </h3>
       {specific}
       <ElementCommonProperties

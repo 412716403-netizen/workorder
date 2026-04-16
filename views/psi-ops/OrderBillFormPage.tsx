@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { Product, Warehouse, ProductCategory, Partner, PartnerCategory, AppDictionaries, PurchaseOrderFormSettings, PurchaseBillFormSettings } from '../../types';
+import React, { useState, useMemo, useCallback } from 'react';
+import { toast } from 'sonner';
+import { Product, Warehouse, ProductCategory, Partner, PartnerCategory, AppDictionaries, PurchaseOrderFormSettings, PurchaseBillFormSettings, PrintRenderContext } from '../../types';
 import PurchaseOrderFormSection from './PurchaseOrderFormSection';
 import SalesOrderFormSection from './SalesOrderFormSection';
 import SalesBillFormSection from './SalesBillFormSection';
@@ -8,7 +9,11 @@ import { localTodayYmd, localCalendarYmdStartToIso, toLocalDateYmd } from '../..
 import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 import { nextPsiDocNumber } from '../../utils/partnerDocNumber';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAppActions, useConfigData, useFinanceData } from '../../contexts/AppDataContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import { buildSalesBillPrintRenderContext } from '../../utils/buildSalesBillPrintContext';
+import { pickSalesBillPrintTemplate } from '../../utils/salesBillPrintTemplate';
+import { SalesBillPrintDialog } from './SalesBillPrintDialog';
 
 type FormType = 'PURCHASE_ORDER' | 'PURCHASE_BILL' | 'SALES_ORDER' | 'SALES_BILL';
 
@@ -80,6 +85,8 @@ interface OrderBillFormPageProps {
   userPermissions?: string[];
   tenantRole?: string;
   partnerLabel: string;
+  /** 生产外协收回等（打印销售单应收结余用） */
+  prodRecords?: any[];
 }
 
 const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
@@ -110,8 +117,14 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   userPermissions,
   tenantRole,
   partnerLabel,
+  prodRecords = [],
 }) => {
   const { currentUser } = useAuth();
+  const { printTemplates } = useConfigData();
+  const { financeRecords } = useFinanceData();
+  const { ensureDeferredLoaded } = useAppActions();
+  const [salesBillPrintOpen, setSalesBillPrintOpen] = useState(false);
+  const [salesBillPrintCtx, setSalesBillPrintCtx] = useState<PrintRenderContext | null>(null);
   const docOperator = currentOperatorDisplayName(currentUser);
   const recordsList = records ?? [];
   const _isOwner = tenantRole === 'owner';
@@ -336,6 +349,41 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
     }));
   };
   const removeSalesBillItem = (id: string) => setSalesBillItems(prev => prev.filter(i => i.id !== id));
+
+  const salesBillPrintTemplate = useMemo(() => pickSalesBillPrintTemplate(printTemplates), [printTemplates]);
+
+  const openSalesBillPrint = useCallback(async () => {
+    await ensureDeferredLoaded();
+    if (!salesBillPrintTemplate) {
+      toast.error('未找到销售单打印模版。请打开「生产管理 → 打印模版」确认列表中存在「销售单（标准）」。');
+      return;
+    }
+    const ctx = buildSalesBillPrintRenderContext({
+      form,
+      lines: salesBillItems,
+      productMap: productMapPSI,
+      warehouseMap: warehouseMapPSI,
+      dictionaries,
+      psiRecords: recordsList,
+      financeRecords,
+      prodRecords,
+      editingDocNumber,
+    });
+    setSalesBillPrintCtx(ctx);
+    setSalesBillPrintOpen(true);
+  }, [
+    ensureDeferredLoaded,
+    salesBillPrintTemplate,
+    form,
+    salesBillItems,
+    productMapPSI,
+    warehouseMapPSI,
+    dictionaries,
+    recordsList,
+    financeRecords,
+    prodRecords,
+    editingDocNumber,
+  ]);
 
   const addPurchaseBillItem = () => setPurchaseBillItems(prev => [...prev, { id: `pb-line-${Date.now()}`, productId: '', quantity: 0, purchasePrice: 0 }]);
   const updatePurchaseBillItem = (id: string, updates: Partial<{ productId: string; quantity?: number; purchasePrice: number; variantQuantities?: Record<string, number>; batch?: string }>) => {
@@ -790,30 +838,45 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
 
   if (formType === 'SALES_BILL') {
     return (
-      <SalesBillFormSection
-        form={form}
-        setForm={setForm}
-        salesBillItems={salesBillItems}
-        onAddItem={addSalesBillItem}
-        onUpdateItem={updateSalesBillItem}
-        onUpdateVariantQty={updateSalesBillVariantQty}
-        onRemoveItem={removeSalesBillItem}
-        onSave={() => handleSaveManual('SALES_BILL')}
-        onBack={onBack}
-        onDeleteRecords={onDeleteRecords}
-        editingDocNumber={editingDocNumber}
-        hasPsiPerm={hasPsiPerm}
-        products={products}
-        categories={categories}
-        partners={partners}
-        partnerCategories={partnerCategories}
-        dictionaries={dictionaries}
-        warehouses={warehouses}
-        productMapPSI={productMapPSI}
-        formatQtyDisplay={formatQtyDisplay}
-        getUnitName={getUnitName}
-        partnerLabel={partnerLabel}
-      />
+      <>
+        <SalesBillFormSection
+          form={form}
+          setForm={setForm}
+          salesBillItems={salesBillItems}
+          onAddItem={addSalesBillItem}
+          onUpdateItem={updateSalesBillItem}
+          onUpdateVariantQty={updateSalesBillVariantQty}
+          onRemoveItem={removeSalesBillItem}
+          onSave={() => handleSaveManual('SALES_BILL')}
+          onBack={onBack}
+          onDeleteRecords={onDeleteRecords}
+          editingDocNumber={editingDocNumber}
+          hasPsiPerm={hasPsiPerm}
+          products={products}
+          categories={categories}
+          partners={partners}
+          partnerCategories={partnerCategories}
+          dictionaries={dictionaries}
+          warehouses={warehouses}
+          productMapPSI={productMapPSI}
+          formatQtyDisplay={formatQtyDisplay}
+          getUnitName={getUnitName}
+          partnerLabel={partnerLabel}
+          onOpenPrint={openSalesBillPrint}
+          printDisabled={!salesBillPrintTemplate}
+        />
+        {salesBillPrintOpen && salesBillPrintCtx && salesBillPrintTemplate ? (
+          <SalesBillPrintDialog
+            open={salesBillPrintOpen}
+            onClose={() => {
+              setSalesBillPrintOpen(false);
+              setSalesBillPrintCtx(null);
+            }}
+            template={salesBillPrintTemplate}
+            ctx={salesBillPrintCtx}
+          />
+        ) : null}
+      </>
     );
   }
 

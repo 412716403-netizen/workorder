@@ -6,6 +6,7 @@ import {
   Trash2,
   Layers,
   FileText,
+  Printer,
 } from 'lucide-react';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
@@ -46,6 +47,10 @@ interface SalesBillFormSectionProps {
   formatQtyDisplay: (q: number | string | undefined | null) => number;
   getUnitName: (productId: string) => string;
   partnerLabel: string;
+  /** 打开销售单打印预览（由父级注入打印上下文） */
+  onOpenPrint?: () => void | Promise<void>;
+  /** 无可用打印模版时为 true */
+  printDisabled?: boolean;
 }
 
 const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
@@ -56,6 +61,8 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
   products, categories, partners, partnerCategories, dictionaries, warehouses,
   productMapPSI, formatQtyDisplay, getUnitName,
   partnerLabel,
+  onOpenPrint,
+  printDisabled,
 }) => {
   const confirm = useConfirm();
 
@@ -66,6 +73,16 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
           <ArrowLeft className="w-4 h-4" /> 返回列表
         </button>
         <div className="flex items-center gap-3">
+          {onOpenPrint && (
+            <button
+              type="button"
+              onClick={() => void onOpenPrint()}
+              disabled={!!printDisabled || salesBillItems.length === 0}
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Printer className="h-4 w-4" /> 打印预览
+            </button>
+          )}
           {editingDocNumber && onDeleteRecords && hasPsiPerm('psi:sales_bill:delete') && (
             <button
               type="button"

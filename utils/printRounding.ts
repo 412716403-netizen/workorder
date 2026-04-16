@@ -7,6 +7,7 @@ import type {
   PrintImageElementConfig,
   PrintLineElementConfig,
   PrintRectElementConfig,
+  PrintSalesBillMatrixElementConfig,
   PrintTableElementConfig,
   PrintTemplate,
   PrintTextElementConfig,
@@ -90,6 +91,12 @@ export function roundPrintElementConfigForType(type: PrintBodyElementType, confi
     }
     case 'dynamicList':
       return roundDynamicListConfig(config as PrintDynamicListElementConfig);
+    case 'salesBillMatrix': {
+      const c = config as PrintSalesBillMatrixElementConfig;
+      return {
+        fontSizePt: roundPrintDecimal1(Math.min(14, Math.max(5, c.fontSizePt ?? 7))),
+      };
+    }
     case 'qrcode':
       return config;
     default:

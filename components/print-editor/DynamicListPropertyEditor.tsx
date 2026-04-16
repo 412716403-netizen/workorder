@@ -7,16 +7,19 @@ import type {
 } from '../../types';
 import type { PrintFieldOption } from './printFieldOptions';
 import { FieldPicker } from './FieldPicker';
+import { FontSizePtInput } from './FontSizePtInput';
 import { Labeled } from './Labeled';
 import { newElementId } from '../../utils/printTemplateDefaults';
 
 function fieldOptionsForListSource(options: PrintFieldOption[], src: PrintDynamicListDataSource): PrintFieldOption[] {
   const order =
-    src === 'order'
-      ? ['工单', '明细行', '系统', '工序', '产品', '计划', '计划自定义']
-      : src === 'plan'
-        ? ['计划', '计划自定义', '明细行', '系统', '产品', '工序', '工单']
-        : ['产品', '明细行', '系统', '工序', '计划', '计划自定义', '工单'];
+    src === 'salesBill'
+      ? ['销售单', '销售单明细', '明细行', '系统', '工单', '计划', '产品', '工序', '计划自定义', '单品码行', '批次码']
+      : src === 'order'
+        ? ['工单', '明细行', '系统', '工序', '产品', '计划', '计划自定义']
+        : src === 'plan'
+          ? ['计划', '计划自定义', '明细行', '系统', '产品', '工序', '工单']
+          : ['产品', '明细行', '系统', '工序', '计划', '计划自定义', '工单'];
   return [...options].sort((a, b) => {
     const ia = order.indexOf(a.group);
     const ib = order.indexOf(b.group);
@@ -149,6 +152,7 @@ function DynamicListPropertyEditorInner({
           <option value="order">工单</option>
           <option value="plan">计划单</option>
           <option value="product">产品</option>
+          <option value="salesBill">销售单</option>
         </select>
       </Labeled>
       <Labeled label="表格列数（不含序号列）">
@@ -221,23 +225,23 @@ function DynamicListPropertyEditorInner({
       </Labeled>
       <div className="grid grid-cols-2 gap-2">
         <Labeled label="表头字号 pt">
-          <input
-            type="number"
+          <FontSizePtInput
+            id={`${el.id}-list-hdr`}
+            value={c.headerFontSizePt ?? 8}
             min={6}
             max={24}
-            value={c.headerFontSizePt}
-            onChange={e => onUpdateElementConfig(el.id, { ...c, headerFontSizePt: Number(e.target.value) || 8 })}
             className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+            onCommit={n => onUpdateElementConfig(el.id, { ...c, headerFontSizePt: n })}
           />
         </Labeled>
         <Labeled label="单元格字号 pt">
-          <input
-            type="number"
+          <FontSizePtInput
+            id={`${el.id}-list-cell`}
+            value={c.fontSizePt ?? 8}
             min={6}
             max={24}
-            value={c.fontSizePt}
-            onChange={e => onUpdateElementConfig(el.id, { ...c, fontSizePt: Number(e.target.value) || 8 })}
             className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+            onCommit={n => onUpdateElementConfig(el.id, { ...c, fontSizePt: n })}
           />
         </Labeled>
       </div>

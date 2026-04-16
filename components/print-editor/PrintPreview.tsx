@@ -65,22 +65,27 @@ function printViaNewWindow(contentEl: HTMLElement, wMm: number, hMm: number) {
 
   let labelsHtml = '';
   if (labelPages.length > 0) {
-    labelPages.forEach(orig => {
+    labelPages.forEach((orig, idx) => {
       const clone = orig.cloneNode(true) as HTMLElement;
       inlineAllStyles(orig, clone);
       clone.removeAttribute('class');
       clone.style.setProperty('display', 'block');
-      clone.style.setProperty('page-break-after', 'always');
-      clone.style.setProperty('break-after', 'page');
+      const isLast = idx === labelPages.length - 1;
+      if (!isLast) {
+        clone.style.setProperty('page-break-after', 'always');
+        clone.style.setProperty('break-after', 'page');
+      } else {
+        clone.style.setProperty('page-break-after', 'auto');
+        clone.style.setProperty('break-after', 'auto');
+      }
       labelsHtml += clone.outerHTML;
     });
   } else {
     labelsHtml = contentEl.innerHTML;
   }
-  const labelCount = labelPages.length || '?';
 
   const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>标签打印</title>
+<html><head><meta charset="utf-8"><title>打印</title>
 <style>
 @page { size: ${wMm}mm ${hMm}mm; margin: 0; }
 * { box-sizing: border-box; }
@@ -120,8 +125,10 @@ export function usePrintTemplateAction(template: PrintTemplate, _ctx: PrintRende
   });
 
   const handlePrint = useCallback(() => {
-    if (_ctx.labelPerRow && printRef.current) {
-      printViaNewWindow(printRef.current, widthMm, heightMm);
+    const root = printRef.current;
+    const splitPages = root ? root.querySelectorAll('[data-label-page]').length : 0;
+    if (root && (_ctx.labelPerRow || splitPages > 1)) {
+      printViaNewWindow(root, widthMm, heightMm);
     } else {
       handlePrintLib();
     }

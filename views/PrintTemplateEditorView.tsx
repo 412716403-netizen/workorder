@@ -99,14 +99,62 @@ export default function PrintTemplateEditorView() {
     const plan = plans[0];
     const order = orders[0];
     const product = products.find(p => p.id === (plan?.productId || order?.productId)) ?? products[0];
-    return {
+    const base: PrintRenderContext = {
       plan,
       order,
       product,
       milestoneName: '示例工序',
       completedQuantity: 12,
     };
-  }, [plans, orders, products]);
+    const hasMatrix = template.elements.some(e => e.type === 'salesBillMatrix');
+    if (!hasMatrix) return base;
+    return {
+      ...base,
+      salesBill: {
+        title: '销售单',
+        docNumber: 'XS-0001',
+        partner: '示例客户',
+        warehouseName: '主仓',
+        createdAtDisplay: '2026年01月15日',
+        note: '',
+        docTotalQty: 300,
+        docTotalAmount: 0,
+        previousBalance: 19929,
+        currentDebt: 0,
+        accumulatedDebt: 19929,
+      },
+      salesBillMatrix: [
+        {
+          lineNo: 1,
+          sku: '26003',
+          productName: '26003',
+          sizes: ['XL', 'xs'],
+          colorRows: [
+            { colorName: '大红', quantities: [50, 50] },
+            { colorName: '嘿嘿嘿', quantities: [50, 50] },
+          ],
+          totalQty: 200,
+          unitPrice: 0,
+          totalAmount: 0,
+          remark: '',
+        },
+        {
+          lineNo: 2,
+          sku: '2121233',
+          productName: '23321223',
+          sizes: ['均码'],
+          colorRows: [
+            { colorName: '米白色', quantities: [50] },
+            { colorName: '大红', quantities: [50] },
+          ],
+          totalQty: 100,
+          unitPrice: 0,
+          totalAmount: 0,
+          remark: '',
+        },
+      ],
+    };
+  }, [plans, orders, products, template.elements]);
 
   const fieldOptions = useMemo(() => buildPrintFieldOptions(planFormSettings.customFields), [planFormSettings.customFields]);
 

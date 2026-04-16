@@ -483,6 +483,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
           userPermissions={userPermissions}
           tenantRole={tenantRole}
           partnerLabel={current.partnerLabel || '供应商'}
+          prodRecords={prodRecords}
         />
       ) : type === 'WAREHOUSE_MGMT' ? (
         <WarehousePanel

@@ -66,6 +66,31 @@ export function buildPrintFieldOptions(planCustomFields: PlanFormFieldConfig[]):
     { group: '单品码行', value: '行.orderNumbers', label: '关联工单号' },
     { group: '单品码行', value: '行.status', label: '单品码状态' },
   ];
+  const salesBillHeader: PrintFieldOption[] = [
+    { group: '销售单', value: '销售单.title', label: '标题' },
+    { group: '销售单', value: '销售单.docNumber', label: '单据编号' },
+    { group: '销售单', value: '销售单.partner', label: '客户' },
+    { group: '销售单', value: '销售单.partnerId', label: '客户ID' },
+    { group: '销售单', value: '销售单.warehouseName', label: '出库仓库' },
+    { group: '销售单', value: '销售单.createdAtDisplay', label: '开单日期（中文）' },
+    { group: '销售单', value: '销售单.note', label: '单据备注' },
+    { group: '销售单', value: '销售单.docTotalQty', label: '本单总件数' },
+    { group: '销售单', value: '销售单.docTotalAmount', label: '本单总金额' },
+    { group: '销售单', value: '销售单.previousBalance', label: '上次结余（应收）' },
+    { group: '销售单', value: '销售单.currentDebt', label: '本次应收变动' },
+    { group: '销售单', value: '销售单.accumulatedDebt', label: '累计应收余额' },
+  ];
+  const salesBillRow: PrintFieldOption[] = [
+    { group: '销售单明细', value: '行.lineNo', label: '行序号' },
+    { group: '销售单明细', value: '行.sku', label: '货号' },
+    { group: '销售单明细', value: '行.productName', label: '名称' },
+    { group: '销售单明细', value: '行.colorName', label: '颜色' },
+    { group: '销售单明细', value: '行.sizeName', label: '尺码' },
+    { group: '销售单明细', value: '行.qty', label: '数量' },
+    { group: '销售单明细', value: '行.unitPrice', label: '单价' },
+    { group: '销售单明细', value: '行.amount', label: '金额' },
+    { group: '销售单明细', value: '行.remark', label: '备注' },
+  ];
   const virtualBatchRow: PrintFieldOption[] = [
     { group: '批次码', value: '批次.scanUrl', label: '扫码URL（二维码内容）' },
     { group: '批次码', value: '批次.scanToken', label: '扫码Token' },
@@ -86,5 +111,17 @@ export function buildPrintFieldOptions(planCustomFields: PlanFormFieldConfig[]):
     value: `计划.custom.${f.id}`,
     label: f.label,
   }));
-  return [...system, ...plan, ...order, ...product, ...proc, ...listRow, ...itemCodeRow, ...virtualBatchRow, ...customPlan];
+  return [
+    ...system,
+    ...plan,
+    ...order,
+    ...product,
+    ...proc,
+    ...listRow,
+    ...salesBillHeader,
+    ...salesBillRow,
+    ...itemCodeRow,
+    ...virtualBatchRow,
+    ...customPlan,
+  ];
 }

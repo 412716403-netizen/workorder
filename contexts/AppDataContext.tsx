@@ -29,6 +29,7 @@ import type {
 import { DEFAULT_MATERIAL_PANEL_SETTINGS } from '../types';
 import { normalizePartnersFromApi } from '../utils/partnerNormalize';
 import { currentOperatorDisplayName } from '../utils/currentOperatorDisplayName';
+import { ensureBuiltinSalesBillPrintTemplate } from '../utils/salesBillPrintTemplate';
 
 // ── Decimal normalizer ──
 
@@ -410,7 +411,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       setPurchaseOrderFormSettings((cfg.purchaseOrderFormSettings as PurchaseOrderFormSettings) ?? DEFAULT_PURCHASE_ORDER_FORM_SETTINGS);
       setPurchaseBillFormSettings((cfg.purchaseBillFormSettings as PurchaseBillFormSettings) ?? DEFAULT_PURCHASE_BILL_FORM_SETTINGS);
       setMaterialPanelSettings((cfg.materialPanelSettings as MaterialPanelSettings) ?? DEFAULT_MATERIAL_PANEL_SETTINGS);
-      setPrintTemplates(Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : []);
+      setPrintTemplates(
+        ensureBuiltinSalesBillPrintTemplate(Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : []),
+      );
       if (val(coreResults, 1))  setCategories(val(coreResults, 1) as ProductCategory[]);
       if (val(coreResults, 2))  setPartnerCategories(val(coreResults, 2) as PartnerCategory[]);
       if (val(coreResults, 3))  setGlobalNodes(val(coreResults, 3) as GlobalNodeTemplate[]);
@@ -538,7 +541,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const refreshPrintTemplates = useCallback(async () => {
     try {
       const cfg = (await api.settings.getConfig()) as Record<string, unknown>;
-      setPrintTemplates(Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : []);
+      setPrintTemplates(
+        ensureBuiltinSalesBillPrintTemplate(Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : []),
+      );
     } catch (err: any) {
       toast.error(err?.message || '打印模版刷新失败');
     }

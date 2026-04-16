@@ -347,7 +347,15 @@ export const DEFAULT_MATERIAL_PANEL_SETTINGS: MaterialPanelSettings = {
 
 // ── 打印模板（标签 / 单据可视化设计） ──
 
-export type PrintBodyElementType = 'text' | 'qrcode' | 'line' | 'rect' | 'image' | 'dynamicTable' | 'dynamicList';
+export type PrintBodyElementType =
+  | 'text'
+  | 'qrcode'
+  | 'line'
+  | 'rect'
+  | 'image'
+  | 'dynamicTable'
+  | 'dynamicList'
+  | 'salesBillMatrix';
 
 /** 打印图片：本地上传存 data URL；地址/字段可含 {{}} 占位符 */
 export type PrintImageSourceType = 'upload' | 'url' | 'field';
@@ -415,7 +423,7 @@ export interface PrintTableElementConfig {
 }
 
 /** 动态列表绑定的业务数据源（决定推荐字段；占位符仍可按需写任意 {{}}） */
-export type PrintDynamicListDataSource = 'plan' | 'order' | 'product';
+export type PrintDynamicListDataSource = 'plan' | 'order' | 'product' | 'salesBill';
 
 export interface PrintDynamicListColumn {
   id: string;
@@ -435,6 +443,19 @@ export interface PrintDynamicListColumn {
    * `normal` | `bold` 覆盖默认
    */
   headerFontWeight?: 'normal' | 'bold';
+}
+
+/** 销售单矩阵表：颜色 × 多尺码列 + 左侧 rowspan（由打印上下文 salesBillMatrix 驱动） */
+export interface PrintSalesBillMatrixElementConfig {
+  fontSizePt: number;
+  /** @deprecated 已固定为 #000000，属性面板已移除 */
+  borderColor?: string;
+  /** @deprecated 已固定为无底色（白），属性面板已移除 */
+  headerBackgroundColor?: string;
+  /** @deprecated 分页固定按组件高度估算，属性面板已移除 */
+  estimatedMmPerProductGroup?: number;
+  /** @deprecated 不再支持每页固定块数 */
+  groupsPerPage?: number;
 }
 
 export interface PrintDynamicListElementConfig {
@@ -467,7 +488,8 @@ export type PrintElementConfig =
   | PrintRectElementConfig
   | PrintImageElementConfig
   | PrintTableElementConfig
-  | PrintDynamicListElementConfig;
+  | PrintDynamicListElementConfig
+  | PrintSalesBillMatrixElementConfig;
 
 export interface PrintBodyElement {
   id: string;
@@ -508,6 +530,47 @@ export type PrintListRow = Record<string, string | number | undefined | null>;
 /** 打印用批次字段（键与占位符路径一致，如 scanUrl、quantity） */
 export type VirtualBatchPrintRow = Record<string, string>;
 
+/** 销售单矩阵表一行颜色对应各尺码数量（与 sizes[] 下标对齐） */
+export interface SalesBillMatrixColorRow {
+  colorName: string;
+  quantities: number[];
+}
+
+/** 销售单矩阵表：一个货号（一行明细）的 rowspan 块 */
+export interface SalesBillMatrixGroup {
+  lineNo: number;
+  sku: string;
+  productName: string;
+  /** 尺码列标题，如 XL、xs、均码 */
+  sizes: string[];
+  colorRows: SalesBillMatrixColorRow[];
+  totalQty: number;
+  unitPrice: number;
+  totalAmount: number;
+  remark: string;
+}
+
+/** 销售单（SALES_BILL）表头/页脚占位符 {{销售单.xxx}} */
+export interface SalesBillPrintDoc {
+  /** 展示用标题，如「某某销售单」 */
+  title: string;
+  docNumber: string;
+  partner: string;
+  partnerId?: string;
+  warehouseName: string;
+  /** 本地日历展示，如 2026年03月14日 */
+  createdAtDisplay: string;
+  note: string;
+  docTotalQty: number;
+  docTotalAmount: number;
+  /** 开单前合作单位应收余额（与财务对账逻辑一致） */
+  previousBalance: number;
+  /** 本单应收变动额（与明细金额代数和一致） */
+  currentDebt: number;
+  /** 开单后应收余额 */
+  accumulatedDebt: number;
+}
+
 /** 打印上下文：预览/打印时解析占位符 */
 export interface PrintRenderContext {
   plan?: PlanOrder;
@@ -527,6 +590,10 @@ export interface PrintRenderContext {
   listRow?: PrintListRow;
   /** 批次码标签：占位符 {{批次.xxx}}，见 printFieldOptions「批次码」分组 */
   virtualBatch?: VirtualBatchPrintRow;
+  /** 销售单打印：占位符 {{销售单.xxx}} */
+  salesBill?: SalesBillPrintDoc;
+  /** 销售单矩阵明细（与组件 salesBillMatrix 配套） */
+  salesBillMatrix?: SalesBillMatrixGroup[];
 }
 
 /** 纸张可打印区内边距（mm），未设置时按 0 处理以兼容旧模板 */

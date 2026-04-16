@@ -2,6 +2,8 @@ import type { PrintTemplate } from '../types';
 
 /** ISO 216 竖向常用幅面（mm） */
 export const PRINT_PAPER_A4_MM = { widthMm: 210, heightMm: 297 } as const;
+/** A4 纵向二等分（沿长边对半裁切后的单联高度，常用针式/撕页） */
+export const PRINT_PAPER_A4_HALF_MM = { widthMm: 210, heightMm: 148.5 } as const;
 export const PRINT_PAPER_A5_MM = { widthMm: 148, heightMm: 210 } as const;
 
 function nowIso() {

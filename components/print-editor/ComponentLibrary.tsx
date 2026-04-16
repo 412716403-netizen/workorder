@@ -1,6 +1,6 @@
 import React from 'react';
 import { useDraggable } from '@dnd-kit/core';
-import { Type, QrCode, Minus, Square, Image, Table2, ListOrdered, PanelTop, PanelBottom } from 'lucide-react';
+import { Type, QrCode, Minus, Square, Image, Table2, ListOrdered, LayoutGrid, PanelTop, PanelBottom } from 'lucide-react';
 import type { PrintBodyElementType } from '../../types';
 
 export type PaletteDropType = PrintBodyElementType | 'header' | 'footer';
@@ -60,6 +60,13 @@ export function ComponentLibrary({ onPick }: { onPick?: (t: PaletteDropType) => 
               label="动态列表"
               description="可自动分页的数据列表"
               icon={ListOrdered}
+              onPick={onPick}
+            />
+            <DraggableChip
+              paletteType="salesBillMatrix"
+              label="销售单矩阵"
+              description="颜色×多尺码列（销售单打印上下文）"
+              icon={LayoutGrid}
               onPick={onPick}
             />
           </div>
