@@ -69,7 +69,7 @@ async function main() {
       standardFields: [
         { id: 'planNumber', label: '计划单号', showInList: true, showInCreate: false, showInDetail: true },
         { id: 'customer', label: '客户', showInList: true, showInCreate: true, showInDetail: true },
-        { id: 'dueDate', label: '交期', showInList: true, showInCreate: true, showInDetail: true },
+        { id: 'createdAt', label: '添加日期', showInList: true, showInCreate: true, showInDetail: true },
         { id: 'startDate', label: '开始日期', showInList: false, showInCreate: true, showInDetail: true },
         { id: 'priority', label: '优先级', showInList: true, showInCreate: true, showInDetail: true },
       ],
@@ -86,11 +86,19 @@ async function main() {
     },
     purchaseOrderFormSettings: {
       standardFields: [
-        { id: 'docNumber', label: '单据号', showInList: true, showInCreate: false, showInDetail: true },
+        { id: 'docNumber', label: '单据编号', showInList: true, showInCreate: true, showInDetail: true },
         { id: 'partner', label: '供应商', showInList: true, showInCreate: true, showInDetail: true },
-        { id: 'dueDate', label: '交期', showInList: true, showInCreate: true, showInDetail: true },
       ],
       customFields: [],
+      listPrint: { showPrintButton: true },
+    },
+    salesOrderFormSettings: {
+      standardFields: [
+        { id: 'docNumber', label: '单据编号', showInList: true, showInCreate: false, showInDetail: true },
+        { id: 'partner', label: '客户', showInList: true, showInCreate: true, showInDetail: true },
+      ],
+      customFields: [],
+      listPrint: { showPrintButton: true },
     },
     purchaseBillFormSettings: {
       standardFields: [
@@ -99,9 +107,29 @@ async function main() {
         { id: 'warehouse', label: '入库仓库', showInList: true, showInCreate: true, showInDetail: true },
       ],
       customFields: [],
+      listPrint: { showPrintButton: true },
+    },
+    salesBillFormSettings: {
+      standardFields: [],
+      customFields: [],
+      listPrint: { showPrintButton: true },
     },
     materialPanelSettings: {
       groupByOutsourcePartner: false,
+    },
+    materialFormSettings: {
+      materialIssueCustomFields: [],
+      materialReturnCustomFields: [],
+      outsourceMaterialIssueCustomFields: [],
+      outsourceMaterialReturnCustomFields: [],
+    },
+    outsourceFormSettings: {
+      outsourceDispatchCustomFields: [],
+      outsourceReceiveCustomFields: [],
+    },
+    reworkFormSettings: {
+      defectTreatmentCustomFields: [],
+      reworkReportCustomFields: [],
     },
   };
 

@@ -14,6 +14,10 @@ import {
   ProductCategory,
   ProcessSequenceMode,
   ProductMilestoneProgress,
+  OrderFormSettings,
+  PrintTemplate,
+  PrintRenderContext,
+  PlanFormFieldConfig,
 } from '../../types';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
@@ -23,12 +27,55 @@ import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 import { computePendingStockOrders } from '../../utils/pendingStockCompute';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
+import { PlanFormCustomFieldInput, PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
 
 function fmtDT(ts: string | Date | undefined | null): string {
   if (!ts) return '—';
   const d = new Date(ts);
   if (isNaN(d.getTime())) return String(ts);
   return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+}
+
+/** 将入库登记自定义字段写入 production_op_records.collabData.stockInCustomData */
+function stockInCollabFromCustomData(customData: Record<string, unknown> | undefined): { collabData?: Record<string, unknown> } {
+  const clean = Object.fromEntries(
+    Object.entries(customData ?? {}).filter(([, v]) => v !== '' && v != null && v !== undefined),
+  );
+  if (!Object.keys(clean).length) return {};
+  return { collabData: { stockInCustomData: clean } };
+}
+
+function StockInCustomCreateFields({
+  fields,
+  values,
+  onChange,
+  onFilePreview,
+}: {
+  fields: PlanFormFieldConfig[];
+  values: Record<string, unknown>;
+  onChange: (id: string, value: unknown) => void;
+  onFilePreview?: (url: string, type: 'image' | 'pdf') => void;
+}) {
+  const list = fields.filter(f => f.showInCreate);
+  if (!list.length) return null;
+  return (
+    <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+      <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">入库自定义内容</h4>
+      {list.map(cf => (
+        <div key={cf.id} className="space-y-1">
+          <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
+          <PlanFormCustomFieldInput
+            cf={cf}
+            value={values[cf.id]}
+            onChange={v => onChange(cf.id, v)}
+            controlClassName="h-[52px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+            onFilePreview={onFilePreview}
+          />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 type PendingStockItem = {
@@ -76,6 +123,9 @@ interface PendingStockPanelProps {
   productMilestoneProgresses: ProductMilestoneProgress[];
   productionLinkMode: 'order' | 'product';
   processSequenceMode: ProcessSequenceMode;
+  orderFormSettings: OrderFormSettings;
+  printTemplates: PrintTemplate[];
+  onOpenOrderFormPrintTab?: () => void;
   onAddRecord?: (record: ProductionOpRecord) => void;
   onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
   onUpdateRecord?: (record: ProductionOpRecord) => void;
@@ -95,6 +145,9 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
   dictionaries,
   productMilestoneProgresses,
   productionLinkMode,
+  orderFormSettings,
+  printTemplates,
+  onOpenOrderFormPrintTab,
   onAddRecord,
   onAddRecordBatch,
   onUpdateRecord,
@@ -105,6 +158,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
   const { currentUser } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
   const confirm = useConfirm();
+  const [stockInFilePreview, setStockInFilePreview] = useState<{ url: string; type: 'image' | 'pdf' } | null>(null);
 
   const hasPerm = (perm: string): boolean => {
     if (tenantRole === 'owner') return true;
@@ -116,6 +170,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
 
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+  const stockInCustomFieldDefs = orderFormSettings.stockInCustomFields ?? [];
 
   const getUnitName = (productId: string) => {
     const p = productMap.get(productId);
@@ -149,14 +204,16 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
     warehouseId: string;
     variantQuantities: Record<string, number>;
     singleQuantity: number;
-  }>({ warehouseId: '', variantQuantities: {}, singleQuantity: 0 });
+    customData: Record<string, unknown>;
+  }>({ warehouseId: '', variantQuantities: {}, singleQuantity: 0, customData: {} });
 
   const [selectedPendingRowKeys, setSelectedPendingRowKeys] = useState<Set<string>>(new Set());
   const [batchStockInItems, setBatchStockInItems] = useState<PendingStockItem[] | null>(null);
   const [batchStockForm, setBatchStockForm] = useState<{
     warehouseId: string;
+    customData: Record<string, unknown>;
     lines: Record<string, { variantQuantities: Record<string, number>; singleQuantity: number }>;
-  }>({ warehouseId: '', lines: {} });
+  }>({ warehouseId: '', customData: {}, lines: {} });
 
   const [showStockInFlowModal, setShowStockInFlowModal] = useState(false);
   const [stockInFlowFilter, setStockInFlowFilter] = useState<{
@@ -173,7 +230,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
     if (!open) {
       setSelectedPendingRowKeys(new Set());
       setBatchStockInItems(null);
-      setBatchStockForm({ warehouseId: '', lines: {} });
+      setBatchStockForm({ warehouseId: '', customData: {}, lines: {} });
     }
   }, [open]);
 
@@ -248,7 +305,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                 className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
                 onClick={() => {
                   setBatchStockInItems(null);
-                  setBatchStockForm({ warehouseId: '', lines: {} });
+                  setBatchStockForm({ warehouseId: '', customData: {}, lines: {} });
                 }}
               />
               <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
@@ -260,7 +317,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                     type="button"
                     onClick={() => {
                       setBatchStockInItems(null);
-                      setBatchStockForm({ warehouseId: '', lines: {} });
+                      setBatchStockForm({ warehouseId: '', customData: {}, lines: {} });
                     }}
                     className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"
                   >
@@ -285,6 +342,12 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                   )}
                   <p className="text-xs text-slate-500 mt-2">本次将使用同一入库单号生成多条明细；合计 {batchTotalPieces}（校验通过后方可提交）</p>
                   {batchError && <p className="text-xs font-bold text-rose-600 mt-1">存在超量行，请检查各行不超过本单待入库。</p>}
+                  <StockInCustomCreateFields
+                    fields={stockInCustomFieldDefs}
+                    values={batchStockForm.customData}
+                    onChange={(id, v) => setBatchStockForm(f => ({ ...f, customData: { ...f.customData, [id]: v } }))}
+                    onFilePreview={(url, type) => setStockInFilePreview({ url, type })}
+                  />
                 </div>
                 <div className="flex-1 overflow-auto p-4 space-y-4">
                   {batchStockInItems.map(stockItem => {
@@ -388,7 +451,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                     type="button"
                     onClick={() => {
                       setBatchStockInItems(null);
-                      setBatchStockForm({ warehouseId: '', lines: {} });
+                      setBatchStockForm({ warehouseId: '', customData: {}, lines: {} });
                     }}
                     className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200"
                   >
@@ -428,17 +491,17 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                                 const alloc = Math.min(remain, cap);
                                 remain -= alloc;
                                 seq += 1;
-                                records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: o.id, productId: o.productId, variantId: vid || undefined, quantity: alloc, operator, timestamp: ts, status: '已完成', warehouseId: batchStockForm.warehouseId || undefined, docNo } as ProductionOpRecord);
+                                records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: o.id, productId: o.productId, variantId: vid || undefined, quantity: alloc, operator, timestamp: ts, status: '已完成', warehouseId: batchStockForm.warehouseId || undefined, docNo, ...stockInCollabFromCustomData(batchStockForm.customData) } as ProductionOpRecord);
                               }
                               if (remain > 0) {
                                 seq += 1;
-                                records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: sortedOrders[sortedOrders.length - 1].id, productId: pit.order.productId, variantId: vid || undefined, quantity: remain, operator, timestamp: ts, status: '已完成', warehouseId: batchStockForm.warehouseId || undefined, docNo } as ProductionOpRecord);
+                                records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: sortedOrders[sortedOrders.length - 1].id, productId: pit.order.productId, variantId: vid || undefined, quantity: remain, operator, timestamp: ts, status: '已完成', warehouseId: batchStockForm.warehouseId || undefined, docNo, ...stockInCollabFromCustomData(batchStockForm.customData) } as ProductionOpRecord);
                               }
                             }
                           } else {
                             variantEntries.forEach(([variantId, qty]) => {
                               seq += 1;
-                              records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: pit.order.id, productId: pit.order.productId, variantId: variantId || undefined, quantity: qty, operator, timestamp: ts, status: '已完成', warehouseId: batchStockForm.warehouseId || undefined, docNo } as ProductionOpRecord);
+                              records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: pit.order.id, productId: pit.order.productId, variantId: variantId || undefined, quantity: qty, operator, timestamp: ts, status: '已完成', warehouseId: batchStockForm.warehouseId || undefined, docNo, ...stockInCollabFromCustomData(batchStockForm.customData) } as ProductionOpRecord);
                             });
                           }
                         } else {
@@ -455,15 +518,15 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                               const alloc = Math.min(remain, cap);
                               remain -= alloc;
                               seq += 1;
-                              records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: o.id, productId: o.productId, quantity: alloc, operator, timestamp: ts, status: '已完成', warehouseId: batchStockForm.warehouseId || undefined, docNo } as ProductionOpRecord);
+                              records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: o.id, productId: o.productId, quantity: alloc, operator, timestamp: ts, status: '已完成', warehouseId: batchStockForm.warehouseId || undefined, docNo, ...stockInCollabFromCustomData(batchStockForm.customData) } as ProductionOpRecord);
                             }
                             if (remain > 0) {
                               seq += 1;
-                              records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: sortedOrders[sortedOrders.length - 1].id, productId: pit.order.productId, quantity: remain, operator, timestamp: ts, status: '已完成', warehouseId: batchStockForm.warehouseId || undefined, docNo } as ProductionOpRecord);
+                              records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: sortedOrders[sortedOrders.length - 1].id, productId: pit.order.productId, quantity: remain, operator, timestamp: ts, status: '已完成', warehouseId: batchStockForm.warehouseId || undefined, docNo, ...stockInCollabFromCustomData(batchStockForm.customData) } as ProductionOpRecord);
                             }
                           } else {
                             seq += 1;
-                            records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: pit.order.id, productId: pit.order.productId, quantity: totalQty, operator, timestamp: ts, status: '已完成', warehouseId: batchStockForm.warehouseId || undefined, docNo } as ProductionOpRecord);
+                            records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: pit.order.id, productId: pit.order.productId, quantity: totalQty, operator, timestamp: ts, status: '已完成', warehouseId: batchStockForm.warehouseId || undefined, docNo, ...stockInCollabFromCustomData(batchStockForm.customData) } as ProductionOpRecord);
                           }
                         }
                       }
@@ -475,7 +538,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                         description: `入库单号 ${docNo}，${records.length} 条明细，合计 ${batchTotalQty} 件`,
                       });
                       setBatchStockInItems(null);
-                      setBatchStockForm({ warehouseId: '', lines: {} });
+                      setBatchStockForm({ warehouseId: '', customData: {}, lines: {} });
                       setSelectedPendingRowKeys(new Set());
                     }}
                     className="px-6 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
@@ -493,11 +556,11 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
           const unitName = getUnitName(order.productId);
           return (
             <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
-              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: warehouses[0]?.id ?? '', variantQuantities: {}, singleQuantity: 0 }); }} />
+              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: warehouses[0]?.id ?? '', variantQuantities: {}, singleQuantity: 0, customData: {} }); }} />
               <div className="relative bg-white w-full max-w-2xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
                 <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
                   <h3 className="font-bold text-slate-800 flex items-center gap-2"><ArrowDownToLine className="w-5 h-5 text-indigo-600" /> 选择入库 — {productionLinkMode === 'product' ? (order.productName || product?.name || '关联产品') : order.orderNumber}</h3>
-                  <button onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: warehouses[0]?.id ?? '', variantQuantities: {}, singleQuantity: 0 }); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
+                  <button onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: warehouses[0]?.id ?? '', variantQuantities: {}, singleQuantity: 0, customData: {} }); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
                 </div>
                 <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
                   <p className="text-sm font-bold text-slate-700">{order.productName || product?.name}</p>
@@ -528,6 +591,12 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                       </div>
                     )}
                   </div>
+                  <StockInCustomCreateFields
+                    fields={stockInCustomFieldDefs}
+                    values={stockInForm.customData}
+                    onChange={(id, v) => setStockInForm(f => ({ ...f, customData: { ...f.customData, [id]: v } }))}
+                    onFilePreview={(url, type) => setStockInFilePreview({ url, type })}
+                  />
                   {hasColorSize && product?.variants?.length ? (
                     <div className="space-y-4">
                       <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider">入库数量明细（颜色尺码）</h4>
@@ -596,7 +665,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                 <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
                   <button
                     type="button"
-                    onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: warehouses[0]?.id ?? '', variantQuantities: {}, singleQuantity: 0 }); }}
+                    onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: warehouses[0]?.id ?? '', variantQuantities: {}, singleQuantity: 0, customData: {} }); }}
                     className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200"
                   >
                     返回列表
@@ -628,12 +697,12 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                               const alloc = Math.min(remain, cap);
                               remain -= alloc;
                               seq += 1;
-                              records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: o.id, productId: o.productId, variantId: vid || undefined, quantity: alloc, operator, timestamp: ts, status: '已完成', warehouseId: stockInForm.warehouseId || undefined, docNo } as ProductionOpRecord);
+                              records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: o.id, productId: o.productId, variantId: vid || undefined, quantity: alloc, operator, timestamp: ts, status: '已完成', warehouseId: stockInForm.warehouseId || undefined, docNo, ...stockInCollabFromCustomData(stockInForm.customData) } as ProductionOpRecord);
                             }
                             if (remain > 0) {
                               const fallback = sortedOrders[sortedOrders.length - 1];
                               seq += 1;
-                              records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: fallback.id, productId: fallback.productId, variantId: vid || undefined, quantity: remain, operator, timestamp: ts, status: '已完成', warehouseId: stockInForm.warehouseId || undefined, docNo } as ProductionOpRecord);
+                              records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: fallback.id, productId: fallback.productId, variantId: vid || undefined, quantity: remain, operator, timestamp: ts, status: '已完成', warehouseId: stockInForm.warehouseId || undefined, docNo, ...stockInCollabFromCustomData(stockInForm.customData) } as ProductionOpRecord);
                             }
                           }
                         } else {
@@ -647,12 +716,12 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                             const alloc = Math.min(remain, cap);
                             remain -= alloc;
                             seq += 1;
-                            records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: o.id, productId: o.productId, quantity: alloc, operator, timestamp: ts, status: '已完成', warehouseId: stockInForm.warehouseId || undefined, docNo } as ProductionOpRecord);
+                            records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: o.id, productId: o.productId, quantity: alloc, operator, timestamp: ts, status: '已完成', warehouseId: stockInForm.warehouseId || undefined, docNo, ...stockInCollabFromCustomData(stockInForm.customData) } as ProductionOpRecord);
                           }
                           if (remain > 0) {
                             const fallback = sortedOrders[sortedOrders.length - 1];
                             seq += 1;
-                            records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: fallback.id, productId: fallback.productId, quantity: remain, operator, timestamp: ts, status: '已完成', warehouseId: stockInForm.warehouseId || undefined, docNo } as ProductionOpRecord);
+                            records.push({ id: `rec-${Date.now()}-${seq}-${Math.random().toString(36).slice(2, 8)}`, type: 'STOCK_IN', orderId: fallback.id, productId: fallback.productId, quantity: remain, operator, timestamp: ts, status: '已完成', warehouseId: stockInForm.warehouseId || undefined, docNo, ...stockInCollabFromCustomData(stockInForm.customData) } as ProductionOpRecord);
                           }
                         }
                         if (records.length > 0) {
@@ -677,7 +746,8 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                             timestamp: ts,
                             status: '已完成',
                             warehouseId: stockInForm.warehouseId || undefined,
-                            docNo
+                            docNo,
+                            ...stockInCollabFromCustomData(stockInForm.customData),
                           }));
                         if (records.length > 0) {
                           if (onAddRecordBatch) {
@@ -703,14 +773,15 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                           timestamp: ts,
                           status: '已完成',
                           warehouseId: stockInForm.warehouseId || undefined,
-                          docNo
+                          docNo,
+                          ...stockInCollabFromCustomData(stockInForm.customData),
                         } as ProductionOpRecord);
                         toast.success('入库已保存', {
                           description: `入库单号 ${docNo}，1 条明细，合计 ${qty} ${unitName}`,
                         });
                       }
                       setStockInOrder(null);
-                      setStockInForm({ warehouseId: warehouses[0]?.id ?? '', variantQuantities: {}, singleQuantity: 0 });
+                      setStockInForm({ warehouseId: warehouses[0]?.id ?? '', variantQuantities: {}, singleQuantity: 0, customData: {} });
                     }}
                     className="px-6 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
@@ -742,7 +813,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                           lines[it.rowKey] = defaultQuantitiesForPendingItem(it);
                         });
                         setStockInOrder(null);
-                        setBatchStockForm({ warehouseId: warehouses[0]?.id ?? '', lines });
+                        setBatchStockForm({ warehouseId: warehouses[0]?.id ?? '', customData: {}, lines });
                         setBatchStockInItems(rows);
                       }}
                       className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
@@ -851,13 +922,14 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                                   type="button"
                                   onClick={() => {
                                     setBatchStockInItems(null);
-                                    setBatchStockForm({ warehouseId: '', lines: {} });
+                                    setBatchStockForm({ warehouseId: '', customData: {}, lines: {} });
                                     setStockInOrder(item);
                                     const d = defaultQuantitiesForPendingItem(item);
                                     setStockInForm({
                                       warehouseId: warehouses[0]?.id ?? '',
                                       variantQuantities: d.variantQuantities,
                                       singleQuantity: d.singleQuantity,
+                                      customData: {},
                                     });
                                   }}
                                   className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700"
@@ -894,6 +966,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
           quantity: number;
           operator: string;
           timestamp: string;
+          collabData?: Record<string, unknown> | null;
         };
         const allStockInRows: StockInRow[] = (prodRecords || [])
           .filter(r => r.type === 'STOCK_IN')
@@ -914,6 +987,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
               quantity: r.quantity ?? 0,
               operator: r.operator ?? '',
               timestamp: r.timestamp ?? '',
+              collabData: (r as ProductionOpRecord & { collabData?: Record<string, unknown> | null }).collabData ?? null,
             };
           });
 
@@ -939,6 +1013,8 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
           orderNumber: string;
           productName: string;
           warehouseName: string;
+          /** 同单首条记录上的 collabData.stockInCustomData */
+          stockInCustomSnapshot?: Record<string, unknown>;
         };
         const groups = new Map<string, StockInRow[]>();
         filteredRows.forEach(r => {
@@ -950,6 +1026,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
           .map(([docNo, rows]) => {
             const pid = rows[0].productId;
             const prod = productMap.get(pid);
+            const snap = rows[0].collabData?.stockInCustomData;
             return {
               docNo,
               rows,
@@ -958,6 +1035,8 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
               orderNumber: rows[0].orderNumber,
               productName: prod?.name || rows[0].productName,
               warehouseName: rows[0].warehouseName,
+              stockInCustomSnapshot:
+                snap && typeof snap === 'object' && !Array.isArray(snap) ? (snap as Record<string, unknown>) : undefined,
             };
           })
           .sort((a, b) => {
@@ -1121,6 +1200,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                       quantity: Math.max(0, editRow.quantity),
                       warehouseId: stockInFlowEditing.warehouseId || undefined,
                       operator: stockInFlowEditing.operator,
+                      collabData: (rec as ProductionOpRecord & { collabData?: Record<string, unknown> }).collabData,
                     });
                   }
                 });
@@ -1159,6 +1239,37 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                           </>
                         ) : (
                           <>
+                            <OrderCenterDetailPrintBlock
+                              printSlot={orderFormSettings.orderCenterPrint?.stockInFlowDetail}
+                              printTemplates={printTemplates}
+                              onAddPrintTemplate={onOpenOrderFormPrintTab}
+                              buildContext={(_template: PrintTemplate): PrintRenderContext => {
+                                const od =
+                                  productionLinkMode !== 'product' && detailBatch.orderNumber
+                                    ? orders.find(o => o.orderNumber === detailBatch.orderNumber)
+                                    : undefined;
+                                return {
+                                  order: od,
+                                  product: product ?? undefined,
+                                  stockInPrint: {
+                                    docNo: detailBatch.docNo,
+                                    warehouseName: detailBatch.warehouseName || wh?.name || '',
+                                    operator: detailBatch.first.operator,
+                                    timestamp: fmtDT(detailBatch.first.timestamp),
+                                    productName: detailBatch.productName,
+                                    orderNumber: detailBatch.orderNumber || '—',
+                                    totalQty: detailBatch.totalQty,
+                                    custom: detailBatch.stockInCustomSnapshot ?? {},
+                                  },
+                                  printListRows: detailBatch.rows.map((r, i) => ({
+                                    index: i + 1,
+                                    variantLabel: getVariantLabel(r.variantId),
+                                    quantity: r.quantity,
+                                  })),
+                                };
+                              }}
+                              pickerSubtitle={`入库单 ${detailBatch.docNo}`}
+                            />
                             {onUpdateRecord && hasPerm('production:orders_pending_stock_in:edit') && (
                               <button type="button" onClick={startEdit} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200">
                                 <Pencil className="w-4 h-4" /> 编辑
@@ -1266,6 +1377,30 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                               <p className="text-sm font-bold text-slate-800">{detailBatch.first.operator}</p>
                             </div>
                           </div>
+                          {stockInCustomFieldDefs.filter(f => f.showInDetail).length > 0 && detailBatch.stockInCustomSnapshot && (
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                              {stockInCustomFieldDefs.filter(f => f.showInDetail).map(f => {
+                                const val = detailBatch.stockInCustomSnapshot![f.id];
+                                if (val == null || val === '') return null;
+                                return (
+                                  <div key={f.id} className="rounded-xl bg-slate-50 px-4 py-2">
+                                    <p className="mb-0.5 text-[10px] font-bold uppercase text-slate-400">{f.label}</p>
+                                    <div className="text-sm font-bold text-slate-800">
+                                      {typeof val === 'boolean' ? (
+                                        val ? '是' : '否'
+                                      ) : (
+                                        <PlanFormCustomFieldReadonly
+                                          cf={f}
+                                          value={val}
+                                          onFilePreview={(url, type) => setStockInFilePreview({ url, type })}
+                                        />
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                           <div className="border border-slate-200 rounded-2xl overflow-hidden">
                             <table className="w-full text-left text-sm">
                               <thead>
@@ -1302,6 +1437,32 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
           </>
         );
       })()}
+
+      {stockInFilePreview && (
+        <div
+          className="fixed inset-0 z-[140] flex items-center justify-center p-8 bg-slate-900/80 backdrop-blur-sm"
+          onClick={() => setStockInFilePreview(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setStockInFilePreview(null)}
+            className="absolute right-6 top-6 z-10 rounded-full bg-white/20 p-2 text-white transition-all hover:bg-white/40"
+            aria-label="关闭预览"
+          >
+            <X className="h-8 w-8" />
+          </button>
+          <div
+            className="relative z-10 max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            {stockInFilePreview.type === 'image' ? (
+              <img src={stockInFilePreview.url} alt="预览" className="max-h-[85vh] w-full object-contain" />
+            ) : (
+              <iframe src={stockInFilePreview.url} title="PDF 预览" className="h-[85vh] w-full border-0" sandbox="allow-same-origin" />
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 };

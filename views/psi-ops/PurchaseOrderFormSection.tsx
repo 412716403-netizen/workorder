@@ -12,6 +12,8 @@ import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelec
 import { Product, ProductCategory, Partner, PartnerCategory, AppDictionaries, ProductVariant } from '../../types';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 import { sectionTitleClass } from '../../styles/uiDensity';
+import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
+import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import { useConfirm } from '../../contexts/ConfirmContext';
 
 export interface PurchaseOrderLineItem {
@@ -28,7 +30,15 @@ interface PurchaseOrderFormSectionProps {
   setForm: (form: any) => void;
   purchaseOrderItems: PurchaseOrderLineItem[];
   onAddItem: () => void;
-  onUpdateItem: (id: string, updates: Partial<{ productId: string; quantity?: number; purchasePrice: number; variantQuantities?: Record<string, number> }>) => void;
+  onUpdateItem: (
+    id: string,
+    updates: Partial<{
+      productId: string;
+      quantity?: number;
+      purchasePrice: number;
+      variantQuantities?: Record<string, number>;
+    }>,
+  ) => void;
   onUpdateVariantQty: (lineId: string, variantId: string, qty: number) => void;
   onRemoveItem: (id: string) => void;
   onSave: () => void;
@@ -45,6 +55,8 @@ interface PurchaseOrderFormSectionProps {
   formatQtyDisplay: (q: number | string | undefined | null) => number;
   getUnitName: (productId: string) => string;
   formSettings: { standardFields: any[]; customFields: any[] };
+  /** 新增时展示的「将生成的单号」预览（保存逻辑在父组件强制自动生成） */
+  previewAutoPoDocNumber?: string;
   partnerLabel: string;
   receivedByOrderLine: Record<string, number>;
 }
@@ -56,7 +68,10 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
   editingDocNumber, hasPsiPerm,
   products, categories, partners, partnerCategories, dictionaries,
   productMapPSI, formatQtyDisplay, getUnitName,
-  formSettings, partnerLabel, receivedByOrderLine,
+  formSettings,
+  previewAutoPoDocNumber,
+  partnerLabel,
+  receivedByOrderLine,
 }) => {
   const confirm = useConfirm();
 
@@ -104,57 +119,55 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
             <h3 className={sectionTitleClass}>1. 采购订单基础信息</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2 space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{partnerLabel}</label>
-              <SearchablePartnerSelect
-                options={partners}
-                categories={partnerCategories}
-                value={form.partner}
-                onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id })}
-                placeholder={`选择${partnerLabel}...`}
-                triggerClassName="text-sm"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据编号 (选填)</label>
-              <div className="relative">
-                <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                <input type="text" placeholder="留空则自动生成" value={form.docNumber} onChange={e => setForm({ ...form, docNumber: e.target.value })} className="w-full bg-slate-50 border-none rounded-xl py-3 pl-10 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
+            <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5 min-w-0">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{partnerLabel}</label>
+                <SearchablePartnerSelect
+                  options={partners}
+                  categories={partnerCategories}
+                  value={form.partner}
+                  onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id })}
+                  placeholder={`选择${partnerLabel}...`}
+                  triggerClassName="text-sm w-full max-w-full"
+                />
+              </div>
+              <div className="space-y-1 min-w-0">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据编号</label>
+                <div className="relative">
+                  <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
+                  <div className="w-full min-w-0 bg-slate-100 border border-slate-100 rounded-xl py-3 pl-10 pr-4 font-bold text-slate-800 h-[52px] flex items-center truncate">
+                    <span className="truncate">
+                      {editingDocNumber
+                        ? editingDocNumber
+                        : form.partner
+                          ? previewAutoPoDocNumber || '保存时自动生成'
+                          : '请先选择供应商'}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-[10px] font-bold text-slate-400 ml-1 leading-snug">由系统自动生成，不可修改</p>
               </div>
             </div>
-            {formSettings.standardFields.find(f => f.id === 'dueDate')?.showInCreate !== false && (
+            {editingDocNumber && formSettings.standardFields.find(f => f.id === 'dueDate')?.showInCreate !== false && (
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">期望到货日期</label>
                 <input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
               </div>
             )}
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">添加日期</label>
-              <input type="date" value={form.createdAt} onChange={e => setForm({ ...form, createdAt: e.target.value })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-            </div>
-            {formSettings.standardFields.find(f => f.id === 'note')?.showInCreate !== false && (
-              <div className="md:col-span-2 space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据备注</label>
-                <input type="text" value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" placeholder="备注说明..." />
-              </div>
-            )}
-            {formSettings.customFields.filter(f => f.showInCreate).map(cf => (
-              <div key={cf.id} className={cf.type === 'text' || cf.type === undefined ? 'md:col-span-2 space-y-1' : 'space-y-1'}>
+            {formSettings.customFields.filter(f => f.showInCreate).map(cf => {
+              const eff = effectivePlanFormFieldType(cf);
+              return (
+              <div key={cf.id} className={eff === 'text' || eff === 'file' ? 'md:col-span-2 space-y-1' : 'space-y-1'}>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{cf.label}</label>
-                {cf.type === 'date' ? (
-                  <input type="date" value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-                ) : cf.type === 'number' ? (
-                  <input type="number" value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value === '' ? '' : Number(e.target.value) } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-                ) : cf.type === 'select' ? (
-                  <select value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]">
-                    <option value="">请选择</option>
-                    {(cf.options ?? []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                  </select>
-                ) : (
-                  <input type="text" value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" placeholder={`${cf.label}`} />
-                )}
+                <PlanFormCustomFieldInput
+                  cf={cf}
+                  value={form.customData?.[cf.id]}
+                  onChange={next => setForm({ ...form, customData: { ...form.customData, [cf.id]: next } })}
+                  controlClassName="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]"
+                />
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
 
@@ -206,7 +219,7 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
                           productId: id,
                           purchasePrice: p?.purchasePrice ?? 0,
                           quantity: hv ? undefined : 0,
-                          variantQuantities: hv ? {} : undefined
+                          variantQuantities: hv ? {} : undefined,
                         });
                       }}
                     />

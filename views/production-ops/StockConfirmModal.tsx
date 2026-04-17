@@ -1,6 +1,7 @@
 import React from 'react';
 import { Check, X } from 'lucide-react';
-import type { ProductionOrder, Product, Warehouse, AppDictionaries } from '../../types';
+import type { ProductionOrder, Product, Warehouse, AppDictionaries, PlanFormFieldConfig } from '../../types';
+import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 
 export interface StockConfirmModalProps {
   visible: boolean;
@@ -16,6 +17,10 @@ export interface StockConfirmModalProps {
   onWarehouseChange: (warehouseId: string) => void;
   stockConfirmReason: string;
   onReasonChange: (reason: string) => void;
+  /** 确认领料/退料时填写的自定义项（showInCreate） */
+  materialCustomFieldDefs?: PlanFormFieldConfig[];
+  materialCustomValues?: Record<string, unknown>;
+  onMaterialCustomValueChange?: (fieldId: string, value: unknown) => void;
   orders: ProductionOrder[];
   products: Product[];
   warehouses: Warehouse[];
@@ -37,6 +42,9 @@ const StockConfirmModal: React.FC<StockConfirmModalProps> = ({
   onWarehouseChange,
   stockConfirmReason,
   onReasonChange,
+  materialCustomFieldDefs = [],
+  materialCustomValues = {},
+  onMaterialCustomValueChange,
   orders,
   products,
   warehouses,
@@ -112,6 +120,24 @@ const StockConfirmModal: React.FC<StockConfirmModalProps> = ({
               />
             </div>
           </div>
+          {materialCustomFieldDefs.length > 0 && onMaterialCustomValueChange ? (
+            <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+              <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">
+                {isReturn ? '退料自定义内容' : '领料自定义内容'}
+              </h4>
+              {materialCustomFieldDefs.map(cf => (
+                <div key={cf.id} className="space-y-1">
+                  <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
+                  <PlanFormCustomFieldInput
+                    cf={cf}
+                    value={materialCustomValues[cf.id]}
+                    onChange={v => onMaterialCustomValueChange(cf.id, v)}
+                    controlClassName="h-[52px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              ))}
+            </div>
+          ) : null}
           <div className="border border-slate-200 rounded-2xl overflow-hidden">
             <table className="w-full text-left text-sm">
               <thead>

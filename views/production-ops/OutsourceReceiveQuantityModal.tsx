@@ -8,7 +8,9 @@ import type {
   ProductVariant,
   ProductMilestoneProgress,
   AppDictionaries,
+  PlanFormFieldConfig,
 } from '../../types';
+import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 
@@ -43,6 +45,9 @@ export interface OutsourceReceiveQuantityModalProps {
   dictionaries?: AppDictionaries;
   records: ProductionOpRecord[];
   productMilestoneProgresses?: ProductMilestoneProgress[];
+  receiveCustomFieldDefs?: PlanFormFieldConfig[];
+  receiveCustomValues?: Record<string, unknown>;
+  setReceiveCustomValues?: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
   onSubmit: () => void;
   onClose: () => void;
 }
@@ -63,6 +68,9 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
   dictionaries,
   records,
   productMilestoneProgresses = [],
+  receiveCustomFieldDefs = [],
+  receiveCustomValues = {},
+  setReceiveCustomValues,
   onSubmit,
   onClose,
 }) => {
@@ -88,6 +96,24 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
               <input type="text" value={receiveFormRemark} onChange={e => setReceiveFormRemark(e.target.value)} placeholder="选填" className="w-full h-[52px] rounded-xl border border-slate-200 py-3 px-4 text-sm font-bold text-slate-800 bg-white focus:ring-2 focus:ring-indigo-500 outline-none placeholder:text-slate-400" />
             </div>
           </div>
+          {receiveCustomFieldDefs.length > 0 && setReceiveCustomValues ? (
+            <div className="mt-4 space-y-3 rounded-xl border border-slate-100 bg-white/80 p-4">
+              <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500">自定义内容</h4>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {receiveCustomFieldDefs.map(cf => (
+                  <div key={cf.id} className="min-w-0 space-y-1">
+                    <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
+                    <PlanFormCustomFieldInput
+                      cf={cf}
+                      value={receiveCustomValues[cf.id]}
+                      onChange={v => setReceiveCustomValues(prev => ({ ...prev, [cf.id]: v }))}
+                      controlClassName="h-[48px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
         <div className="flex-1 overflow-auto min-h-0 p-6">
           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">商品明细</h4>

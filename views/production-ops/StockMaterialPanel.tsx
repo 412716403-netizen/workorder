@@ -15,13 +15,17 @@ import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import type {
   ProductionOpRecord,
   ProductionOrder,
+  PlanOrder,
   ProdOpType,
   MaterialPanelSettings,
+  MaterialFormSettings,
+  PrintTemplate,
 } from '../../types';
-import { DEFAULT_MATERIAL_PANEL_SETTINGS } from '../../types';
+import { DEFAULT_MATERIAL_PANEL_SETTINGS, DEFAULT_MATERIAL_FORM_SETTINGS } from '../../types';
 import { PanelProps, hasOpsPerm, getOrderFamilyIds, type StockDocDetail } from './types';
 import { toLocalCompactYmd } from '../../utils/localDateTime';
 import { orderCreatedMs } from '../../utils/orderCenterSort';
+import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpCollab/material';
 
 type MatRow = { productId: string; issue: number; returnQty: number; theoryCost: number };
 
@@ -156,8 +160,14 @@ const MaterialStatsTable: React.FC<{
 };
 
 interface StockMaterialPanelProps extends PanelProps {
+  plans?: PlanOrder[];
   materialPanelSettings?: MaterialPanelSettings;
   onUpdateMaterialPanelSettings?: (settings: MaterialPanelSettings) => void;
+  materialFormSettings?: MaterialFormSettings;
+  onUpdateMaterialFormSettings?: (settings: MaterialFormSettings) => void;
+  printTemplates?: PrintTemplate[];
+  onUpdatePrintTemplates?: (list: PrintTemplate[]) => void | Promise<void>;
+  onRefreshPrintTemplates?: () => void | Promise<void>;
 }
 import { useDataIndexes } from './useDataIndexes';
 import {
@@ -170,11 +180,12 @@ import StockConfirmModal from './StockConfirmModal';
 import StockDocDetailModal from './StockDocDetailModal';
 import StockFlowListModal from './StockFlowListModal';
 import StockMaterialFormModal from './StockMaterialFormModal';
-import MaterialPanelConfigModal from './MaterialPanelConfigModal';
+import MaterialFormConfigModal from './MaterialFormConfigModal';
 
 const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   productionLinkMode,
   productMilestoneProgresses,
+  plans = [],
   records,
   orders,
   products,
@@ -189,6 +200,11 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   tenantRole,
   materialPanelSettings = DEFAULT_MATERIAL_PANEL_SETTINGS,
   onUpdateMaterialPanelSettings,
+  materialFormSettings = DEFAULT_MATERIAL_FORM_SETTINGS,
+  onUpdateMaterialFormSettings,
+  printTemplates = [],
+  onUpdatePrintTemplates,
+  onRefreshPrintTemplates,
 }) => {
   const canViewMainList = hasOpsPerm(tenantRole, userPermissions, 'production:material_list:allow');
   const toggleSelect = (productId: string) => setStockSelectedIds(prev => { const next = new Set(prev); if (next.has(productId)) next.delete(productId); else next.add(productId); return next; });
@@ -204,8 +220,10 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   const [stockConfirmQuantities, setStockConfirmQuantities] = useState<Record<string, number>>({});
   const [stockConfirmWarehouseId, setStockConfirmWarehouseId] = useState('');
   const [stockConfirmReason, setStockConfirmReason] = useState('');
+  const [stockConfirmCustomValues, setStockConfirmCustomValues] = useState<Record<string, unknown>>({});
   const [stockDocDetail, setStockDocDetail] = useState<StockDocDetail | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
+  const [materialFormConfigEntryTab, setMaterialFormConfigEntryTab] = useState<'fields' | 'print' | 'list'>('fields');
   const [stockSelectPartner, setStockSelectPartner] = useState<string | null>(null);
   const [materialSearch, setMaterialSearch] = useState('');
   const debouncedMaterialSearch = useDebouncedValue(materialSearch, 300);
@@ -259,7 +277,8 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
           ? (bestMs.reports || []).reduce((s, r) => s + Number(r.quantity), 0)
           : ord.milestones.reduce((max, ms) => Math.max(max, ms.completedQuantity), 0);
 
-        if (variants.length > 0 && variantCompletedMap.size > 0) {
+        const hasReportQtyForAnyProductVariant = variants.some(v => (variantCompletedMap.get(v.id) ?? 0) > 0);
+        if (variants.length > 0 && variantCompletedMap.size > 0 && hasReportQtyForAnyProductVariant) {
           variants.forEach(v => {
             const vCompleted = variantCompletedMap.get(v.id) ?? 0;
             if (vCompleted <= 0) return;
@@ -321,8 +340,18 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   /** 关联产品模式：按成品聚合物料（多工单同产品合并一行卡片） */
   const productMaterialStatsByProduct = useMemo(() => {
     if (productionLinkMode !== 'product') return null as Map<string, { productId: string; issue: number; returnQty: number; theoryCost: number }[]> | null;
-    const { productsById, bomsById, bomsByParentProduct, childrenByParentId, rootOrdersByProductId, pmpByKey } = idx;
+    const { productsById, bomsById, bomsByParentProduct, childrenByParentId, rootOrdersByProductId, ordersByProductId, ordersById, pmpByKey } = idx;
     const result = new Map<string, { productId: string; issue: number; returnQty: number; theoryCost: number }[]>();
+    const resolveOrderRootId = (orderId: string): string => {
+      let cur = orderId;
+      for (let i = 0; i < 24; i++) {
+        const o = ordersById.get(cur);
+        if (!o) return cur;
+        if (!o.parentOrderId) return o.id;
+        cur = o.parentOrderId;
+      }
+      return cur;
+    };
     const finishedProductHasBom = (fpId: string): boolean => {
       const ordProduct = productsById.get(fpId);
       if (!ordProduct) return false;
@@ -348,13 +377,21 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
       }
     }
 
-    const finishedIds = ([...new Set(orders.filter(o => !o.parentOrderId).map(o => o.productId))] as string[])
+    const finishedIds = ([...new Set(orders.map(o => o.productId))] as string[])
       .filter(Boolean)
       .filter(fpId => finishedProductHasBom(fpId));
     for (const fpId of finishedIds) {
       const roots = rootOrdersByProductId.get(fpId) ?? [];
+      const ordersForThisProduct = ordersByProductId.get(fpId) ?? [];
       const allFamilyIds = new Set<string>();
-      roots.forEach(p => getOrderFamilyIds(orders, p.id, childrenByParentId).forEach(id => allFamilyIds.add(id)));
+      if (roots.length > 0) {
+        roots.forEach(p => getOrderFamilyIds(orders, p.id, childrenByParentId).forEach(id => allFamilyIds.add(id)));
+      } else {
+        ordersForThisProduct.forEach(o => {
+          const rootId = resolveOrderRootId(o.id);
+          getOrderFamilyIds(orders, rootId, childrenByParentId).forEach(id => allFamilyIds.add(id));
+        });
+      }
       const prodMap = new Map<string, { issue: number; returnQty: number; theoryCost: number }>();
       const addTheory2 = (bi: { productId: string; quantity: number }, qty: number) => {
         const theory = Number(bi.quantity) * qty;
@@ -382,31 +419,37 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         if (totalCompleted2 > 0) usedPmp = true;
       }
 
-      // PMP 无数据时回退到工单 milestone reports
+      // PMP 无数据时回退到工单 milestone reports（有主工单用整棵工单树；仅子工单产品则只统计该产品自身工单，避免把父成品报工计入中间料）
       if (!usedPmp) {
-        roots.forEach(parent => {
-          const familyIds = new Set(getOrderFamilyIds(orders, parent.id, childrenByParentId));
-          orders.filter(o => familyIds.has(o.id)).forEach(ord => {
-            const bestMsIdx = ord.milestones.reduce((bi, ms, i) => ms.completedQuantity > (ord.milestones[bi]?.completedQuantity ?? 0) ? i : bi, 0);
-            const bestMs = ord.milestones[bestMsIdx];
-            if (bestMs) {
-              (bestMs.reports || []).forEach(r => {
-                const qty = Number(r.quantity);
-                totalCompleted2 += qty;
-                const vid = r.variantId ?? '';
-                if (vid) variantCompletedMap2.set(vid, (variantCompletedMap2.get(vid) ?? 0) + qty);
-              });
-            } else {
-              const msMax = ord.milestones.reduce((max, ms) => Math.max(max, ms.completedQuantity), 0);
-              totalCompleted2 += msMax;
-            }
+        const accumulateMilestoneForOrder = (ord: ProductionOrder) => {
+          const bestMsIdx = ord.milestones.reduce((bi, ms, i) => ms.completedQuantity > (ord.milestones[bi]?.completedQuantity ?? 0) ? i : bi, 0);
+          const bestMs = ord.milestones[bestMsIdx];
+          if (bestMs) {
+            (bestMs.reports || []).forEach(r => {
+              const qty = Number(r.quantity);
+              totalCompleted2 += qty;
+              const vid = r.variantId ?? '';
+              if (vid) variantCompletedMap2.set(vid, (variantCompletedMap2.get(vid) ?? 0) + qty);
+            });
+          } else {
+            const msMax = ord.milestones.reduce((max, ms) => Math.max(max, ms.completedQuantity), 0);
+            totalCompleted2 += msMax;
+          }
+        };
+        if (roots.length > 0) {
+          roots.forEach(parent => {
+            const familyIds = new Set(getOrderFamilyIds(orders, parent.id, childrenByParentId));
+            orders.filter(o => familyIds.has(o.id)).forEach(accumulateMilestoneForOrder);
           });
-        });
+        } else {
+          ordersForThisProduct.forEach(accumulateMilestoneForOrder);
+        }
       }
 
       // BOM 理论耗材 = 报工流水完成量 × 单位 BOM 用量
       if (totalCompleted2 > 0 && fpProduct) {
-        if (fpVariants.length > 0 && variantCompletedMap2.size > 0) {
+        const hasPmpQtyForAnyFpVariant = fpVariants.some(v => (variantCompletedMap2.get(v.id) ?? 0) > 0);
+        if (fpVariants.length > 0 && variantCompletedMap2.size > 0 && hasPmpQtyForAnyFpVariant) {
           fpVariants.forEach(v => {
             const vCompleted = variantCompletedMap2.get(v.id) ?? 0;
             if (vCompleted <= 0) return;
@@ -590,8 +633,8 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
       if (materialsHit(materials)) return true;
       const fp = idx.productsById.get(fpId);
       if ((fp?.name ?? '').toLowerCase().includes(materialKw) || (fp?.sku ?? '').toLowerCase().includes(materialKw)) return true;
-      const roots = idx.rootOrdersByProductId.get(fpId) ?? [];
-      return roots.some(o =>
+      const scopeOrders = idx.ordersByProductId.get(fpId) ?? [];
+      return scopeOrders.some(o =>
         (o.orderNumber ?? '').toLowerCase().includes(materialKw) ||
         (o.customer ?? '').toLowerCase().includes(materialKw) ||
         (o.productName ?? '').toLowerCase().includes(materialKw)
@@ -635,25 +678,26 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
     if (!productMaterialStatsByProduct) return null;
     const sortByNewest = (entries: [string, MatRow[]][]) =>
       entries.sort((a, b) => {
-        const aMax = Math.max(0, ...(idx.rootOrdersByProductId.get(a[0]) ?? []).map(orderCreatedMs));
-        const bMax = Math.max(0, ...(idx.rootOrdersByProductId.get(b[0]) ?? []).map(orderCreatedMs));
+        const aMax = Math.max(0, ...(idx.ordersByProductId.get(a[0]) ?? []).map(orderCreatedMs));
+        const bMax = Math.max(0, ...(idx.ordersByProductId.get(b[0]) ?? []).map(orderCreatedMs));
         return bMax - aMax;
       });
     if (!materialKw) return sortByNewest(Array.from(productMaterialStatsByProduct.entries()));
-    return sortByNewest(Array.from(productMaterialStatsByProduct.entries()).filter(([fpId, materials]) => {
+    const filtered = Array.from(productMaterialStatsByProduct.entries()).filter(([fpId, materials]) => {
       if (materials.some(m => {
         const p = idx.productsById.get(m.productId);
         return (p?.name ?? '').toLowerCase().includes(materialKw) || (p?.sku ?? '').toLowerCase().includes(materialKw);
       })) return true;
       const fp = idx.productsById.get(fpId);
       if ((fp?.name ?? '').toLowerCase().includes(materialKw) || (fp?.sku ?? '').toLowerCase().includes(materialKw)) return true;
-      const roots = idx.rootOrdersByProductId.get(fpId) ?? [];
-      return roots.some(o =>
+      const scopeOrders = idx.ordersByProductId.get(fpId) ?? [];
+      return scopeOrders.some(o =>
         (o.orderNumber ?? '').toLowerCase().includes(materialKw) ||
         (o.customer ?? '').toLowerCase().includes(materialKw) ||
         (o.productName ?? '').toLowerCase().includes(materialKw)
       );
-    }));
+    }) as [string, MatRow[]][];
+    return sortByNewest(filtered);
   }, [productMaterialStatsByProduct, materialKw, idx]);
 
   const parentOrdersForDisplay = useMemo(() => {
@@ -707,6 +751,11 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
     const timestamp = new Date().toLocaleString();
     const partnerForRecord = stockSelectPartner && stockSelectPartner !== '__internal__' ? stockSelectPartner : undefined;
     const srcPid = stockSelectSourceProductId;
+    const collabExtra = buildMaterialStockCustomCollabPayload(
+      stockConfirmCustomValues,
+      recordType,
+      partnerForRecord,
+    );
     if (srcPid) {
       const batch: ProductionOpRecord[] = toSubmit.map(pid => ({
         id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -720,7 +769,8 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         status: '已完成',
         warehouseId: stockConfirmWarehouseId || undefined,
         partner: partnerForRecord,
-        docNo
+        docNo,
+        ...collabExtra,
       } as ProductionOpRecord));
       if (onAddRecordBatch && batch.length > 1) {
         await onAddRecordBatch(batch);
@@ -751,7 +801,8 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         status: '已完成',
         warehouseId: stockConfirmWarehouseId || undefined,
         partner: partnerForRecord,
-        docNo
+        docNo,
+        ...collabExtra,
       } as ProductionOpRecord));
       if (onAddRecordBatch && batch.length > 1) {
         await onAddRecordBatch(batch);
@@ -778,7 +829,28 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
     setStockSelectedIds(new Set());
     setStockConfirmQuantities({});
     setStockConfirmReason('');
+    setStockConfirmCustomValues({});
   };
+
+  const stockConfirmMaterialCustomFieldDefs = useMemo(() => {
+    const wx = stockSelectPartner && stockSelectPartner !== '__internal__';
+    const raw =
+      stockSelectMode === 'stock_return'
+        ? wx
+          ? materialFormSettings.outsourceMaterialReturnCustomFields
+          : materialFormSettings.materialReturnCustomFields
+        : wx
+          ? materialFormSettings.outsourceMaterialIssueCustomFields
+          : materialFormSettings.materialIssueCustomFields;
+    return (raw ?? []).filter(f => f.showInCreate);
+  }, [
+    stockSelectMode,
+    stockSelectPartner,
+    materialFormSettings.materialIssueCustomFields,
+    materialFormSettings.materialReturnCustomFields,
+    materialFormSettings.outsourceMaterialIssueCustomFields,
+    materialFormSettings.outsourceMaterialReturnCustomFields,
+  ]);
 
   return (
     <div className="space-y-4">
@@ -814,7 +886,10 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         {!showModal && hasOpsPerm(tenantRole, userPermissions, 'production:material_form_config:allow') && (
             <button
               type="button"
-              onClick={() => setShowConfigModal(true)}
+              onClick={() => {
+                setMaterialFormConfigEntryTab('fields');
+                setShowConfigModal(true);
+              }}
               className={outlineAccentToolbarButtonClass}
             >
               <Sliders className="w-4 h-4 shrink-0" />
@@ -872,7 +947,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                     {selecting ? (
                                       <>
                                         <span className="text-xs font-bold text-slate-500">已选 {stockSelectedIds.size} 项</span>
-                                        <button type="button" onClick={() => { if (stockSelectedIds.size === 0) return; setStockConfirmQuantities({}); setStockConfirmWarehouseId(warehouses[0]?.id ?? ''); setShowStockConfirmModal(true); }} disabled={stockSelectedIds.size === 0} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm disabled:opacity-50 ${stockSelectMode === 'stock_out' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'}`}><Check className="w-3 h-3" /> {stockSelectMode === 'stock_out' ? '确认领料' : '确认退料'}</button>
+                                        <button type="button" onClick={() => { if (stockSelectedIds.size === 0) return; setStockConfirmQuantities({}); setStockConfirmCustomValues({}); setStockConfirmWarehouseId(warehouses[0]?.id ?? ''); setShowStockConfirmModal(true); }} disabled={stockSelectedIds.size === 0} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm disabled:opacity-50 ${stockSelectMode === 'stock_out' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'}`}><Check className="w-3 h-3" /> {stockSelectMode === 'stock_out' ? '确认领料' : '确认退料'}</button>
                                         <button type="button" onClick={() => { setStockSelectSourceProductId(null); setStockSelectPartner(null); setStockSelectMode(null); setStockSelectedIds(new Set()); }} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all">取消</button>
                                       </>
                                     ) : (
@@ -910,7 +985,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                     {selecting ? (
                                       <>
                                         <span className="text-xs font-bold text-slate-500">已选 {stockSelectedIds.size} 项</span>
-                                        <button type="button" onClick={() => { if (stockSelectedIds.size === 0) return; setStockConfirmQuantities({}); setStockConfirmWarehouseId(warehouses[0]?.id ?? ''); setShowStockConfirmModal(true); }} disabled={stockSelectedIds.size === 0} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm disabled:opacity-50 ${stockSelectMode === 'stock_out' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'}`}><Check className="w-3 h-3" /> {stockSelectMode === 'stock_out' ? '确认领料' : '确认退料'}</button>
+                                        <button type="button" onClick={() => { if (stockSelectedIds.size === 0) return; setStockConfirmQuantities({}); setStockConfirmCustomValues({}); setStockConfirmWarehouseId(warehouses[0]?.id ?? ''); setShowStockConfirmModal(true); }} disabled={stockSelectedIds.size === 0} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm disabled:opacity-50 ${stockSelectMode === 'stock_out' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'}`}><Check className="w-3 h-3" /> {stockSelectMode === 'stock_out' ? '确认领料' : '确认退料'}</button>
                                         <button type="button" onClick={() => { setStockSelectOrderId(null); setStockSelectPartner(null); setStockSelectMode(null); setStockSelectedIds(new Set()); }} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all">取消</button>
                                       </>
                                     ) : (
@@ -958,7 +1033,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
               return (<>
               {pagedEntries.map(([fpId, materials]) => {
                 const fp = idx.productsById.get(fpId);
-                const orderCnt = (idx.rootOrdersByProductId.get(fpId) ?? []).length;
+                const orderCnt = (idx.ordersByProductId.get(fpId) ?? []).length;
                 const selecting = stockSelectSourceProductId === fpId && stockSelectMode;
                 const displayMaterials = displayMaterialsForSearch(materials);
                 return (
@@ -982,6 +1057,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                               onClick={() => {
                                 if (stockSelectedIds.size === 0) return;
                                 setStockConfirmQuantities({});
+                                setStockConfirmCustomValues({});
                                 setStockConfirmWarehouseId(warehouses[0]?.id ?? '');
                                 setShowStockConfirmModal(true);
                               }}
@@ -1085,6 +1161,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                             onClick={() => {
                               if (stockSelectedIds.size === 0) return;
                               setStockConfirmQuantities({});
+                              setStockConfirmCustomValues({});
                               setStockConfirmWarehouseId(warehouses[0]?.id ?? '');
                               setShowStockConfirmModal(true);
                             }}
@@ -1144,7 +1221,11 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
 
       <StockConfirmModal
         visible={showStockConfirmModal}
-        onClose={() => { setShowStockConfirmModal(false); setStockConfirmReason(''); }}
+        onClose={() => {
+          setShowStockConfirmModal(false);
+          setStockConfirmReason('');
+          setStockConfirmCustomValues({});
+        }}
         onSubmit={handleStockConfirmSubmit}
         stockSelectMode={stockSelectMode}
         stockSelectOrderId={stockSelectOrderId}
@@ -1156,6 +1237,11 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         onWarehouseChange={setStockConfirmWarehouseId}
         stockConfirmReason={stockConfirmReason}
         onReasonChange={setStockConfirmReason}
+        materialCustomFieldDefs={stockConfirmMaterialCustomFieldDefs}
+        materialCustomValues={stockConfirmCustomValues}
+        onMaterialCustomValueChange={(fieldId, value) =>
+          setStockConfirmCustomValues(prev => ({ ...prev, [fieldId]: value }))
+        }
         orders={orders}
         products={products}
         warehouses={warehouses}
@@ -1172,6 +1258,16 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         products={products}
         warehouses={warehouses}
         dictionaries={dictionaries}
+        materialFormSettings={materialFormSettings}
+        printTemplates={printTemplates}
+        onOpenMaterialFormPrintTab={
+          hasOpsPerm(tenantRole, userPermissions, 'production:material_form_config:allow')
+            ? () => {
+                setMaterialFormConfigEntryTab('print');
+                setShowConfigModal(true);
+              }
+            : undefined
+        }
         onUpdateRecord={onUpdateRecord}
         onDeleteRecord={onDeleteRecord}
         userPermissions={userPermissions}
@@ -1198,15 +1294,26 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         products={products}
         warehouses={warehouses}
         productionLinkMode={productionLinkMode}
+        materialFormSettings={materialFormSettings}
         onAddRecord={onAddRecord}
         getNextStockDocNo={getNextStockDocNo}
       />
 
-      {showConfigModal && onUpdateMaterialPanelSettings && (
-        <MaterialPanelConfigModal
+      {showConfigModal && onUpdateMaterialPanelSettings && onUpdateMaterialFormSettings && (
+        <MaterialFormConfigModal
+          open={showConfigModal}
           onClose={() => setShowConfigModal(false)}
-          settings={materialPanelSettings}
-          onUpdate={onUpdateMaterialPanelSettings}
+          defaultTabWhenOpen={materialFormConfigEntryTab}
+          materialFormSettings={materialFormSettings}
+          onUpdateMaterialFormSettings={onUpdateMaterialFormSettings}
+          materialPanelSettings={materialPanelSettings}
+          onUpdateMaterialPanelSettings={onUpdateMaterialPanelSettings}
+          printTemplates={printTemplates}
+          onUpdatePrintTemplates={onUpdatePrintTemplates ?? (async () => {})}
+          onRefreshPrintTemplates={onRefreshPrintTemplates}
+          plans={plans}
+          orders={orders}
+          products={products}
         />
       )}
     </div>

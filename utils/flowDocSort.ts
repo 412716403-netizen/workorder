@@ -1,5 +1,22 @@
 import { formatLocalDateTimeZh, parsePsiCreatedAtForSortMs, parseProductionOpTimestampMs } from './localDateTime';
 
+/** 进销存单据组：业务「添加日期」取组内首条有效 `createdAt`（各行通常相同），用于排序/列表展示 */
+export function psiDocGroupBusinessCreatedMs(docLines: any[] | undefined): number {
+  if (!docLines?.length) return 0;
+  for (const r of docLines) {
+    const t = parsePsiCreatedAtForSortMs(r?.createdAt);
+    if (t > 0) return t;
+  }
+  return 0;
+}
+
+/** 列表卡片：添加日期中文展示，无有效 `createdAt` 时为 — */
+export function formatPsiDocBusinessDateListZh(docLines: any[] | undefined): string {
+  const ms = psiDocGroupBusinessCreatedMs(docLines);
+  if (ms <= 0) return '—';
+  return new Date(ms).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+}
+
 /**
  * 单条明细上的时间：优先 **timestamp**（保存时的真实时刻 ISO），再 _savedAtMs，最后 **createdAt**（多为「添加日期」日历日，单独解析避免 UTC 午夜变东八区 8 点）。
  */

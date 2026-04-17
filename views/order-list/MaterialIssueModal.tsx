@@ -14,6 +14,7 @@ import {
 import { toLocalCompactYmd } from '../../utils/localDateTime';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
 
 interface MaterialIssueModalProps {
   orderId: string | null;
@@ -40,6 +41,28 @@ type BomMaterial = {
   unitNeeded: number;
   nodeNames: string[];
 };
+
+/**
+ * 子工单等场景：明细 variantId 常仍为父成品规格，与本产品 BOM 的 variantId 对不上。
+ * 回退用量顺序：命中同 variant 的明细数量 → 仅一条明细时用其数量 → 无任何明细命中本批 BOM 的 variant 时用工单总件数。
+ */
+function effectiveBomQtyForOrder(
+  order: ProductionOrder,
+  bom: BOM,
+  orderQty: number,
+  bomsSameParentAndNode: BOM[],
+): number {
+  if (!bom.variantId) return orderQty;
+  const hit = order.items.find(i => i.variantId === bom.variantId);
+  if (hit != null && hit.quantity > 0) return hit.quantity;
+  if (order.items.length === 1 && order.items[0].quantity > 0) return order.items[0].quantity;
+  const scopeVariantIds = new Set(
+    bomsSameParentAndNode.map(b => b.variantId).filter((id): id is string => Boolean(id)),
+  );
+  const anyItemMatchesScope = order.items.some(i => Boolean(i.variantId && scopeVariantIds.has(i.variantId)));
+  if (!anyItemMatchesScope && orderQty > 0) return orderQty;
+  return hit?.quantity ?? 0;
+}
 
 const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
   orderId,
@@ -103,11 +126,13 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
     const variants = product?.variants ?? [];
     if (variants.length > 0) {
       order.items.forEach(item => {
+        if (item.quantity <= 0) return;
         const v = variants.find(vx => vx.id === item.variantId) ?? variants[0];
         const lineQty = item.quantity;
         const seenBomIds = new Set<string>();
         if (v?.nodeBoms && Object.keys(v.nodeBoms).length > 0) {
-          Object.entries(v.nodeBoms).forEach(([nodeId, bomId]) => {
+          Object.entries(v.nodeBoms).forEach(([nodeId, bomIdRaw]) => {
+            const bomId = String(bomIdRaw);
             if (seenBomIds.has(bomId)) return;
             seenBomIds.add(bomId);
             const nodeName = globalNodes.find(n => n.id === nodeId)?.name ?? '';
@@ -126,13 +151,13 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
     }
     if (matMap.size === 0 && product) {
       const seenBomIds = new Set<string>();
-      boms.filter(b => b.parentProductId === product.id && b.nodeId).forEach(bom => {
+      const fallbackBoms = boms.filter(b => b.parentProductId === product.id && b.nodeId);
+      fallbackBoms.forEach(bom => {
         if (seenBomIds.has(bom.id)) return;
         seenBomIds.add(bom.id);
         const nodeName = globalNodes.find(n => n.id === bom.nodeId)?.name ?? '';
-        const qty = bom.variantId
-          ? (order.items.find(i => i.variantId === bom.variantId)?.quantity ?? 0)
-          : orderQty;
+        const qty = effectiveBomQtyForOrder(order, bom, orderQty, fallbackBoms);
+        if (qty <= 0) return;
         addBomItems(bom, qty, nodeName);
       });
     }
@@ -220,7 +245,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                         </div>
                         {m.sku && <p className="text-[10px] text-slate-400 mt-0.5">{m.sku}</p>}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-slate-600">{m.unitNeeded}</td>
+                      <td className="px-4 py-3 text-right text-sm font-bold text-slate-600 tabular-nums">{formatMaterialQtyDisplay(m.unitNeeded)}</td>
                       <td className="px-4 py-3">
                         {(() => {
                           const needed = m.unitNeeded;
@@ -238,8 +263,15 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                                   <div className={`h-full rounded-full ${pct >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${pct}%` }} />
                                 )}
                               </div>
-                              <span className="text-[9px] font-bold text-slate-500">
-                                {overIssue ? <span>已发 {issued} <span className="text-rose-500">（超发 {issued - needed}）</span></span> : `已发 ${issued}`}
+                              <span className="text-[9px] font-bold text-slate-500 tabular-nums">
+                                {overIssue ? (
+                                  <span>
+                                    已发 {formatMaterialQtyDisplay(issued)}{' '}
+                                    <span className="text-rose-500">（超发 {formatMaterialQtyDisplay(issued - needed)}）</span>
+                                  </span>
+                                ) : (
+                                  `已发 ${formatMaterialQtyDisplay(issued)}`
+                                )}
                               </span>
                             </div>
                           );
@@ -331,11 +363,13 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
       };
       if (variants.length > 0) {
         order.items.forEach(item => {
+          if (item.quantity <= 0) return;
           const v = variants.find(vx => vx.id === item.variantId) ?? variants[0];
           const lineQty = item.quantity;
           const seenBomIds = new Set<string>();
           if (v?.nodeBoms && Object.keys(v.nodeBoms).length > 0) {
-            Object.entries(v.nodeBoms).forEach(([nodeId, bomId]) => {
+            Object.entries(v.nodeBoms).forEach(([nodeId, bomIdRaw]) => {
+              const bomId = String(bomIdRaw);
               if (seenBomIds.has(bomId)) return;
               seenBomIds.add(bomId);
               const nodeName = globalNodes.find(n => n.id === nodeId)?.name ?? '';
@@ -354,13 +388,13 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
       }
       if (local.size === 0 && product) {
         const seenBomIds = new Set<string>();
-        boms.filter(b => b.parentProductId === product.id && b.nodeId).forEach(bom => {
+        const fallbackBoms = boms.filter(b => b.parentProductId === product.id && b.nodeId);
+        fallbackBoms.forEach(bom => {
           if (seenBomIds.has(bom.id)) return;
           seenBomIds.add(bom.id);
           const nodeName = globalNodes.find(n => n.id === bom.nodeId)?.name ?? '';
-          const qty = bom.variantId
-            ? (order.items.find(i => i.variantId === bom.variantId)?.quantity ?? 0)
-            : orderQty;
+          const qty = effectiveBomQtyForOrder(order, bom, orderQty, fallbackBoms);
+          if (qty <= 0) return;
           addLocal(bom, qty, nodeName);
         });
       }
@@ -473,7 +507,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                           </div>
                           {m.sku && <p className="text-[10px] text-slate-400 mt-0.5">{m.sku}</p>}
                         </td>
-                        <td className="px-4 py-3 text-right text-sm font-bold text-slate-600">{m.unitNeeded}</td>
+                        <td className="px-4 py-3 text-right text-sm font-bold text-slate-600 tabular-nums">{formatMaterialQtyDisplay(m.unitNeeded)}</td>
                         <td className="px-4 py-3">
                           {(() => {
                             const needed = m.unitNeeded;
@@ -497,13 +531,14 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                                     />
                                   )}
                                 </div>
-                                <span className="text-[9px] font-bold text-slate-500">
+                                <span className="text-[9px] font-bold text-slate-500 tabular-nums">
                                   {overIssue ? (
                                     <span>
-                                      已发 {issued} <span className="text-rose-500">（超发 {issued - needed}）</span>
+                                      已发 {formatMaterialQtyDisplay(issued)}{' '}
+                                      <span className="text-rose-500">（超发 {formatMaterialQtyDisplay(issued - needed)}）</span>
                                     </span>
                                   ) : (
-                                    `已发 ${issued}`
+                                    `已发 ${formatMaterialQtyDisplay(issued)}`
                                   )}
                                 </span>
                               </div>

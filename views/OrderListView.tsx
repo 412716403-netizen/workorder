@@ -1,7 +1,25 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Clock, Layers, Plus, History, User, Sliders, X, FileText, ChevronDown, ChevronRight, ScrollText, Pencil, Search, Package, RotateCcw, ArrowDownToLine, Split } from 'lucide-react';
-import { ProductionOrder, MilestoneStatus, Milestone, Product, GlobalNodeTemplate, OrderFormSettings, ProductCategory, AppDictionaries, Partner, BOM, ProductionOpRecord, Worker, ProductMilestoneProgress, ProcessSequenceMode, Warehouse } from '../types';
+import {
+  ProductionOrder,
+  MilestoneStatus,
+  Milestone,
+  Product,
+  GlobalNodeTemplate,
+  OrderFormSettings,
+  PlanOrder,
+  PrintTemplate,
+  ProductCategory,
+  AppDictionaries,
+  Partner,
+  BOM,
+  ProductionOpRecord,
+  Worker,
+  ProductMilestoneProgress,
+  ProcessSequenceMode,
+  Warehouse,
+} from '../types';
 import ProductDetailModal from './ProductDetailModal';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { orders as ordersApi } from '../services/api';
@@ -42,6 +60,8 @@ interface OrderListViewProps {
   processSequenceMode?: ProcessSequenceMode;
   allowExceedMaxReportQty?: boolean;
   orders: ProductionOrder[];
+  /** 打印模版管理弹窗预览用；可传空数组 */
+  plans?: PlanOrder[];
   products: Product[];
   workers?: Worker[];
   equipment?: { id: string; name: string; code?: string; assignedMilestoneIds?: string[] }[];
@@ -51,6 +71,9 @@ interface OrderListViewProps {
   boms: BOM[];
   globalNodes: GlobalNodeTemplate[];
   orderFormSettings: OrderFormSettings;
+  printTemplates: PrintTemplate[];
+  onUpdatePrintTemplates: (list: PrintTemplate[]) => void | Promise<void>;
+  onRefreshPrintTemplates?: () => void | Promise<void>;
   prodRecords?: ProductionOpRecord[];
   warehouses?: Warehouse[];
   onUpdateOrderFormSettings: (settings: OrderFormSettings) => void;
@@ -99,6 +122,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   initialDetailOrderId,
   onClearDetailOrderIdFromState,
   orders,
+  plans = [],
   products,
   workers = [],
   equipment = [],
@@ -108,6 +132,9 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   boms,
   globalNodes,
   orderFormSettings,
+  printTemplates,
+  onUpdatePrintTemplates,
+  onRefreshPrintTemplates,
   prodRecords = [],
   warehouses = [],
   onUpdateOrderFormSettings,
@@ -138,6 +165,17 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     if (userPermissions.some(p => p.startsWith(`${permKey}:`))) return true;
     return false;
   };
+  /** 与系统设置页「工序节点库」页签的查看权限一致 */
+  const canViewSettingsNodesTab = (): boolean => {
+    if (_isOwner) return true;
+    if (!userPermissions) return true;
+    const perm = 'settings:nodes:view';
+    if (userPermissions.includes(perm)) return true;
+    if (userPermissions.includes('settings')) return true;
+    const [module] = perm.split(':');
+    if (module && userPermissions.includes(module)) return true;
+    return false;
+  };
   const hasProcessReportPerm = (): boolean => {
     if (_isOwner) return true;
     if (!userPermissions) return true;
@@ -151,6 +189,17 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
 
   const [detailOrderId, setDetailOrderId] = useState<string | null>(initialDetailOrderId ?? null);
+  /** 关联产品模式下：从「工单流水」打开详情时用单工单布局（编辑/删除、颜色尺码，不显示产品工序进度汇总） */
+  const [orderDetailFromFlow, setOrderDetailFromFlow] = useState(false);
+  const openOrderDetail = useCallback((orderId: string, fromOrderFlow = false) => {
+    setDetailOrderId(orderId);
+    setOrderDetailFromFlow(fromOrderFlow);
+  }, []);
+  const closeOrderDetail = useCallback(() => {
+    setDetailOrderId(null);
+    setOrderDetailFromFlow(false);
+    onClearDetailOrderIdFromState?.();
+  }, [onClearDetailOrderIdFromState]);
   const [showOrderFlowModal, setShowOrderFlowModal] = useState(false);
   /** 从产品卡片打开工单流水时传入，用于预填搜索筛选 */
   const [orderFlowProductId, setOrderFlowProductId] = useState<string | null>(null);
@@ -213,6 +262,13 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   >(null);
   const [viewProductId, setViewProductId] = useState<string | null>(null);
   const [showOrderFormConfigModal, setShowOrderFormConfigModal] = useState(false);
+  /** 打开工单表单配置时默认页签（工具栏为字段；详情「增加打印模版」为打印） */
+  const [orderFormConfigEntryTab, setOrderFormConfigEntryTab] = useState<'fields' | 'print'>('fields');
+  const openOrderFormPrintTab = useCallback(() => {
+    setOrderFormConfigEntryTab('print');
+    void onRefreshPrintTemplates?.();
+    setShowOrderFormConfigModal(true);
+  }, [onRefreshPrintTemplates]);
   /** 每次打开报工弹窗递增，用于 ReportModal key，避免关闭再开后仍保留上次输入/旧默认值表现 */
   const [reportModalSession, setReportModalSession] = useState(0);
   const [reportModal, setReportModal] = useState<{
@@ -518,7 +574,10 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           {hasOrderPerm('production:orders_form_config:allow') && (
           <button
             type="button"
-            onClick={() => setShowOrderFormConfigModal(true)}
+            onClick={() => {
+              setOrderFormConfigEntryTab('fields');
+              setShowOrderFormConfigModal(true);
+            }}
             className={secondaryToolbarButtonClass}
           >
             <Sliders className="w-4 h-4 shrink-0" /> 表单配置
@@ -593,11 +652,11 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                   <div key={order.id} className={cardClass} style={indentPx != null && indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
                     <div className="flex items-center gap-4 min-w-0">
                       {product?.imageUrl ? (
-                        <button type="button" onClick={() => hasOrderPerm('production:orders_detail:view') && setDetailOrderId(order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none block`}>
+                        <button type="button" onClick={() => hasOrderPerm('production:orders_detail:view') && openOrderDetail(order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} overflow-hidden border border-slate-100 flex-shrink-0 focus:ring-2 focus:ring-indigo-500 outline-none block`}>
                           <img loading="lazy" decoding="async" src={product.imageUrl} alt={order.productName} className="w-full h-full object-cover block" />
                         </button>
                       ) : (
-                        <button type="button" onClick={() => hasOrderPerm('production:orders_detail:view') && setDetailOrderId(order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 transition-colors`}>
+                        <button type="button" onClick={() => hasOrderPerm('production:orders_detail:view') && openOrderDetail(order.id)} className={`${isChild ? 'w-12 h-12 rounded-xl' : 'w-14 h-14 rounded-2xl'} flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 transition-colors`}>
                           <Layers className={isChild ? 'w-6 h-6' : 'w-7 h-7'} />
                         </button>
                       )}
@@ -688,7 +747,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                 <button
                                   key={ms.id}
                                   type="button"
-                                  onClick={e => { e.stopPropagation(); hasOrderPerm('production:orders_detail:view') && setDetailOrderId(order.id); }}
+                                  onClick={e => { e.stopPropagation(); hasOrderPerm('production:orders_detail:view') && openOrderDetail(order.id); }}
                                   className="flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 bg-slate-50 rounded-xl border border-slate-100 hover:bg-slate-100 hover:border-slate-200 transition-colors cursor-pointer"
                                   title={tooltip}
                                 >
@@ -713,7 +772,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         {hasOrderPerm('production:orders_detail:view') && (
                         <button
                           type="button"
-                          onClick={e => { e.stopPropagation(); setDetailOrderId(order.id); }}
+                          onClick={e => { e.stopPropagation(); openOrderDetail(order.id); }}
                           className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all w-full justify-center"
                         >
                           <FileText className="w-3.5 h-3.5" /> 详情
@@ -1067,7 +1126,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
               </button>
             </div>
             <div className="flex-1 overflow-auto p-4">
-              <OrderFlowView orders={orders} products={products} embedded productionLinkMode={productionLinkMode} initialProductId={orderFlowProductId} onOpenOrderDetail={(id) => setDetailOrderId(id)} />
+              <OrderFlowView orders={orders} products={products} embedded productionLinkMode={productionLinkMode} initialProductId={orderFlowProductId} onOpenOrderDetail={(id) => openOrderDetail(id, true)} />
             </div>
           </div>
         </div>
@@ -1075,9 +1134,18 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
       {showOrderFormConfigModal && (
         <OrderFormConfigModal
+          open={showOrderFormConfigModal}
           onClose={() => setShowOrderFormConfigModal(false)}
+          defaultTabWhenOpen={orderFormConfigEntryTab}
           orderFormSettings={orderFormSettings}
           onUpdateOrderFormSettings={onUpdateOrderFormSettings}
+          printTemplates={printTemplates}
+          onUpdatePrintTemplates={onUpdatePrintTemplates}
+          onRefreshPrintTemplates={onRefreshPrintTemplates}
+          plans={plans}
+          orders={orders}
+          products={products}
+          canNavigateToSettingsNodes={canViewSettingsNodesTab()}
         />
       )}
 
@@ -1132,6 +1200,9 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         productMilestoneProgresses={productMilestoneProgresses}
         productionLinkMode={productionLinkMode}
         processSequenceMode={processSequenceMode}
+        orderFormSettings={orderFormSettings}
+        printTemplates={printTemplates}
+        onOpenOrderFormPrintTab={hasOrderPerm('production:orders_form_config:allow') ? openOrderFormPrintTab : undefined}
         onAddRecord={onAddRecord}
         onAddRecordBatch={onAddRecordBatch}
         onUpdateRecord={onUpdateRecord}
@@ -1154,6 +1225,9 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           productMilestoneProgresses={productMilestoneProgresses}
           processSequenceMode={processSequenceMode}
           productionLinkMode={productionLinkMode}
+          orderFormSettings={orderFormSettings}
+          printTemplates={printTemplates}
+          onOpenOrderFormPrintTab={hasOrderPerm('production:orders_form_config:allow') ? openOrderFormPrintTab : undefined}
           onUpdateReport={onUpdateReport}
           onDeleteReport={onDeleteReport}
           onUpdateReportProduct={onUpdateReportProduct}
@@ -1165,18 +1239,21 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
       <OrderDetailModal
         orderId={detailOrderId}
-        onClose={() => { setDetailOrderId(null); onClearDetailOrderIdFromState?.(); }}
+        onClose={closeOrderDetail}
         orders={orders}
         products={products}
         prodRecords={prodRecords}
         dictionaries={dictionaries}
         categories={categories}
         orderFormSettings={orderFormSettings}
+        printTemplates={printTemplates}
+        onOpenOrderFormPrintTab={hasOrderPerm('production:orders_form_config:allow') ? openOrderFormPrintTab : undefined}
         productionLinkMode={productionLinkMode}
         productMilestoneProgresses={productMilestoneProgresses}
         globalNodes={globalNodes}
+        productModeSingleOrderLayout={productionLinkMode === 'product' && orderDetailFromFlow}
         onUpdateOrder={hasOrderPerm('production:orders_detail:edit') ? onUpdateOrder : undefined}
-        onDeleteOrder={hasOrderPerm('production:orders_detail:delete') && onDeleteOrder ? (id) => { onDeleteOrder(id); setDetailOrderId(null); onClearDetailOrderIdFromState?.(); } : undefined}
+        onDeleteOrder={hasOrderPerm('production:orders_detail:delete') && onDeleteOrder ? (id) => { onDeleteOrder(id); closeOrderDetail(); } : undefined}
       />
 
       <ProductDetailModal

@@ -1,9 +1,26 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Check, X, Pencil, Trash2 } from 'lucide-react';
-import type { ProductionOpRecord, ProductionOrder, Product, Warehouse, AppDictionaries } from '../../types';
+import type {
+  MaterialFormSettings,
+  PlanListPrintSettings,
+  PrintTemplate,
+  ProductionOrder,
+  Product,
+  Warehouse,
+  AppDictionaries,
+} from '../../types';
+import { DEFAULT_MATERIAL_FORM_SETTINGS } from '../../types';
 import { hasOpsPerm, type StockDocDetail } from './types';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { formatLocalDateTimeZh, parseProductionOpTimestampMs } from '../../utils/localDateTime';
+import { PlanFormCustomFieldInput, PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
+import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
+import {
+  buildMaterialStockDocPrintContext,
+  materialStockDocPrintSlot,
+  readMaterialStockCustomSnapshot,
+} from '../../utils/buildMaterialStockDocPrintContext';
+import { isOutsourceMaterialPartner, materialStockCustomDataCollabKey } from '../../utils/productionOpCollab/material';
 
 export interface StockDocDetailModalProps {
   detail: StockDocDetail | null;
@@ -14,6 +31,9 @@ export interface StockDocDetailModalProps {
   products: Product[];
   warehouses: Warehouse[];
   dictionaries?: AppDictionaries;
+  materialFormSettings?: MaterialFormSettings;
+  printTemplates?: PrintTemplate[];
+  onOpenMaterialFormPrintTab?: () => void;
   onUpdateRecord?: (record: ProductionOpRecord) => void;
   onDeleteRecord?: (recordId: string) => void;
   userPermissions?: string[];
@@ -29,6 +49,9 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
   products,
   warehouses,
   dictionaries,
+  materialFormSettings = DEFAULT_MATERIAL_FORM_SETTINGS,
+  printTemplates = [],
+  onOpenMaterialFormPrintTab,
   onUpdateRecord,
   onDeleteRecord,
   userPermissions,
@@ -39,7 +62,33 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
     warehouseId: string;
     lines: { productId: string; quantity: number }[];
     reason: string;
+    customData: Record<string, unknown>;
   } | null>(null);
+
+  const materialCustomFieldDefsForDetail = useMemo(() => {
+    if (!detail) return [];
+    const wx = isOutsourceMaterialPartner(detail.partner);
+    const raw =
+      detail.type === 'STOCK_RETURN'
+        ? wx
+          ? materialFormSettings.outsourceMaterialReturnCustomFields
+          : materialFormSettings.materialReturnCustomFields
+        : wx
+          ? materialFormSettings.outsourceMaterialIssueCustomFields
+          : materialFormSettings.materialIssueCustomFields;
+    return (raw ?? []).filter(f => f.showInDetail);
+  }, [
+    detail,
+    materialFormSettings.materialIssueCustomFields,
+    materialFormSettings.materialReturnCustomFields,
+    materialFormSettings.outsourceMaterialIssueCustomFields,
+    materialFormSettings.outsourceMaterialReturnCustomFields,
+  ]);
+
+  const materialCustomSnapshot = useMemo(() => {
+    if (!detail) return {} as Record<string, unknown>;
+    return readMaterialStockCustomSnapshot(records, detail.docNo, detail.type, detail.partner);
+  }, [detail, records]);
 
   if (!detail) return null;
 
@@ -55,23 +104,36 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
   };
   const isReturn = stockDocDetail.type === 'STOCK_RETURN';
   const isEditing = stockDocEditForm !== null;
-  const startEdit = () => setStockDocEditForm({
-    warehouseId: stockDocDetail.warehouseId,
-    lines: stockDocDetail.lines.map(l => ({ productId: l.productId, quantity: l.quantity })),
-    reason: stockDocDetail.reason ?? ''
-  });
+  const startEdit = () => {
+    const snap = { ...materialCustomSnapshot };
+    setStockDocEditForm({
+      warehouseId: stockDocDetail.warehouseId,
+      lines: stockDocDetail.lines.map(l => ({ productId: l.productId, quantity: l.quantity })),
+      reason: stockDocDetail.reason ?? '',
+      customData: snap,
+    });
+  };
   const cancelEdit = () => setStockDocEditForm(null);
   const saveEdit = () => {
     if (!stockDocEditForm || !onUpdateRecord) return;
-    const docRecords = records.filter(r => r.docNo === stockDocDetail.docNo);
+    const dataKey = materialStockCustomDataCollabKey(
+      isReturn ? 'STOCK_RETURN' : 'STOCK_OUT',
+      stockDocDetail.partner,
+    );
+    const cleanCustom = Object.fromEntries(
+      Object.entries(stockDocEditForm.customData).filter(([, v]) => v !== '' && v != null && v !== undefined),
+    );
+    const docRecords = records.filter(r => r.docNo === stockDocDetail.docNo && r.type === stockDocDetail.type);
     docRecords.forEach(rec => {
       const line = stockDocEditForm.lines.find(l => l.productId === rec.productId);
       if (line) {
+        const prevCd = (rec as ProductionOpRecord & { collabData?: Record<string, unknown> }).collabData ?? {};
         onUpdateRecord({
           ...rec,
           quantity: line.quantity,
           warehouseId: stockDocEditForm.warehouseId || undefined,
-          reason: stockDocEditForm.reason.trim() || undefined
+          reason: stockDocEditForm.reason.trim() || undefined,
+          collabData: { ...prevCd, [dataKey]: cleanCustom },
         });
       }
     });
@@ -88,6 +150,8 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
     onClose();
   };
   const editForm = stockDocEditForm;
+
+  const printSlot: PlanListPrintSettings | undefined = materialStockDocPrintSlot(materialFormSettings, stockDocDetail);
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
@@ -118,6 +182,23 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
               </>
             ) : (
               <>
+                <OrderCenterDetailPrintBlock
+                  printSlot={printSlot}
+                  printTemplates={printTemplates}
+                  onAddPrintTemplate={onOpenMaterialFormPrintTab}
+                  buildContext={(template: PrintTemplate): PrintRenderContext =>
+                    buildMaterialStockDocPrintContext(template, {
+                      detail: stockDocDetail,
+                      records,
+                      orders,
+                      products,
+                      warehouses,
+                      dictionaries,
+                      customSnapshot: materialCustomSnapshot,
+                    })
+                  }
+                  pickerSubtitle={`${isReturn ? '退料' : '领料'}单 ${stockDocDetail.docNo}`}
+                />
                 {onUpdateRecord && hasOpsPerm(tenantRole, userPermissions, 'production:material_records:edit') && (
                   <button
                     type="button"
@@ -195,6 +276,19 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
                     <p className="text-sm font-bold text-slate-800">{stockDocDetail.reason}</p>
                   </div>
                 )}
+                {materialCustomFieldDefsForDetail.length > 0 && (
+                  <div className="w-full rounded-2xl border border-slate-100 bg-slate-50/60 p-4 space-y-3">
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500">自定义内容</h4>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {materialCustomFieldDefsForDetail.map(cf => (
+                        <div key={cf.id} className="min-w-0">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">{cf.label}</p>
+                          <PlanFormCustomFieldReadonly cf={cf} value={materialCustomSnapshot[cf.id]} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="flex-1 overflow-auto -mt-2">
                 <div className="border border-slate-200 rounded-2xl overflow-hidden">
@@ -250,6 +344,28 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
                       />
                     </div>
                   </div>
+                  {materialCustomFieldDefsForDetail.length > 0 ? (
+                    <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+                      <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500">自定义内容</h4>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {materialCustomFieldDefsForDetail.map(cf => (
+                          <div key={cf.id} className="min-w-0 space-y-1">
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
+                            <PlanFormCustomFieldInput
+                              cf={cf}
+                              value={editForm.customData[cf.id]}
+                              onChange={v =>
+                                setStockDocEditForm(prev =>
+                                  prev ? { ...prev, customData: { ...prev.customData, [cf.id]: v } } : null,
+                                )
+                              }
+                              controlClassName="h-[44px] w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-200"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="border border-slate-200 rounded-2xl overflow-hidden">
                     <table className="w-full text-left text-sm">
                       <thead>

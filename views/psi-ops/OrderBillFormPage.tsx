@@ -1,6 +1,17 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { toast } from 'sonner';
-import { Product, Warehouse, ProductCategory, Partner, PartnerCategory, AppDictionaries, PurchaseOrderFormSettings, PurchaseBillFormSettings, PrintRenderContext } from '../../types';
+import {
+  Product,
+  Warehouse,
+  ProductCategory,
+  Partner,
+  PartnerCategory,
+  AppDictionaries,
+  PurchaseOrderFormSettings,
+  SalesOrderFormSettings,
+  PurchaseBillFormSettings,
+  SalesBillFormSettings,
+  PrintTemplate,
+} from '../../types';
 import PurchaseOrderFormSection from './PurchaseOrderFormSection';
 import SalesOrderFormSection from './SalesOrderFormSection';
 import SalesBillFormSection from './SalesBillFormSection';
@@ -8,12 +19,11 @@ import PurchaseBillFormSection from './PurchaseBillFormSection';
 import { localTodayYmd, localCalendarYmdStartToIso, toLocalDateYmd } from '../../utils/localDateTime';
 import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 import { nextPsiDocNumber } from '../../utils/partnerDocNumber';
+import { buildSalesOrderPrintRenderContext } from '../../utils/buildSalesOrderPrintContext';
+import { buildPurchaseBillPrintRenderContext } from '../../utils/buildPurchaseBillPrintContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { useAppActions, useConfigData, useFinanceData } from '../../contexts/AppDataContext';
+import { useConfigData } from '../../contexts/AppDataContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
-import { buildSalesBillPrintRenderContext } from '../../utils/buildSalesBillPrintContext';
-import { pickSalesBillPrintTemplate } from '../../utils/salesBillPrintTemplate';
-import { SalesBillPrintDialog } from './SalesBillPrintDialog';
 
 type FormType = 'PURCHASE_ORDER' | 'PURCHASE_BILL' | 'SALES_ORDER' | 'SALES_BILL';
 
@@ -81,12 +91,16 @@ interface OrderBillFormPageProps {
   onDeleteRecords?: (type: string, docNumber: string) => void;
   editingDocNumber: string | null;
   purchaseOrderFormSettings?: PurchaseOrderFormSettings;
+  salesOrderFormSettings?: SalesOrderFormSettings;
   purchaseBillFormSettings?: PurchaseBillFormSettings;
+  salesBillFormSettings?: SalesBillFormSettings;
   userPermissions?: string[];
   tenantRole?: string;
   partnerLabel: string;
   /** 生产外协收回等（打印销售单应收结余用） */
   prodRecords?: any[];
+  /** 采购订单/采购单详情打印模版列表（未传时回退到全局配置） */
+  orderBillPrintTemplates?: PrintTemplate[];
 }
 
 const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
@@ -112,19 +126,27 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   onReplaceRecords,
   onDeleteRecords,
   editingDocNumber,
-  purchaseOrderFormSettings = { standardFields: [], customFields: [] },
-  purchaseBillFormSettings = { standardFields: [], customFields: [] },
+  purchaseOrderFormSettings = {
+    standardFields: [],
+    customFields: [],
+    listPrint: { showPrintButton: true },
+  },
+  salesOrderFormSettings = {
+    standardFields: [],
+    customFields: [],
+    listPrint: { showPrintButton: true },
+  },
+  purchaseBillFormSettings = { standardFields: [], customFields: [], listPrint: { showPrintButton: true } },
+  salesBillFormSettings = { standardFields: [], customFields: [], listPrint: { showPrintButton: true } },
   userPermissions,
   tenantRole,
   partnerLabel,
   prodRecords = [],
+  orderBillPrintTemplates,
 }) => {
   const { currentUser } = useAuth();
-  const { printTemplates } = useConfigData();
-  const { financeRecords } = useFinanceData();
-  const { ensureDeferredLoaded } = useAppActions();
-  const [salesBillPrintOpen, setSalesBillPrintOpen] = useState(false);
-  const [salesBillPrintCtx, setSalesBillPrintCtx] = useState<PrintRenderContext | null>(null);
+  const { printTemplates: configPrintTemplates } = useConfigData();
+  const mergedPrintTemplates = orderBillPrintTemplates ?? configPrintTemplates;
   const docOperator = currentOperatorDisplayName(currentUser);
   const recordsList = records ?? [];
   const _isOwner = tenantRole === 'owner';
@@ -136,8 +158,22 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
     if (userPermissions.some(p => p.startsWith(`${perm}:`))) return true;
     return false;
   };
-  const safePurchaseOrderFormSettings = { standardFields: purchaseOrderFormSettings?.standardFields ?? [], customFields: purchaseOrderFormSettings?.customFields ?? [] };
-  const safePurchaseBillFormSettings = { standardFields: purchaseBillFormSettings?.standardFields ?? [], customFields: purchaseBillFormSettings?.customFields ?? [] };
+  const safePurchaseBillFormSettings = useMemo(
+    () => ({
+      standardFields: purchaseBillFormSettings?.standardFields ?? [],
+      customFields: purchaseBillFormSettings?.customFields ?? [],
+      listPrint: purchaseBillFormSettings?.listPrint ?? { showPrintButton: true },
+    }),
+    [purchaseBillFormSettings],
+  );
+  const safeSalesBillFormSettings = useMemo(
+    () => ({
+      standardFields: salesBillFormSettings?.standardFields ?? [],
+      customFields: salesBillFormSettings?.customFields ?? [],
+      listPrint: salesBillFormSettings?.listPrint ?? { showPrintButton: true },
+    }),
+    [salesBillFormSettings],
+  );
 
   // ── Form state ──
   const [form, setForm] = useState<any>(() => {
@@ -164,10 +200,18 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         base.partner = first.partner ?? '';
         base.partnerId = first.partnerId ?? '';
         base.docNumber = editingDocNumber;
-        base.dueDate = first.dueDate ?? '';
-        base.note = first.note ?? '';
         base.warehouseId = first.warehouseId ?? '';
-        base.createdAt = toLocalDateYmd(first.createdAt) || localTodayYmd();
+        if (formType !== 'PURCHASE_ORDER' && formType !== 'SALES_ORDER') {
+          if (formType === 'SALES_BILL') {
+            base.createdAt = toLocalDateYmd(first.createdAt) || localTodayYmd();
+            base.note = '';
+            base.dueDate = '';
+          } else {
+            base.dueDate = first.dueDate ?? '';
+            base.note = first.note ?? '';
+            base.createdAt = toLocalDateYmd(first.createdAt) || localTodayYmd();
+          }
+        }
         base.customData = first.customData ?? {};
       }
     }
@@ -175,7 +219,16 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   });
 
   // ── Purchase order items ──
-  const [purchaseOrderItems, setPurchaseOrderItems] = useState<{ id: string; productId: string; quantity?: number; purchasePrice: number; variantQuantities?: Record<string, number>; sourceRecordIds?: string[] }[]>(() => {
+  const [purchaseOrderItems, setPurchaseOrderItems] = useState<
+    {
+      id: string;
+      productId: string;
+      quantity?: number;
+      purchasePrice: number;
+      variantQuantities?: Record<string, number>;
+      sourceRecordIds?: string[];
+    }[]
+  >(() => {
     if (formType !== 'PURCHASE_ORDER' || !editingDocNumber) return [];
     const existing = recordsList.filter((r: any) => r.type === 'PURCHASE_ORDER' && r.docNumber === editingDocNumber);
     if (existing.length === 0) return [];
@@ -201,6 +254,24 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       };
     });
   });
+
+  const safePurchaseOrderFormSettings = useMemo(
+    () => ({
+      standardFields: purchaseOrderFormSettings?.standardFields ?? [],
+      customFields: purchaseOrderFormSettings?.customFields ?? [],
+      listPrint: purchaseOrderFormSettings?.listPrint ?? { showPrintButton: true },
+    }),
+    [purchaseOrderFormSettings],
+  );
+
+  const safeSalesOrderFormSettings = useMemo(
+    () => ({
+      standardFields: salesOrderFormSettings?.standardFields ?? [],
+      customFields: salesOrderFormSettings?.customFields ?? [],
+      listPrint: salesOrderFormSettings?.listPrint ?? { showPrintButton: true },
+    }),
+    [salesOrderFormSettings],
+  );
 
   // ── Purchase bill items ──
   const [purchaseBillItems, setPurchaseBillItems] = useState<{ id: string; productId: string; quantity?: number; purchasePrice: number; variantQuantities?: Record<string, number>; batch?: string }[]>(() => {
@@ -310,9 +381,27 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
     return nextPsiDocNumber('XS', 'SALES_BILL', partners, recordsList, pid, form.partner || '', ['SB']);
   };
 
+  const salesBillPreviewDocNumber = useMemo(() => {
+    if (formType !== 'SALES_BILL' || editingDocNumber) return '';
+    if (!form.partner?.trim()) return '';
+    const pid = form.partnerId || partners.find(p => p.name === form.partner)?.id || '';
+    return nextPsiDocNumber('XS', 'SALES_BILL', partners, recordsList, pid, form.partner || '', ['SB']);
+  }, [formType, editingDocNumber, form.partnerId, form.partner, partners, recordsList]);
+
+  const salesBillReadonlyDocNumber = editingDocNumber || salesBillPreviewDocNumber;
+
   // ── Item CRUD helpers ──
-  const addPurchaseOrderItem = () => setPurchaseOrderItems(prev => [...prev, { id: `line-${Date.now()}`, productId: '', quantity: 0, purchasePrice: 0 }]);
-  const updatePurchaseOrderItem = (id: string, updates: Partial<{ productId: string; quantity?: number; purchasePrice: number; variantQuantities?: Record<string, number> }>) => {
+  const addPurchaseOrderItem = () =>
+    setPurchaseOrderItems(prev => [...prev, { id: `line-${Date.now()}`, productId: '', quantity: 0, purchasePrice: 0 }]);
+  const updatePurchaseOrderItem = (
+    id: string,
+    updates: Partial<{
+      productId: string;
+      quantity?: number;
+      purchasePrice: number;
+      variantQuantities?: Record<string, number>;
+    }>,
+  ) => {
     setPurchaseOrderItems(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i));
   };
   const updatePurchaseOrderVariantQty = (lineId: string, variantId: string, qty: number) => {
@@ -337,6 +426,33 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   };
   const removeSalesOrderItem = (id: string) => setSalesOrderItems(prev => prev.filter(i => i.id !== id));
 
+  const soDocNumberForPrint = useMemo(
+    () =>
+      editingDocNumber ||
+      nextPsiDocNumber('SO', 'SALES_ORDER', partners, recordsList, form.partnerId || '', form.partner || ''),
+    [editingDocNumber, partners, recordsList, form.partnerId, form.partner],
+  );
+
+  const buildSalesOrderPrintContext = useCallback(
+    (_template: PrintTemplate) =>
+      buildSalesOrderPrintRenderContext({
+        docNumber: soDocNumberForPrint,
+        partner: String(form.partner ?? ''),
+        operator: docOperator,
+        customData: form.customData,
+        lines: salesOrderItems.map(l => ({
+          id: l.id,
+          productId: l.productId,
+          quantity: l.quantity,
+          salesPrice: l.salesPrice,
+          variantQuantities: l.variantQuantities,
+        })),
+        productMap: productMapPSI,
+        dictionaries,
+      }),
+    [soDocNumberForPrint, form.partner, form.customData, salesOrderItems, productMapPSI, dictionaries, docOperator],
+  );
+
   const addSalesBillItem = () => setSalesBillItems(prev => [...prev, { id: `sb-line-${Date.now()}`, productId: '', quantity: 0, salesPrice: 0 }]);
   const updateSalesBillItem = (id: string, updates: Partial<{ productId: string; quantity?: number; salesPrice: number; variantQuantities?: Record<string, number> }>) => {
     setSalesBillItems(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i));
@@ -350,40 +466,36 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   };
   const removeSalesBillItem = (id: string) => setSalesBillItems(prev => prev.filter(i => i.id !== id));
 
-  const salesBillPrintTemplate = useMemo(() => pickSalesBillPrintTemplate(printTemplates), [printTemplates]);
+  const pbDocNumberForPrint = useMemo(
+    () =>
+      editingDocNumber ||
+      nextPsiDocNumber('PB', 'PURCHASE_BILL', partners, recordsList, form.partnerId || '', form.partner || ''),
+    [editingDocNumber, partners, recordsList, form.partnerId, form.partner],
+  );
 
-  const openSalesBillPrint = useCallback(async () => {
-    await ensureDeferredLoaded();
-    if (!salesBillPrintTemplate) {
-      toast.error('未找到销售单打印模版。请打开「生产管理 → 打印模版」确认列表中存在「销售单（标准）」。');
-      return;
-    }
-    const ctx = buildSalesBillPrintRenderContext({
-      form,
-      lines: salesBillItems,
-      productMap: productMapPSI,
-      warehouseMap: warehouseMapPSI,
-      dictionaries,
-      psiRecords: recordsList,
-      financeRecords,
-      prodRecords,
-      editingDocNumber,
-    });
-    setSalesBillPrintCtx(ctx);
-    setSalesBillPrintOpen(true);
-  }, [
-    ensureDeferredLoaded,
-    salesBillPrintTemplate,
-    form,
-    salesBillItems,
-    productMapPSI,
-    warehouseMapPSI,
-    dictionaries,
-    recordsList,
-    financeRecords,
-    prodRecords,
-    editingDocNumber,
-  ]);
+  const buildPurchaseBillPrintContext = useCallback(
+    (_template: PrintTemplate) => {
+      const wid = form.warehouseId as string | undefined;
+      const warehouseName = wid ? warehouseMapPSI.get(wid)?.name ?? wid : '';
+      return buildPurchaseBillPrintRenderContext({
+        docNumber: pbDocNumberForPrint,
+        partner: String(form.partner ?? ''),
+        operator: docOperator,
+        warehouseName,
+        customData: form.customData,
+        lines: purchaseBillItems.map(({ id, productId, quantity, purchasePrice, variantQuantities }) => ({
+          id,
+          productId,
+          quantity,
+          purchasePrice,
+          variantQuantities,
+        })),
+        productMap: productMapPSI,
+        dictionaries,
+      });
+    },
+    [pbDocNumberForPrint, form.partner, form.customData, form.warehouseId, purchaseBillItems, productMapPSI, warehouseMapPSI, dictionaries, docOperator],
+  );
 
   const addPurchaseBillItem = () => setPurchaseBillItems(prev => [...prev, { id: `pb-line-${Date.now()}`, productId: '', quantity: 0, purchasePrice: 0 }]);
   const updatePurchaseBillItem = (id: string, updates: Partial<{ productId: string; quantity?: number; purchasePrice: number; variantQuantities?: Record<string, number>; batch?: string }>) => {
@@ -428,7 +540,8 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       });
       if (!form.partner || purchaseOrderItems.length === 0 || !hasValidLine) return;
       const originalDocNumber = editingDocNumber || '';
-      let docNumber = form.docNumber?.trim() || (editingDocNumber ?? generatePODocNumber());
+      /** 采购订单单号：新增保存时自动生成；编辑沿用原单号且不可改 */
+      let docNumber = editingDocNumber ? editingDocNumber : generatePODocNumber();
       if (!editingDocNumber) {
         const exists = (n: string) => recordsList.some((r: any) => r.type === 'PURCHASE_ORDER' && (r.docNumber || '').toLowerCase() === n.toLowerCase());
         let attempts = 0;
@@ -444,6 +557,18 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         }
       }
       const timestamp = psiDocTimestampIsoForSave(recordsList, 'PURCHASE_ORDER', editingDocNumber);
+
+      const poCreatedAtIso = (() => {
+        if (!editingDocNumber) return localCalendarYmdStartToIso(localTodayYmd());
+        const row = recordsList.find(
+          (r: any) => r.type === 'PURCHASE_ORDER' && String(r.docNumber || '') === String(editingDocNumber),
+        );
+        if (!row) return localCalendarYmdStartToIso(localTodayYmd());
+        const ca = row.createdAt;
+        if (ca == null || ca === '') return localCalendarYmdStartToIso(localTodayYmd());
+        if (typeof ca === 'string' && ca.includes('T')) return ca;
+        return localCalendarYmdStartToIso(toLocalDateYmd(ca) || localTodayYmd());
+      })();
 
       const newRecords: any[] = [];
       let recIdx = 0;
@@ -467,12 +592,12 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
               quantity: qty,
               purchasePrice: price,
               amount,
-              dueDate: form.dueDate,
-              note: form.note,
+              dueDate: '',
+              note: '',
               operator: docOperator,
               lineGroupId: item.id,
-              createdAt: localCalendarYmdStartToIso(form.createdAt || localTodayYmd()),
-              ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {})
+              createdAt: poCreatedAtIso,
+              ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
             });
           });
         } else if ((item.quantity ?? 0) > 0) {
@@ -489,12 +614,12 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
             quantity: item.quantity,
             purchasePrice: price,
             amount,
-            dueDate: form.dueDate,
-            note: form.note,
+            dueDate: '',
+            note: '',
             operator: docOperator,
             lineGroupId: item.id,
-            createdAt: localCalendarYmdStartToIso(form.createdAt || localTodayYmd()),
-            ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {})
+            createdAt: poCreatedAtIso,
+            ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
           });
         }
       });
@@ -520,7 +645,8 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       });
       if (!form.partner || !form.warehouseId || purchaseBillItems.length === 0 || !hasValidBillLine) return;
       const originalDocNumber = editingDocNumber || '';
-      let docNumber = form.docNumber?.trim() || (editingDocNumber ?? generatePBDocNumber(form.partnerId || '', form.partner || ''));
+      /** 采购单单号：新增保存时自动生成；编辑沿用原单号且不可改 */
+      let docNumber = editingDocNumber ? editingDocNumber : generatePBDocNumber(form.partnerId || '', form.partner || '');
       if (!editingDocNumber) {
         const exists = (n: string) => recordsList.some((r: any) => r.type === 'PURCHASE_BILL' && (r.docNumber || '').toLowerCase() === n.toLowerCase());
         let attempts = 0;
@@ -536,6 +662,17 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         }
       }
       const timestamp = psiDocTimestampIsoForSave(recordsList, 'PURCHASE_BILL', editingDocNumber);
+      const pbCreatedAtIso = (() => {
+        if (!editingDocNumber) return localCalendarYmdStartToIso(localTodayYmd());
+        const row = recordsList.find(
+          (r: any) => r.type === 'PURCHASE_BILL' && String(r.docNumber || '') === String(editingDocNumber),
+        );
+        if (!row) return localCalendarYmdStartToIso(localTodayYmd());
+        const ca = row.createdAt;
+        if (ca == null || ca === '') return localCalendarYmdStartToIso(localTodayYmd());
+        if (typeof ca === 'string' && ca.includes('T')) return ca;
+        return localCalendarYmdStartToIso(toLocalDateYmd(ca) || localTodayYmd());
+      })();
       const newRecords: any[] = [];
       let pbIdx = 0;
       purchaseBillItems.forEach((item) => {
@@ -558,10 +695,10 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
               purchasePrice: price,
               amount: qty * price,
               warehouseId: form.warehouseId,
-              note: form.note,
+              note: '',
               operator: docOperator,
               lineGroupId: item.id,
-              createdAt: localCalendarYmdStartToIso(form.createdAt || localTodayYmd()),
+              createdAt: pbCreatedAtIso,
               ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
               ...(item.batch != null && item.batch !== '' && { batch: item.batch })
             });
@@ -580,10 +717,10 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
             purchasePrice: price,
             amount: item.quantity! * price,
             warehouseId: form.warehouseId,
-            note: form.note,
+            note: '',
             operator: docOperator,
             lineGroupId: item.id,
-            createdAt: localCalendarYmdStartToIso(form.createdAt || localTodayYmd()),
+            createdAt: pbCreatedAtIso,
             ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
             ...(item.batch != null && item.batch !== '' && { batch: item.batch })
           });
@@ -607,7 +744,8 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       });
       if (!form.partner || salesOrderItems.length === 0 || !hasValidLine) return;
       const originalDocNumber = editingDocNumber || '';
-      let docNumber = form.docNumber?.trim() || (editingDocNumber ?? generateSODocNumber());
+      /** 销售订单单号：新增保存时自动生成；编辑沿用原单号且不可改 */
+      let docNumber = editingDocNumber ? editingDocNumber : generateSODocNumber();
       if (!editingDocNumber) {
         const exists = (n: string) => recordsList.some((r: any) => r.type === 'SALES_ORDER' && (r.docNumber || '').toLowerCase() === n.toLowerCase());
         let attempts = 0;
@@ -622,6 +760,17 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
           attempts++;
         }
       }
+      const soCreatedAtIso = (() => {
+        if (!editingDocNumber) return localCalendarYmdStartToIso(localTodayYmd());
+        const row = recordsList.find(
+          (r: any) => r.type === 'SALES_ORDER' && String(r.docNumber || '') === String(editingDocNumber),
+        );
+        if (!row) return localCalendarYmdStartToIso(localTodayYmd());
+        const ca = row.createdAt;
+        if (ca == null || ca === '') return localCalendarYmdStartToIso(localTodayYmd());
+        if (typeof ca === 'string' && ca.includes('T')) return ca;
+        return localCalendarYmdStartToIso(toLocalDateYmd(ca) || localTodayYmd());
+      })();
       const timestamp = psiDocTimestampIsoForSave(recordsList, 'SALES_ORDER', editingDocNumber);
       const newRecords: any[] = [];
       let recIdx = 0;
@@ -645,11 +794,11 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
               quantity: qty,
               salesPrice: price,
               amount,
-              dueDate: form.dueDate,
-              note: form.note,
+              dueDate: null,
+              note: '',
               operator: docOperator,
               lineGroupId: item.id,
-              createdAt: localCalendarYmdStartToIso(form.createdAt || localTodayYmd()),
+              createdAt: soCreatedAtIso,
               ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
               ...preservedSalesOrderLinePsi(recordsList, item.sourceRecordIds, variantId, Number(qty) || 0),
             });
@@ -669,11 +818,11 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
             quantity: item.quantity,
             salesPrice: price,
             amount,
-            dueDate: form.dueDate,
-            note: form.note,
+            dueDate: null,
+            note: '',
             operator: docOperator,
             lineGroupId: item.id,
-            createdAt: localCalendarYmdStartToIso(form.createdAt || localTodayYmd()),
+            createdAt: soCreatedAtIso,
             ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
             ...preservedSalesOrderLinePsi(recordsList, item.sourceRecordIds, undefined, q0),
           });
@@ -698,7 +847,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       });
       if (!form.partner || !form.warehouseId || salesBillItems.length === 0 || !hasValidLine) return;
       const originalDocNumber = editingDocNumber || '';
-      let docNumber = form.docNumber?.trim() || (editingDocNumber ?? generateSBDocNumber());
+      let docNumber = (editingDocNumber || generateSBDocNumber()).trim();
       if (!editingDocNumber) {
         const exists = (n: string) => recordsList.some((r: any) => r.type === 'SALES_BILL' && (r.docNumber || '').toLowerCase() === n.toLowerCase());
         let attempts = 0;
@@ -714,6 +863,15 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         }
       }
       const timestamp = psiDocTimestampIsoForSave(recordsList, 'SALES_BILL', editingDocNumber);
+      const sbHead = editingDocNumber
+        ? recordsList.find((r: any) => r.type === 'SALES_BILL' && r.docNumber === editingDocNumber)
+        : undefined;
+      const sbCreatedAtIso = sbHead?.createdAt
+        ? (String(sbHead.createdAt).trim().includes('T')
+          ? String(sbHead.createdAt).trim()
+          : localCalendarYmdStartToIso(toLocalDateYmd(sbHead.createdAt) || localTodayYmd()))
+        : localCalendarYmdStartToIso(localTodayYmd());
+      const sbNotePreserve = sbHead && editingDocNumber ? (sbHead.note != null ? String(sbHead.note) : '') : '';
       const newRecords: any[] = [];
       let recIdx = 0;
       salesBillItems.forEach((item) => {
@@ -736,10 +894,10 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
               quantity: qty,
               salesPrice: price,
               amount: qty * price,
-              note: form.note,
+              note: sbNotePreserve,
               operator: docOperator,
               lineGroupId: item.id,
-              createdAt: localCalendarYmdStartToIso(form.createdAt || localTodayYmd()),
+              createdAt: sbCreatedAtIso,
               ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {})
             });
           });
@@ -757,10 +915,10 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
             quantity: item.quantity!,
             salesPrice: price,
             amount: item.quantity! * price,
-            note: form.note,
+            note: sbNotePreserve,
             operator: docOperator,
             lineGroupId: item.id,
-            createdAt: localCalendarYmdStartToIso(form.createdAt || localTodayYmd()),
+            createdAt: sbCreatedAtIso,
             ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {})
           });
         }
@@ -783,6 +941,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       <PurchaseOrderFormSection
         form={form}
         setForm={setForm}
+        previewAutoPoDocNumber={!editingDocNumber ? generatePODocNumber() : undefined}
         purchaseOrderItems={purchaseOrderItems}
         onAddItem={addPurchaseOrderItem}
         onUpdateItem={updatePurchaseOrderItem}
@@ -813,6 +972,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       <SalesOrderFormSection
         form={form}
         setForm={setForm}
+        previewAutoSODocNumber={!editingDocNumber ? generateSODocNumber() : undefined}
         salesOrderItems={salesOrderItems}
         onAddItem={addSalesOrderItem}
         onUpdateItem={updateSalesOrderItem}
@@ -832,51 +992,42 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         formatQtyDisplay={formatQtyDisplay}
         getUnitName={getUnitName}
         partnerLabel={partnerLabel}
+        formSettings={safeSalesOrderFormSettings}
+        listPrintSlot={safeSalesOrderFormSettings.listPrint}
+        printTemplates={mergedPrintTemplates}
+        buildSalesOrderPrintContext={buildSalesOrderPrintContext}
       />
     );
   }
 
   if (formType === 'SALES_BILL') {
     return (
-      <>
-        <SalesBillFormSection
-          form={form}
-          setForm={setForm}
-          salesBillItems={salesBillItems}
-          onAddItem={addSalesBillItem}
-          onUpdateItem={updateSalesBillItem}
-          onUpdateVariantQty={updateSalesBillVariantQty}
-          onRemoveItem={removeSalesBillItem}
-          onSave={() => handleSaveManual('SALES_BILL')}
-          onBack={onBack}
-          onDeleteRecords={onDeleteRecords}
-          editingDocNumber={editingDocNumber}
-          hasPsiPerm={hasPsiPerm}
-          products={products}
-          categories={categories}
-          partners={partners}
-          partnerCategories={partnerCategories}
-          dictionaries={dictionaries}
-          warehouses={warehouses}
-          productMapPSI={productMapPSI}
-          formatQtyDisplay={formatQtyDisplay}
-          getUnitName={getUnitName}
-          partnerLabel={partnerLabel}
-          onOpenPrint={openSalesBillPrint}
-          printDisabled={!salesBillPrintTemplate}
-        />
-        {salesBillPrintOpen && salesBillPrintCtx && salesBillPrintTemplate ? (
-          <SalesBillPrintDialog
-            open={salesBillPrintOpen}
-            onClose={() => {
-              setSalesBillPrintOpen(false);
-              setSalesBillPrintCtx(null);
-            }}
-            template={salesBillPrintTemplate}
-            ctx={salesBillPrintCtx}
-          />
-        ) : null}
-      </>
+      <SalesBillFormSection
+        form={form}
+        setForm={setForm}
+        readonlyDocNumber={salesBillReadonlyDocNumber}
+        salesBillItems={salesBillItems}
+        onAddItem={addSalesBillItem}
+        onUpdateItem={updateSalesBillItem}
+        onUpdateVariantQty={updateSalesBillVariantQty}
+        onRemoveItem={removeSalesBillItem}
+        onSave={() => handleSaveManual('SALES_BILL')}
+        onBack={onBack}
+        onDeleteRecords={onDeleteRecords}
+        editingDocNumber={editingDocNumber}
+        hasPsiPerm={hasPsiPerm}
+        products={products}
+        categories={categories}
+        partners={partners}
+        partnerCategories={partnerCategories}
+        dictionaries={dictionaries}
+        warehouses={warehouses}
+        productMapPSI={productMapPSI}
+        formatQtyDisplay={formatQtyDisplay}
+        getUnitName={getUnitName}
+        partnerLabel={partnerLabel}
+        formSettings={safeSalesBillFormSettings}
+      />
     );
   }
 
@@ -913,6 +1064,10 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         recordsList={recordsList}
         receivedByOrderLine={receivedByOrderLine}
         generatePBDocNumber={generatePBDocNumber}
+        previewAutoPbDocNumber={!editingDocNumber ? generatePBDocNumber(form.partnerId || '', form.partner || '') : undefined}
+        listPrintSlot={safePurchaseBillFormSettings.listPrint}
+        printTemplates={mergedPrintTemplates}
+        buildPurchaseBillPrintContext={buildPurchaseBillPrintContext}
       />
     );
   }

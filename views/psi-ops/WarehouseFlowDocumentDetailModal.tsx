@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { X, ScrollText } from 'lucide-react';
 import { Product, Warehouse, ProductCategory, AppDictionaries, ProductVariant } from '../../types';
+import { formatPsiDocBusinessDateListZh } from '../../utils/flowDocSort';
 
 const formatFlowDateTime = (ts: string) => {
   if (!ts || !ts.toString().trim()) return '—';
@@ -82,7 +83,19 @@ const WarehouseFlowDocumentDetailModal: React.FC<WarehouseFlowDocumentDetailModa
       ? { docNumber: first.docNo || (ordersList.find((o) => o.id === first.orderId)?.orderNumber ? `退料-${ordersList.find((o) => o.id === first.orderId)?.orderNumber}` : first.id), createdAt: first.timestamp || '—', partner: '—', warehouseId: first.warehouseId, warehouseName: warehouseMapPSI.get(first.warehouseId)?.name ?? '—', note: first.reason ?? '—', fromWarehouseId: undefined, toWarehouseId: undefined, orderNumber: ordersList.find((o) => o.id === first.orderId)?.orderNumber ?? '—' }
       : isStockOut
       ? { docNumber: first.docNo || (ordersList.find((o) => o.id === first.orderId)?.orderNumber ? `领料-${ordersList.find((o) => o.id === first.orderId)?.orderNumber}` : first.id), createdAt: first.timestamp || '—', partner: '—', warehouseId: first.warehouseId, warehouseName: warehouseMapPSI.get(first.warehouseId)?.name ?? '—', note: first.reason ?? '—', fromWarehouseId: undefined, toWarehouseId: undefined, orderNumber: ordersList.find((o) => o.id === first.orderId)?.orderNumber ?? '—' }
-      : { docNumber: first.docNumber || detailDocNo, createdAt: first.createdAt || first.timestamp || '—', partner: first.partner ?? '—', warehouseId: first.warehouseId, warehouseName: warehouseMapPSI.get(first.warehouseId)?.name ?? '—', note: first.note ?? '—', fromWarehouseId: first.fromWarehouseId, toWarehouseId: first.toWarehouseId, orderNumber: '—' };
+      : {
+        docNumber: first.docNumber || detailDocNo,
+        createdAt: first.createdAt || first.timestamp || '—',
+        partner: first.partner ?? '—',
+        warehouseId: first.warehouseId,
+        warehouseName: warehouseMapPSI.get(first.warehouseId)?.name ?? '—',
+        note: (first.note && String(first.note).trim()) || '',
+        businessDateZh: formatPsiDocBusinessDateListZh(docRecords),
+        docTimestamp: first.timestamp || '',
+        fromWarehouseId: first.fromWarehouseId,
+        toWarehouseId: first.toWarehouseId,
+        orderNumber: '—',
+      };
     const detailLinesByProductVariant = new Map<string, { productId: string; variantId?: string; quantity: number; purchasePrice?: number; salesPrice?: number; record: any }>();
     docRecords.forEach(r => {
       const vId = r.variantId ?? '';
@@ -137,10 +150,30 @@ const WarehouseFlowDocumentDetailModal: React.FC<WarehouseFlowDocumentDetailModa
               <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">单号</label>
               <div className="py-2 px-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 bg-white">{mainInfo.docNumber}</div>
             </div>
-            <div>
-              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">日期时间</label>
-              <div className="py-2 px-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 bg-white">{formatFlowDateTime(mainInfo.createdAt)}</div>
-            </div>
+            {(detailType === 'SALES_BILL' || detailType === 'PURCHASE_BILL') ? (
+              detailType === 'PURCHASE_BILL' ? (
+                <>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">添加日期</label>
+                    <div className="py-2 px-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 bg-white">{(mainInfo as any).businessDateZh ?? '—'}</div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">制单时间</label>
+                    <div className="py-2 px-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 bg-white">{formatFlowDateTime((mainInfo as any).docTimestamp || '')}</div>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">制单时间</label>
+                  <div className="py-2 px-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 bg-white">{formatFlowDateTime((mainInfo as any).docTimestamp || '')}</div>
+                </div>
+              )
+            ) : (
+              <div>
+                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">日期时间</label>
+                <div className="py-2 px-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 bg-white">{formatFlowDateTime(mainInfo.createdAt)}</div>
+              </div>
+            )}
             <div>
               <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">{detailType === 'SALES_BILL' ? '客户' : detailType === 'PURCHASE_BILL' ? '供应商' : detailType === 'TRANSFER' ? '调拨' : detailType === 'STOCKTAKE' ? '仓库' : detailType === 'STOCK_IN' || detailType === 'STOCK_RETURN' || detailType === 'STOCK_OUT' ? '工单号' : '备注'}</label>
               <div className="py-2 px-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 bg-white">
@@ -153,7 +186,13 @@ const WarehouseFlowDocumentDetailModal: React.FC<WarehouseFlowDocumentDetailModa
                 <div className="py-2 px-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 bg-white">{mainInfo.warehouseName}</div>
               </div>
             )}
-            {mainInfo.note && (
+            {detailType === 'PURCHASE_BILL' && (
+              <div className="md:col-span-2 lg:col-span-4">
+                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">单据备注</label>
+                <div className="py-2 px-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 bg-white whitespace-pre-wrap break-words" title={mainInfo.note || undefined}>{mainInfo.note || '—'}</div>
+              </div>
+            )}
+            {detailType !== 'SALES_BILL' && detailType !== 'PURCHASE_BILL' && mainInfo.note && (
               <div className="md:col-span-2">
                 <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">备注</label>
                 <div className="py-2 px-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-800 bg-white truncate" title={mainInfo.note}>{mainInfo.note}</div>

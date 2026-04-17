@@ -6,11 +6,14 @@ import {
   Trash2,
   Layers,
   FileText,
-  Printer,
 } from 'lucide-react';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
+import type { PlanListPrintSettings, PrintRenderContext, PrintTemplate } from '../../types';
 import { Product, Warehouse, ProductCategory, Partner, PartnerCategory, AppDictionaries, ProductVariant } from '../../types';
+import { PsiListPrintPicker } from '../../components/psi/PsiListPrintPicker';
+import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
+import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 import { sectionTitleClass } from '../../styles/uiDensity';
 import { useConfirm } from '../../contexts/ConfirmContext';
@@ -27,6 +30,8 @@ export interface SalesBillLineItem {
 interface SalesBillFormSectionProps {
   form: any;
   setForm: (form: any) => void;
+  /** 展示用单号：新建为系统预生成号，编辑为原单号（只读） */
+  readonlyDocNumber: string;
   salesBillItems: SalesBillLineItem[];
   onAddItem: () => void;
   onUpdateItem: (id: string, updates: Partial<{ productId: string; quantity?: number; salesPrice: number; variantQuantities?: Record<string, number> }>) => void;
@@ -47,22 +52,25 @@ interface SalesBillFormSectionProps {
   formatQtyDisplay: (q: number | string | undefined | null) => number;
   getUnitName: (productId: string) => string;
   partnerLabel: string;
-  /** 打开销售单打印预览（由父级注入打印上下文） */
-  onOpenPrint?: () => void | Promise<void>;
-  /** 无可用打印模版时为 true */
-  printDisabled?: boolean;
+  formSettings: { standardFields: any[]; customFields: any[] };
+  /** 列表与登记/详情共用：`salesBillFormSettings.listPrint` */
+  listPrintSlot?: PlanListPrintSettings;
+  printTemplates?: PrintTemplate[];
+  buildSalesBillPrintContext?: (template: PrintTemplate) => PrintRenderContext;
 }
 
 const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
-  form, setForm,
+  form, setForm, readonlyDocNumber,
   salesBillItems, onAddItem, onUpdateItem, onUpdateVariantQty, onRemoveItem,
   onSave, onBack, onDeleteRecords,
   editingDocNumber, hasPsiPerm,
   products, categories, partners, partnerCategories, dictionaries, warehouses,
   productMapPSI, formatQtyDisplay, getUnitName,
   partnerLabel,
-  onOpenPrint,
-  printDisabled,
+  formSettings,
+  listPrintSlot,
+  printTemplates = [],
+  buildSalesBillPrintContext,
 }) => {
   const confirm = useConfirm();
 
@@ -73,16 +81,12 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
           <ArrowLeft className="w-4 h-4" /> 返回列表
         </button>
         <div className="flex items-center gap-3">
-          {onOpenPrint && (
-            <button
-              type="button"
-              onClick={() => void onOpenPrint()}
-              disabled={!!printDisabled || salesBillItems.length === 0}
-              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Printer className="h-4 w-4" /> 打印预览
-            </button>
-          )}
+          <PsiListPrintPicker
+            slot={listPrintSlot}
+            printTemplates={printTemplates}
+            buildContext={buildSalesBillPrintContext}
+            pickerSubtitle={readonlyDocNumber || undefined}
+          />
           {editingDocNumber && onDeleteRecords && hasPsiPerm('psi:sales_bill:delete') && (
             <button
               type="button"
@@ -119,15 +123,32 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
             <h3 className={sectionTitleClass}>1. 销售单基础信息</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2 space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{partnerLabel}</label>
-              <SearchablePartnerSelect
-                options={partners}
-                categories={partnerCategories}
-                value={form.partner}
-                onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id })}
-                placeholder={`选择${partnerLabel}...`}
-              />
+            <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+              <div className="w-full min-w-0 space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{partnerLabel}</label>
+                <SearchablePartnerSelect
+                  options={partners}
+                  categories={partnerCategories}
+                  value={form.partner}
+                  onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id })}
+                  placeholder={`选择${partnerLabel}...`}
+                  showCategoryHint={false}
+                  triggerClassName="!h-[52px] !min-h-[52px] !py-3"
+                />
+              </div>
+              <div className="w-full min-w-0 space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据编号（系统自动生成，不可改）</label>
+                <div className="relative">
+                  <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
+                  <div className="w-full bg-slate-100 border border-slate-100 rounded-xl pl-10 pr-4 font-bold h-[52px] flex items-center text-slate-700 box-border">
+                    {readonlyDocNumber ? (
+                      <span className="truncate">{readonlyDocNumber}</span>
+                    ) : (
+                      <span className="text-slate-400 font-bold text-sm truncate">选择合作单位后自动生成</span>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">出库仓库</label>
@@ -136,21 +157,20 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
                 {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
             </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据编号 (选填)</label>
-              <div className="relative">
-                <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                <input type="text" placeholder="留空则自动生成" value={form.docNumber} onChange={e => setForm({ ...form, docNumber: e.target.value })} className="w-full bg-slate-50 border-none rounded-xl py-3 pl-10 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">添加日期</label>
-              <input type="date" value={form.createdAt} onChange={e => setForm({ ...form, createdAt: e.target.value })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-            </div>
-            <div className="md:col-span-2 space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据备注</label>
-              <input type="text" value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" placeholder="备注说明..." />
-            </div>
+            {formSettings.customFields.filter(f => f.showInCreate).map(cf => {
+              const eff = effectivePlanFormFieldType(cf);
+              return (
+                <div key={cf.id} className={eff === 'text' || eff === 'file' ? 'md:col-span-2 space-y-1' : 'space-y-1'}>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{cf.label}</label>
+                  <PlanFormCustomFieldInput
+                    cf={cf}
+                    value={form.customData?.[cf.id]}
+                    onChange={next => setForm({ ...form, customData: { ...form.customData, [cf.id]: next } })}
+                    controlClassName="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]"
+                  />
+                </div>
+              );
+            })}
           </div>
         </div>
 

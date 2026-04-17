@@ -36,11 +36,14 @@ import {
   PrintTemplate,
   ProductionOrder,
   PrintRenderContext,
+  PlanFormFieldConfig,
 } from '../types';
+import { effectivePlanFormFieldType } from '../utils/planFormCustomField';
 import SplitPlanModal from './plan-order-list/SplitPlanModal';
 import PlanFormConfigModal from './plan-order-list/PlanFormConfigModal';
 import { HiddenPrintSlot, usePrintTemplateAction } from '../components/print-editor/PrintPreview';
 import { createBlankCustomTemplate } from '../utils/printTemplateDefaults';
+import { buildPlanPrintListRows } from '../utils/buildPlanPrintListRows';
 import {
   moduleHeaderRowClass,
   pageSubtitleClass,
@@ -55,11 +58,6 @@ import { PlanPrintTemplateManageDialog } from '../components/plan-print/PlanPrin
 import { plans as plansApi } from '../services/api';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { planIdToLocalYmd, toLocalDateYmd } from '../utils/localDateTime';
-
-/** 列表交期展示：本地日历日 */
-function formatPlanDueDateList(due: string): string {
-  return toLocalDateYmd(due) || String(due).trim().slice(0, 10);
-}
 
 /** 列表添加日期展示：本地日历日 */
 function formatPlanCreatedDateList(created: string | undefined | null): string {
@@ -122,11 +120,81 @@ function collectSubtreePlanIdsForPlan(rootId: string, allPlans: PlanOrder[]): st
   return out;
 }
 
+function renderPlanListCustomFieldValue(
+  cf: PlanFormFieldConfig,
+  plan: PlanOrder,
+  setImagePreviewUrl: (u: string | null) => void,
+  setFilePreviewUrl: (u: string | null) => void,
+  setFilePreviewType: (t: 'image' | 'pdf') => void,
+): React.ReactNode {
+  const raw = plan.customData?.[cf.id];
+  if (raw == null || raw === '') return null;
+  const t = effectivePlanFormFieldType(cf);
+  const s = String(raw);
+  if (t === 'file' && s.startsWith('data:image/')) {
+    return (
+      <span key={cf.id} className="flex shrink-0 items-center gap-1">
+        <span className="text-slate-500">{cf.label}:</span>
+        <button
+          type="button"
+          onClick={() => setImagePreviewUrl(s)}
+          className="h-7 w-7 shrink-0 overflow-hidden rounded border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          <img src={s} alt="" className="h-full w-full object-cover" />
+        </button>
+      </span>
+    );
+  }
+  if (t === 'file' && s.startsWith('data:application/pdf')) {
+    return (
+      <span key={cf.id} className="flex shrink-0 items-center gap-1">
+        <span className="text-slate-500">{cf.label}:</span>
+        <button
+          type="button"
+          className="text-xs font-bold text-indigo-600 hover:underline"
+          onClick={() => {
+            setFilePreviewUrl(s);
+            setFilePreviewType('pdf');
+          }}
+        >
+          查看
+        </button>
+      </span>
+    );
+  }
+  if (t === 'file' && s.startsWith('data:')) {
+    return (
+      <span key={cf.id} className="flex shrink-0 items-center gap-1">
+        <span className="text-slate-500">{cf.label}:</span>
+        <button
+          type="button"
+          className="text-xs font-bold text-indigo-600 hover:underline"
+          onClick={() => window.open(s, '_blank', 'noopener,noreferrer')}
+        >
+          查看
+        </button>
+      </span>
+    );
+  }
+  return (
+    <span key={cf.id} className="flex items-center gap-1">
+      {cf.label}: {s}
+    </span>
+  );
+}
+
 const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMode = 'order', plans, products, categories, dictionaries, workers, equipment, globalNodes, boms, partners, partnerCategories = [], psiRecords = [], planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orders = [], onCreatePlan, onSplitPlan, onConvertToOrder, onDeletePlan, onUpdateProduct, onUpdatePlan, onAddPSIRecord, onAddPSIRecordBatch, onCreateSubPlan, onCreateSubPlans }) => {
   const [showModal, setShowModal] = useState(false);
   const [viewDetailPlanId, setViewDetailPlanId] = useState<string | null>(null);
   const [viewProductId, setViewProductId] = useState<string | null>(null);
   const [showPlanFormConfigModal, setShowPlanFormConfigModal] = useState(false);
+  /** 打开计划单表单配置时默认页签（工具栏为字段；列表「增加打印模版」为打印） */
+  const [planFormConfigEntryTab, setPlanFormConfigEntryTab] = useState<'fields' | 'print'>('fields');
+  const openPlanFormPrintTab = useCallback(() => {
+    setPlanFormConfigEntryTab('print');
+    void onRefreshPrintTemplates?.();
+    setShowPlanFormConfigModal(true);
+  }, [onRefreshPrintTemplates]);
   const [planPrintPickerOpen, setPlanPrintPickerOpen] = useState(false);
   const [planPrintPickerPlan, setPlanPrintPickerPlan] = useState<PlanOrder | null>(null);
   const [planPrintTemplateManageScope, setPlanPrintTemplateManageScope] = useState<'planList' | 'planLabel' | null>(null);
@@ -211,10 +279,22 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   }, [plansForView]);
 
   const showPlanListPrintButton = planFormSettings.listPrint?.showPrintButton !== false;
-  const planListPrintPickerTemplates = useMemo(() => {
-    const allowed = planFormSettings.listPrint?.allowedTemplateIds;
-    if (!allowed?.length) return printTemplates;
-    return printTemplates.filter(t => allowed.includes(t.id));
+  /** 仅当已在表单配置中加入至少一个可选模版 id 时，才列出可选模版；未配置时不列出全部模版（与工单中心一致） */
+  const { planListPrintPickerTemplates, planListPrintPickerHasWhitelist } = useMemo(() => {
+    const raw = planFormSettings.listPrint?.allowedTemplateIds;
+    if (!raw || !Array.isArray(raw) || raw.length === 0) {
+      return { planListPrintPickerTemplates: [] as PrintTemplate[], planListPrintPickerHasWhitelist: false };
+    }
+    const allowedSet = new Set(
+      raw.map(x => (x != null && x !== '' ? String(x).trim() : '')).filter(Boolean),
+    );
+    if (allowedSet.size === 0) {
+      return { planListPrintPickerTemplates: [] as PrintTemplate[], planListPrintPickerHasWhitelist: false };
+    }
+    return {
+      planListPrintPickerTemplates: printTemplates.filter(t => allowedSet.has(String(t.id).trim())),
+      planListPrintPickerHasWhitelist: true,
+    };
   }, [printTemplates, planFormSettings.listPrint?.allowedTemplateIds]);
 
   const idlePlanPrintTemplate = useMemo(() => createBlankCustomTemplate(80, 60, ' '), []);
@@ -228,6 +308,8 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
         printListRows: (planListPrintRun.plan as any)._printListRows ?? undefined,
         labelPerRow: (planListPrintRun.plan as any)._labelPerRow ?? undefined,
         virtualBatch: (planListPrintRun.plan as any)._virtualBatch ?? undefined,
+        virtualBatchRows: (planListPrintRun.plan as any)._virtualBatchRows ?? undefined,
+        labelPerVirtualBatch: (planListPrintRun.plan as any)._labelPerVirtualBatch ?? undefined,
       }
     : idlePlanPrintCtx;
 
@@ -397,7 +479,10 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => setShowPlanFormConfigModal(true)}
+              onClick={() => {
+                setPlanFormConfigEntryTab('fields');
+                setShowPlanFormConfigModal(true);
+              }}
               className={secondaryToolbarButtonClass}
             >
               <Sliders className="w-4 h-4 shrink-0" /> 表单配置
@@ -451,9 +536,10 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                           {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
                           {showInList('totalQty') && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 计划总量: {totalQty}</span>}
-                          {showInList('dueDate') && plan.dueDate && <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3" /> 交期: {formatPlanDueDateList(plan.dueDate)}</span>}
                           {showInList('createdAt') && createdDate && <span className="flex items-center gap-1 text-slate-500"><CalendarDays className="w-3 h-3" /> 添加: {createdDate}</span>}
-                          {customListFields.map(cf => (plan.customData?.[cf.id] != null && plan.customData?.[cf.id] !== '') && <span key={cf.id} className="flex items-center gap-1">{cf.label}: {String(plan.customData[cf.id])}</span>)}
+                          {customListFields.map(cf =>
+                            renderPlanListCustomFieldValue(cf, plan, setImagePreviewUrl, setFilePreviewUrl, setFilePreviewType),
+                          )}
                       </div>
                     </div>
                   </div>
@@ -528,9 +614,10 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                 <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                                   {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
                                   {showInList('totalQty') && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 计划总量: {totalQty}</span>}
-                                  {showInList('dueDate') && plan.dueDate && <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3" /> 交期: {formatPlanDueDateList(plan.dueDate)}</span>}
                                   {showInList('createdAt') && createdDate && <span className="flex items-center gap-1 text-slate-500"><CalendarDays className="w-3 h-3" /> 添加: {createdDate}</span>}
-                                  {customListFields.map(cf => (plan.customData?.[cf.id] != null && plan.customData?.[cf.id] !== '') && <span key={cf.id} className="flex items-center gap-1">{cf.label}: {String(plan.customData[cf.id])}</span>)}
+                                  {customListFields.map(cf =>
+                            renderPlanListCustomFieldValue(cf, plan, setImagePreviewUrl, setFilePreviewUrl, setFilePreviewType),
+                          )}
                                 </div>
                               </div>
                             </div>
@@ -609,9 +696,10 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                               <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                                 {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
                                 {showInList('totalQty') && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 计划总量: {totalQty}</span>}
-                                {showInList('dueDate') && plan.dueDate && <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3" /> 交期: {formatPlanDueDateList(plan.dueDate)}</span>}
                                 {showInList('createdAt') && createdDate && <span className="flex items-center gap-1 text-slate-500"><CalendarDays className="w-3 h-3" /> 添加: {createdDate}</span>}
-                                {customListFields.map(cf => (plan.customData?.[cf.id] != null && plan.customData?.[cf.id] !== '') && <span key={cf.id} className="flex items-center gap-1">{cf.label}: {String(plan.customData[cf.id])}</span>)}
+                                {customListFields.map(cf =>
+                            renderPlanListCustomFieldValue(cf, plan, setImagePreviewUrl, setFilePreviewUrl, setFilePreviewType),
+                          )}
                               </div>
                             </div>
                           </div>
@@ -727,13 +815,18 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
         const pickerPlan = planPrintPickerPlan;
 
         const handlePickListTemplate = (t: PrintTemplate) => {
-          setPlanListPrintRun({ template: t, plan: pickerPlan });
+          const prod = products.find(p => p.id === pickerPlan.productId);
+          const printListRows = buildPlanPrintListRows(pickerPlan, prod, dictionaries);
+          setPlanListPrintRun({
+            template: t,
+            plan: { ...pickerPlan, _printListRows: printListRows } as PlanOrder,
+          });
           setPlanPrintPickerOpen(false);
           setPlanPrintPickerPlan(null);
         };
 
         return (
-        <div className="fixed inset-0 z-[72] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
           <button
             type="button"
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
@@ -746,7 +839,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
           <div
             role="dialog"
             aria-modal="true"
-            className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+            className="relative w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
@@ -766,39 +859,51 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
               </button>
             </div>
 
-            <ul className="max-h-[min(40vh,280px)] divide-y divide-slate-100 overflow-y-auto p-2">
+            <div className="max-h-[min(40vh,280px)] overflow-y-auto p-2">
               {planListPrintPickerTemplates.length === 0 ? (
-                <li className="px-4 py-6 text-center text-xs leading-relaxed text-slate-400">
-                  暂无可用模版。请点击下方「增加模版」创建或加入白名单；若已限制列表可选模版，请先在「表单配置 → 打印模版」中勾选。
-                </li>
+                <div className="flex flex-col items-center gap-4 px-4 py-8 text-center">
+                  <p className="text-xs leading-relaxed text-slate-500">
+                    {planListPrintPickerHasWhitelist
+                      ? '已加入的可选模版在当前列表中均不可用，或模版已被删除。请在「表单配置 → 打印模版」中调整。'
+                      : '请先在「表单配置 → 打印模版」中为「计划单列表」增加模版并加入可选列表后，再在此处打印。'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlanPrintPickerOpen(false);
+                      setPlanPrintPickerPlan(null);
+                      openPlanFormPrintTab();
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-indigo-700"
+                  >
+                    <Plus className="h-4 w-4" />
+                    增加打印模版
+                  </button>
+                </div>
               ) : (
-                planListPrintPickerTemplates.map(t => (
-                  <li key={t.id}>
-                    <button
-                      type="button"
-                      onClick={() => handlePickListTemplate(t)}
-                      className="flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold text-slate-800 hover:bg-indigo-50"
-                    >
-                      <span className="min-w-0 truncate">{t.name}</span>
-                      <span className="shrink-0 text-xs font-bold text-indigo-600">
-                        {t.paperSize.widthMm}×{t.paperSize.heightMm} mm
-                      </span>
-                    </button>
-                  </li>
-                ))
+                <ul className="divide-y divide-slate-100">
+                  {planListPrintPickerTemplates.map(t => (
+                    <li key={t.id}>
+                      <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-slate-50/80">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-bold text-slate-800">{t.name}</div>
+                          <div className="mt-0.5 text-xs font-bold text-indigo-600">
+                            {t.paperSize.widthMm}×{t.paperSize.heightMm} mm
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handlePickListTemplate(t)}
+                          className="flex shrink-0 items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700"
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                          打印
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               )}
-            </ul>
-            <div className="flex justify-end border-t border-slate-100 px-3 py-3">
-              <button
-                type="button"
-                onClick={() => {
-                  void onRefreshPrintTemplates?.();
-                  setPlanPrintTemplateManageScope('planList');
-                }}
-                className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-100"
-              >
-                <Plus className="h-4 w-4" /> 增加模版
-              </button>
             </div>
           </div>
         </div>
@@ -811,13 +916,13 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
       <PlanFormConfigModal
         open={showPlanFormConfigModal}
         onClose={() => setShowPlanFormConfigModal(false)}
+        defaultTabWhenOpen={planFormConfigEntryTab}
         settings={planFormSettings}
         onSave={onUpdatePlanFormSettings}
         productionLinkMode={productionLinkMode}
         printTemplates={printTemplates}
         onUpdatePrintTemplates={onUpdatePrintTemplates}
         onRefreshPrintTemplates={onRefreshPrintTemplates}
-        planFormSettings={planFormSettings}
         plans={plans}
         orders={orders}
         products={products}

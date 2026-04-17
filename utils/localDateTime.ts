@@ -151,8 +151,105 @@ export function formatLocalDateTimeZh(input?: string | Date | null): string {
   return `${y}-${mo}-${day} ${h}:${mi}:${s}`;
 }
 
+/** `<input type="datetime-local" />` 存库：无时区的整串匹配（勿用 `Date` 解析，否则易被当成 UTC 导致打印偏差） */
+const NAIVE_DATETIME_LOCAL_PRINT = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/;
+
+/** 是否带 ISO 时区（与无时区 datetime-local 区分） */
+function hasExplicitIsoTimeZone(s: string): boolean {
+  return /[zZ]$/.test(s) || /[+\-]\d{2}:?\d{2}$/.test(s);
+}
+
+/**
+ * 字符串是否「像」可解析的日期/时间（避免自由文本被 `new Date(文本)` 误解析，例如 `备注-01-01 00:00:00` 在 V8 中会解析成 2001-01-01）。
+ */
+function looksLikeParsableAsPrintDatetime(s: string): boolean {
+  const t = s.trim();
+  if (!t) return false;
+  if (YMD_ONLY.test(t)) return true;
+  if (/^\d{4}-\d{2}-\d{2}/.test(t)) return true;
+  if (/^\d{4}[/-]\d{1,2}[/-]\d{1,2}/.test(t)) return true;
+  if (t.includes('T')) return true;
+  if (/^(?:上午|下午)/.test(t)) return true;
+  /** 纯数字：Unix 秒(10 位)或毫秒(13 位) */
+  if (/^\d{10}$|^\d{13}$/.test(t)) return true;
+  return false;
+}
+
+/**
+ * 打印占位符中自定义字段值的展示（历史上函数名带 Datetime，实际用于所有自定义类型）。
+ * - `YYYY-MM-DDTHH:mm`（无时区）按字面转为 `YYYY-MM-DD HH:mm`，与表单填写一致；
+ * - 带 `Z` / `±hh:mm` 的 ISO 按本地时区格式化；
+ * - 纯 `YYYY-MM-DD` 原样返回。
+ * - **非**日期形态的字符串不再调用宽松 `parseProductionOpTimestampMs`，避免正文后出现 `-01-01 00:00:00` 等误解析尾巴。
+ * - 数字：仅当像 Unix 毫秒(>1e11) 或 Unix 秒(2000–2100 范围整数)时才格式化为日期时间，否则按普通数字打印。
+ */
+export function formatCustomFieldDatetimeForPrint(value: unknown): string {
+  if (value == null || value === '') return '';
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const n = value;
+    const abs = Math.abs(n);
+    if (abs > 1e11) {
+      return formatLocalDateTimeZh(new Date(n));
+    }
+    /** 2000-01-01 ~ 2100-01-01 的 Unix 秒 → 本地日期时间 */
+    if (Number.isInteger(n) && abs >= 946684800 && abs < 4102444800) {
+      return formatLocalDateTimeZh(new Date(n * 1000));
+    }
+    return String(n);
+  }
+  if (typeof value !== 'string') return String(value);
+  const s = value.trim();
+  if (!s) return '';
+  if (YMD_ONLY.test(s)) return s;
+  const naive = NAIVE_DATETIME_LOCAL_PRINT.exec(s);
+  if (naive && naive[0] === s && !hasExplicitIsoTimeZone(s)) {
+    const date = naive[1];
+    const hh = naive[2];
+    const mm = naive[3];
+    const ss = naive[4];
+    if (ss != null) return `${date} ${hh}:${mm}:${ss}`;
+    return `${date} ${hh}:${mm}`;
+  }
+  if (hasExplicitIsoTimeZone(s)) {
+    const d = new Date(s);
+    if (!Number.isNaN(d.getTime())) return formatLocalDateTimeZh(d);
+  }
+  if (!looksLikeParsableAsPrintDatetime(s)) return s;
+  const ms = parseProductionOpTimestampMs(s);
+  if (ms > 0) return formatLocalDateTimeZh(new Date(ms));
+  return s;
+}
+
 export function localTodayYmd(): string {
   return toLocalDateYmd(new Date());
+}
+
+/** 当前本地日期时间，供 `<input type="datetime-local" />`，格式 `YYYY-MM-DDTHH:mm` */
+export function localNowForDatetimeLocal(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const h = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${y}-${mo}-${day}T${h}:${mi}`;
+}
+
+/** 将已存值规范为 datetime-local 可用的 `YYYY-MM-DDTHH:mm` */
+export function toDatetimeLocalInputValue(raw: string | undefined | null): string {
+  if (raw == null || raw === '') return '';
+  const s = String(raw).trim();
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return s.slice(0, 16);
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const h = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    return `${y}-${mo}-${day}T${h}:${mi}`;
+  }
+  return s.length > 16 ? s.slice(0, 16) : s;
 }
 
 /** yyyyMMdd，用于与业务单号中的日期段对齐（按本地日历日） */

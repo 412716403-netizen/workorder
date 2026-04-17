@@ -6,7 +6,7 @@ import {
   CreditCard, 
   Warehouse
 } from 'lucide-react';
-import { Product, Warehouse as WarehouseType, ProductCategory, Partner, PartnerCategory, AppDictionaries, PurchaseOrderFormSettings, PurchaseBillFormSettings } from '../types';
+import { Product, Warehouse as WarehouseType, ProductCategory, Partner, PartnerCategory, AppDictionaries, PurchaseOrderFormSettings, SalesOrderFormSettings, PurchaseBillFormSettings, SalesBillFormSettings } from '../types';
 const PSIOpsView = lazy(() => import('./PSIOpsView'));
 
 const PsiPanelFallback = () => (
@@ -39,8 +39,12 @@ interface PSIViewProps {
   dictionaries: AppDictionaries;
   purchaseOrderFormSettings?: PurchaseOrderFormSettings;
   onUpdatePurchaseOrderFormSettings?: (settings: PurchaseOrderFormSettings) => void;
+  salesOrderFormSettings?: SalesOrderFormSettings;
+  onUpdateSalesOrderFormSettings?: (settings: SalesOrderFormSettings) => void;
   purchaseBillFormSettings?: PurchaseBillFormSettings;
   onUpdatePurchaseBillFormSettings?: (settings: PurchaseBillFormSettings) => void;
+  salesBillFormSettings?: SalesBillFormSettings;
+  onUpdateSalesBillFormSettings?: (settings: SalesBillFormSettings) => void;
   onAddRecord: (record: any) => void;
   onAddRecordBatch?: (records: any[]) => Promise<void>;
   /** 替换某一类单据、某个单号下的所有记录（用于编辑采购订单等场景） */
@@ -62,7 +66,7 @@ const TAB_PERM_GROUPS: Record<string, string[]> = {
   WAREHOUSE_MGMT: ['warehouse_list', 'warehouse_stocktake', 'warehouse_transfer', 'warehouse_flow'],
 };
 
-const PSIView: React.FC<PSIViewProps> = ({ products, records, prodRecords = [], orders = [], warehouses, categories, partners, partnerCategories, dictionaries, purchaseOrderFormSettings, onUpdatePurchaseOrderFormSettings, purchaseBillFormSettings, onUpdatePurchaseBillFormSettings, onAddRecord, onAddRecordBatch, onReplaceRecords, onDeleteRecords, userPermissions, tenantRole }) => {
+const PSIView: React.FC<PSIViewProps> = ({ products, records, prodRecords = [], orders = [], warehouses, categories, partners, partnerCategories, dictionaries, purchaseOrderFormSettings, onUpdatePurchaseOrderFormSettings, salesOrderFormSettings, onUpdateSalesOrderFormSettings, purchaseBillFormSettings, onUpdatePurchaseBillFormSettings, salesBillFormSettings, onUpdateSalesBillFormSettings, onAddRecord, onAddRecordBatch, onReplaceRecords, onDeleteRecords, userPermissions, tenantRole }) => {
   const [activeTab, setActiveTab] = useState<PSITab>('PURCHASE_ORDER');
   const setScrollSegment = useSetMainScrollSegment();
   useLayoutEffect(() => {
@@ -186,8 +190,12 @@ const PSIView: React.FC<PSIViewProps> = ({ products, records, prodRecords = [], 
           records={records}
           purchaseOrderFormSettings={purchaseOrderFormSettings}
           onUpdatePurchaseOrderFormSettings={onUpdatePurchaseOrderFormSettings}
+          salesOrderFormSettings={salesOrderFormSettings}
+          onUpdateSalesOrderFormSettings={onUpdateSalesOrderFormSettings}
           purchaseBillFormSettings={purchaseBillFormSettings}
           onUpdatePurchaseBillFormSettings={onUpdatePurchaseBillFormSettings}
+          salesBillFormSettings={salesBillFormSettings}
+          onUpdateSalesBillFormSettings={onUpdateSalesBillFormSettings}
           onAddRecord={onAddRecord}
           onAddRecordBatch={onAddRecordBatch}
           onReplaceRecords={onReplaceRecords}

@@ -7,17 +7,21 @@ import type {
   PrintTemplate,
   SalesBillMatrixGroup,
 } from '../types';
+import { dynamicListHasMatrixColumn, matrixVisualSubRowCountForRow } from './dynamicListMatrix';
 
 function dynamicListHeaderHeightMm(cfg: PrintDynamicListElementConfig): number {
   if (!cfg.showHeader) return 0;
   const h = cfg.headerRowHeightMm;
-  if (h != null && h > 0) return h;
-  return 4;
+  return h != null && h > 0 ? h : 4;
 }
 
 /** 组件内数据区可容纳的数据行数（至少 1）。
  *  bodyH 非空时以「画布高度 - 组件 y」作为可用高度，使列表尽量填满整页。 */
-export function getDynamicListRowsPerPage(el: PrintBodyElement, bodyH?: number): number {
+export function getDynamicListRowsPerPage(
+  el: PrintBodyElement,
+  bodyH?: number,
+  printListRows?: PrintListRow[],
+): number {
   if (el.type !== 'dynamicList') return 1;
   const cfg = el.config as PrintDynamicListElementConfig;
   const headerH = dynamicListHeaderHeightMm(cfg);
@@ -25,7 +29,12 @@ export function getDynamicListRowsPerPage(el: PrintBodyElement, bodyH?: number):
   const avail = Math.max(0.1, effectiveH - headerH);
   const rowH =
     cfg.bodyRowHeightMm != null && cfg.bodyRowHeightMm > 0 ? Math.max(0.5, cfg.bodyRowHeightMm) : 6;
-  return Math.max(1, Math.floor(avail / rowH));
+  const hasMatrix = dynamicListHasMatrixColumn(cfg);
+  if (!hasMatrix || !printListRows?.length) {
+    return Math.max(1, Math.floor(avail / rowH));
+  }
+  const maxSlots = Math.max(1, ...printListRows.map(matrixVisualSubRowCountForRow));
+  return Math.max(1, Math.floor(avail / (rowH * maxSlots)));
 }
 
 export type ListPaginationSummary = {
@@ -48,7 +57,7 @@ export function computeListPaginationSummary(
   if (!rows?.length) return null;
   const lists = template.elements.filter(e => e.type === 'dynamicList');
   if (!lists.length) return null;
-  const rps = lists.map(e => getDynamicListRowsPerPage(e, bodyH));
+  const rps = lists.map(e => getDynamicListRowsPerPage(e, bodyH, rows));
   const globalRowsPerPage = Math.min(...rps);
   const listDrivenPages = Math.max(1, Math.ceil(rows.length / globalRowsPerPage));
   return { globalRowsPerPage, listDrivenPages, rowCount: rows.length };

@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { 
   PlanOrder, ProductionOrder, Product, BOM,
-  ProductionOpRecord, GlobalNodeTemplate, ProdOpType, ProductCategory, AppDictionaries, Worker, Equipment, PlanFormSettings, OrderFormSettings, MaterialPanelSettings, Partner, PartnerCategory, ProductionLinkMode, ProductMilestoneProgress, ProcessSequenceMode, Warehouse, PrintTemplate
+  ProductionOpRecord, GlobalNodeTemplate, ProdOpType, ProductCategory, AppDictionaries, Worker, Equipment,   PlanFormSettings, OrderFormSettings, MaterialPanelSettings, MaterialFormSettings, OutsourceFormSettings, ReworkFormSettings, Partner, PartnerCategory, ProductionLinkMode, ProductMilestoneProgress, ProcessSequenceMode, Warehouse, PrintTemplate
 } from '../types';
 const PlanOrderListView = lazy(() => import('./PlanOrderListView'));
 const OrderListView = lazy(() => import('./OrderListView'));
@@ -58,6 +58,12 @@ interface ProductionManagementViewProps {
   onUpdateOrderFormSettings: (settings: OrderFormSettings) => void;
   materialPanelSettings?: MaterialPanelSettings;
   onUpdateMaterialPanelSettings?: (settings: MaterialPanelSettings) => void;
+  materialFormSettings: MaterialFormSettings;
+  onUpdateMaterialFormSettings: (settings: MaterialFormSettings) => void;
+  outsourceFormSettings: OutsourceFormSettings;
+  onUpdateOutsourceFormSettings: (settings: OutsourceFormSettings) => void | Promise<void>;
+  reworkFormSettings: ReworkFormSettings;
+  onUpdateReworkFormSettings: (settings: ReworkFormSettings) => void | Promise<void>;
   onCreatePlan: (plan: PlanOrder) => void | Promise<void>;
   onUpdateProduct: (product: Product) => Promise<boolean>;
   onUpdatePlan?: (planId: string, updates: Partial<PlanOrder>) => void;
@@ -89,7 +95,7 @@ type MainTab = 'plans' | 'orders' | ProdOpType;
 
 const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
   productionLinkMode = 'order', processSequenceMode = 'free', allowExceedMaxReportQty = true, plans, orders, products, categories, dictionaries, workers, equipment, prodRecords, psiRecords = [], warehouses = [], globalNodes, boms,   partners, partnerCategories,
-  planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orderFormSettings, onUpdateOrderFormSettings, materialPanelSettings, onUpdateMaterialPanelSettings,
+  planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orderFormSettings, onUpdateOrderFormSettings, materialPanelSettings, onUpdateMaterialPanelSettings, materialFormSettings, onUpdateMaterialFormSettings, outsourceFormSettings, onUpdateOutsourceFormSettings, reworkFormSettings, onUpdateReworkFormSettings,
   onCreatePlan, onUpdateProduct, onUpdatePlan, onSplitPlan, onConvertToOrder, onDeletePlan, onAddRecord, onAddRecordBatch, onUpdateRecord, onDeleteRecord, onAddPSIRecord, onAddPSIRecordBatch, onReportSubmit, onCreateSubPlan, onCreateSubPlans, onUpdateOrder, onDeleteOrder, onUpdateReport, onDeleteReport,
   productMilestoneProgresses = [], onReportSubmitProduct, onUpdateReportProduct, onDeleteReportProduct,
   userPermissions, tenantRole
@@ -103,8 +109,16 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
     plans: ['plans'],
     orders: ['orders_list', 'orders_form_config', 'orders_report_records', 'orders_pending_stock_in', 'orders_detail', 'orders_material', 'orders_rework'],
     STOCK_OUT: ['material_list', 'material_records', 'material_issue', 'material_return'],
-    OUTSOURCE: ['outsource_list', 'outsource_send', 'outsource_receive', 'outsource_records', 'outsource_material'],
-    REWORK: ['rework_list', 'rework_defective', 'rework_records', 'rework_report_records', 'rework_detail', 'rework_material'],
+    OUTSOURCE: ['outsource_form_config', 'outsource_list', 'outsource_send', 'outsource_receive', 'outsource_records', 'outsource_material'],
+    REWORK: [
+      'rework_list',
+      'rework_defective',
+      'rework_records',
+      'rework_report_records',
+      'rework_detail',
+      'rework_material',
+      'rework_form_config',
+    ],
   }), []);
 
   const [activeTab, setActiveTab] = useState<MainTab>('plans');
@@ -270,7 +284,8 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
             productionLinkMode={productionLinkMode}
             processSequenceMode={processSequenceMode}
             allowExceedMaxReportQty={allowExceedMaxReportQty}
-            orders={orders} 
+            orders={orders}
+            plans={plans}
             products={products} 
             workers={workers}
             equipment={equipment}
@@ -280,6 +295,9 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
             boms={boms}
             globalNodes={globalNodes} 
             orderFormSettings={orderFormSettings}
+            printTemplates={printTemplates}
+            onUpdatePrintTemplates={onUpdatePrintTemplates}
+            onRefreshPrintTemplates={onRefreshPrintTemplates}
             prodRecords={prodRecords}
             warehouses={warehouses}
             onUpdateOrderFormSettings={onUpdateOrderFormSettings}
@@ -309,6 +327,7 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
           <ProductionMgmtOpsView 
             productionLinkMode={productionLinkMode}
             productMilestoneProgresses={productMilestoneProgresses}
+            plans={plans}
             records={prodRecords} 
             orders={orders} 
             products={products} 
@@ -329,6 +348,15 @@ const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
             processSequenceMode={processSequenceMode}
             materialPanelSettings={materialPanelSettings}
             onUpdateMaterialPanelSettings={onUpdateMaterialPanelSettings}
+            materialFormSettings={materialFormSettings}
+            onUpdateMaterialFormSettings={onUpdateMaterialFormSettings}
+            printTemplates={printTemplates}
+            onUpdatePrintTemplates={onUpdatePrintTemplates}
+            onRefreshPrintTemplates={onRefreshPrintTemplates}
+            outsourceFormSettings={outsourceFormSettings}
+            onUpdateOutsourceFormSettings={onUpdateOutsourceFormSettings}
+            reworkFormSettings={reworkFormSettings}
+            onUpdateReworkFormSettings={onUpdateReworkFormSettings}
             userPermissions={userPermissions}
             tenantRole={tenantRole}
           />

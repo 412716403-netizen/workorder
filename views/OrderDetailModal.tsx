@@ -1,11 +1,26 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { toast } from 'sonner';
 import { X, Layers, Trash2, Pencil, Check, ClipboardList, Truck, FileText } from 'lucide-react';
-import { ProductionOrder, Product, OrderFormSettings, ProductionOpRecord, OrderItem, ProductCategory, AppDictionaries, ProductMilestoneProgress, GlobalNodeTemplate, ProductVariant } from '../types';
+import {
+  ProductionOrder,
+  Product,
+  OrderFormSettings,
+  ProductionOpRecord,
+  OrderItem,
+  ProductCategory,
+  AppDictionaries,
+  ProductMilestoneProgress,
+  GlobalNodeTemplate,
+  ProductVariant,
+  PrintTemplate,
+  PrintRenderContext,
+} from '../types';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { productHasColorSizeMatrix } from '../utils/productColorSize';
 import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
 import { getEffectiveReportTemplate, getReportCustomDataDisplayEntries } from '../utils/effectiveReportTemplate';
+import { buildPrintListRowsFromOrderItems } from '../utils/printListPagination';
+import { OrderCenterDetailPrintBlock } from '../components/order-print/OrderCenterDetailPrintBlock';
 
 function fmtReportDetailTs(ts: string | Date | undefined | null): string {
   if (!ts) return '—';
@@ -23,17 +38,22 @@ interface OrderDetailModalProps {
   dictionaries?: AppDictionaries;
   categories?: ProductCategory[];
   orderFormSettings?: OrderFormSettings;
+  printTemplates?: PrintTemplate[];
   /** 关联产品模式下隐藏客户、交期 */
   productionLinkMode?: 'order' | 'product';
   /** 关联产品模式下展示产品工序进度 */
   productMilestoneProgresses?: ProductMilestoneProgress[];
   globalNodes?: GlobalNodeTemplate[];
+  /** 关联产品模式下：为 true 时按「单张工单」展示详情（如工单流水入口），与关联工单详情一致；为 false 时保留产品汇总卡片 */
+  productModeSingleOrderLayout?: boolean;
+  /** 详情打印：打开工单表单配置「打印模版」页签 */
+  onOpenOrderFormPrintTab?: () => void;
   onUpdateOrder?: (orderId: string, updates: Partial<ProductionOrder>) => void;
   onDeleteOrder?: (orderId: string) => void;
 }
 
 const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
-  orderId, onClose, orders, products, prodRecords, dictionaries, categories, orderFormSettings, productionLinkMode, productMilestoneProgresses = [], globalNodes = [], onUpdateOrder, onDeleteOrder
+  orderId, onClose, orders, products, prodRecords, dictionaries, categories, orderFormSettings, printTemplates = [], productionLinkMode, productMilestoneProgresses = [], globalNodes = [], productModeSingleOrderLayout = false, onOpenOrderFormPrintTab, onUpdateOrder, onDeleteOrder
 }) => {
   const confirm = useConfirm();
   const showInDetail = (id: string) => orderFormSettings?.standardFields.find(f => f.id === id)?.showInDetail ?? true;
@@ -135,6 +155,20 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     });
   }, [order?.productId, productMilestoneProgresses, globalNodes, product?.milestoneNodeIds]);
 
+  const buildOrderPrintContext = useCallback(
+    (_template: PrintTemplate): PrintRenderContext => {
+      const o = orders.find(x => x.id === orderId);
+      const p = o ? products.find(pr => pr.id === o.productId) : undefined;
+      if (!o) return {};
+      return {
+        order: o,
+        product: p,
+        printListRows: buildPrintListRowsFromOrderItems(o),
+      };
+    },
+    [orderId, orders, products],
+  );
+
   if (!orderId || !order) return null;
 
   const handleSave = () => {
@@ -215,7 +249,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     ? editForm.items.reduce((s, i) => s + i.quantity, 0)
     : orderTotalQty;
 
-  if (productionLinkMode === 'product') {
+  if (productionLinkMode === 'product' && !productModeSingleOrderLayout) {
     return (
       <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
@@ -315,6 +349,15 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               <button onClick={handleDelete} className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold">
                 <Trash2 className="w-4 h-4" /> 删除
               </button>
+            )}
+            {(productionLinkMode !== 'product' || productModeSingleOrderLayout) && (
+              <OrderCenterDetailPrintBlock
+                printSlot={orderFormSettings?.orderCenterPrint?.orderDetail}
+                printTemplates={printTemplates}
+                buildContext={buildOrderPrintContext}
+                pickerSubtitle={`工单 ${order.orderNumber}`}
+                onAddPrintTemplate={onOpenOrderFormPrintTab}
+              />
             )}
             <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50">
               <X className="w-5 h-5" />

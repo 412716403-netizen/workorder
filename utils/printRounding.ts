@@ -19,29 +19,54 @@ export function roundPrintDecimal1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
-function roundDynamicListConfig(c: PrintDynamicListElementConfig): PrintDynamicListElementConfig {
-  const serial =
-    c.serialColumnWidthMm != null && c.serialColumnWidthMm > 0 ? roundPrintDecimal1(c.serialColumnWidthMm) : c.serialColumnWidthMm;
-  const widths = c.dataColumnWidthsMm?.map(w => (w > 0 ? roundPrintDecimal1(w) : w));
-  const hh = c.headerRowHeightMm != null && c.headerRowHeightMm > 0 ? roundPrintDecimal1(c.headerRowHeightMm) : c.headerRowHeightMm;
-  const bh = c.bodyRowHeightMm != null && c.bodyRowHeightMm > 0 ? roundPrintDecimal1(c.bodyRowHeightMm) : c.bodyRowHeightMm;
-  const columns = (c.columns ?? []).map(col => ({
+/** 解析为正 mm；无效或 ≤0 返回 undefined（与属性面板「留空=自动」一致） */
+function toOptionalMm(v: unknown): number | undefined {
+  if (v == null || v === '') return undefined;
+  const n = typeof v === 'number' ? v : Number(v);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return roundPrintDecimal1(n);
+}
+
+/** 解析为合法字号 pt；无效时用 fallback */
+function toFiniteFontPt(v: unknown, fallback: number): number {
+  const n = typeof v === 'number' ? v : Number(v);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return roundPrintDecimal1(Math.min(48, Math.max(1, n)));
+}
+
+function roundDynamicListConfig(
+  c: PrintDynamicListElementConfig & { dataSource?: unknown },
+): PrintDynamicListElementConfig {
+  const { dataSource: _legacyDataSource, ...base } = c;
+  const serial = toOptionalMm(base.serialColumnWidthMm);
+  const widths = base.dataColumnWidthsMm?.map(w => {
+    if (w == null || w === '') return 0;
+    const n = typeof w === 'number' ? w : Number(w);
+    if (!Number.isFinite(n) || n < 0) return 0;
+    if (n === 0) return 0;
+    return roundPrintDecimal1(n);
+  });
+  const hh = toOptionalMm(base.headerRowHeightMm);
+  const bh = toOptionalMm(base.bodyRowHeightMm);
+  const columns = (base.columns ?? []).map(col => ({
     ...col,
     fontSizePt:
-      col.fontSizePt != null && col.fontSizePt > 0 ? roundPrintDecimal1(Math.min(48, Math.max(1, col.fontSizePt))) : col.fontSizePt,
+      col.fontSizePt != null && Number(col.fontSizePt) > 0
+        ? roundPrintDecimal1(Math.min(48, Math.max(1, Number(col.fontSizePt))))
+        : col.fontSizePt,
     headerFontSizePt:
-      col.headerFontSizePt != null && col.headerFontSizePt > 0
-        ? roundPrintDecimal1(Math.min(48, Math.max(1, col.headerFontSizePt)))
+      col.headerFontSizePt != null && Number(col.headerFontSizePt) > 0
+        ? roundPrintDecimal1(Math.min(48, Math.max(1, Number(col.headerFontSizePt))))
         : col.headerFontSizePt,
   }));
   return {
-    ...c,
+    ...base,
     serialColumnWidthMm: serial,
     dataColumnWidthsMm: widths,
     headerRowHeightMm: hh,
     bodyRowHeightMm: bh,
-    headerFontSizePt: roundPrintDecimal1(c.headerFontSizePt),
-    fontSizePt: roundPrintDecimal1(c.fontSizePt),
+    headerFontSizePt: toFiniteFontPt(base.headerFontSizePt, 8),
+    fontSizePt: toFiniteFontPt(base.fontSizePt, 8),
     columns,
   };
 }

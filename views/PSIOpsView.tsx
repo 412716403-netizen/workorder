@@ -1,17 +1,34 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { 
-  Plus, 
-  Clock, 
-  Package, 
-  User, 
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import {
+  Plus,
+  Clock,
+  Package,
+  User,
   ChevronRight,
   FileText,
   Building2,
   CheckCircle2,
   Sliders,
   PackageCheck,
+  Printer,
 } from 'lucide-react';
-import { Product, Warehouse, ProductCategory, Partner, PartnerCategory, AppDictionaries, ProductVariant, PurchaseOrderFormSettings, PurchaseBillFormSettings } from '../types';
+import {
+  Product,
+  Warehouse,
+  ProductCategory,
+  Partner,
+  PartnerCategory,
+  AppDictionaries,
+  ProductVariant,
+  PurchaseOrderFormSettings,
+  SalesOrderFormSettings,
+  PurchaseBillFormSettings,
+  SalesBillFormSettings,
+  PlanFormFieldConfig,
+  PrintTemplate,
+  PrintRenderContext,
+  ProductionOrder,
+} from '../types';
 import {
   moduleHeaderRowClass,
   outlineAccentToolbarButtonClass,
@@ -25,10 +42,44 @@ import OrderBillFormPage from './psi-ops/OrderBillFormPage';
 import PendingShipmentListModal, { PendingShipmentGroup } from './psi-ops/PendingShipmentListModal';
 import PendingShipDetailModal from './psi-ops/PendingShipDetailModal';
 import AllocationModal from './psi-ops/AllocationModal';
-import FormConfigModal from './psi-ops/FormConfigModal';
-import { flowRecordsEarliestMs, formatPsiDocListTime, recordDocLineTimeMs } from '../utils/flowDocSort';
+import PurchaseOrderFormConfigModal from './psi-ops/PurchaseOrderFormConfigModal';
+import SalesOrderFormConfigModal from './psi-ops/SalesOrderFormConfigModal';
+import PurchaseBillFormConfigModal from './psi-ops/PurchaseBillFormConfigModal';
+import SalesBillFormConfigModal from './psi-ops/SalesBillFormConfigModal';
+import {
+  PsiListPrintController,
+  type PsiListPrintControllerHandle,
+} from '../components/psi/PsiListPrintPicker';
+import { buildPurchaseOrderPrintContextFromPsiDoc } from '../utils/buildPurchaseOrderPrintContext';
+import { buildPurchaseBillPrintContextFromPsiDoc } from '../utils/buildPurchaseBillPrintContext';
+import { buildSalesOrderPrintContextFromPsiDoc } from '../utils/buildSalesOrderPrintContext';
+import { buildSalesBillPrintContextFromPsiDoc } from '../utils/buildSalesBillPrintContext';
+import { useConfigData, useAppActions, useFinanceData } from '../contexts/AppDataContext';
+import {
+  flowRecordsEarliestMs,
+  formatPsiDocListTime,
+  psiDocGroupBusinessCreatedMs,
+  recordDocLineTimeMs,
+} from '../utils/flowDocSort';
 import { nextSalesBillDocNumber } from '../utils/partnerDocNumber';
 import { effectiveAllocatedQuantity } from '../utils/psiAllocationDisplay';
+import { effectivePlanFormFieldType } from '../utils/planFormCustomField';
+import { toLocalDateYmd, formatCustomFieldDatetimeForPrint } from '../utils/localDateTime';
+
+import {
+  formatPsiDocNumForList,
+  truncatePsiListNote,
+  compactPsiListCustomValue,
+  purchaseOrderStandardListText,
+  purchaseBillStandardListText,
+  type PsiDocListMainRow,
+} from './psi-ops/psiOpsListFormatting';
+import {
+  DEFAULT_PURCHASE_ORDER_FORM_SETTINGS,
+  DEFAULT_SALES_ORDER_FORM_SETTINGS,
+  DEFAULT_PURCHASE_BILL_FORM_SETTINGS,
+  DEFAULT_SALES_BILL_FORM_SETTINGS,
+} from '../contexts/AppDataContext';
 
 interface PSIOpsViewProps {
   type: string;
@@ -41,8 +92,12 @@ interface PSIOpsViewProps {
   records: any[];
   purchaseOrderFormSettings?: PurchaseOrderFormSettings;
   onUpdatePurchaseOrderFormSettings?: (settings: PurchaseOrderFormSettings) => void;
+  salesOrderFormSettings?: SalesOrderFormSettings;
+  onUpdateSalesOrderFormSettings?: (settings: SalesOrderFormSettings) => void;
   purchaseBillFormSettings?: PurchaseBillFormSettings;
   onUpdatePurchaseBillFormSettings?: (settings: PurchaseBillFormSettings) => void;
+  salesBillFormSettings?: SalesBillFormSettings;
+  onUpdateSalesBillFormSettings?: (settings: SalesBillFormSettings) => void;
   onAddRecord: (record: any) => void;
   onAddRecordBatch?: (records: any[]) => Promise<void>;
   onReplaceRecords?: (type: string, docNumber: string, newRecords: any[]) => void;
@@ -57,7 +112,33 @@ interface PSIOpsViewProps {
   tenantRole?: string;
 }
 
-const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, categories, partners, partnerCategories, dictionaries, records, purchaseOrderFormSettings = { standardFields: [], customFields: [] }, onUpdatePurchaseOrderFormSettings, purchaseBillFormSettings = { standardFields: [], customFields: [] }, onUpdatePurchaseBillFormSettings, onAddRecord, onAddRecordBatch, onReplaceRecords, onDeleteRecords, onDetailViewChange, prodRecords = [], orders = [], userPermissions, tenantRole }) => {
+const PSIOpsView: React.FC<PSIOpsViewProps> = ({
+  type,
+  products,
+  warehouses,
+  categories,
+  partners,
+  partnerCategories,
+  dictionaries,
+  records,
+  purchaseOrderFormSettings = DEFAULT_PURCHASE_ORDER_FORM_SETTINGS,
+  onUpdatePurchaseOrderFormSettings,
+  salesOrderFormSettings = DEFAULT_SALES_ORDER_FORM_SETTINGS,
+  onUpdateSalesOrderFormSettings,
+  purchaseBillFormSettings = DEFAULT_PURCHASE_BILL_FORM_SETTINGS,
+  onUpdatePurchaseBillFormSettings,
+  salesBillFormSettings = DEFAULT_SALES_BILL_FORM_SETTINGS,
+  onUpdateSalesBillFormSettings,
+  onAddRecord,
+  onAddRecordBatch,
+  onReplaceRecords,
+  onDeleteRecords,
+  onDetailViewChange,
+  prodRecords = [],
+  orders = [],
+  userPermissions,
+  tenantRole,
+}) => {
   const _isOwner = tenantRole === 'owner';
   const hasPsiPerm = (perm: string): boolean => {
     if (_isOwner) return true;
@@ -69,8 +150,41 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
   };
   const ordersList = orders ?? [];
   const recordsList = records ?? [];
-  const safePurchaseOrderFormSettings = { standardFields: purchaseOrderFormSettings?.standardFields ?? [], customFields: purchaseOrderFormSettings?.customFields ?? [] };
-  const safePurchaseBillFormSettings = { standardFields: purchaseBillFormSettings?.standardFields ?? [], customFields: purchaseBillFormSettings?.customFields ?? [] };
+  const { printTemplates } = useConfigData();
+  const { refreshPrintTemplates, onUpdatePrintTemplates } = useAppActions();
+  const { financeRecords } = useFinanceData();
+  const safePurchaseOrderFormSettings = useMemo(
+    (): PurchaseOrderFormSettings => ({
+      standardFields: purchaseOrderFormSettings?.standardFields ?? [],
+      customFields: purchaseOrderFormSettings?.customFields ?? [],
+      listPrint: purchaseOrderFormSettings?.listPrint ?? { showPrintButton: true },
+    }),
+    [purchaseOrderFormSettings],
+  );
+  const safePurchaseBillFormSettings = useMemo(
+    (): PurchaseBillFormSettings => ({
+      standardFields: purchaseBillFormSettings?.standardFields ?? [],
+      customFields: purchaseBillFormSettings?.customFields ?? [],
+      listPrint: purchaseBillFormSettings?.listPrint ?? { showPrintButton: true },
+    }),
+    [purchaseBillFormSettings],
+  );
+  const safeSalesOrderFormSettings = useMemo(
+    (): SalesOrderFormSettings => ({
+      standardFields: salesOrderFormSettings?.standardFields ?? [],
+      customFields: salesOrderFormSettings?.customFields ?? [],
+      listPrint: salesOrderFormSettings?.listPrint ?? { showPrintButton: true },
+    }),
+    [salesOrderFormSettings],
+  );
+  const safeSalesBillFormSettings = useMemo(
+    (): SalesBillFormSettings => ({
+      standardFields: salesBillFormSettings?.standardFields ?? [],
+      customFields: salesBillFormSettings?.customFields ?? [],
+      listPrint: salesBillFormSettings?.listPrint ?? { showPrintButton: true },
+    }),
+    [salesBillFormSettings],
+  );
   const productMapPSI = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const warehouseMapPSI = useMemo(() => new Map(warehouses.map(w => [w.id, w])), [warehouses]);
   const categoryMapPSI = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
@@ -92,7 +206,19 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
   // 当前是否处于采购订单编辑模式（存原始单号）
   const [editingPODocNumber, setEditingPODocNumber] = useState<string | null>(null);
   const [showPOFormConfigModal, setShowPOFormConfigModal] = useState(false);
+  const [poFormConfigEntryTab, setPoFormConfigEntryTab] = useState<'fields' | 'print'>('fields');
   const [showPBFormConfigModal, setShowPBFormConfigModal] = useState(false);
+  const [pbFormConfigEntryTab, setPbFormConfigEntryTab] = useState<'fields' | 'print'>('fields');
+  const [showSOFormConfigModal, setShowSOFormConfigModal] = useState(false);
+  const [soFormConfigEntryTab, setSoFormConfigEntryTab] = useState<'fields' | 'print'>('fields');
+  const [showSBFormConfigModal, setShowSBFormConfigModal] = useState(false);
+  const [sbFormConfigEntryTab, setSbFormConfigEntryTab] = useState<'fields' | 'print'>('fields');
+  // 列表行「打印」按钮 → 选模版 Dialog → HiddenPrintSlot → 打印的完整链路，
+  // 封装在 PsiListPrintController 内；4 个 type 各持一个 ref 以便触发 openPicker。
+  const poListPrintControllerRef = useRef<PsiListPrintControllerHandle>(null);
+  const pbListPrintControllerRef = useRef<PsiListPrintControllerHandle>(null);
+  const soListPrintControllerRef = useRef<PsiListPrintControllerHandle>(null);
+  const sbListPrintControllerRef = useRef<PsiListPrintControllerHandle>(null);
   // 采购单详情查看/删除（存单号）
   const [editingPBDocNumber, setEditingPBDocNumber] = useState<string | null>(null);
   // 销售订单详情编辑（存单号）
@@ -333,19 +459,26 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
     return groups;
   }, [recordsList, type]);
 
-  /** 单据列表：按组内制单时间（最早一行）倒序，无有效时间殿后，再按单号 */
+  /** 单据列表：销售单优先按业务创建日（行 createdAt）倒序，其余按组内制单时间倒序；无有效时间殿后，再按单号 */
   const sortedGroupedEntries = useMemo(() => {
     const entries = Object.entries(groupedRecords);
+    const sortKeyMs = (recs: any[]) => {
+      if (type === 'SALES_BILL') {
+        const b = psiDocGroupBusinessCreatedMs(recs);
+        if (b > 0) return b;
+      }
+      return flowRecordsEarliestMs(recs as { timestamp?: string; createdAt?: string; _savedAtMs?: number }[]);
+    };
     return entries.sort(([docA, recsA], [docB, recsB]) => {
-      const ma = flowRecordsEarliestMs(recsA as { timestamp?: string; createdAt?: string; _savedAtMs?: number }[]);
-      const mb = flowRecordsEarliestMs(recsB as { timestamp?: string; createdAt?: string; _savedAtMs?: number }[]);
+      const ma = sortKeyMs(recsA as any[]);
+      const mb = sortKeyMs(recsB as any[]);
       const ha = ma > 0;
       const hb = mb > 0;
       if (ha !== hb) return ha ? -1 : 1;
       if (ha && hb && mb !== ma) return mb - ma;
       return (docB || '').localeCompare(docA || '');
     });
-  }, [groupedRecords]);
+  }, [groupedRecords, type]);
 
   const PSI_PAGE_SIZE = 20;
   const [psiPage, setPsiPage] = useState(1);
@@ -380,6 +513,10 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
     return groups;
   }, [recordsList]);
 
+  const showPoListPrintButton = type === 'PURCHASE_ORDER' && safePurchaseOrderFormSettings.listPrint?.showPrintButton !== false;
+  const showPbListPrintButton = type === 'PURCHASE_BILL' && safePurchaseBillFormSettings.listPrint?.showPrintButton !== false;
+  const showSoListPrintButton = type === 'SALES_ORDER' && safeSalesOrderFormSettings.listPrint?.showPrintButton !== false;
+  const showSbListPrintButton = type === 'SALES_BILL' && safeSalesBillFormSettings.listPrint?.showPrintButton !== false;
 
   return (
     <div className="space-y-4">
@@ -391,12 +528,50 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
         
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           {type === 'PURCHASE_ORDER' && onUpdatePurchaseOrderFormSettings && (
-            <button type="button" onClick={() => setShowPOFormConfigModal(true)} className={secondaryToolbarButtonClass}>
+            <button
+              type="button"
+              onClick={() => {
+                setPoFormConfigEntryTab('fields');
+                setShowPOFormConfigModal(true);
+              }}
+              className={secondaryToolbarButtonClass}
+            >
               <Sliders className="w-4 h-4 shrink-0" /> 表单配置
             </button>
           )}
           {type === 'PURCHASE_BILL' && onUpdatePurchaseBillFormSettings && (
-            <button type="button" onClick={() => setShowPBFormConfigModal(true)} className={secondaryToolbarButtonClass}>
+            <button
+              type="button"
+              onClick={() => {
+                setPbFormConfigEntryTab('fields');
+                setShowPBFormConfigModal(true);
+              }}
+              className={secondaryToolbarButtonClass}
+            >
+              <Sliders className="w-4 h-4 shrink-0" /> 表单配置
+            </button>
+          )}
+          {type === 'SALES_ORDER' && onUpdateSalesOrderFormSettings && (
+            <button
+              type="button"
+              onClick={() => {
+                setSoFormConfigEntryTab('fields');
+                setShowSOFormConfigModal(true);
+              }}
+              className={secondaryToolbarButtonClass}
+            >
+              <Sliders className="w-4 h-4 shrink-0" /> 表单配置
+            </button>
+          )}
+          {type === 'SALES_BILL' && onUpdateSalesBillFormSettings && (
+            <button
+              type="button"
+              onClick={() => {
+                setSbFormConfigEntryTab('fields');
+                setShowSBFormConfigModal(true);
+              }}
+              className={secondaryToolbarButtonClass}
+            >
               <Sliders className="w-4 h-4 shrink-0" /> 表单配置
             </button>
           )}
@@ -479,11 +654,14 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
           onDeleteRecords={onDeleteRecords}
           editingDocNumber={type === 'PURCHASE_ORDER' ? editingPODocNumber : type === 'PURCHASE_BILL' ? editingPBDocNumber : type === 'SALES_ORDER' ? editingSODocNumber : editingSBDocNumber}
           purchaseOrderFormSettings={safePurchaseOrderFormSettings}
+          salesOrderFormSettings={safeSalesOrderFormSettings}
           purchaseBillFormSettings={safePurchaseBillFormSettings}
+          salesBillFormSettings={safeSalesBillFormSettings}
           userPermissions={userPermissions}
           tenantRole={tenantRole}
           partnerLabel={current.partnerLabel || '供应商'}
           prodRecords={prodRecords}
+          orderBillPrintTemplates={printTemplates}
         />
       ) : type === 'WAREHOUSE_MGMT' ? (
         <WarehousePanel
@@ -540,37 +718,134 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                       </div>
                       <div>
                         <div className="flex items-center gap-3">
-                          <h3 className="text-base font-black text-slate-800">{mainInfo.partner || '未指定单位'}</h3>
-                          <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest border ${isConverted ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}`}>
-                             {docNum.startsWith('UNGROUPED-') ? '独立单据' : docNum}
-                          </span>
-                          {type === 'SALES_BILL' && totalQty < 0 && <span className="text-[10px] font-black text-amber-600 uppercase tracking-tighter bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 shadow-sm">销售退货</span>}
-                          {isConverted && <span className="text-[10px] font-black text-emerald-500 uppercase tracking-tighter bg-white px-2 py-0.5 rounded-full border border-emerald-50 shadow-sm">已入库完成</span>}
+                          {type === 'PURCHASE_ORDER' ? (
+                            <>
+                              <h3 className="text-base font-black text-slate-800">采购订单</h3>
+                              {isConverted && (
+                                <span className="text-[10px] font-black text-emerald-500 uppercase tracking-tighter bg-white px-2 py-0.5 rounded-full border border-emerald-50 shadow-sm">
+                                  已入库完成
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <h3 className="text-base font-black text-slate-800">{mainInfo.partner || '未指定单位'}</h3>
+                              <span
+                                className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest border ${
+                                  isConverted ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'
+                                }`}
+                              >
+                                {docNum.startsWith('UNGROUPED-') ? '独立单据' : docNum}
+                              </span>
+                              {type === 'SALES_BILL' && totalQty < 0 && (
+                                <span className="text-[10px] font-black text-amber-600 uppercase tracking-tighter bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 shadow-sm">
+                                  销售退货
+                                </span>
+                              )}
+                              {isConverted && (
+                                <span className="text-[10px] font-black text-emerald-500 uppercase tracking-tighter bg-white px-2 py-0.5 rounded-full border border-emerald-50 shadow-sm">
+                                  已入库完成
+                                </span>
+                              )}
+                            </>
+                          )}
                         </div>
                         <div className="flex items-center gap-4 mt-1 text-[10px] font-bold text-slate-400 uppercase flex-wrap">
                           <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatPsiDocListTime(docItems as any[])}</span>
                           <span className="flex items-center gap-1"><User className="w-3 h-3" /> 经办: {mainInfo.operator}</span>
-                          {type === 'PURCHASE_ORDER' && safePurchaseOrderFormSettings.standardFields.find(f => f.id === 'note')?.showInList && mainInfo.note && (
-                            <span className="flex items-center gap-1 text-slate-500" title={mainInfo.note}>备注: {mainInfo.note.length > 30 ? mainInfo.note.slice(0, 30) + '…' : mainInfo.note}</span>
-                          )}
-                          {type === 'PURCHASE_ORDER' && safePurchaseOrderFormSettings.customFields.filter(f => f.showInList).map(cf => (mainInfo.customData?.[cf.id] != null && mainInfo.customData?.[cf.id] !== '') && (
-                            <span key={cf.id} className="flex items-center gap-1 text-slate-500">{cf.label}: {String(mainInfo.customData[cf.id])}</span>
-                          ))}
-                          {type === 'PURCHASE_BILL' && mainInfo.note && (
-                            <span className="flex items-center gap-1 text-slate-500" title={mainInfo.note}>备注: {mainInfo.note.length > 30 ? mainInfo.note.slice(0, 30) + '…' : mainInfo.note}</span>
-                          )}
-                          {type === 'PURCHASE_BILL' && safePurchaseBillFormSettings.customFields.filter(f => f.showInList).map(cf => (mainInfo.customData?.[cf.id] != null && mainInfo.customData?.[cf.id] !== '') && (
-                            <span key={cf.id} className="flex items-center gap-1 text-slate-500">{cf.label}: {String(mainInfo.customData[cf.id])}</span>
-                          ))}
-                          {type === 'SALES_ORDER' && mainInfo.dueDate && (
-                            <span className="flex items-center gap-1 text-rose-500 font-bold">交期: {mainInfo.dueDate}</span>
-                          )}
-                          {type === 'SALES_ORDER' && mainInfo.note && (
-                            <span className="flex items-center gap-1 text-slate-500" title={mainInfo.note}>备注: {mainInfo.note.length > 30 ? mainInfo.note.slice(0, 30) + '…' : mainInfo.note}</span>
-                          )}
-                          {type === 'SALES_BILL' && mainInfo.note && (
-                            <span className="flex items-center gap-1 text-slate-500" title={mainInfo.note}>备注: {mainInfo.note.length > 30 ? mainInfo.note.slice(0, 30) + '…' : mainInfo.note}</span>
-                          )}
+                          {type === 'PURCHASE_ORDER' &&
+                            safePurchaseOrderFormSettings.standardFields
+                              .filter(
+                                f =>
+                                  f.showInList &&
+                                  f.id !== 'createdAt' &&
+                                  f.id !== 'note' &&
+                                  f.id !== 'docNumber' &&
+                                  f.id !== 'partner' &&
+                                  f.id !== 'warehouse' &&
+                                  f.id !== 'warehouseId',
+                              )
+                              .map(f => {
+                                const text = purchaseOrderStandardListText(f.id, mainInfo, docNum);
+                                return (
+                                  <span key={`po-std-${f.id}`} className="flex items-center gap-1 text-slate-500 normal-case" title={`${f.label}: ${text}`}>
+                                    {f.label}: {text}
+                                  </span>
+                                );
+                              })}
+                          {type === 'PURCHASE_ORDER' &&
+                            safePurchaseOrderFormSettings.customFields
+                              .filter(f => f.showInList)
+                              .map(cf => {
+                                const text = compactPsiListCustomValue(cf, mainInfo.customData?.[cf.id]);
+                                return (
+                                  <span key={`po-cf-${cf.id}`} className="flex items-center gap-1 text-slate-500 normal-case" title={`${cf.label}: ${text}`}>
+                                    {cf.label}: {text}
+                                  </span>
+                                );
+                              })}
+                          {type === 'PURCHASE_BILL' &&
+                            safePurchaseBillFormSettings.standardFields
+                              .filter(f => f.showInList && f.id !== 'createdAt' && f.id !== 'note')
+                              .map(f => {
+                                const text = purchaseBillStandardListText(f.id, mainInfo, docNum, warehouseMapPSI);
+                                return (
+                                  <span key={`pb-std-${f.id}`} className="flex items-center gap-1 text-slate-500 normal-case" title={`${f.label}: ${text}`}>
+                                    {f.label}: {text}
+                                  </span>
+                                );
+                              })}
+                          {type === 'PURCHASE_BILL' &&
+                            safePurchaseBillFormSettings.customFields
+                              .filter(f => f.showInList)
+                              .map(cf => {
+                                const text = compactPsiListCustomValue(cf, mainInfo.customData?.[cf.id]);
+                                return (
+                                  <span key={`pb-cf-${cf.id}`} className="flex items-center gap-1 text-slate-500 normal-case" title={`${cf.label}: ${text}`}>
+                                    {cf.label}: {text}
+                                  </span>
+                                );
+                              })}
+                          {type === 'SALES_ORDER' &&
+                            safeSalesOrderFormSettings.standardFields
+                              .filter(
+                                f =>
+                                  f.showInList &&
+                                  f.id !== 'createdAt' &&
+                                  f.id !== 'note' &&
+                                  f.id !== 'docNumber' &&
+                                  f.id !== 'partner',
+                              )
+                              .map(f => {
+                                const text = purchaseOrderStandardListText(f.id, mainInfo, docNum);
+                                return (
+                                  <span key={`so-std-${f.id}`} className="flex items-center gap-1 text-slate-500 normal-case" title={`${f.label}: ${text}`}>
+                                    {f.label}: {text}
+                                  </span>
+                                );
+                              })}
+                          {type === 'SALES_ORDER' &&
+                            safeSalesOrderFormSettings.customFields
+                              .filter(f => f.showInList)
+                              .map(cf => {
+                                const text = compactPsiListCustomValue(cf, mainInfo.customData?.[cf.id]);
+                                return (
+                                  <span key={`so-cf-${cf.id}`} className="flex items-center gap-1 text-slate-500 normal-case" title={`${cf.label}: ${text}`}>
+                                    {cf.label}: {text}
+                                  </span>
+                                );
+                              })}
+                          {type === 'SALES_BILL' &&
+                            safeSalesBillFormSettings.customFields
+                              .filter(f => f.showInList)
+                              .map(cf => {
+                                const text = compactPsiListCustomValue(cf, mainInfo.customData?.[cf.id]);
+                                return (
+                                  <span key={`sb-cf-${cf.id}`} className="flex items-center gap-1 text-slate-500 normal-case" title={`${cf.label}: ${text}`}>
+                                    {cf.label}: {text}
+                                  </span>
+                                );
+                              })}
                         </div>
                       </div>
                     </div>
@@ -586,40 +861,96 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                         </div>
                       )}
                       {type === 'PURCHASE_ORDER' && hasPsiPerm('psi:purchase_order:view') && (
-                        <button
-                          type="button"
-                          onClick={openPurchaseOrderDetail}
-                          className="px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1"
-                        >
-                          <FileText className="w-3.5 h-3.5" /> 详情
-                        </button>
+                        <>
+                          {showPoListPrintButton && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void refreshPrintTemplates();
+                                poListPrintControllerRef.current?.openPicker(docNum);
+                              }}
+                              className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-700 transition-all hover:bg-slate-50"
+                            >
+                              <Printer className="h-3.5 w-3.5" /> 打印
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={openPurchaseOrderDetail}
+                            className="flex items-center gap-1 rounded-xl border border-indigo-100 bg-white px-3 py-1.5 text-[11px] font-black text-indigo-600 transition-all hover:bg-indigo-50"
+                          >
+                            <FileText className="w-3.5 h-3.5" /> 详情
+                          </button>
+                        </>
                       )}
                       {type === 'PURCHASE_BILL' && hasPsiPerm('psi:purchase_bill:view') && (
-                        <button
-                          type="button"
-                          onClick={openPurchaseBillDetail}
-                          className="px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1"
-                        >
-                          <FileText className="w-3.5 h-3.5" /> 详情
-                        </button>
+                        <>
+                          {showPbListPrintButton && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void refreshPrintTemplates();
+                                pbListPrintControllerRef.current?.openPicker(docNum);
+                              }}
+                              className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-700 transition-all hover:bg-slate-50"
+                            >
+                              <Printer className="h-3.5 w-3.5" /> 打印
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={openPurchaseBillDetail}
+                            className="px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1"
+                          >
+                            <FileText className="w-3.5 h-3.5" /> 详情
+                          </button>
+                        </>
                       )}
                       {type === 'SALES_ORDER' && hasPsiPerm('psi:sales_order:view') && (
-                        <button
-                          type="button"
-                          onClick={openSalesOrderDetail}
-                          className="px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1"
-                        >
-                          <FileText className="w-3.5 h-3.5" /> 详情
-                        </button>
+                        <>
+                          {showSoListPrintButton && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void refreshPrintTemplates();
+                                soListPrintControllerRef.current?.openPicker(docNum);
+                              }}
+                              className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-700 transition-all hover:bg-slate-50"
+                            >
+                              <Printer className="h-3.5 w-3.5" /> 打印
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={openSalesOrderDetail}
+                            className="px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1"
+                          >
+                            <FileText className="w-3.5 h-3.5" /> 详情
+                          </button>
+                        </>
                       )}
                       {type === 'SALES_BILL' && hasPsiPerm('psi:sales_bill:view') && (
-                        <button
-                          type="button"
-                          onClick={openSalesBillDetail}
-                          className="px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1"
-                        >
-                          <FileText className="w-3.5 h-3.5" /> 详情
-                        </button>
+                        <>
+                          {showSbListPrintButton && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void refreshPrintTemplates();
+                                sbListPrintControllerRef.current?.openPicker(docNum);
+                              }}
+                              className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-700 transition-all hover:bg-slate-50"
+                            >
+                              <Printer className="h-3.5 w-3.5" /> 打印
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={openSalesBillDetail}
+                            className="px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1"
+                          >
+                            <FileText className="w-3.5 h-3.5" /> 详情
+                          </button>
+                        </>
                       )}
                       <ChevronRight className="w-5 h-5 text-slate-200 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all" />
                     </div>
@@ -721,17 +1052,23 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
                           return (
                               <tr key={gid} className="hover:bg-slate-50/30 transition-colors">
                                 <td className="py-4 pr-6">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-300"><Package className="w-4 h-4" /></div>
-                                  <div>
-                                    <p className="text-sm font-bold text-slate-700">{rowProductName || '未知产品'}</p>
+                                  <div className="flex items-start gap-3 min-w-0">
+                                    <div className="w-8 h-8 shrink-0 bg-slate-50 rounded-lg flex items-center justify-center text-slate-300">
+                                      <Package className="w-4 h-4" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                                        <span className="text-sm font-bold text-slate-700 shrink-0">
+                                          {rowProductName || '未知产品'}
+                                        </span>
+                                      </div>
                                       <p className="text-[9px] text-slate-300 font-bold uppercase tracking-tight">
                                         {rowProductSku}
                                         {variantLabel && type !== 'SALES_ORDER' && type !== 'SALES_BILL' && ` · ${variantLabel}`}
                                       </p>
+                                    </div>
                                   </div>
-                                </div>
-                              </td>
+                                </td>
                               {!current.hideWarehouse && (
                                   <td className="py-4 px-3 text-center">
                                   <span className="px-2 py-0.5 rounded-md bg-slate-50 text-slate-500 text-[10px] font-black uppercase border border-slate-100">
@@ -923,24 +1260,175 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({ type, products, warehouses, cat
       )}
 
       {showPOFormConfigModal && onUpdatePurchaseOrderFormSettings && (
-        <FormConfigModal
-          title="采购订单表单配置"
-          subtitle="配置在列表、新增、详情页中显示的字段，可增加自定义项"
-          hiddenStandardFieldIds={['docNumber', 'partner', 'createdAt']}
-          initialSettings={purchaseOrderFormSettings}
-          onSave={onUpdatePurchaseOrderFormSettings}
+        <PurchaseOrderFormConfigModal
+          open={showPOFormConfigModal}
           onClose={() => setShowPOFormConfigModal(false)}
+          defaultTabWhenOpen={poFormConfigEntryTab}
+          settings={purchaseOrderFormSettings ?? DEFAULT_PURCHASE_ORDER_FORM_SETTINGS}
+          onSave={onUpdatePurchaseOrderFormSettings}
+          printTemplates={printTemplates}
+          onUpdatePrintTemplates={onUpdatePrintTemplates}
+          onRefreshPrintTemplates={refreshPrintTemplates}
+          plans={[]}
+          orders={ordersList as ProductionOrder[]}
+          products={products}
+        />
+      )}
+
+      {type === 'PURCHASE_ORDER' && (
+        <PsiListPrintController<any>
+          ref={poListPrintControllerRef}
+          listPrintSlot={safePurchaseOrderFormSettings.listPrint}
+          printTemplates={printTemplates}
+          resolveDocItems={docNumber =>
+            recordsList.filter((r: any) => r.type === 'PURCHASE_ORDER' && r.docNumber === docNumber)
+          }
+          buildContext={(_t, { docNumber, docItems }) =>
+            buildPurchaseOrderPrintContextFromPsiDoc({
+              docNumber,
+              docItems,
+              productMap: productMapPSI,
+              dictionaries,
+            })
+          }
+          pickerSubtitle={docNumber =>
+            `采购订单 ${docNumber.startsWith('UNGROUPED-') ? '独立单据' : docNumber}`
+          }
+          onAddPrintTemplate={onUpdatePurchaseOrderFormSettings ? () => {
+            setPoFormConfigEntryTab('print');
+            setShowPOFormConfigModal(true);
+          } : undefined}
+        />
+      )}
+
+      {type === 'PURCHASE_BILL' && (
+        <PsiListPrintController<any>
+          ref={pbListPrintControllerRef}
+          listPrintSlot={safePurchaseBillFormSettings.listPrint}
+          printTemplates={printTemplates}
+          resolveDocItems={docNumber =>
+            recordsList.filter((r: any) => r.type === 'PURCHASE_BILL' && r.docNumber === docNumber)
+          }
+          buildContext={(_t, { docNumber, docItems }) =>
+            buildPurchaseBillPrintContextFromPsiDoc({
+              docNumber,
+              docItems,
+              productMap: productMapPSI,
+              warehouseMap: warehouseMapPSI,
+              dictionaries,
+            })
+          }
+          pickerSubtitle={docNumber =>
+            `采购单 ${docNumber.startsWith('UNGROUPED-') ? '独立单据' : docNumber}`
+          }
+          onAddPrintTemplate={onUpdatePurchaseBillFormSettings ? () => {
+            setPbFormConfigEntryTab('print');
+            setShowPBFormConfigModal(true);
+          } : undefined}
+        />
+      )}
+
+      {type === 'SALES_ORDER' && (
+        <PsiListPrintController<any>
+          ref={soListPrintControllerRef}
+          listPrintSlot={safeSalesOrderFormSettings.listPrint}
+          printTemplates={printTemplates}
+          resolveDocItems={docNumber =>
+            recordsList.filter((r: any) => r.type === 'SALES_ORDER' && r.docNumber === docNumber)
+          }
+          buildContext={(_t, { docNumber, docItems }) =>
+            buildSalesOrderPrintContextFromPsiDoc({
+              docNumber,
+              docItems,
+              productMap: productMapPSI,
+              dictionaries,
+            })
+          }
+          pickerSubtitle={docNumber =>
+            `销售订单 ${docNumber.startsWith('UNGROUPED-') ? '独立单据' : docNumber}`
+          }
+          onAddPrintTemplate={onUpdateSalesOrderFormSettings ? () => {
+            setSoFormConfigEntryTab('print');
+            setShowSOFormConfigModal(true);
+          } : undefined}
+        />
+      )}
+
+      {type === 'SALES_BILL' && (
+        <PsiListPrintController<any>
+          ref={sbListPrintControllerRef}
+          listPrintSlot={safeSalesBillFormSettings.listPrint}
+          printTemplates={printTemplates}
+          resolveDocItems={docNumber =>
+            recordsList.filter((r: any) => r.type === 'SALES_BILL' && r.docNumber === docNumber)
+          }
+          buildContext={(_t, { docNumber, docItems }) =>
+            buildSalesBillPrintContextFromPsiDoc({
+              docNumber,
+              docItems,
+              productMap: productMapPSI,
+              warehouseMap: warehouseMapPSI,
+              dictionaries,
+              psiRecords: recordsList,
+              financeRecords,
+              prodRecords,
+            })
+          }
+          pickerSubtitle={docNumber =>
+            `销售单 ${docNumber.startsWith('UNGROUPED-') ? '独立单据' : docNumber}`
+          }
+          onAddPrintTemplate={onUpdateSalesBillFormSettings ? () => {
+            setSbFormConfigEntryTab('print');
+            setShowSBFormConfigModal(true);
+          } : undefined}
+        />
+      )}
+
+      {showSOFormConfigModal && onUpdateSalesOrderFormSettings && (
+        <SalesOrderFormConfigModal
+          open={showSOFormConfigModal}
+          onClose={() => setShowSOFormConfigModal(false)}
+          defaultTabWhenOpen={soFormConfigEntryTab}
+          settings={salesOrderFormSettings ?? DEFAULT_SALES_ORDER_FORM_SETTINGS}
+          onSave={onUpdateSalesOrderFormSettings}
+          printTemplates={printTemplates}
+          onUpdatePrintTemplates={onUpdatePrintTemplates}
+          onRefreshPrintTemplates={refreshPrintTemplates}
+          plans={[]}
+          orders={ordersList as ProductionOrder[]}
+          products={products}
         />
       )}
 
       {showPBFormConfigModal && onUpdatePurchaseBillFormSettings && (
-        <FormConfigModal
-          title="采购单表单配置"
-          subtitle="配置在列表、新增、详情页中显示的字段，可增加自定义项"
-          hiddenStandardFieldIds={['docNumber', 'partner', 'warehouse', 'createdAt']}
-          initialSettings={purchaseBillFormSettings}
-          onSave={onUpdatePurchaseBillFormSettings}
+        <PurchaseBillFormConfigModal
+          open={showPBFormConfigModal}
           onClose={() => setShowPBFormConfigModal(false)}
+          defaultTabWhenOpen={pbFormConfigEntryTab}
+          settings={purchaseBillFormSettings ?? DEFAULT_PURCHASE_BILL_FORM_SETTINGS}
+          onSave={onUpdatePurchaseBillFormSettings}
+          printTemplates={printTemplates}
+          onUpdatePrintTemplates={onUpdatePrintTemplates}
+          onRefreshPrintTemplates={refreshPrintTemplates}
+          plans={[]}
+          orders={ordersList as ProductionOrder[]}
+          products={products}
+        />
+      )}
+
+      {showSBFormConfigModal && onUpdateSalesBillFormSettings && (
+        <SalesBillFormConfigModal
+          open={showSBFormConfigModal}
+          onClose={() => setShowSBFormConfigModal(false)}
+          defaultTabWhenOpen={sbFormConfigEntryTab}
+          settings={salesBillFormSettings ?? DEFAULT_SALES_BILL_FORM_SETTINGS}
+          onSave={onUpdateSalesBillFormSettings}
+          printTemplates={printTemplates}
+          onUpdatePrintTemplates={onUpdatePrintTemplates}
+          onRefreshPrintTemplates={refreshPrintTemplates}
+          plans={[]}
+          orders={ordersList as ProductionOrder[]}
+          products={products}
         />
       )}
 

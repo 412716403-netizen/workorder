@@ -11,6 +11,7 @@ import {
   User,
   Package,
   Truck,
+  Sliders,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
@@ -27,6 +28,7 @@ import type {
   ProcessSequenceMode,
   ProductMilestoneProgress,
 } from '../../types';
+import { DEFAULT_MATERIAL_FORM_SETTINGS, DEFAULT_OUTSOURCE_FORM_SETTINGS } from '../../types';
 import { PanelProps, hasOpsPerm, OutsourceModalType } from './types';
 import { useDataIndexes } from './useDataIndexes';
 import * as api from '../../services/api';
@@ -57,6 +59,9 @@ import OutsourceFlowDocumentDetailModal from './OutsourceFlowDocumentDetailModal
 import OutsourceCollabSyncModal from './OutsourceCollabSyncModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import { outsourceCustomCollabPart } from '../../utils/productionOpCollab/outsource';
+import OutsourceFormConfigModal from './OutsourceFormConfigModal';
+import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 
 const OutsourcePanel: React.FC<PanelProps> = ({
   productionLinkMode,
@@ -80,6 +85,13 @@ const OutsourcePanel: React.FC<PanelProps> = ({
   processSequenceMode,
   userPermissions,
   tenantRole,
+  plans = [],
+  outsourceFormSettings = DEFAULT_OUTSOURCE_FORM_SETTINGS,
+  onUpdateOutsourceFormSettings,
+  printTemplates = [],
+  onUpdatePrintTemplates,
+  onRefreshPrintTemplates,
+  materialFormSettings = DEFAULT_MATERIAL_FORM_SETTINGS,
 }) => {
   const { currentUser } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
@@ -122,10 +134,33 @@ const OutsourcePanel: React.FC<PanelProps> = ({
   const [matReturnWarehouseId, setMatReturnWarehouseId] = useState('');
   const [matReturnRemark, setMatReturnRemark] = useState('');
   const [matReturnQty, setMatReturnQty] = useState<Record<string, number>>({});
+  const [showOutsourceConfig, setShowOutsourceConfig] = useState(false);
+  const [outsourceConfigDefaultTab, setOutsourceConfigDefaultTab] = useState<'fields' | 'print'>('fields');
+  const [dispatchCustomValues, setDispatchCustomValues] = useState<Record<string, unknown>>({});
+  const [receiveCustomValues, setReceiveCustomValues] = useState<Record<string, unknown>>({});
+  const [receiveLineCustomValues, setReceiveLineCustomValues] = useState<Record<string, unknown>>({});
 
   const OUTS_PAGE_SIZE = 10;
   const [outsPage, setOutsPage] = useState(1);
   useEffect(() => { setOutsPage(1); }, [productionLinkMode]);
+  useEffect(() => {
+    if (dispatchFormModalOpen) setDispatchCustomValues({});
+  }, [dispatchFormModalOpen]);
+  useEffect(() => {
+    if (receiveFormModalOpen) setReceiveCustomValues({});
+  }, [receiveFormModalOpen]);
+  useEffect(() => {
+    if (receiveModal) setReceiveLineCustomValues({});
+  }, [receiveModal]);
+
+  const dispatchCustomCreateDefs = useMemo(
+    () => (outsourceFormSettings.outsourceDispatchCustomFields ?? []).filter(f => f.showInCreate),
+    [outsourceFormSettings.outsourceDispatchCustomFields],
+  );
+  const receiveCustomCreateDefs = useMemo(
+    () => (outsourceFormSettings.outsourceReceiveCustomFields ?? []).filter(f => f.showInCreate),
+    [outsourceFormSettings.outsourceReceiveCustomFields],
+  );
 
   const idx = useDataIndexes(orders, products, boms, globalNodes, productMilestoneProgresses);
 
@@ -551,6 +586,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
     const docNo = getNextOutsourceDocNo(partnerName);
     const timestamp = new Date().toLocaleString();
     const isProductMode = productionLinkMode === 'product';
+    const dispatchCollab = outsourceCustomCollabPart(dispatchCustomValues, 'dispatch');
     const batch: ProductionOpRecord[] = [];
     entries.forEach(([key, qty]) => {
       const parts = key.split('|');
@@ -572,7 +608,8 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           partner: partnerName,
           docNo,
           nodeId,
-          variantId: variantId || undefined
+          variantId: variantId || undefined,
+          ...dispatchCollab,
         } as ProductionOpRecord);
       } else {
         const orderId = parts[0];
@@ -591,7 +628,8 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           partner: partnerName,
           docNo,
           nodeId,
-          variantId: variantId || undefined
+          variantId: variantId || undefined,
+          ...dispatchCollab,
         } as ProductionOpRecord);
       }
     });
@@ -628,6 +666,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
       return;
     }
     const receiveDocNo = getNextReceiveDocNo(receiveModal.partner);
+    const lineCollab = outsourceCustomCollabPart(receiveLineCustomValues, 'receive');
     const receiveRec: ProductionOpRecord = {
       id: `rec-${Date.now()}-recv-${Math.random().toString(36).slice(2, 8)}`,
       type: 'OUTSOURCE',
@@ -640,6 +679,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
       partner: receiveModal.partner,
       nodeId: receiveModal.nodeId,
       docNo: receiveDocNo,
+      ...lineCollab,
     };
     onAddRecord(receiveRec);
     toast.success('收货已保存', {
@@ -738,6 +778,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
     const firstRow = firstKey ? outsourceReceiveRows.find(r => (r.orderId != null ? `${r.orderId}|${r.nodeId}` : `${r.productId}|${r.nodeId}|${r.partner}`) === firstKey) : null;
     const partnerName = firstRow?.partner ?? '';
     const receiveDocNo = getNextReceiveDocNo(partnerName);
+    const receiveCollab = outsourceCustomCollabPart(receiveCustomValues, 'receive');
     for (const [key, qty] of entries) {
       const parts = key.split('|');
       if (isProductMode) {
@@ -764,6 +805,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           docNo: receiveDocNo,
           unitPrice: unitPrice || undefined,
           amount: amount || undefined,
+          ...receiveCollab,
         });
       } else {
         const orderId = parts[0];
@@ -790,6 +832,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           docNo: receiveDocNo,
           unitPrice: unitPrice || undefined,
           amount: amount || undefined,
+          ...receiveCollab,
         });
       }
     }
@@ -841,6 +884,18 @@ const OutsourcePanel: React.FC<PanelProps> = ({
               className={outlineToolbarButtonClass}
             >
               <ScrollText className="w-4 h-4 shrink-0" /> 外协流水
+            </button>
+          )}
+          {hasOpsPerm(tenantRole, userPermissions, 'production:outsource_form_config:allow') && onUpdateOutsourceFormSettings && (
+            <button
+              type="button"
+              onClick={() => {
+                setOutsourceConfigDefaultTab('fields');
+                setShowOutsourceConfig(true);
+              }}
+              className={outlineToolbarButtonClass}
+            >
+              <Sliders className="w-4 h-4 shrink-0" /> 表单配置
             </button>
           )}
         </div>
@@ -1041,6 +1096,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           globalNodes={globalNodes}
           records={records}
           warehouses={warehouses}
+          materialFormSettings={materialFormSettings}
           onAddRecord={onAddRecord}
           onAddRecordBatch={onAddRecordBatch}
           onClose={() => {
@@ -1073,6 +1129,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           boms={boms}
           records={records}
           warehouses={warehouses}
+          materialFormSettings={materialFormSettings}
           onAddRecord={onAddRecord}
           onAddRecordBatch={onAddRecordBatch}
           onClose={() => {
@@ -1120,6 +1177,9 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           processSequenceMode={processSequenceMode}
           productMilestoneProgresses={productMilestoneProgresses}
           defectiveReworkByOrderForOutsource={defectiveReworkByOrderForOutsource}
+          dispatchCustomFieldDefs={dispatchCustomCreateDefs}
+          dispatchCustomValues={dispatchCustomValues}
+          setDispatchCustomValues={setDispatchCustomValues}
           onSubmit={handleDispatchFormSubmit}
           onClose={() => setDispatchFormModalOpen(false)}
         />
@@ -1155,6 +1215,9 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           dictionaries={dictionaries}
           records={records}
           productMilestoneProgresses={productMilestoneProgresses}
+          receiveCustomFieldDefs={receiveCustomCreateDefs}
+          receiveCustomValues={receiveCustomValues}
+          setReceiveCustomValues={setReceiveCustomValues}
           onSubmit={handleReceiveFormSubmit}
           onClose={() => setReceiveFormModalOpen(false)}
         />
@@ -1196,6 +1259,12 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           onAddRecordBatch={onAddRecordBatch}
           onUpdateRecord={onUpdateRecord}
           onDeleteRecord={onDeleteRecord}
+          outsourceFormSettings={outsourceFormSettings}
+          printTemplates={printTemplates}
+          onOpenOutsourceFormPrintTab={() => {
+            setOutsourceConfigDefaultTab('print');
+            setShowOutsourceConfig(true);
+          }}
           onClose={() => setFlowDetailKey(null)}
         />
       )}
@@ -1215,6 +1284,24 @@ const OutsourcePanel: React.FC<PanelProps> = ({
               <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">本次收回数量</label>
               <input type="number" min={1} max={receiveModal.pendingQty} value={receiveQty || ''} onChange={e => setReceiveQty(Number(e.target.value) || 0)} className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="0" />
             </div>
+            {receiveCustomCreateDefs.length > 0 ? (
+              <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/80 p-4">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500">自定义内容</h4>
+                <div className="grid gap-3 sm:grid-cols-1">
+                  {receiveCustomCreateDefs.map(cf => (
+                    <div key={cf.id} className="min-w-0 space-y-1">
+                      <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
+                      <PlanFormCustomFieldInput
+                        cf={cf}
+                        value={receiveLineCustomValues[cf.id]}
+                        onChange={v => setReceiveLineCustomValues(prev => ({ ...prev, [cf.id]: v }))}
+                        controlClassName="h-[48px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div className="flex gap-3 pt-2">
               <button type="button" onClick={() => { setReceiveModal(null); setReceiveQty(0); }} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">取消</button>
               <button type="button" onClick={handleOutsourceReceiveSubmit} disabled={receiveQty <= 0 || receiveQty > receiveModal.pendingQty} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-colors">确认收回</button>
@@ -1228,6 +1315,24 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           collabSyncConfirm={collabSyncConfirm}
           collabRoutes={collabRoutes}
           onClose={() => setCollabSyncConfirm(null)}
+        />
+      )}
+
+      {showOutsourceConfig && onUpdateOutsourceFormSettings && (
+        <OutsourceFormConfigModal
+          open={showOutsourceConfig}
+          onClose={() => setShowOutsourceConfig(false)}
+          defaultTabWhenOpen={outsourceConfigDefaultTab}
+          outsourceFormSettings={outsourceFormSettings}
+          onUpdateOutsourceFormSettings={next => {
+            void onUpdateOutsourceFormSettings(next);
+          }}
+          printTemplates={printTemplates}
+          onUpdatePrintTemplates={onUpdatePrintTemplates}
+          onRefreshPrintTemplates={onRefreshPrintTemplates}
+          plans={plans}
+          orders={orders}
+          products={products}
         />
       )}
     </div>

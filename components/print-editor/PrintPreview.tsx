@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useMemo } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import type { PrintRenderContext, PrintTemplate } from '../../types';
 import { PrintPaper } from './PrintPaper';
@@ -115,24 +115,32 @@ ${labelsHtml}
 
 export function usePrintTemplateAction(template: PrintTemplate, _ctx: PrintRenderContext) {
   const printRef = useRef<HTMLDivElement>(null);
+  const ctxRef = useRef(_ctx);
+  ctxRef.current = _ctx;
   const { widthMm, heightMm } = template.paperSize;
-  const pageStyle = `@page { size: ${widthMm}mm ${heightMm}mm; margin: 0; }`;
+  /** 须 memo：`useReactToPrint` 依赖引用相等；否则父组件每次重渲染都会换新回调，列表打印的 `useEffect(..., [handlePrint])` 会反复清掉 300ms 定时器导致永远不调起打印。 */
+  const pageStyle = useMemo(
+    () => `@page { size: ${widthMm}mm ${heightMm}mm; margin: 0; }`,
+    [widthMm, heightMm],
+  );
+  const documentTitle = useMemo(() => template.name || 'print', [template.name]);
 
   const handlePrintLib = useReactToPrint({
     contentRef: printRef,
-    documentTitle: template.name || 'print',
+    documentTitle,
     pageStyle,
   });
 
   const handlePrint = useCallback(() => {
+    const ctx = ctxRef.current;
     const root = printRef.current;
     const splitPages = root ? root.querySelectorAll('[data-label-page]').length : 0;
-    if (root && (_ctx.labelPerRow || splitPages > 1)) {
+    if (root && (ctx.labelPerRow || ctx.labelPerVirtualBatch || splitPages > 1)) {
       printViaNewWindow(root, widthMm, heightMm);
     } else {
       handlePrintLib();
     }
-  }, [_ctx.labelPerRow, widthMm, heightMm, handlePrintLib]);
+  }, [widthMm, heightMm, handlePrintLib]);
 
   return { printRef, handlePrint };
 }

@@ -155,6 +155,7 @@ export function createBuiltinSalesBillPrintTemplate(): PrintTemplate {
   return {
     id: BUILTIN_SALES_BILL_PRINT_TEMPLATE_ID,
     name: '销售单（标准·二等分）',
+    documentType: 'salesBill' as const,
     paperSize: { ...PRINT_PAPER_A4_HALF_MM },
     paperMarginsMm: { top: 2, bottom: 2, left: 2, right: 2 },
     paperBackgroundColor: '#FFFFFF',
@@ -164,17 +165,7 @@ export function createBuiltinSalesBillPrintTemplate(): PrintTemplate {
   };
 }
 
-const LEGACY_BUILTIN_ID = 'builtin-sales-bill-v1';
-
 export function ensureBuiltinSalesBillPrintTemplate(list: PrintTemplate[]): PrintTemplate[] {
   if (list.some(t => t.id === BUILTIN_SALES_BILL_PRINT_TEMPLATE_ID)) return list;
   return [...list, createBuiltinSalesBillPrintTemplate()];
-}
-
-export function pickSalesBillPrintTemplate(templates: PrintTemplate[]): PrintTemplate | undefined {
-  const v2 = templates.find(t => t.id === BUILTIN_SALES_BILL_PRINT_TEMPLATE_ID);
-  if (v2) return v2;
-  const v1 = templates.find(t => t.id === LEGACY_BUILTIN_ID);
-  if (v1) return v1;
-  return templates.find(t => t.name.includes('销售单'));
 }

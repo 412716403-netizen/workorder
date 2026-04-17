@@ -170,23 +170,6 @@ const OrderDetailView: React.FC<OrderDetailViewProps> = ({
           </div>
         )}
 
-          {orderFormSettings?.customFields && orderFormSettings.customFields.filter(f => f.showInDetail).length > 0 && (
-            <div className="pt-4 space-y-3">
-              <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">自定义字段</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {orderFormSettings.customFields.filter(f => f.showInDetail).map(f => {
-                  const val = (order as any).customData?.[f.id];
-                  if (val == null || val === '') return null;
-                  return (
-                    <div key={f.id} className="bg-slate-50 rounded-xl p-4">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{f.label}</p>
-                      <p className="text-sm font-bold text-slate-800">{typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

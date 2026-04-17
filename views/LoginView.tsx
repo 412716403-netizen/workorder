@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { LogIn, UserPlus, Factory } from 'lucide-react';
+import { LogIn, UserPlus } from 'lucide-react';
+import { BRAND_LOGO_PATH, BRAND_NAME } from '../constants/branding';
 import { auth as authApi } from '../services/api';
 
 const CN_PHONE_RE = /^1[3-9]\d{9}$/;
@@ -86,13 +87,21 @@ export default function LoginView({ onLogin }: LoginViewProps) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4 shadow-lg">
-            <Factory className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">SmartTrack Pro</h1>
-          <p className="text-gray-500 mt-1">生产进度节点报工系统</p>
-        </div>
+        <header className="mb-10 flex flex-col items-center text-center">
+          <img
+            src={BRAND_LOGO_PATH}
+            alt=""
+            width={224}
+            height={224}
+            className="mb-5 h-24 w-24 shrink-0 object-contain sm:h-28 sm:w-28"
+          />
+          <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+            {BRAND_NAME}
+          </h1>
+          <p className="mt-2.5 max-w-[19rem] text-[13px] leading-snug text-slate-500 sm:text-sm sm:leading-relaxed">
+            生产进度节点报工系统
+          </p>
+        </header>
 
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
           <h2 className="text-xl font-semibold text-gray-800 mb-1">
@@ -218,7 +227,7 @@ export default function LoginView({ onLogin }: LoginViewProps) {
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          SmartTrack Pro v1.0 &copy; {new Date().getFullYear()}
+          {BRAND_NAME} v1.0 &copy; {new Date().getFullYear()}
         </p>
       </div>
     </div>

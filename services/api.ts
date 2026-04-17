@@ -1,4 +1,7 @@
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api';
+/** 生产或未走 Vite 时可用 VITE_API_BASE；开发默认走同源 /api，由 Vite 代理到本机 3001（支持局域网 IP 访问前端） */
+const API_BASE =
+  import.meta.env.VITE_API_BASE ||
+  (import.meta.env.DEV ? '/api' : 'http://localhost:3001/api');
 
 /** 避免防火墙丢包或地址错误时 fetch 长期挂起，登录按钮一直转圈 */
 const REQUEST_TIMEOUT_MS = 25_000;
@@ -679,9 +682,6 @@ export const itemCodesApi = {
     );
   },
 
-  void: (id: string) =>
-    request<import('../types').ItemCode>(`/item-codes/${id}/void`, { method: 'PATCH' }),
-
   scan: (token: string) =>
     request<any>(`/item-codes/scan/${token}`),
 };
@@ -743,9 +743,6 @@ export const planVirtualBatchesApi = {
       `/plan-virtual-batches?${qs.toString()}`,
     );
   },
-
-  void: (id: string) =>
-    request<import('../types').PlanVirtualBatch>(`/plan-virtual-batches/${id}/void`, { method: 'PATCH' }),
 
   scan: (token: string) => request<any>(`/plan-virtual-batches/scan/${encodeURIComponent(token)}`),
 };

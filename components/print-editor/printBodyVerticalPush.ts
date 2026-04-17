@@ -1,5 +1,6 @@
 import type { PrintBodyElement, PrintDynamicListElementConfig, PrintRenderContext, PrintSalesBillMatrixElementConfig } from '../../types';
 import type { MatrixPageChunk } from '../../utils/printListPagination';
+import { dynamicListHasMatrixColumn, matrixVisualSubRowCountForRow } from '../../utils/dynamicListMatrix';
 
 /** 动态列表：固定行高时，内容所需高度可能超过组件框高，返回超出部分 (mm) */
 export function estimateDynamicListOverflowMm(
@@ -9,6 +10,8 @@ export function estimateDynamicListOverflowMm(
 ): number {
   if (el.type !== 'dynamicList') return 0;
   const cfg = el.config as PrintDynamicListElementConfig;
+  const rows =
+    listChunk != null && ctx.printListRows?.length ? listChunk.rows : ctx.printListRows ?? [];
   const rowCount =
     listChunk != null && ctx.printListRows?.length
       ? listChunk.rows.length
@@ -18,7 +21,12 @@ export function estimateDynamicListOverflowMm(
     headerMm = cfg.headerRowHeightMm != null && cfg.headerRowHeightMm > 0 ? cfg.headerRowHeightMm : 4;
   }
   if (!(cfg.bodyRowHeightMm != null && cfg.bodyRowHeightMm > 0)) return 0;
-  const needMm = headerMm + rowCount * cfg.bodyRowHeightMm;
+  const hasMatrix = dynamicListHasMatrixColumn(cfg);
+  const slotTotal =
+    hasMatrix && rows.length > 0
+      ? rows.reduce((s, r) => s + matrixVisualSubRowCountForRow(r), 0)
+      : rowCount;
+  const needMm = headerMm + slotTotal * cfg.bodyRowHeightMm;
   return Math.max(0, needMm - el.height);
 }
 

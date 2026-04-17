@@ -4,7 +4,22 @@ import {
   ArrowUpCircle, 
   Scale
 } from 'lucide-react';
-import { ProductionOrder, FinanceRecord, FinanceOpType, FinanceCategory, FinanceAccountType, Partner, Worker, Product, AppDictionaries, ProductMilestoneProgress } from '../types';
+import {
+  ProductionOrder,
+  FinanceRecord,
+  FinanceOpType,
+  FinanceCategory,
+  FinanceAccountType,
+  Partner,
+  Worker,
+  Product,
+  AppDictionaries,
+  ProductMilestoneProgress,
+  PlanOrder,
+  PrintTemplate,
+  ReceiptFormSettings,
+  PaymentFormSettings,
+} from '../types';
 import { PartnerCategory, ProductCategory, GlobalNodeTemplate } from '../types';
 import FinanceOpsView from './FinanceOpsView';
 import {
@@ -38,9 +53,45 @@ interface FinanceViewProps {
   dictionaries?: AppDictionaries;
   userPermissions?: string[];
   tenantRole?: string;
+  plans: PlanOrder[];
+  receiptFormSettings: ReceiptFormSettings;
+  paymentFormSettings: PaymentFormSettings;
+  onUpdateReceiptFormSettings: (s: ReceiptFormSettings) => void | Promise<void>;
+  onUpdatePaymentFormSettings: (s: PaymentFormSettings) => void | Promise<void>;
+  printTemplates: PrintTemplate[];
+  onUpdatePrintTemplates: (list: PrintTemplate[]) => void | Promise<void>;
+  onRefreshPrintTemplates?: () => void | Promise<void>;
 }
 
-const FinanceView: React.FC<FinanceViewProps> = ({ orders, records, psiRecords = [], prodRecords = [], productMilestoneProgresses = [], onAddRecord, onUpdateRecord, onDeleteRecord, financeCategories, financeAccountTypes, partners, workers, products, partnerCategories, categories, globalNodes, dictionaries, userPermissions, tenantRole }) => {
+const FinanceView: React.FC<FinanceViewProps> = ({
+  orders,
+  records,
+  psiRecords = [],
+  prodRecords = [],
+  productMilestoneProgresses = [],
+  onAddRecord,
+  onUpdateRecord,
+  onDeleteRecord,
+  financeCategories,
+  financeAccountTypes,
+  partners,
+  workers,
+  products,
+  partnerCategories,
+  categories,
+  globalNodes,
+  dictionaries,
+  userPermissions,
+  tenantRole,
+  plans,
+  receiptFormSettings,
+  paymentFormSettings,
+  onUpdateReceiptFormSettings,
+  onUpdatePaymentFormSettings,
+  printTemplates,
+  onUpdatePrintTemplates,
+  onRefreshPrintTemplates,
+}) => {
   const [activeTab, setActiveTab] = useState<FinanceOpType>('RECEIPT');
   const setScrollSegment = useSetMainScrollSegment();
   useLayoutEffect(() => {
@@ -164,6 +215,14 @@ const FinanceView: React.FC<FinanceViewProps> = ({ orders, records, psiRecords =
           dictionaries={dictionaries}
           userPermissions={userPermissions}
           tenantRole={tenantRole}
+          plans={plans}
+          receiptFormSettings={receiptFormSettings}
+          paymentFormSettings={paymentFormSettings}
+          onUpdateReceiptFormSettings={onUpdateReceiptFormSettings}
+          onUpdatePaymentFormSettings={onUpdatePaymentFormSettings}
+          printTemplates={printTemplates}
+          onUpdatePrintTemplates={onUpdatePrintTemplates}
+          onRefreshPrintTemplates={onRefreshPrintTemplates}
         />
       </div>
     </div>

@@ -375,25 +375,6 @@ export async function bulkSplitAllVariants(
   };
 }
 
-export async function voidBatch(db: TenantPrismaClient, id: string) {
-  const batch = await db.planVirtualBatch.findUnique({ where: { id } });
-  if (!batch) throw new AppError(404, '批次码不存在');
-  if (batch.status === 'VOIDED') throw new AppError(400, '批次码已作废');
-
-  const updated = await db.$transaction(async (tx) => {
-    const row = await tx.planVirtualBatch.update({
-      where: { id },
-      data: { status: 'VOIDED' },
-    });
-    await tx.itemCode.updateMany({
-      where: { batchId: id, status: 'ACTIVE' },
-      data: { status: 'VOIDED' },
-    });
-    return row;
-  });
-  return updated;
-}
-
 export async function scanBatch(callerTenantId: string, token: string) {
   const batch = await basePrisma.planVirtualBatch.findUnique({
     where: { scanToken: token },

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Undo2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
@@ -9,10 +9,14 @@ import type {
   BOM,
   GlobalNodeTemplate,
   Warehouse,
+  MaterialFormSettings,
 } from '../../types';
+import { DEFAULT_MATERIAL_FORM_SETTINGS } from '../../types';
 import { toLocalCompactYmd } from '../../utils/localDateTime';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
+import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpCollab/material';
 
 export interface OutsourceMaterialReturnModalProps {
   productionLinkMode: 'order' | 'product';
@@ -32,6 +36,8 @@ export interface OutsourceMaterialReturnModalProps {
   boms: BOM[];
   records: ProductionOpRecord[];
   warehouses: Warehouse[];
+  /** 外协生产退料自定义字段（生产物料 → 字段配置） */
+  materialFormSettings?: MaterialFormSettings;
   onAddRecord: (record: ProductionOpRecord) => void;
   onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
   onClose: () => void;
@@ -55,12 +61,21 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
   boms,
   records,
   warehouses,
+  materialFormSettings = DEFAULT_MATERIAL_FORM_SETTINGS,
   onAddRecord,
   onAddRecordBatch,
   onClose,
 }) => {
   const { currentUser } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
+  const [matReturnCustomValues, setMatReturnCustomValues] = useState<Record<string, unknown>>({});
+  const materialCustomFieldDefs = useMemo(
+    () => (materialFormSettings.outsourceMaterialReturnCustomFields ?? []).filter(f => f.showInCreate),
+    [materialFormSettings.outsourceMaterialReturnCustomFields],
+  );
+  useEffect(() => {
+    setMatReturnCustomValues({});
+  }, [matReturnOrderId, matReturnProductId]);
   const isProductMode = productionLinkMode === 'product';
   const targetOrder = !isProductMode && matReturnOrderId ? orders.find(o => o.id === matReturnOrderId) : undefined;
   const targetProductId = isProductMode ? matReturnProductId : targetOrder?.productId;
@@ -174,6 +189,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
     if (overItems.length > 0) { toast.warning(`「${overItems[0].name}」退回数量超过可退回数量`); return; }
     const docNo = getNextWtDocNo();
     const timestamp = new Date().toLocaleString();
+    const collabExtra = buildMaterialStockCustomCollabPayload(matReturnCustomValues, 'STOCK_RETURN', matReturnPartner);
     const batch: ProductionOpRecord[] = toReturn.map(m => ({
       id: `wt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       type: 'STOCK_RETURN' as ProdOpType,
@@ -188,6 +204,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
       docNo,
       reason: matReturnRemark.trim() || undefined,
       sourceProductId: isProductMode ? (targetProductId ?? undefined) : undefined,
+      ...collabExtra,
     }));
     if (onAddRecordBatch && batch.length > 1) { await onAddRecordBatch(batch); } else { for (const rec of batch) onAddRecord(rec); }
     toast.success(`已退回 ${toReturn.length} 种物料，来自「${matReturnPartner}」`);
@@ -213,7 +230,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
               {matReturnPartnerOptions.length <= 1 ? (
                 <div className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 bg-slate-50">{matReturnPartnerOptions[0] ?? '—'}</div>
               ) : (
-                <select value={matReturnPartner} onChange={e => { setMatReturnPartner(e.target.value); setMatReturnQty({}); }} className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none bg-white">
+                <select value={matReturnPartner} onChange={e => { setMatReturnPartner(e.target.value); setMatReturnQty({}); setMatReturnCustomValues({}); }} className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none bg-white">
                   {matReturnPartnerOptions.map(p => (<option key={p} value={p}>{p}</option>))}
                 </select>
               )}
@@ -231,6 +248,24 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">备注说明</label>
             <input type="text" value={matReturnRemark} onChange={e => setMatReturnRemark(e.target.value)} placeholder="选填" className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 bg-white focus:ring-2 focus:ring-amber-500 outline-none placeholder:text-slate-400" />
           </div>
+          {materialCustomFieldDefs.length > 0 ? (
+            <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+              <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">外协生产退料自定义内容</h4>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {materialCustomFieldDefs.map(cf => (
+                  <div key={cf.id} className="space-y-1">
+                    <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
+                    <PlanFormCustomFieldInput
+                      cf={cf}
+                      value={matReturnCustomValues[cf.id]}
+                      onChange={v => setMatReturnCustomValues(prev => ({ ...prev, [cf.id]: v }))}
+                      controlClassName="h-[52px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {returnableMaterials.length === 0 ? (
             <p className="py-8 text-center text-slate-400 text-sm">该工厂暂无外发记录</p>
           ) : (

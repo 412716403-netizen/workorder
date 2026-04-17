@@ -1,10 +1,42 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { Plus, X, Clock, DollarSign, Search, ChevronDown, Building2, User, FileText, Pencil, Trash2 } from 'lucide-react';
-import { FinanceRecord, FinanceOpType, ProductionOrder, FinanceCategory, FinanceAccountType, Partner, Worker, Product, ReportFieldDefinition, PartnerCategory, ProductCategory, GlobalNodeTemplate, AppDictionaries, FINANCE_DOC_NO_PREFIX, ProductMilestoneProgress } from '../types';
+import { Plus, X, Clock, DollarSign, Search, ChevronDown, Building2, User, FileText, Pencil, Trash2, Sliders, Printer } from 'lucide-react';
+import {
+  FinanceRecord,
+  FinanceOpType,
+  ProductionOrder,
+  FinanceCategory,
+  FinanceAccountType,
+  Partner,
+  Worker,
+  Product,
+  ReportFieldDefinition,
+  PartnerCategory,
+  ProductCategory,
+  GlobalNodeTemplate,
+  AppDictionaries,
+  FINANCE_DOC_NO_PREFIX,
+  ProductMilestoneProgress,
+  PlanOrder,
+  PrintTemplate,
+  ReceiptFormSettings,
+  PaymentFormSettings,
+} from '../types';
 import { SearchableProductSelect } from '../components/SearchableProductSelect';
 import { SearchablePartnerSelect } from '../components/SearchablePartnerSelect';
 import type { ProductionOpRecord } from '../types';
-import { moduleHeaderRowClass, pageSubtitleClass, pageTitleClass, primaryToolbarButtonClass } from '../styles/uiDensity';
+import {
+  moduleHeaderRowClass,
+  pageSubtitleClass,
+  pageTitleClass,
+  primaryToolbarButtonClass,
+  secondaryToolbarButtonClass,
+} from '../styles/uiDensity';
+import { PsiListPrintController, type PsiListPrintControllerHandle } from '../components/psi/PsiListPrintPicker';
+import { buildReceiptPrintContextFromRecord } from '../utils/buildReceiptPrintContext';
+import { buildPaymentPrintContextFromRecord } from '../utils/buildPaymentPrintContext';
+import ReceiptFormConfigModal from './finance/ReceiptFormConfigModal';
+import PaymentFormConfigModal from './finance/PaymentFormConfigModal';
+import { DEFAULT_RECEIPT_FORM_SETTINGS, DEFAULT_PAYMENT_FORM_SETTINGS } from '../contexts/AppDataContext';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { toLocalCompactYmd, toLocalDateYmd } from '../utils/localDateTime';
 import { productHasColorSizeMatrix } from '../utils/productColorSize';
@@ -205,6 +237,14 @@ interface FinanceOpsViewProps {
   dictionaries?: AppDictionaries;
   userPermissions?: string[];
   tenantRole?: string;
+  plans: PlanOrder[];
+  receiptFormSettings: ReceiptFormSettings;
+  paymentFormSettings: PaymentFormSettings;
+  onUpdateReceiptFormSettings: (s: ReceiptFormSettings) => void | Promise<void>;
+  onUpdatePaymentFormSettings: (s: PaymentFormSettings) => void | Promise<void>;
+  printTemplates: PrintTemplate[];
+  onUpdatePrintTemplates: (list: PrintTemplate[]) => void | Promise<void>;
+  onRefreshPrintTemplates?: () => void | Promise<void>;
 }
 
 const emptyForm = {
@@ -249,7 +289,37 @@ function getFinanceRecordFromDetail(d: DetailTarget): FinanceRecord | null {
   return null;
 }
 
-const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, allRecords, psiRecords = [], prodRecords = [], productMilestoneProgresses = [], onAddRecord, onUpdateRecord, onDeleteRecord, financeCategories, financeAccountTypes, partners, workers, products, partnerCategories, categories, globalNodes, dictionaries, userPermissions, tenantRole }) => {
+const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
+  type,
+  orders,
+  records,
+  allRecords,
+  psiRecords = [],
+  prodRecords = [],
+  productMilestoneProgresses = [],
+  onAddRecord,
+  onUpdateRecord,
+  onDeleteRecord,
+  financeCategories,
+  financeAccountTypes,
+  partners,
+  workers,
+  products,
+  partnerCategories,
+  categories,
+  globalNodes,
+  dictionaries,
+  userPermissions,
+  tenantRole,
+  plans,
+  receiptFormSettings,
+  paymentFormSettings,
+  onUpdateReceiptFormSettings,
+  onUpdatePaymentFormSettings,
+  printTemplates,
+  onUpdatePrintTemplates,
+  onRefreshPrintTemplates,
+}) => {
   const _isOwner = tenantRole === 'owner';
   const hasFinancePerm = (permKey: string): boolean => {
     if (_isOwner) return true;
@@ -318,7 +388,18 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
   const current = bizConfig[type];
   const isReceiptOrPayment = type === 'RECEIPT' || type === 'PAYMENT';
 
+  const safeReceiptFormSettings = receiptFormSettings ?? DEFAULT_RECEIPT_FORM_SETTINGS;
+  const safePaymentFormSettings = paymentFormSettings ?? DEFAULT_PAYMENT_FORM_SETTINGS;
+  const listPrintSlot =
+    type === 'RECEIPT' ? safeReceiptFormSettings.listPrint : type === 'PAYMENT' ? safePaymentFormSettings.listPrint : undefined;
+  const showListPrintButton = isReceiptOrPayment && listPrintSlot?.showPrintButton !== false;
+  const financeListPrintRef = useRef<PsiListPrintControllerHandle>(null);
+  const [showReceiptFormConfig, setShowReceiptFormConfig] = useState(false);
+  const [showPaymentFormConfig, setShowPaymentFormConfig] = useState(false);
+  const [financeFormConfigTab, setFinanceFormConfigTab] = useState<'fields' | 'print'>('fields');
+
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
+  const orderMap = useMemo(() => new Map(orders.map(o => [o.id, o])), [orders]);
   const workerMap = useMemo(() => new Map(workers.map(w => [w.id, w])), [workers]);
   const financeCatMap = useMemo(() => new Map(financeCategories.map(c => [c.id, c])), [financeCategories]);
   const categoriesForType = useMemo(() =>
@@ -676,17 +757,51 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
               <p className={pageSubtitleClass}>{current.sub}</p>
             )}
           </div>
-          {type !== 'RECONCILIATION' && canCreate && (
-            <div className="flex items-center gap-2 shrink-0 mt-4 sm:mt-0">
-            <button
-              type="button"
-              onClick={() => { setEditingRecordId(null); setForm(emptyForm); setShowModal(true); }}
-              className={primaryToolbarButtonClass}
-            >
-              <Plus className="w-4 h-4 shrink-0" /> 新增{current.label}
-            </button>
-            </div>
-          )}
+          {type !== 'RECONCILIATION' &&
+            (canCreate ||
+              (isReceiptOrPayment &&
+                canEdit &&
+                (type === 'RECEIPT' ? onUpdateReceiptFormSettings : onUpdatePaymentFormSettings))) && (
+              <div className="flex items-center gap-2 shrink-0 mt-4 sm:mt-0">
+                {isReceiptOrPayment && canEdit && type === 'RECEIPT' && onUpdateReceiptFormSettings && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFinanceFormConfigTab('fields');
+                      setShowReceiptFormConfig(true);
+                    }}
+                    className={secondaryToolbarButtonClass}
+                  >
+                    <Sliders className="w-4 h-4 shrink-0" /> 表单配置
+                  </button>
+                )}
+                {isReceiptOrPayment && canEdit && type === 'PAYMENT' && onUpdatePaymentFormSettings && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFinanceFormConfigTab('fields');
+                      setShowPaymentFormConfig(true);
+                    }}
+                    className={secondaryToolbarButtonClass}
+                  >
+                    <Sliders className="w-4 h-4 shrink-0" /> 表单配置
+                  </button>
+                )}
+                {canCreate && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingRecordId(null);
+                      setForm(emptyForm);
+                      setShowModal(true);
+                    }}
+                    className={primaryToolbarButtonClass}
+                  >
+                    <Plus className="w-4 h-4 shrink-0" /> 新增{current.label}
+                  </button>
+                )}
+              </div>
+            )}
         </div>
         {type === 'RECONCILIATION' && (
           <div className="flex flex-wrap items-center gap-3">
@@ -769,7 +884,9 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                 ) : (
                   <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">业务金额</th>
                 )}
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-24">操作</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center min-w-[9rem]">
+                  操作
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -920,13 +1037,27 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                       </span>
                     </td>
                     <td className="px-8 py-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => setDetailRecord(rec)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all whitespace-nowrap shrink-0"
-                      >
-                        <FileText className="w-3.5 h-3.5" /> 详情
-                      </button>
+                      <div className="inline-flex flex-wrap items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setDetailRecord(rec)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all whitespace-nowrap shrink-0"
+                        >
+                          <FileText className="w-3.5 h-3.5" /> 详情
+                        </button>
+                        {showListPrintButton && canView && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void onRefreshPrintTemplates?.();
+                              financeListPrintRef.current?.openPicker(rec.id);
+                            }}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition-all whitespace-nowrap shrink-0"
+                          >
+                            <Printer className="w-3.5 h-3.5" /> 打印
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ));
@@ -964,6 +1095,18 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
                   {financeRec && onDeleteRecord && canDelete && (
                     <button type="button" onClick={() => { void confirm({ message: '确定删除该单据？', danger: true }).then((ok) => { if (!ok) return; onDeleteRecord(financeRec.id); setDetailRecord(null); }); }} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 text-sm font-bold transition-all">
                       <Trash2 className="w-4 h-4" /> 删除
+                    </button>
+                  )}
+                  {financeRec && showListPrintButton && canView && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void onRefreshPrintTemplates?.();
+                        financeListPrintRef.current?.openPicker(financeRec.id);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 text-sm font-bold transition-all"
+                    >
+                      <Printer className="w-4 h-4" /> 打印
                     </button>
                   )}
                   <button type="button" onClick={() => setDetailRecord(null)} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"><X className="w-5 h-5" /></button>
@@ -1394,6 +1537,88 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({ type, orders, records, 
             </div>
           </div>
         </div>
+      )}
+
+      {showReceiptFormConfig && (
+        <ReceiptFormConfigModal
+          open={showReceiptFormConfig}
+          onClose={() => setShowReceiptFormConfig(false)}
+          defaultTabWhenOpen={financeFormConfigTab}
+          settings={safeReceiptFormSettings}
+          onSave={onUpdateReceiptFormSettings}
+          printTemplates={printTemplates}
+          onUpdatePrintTemplates={onUpdatePrintTemplates}
+          onRefreshPrintTemplates={onRefreshPrintTemplates}
+          plans={plans}
+          orders={orders}
+          products={products}
+        />
+      )}
+      {showPaymentFormConfig && (
+        <PaymentFormConfigModal
+          open={showPaymentFormConfig}
+          onClose={() => setShowPaymentFormConfig(false)}
+          defaultTabWhenOpen={financeFormConfigTab}
+          settings={safePaymentFormSettings}
+          onSave={onUpdatePaymentFormSettings}
+          printTemplates={printTemplates}
+          onUpdatePrintTemplates={onUpdatePrintTemplates}
+          onRefreshPrintTemplates={onRefreshPrintTemplates}
+          plans={plans}
+          orders={orders}
+          products={products}
+        />
+      )}
+
+      {isReceiptOrPayment && (
+        <PsiListPrintController<FinanceRecord>
+          ref={financeListPrintRef}
+          listPrintSlot={listPrintSlot}
+          printTemplates={printTemplates}
+          resolveDocItems={recId => {
+            const hit = records.find(r => r.id === recId);
+            return hit ? [hit] : [];
+          }}
+          buildContext={(_t, { docItems }) => {
+            const rec = docItems[0];
+            if (!rec) return {};
+            if (rec.type === 'RECEIPT') {
+              return buildReceiptPrintContextFromRecord({
+                record: rec,
+                categoryMap: financeCatMap,
+                productMap,
+                workerMap,
+                orderMap,
+                orders,
+              });
+            }
+            return buildPaymentPrintContextFromRecord({
+              record: rec,
+              categoryMap: financeCatMap,
+              productMap,
+              workerMap,
+              orderMap,
+              orders,
+            });
+          }}
+          pickerSubtitle={recId => {
+            const r = records.find(x => x.id === recId);
+            return `${current.label} ${r?.docNo || r?.id || recId}`;
+          }}
+          onAddPrintTemplate={
+            type === 'RECEIPT' && onUpdateReceiptFormSettings
+              ? () => {
+                  setFinanceFormConfigTab('print');
+                  setShowReceiptFormConfig(true);
+                }
+              : type === 'PAYMENT' && onUpdatePaymentFormSettings
+                ? () => {
+                    setFinanceFormConfigTab('print');
+                    setShowPaymentFormConfig(true);
+                  }
+                : undefined
+          }
+        />
       )}
     </div>
   );

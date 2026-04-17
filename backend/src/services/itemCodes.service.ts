@@ -41,17 +41,6 @@ export async function listItemCodes(
   return { items, total, page: opts.page, pageSize: opts.pageSize };
 }
 
-export async function voidCode(db: TenantPrismaClient, id: string) {
-  const code = await db.itemCode.findUnique({ where: { id } });
-  if (!code) throw new AppError(404, '单品码不存在');
-  if (code.status === 'VOIDED') throw new AppError(400, '单品码已作废');
-
-  return db.itemCode.update({
-    where: { id },
-    data: { status: 'VOIDED' },
-  });
-}
-
 export async function scanItemCode(callerTenantId: string, token: string) {
   const code = await basePrisma.itemCode.findUnique({ where: { scanToken: token } });
   if (!code) throw new AppError(404, '单品码不存在');

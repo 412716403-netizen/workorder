@@ -11,8 +11,13 @@ import type {
   Warehouse,
   PlanFormSettings,
   OrderFormSettings,
+  PlanListPrintSettings,
   PurchaseOrderFormSettings,
+  SalesOrderFormSettings,
   PurchaseBillFormSettings,
+  SalesBillFormSettings,
+  ReceiptFormSettings,
+  PaymentFormSettings,
   ProductionLinkMode,
   ProductMilestoneProgress,
   ProcessSequenceMode,
@@ -25,11 +30,21 @@ import type {
   BOM,
   PrintTemplate,
   MaterialPanelSettings,
+  MaterialFormSettings,
+  OutsourceFormSettings,
+  ReworkFormSettings,
 } from '../types';
-import { DEFAULT_MATERIAL_PANEL_SETTINGS } from '../types';
+import {
+  DEFAULT_MATERIAL_PANEL_SETTINGS,
+  DEFAULT_MATERIAL_FORM_SETTINGS,
+  DEFAULT_OUTSOURCE_FORM_SETTINGS,
+  DEFAULT_REWORK_FORM_SETTINGS,
+} from '../types';
 import { normalizePartnersFromApi } from '../utils/partnerNormalize';
 import { currentOperatorDisplayName } from '../utils/currentOperatorDisplayName';
 import { ensureBuiltinSalesBillPrintTemplate } from '../utils/salesBillPrintTemplate';
+import { normalizePlanFormFieldConfigArray } from '../utils/planFormCustomField';
+import { broadcastPrintTemplatesSaved, subscribePrintTemplatesChanged } from '../utils/printTemplatesCrossTab';
 
 // ── Decimal normalizer ──
 
@@ -75,23 +90,42 @@ function normalizeDecimals<T>(arr: T[]): T[] {
 
 // ── Default form settings ──
 
-const DEFAULT_PLAN_FORM_SETTINGS: PlanFormSettings = {
+export const DEFAULT_PLAN_FORM_SETTINGS: PlanFormSettings = {
   standardFields: [
     { id: 'planNumber', label: '计划单号', showInList: true, showInCreate: false, showInDetail: true },
     { id: 'customer', label: '客户', showInList: true, showInCreate: true, showInDetail: true },
-    { id: 'dueDate', label: '交期', showInList: true, showInCreate: true, showInDetail: true },
     { id: 'createdAt', label: '添加日期', showInList: true, showInCreate: true, showInDetail: true },
   ],
   customFields: [],
   listPrint: { showPrintButton: true },
 };
 
-function normalizePlanFormSettings(raw: PlanFormSettings | null | undefined): PlanFormSettings {
+/** 合并租户已存配置与默认标准字段，避免旧数据缺少 createdAt 等项导致表单配置与新建/详情不同步 */
+function mergePlanStandardFields(
+  saved: PlanFormSettings['standardFields'] | undefined,
+): PlanFormSettings['standardFields'] {
+  const defs = DEFAULT_PLAN_FORM_SETTINGS.standardFields;
+  const arr = saved ?? [];
+  const used = new Set<string>();
+  const merged: PlanFormSettings['standardFields'] = defs.map(def => {
+    const hit = arr.find(x => x.id === def.id);
+    used.add(def.id);
+    return hit ? { ...def, ...hit } : def;
+  });
+  for (const f of arr) {
+    if (!used.has(f.id)) merged.push(f);
+  }
+  return merged;
+}
+
+export function normalizePlanFormSettings(raw: PlanFormSettings | null | undefined): PlanFormSettings {
   const s = raw ?? DEFAULT_PLAN_FORM_SETTINGS;
   const allowedList = s.listPrint?.allowedTemplateIds?.filter(Boolean) ?? [];
   const allowedLabel = s.labelPrint?.allowedTemplateIds?.filter(Boolean) ?? [];
   return {
     ...s,
+    standardFields: mergePlanStandardFields(s.standardFields).filter(f => f.id !== 'dueDate'),
+    customFields: normalizePlanFormFieldConfigArray(s.customFields),
     listPrint: {
       showPrintButton: s.listPrint?.showPrintButton !== false,
       allowedTemplateIds: allowedList.length > 0 ? allowedList : undefined,
@@ -106,7 +140,110 @@ function normalizePlanFormSettings(raw: PlanFormSettings | null | undefined): Pl
   };
 }
 
-const DEFAULT_ORDER_FORM_SETTINGS: OrderFormSettings = {
+function normalizePlanListSlot(slot: PlanListPrintSettings | undefined): PlanListPrintSettings | undefined {
+  if (!slot) return undefined;
+  const allowed = slot.allowedTemplateIds?.filter(Boolean) ?? [];
+  return {
+    showPrintButton: slot.showPrintButton !== false,
+    allowedTemplateIds: allowed.length > 0 ? allowed : undefined,
+  };
+}
+
+export function normalizeOrderFormSettings(raw: OrderFormSettings | null | undefined): OrderFormSettings {
+  const s = raw ?? DEFAULT_ORDER_FORM_SETTINGS;
+  const stockInCustomFieldsRaw =
+    Array.isArray(s.stockInCustomFields) && s.stockInCustomFields.length > 0
+      ? s.stockInCustomFields
+      : Array.isArray(s.customFields) && s.customFields.length > 0
+        ? s.customFields
+        : [];
+  const stockInCustomFields = normalizePlanFormFieldConfigArray(stockInCustomFieldsRaw);
+  const base: OrderFormSettings = {
+    ...s,
+    stockInCustomFields,
+    /** 报工自定义在工序节点维护；入库自定义使用 stockInCustomFields */
+    customFields: [],
+    orderCenterPrint: s.orderCenterPrint,
+  };
+  const ocp = base.orderCenterPrint;
+  if (!ocp) return base;
+  return {
+    ...base,
+    orderCenterPrint: {
+      orderDetail: normalizePlanListSlot(ocp.orderDetail),
+      reportBatchDetail: normalizePlanListSlot(ocp.reportBatchDetail),
+      stockInFlowDetail: normalizePlanListSlot(ocp.stockInFlowDetail),
+    },
+  };
+}
+
+export function normalizeMaterialFormSettings(raw: MaterialFormSettings | null | undefined): MaterialFormSettings {
+  const s = raw ?? DEFAULT_MATERIAL_FORM_SETTINGS;
+  const issue = normalizePlanFormFieldConfigArray(s.materialIssueCustomFields ?? []);
+  const ret = normalizePlanFormFieldConfigArray(s.materialReturnCustomFields ?? []);
+  const osIssue = normalizePlanFormFieldConfigArray(s.outsourceMaterialIssueCustomFields ?? []);
+  const osRet = normalizePlanFormFieldConfigArray(s.outsourceMaterialReturnCustomFields ?? []);
+  const base: MaterialFormSettings = {
+    ...s,
+    materialIssueCustomFields: issue,
+    materialReturnCustomFields: ret,
+    outsourceMaterialIssueCustomFields: osIssue,
+    outsourceMaterialReturnCustomFields: osRet,
+  };
+  const mcp = base.materialCenterPrint;
+  if (!mcp) return base;
+  return {
+    ...base,
+    materialCenterPrint: {
+      stockOutFlowDetail: normalizePlanListSlot(mcp.stockOutFlowDetail),
+      stockReturnFlowDetail: normalizePlanListSlot(mcp.stockReturnFlowDetail),
+      outsourceStockOutFlowDetail: normalizePlanListSlot(mcp.outsourceStockOutFlowDetail),
+      outsourceStockReturnFlowDetail: normalizePlanListSlot(mcp.outsourceStockReturnFlowDetail),
+    },
+  };
+}
+
+export function normalizeOutsourceFormSettings(raw: OutsourceFormSettings | null | undefined): OutsourceFormSettings {
+  const s = raw ?? DEFAULT_OUTSOURCE_FORM_SETTINGS;
+  const dispatch = normalizePlanFormFieldConfigArray(s.outsourceDispatchCustomFields ?? []);
+  const receive = normalizePlanFormFieldConfigArray(s.outsourceReceiveCustomFields ?? []);
+  const base: OutsourceFormSettings = {
+    ...s,
+    outsourceDispatchCustomFields: dispatch,
+    outsourceReceiveCustomFields: receive,
+  };
+  const ocp = base.outsourceCenterPrint;
+  if (!ocp) return base;
+  return {
+    ...base,
+    outsourceCenterPrint: {
+      dispatchFlowDetail: normalizePlanListSlot(ocp.dispatchFlowDetail),
+      receiveFlowDetail: normalizePlanListSlot(ocp.receiveFlowDetail),
+    },
+  };
+}
+
+export function normalizeReworkFormSettings(raw: ReworkFormSettings | null | undefined): ReworkFormSettings {
+  const s = raw ?? DEFAULT_REWORK_FORM_SETTINGS;
+  const defect = normalizePlanFormFieldConfigArray(s.defectTreatmentCustomFields ?? []);
+  const report = normalizePlanFormFieldConfigArray(s.reworkReportCustomFields ?? []);
+  const base: ReworkFormSettings = {
+    ...s,
+    defectTreatmentCustomFields: defect,
+    reworkReportCustomFields: report,
+  };
+  const rcp = base.reworkCenterPrint;
+  if (!rcp) return base;
+  return {
+    ...base,
+    reworkCenterPrint: {
+      defectTreatmentFlowDetail: normalizePlanListSlot(rcp.defectTreatmentFlowDetail),
+      reworkReportFlowDetail: normalizePlanListSlot(rcp.reworkReportFlowDetail),
+    },
+  };
+}
+
+export const DEFAULT_ORDER_FORM_SETTINGS: OrderFormSettings = {
   standardFields: [
     { id: 'orderNumber', label: '工单号', showInList: true, showInCreate: false, showInDetail: true },
     { id: 'customer', label: '客户', showInList: false, showInCreate: true, showInDetail: true },
@@ -114,29 +251,219 @@ const DEFAULT_ORDER_FORM_SETTINGS: OrderFormSettings = {
     { id: 'startDate', label: '开始日期', showInList: false, showInCreate: true, showInDetail: true },
   ],
   customFields: [],
+  stockInCustomFields: [],
 };
 
-const DEFAULT_PURCHASE_ORDER_FORM_SETTINGS: PurchaseOrderFormSettings = {
+/** 采购订单已废弃的标准字段 id（历史配置中可能仍存在，加载时剔除） */
+const DEPRECATED_PURCHASE_ORDER_STANDARD_FIELD_IDS = new Set(['dueDate', 'createdAt', 'note']);
+
+export const DEFAULT_PURCHASE_ORDER_FORM_SETTINGS: PurchaseOrderFormSettings = {
   standardFields: [
-    { id: 'docNumber', label: '单据编号', showInList: true, showInCreate: true, showInDetail: true },
+    { id: 'docNumber', label: '单据编号', showInList: true, showInCreate: false, showInDetail: true },
     { id: 'partner', label: '供应商', showInList: true, showInCreate: true, showInDetail: true },
-    { id: 'dueDate', label: '期望到货日期', showInList: true, showInCreate: true, showInDetail: true },
-    { id: 'createdAt', label: '添加日期', showInList: true, showInCreate: true, showInDetail: true },
-    { id: 'note', label: '单据备注', showInList: false, showInCreate: true, showInDetail: true },
   ],
   customFields: [],
+  listPrint: { showPrintButton: true },
 };
 
-const DEFAULT_PURCHASE_BILL_FORM_SETTINGS: PurchaseBillFormSettings = {
+function mergePurchaseOrderStandardFields(
+  saved: PurchaseOrderFormSettings['standardFields'] | undefined,
+): PurchaseOrderFormSettings['standardFields'] {
+  const defs = DEFAULT_PURCHASE_ORDER_FORM_SETTINGS.standardFields;
+  const arr = (saved ?? []).filter(f => !DEPRECATED_PURCHASE_ORDER_STANDARD_FIELD_IDS.has(f.id));
+  const used = new Set<string>();
+  const merged: PurchaseOrderFormSettings['standardFields'] = defs.map(def => {
+    const hit = arr.find(x => x.id === def.id);
+    used.add(def.id);
+    return hit ? { ...def, ...hit } : def;
+  });
+  for (const f of arr) {
+    if (!used.has(f.id) && !DEPRECATED_PURCHASE_ORDER_STANDARD_FIELD_IDS.has(f.id)) merged.push(f);
+  }
+  return merged.map(f => (f.id === 'docNumber' ? { ...f, showInCreate: false } : f));
+}
+
+export function normalizePurchaseOrderFormSettings(raw: PurchaseOrderFormSettings | null | undefined): PurchaseOrderFormSettings {
+  const s = raw ?? DEFAULT_PURCHASE_ORDER_FORM_SETTINGS;
+  const legacyDetail = normalizePlanListSlot(
+    (s as PurchaseOrderFormSettings & { detailPrint?: PlanListPrintSettings }).detailPrint,
+  );
+  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
+  const a = listNorm.allowedTemplateIds ?? [];
+  const b = legacyDetail?.allowedTemplateIds ?? [];
+  const mergedIds = a.length || b.length ? Array.from(new Set([...a, ...b])) : [];
+  const listPrint: PlanListPrintSettings = {
+    showPrintButton: listNorm.showPrintButton !== false,
+    allowedTemplateIds: mergedIds.length > 0 ? mergedIds : undefined,
+  };
+  return {
+    standardFields: mergePurchaseOrderStandardFields(s.standardFields),
+    customFields: normalizePlanFormFieldConfigArray(s.customFields),
+    listPrint,
+  };
+}
+
+/** 销售订单已废弃的标准字段 id（与采购订单对齐） */
+const DEPRECATED_SALES_ORDER_STANDARD_FIELD_IDS = DEPRECATED_PURCHASE_ORDER_STANDARD_FIELD_IDS;
+
+export const DEFAULT_SALES_ORDER_FORM_SETTINGS: SalesOrderFormSettings = {
   standardFields: [
-    { id: 'docNumber', label: '单据编号', showInList: true, showInCreate: true, showInDetail: true },
+    { id: 'docNumber', label: '单据编号', showInList: true, showInCreate: false, showInDetail: true },
+    { id: 'partner', label: '客户', showInList: true, showInCreate: true, showInDetail: true },
+  ],
+  customFields: [],
+  listPrint: { showPrintButton: true },
+};
+
+function mergeSalesOrderStandardFields(
+  saved: SalesOrderFormSettings['standardFields'] | undefined,
+): SalesOrderFormSettings['standardFields'] {
+  const defs = DEFAULT_SALES_ORDER_FORM_SETTINGS.standardFields;
+  const arr = (saved ?? []).filter(f => !DEPRECATED_SALES_ORDER_STANDARD_FIELD_IDS.has(f.id));
+  const used = new Set<string>();
+  const merged: SalesOrderFormSettings['standardFields'] = defs.map(def => {
+    const hit = arr.find(x => x.id === def.id);
+    used.add(def.id);
+    return hit ? { ...def, ...hit } : def;
+  });
+  for (const f of arr) {
+    if (!used.has(f.id) && !DEPRECATED_SALES_ORDER_STANDARD_FIELD_IDS.has(f.id)) merged.push(f);
+  }
+  return merged.map(f => (f.id === 'docNumber' ? { ...f, showInCreate: false } : f));
+}
+
+export function normalizeSalesOrderFormSettings(raw: SalesOrderFormSettings | null | undefined): SalesOrderFormSettings {
+  const s = raw ?? DEFAULT_SALES_ORDER_FORM_SETTINGS;
+  const legacyDetail = normalizePlanListSlot(
+    (s as SalesOrderFormSettings & { detailPrint?: PlanListPrintSettings }).detailPrint,
+  );
+  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
+  const a = listNorm.allowedTemplateIds ?? [];
+  const b = legacyDetail?.allowedTemplateIds ?? [];
+  const mergedIds = a.length || b.length ? Array.from(new Set([...a, ...b])) : [];
+  const listPrint: PlanListPrintSettings = {
+    showPrintButton: listNorm.showPrintButton !== false,
+    allowedTemplateIds: mergedIds.length > 0 ? mergedIds : undefined,
+  };
+  return {
+    standardFields: mergeSalesOrderStandardFields(s.standardFields),
+    customFields: normalizePlanFormFieldConfigArray(s.customFields),
+    listPrint,
+  };
+}
+
+/** 采购单（入库）已废弃的标准字段 id（历史配置加载时剔除） */
+const DEPRECATED_PURCHASE_BILL_STANDARD_FIELD_IDS = new Set(['createdAt', 'note']);
+
+export const DEFAULT_PURCHASE_BILL_FORM_SETTINGS: PurchaseBillFormSettings = {
+  standardFields: [
+    { id: 'docNumber', label: '单据编号', showInList: true, showInCreate: false, showInDetail: true },
     { id: 'partner', label: '供应商', showInList: true, showInCreate: true, showInDetail: true },
     { id: 'warehouse', label: '入库仓库', showInList: true, showInCreate: true, showInDetail: true },
-    { id: 'createdAt', label: '添加日期', showInList: true, showInCreate: true, showInDetail: true },
-    { id: 'note', label: '单据备注', showInList: true, showInCreate: true, showInDetail: true },
   ],
   customFields: [],
+  listPrint: { showPrintButton: true },
 };
+
+function mergePurchaseBillStandardFields(
+  saved: PurchaseBillFormSettings['standardFields'] | undefined,
+): PurchaseBillFormSettings['standardFields'] {
+  const defs = DEFAULT_PURCHASE_BILL_FORM_SETTINGS.standardFields;
+  const arr = (saved ?? []).filter(f => !DEPRECATED_PURCHASE_BILL_STANDARD_FIELD_IDS.has(f.id));
+  const used = new Set<string>();
+  const merged: PurchaseBillFormSettings['standardFields'] = defs.map(def => {
+    const hit = arr.find(x => x.id === def.id);
+    used.add(def.id);
+    return hit ? { ...def, ...hit } : def;
+  });
+  for (const f of arr) {
+    if (!used.has(f.id) && !DEPRECATED_PURCHASE_BILL_STANDARD_FIELD_IDS.has(f.id)) merged.push(f);
+  }
+  return merged.map(f => (f.id === 'docNumber' ? { ...f, showInCreate: false } : f));
+}
+
+export function normalizePurchaseBillFormSettings(raw: PurchaseBillFormSettings | null | undefined): PurchaseBillFormSettings {
+  const s = raw ?? DEFAULT_PURCHASE_BILL_FORM_SETTINGS;
+  type PbLegacy = PurchaseBillFormSettings & {
+    detailPrint?: PlanListPrintSettings;
+    /** 历史采购单配置曾继承计划单 `labelPrint` */
+    labelPrint?: { allowedTemplateIds?: string[]; showPlanDetailTraceSection?: boolean };
+  };
+  const leg = s as PbLegacy;
+  const legacyDetail = normalizePlanListSlot(leg.detailPrint);
+  const legacyLabel = normalizePlanListSlot(
+    leg.labelPrint?.allowedTemplateIds?.length
+      ? { showPrintButton: true, allowedTemplateIds: leg.labelPrint.allowedTemplateIds }
+      : undefined,
+  );
+  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
+  const a = listNorm.allowedTemplateIds ?? [];
+  const b = legacyDetail?.allowedTemplateIds ?? [];
+  const c = legacyLabel?.allowedTemplateIds ?? [];
+  const mergedIds = a.length || b.length || c.length ? Array.from(new Set([...a, ...b, ...c])) : [];
+  const listPrint: PlanListPrintSettings = {
+    showPrintButton: listNorm.showPrintButton !== false,
+    allowedTemplateIds: mergedIds.length > 0 ? mergedIds : undefined,
+  };
+  return {
+    standardFields: mergePurchaseBillStandardFields(s.standardFields),
+    customFields: normalizePlanFormFieldConfigArray(s.customFields),
+    listPrint,
+  };
+}
+
+export const DEFAULT_SALES_BILL_FORM_SETTINGS: SalesBillFormSettings = {
+  standardFields: [],
+  customFields: [],
+  listPrint: { showPrintButton: true },
+};
+
+export function normalizeSalesBillFormSettings(raw: SalesBillFormSettings | null | undefined): SalesBillFormSettings {
+  const s = raw ?? DEFAULT_SALES_BILL_FORM_SETTINGS;
+  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
+  const rawIds = listNorm.allowedTemplateIds?.map(x => (x != null && x !== '' ? String(x).trim() : '')).filter(Boolean) ?? [];
+  const listPrint: PlanListPrintSettings = {
+    showPrintButton: listNorm.showPrintButton !== false,
+    allowedTemplateIds: rawIds.length > 0 ? Array.from(new Set(rawIds)) : undefined,
+  };
+  return {
+    standardFields: [],
+    customFields: normalizePlanFormFieldConfigArray(s.customFields),
+    listPrint,
+  };
+}
+
+export const DEFAULT_RECEIPT_FORM_SETTINGS: ReceiptFormSettings = {
+  listPrint: { showPrintButton: true },
+};
+
+export function normalizeReceiptFormSettings(raw: ReceiptFormSettings | null | undefined): ReceiptFormSettings {
+  const s = raw ?? DEFAULT_RECEIPT_FORM_SETTINGS;
+  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
+  const rawIds = listNorm.allowedTemplateIds?.map(x => (x != null && x !== '' ? String(x).trim() : '')).filter(Boolean) ?? [];
+  return {
+    listPrint: {
+      showPrintButton: listNorm.showPrintButton !== false,
+      allowedTemplateIds: rawIds.length > 0 ? Array.from(new Set(rawIds)) : undefined,
+    },
+  };
+}
+
+export const DEFAULT_PAYMENT_FORM_SETTINGS: PaymentFormSettings = {
+  listPrint: { showPrintButton: true },
+};
+
+export function normalizePaymentFormSettings(raw: PaymentFormSettings | null | undefined): PaymentFormSettings {
+  const s = raw ?? DEFAULT_PAYMENT_FORM_SETTINGS;
+  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
+  const rawIds = listNorm.allowedTemplateIds?.map(x => (x != null && x !== '' ? String(x).trim() : '')).filter(Boolean) ?? [];
+  return {
+    listPrint: {
+      showPrintButton: listNorm.showPrintButton !== false,
+      allowedTemplateIds: rawIds.length > 0 ? Array.from(new Set(rawIds)) : undefined,
+    },
+  };
+}
 
 const EMPTY_DICTIONARIES: AppDictionaries = { colors: [], sizes: [], units: [] };
 
@@ -164,7 +491,11 @@ export interface AppDataContextValue {
   planFormSettings: PlanFormSettings;
   orderFormSettings: OrderFormSettings;
   purchaseOrderFormSettings: PurchaseOrderFormSettings;
+  salesOrderFormSettings: SalesOrderFormSettings;
   purchaseBillFormSettings: PurchaseBillFormSettings;
+  salesBillFormSettings: SalesBillFormSettings;
+  receiptFormSettings: ReceiptFormSettings;
+  paymentFormSettings: PaymentFormSettings;
   /** 租户级打印模板列表 */
   printTemplates: PrintTemplate[];
   productionLinkMode: ProductionLinkMode;
@@ -178,10 +509,20 @@ export interface AppDataContextValue {
   onUpdatePlanFormSettings: (v: PlanFormSettings) => Promise<void>;
   onUpdateOrderFormSettings: (v: OrderFormSettings) => Promise<void>;
   onUpdatePurchaseOrderFormSettings: (v: PurchaseOrderFormSettings) => Promise<void>;
+  onUpdateSalesOrderFormSettings: (v: SalesOrderFormSettings) => Promise<void>;
   onUpdatePurchaseBillFormSettings: (v: PurchaseBillFormSettings) => Promise<void>;
+  onUpdateSalesBillFormSettings: (v: SalesBillFormSettings) => Promise<void>;
+  onUpdateReceiptFormSettings: (v: ReceiptFormSettings) => Promise<void>;
+  onUpdatePaymentFormSettings: (v: PaymentFormSettings) => Promise<void>;
   onUpdatePrintTemplates: (v: PrintTemplate[]) => Promise<void>;
   materialPanelSettings: MaterialPanelSettings;
+  materialFormSettings: MaterialFormSettings;
+  outsourceFormSettings: OutsourceFormSettings;
+  reworkFormSettings: ReworkFormSettings;
   onUpdateMaterialPanelSettings: (v: MaterialPanelSettings) => Promise<void>;
+  onUpdateMaterialFormSettings: (v: MaterialFormSettings) => Promise<void>;
+  onUpdateOutsourceFormSettings: (v: OutsourceFormSettings) => Promise<void>;
+  onUpdateReworkFormSettings: (v: ReworkFormSettings) => Promise<void>;
   // Product / BOM
   /** 成功返回 true，失败已 toast 并返回 false */
   onUpdateProduct: (p: Product) => Promise<boolean>;
@@ -246,7 +587,7 @@ export type AppDataState = Pick<AppDataContextValue,
   'categories' | 'partnerCategories' | 'dictionaries' | 'globalNodes' | 'boms' |
   'partners' | 'workers' | 'equipment' | 'warehouses' |
   'financeCategories' | 'financeAccountTypes' |
-  'planFormSettings' | 'orderFormSettings' | 'purchaseOrderFormSettings' | 'purchaseBillFormSettings' | 'materialPanelSettings' |
+  'planFormSettings' | 'orderFormSettings' | 'purchaseOrderFormSettings' | 'salesOrderFormSettings' | 'purchaseBillFormSettings' | 'salesBillFormSettings' | 'receiptFormSettings' | 'paymentFormSettings' | 'materialPanelSettings' | 'materialFormSettings' | 'outsourceFormSettings' | 'reworkFormSettings' |
   'printTemplates' |
   'productionLinkMode' | 'processSequenceMode' | 'allowExceedMaxReportQty' | 'productMilestoneProgresses'
 >;
@@ -275,8 +616,15 @@ export interface ConfigState {
   planFormSettings: PlanFormSettings;
   orderFormSettings: OrderFormSettings;
   purchaseOrderFormSettings: PurchaseOrderFormSettings;
+  salesOrderFormSettings: SalesOrderFormSettings;
   purchaseBillFormSettings: PurchaseBillFormSettings;
+  salesBillFormSettings: SalesBillFormSettings;
+  receiptFormSettings: ReceiptFormSettings;
+  paymentFormSettings: PaymentFormSettings;
   materialPanelSettings: MaterialPanelSettings;
+  materialFormSettings: MaterialFormSettings;
+  outsourceFormSettings: OutsourceFormSettings;
+  reworkFormSettings: ReworkFormSettings;
   printTemplates: PrintTemplate[];
 }
 
@@ -332,9 +680,22 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [planFormSettings, setPlanFormSettings] = useState<PlanFormSettings>(DEFAULT_PLAN_FORM_SETTINGS);
   const [orderFormSettings, setOrderFormSettings] = useState<OrderFormSettings>(DEFAULT_ORDER_FORM_SETTINGS);
   const [purchaseOrderFormSettings, setPurchaseOrderFormSettings] = useState<PurchaseOrderFormSettings>(DEFAULT_PURCHASE_ORDER_FORM_SETTINGS);
+  const [salesOrderFormSettings, setSalesOrderFormSettings] = useState<SalesOrderFormSettings>(DEFAULT_SALES_ORDER_FORM_SETTINGS);
   const [purchaseBillFormSettings, setPurchaseBillFormSettings] = useState<PurchaseBillFormSettings>(DEFAULT_PURCHASE_BILL_FORM_SETTINGS);
+  const [salesBillFormSettings, setSalesBillFormSettings] = useState<SalesBillFormSettings>(DEFAULT_SALES_BILL_FORM_SETTINGS);
+  const [receiptFormSettings, setReceiptFormSettings] = useState<ReceiptFormSettings>(DEFAULT_RECEIPT_FORM_SETTINGS);
+  const [paymentFormSettings, setPaymentFormSettings] = useState<PaymentFormSettings>(DEFAULT_PAYMENT_FORM_SETTINGS);
   const [materialPanelSettings, setMaterialPanelSettings] = useState<MaterialPanelSettings>(DEFAULT_MATERIAL_PANEL_SETTINGS);
+  const [materialFormSettings, setMaterialFormSettings] = useState<MaterialFormSettings>(DEFAULT_MATERIAL_FORM_SETTINGS);
+  const [outsourceFormSettings, setOutsourceFormSettings] = useState<OutsourceFormSettings>(DEFAULT_OUTSOURCE_FORM_SETTINGS);
+  const [reworkFormSettings, setReworkFormSettings] = useState<ReworkFormSettings>(DEFAULT_REWORK_FORM_SETTINGS);
   const [printTemplates, setPrintTemplates] = useState<PrintTemplate[]>([]);
+  /** 用于跨标签广播时忽略本标签发出的消息，避免重复请求 */
+  const printTemplatesCrossTabIdRef = useRef(
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `pt-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+  );
   const [productionLinkMode, setProductionLinkMode] = useState<ProductionLinkMode>('order');
   const [processSequenceMode, setProcessSequenceMode] = useState<ProcessSequenceMode>('free');
   const [allowExceedMaxReportQty, setAllowExceedMaxReportQty] = useState<boolean>(true);
@@ -372,8 +733,15 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     setPlanFormSettings(DEFAULT_PLAN_FORM_SETTINGS);
     setOrderFormSettings(DEFAULT_ORDER_FORM_SETTINGS);
     setPurchaseOrderFormSettings(DEFAULT_PURCHASE_ORDER_FORM_SETTINGS);
+    setSalesOrderFormSettings(DEFAULT_SALES_ORDER_FORM_SETTINGS);
     setPurchaseBillFormSettings(DEFAULT_PURCHASE_BILL_FORM_SETTINGS);
+    setSalesBillFormSettings(DEFAULT_SALES_BILL_FORM_SETTINGS);
+    setReceiptFormSettings(DEFAULT_RECEIPT_FORM_SETTINGS);
+    setPaymentFormSettings(DEFAULT_PAYMENT_FORM_SETTINGS);
     setMaterialPanelSettings(DEFAULT_MATERIAL_PANEL_SETTINGS);
+    setMaterialFormSettings(DEFAULT_MATERIAL_FORM_SETTINGS);
+    setOutsourceFormSettings(DEFAULT_OUTSOURCE_FORM_SETTINGS);
+    setReworkFormSettings(DEFAULT_REWORK_FORM_SETTINGS);
     setPrintTemplates([]);
     setProductMilestoneProgresses([]);
 
@@ -406,7 +774,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         } else {
           const migrateHint = /数据库|route_report|migration|P20|column|schema|Prisma/i.test(msg)
             ? ' 若为数据库升级后首次使用，请在服务器执行 prisma migrate deploy 并重启后端。' : '';
-          toast.error(`产品列表加载失败：${msg}。${migrateHint}`.trim());
+          const fetchHint =
+            /Failed to fetch|NetworkError|无法连接|超时/i.test(msg) && import.meta.env.DEV
+              ? ' 请确认后端已启动（backend 目录 `npm run dev`，或仓库根目录 `npm run dev:all`），且已配置数据库 `.env`。'
+              : '';
+          toast.error(`产品列表加载失败：${msg}。${migrateHint}${fetchHint}`.trim());
         }
       }
 
@@ -415,10 +787,35 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       setProcessSequenceMode((cfg.processSequenceMode as ProcessSequenceMode) ?? 'free');
       setAllowExceedMaxReportQty(cfg.allowExceedMaxReportQty !== false);
       setPlanFormSettings(normalizePlanFormSettings(cfg.planFormSettings as PlanFormSettings));
-      setOrderFormSettings((cfg.orderFormSettings as OrderFormSettings) ?? DEFAULT_ORDER_FORM_SETTINGS);
-      setPurchaseOrderFormSettings((cfg.purchaseOrderFormSettings as PurchaseOrderFormSettings) ?? DEFAULT_PURCHASE_ORDER_FORM_SETTINGS);
-      setPurchaseBillFormSettings((cfg.purchaseBillFormSettings as PurchaseBillFormSettings) ?? DEFAULT_PURCHASE_BILL_FORM_SETTINGS);
+      setOrderFormSettings(normalizeOrderFormSettings((cfg.orderFormSettings as OrderFormSettings) ?? DEFAULT_ORDER_FORM_SETTINGS));
+      {
+        const po = (cfg.purchaseOrderFormSettings as PurchaseOrderFormSettings) ?? DEFAULT_PURCHASE_ORDER_FORM_SETTINGS;
+        setPurchaseOrderFormSettings(normalizePurchaseOrderFormSettings(po));
+      }
+      {
+        const so = (cfg.salesOrderFormSettings as SalesOrderFormSettings) ?? DEFAULT_SALES_ORDER_FORM_SETTINGS;
+        setSalesOrderFormSettings(normalizeSalesOrderFormSettings(so));
+      }
+      {
+        const pb = (cfg.purchaseBillFormSettings as PurchaseBillFormSettings) ?? DEFAULT_PURCHASE_BILL_FORM_SETTINGS;
+        setPurchaseBillFormSettings(normalizePurchaseBillFormSettings(pb));
+      }
+      {
+        const sb = (cfg.salesBillFormSettings as SalesBillFormSettings) ?? DEFAULT_SALES_BILL_FORM_SETTINGS;
+        setSalesBillFormSettings(normalizeSalesBillFormSettings(sb));
+      }
+      {
+        const rf = (cfg.receiptFormSettings as ReceiptFormSettings) ?? DEFAULT_RECEIPT_FORM_SETTINGS;
+        setReceiptFormSettings(normalizeReceiptFormSettings(rf));
+      }
+      {
+        const pf = (cfg.paymentFormSettings as PaymentFormSettings) ?? DEFAULT_PAYMENT_FORM_SETTINGS;
+        setPaymentFormSettings(normalizePaymentFormSettings(pf));
+      }
       setMaterialPanelSettings((cfg.materialPanelSettings as MaterialPanelSettings) ?? DEFAULT_MATERIAL_PANEL_SETTINGS);
+      setMaterialFormSettings(normalizeMaterialFormSettings((cfg.materialFormSettings as MaterialFormSettings) ?? DEFAULT_MATERIAL_FORM_SETTINGS));
+      setOutsourceFormSettings(normalizeOutsourceFormSettings((cfg.outsourceFormSettings as OutsourceFormSettings) ?? DEFAULT_OUTSOURCE_FORM_SETTINGS));
+      setReworkFormSettings(normalizeReworkFormSettings((cfg.reworkFormSettings as ReworkFormSettings) ?? DEFAULT_REWORK_FORM_SETTINGS));
       setPrintTemplates(
         ensureBuiltinSalesBillPrintTemplate(Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : []),
       );
@@ -557,22 +954,93 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  useEffect(() => {
+    return subscribePrintTemplatesChanged(fromTabId => {
+      if (fromTabId === printTemplatesCrossTabIdRef.current) return;
+      void refreshPrintTemplates();
+    });
+  }, [refreshPrintTemplates]);
+
   // ── Config update handlers ──
   const onUpdateProductionLinkMode = useCallback(async (mode: ProductionLinkMode) => { await api.settings.updateConfig('productionLinkMode', mode); setProductionLinkMode(mode); }, []);
   const onUpdateProcessSequenceMode = useCallback(async (mode: ProcessSequenceMode) => { await api.settings.updateConfig('processSequenceMode', mode); setProcessSequenceMode(mode); }, []);
   const onUpdateAllowExceedMaxReportQty = useCallback(async (value: boolean) => { await api.settings.updateConfig('allowExceedMaxReportQty', value); setAllowExceedMaxReportQty(value); }, []);
-  const onUpdatePlanFormSettings = useCallback(async (v: PlanFormSettings) => {
-    const next = normalizePlanFormSettings(v);
-    await api.settings.updateConfig('planFormSettings', next);
-    setPlanFormSettings(next);
+  /**
+   * 统一的 *FormSettings 保存 handler：
+   * normalize → api.settings.updateConfig(key, next) → setter(next)。
+   *
+   * 9 套 FormSettings 保存路径完全一致；抽 factory 避免重复。
+   * 不使用 useCallback：函数每渲染生成一次是可以接受的（调用方 Modal 不做 memo 级优化），
+   * 且原 useCallback 的 deps=[] 已假定 setter 与 normalize 稳定（setter 来自 useState，稳定；
+   * normalize 是模块级函数，稳定）；identity 不稳定的唯一成本是 Modal 重渲染一次——相比代码重复收益更高。
+   *
+   * 错误处理契约：
+   * - api.settings.updateConfig 失败时（services/api.ts:182-185 在非 2xx 时 throw），
+   *   不调用 setter，避免前端 state 与后端不一致；错误原样向上抛给调用方
+   *   （BusinessFormConfigModal.handleSave 接住后弹 toast）。
+   */
+  const makeFormSettingsSaver = <T,>(
+    key: string,
+    normalize: (v: T) => T,
+    setter: React.Dispatch<React.SetStateAction<T>>,
+  ) => async (v: T) => {
+    const next = normalize(v);
+    await api.settings.updateConfig(key, next);
+    setter(next);
+  };
+  const onUpdatePlanFormSettings = useCallback(
+    makeFormSettingsSaver('planFormSettings', normalizePlanFormSettings, setPlanFormSettings),
+    [],
+  );
+  const onUpdateOrderFormSettings = useCallback(
+    makeFormSettingsSaver('orderFormSettings', normalizeOrderFormSettings, setOrderFormSettings),
+    [],
+  );
+  const onUpdatePurchaseOrderFormSettings = useCallback(
+    makeFormSettingsSaver('purchaseOrderFormSettings', normalizePurchaseOrderFormSettings, setPurchaseOrderFormSettings),
+    [],
+  );
+  const onUpdateSalesOrderFormSettings = useCallback(
+    makeFormSettingsSaver('salesOrderFormSettings', normalizeSalesOrderFormSettings, setSalesOrderFormSettings),
+    [],
+  );
+  const onUpdatePurchaseBillFormSettings = useCallback(
+    makeFormSettingsSaver('purchaseBillFormSettings', normalizePurchaseBillFormSettings, setPurchaseBillFormSettings),
+    [],
+  );
+  const onUpdateSalesBillFormSettings = useCallback(
+    makeFormSettingsSaver('salesBillFormSettings', normalizeSalesBillFormSettings, setSalesBillFormSettings),
+    [],
+  );
+  const onUpdateReceiptFormSettings = useCallback(
+    makeFormSettingsSaver('receiptFormSettings', normalizeReceiptFormSettings, setReceiptFormSettings),
+    [],
+  );
+  const onUpdatePaymentFormSettings = useCallback(
+    makeFormSettingsSaver('paymentFormSettings', normalizePaymentFormSettings, setPaymentFormSettings),
+    [],
+  );
+  const onUpdateMaterialFormSettings = useCallback(
+    makeFormSettingsSaver('materialFormSettings', normalizeMaterialFormSettings, setMaterialFormSettings),
+    [],
+  );
+  const onUpdateOutsourceFormSettings = useCallback(
+    makeFormSettingsSaver('outsourceFormSettings', normalizeOutsourceFormSettings, setOutsourceFormSettings),
+    [],
+  );
+  const onUpdateReworkFormSettings = useCallback(
+    makeFormSettingsSaver('reworkFormSettings', normalizeReworkFormSettings, setReworkFormSettings),
+    [],
+  );
+  // MaterialPanelSettings 无 normalize；保留 inline 形式
+  const onUpdateMaterialPanelSettings = useCallback(async (v: MaterialPanelSettings) => {
+    await api.settings.updateConfig('materialPanelSettings', v);
+    setMaterialPanelSettings(v);
   }, []);
-  const onUpdateOrderFormSettings = useCallback(async (v: OrderFormSettings) => { await api.settings.updateConfig('orderFormSettings', v); setOrderFormSettings(v); }, []);
-  const onUpdatePurchaseOrderFormSettings = useCallback(async (v: PurchaseOrderFormSettings) => { await api.settings.updateConfig('purchaseOrderFormSettings', v); setPurchaseOrderFormSettings(v); }, []);
-  const onUpdatePurchaseBillFormSettings = useCallback(async (v: PurchaseBillFormSettings) => { await api.settings.updateConfig('purchaseBillFormSettings', v); setPurchaseBillFormSettings(v); }, []);
-  const onUpdateMaterialPanelSettings = useCallback(async (v: MaterialPanelSettings) => { await api.settings.updateConfig('materialPanelSettings', v); setMaterialPanelSettings(v); }, []);
   const onUpdatePrintTemplates = useCallback(async (v: PrintTemplate[]) => {
     await api.settings.updateConfig('printTemplates', v);
     setPrintTemplates(v);
+    broadcastPrintTemplatesSaved(printTemplatesCrossTabIdRef.current);
   }, []);
 
   // ── Helpers: normalize a single record ──
@@ -854,9 +1322,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const configValue: ConfigState = useMemo(() => ({
     productionLinkMode, processSequenceMode, allowExceedMaxReportQty,
-    planFormSettings, orderFormSettings, purchaseOrderFormSettings, purchaseBillFormSettings,
-    materialPanelSettings, printTemplates,
-  }), [productionLinkMode, processSequenceMode, allowExceedMaxReportQty, planFormSettings, orderFormSettings, purchaseOrderFormSettings, purchaseBillFormSettings, materialPanelSettings, printTemplates]);
+    planFormSettings, orderFormSettings, purchaseOrderFormSettings, salesOrderFormSettings, purchaseBillFormSettings, salesBillFormSettings,
+    receiptFormSettings, paymentFormSettings,
+    materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates,
+  }), [productionLinkMode, processSequenceMode, allowExceedMaxReportQty, planFormSettings, orderFormSettings, purchaseOrderFormSettings, salesOrderFormSettings, purchaseBillFormSettings, salesBillFormSettings, receiptFormSettings, paymentFormSettings, materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates]);
 
   const ordersValue: OrdersState = useMemo(() => ({
     orders, plans, productMilestoneProgresses, prodRecords,
@@ -871,8 +1340,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const actionsValue: AppDataActions = useMemo(() => ({
     onUpdateProductionLinkMode, onUpdateProcessSequenceMode, onUpdateAllowExceedMaxReportQty,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
-    onUpdatePurchaseOrderFormSettings, onUpdatePurchaseBillFormSettings,
-    onUpdateMaterialPanelSettings, onUpdatePrintTemplates,
+    onUpdatePurchaseOrderFormSettings, onUpdateSalesOrderFormSettings,
+    onUpdatePurchaseBillFormSettings, onUpdateSalesBillFormSettings,
+    onUpdateReceiptFormSettings, onUpdatePaymentFormSettings,
+    onUpdateMaterialPanelSettings, onUpdateMaterialFormSettings, onUpdateOutsourceFormSettings, onUpdateReworkFormSettings, onUpdatePrintTemplates,
     onUpdateProduct, onDeleteProduct, onUpdateBOM,
     onCreatePlan, onUpdatePlan, onSplitPlan, onDeletePlan, onConvertToOrder,
     onCreateSubPlan, onCreateSubPlans,
@@ -891,8 +1362,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }), [
     onUpdateProductionLinkMode, onUpdateProcessSequenceMode, onUpdateAllowExceedMaxReportQty,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
-    onUpdatePurchaseOrderFormSettings, onUpdatePurchaseBillFormSettings,
-    onUpdateMaterialPanelSettings, onUpdatePrintTemplates,
+    onUpdatePurchaseOrderFormSettings, onUpdateSalesOrderFormSettings,
+    onUpdatePurchaseBillFormSettings, onUpdateSalesBillFormSettings,
+    onUpdateReceiptFormSettings, onUpdatePaymentFormSettings,
+    onUpdateMaterialPanelSettings, onUpdateMaterialFormSettings, onUpdateOutsourceFormSettings, onUpdateReworkFormSettings, onUpdatePrintTemplates,
     onUpdateProduct, onDeleteProduct, onUpdateBOM,
     onCreatePlan, onUpdatePlan, onSplitPlan, onDeletePlan, onConvertToOrder,
     onCreateSubPlan, onCreateSubPlans,

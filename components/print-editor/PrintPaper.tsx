@@ -29,6 +29,43 @@ import {
   computeBodyVerticalPushByElementId,
   elementHeightGrowMm,
 } from './printBodyVerticalPush';
+import { DynamicListMatrixTable } from './DynamicListMatrixTable';
+import { padDynamicListDataColumns } from '../../utils/dynamicListMatrix';
+import { serializeColorSizeMatrixPayload } from '../../utils/colorSizeMatrixPrint';
+
+/** 编辑器内动态列表含「颜色尺码数量」列且无 printListRows 时的预览数据 */
+const EDITOR_DYNAMIC_LIST_MATRIX_PREVIEW: PrintListRow[] = [
+  {
+    sku: '示例货号',
+    productName: '示例名称',
+    qty: 200,
+    unitPrice: '0',
+    amount: '0',
+    remark: '',
+    colorSizeMatrixJson: serializeColorSizeMatrixPayload({
+      sizes: ['XL', 'xs'],
+      colorRows: [
+        { colorName: '大红', quantities: [50, 50] },
+        { colorName: '颜色2', quantities: [50, 50] },
+      ],
+    }),
+  },
+  {
+    sku: '示例货号2',
+    productName: '示例名称2',
+    qty: 100,
+    unitPrice: '0',
+    amount: '0',
+    remark: '',
+    colorSizeMatrixJson: serializeColorSizeMatrixPayload({
+      sizes: ['均码'],
+      colorRows: [
+        { colorName: '米白色', quantities: [50] },
+        { colorName: '大红', quantities: [50] },
+      ],
+    }),
+  },
+];
 
 function dynamicListGridTemplateColumns(
   showSerial: boolean,
@@ -389,23 +426,77 @@ function BodyElementView({
     }
     case 'dynamicList': {
       const cfg = el.config as import('../../types').PrintDynamicListElementConfig;
-      const rawCols = cfg.columns ?? [];
-      const n = Math.max(1, cfg.dataColumnCount ?? (rawCols.length || 3));
-      const dataCols = rawCols.slice(0, n);
-      const padded =
-        dataCols.length >= n
-          ? dataCols
-          : [
-              ...dataCols,
-              ...Array.from({ length: n - dataCols.length }, (_, i) => ({
-                id: `pad-${i}`,
-                headerLabel: `列${dataCols.length + i + 1}`,
-                contentTemplate: '',
-                textAlign: 'left' as const,
-                color: '#000000',
-              })),
-            ];
+      const padded = padDynamicListDataColumns(cfg);
+      const matrixIdx = padded.findIndex(c => c.cellKind === 'colorSizeMatrix');
       const totalCols = (cfg.showSerial ? 1 : 0) + padded.length;
+      const useListChunk = listPageChunk != null && !!ctx.printListRows?.length;
+      const matrixListRows: PrintListRow[] = useListChunk
+        ? listPageChunk!.rows
+        : ctx.printListRows && ctx.printListRows.length > 0
+          ? ctx.printListRows
+          : editorMode
+            ? EDITOR_DYNAMIC_LIST_MATRIX_PREVIEW
+            : [];
+      const matrixSerialStart = useListChunk ? listPageChunk!.serialStart : 1;
+
+      if (matrixIdx >= 0) {
+        if (!matrixListRows.length) {
+          return (
+            <div
+              role="presentation"
+              style={{
+                ...style,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: editorMode ? 'auto' : heightGrowMm > 0 ? 'visible' : 'hidden',
+                boxSizing: 'border-box',
+              }}
+              className={`cursor-move ${editorMode?.selectedId === el.id ? 'ring-2 ring-emerald-500 ring-offset-1' : ''}`}
+              onClick={e => {
+                e.stopPropagation();
+                editorMode?.onSelectElement(el.id);
+              }}
+              onPointerDown={e => editorMode?.onElementPointerDown?.(el, e)}
+            >
+              <span className="px-1 text-center text-[7pt] font-bold text-slate-400">
+                当前无 printListRows；请传入明细行数据以预览颜色尺码数量列表
+              </span>
+            </div>
+          );
+        }
+        return (
+          <div
+            role="presentation"
+            style={{
+              ...style,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: editorMode ? 'auto' : heightGrowMm > 0 ? 'visible' : 'hidden',
+              boxSizing: 'border-box',
+            }}
+            className={`cursor-move ${editorMode?.selectedId === el.id ? 'ring-2 ring-emerald-500 ring-offset-1' : ''}`}
+            onClick={e => {
+              e.stopPropagation();
+              editorMode?.onSelectElement(el.id);
+            }}
+            onPointerDown={e => editorMode?.onElementPointerDown?.(el, e)}
+          >
+            <div className={`flex min-h-0 flex-1 flex-col ${editorMode ? 'overflow-auto' : heightGrowMm > 0 ? 'overflow-visible' : 'overflow-hidden'}`}>
+              <DynamicListMatrixTable
+                cfg={cfg}
+                ctx={ctx}
+                padded={padded}
+                matrixIdx={matrixIdx}
+                listRows={matrixListRows}
+                serialStart={matrixSerialStart}
+              />
+            </div>
+          </div>
+        );
+      }
+
       const colTpl = dynamicListGridTemplateColumns(
         cfg.showSerial,
         cfg.serialColumnWidthMm,
@@ -432,7 +523,8 @@ function BodyElementView({
               display: 'grid',
               gridTemplateColumns: colTpl,
               gridTemplateRows: headerRowH ?? 'minmax(0, auto)',
-              minHeight: headerRowH ? undefined : '3mm',
+              minHeight: headerRowH ?? '3mm',
+              height: headerRowH,
               backgroundColor: cfg.headerBackgroundColor || '#f1f5f9',
             }}
           >
@@ -456,23 +548,33 @@ function BodyElementView({
               return (
                 <div
                   key={`h-${col.id}`}
-                  className="flex min-h-0 items-center justify-center px-0.5 py-0.5"
-                  style={{ ...cellBorder, textAlign: col.textAlign, fontSize: `${hpt}pt`, fontWeight: hw }}
+                  className="flex min-h-0 items-center px-0.5 py-0.5"
+                  style={{
+                    ...cellBorder,
+                    fontSize: `${hpt}pt`,
+                    fontWeight: hw,
+                  }}
                 >
-                  {col.headerLabel}
+                  <span className="min-w-0 w-full" style={{ textAlign: col.textAlign ?? 'left' }}>
+                    {col.headerLabel}
+                  </span>
                 </div>
               );
             })}
           </div>
         ) : null;
 
-      const useListChunk = listPageChunk != null && !!ctx.printListRows?.length;
       const rowBlocks = useListChunk
         ? listPageChunk!.rows.map((row, i) => ({
             serial: listPageChunk!.serialStart + i,
             rowCtx: { ...ctx, listRow: row } as PrintRenderContext,
           }))
-        : [{ serial: 1, rowCtx: ctx }];
+        : editorMode && ctx.printListRows && ctx.printListRows.length > 0
+          ? ctx.printListRows.map((row, i) => ({
+              serial: i + 1,
+              rowCtx: { ...ctx, listRow: row } as PrintRenderContext,
+            }))
+          : [{ serial: 1, rowCtx: ctx }];
 
       const renderBodyRow = (serial: number, rowCtx: PrintRenderContext) => (
         <div
@@ -480,7 +582,7 @@ function BodyElementView({
           style={{
             flex: bodyRowH ? 'none' : useListChunk ? ('1 1 0' as const) : 1,
             height: bodyRowH,
-            minHeight: 0,
+            minHeight: bodyRowH ?? 0,
             display: 'grid',
             gridTemplateColumns: colTpl,
             gridTemplateRows: bodyRowH ? 'minmax(0, 1fr)' : 'minmax(0, 1fr)',
@@ -509,16 +611,16 @@ function BodyElementView({
                 className="flex min-h-0 items-center px-0.5 py-0.5"
                 style={{
                   ...cellBorder,
-                  textAlign: col.textAlign,
                   color: col.color,
                   overflow: 'hidden',
-                  wordBreak: 'break-all',
                   fontSize: `${bpt}pt`,
                   fontWeight: bw,
                 }}
                 title={text}
               >
-                {text || '\u00a0'}
+                <span className="min-w-0 w-full break-words" style={{ textAlign: col.textAlign ?? 'left' }}>
+                  {text || '\u00a0'}
+                </span>
               </div>
             );
           })}
@@ -782,9 +884,12 @@ export function PrintPaper({ template, ctx, children, bodyClassName, editorMode 
   const paperBg = template.paperBackgroundColor?.trim() ? template.paperBackgroundColor : '#ffffff';
 
   const isLabelPerRow = !editorMode && !!ctx.labelPerRow && !!ctx.printListRows?.length;
+  const isLabelPerVirtualBatch = !editorMode && !!ctx.labelPerVirtualBatch && !!ctx.virtualBatchRows?.length;
   const totalPages = isLabelPerRow
     ? ctx.printListRows!.length
-    : getPrintOutputPageCount(template, ctx, !!editorMode);
+    : isLabelPerVirtualBatch
+      ? ctx.virtualBatchRows!.length
+      : getPrintOutputPageCount(template, ctx, !!editorMode);
 
   const baseOuterStyle: React.CSSProperties = {
     width: `${template.paperSize.widthMm}mm`,
@@ -819,13 +924,14 @@ export function PrintPaper({ template, ctx, children, bodyClassName, editorMode 
           ...ctxBase,
           page: { current: pageIndex, total: totalPages },
           ...(isLabelPerRow ? { listRow: ctx.printListRows![pageIndex - 1] } : {}),
+          ...(isLabelPerVirtualBatch ? { virtualBatch: ctx.virtualBatchRows![pageIndex - 1] } : {}),
         };
         const listChunk =
-          !isLabelPerRow && listPag && ctx.printListRows?.length && !editorMode
+          !isLabelPerRow && !isLabelPerVirtualBatch && listPag && ctx.printListRows?.length && !editorMode
             ? getListRowsForPrintPage(listPag, ctx.printListRows, pageIndex)
             : undefined;
         const matrixChunk: MatrixPageChunk | undefined =
-          !isLabelPerRow && matrixPag && ctx.salesBillMatrix?.length && !editorMode
+          !isLabelPerRow && !isLabelPerVirtualBatch && matrixPag && ctx.salesBillMatrix?.length && !editorMode
             ? getMatrixGroupsForPrintPage(matrixPag, ctx.salesBillMatrix, pageIndex)
             : undefined;
         const isLastPage = pageIndex === totalPages;
@@ -839,7 +945,7 @@ export function PrintPaper({ template, ctx, children, bodyClassName, editorMode 
 
         const elementsForPage = editorMode
           ? sorted
-          : isLabelPerRow
+          : isLabelPerRow || isLabelPerVirtualBatch
             ? sorted
             : sorted.filter(el => {
                 if (el.repeatPerPage) return !skipHeaderFooter;
@@ -850,7 +956,7 @@ export function PrintPaper({ template, ctx, children, bodyClassName, editorMode 
               });
 
         const verticalPushMmById =
-          editorMode || isLabelPerRow
+          editorMode || isLabelPerRow || isLabelPerVirtualBatch
             ? new Map<string, number>()
             : computeBodyVerticalPushByElementId(
                 elementsForPage, pageCtx, listChunk, matrixChunk,
@@ -879,7 +985,7 @@ export function PrintPaper({ template, ctx, children, bodyClassName, editorMode 
           <div
             key={pageIndex}
             style={outerStyle}
-            data-label-page={!editorMode && (isLabelPerRow || totalPages > 1) ? pageIndex : undefined}
+            data-label-page={!editorMode && (isLabelPerRow || isLabelPerVirtualBatch || totalPages > 1) ? pageIndex : undefined}
           >
             <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-white">
               {!skipHeaderFooter && template.header && (
@@ -913,7 +1019,7 @@ export function PrintPaper({ template, ctx, children, bodyClassName, editorMode 
                     matrixPageChunk={el.type === 'salesBillMatrix' ? matrixChunk : undefined}
                     topPushMm={globalYShift + (verticalPushMmById.get(el.id) ?? 0)}
                     heightGrowMm={
-                      editorMode || isLabelPerRow
+                      editorMode || isLabelPerRow || isLabelPerVirtualBatch
                         ? 0
                         : elementHeightGrowMm(el, pageCtx, listChunk, matrixChunk)
                     }

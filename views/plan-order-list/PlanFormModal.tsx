@@ -27,6 +27,7 @@ import { SearchableProductSelect } from '../../components/SearchableProductSelec
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
 import { sectionTitleClass } from '../../styles/uiDensity';
 import { localTodayYmd } from '../../utils/localDateTime';
+import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 
 export interface PlanFormModalProps {
   open: boolean;
@@ -65,7 +66,6 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
     categoryId: string;
     productId: string;
     customer: string;
-    dueDate: string;
     createdAt: string;
     variantQuantities: Record<string, number>;
     singleQuantity: number;
@@ -74,7 +74,6 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
     categoryId: '',
     productId: '',
     customer: '',
-    dueDate: '',
     createdAt: today,
     variantQuantities: {},
     singleQuantity: 0,
@@ -148,7 +147,6 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
       productId: form.productId,
       items,
       startDate: localTodayYmd(),
-      dueDate: form.dueDate,
       status: PlanStatus.APPROVED,
       customer: form.customer,
       priority: 'Medium',
@@ -164,7 +162,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
     if (!ok) return;
     onClose();
     const nextToday = localTodayYmd();
-    setForm({ categoryId: '', productId: '', customer: '', dueDate: '', createdAt: nextToday, variantQuantities: {}, singleQuantity: 0, customData: {} });
+    setForm({ categoryId: '', productId: '', customer: '', createdAt: nextToday, variantQuantities: {}, singleQuantity: 0, customData: {} });
   };
 
   if (!open) return null;
@@ -253,31 +251,24 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
                     />
                   </div>
                 )}
-                {planFormSettings.standardFields.find(f => f.id === 'dueDate')?.showInCreate !== false && (
+                {planFormSettings.standardFields.find(f => f.id === 'createdAt')?.showInCreate !== false && (
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">期望交期截止</label>
-                  <input type="date" value={form.dueDate} onChange={e => setForm({...form, dueDate: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-                </div>
-                )}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">添加日期</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">
+                    {planFormSettings.standardFields.find(f => f.id === 'createdAt')?.label ?? '添加日期'}
+                  </label>
                   <input type="date" value={form.createdAt} onChange={e => setForm({...form, createdAt: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
                 </div>
+                )}
                 {planFormSettings.customFields.filter(f => f.showInCreate).map(cf => (
                   <div key={cf.id} className="space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{cf.label}</label>
-                    {cf.type === 'date' ? (
-                      <input type="date" value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-                    ) : cf.type === 'number' ? (
-                      <input type="number" value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value === '' ? '' : Number(e.target.value) } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-                    ) : cf.type === 'select' ? (
-                      <select value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]">
-                        <option value="">请选择</option>
-                        {(cf.options ?? []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                      </select>
-                    ) : (
-                      <input type="text" value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" placeholder={`${cf.label}`} />
-                    )}
+                    <PlanFormCustomFieldInput
+                      cf={cf}
+                      value={form.customData?.[cf.id]}
+                      onChange={next => setForm({ ...form, customData: { ...form.customData, [cf.id]: next } })}
+                      controlClassName="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]"
+                      onFilePreview={onFilePreview}
+                    />
                   </div>
                 ))}
               </div>

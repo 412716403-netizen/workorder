@@ -8,6 +8,5 @@ router.post('/bulk-split', ctrl.bulkSplit);
 router.post('/', ctrl.create);
 router.get('/scan/:token', ctrl.scan);
 router.get('/', ctrl.list);
-router.patch('/:id/void', ctrl.voidBatch);
 
 export default router;

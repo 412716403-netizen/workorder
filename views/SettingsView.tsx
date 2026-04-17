@@ -1,4 +1,5 @@
 import React, { useState, useLayoutEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Tag, 
   Shapes,
@@ -50,6 +51,15 @@ interface SettingsViewProps {
 }
 
 type SettingsTab = 'categories' | 'partner_categories' | 'nodes' | 'warehouses' | 'finance_categories' | 'production';
+
+const SETTINGS_TAB_QUERY_ALLOWLIST: SettingsTab[] = [
+  'categories',
+  'partner_categories',
+  'nodes',
+  'warehouses',
+  'finance_categories',
+  'production',
+];
 
 const TAB_PERM_MAP: Record<string, string> = {
   categories: 'settings:categories',
@@ -109,6 +119,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     return base ? hasPerm(`${base}:delete`) : true;
   };
 
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<SettingsTab>('categories');
   const [showAccountTypesModal, setShowAccountTypesModal] = useState(false);
 
@@ -125,6 +136,15 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   const effectiveTab = activeTabMeta?.id as SettingsTab | undefined;
 
   const setScrollSegment = useSetMainScrollSegment();
+  useLayoutEffect(() => {
+    const raw = searchParams.get('tab');
+    if (!raw) return;
+    const next = raw as SettingsTab;
+    if (!SETTINGS_TAB_QUERY_ALLOWLIST.includes(next)) return;
+    if (!canView(next)) return;
+    setActiveTab(next);
+  }, [searchParams, isOwner, userPermissions]);
+
   useLayoutEffect(() => {
     const seg = effectiveTab ?? activeTab;
     setScrollSegment?.(String(seg));

@@ -1,7 +1,19 @@
 import React, { useState, useMemo } from 'react';
 import { FileText, X, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
-import { ProductionOpRecord, ProductionOrder, Product, GlobalNodeTemplate, AppDictionaries, ProductCategory, ProductVariant, Worker, ProcessSequenceMode, Partner } from '../../types';
+import {
+  ProductionOpRecord,
+  ProductionOrder,
+  Product,
+  GlobalNodeTemplate,
+  AppDictionaries,
+  ProductCategory,
+  ProductVariant,
+  Worker,
+  ProcessSequenceMode,
+  Partner,
+  PlanFormFieldConfig,
+} from '../../types';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import WorkerSelector from '../../components/WorkerSelector';
@@ -9,6 +21,14 @@ import EquipmentSelector from '../../components/EquipmentSelector';
 import { nextOutsourceDocNumber } from '../../utils/partnerDocNumber';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
+import { REWORK_REPORT_CUSTOM_DATA_KEY } from '../../utils/productionOpCollab/rework';
+
+function reworkReportCollabFromValues(values: Record<string, unknown>): { collabData?: Record<string, unknown> } {
+  const clean = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== '' && v != null && v !== undefined));
+  if (!Object.keys(clean).length) return {};
+  return { collabData: { [REWORK_REPORT_CUSTOM_DATA_KEY]: clean } };
+}
 
 export interface ReworkReportSubmitModalProps {
   reworkReportModal: { order: ProductionOrder; nodeId: string; nodeName: string; outsourcePartner?: string };
@@ -22,6 +42,7 @@ export interface ReworkReportSubmitModalProps {
   equipment: { id: string; name: string; code?: string; assignedMilestoneIds?: string[] }[];
   processSequenceMode: ProcessSequenceMode;
   partners: Partner[];
+  reworkReportCustomFields?: PlanFormFieldConfig[];
   onAddRecord: (record: ProductionOpRecord) => void;
   onUpdateRecord: (record: ProductionOpRecord) => void;
   getNextReworkReportDocNo: () => string;
@@ -40,6 +61,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
   equipment,
   processSequenceMode,
   partners,
+  reworkReportCustomFields = [],
   onAddRecord,
   onUpdateRecord,
   getNextReworkReportDocNo,
@@ -51,6 +73,38 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
   const [reworkReportWorkerId, setReworkReportWorkerId] = useState('');
   const [reworkReportEquipmentId, setReworkReportEquipmentId] = useState('');
   const [reworkReportUnitPrice, setReworkReportUnitPrice] = useState<number>(0);
+  const [reworkReportCustomData, setReworkReportCustomData] = useState<Record<string, unknown>>({});
+
+  const reworkReportCreateFields = useMemo(
+    () => reworkReportCustomFields.filter(f => f.showInCreate),
+    [reworkReportCustomFields],
+  );
+  const reworkReportCustomBlock =
+    reworkReportCreateFields.length > 0 ? (
+      <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+        <div className="space-y-1">
+          <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">返工报工自定义</h4>
+          <p className="text-[11px] font-bold text-slate-500">自定义单据内容（选填，本批次报工共用）</p>
+        </div>
+        {reworkReportCreateFields.map(cf => (
+          <div key={cf.id} className="space-y-1">
+            <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
+            <PlanFormCustomFieldInput
+              cf={cf}
+              value={reworkReportCustomData[cf.id]}
+              onChange={v =>
+                setReworkReportCustomData(prev => ({
+                  ...prev,
+                  [cf.id]: v,
+                }))
+              }
+              dictionaries={dictionaries}
+              controlClassName="h-[44px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+        ))}
+      </div>
+    ) : null;
 
   const { order, nodeId: currentNodeId, outsourcePartner } = reworkReportModal;
   const isOutsourceRework = !!outsourcePartner;
@@ -164,6 +218,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
     let reportSeq = 0;
     let appliedReportQty = 0;
     const resolveOpName = (fallback?: string) => workers?.find((w: Worker) => w.id === reworkReportWorkerId)?.name ?? fallback ?? docOperatorFallback;
+    const collabExtra = reworkReportCollabFromValues(reworkReportCustomData);
     const pushReworkReport = (qty: number, variantId: string | undefined, src: ProductionOpRecord) => {
       if (qty <= 0) return;
       if (!batchDocNo) batchDocNo = getNextReworkReportDocNo();
@@ -189,6 +244,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
         unitPrice: reworkReportUnitPrice > 0 ? reworkReportUnitPrice : undefined,
         amount: reworkReportUnitPrice > 0 ? qty * reworkReportUnitPrice : undefined,
         ...(isOutsourceRework && outsourcePartner ? { partner: outsourcePartner } : {}),
+        ...collabExtra,
       });
     };
     try {
@@ -403,6 +459,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
               />
             </div>
           )}
+          {reworkReportCustomBlock}
           <div className="flex flex-wrap items-end gap-6 pt-2 border-t border-slate-100">
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">单价（元/件）</label>

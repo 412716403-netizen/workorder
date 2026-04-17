@@ -10,6 +10,11 @@ import type {
   SalesBillPrintDoc,
   Warehouse,
 } from '../types';
+import {
+  COLOR_SIZE_MATRIX_JSON_KEY,
+  matrixGroupToColorSizePayload,
+  serializeColorSizeMatrixPayload,
+} from './colorSizeMatrixPrint';
 import { localCalendarYmdStartToIso } from './localDateTime';
 import { sortedVariantColorEntries } from './sortVariantsByProduct';
 import { computePartnerReceivableBeforeDoc } from './partnerReceivableLedger';
@@ -183,6 +188,25 @@ export function buildSalesBillMatrixGroups(
   return groups;
 }
 
+/** 销售单动态列表：每行明细（货号块）一条 PrintListRow，含 colorSizeMatrixJson */
+export function buildSalesBillPrintListRowsByProductLine(
+  items: SalesBillLineInput[],
+  productMap: Map<string, Product>,
+  dictionaries: AppDictionaries,
+): PrintListRow[] {
+  const groups = buildSalesBillMatrixGroups(items, productMap, dictionaries);
+  return groups.map(g => ({
+    lineNo: g.lineNo,
+    sku: g.sku,
+    productName: g.productName,
+    qty: g.totalQty,
+    unitPrice: fmtMoney(g.unitPrice),
+    amount: fmtMoney(g.totalAmount),
+    remark: g.remark ?? '',
+    [COLOR_SIZE_MATRIX_JSON_KEY]: serializeColorSizeMatrixPayload(matrixGroupToColorSizePayload(g)),
+  }));
+}
+
 export function buildSalesBillPrintRenderContext(opts: {
   form: {
     partner: string;
@@ -191,6 +215,7 @@ export function buildSalesBillPrintRenderContext(opts: {
     warehouseId: string;
     createdAt: string;
     note: string;
+    customData?: Record<string, unknown>;
   };
   lines: SalesBillLineInput[];
   productMap: Map<string, Product>;
@@ -235,6 +260,11 @@ export function buildSalesBillPrintRenderContext(opts: {
 
   const wh = warehouseMap.get(form.warehouseId);
 
+  const custom =
+    form.customData && typeof form.customData === 'object' && Object.keys(form.customData).length > 0
+      ? { ...form.customData }
+      : undefined;
+
   const salesBill: SalesBillPrintDoc = {
     title: '销售单',
     docNumber,
@@ -248,12 +278,84 @@ export function buildSalesBillPrintRenderContext(opts: {
     previousBalance: Math.round(bal.previousBalance * 100) / 100,
     currentDebt: Math.round(bal.currentDebt * 100) / 100,
     accumulatedDebt: Math.round(bal.accumulatedDebt * 100) / 100,
+    custom,
   };
+
+  const firstProductId = lines.find(l => l.productId)?.productId;
+  const product = firstProductId ? productMap.get(firstProductId) : undefined;
 
   return {
     salesBill,
     salesBillMatrix,
-    printListRows: [],
+    printListRows: buildSalesBillPrintListRowsByProductLine(lines, productMap, dictionaries),
+    product,
     page: { current: 1, total: 1 },
   };
+}
+
+/** 从同一销售单下的 PSI 行记录聚合为打印行输入 */
+export function buildSalesBillLinesFromPsiRecords(docItems: any[]): SalesBillLineInput[] {
+  const lineMap: Record<string, any[]> = {};
+  docItems.forEach((r: any) => {
+    const lg = r.lineGroupId ?? r.id;
+    if (!lineMap[lg]) lineMap[lg] = [];
+    lineMap[lg].push(r);
+  });
+  return Object.entries(lineMap).map(([lgId, recs]) => {
+    const first = recs[0];
+    const hasVar = recs.some((r: any) => r.variantId);
+    const vq: Record<string, number> = {};
+    if (hasVar) {
+      recs.forEach((r: any) => {
+        if (r.variantId) vq[r.variantId] = (vq[r.variantId] ?? 0) + (Number(r.quantity) || 0);
+      });
+    }
+    const lineQtyNoVar = recs.reduce((s, r: any) => s + (Number(r.quantity) || 0), 0);
+    return {
+      id: lgId,
+      productId: first.productId,
+      quantity: hasVar ? undefined : lineQtyNoVar,
+      salesPrice: Number(first.salesPrice) || 0,
+      variantQuantities: hasVar ? vq : undefined,
+    };
+  });
+}
+
+export function buildSalesBillPrintContextFromPsiDoc(params: {
+  docNumber: string;
+  docItems: any[];
+  productMap: Map<string, Product>;
+  warehouseMap: Map<string, Warehouse>;
+  dictionaries: AppDictionaries;
+  psiRecords: any[];
+  financeRecords: FinanceRecord[];
+  prodRecords: any[];
+}): PrintRenderContext {
+  const { docNumber, docItems, productMap, warehouseMap, dictionaries, psiRecords, financeRecords, prodRecords } = params;
+  const main = docItems[0] ?? {};
+  const lines = buildSalesBillLinesFromPsiRecords(docItems);
+  const createdAtRaw = (main.createdAt as string | undefined) ?? '';
+  const createdAtYmd =
+    typeof createdAtRaw === 'string' && createdAtRaw.includes('T')
+      ? createdAtRaw.slice(0, 10)
+      : String(createdAtRaw).trim().slice(0, 10);
+  return buildSalesBillPrintRenderContext({
+    form: {
+      partner: String(main.partner ?? ''),
+      partnerId: main.partnerId,
+      docNumber,
+      warehouseId: String(main.warehouseId ?? ''),
+      createdAt: createdAtYmd,
+      note: String(main.note ?? '').trim(),
+      customData: main.customData,
+    },
+    lines,
+    productMap,
+    warehouseMap,
+    dictionaries,
+    psiRecords,
+    financeRecords,
+    prodRecords,
+    editingDocNumber: docNumber,
+  });
 }

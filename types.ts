@@ -55,8 +55,8 @@ export interface PlanVirtualBatch {
 
 export type FieldType = 'text' | 'number' | 'select' | 'boolean' | 'date' | 'file';
 
-/** 工序节点库「报工表单模板」中应使用的字段类型（仅存 text / select / file；历史数据可能含 number/boolean/date） */
-export type ProcessReportFieldType = 'text' | 'select' | 'file';
+/** 工序节点库「报工自定义单据内容」推荐类型；历史数据可能含 number / boolean */
+export type ProcessReportFieldType = 'text' | 'select' | 'file' | 'date';
 
 export interface ReportFieldDefinition {
   id: string;
@@ -64,6 +64,10 @@ export interface ReportFieldDefinition {
   type: FieldType;
   required?: boolean;
   options?: string[];
+  /** type=date：登记/报工使用日期时间控件，可手输具体时间 */
+  dateWithTime?: boolean;
+  /** type=date：打开表单时用系统当前日期或日期时间自动填入（与 dateWithTime 组合） */
+  dateAutoFill?: boolean;
   placeholder?: string;
   /** 产品分类扩展字段：是否在工单列表、外协列表等场景展示（非文件字段）；合作单位分类下表示是否在表单中显示。默认 true */
   showInForm?: boolean;
@@ -276,7 +280,6 @@ export interface PlanOrder {
   productId: string;
   items: PlanItem[];
   startDate: string;
-  dueDate: string;
   status: PlanStatus;
   customer: string;
   priority: 'High' | 'Medium' | 'Low';
@@ -291,14 +294,21 @@ export interface PlanOrder {
   nodePricingModes?: Record<string, ProcessPricingMode>;
 }
 
+/** 计划单 / 采购单 / 入库等「自定义单据内容」字段类型（不含数字；历史数据中的 number 加载时会规范为 text） */
+export type PlanFormCustomFieldType = 'text' | 'date' | 'select' | 'file';
+
 /** 计划单表单字段显示配置（标准字段或自定义字段） */
 export interface PlanFormFieldConfig {
   id: string;
   label: string;
   /** 仅自定义字段需要，标准字段忽略 */
-  type?: 'text' | 'number' | 'date' | 'select';
+  type?: PlanFormCustomFieldType;
   /** 当 type 为 select 时，下拉选项的文案列表（可自定义） */
   options?: string[];
+  /** type=date：新建/登记时使用日期时间，可填写具体时间 */
+  dateWithTime?: boolean;
+  /** type=date：打开时自动填入系统当前日期；与 dateWithTime 同时勾选则填入当前日期+时间 */
+  dateAutoFill?: boolean;
   showInList: boolean;
   showInCreate: boolean;
   showInDetail: boolean;
@@ -330,14 +340,83 @@ export interface PlanFormSettings {
   labelPrint?: PlanLabelPrintSettings;
 }
 
-/** 采购订单表单配置：结构同计划单，用于列表/新增/详情页字段显示控制 */
-export type PurchaseOrderFormSettings = PlanFormSettings;
+/**
+ * 采购订单表单配置：标准/自定义字段用于列表与表单展示；列表「打印」模版白名单（详情页无打印入口；无计划单「标签打印」）。
+ *
+ * 注：历史曾有 `lineCustomFields`（行级自定义字段）设计，后端迁移同日加列又删列，
+ * 产品决策已下线该能力。前端对应的 UI、state、读写路径均于 2026-04 清理。
+ */
+export interface PurchaseOrderFormSettings {
+  standardFields: PlanFormFieldConfig[];
+  customFields: PlanFormFieldConfig[];
+  /** 进销存采购订单列表「打印」入口与白名单 */
+  listPrint?: PlanListPrintSettings;
+}
 
-/** 采购单表单配置：结构同计划单 */
-export type PurchaseBillFormSettings = PlanFormSettings;
+/**
+ * 销售订单表单配置：与采购订单对齐；列表与登记/详情打印共用 `listPrint` 白名单。
+ * （同采购订单，`lineCustomFields` 已下线。）
+ */
+export interface SalesOrderFormSettings {
+  standardFields: PlanFormFieldConfig[];
+  customFields: PlanFormFieldConfig[];
+  /** 进销存销售订单列表「打印」及登记/详情页「打印」入口与白名单 */
+  listPrint?: PlanListPrintSettings;
+}
 
-/** 工单表单配置：结构同计划单，用于工单列表/新增/详情页字段显示控制 */
-export type OrderFormSettings = PlanFormSettings;
+/**
+ * 采购单（入库）表单配置：与采购订单类似；列表与登记/详情打印共用 `listPrint` 白名单。
+ */
+export interface PurchaseBillFormSettings {
+  standardFields: PlanFormFieldConfig[];
+  customFields: PlanFormFieldConfig[];
+  /** 进销存采购单列表「打印」及登记/详情页「打印」入口与白名单 */
+  listPrint?: PlanListPrintSettings;
+}
+
+/**
+ * 销售单（出库）表单配置：与采购单同形；表单配置弹窗仅维护自定义项与 `listPrint`，`standardFields` 持久化为空。
+ * 列表与登记/详情打印共用 `listPrint` 白名单。
+ */
+export interface SalesBillFormSettings {
+  standardFields: PlanFormFieldConfig[];
+  customFields: PlanFormFieldConfig[];
+  listPrint?: PlanListPrintSettings;
+}
+
+/**
+ * 收款单列表「打印」入口与白名单；分类与自定义字段在「设置 → 收付款类型设置」维护。
+ */
+export interface ReceiptFormSettings {
+  listPrint?: PlanListPrintSettings;
+}
+
+/**
+ * 付款单列表「打印」入口与白名单；分类与自定义字段在「设置 → 收付款类型设置」维护。
+ */
+export interface PaymentFormSettings {
+  listPrint?: PlanListPrintSettings;
+}
+
+/** 工单中心三处详情打印：入口与白名单（与 PlanListPrintSettings 语义一致） */
+export interface OrderCenterPrintSettings {
+  /** 工单详情弹窗 */
+  orderDetail?: PlanListPrintSettings;
+  /** 报工流水 → 报工批次详情 */
+  reportBatchDetail?: PlanListPrintSettings;
+  /** 待入库清单 → 入库流水 → 入库详情 */
+  stockInFlowDetail?: PlanListPrintSettings;
+}
+
+/** 工单表单配置：在计划单表单结构基础上增加工单中心打印 */
+export interface OrderFormSettings extends PlanFormSettings {
+  orderCenterPrint?: OrderCenterPrintSettings;
+  /**
+   * 生产入库（待入库、入库登记、入库流水详情）自定义单据字段，语义与计划单 `customFields` 一致（列表/登记/详情显示开关）。
+   * 历史配置曾写在 `customFields`，加载时会迁移到本字段。
+   */
+  stockInCustomFields?: PlanFormFieldConfig[];
+}
 
 /** 生产物料面板配置 */
 export interface MaterialPanelSettings {
@@ -346,6 +425,78 @@ export interface MaterialPanelSettings {
 }
 export const DEFAULT_MATERIAL_PANEL_SETTINGS: MaterialPanelSettings = {
   groupByOutsourcePartner: false,
+};
+
+/** 生产物料：领料/退料流水详情弹窗的打印入口与白名单 */
+export interface MaterialCenterPrintSettings {
+  /** 领料发出单详情（STOCK_OUT，本厂无加工厂） */
+  stockOutFlowDetail?: PlanListPrintSettings;
+  /** 生产退料单详情（STOCK_RETURN，本厂无加工厂） */
+  stockReturnFlowDetail?: PlanListPrintSettings;
+  /** 外协领料发出单详情（STOCK_OUT 且带 partner） */
+  outsourceStockOutFlowDetail?: PlanListPrintSettings;
+  /** 外协生产退料单详情（STOCK_RETURN 且带 partner） */
+  outsourceStockReturnFlowDetail?: PlanListPrintSettings;
+}
+
+/** 生产物料表单：本厂/外协各两套自定义单据字段 + 详情打印配置（与工单中心入库自定义/打印语义对齐） */
+export interface MaterialFormSettings {
+  materialIssueCustomFields?: PlanFormFieldConfig[];
+  materialReturnCustomFields?: PlanFormFieldConfig[];
+  /** 外协加工厂领料发出（STOCK_OUT + partner）自定义，快照键 `outsourceMaterialIssueCustomData` */
+  outsourceMaterialIssueCustomFields?: PlanFormFieldConfig[];
+  /** 外协加工厂生产退料（STOCK_RETURN + partner）自定义，快照键 `outsourceMaterialReturnCustomData` */
+  outsourceMaterialReturnCustomFields?: PlanFormFieldConfig[];
+  materialCenterPrint?: MaterialCenterPrintSettings;
+}
+
+export const DEFAULT_MATERIAL_FORM_SETTINGS: MaterialFormSettings = {
+  materialIssueCustomFields: [],
+  materialReturnCustomFields: [],
+  outsourceMaterialIssueCustomFields: [],
+  outsourceMaterialReturnCustomFields: [],
+};
+
+/** 外协流水详情弹窗：发出单 / 收回单打印入口与白名单 */
+export interface OutsourceCenterPrintSettings {
+  /** 外协发出（加工中）流水详情 */
+  dispatchFlowDetail?: PlanListPrintSettings;
+  /** 外协收回流水详情 */
+  receiveFlowDetail?: PlanListPrintSettings;
+}
+
+/** 外协管理：两套自定义单据字段 + 详情打印（与生产物料表单语义对齐） */
+export interface OutsourceFormSettings {
+  outsourceDispatchCustomFields?: PlanFormFieldConfig[];
+  outsourceReceiveCustomFields?: PlanFormFieldConfig[];
+  outsourceCenterPrint?: OutsourceCenterPrintSettings;
+}
+
+export const DEFAULT_OUTSOURCE_FORM_SETTINGS: OutsourceFormSettings = {
+  outsourceDispatchCustomFields: [],
+  outsourceReceiveCustomFields: [],
+};
+
+/** 返工管理：处理不良流水详情 / 返工报工流水详情打印入口与白名单 */
+export interface ReworkCenterPrintSettings {
+  /** 处理不良品流水 → 详情弹窗 */
+  defectTreatmentFlowDetail?: PlanListPrintSettings;
+  /** 返工报工流水 → 详情弹窗 */
+  reworkReportFlowDetail?: PlanListPrintSettings;
+}
+
+/** 返工管理：两套自定义单据字段 + 流水详情打印（与工单中心入库自定义语义对齐） */
+export interface ReworkFormSettings {
+  /** 处理不良（REWORK/SCRAP 同 docNo）自定义；快照键 `collabData.defectTreatmentCustomData` */
+  defectTreatmentCustomFields?: PlanFormFieldConfig[];
+  /** 返工报工（REWORK_REPORT 同 docNo）自定义；快照键 `collabData.reworkReportCustomData` */
+  reworkReportCustomFields?: PlanFormFieldConfig[];
+  reworkCenterPrint?: ReworkCenterPrintSettings;
+}
+
+export const DEFAULT_REWORK_FORM_SETTINGS: ReworkFormSettings = {
+  defectTreatmentCustomFields: [],
+  reworkReportCustomFields: [],
 };
 
 // ── 打印模板（标签 / 单据可视化设计） ──
@@ -425,16 +576,35 @@ export interface PrintTableElementConfig {
   cellFontWeight?: Record<string, 'normal' | 'bold'>;
 }
 
-/** 动态列表绑定的业务数据源（决定推荐字段；占位符仍可按需写任意 {{}}） */
-export type PrintDynamicListDataSource = 'plan' | 'order' | 'product' | 'salesBill';
+/** 动态列表列字段排序用语义（由模版 `documentType` 推导；不限制时视为 order） */
+export type PrintDynamicListDataSource =
+  | 'plan'
+  | 'order'
+  | 'product'
+  | 'salesBill'
+  | 'productionMaterial'
+  | 'outsource'
+  | 'rework'
+  | 'purchaseOrder'
+  | 'purchaseBill'
+  | 'salesOrder';
+
+/** 动态列表列类型；`colorSizeMatrix` 为颜色×尺码数量矩阵（整表切换为 HTML 表格布局） */
+export type PrintDynamicListColumnKind = 'text' | 'colorSizeMatrix';
 
 export interface PrintDynamicListColumn {
   id: string;
   headerLabel: string;
-  /** 单元格占位，如 {{工单.orderNumber}} */
+  /** 单元格占位，如 {{工单.orderNumber}}；矩阵列通常留空，由 colorSizeMatrixJson 驱动 */
   contentTemplate: string;
   textAlign: 'left' | 'center' | 'right';
   color: string;
+  /** 缺省为 `text` */
+  cellKind?: PrintDynamicListColumnKind;
+  /** 矩阵列：表头「颜色」文案 */
+  matrixColorHeader?: string;
+  /** 矩阵列：表头「尺码数量」跨多尺码列时的组标题 */
+  matrixSizeGroupTitle?: string;
   /** 数据行字号 pt；未设置则用组件级 fontSizePt */
   fontSizePt?: number;
   /** 数据行字重；未设置则为常规 */
@@ -462,7 +632,6 @@ export interface PrintSalesBillMatrixElementConfig {
 }
 
 export interface PrintDynamicListElementConfig {
-  dataSource: PrintDynamicListDataSource;
   /** 数据列数（不含序号列）；与 columns 长度保持一致 */
   dataColumnCount: number;
   showHeader: boolean;
@@ -553,6 +722,56 @@ export interface SalesBillMatrixGroup {
   remark: string;
 }
 
+/** 采购订单打印：占位符 {{采购订单.xxx}} */
+export interface PurchaseOrderPrintContext {
+  docNumber: string;
+  partner: string;
+  operator?: string;
+  docTotalQty: number;
+  docTotalAmount: number;
+  custom?: Record<string, unknown>;
+}
+
+/** 销售订单打印：占位符 {{销售订单.xxx}}（表头字段与采购订单对应项语义一致，标签在字段选项中区分客户等） */
+export type SalesOrderPrintContext = PurchaseOrderPrintContext;
+
+/** 采购单（入库）打印：占位符 {{采购单.xxx}} */
+export interface PurchaseBillPrintContext {
+  docNumber: string;
+  partner: string;
+  operator?: string;
+  /** 入库仓库名称 */
+  warehouseName: string;
+  docTotalQty: number;
+  docTotalAmount: number;
+  custom?: Record<string, unknown>;
+}
+
+/**
+ * 收款单/付款单打印表头：占位符 {{收款单.xxx}}、{{付款单.xxx}}；
+ * `custom` 与 `FinanceRecord.customData` 一致（key 为分类自定义字段 id）。
+ */
+export interface FinanceDocPrintContext {
+  docNo: string;
+  type: '收款单' | '付款单';
+  amount: number;
+  /** 金额中文大写（人民币） */
+  amountText: string;
+  partner: string;
+  operator: string;
+  timestamp: string;
+  /** 收付款类型名称 */
+  category: string;
+  paymentAccount: string;
+  workerName: string;
+  productName: string;
+  productSku: string;
+  /** 关联工单号（relatedId 存工单号时） */
+  relatedDocNo: string;
+  note: string;
+  custom?: Record<string, unknown>;
+}
+
 /** 销售单（SALES_BILL）表头/页脚占位符 {{销售单.xxx}} */
 export interface SalesBillPrintDoc {
   /** 展示用标题，如「某某销售单」 */
@@ -572,6 +791,8 @@ export interface SalesBillPrintDoc {
   currentDebt: number;
   /** 开单后应收余额 */
   accumulatedDebt: number;
+  /** 表单配置自定义项；占位符 {{销售单.custom.<id>}} */
+  custom?: Record<string, unknown>;
 }
 
 /** 打印上下文：预览/打印时解析占位符 */
@@ -587,6 +808,12 @@ export interface PrintRenderContext {
   /** 标签打印模式：每行数据独占一整页，所有元素均可使用 {{行.xxx}} 占位符 */
   labelPerRow?: boolean;
   /**
+   * 批次码标签批量打印：与 labelPerRow 类似，每页使用 virtualBatchRows 中一行作为 {{批次.xxx}}
+   */
+  labelPerVirtualBatch?: boolean;
+  /** 与 labelPerVirtualBatch 配套，每项对应一页标签 */
+  virtualBatchRows?: VirtualBatchPrintRow[];
+  /**
    * 渲染某一明细行单元格时由引擎注入，业务勿手动赋值
    * @internal
    */
@@ -597,7 +824,96 @@ export interface PrintRenderContext {
   salesBill?: SalesBillPrintDoc;
   /** 销售单矩阵明细（与组件 salesBillMatrix 配套） */
   salesBillMatrix?: SalesBillMatrixGroup[];
+  /** 报工批次详情打印：占位符 {{报工.xxx}} */
+  reportBatchPrint?: Record<string, string | number | undefined>;
+  /** 采购订单打印：占位符 {{采购订单.xxx}} */
+  purchaseOrderPrint?: PurchaseOrderPrintContext;
+  /** 销售订单打印：占位符 {{销售订单.xxx}} */
+  salesOrderPrint?: SalesOrderPrintContext;
+  /** 采购单（入库）打印：占位符 {{采购单.xxx}} */
+  purchaseBillPrint?: PurchaseBillPrintContext;
+  /**
+   * 入库单详情打印：占位符 {{入库.docNo}} 等；自定义项为 {{入库.custom.<字段id>}}，见工单表单配置「入库自定义单据内容」。
+   * `custom` 为入库流水快照，与 `collabData.stockInCustomData` 一致。
+   */
+  stockInPrint?: StockInPrintContext;
+  /**
+   * 领料发出详情打印：占位符 {{领料发出.xxx}}；自定义 {{领料发出.custom.<字段id>}}，快照同 `collabData.materialIssueCustomData`。
+   */
+  materialIssuePrint?: MaterialFlowPrintContext;
+  /**
+   * 生产退料详情打印：占位符 {{生产退料.xxx}}；自定义 {{生产退料.custom.<字段id>}}，快照同 `collabData.materialReturnCustomData`。
+   */
+  materialReturnPrint?: MaterialFlowPrintContext;
+  /**
+   * 外协发出详情打印：占位符 {{外协发出.xxx}}；自定义 {{外协发出.custom.<字段id>}}，快照同 `collabData.outsourceDispatchCustomData`。
+   */
+  outsourceDispatchPrint?: MaterialFlowPrintContext;
+  /**
+   * 外协收回详情打印：占位符 {{外协收回.xxx}}；自定义 {{外协收回.custom.<字段id>}}，快照同 `collabData.outsourceReceiveCustomData`。
+   */
+  outsourceReceivePrint?: MaterialFlowPrintContext;
+  /**
+   * 生产物料外协领料发出详情打印：占位符 {{外协领料发出.xxx}}；自定义 {{外协领料发出.custom.<字段id>}}，快照同 `collabData.outsourceMaterialIssueCustomData`（与「外协管理」外协发出不同）。
+   */
+  outsourceMaterialIssuePrint?: MaterialFlowPrintContext;
+  /**
+   * 生产物料外协生产退料详情打印：占位符 {{外协生产退料.xxx}}；自定义 {{外协生产退料.custom.<字段id>}}，快照同 `collabData.outsourceMaterialReturnCustomData`。
+   */
+  outsourceMaterialReturnPrint?: MaterialFlowPrintContext;
+  /**
+   * 处理不良流水详情打印：占位符 {{处理不良.xxx}}；自定义 {{处理不良.custom.<字段id>}}，快照同 `collabData.defectTreatmentCustomData`。
+   */
+  defectTreatmentPrint?: ReworkFlowPrintContext;
+  /**
+   * 返工报工流水详情打印：占位符 {{返工报工.xxx}}；自定义 {{返工报工.custom.<字段id>}}，快照同 `collabData.reworkReportCustomData`。
+   */
+  reworkReportPrint?: ReworkFlowPrintContext;
+  /** 收款单打印：占位符 {{收款单.xxx}} */
+  receiptPrint?: FinanceDocPrintContext;
+  /** 付款单打印：占位符 {{付款单.xxx}} */
+  paymentPrint?: FinanceDocPrintContext;
 }
+
+/** 入库打印表头字段 + 可选自定义项快照 */
+export interface StockInPrintContext {
+  docNo?: string;
+  warehouseName?: string;
+  operator?: string;
+  timestamp?: string;
+  productName?: string;
+  orderNumber?: string;
+  totalQty?: string | number;
+  custom?: Record<string, unknown>;
+  /** 生产物料领退单等扩展展示（入库单可不填） */
+  partner?: string;
+  reason?: string;
+  /** 外协收回等：加工费合计（元） */
+  totalAmount?: string | number;
+}
+
+/**
+ * 返工管理流水打印表头：在入库/领料打印字段基础上扩展返工业务展示键；
+ * 占位符 {{处理不良.xxx}}、{{返工报工.xxx}}，`custom` 与对应 collabData 快照一致。
+ */
+export interface ReworkFlowPrintContext extends StockInPrintContext {
+  /** 返工 / 报损 等 */
+  typeLabel?: string;
+  sourceNodeName?: string;
+  /** 返工目标工序（多选拼接） */
+  targetNodesLabel?: string;
+  /** 返工报工涉及工序名称 */
+  nodeNames?: string;
+  /** 批次内操作人汇总文案 */
+  operators?: string;
+  workerName?: string;
+  equipmentName?: string;
+  unitPrice?: string;
+  batchTotalAmount?: string;
+}
+
+/** 领料/退料流水单打印表头（字段键与入库打印一致，便于复用解析逻辑） */
+export type MaterialFlowPrintContext = StockInPrintContext;
 
 /** 纸张可打印区内边距（mm），未设置时按 0 处理以兼容旧模板 */
 export interface PrintPaperMarginsMm {
@@ -607,9 +923,26 @@ export interface PrintPaperMarginsMm {
   right: number;
 }
 
+/** 打印模板适用单据：用于编辑器内字段分类过滤；缺省或 all 表示不限制 */
+export type PrintTemplateDocumentType =
+  | 'all'
+  | 'plan'
+  | 'order'
+  | 'salesBill'
+  | 'productionMaterial'
+  | 'outsource'
+  | 'rework'
+  | 'purchaseOrder'
+  | 'purchaseBill'
+  | 'salesOrder'
+  | 'receipt'
+  | 'payment';
+
 export interface PrintTemplate {
   id: string;
   name: string;
+  /** 数据源单据类型；仅影响模版编辑时可选字段分组，不改变运行时解析 */
+  documentType?: PrintTemplateDocumentType;
   paperSize: { widthMm: number; heightMm: number };
   /** 纸张内边距（mm），作用于整张纸内的内容区 */
   paperMarginsMm?: PrintPaperMarginsMm;
@@ -742,8 +1075,12 @@ export interface ProductionOpRecord {
   unitPrice?: number;
   /** 外协收回：金额（加工费，元），一般为 quantity * unitPrice */
   amount?: number;
-  /** 协作同步元数据：标识记录来源（syncDispatch / collaborationReturn / chainForward 等） */
-  collabData?: { source?: string; transferId?: string; dispatchId?: string; returnId?: string; [key: string]: any };
+  /**
+   * 协作同步元数据、入库/领退/外协等单据级自定义字段快照等（与 `ProductionOpRecord` 服务端 JSON 一致）。
+   * 外协：`outsourceDispatchCustomData` / `outsourceReceiveCustomData`。
+   * 返工管理：`defectTreatmentCustomData`（处理不良批次）、`reworkReportCustomData`（返工报工批次）。
+   */
+  collabData?: Record<string, unknown>;
 }
 
 export type FinanceOpType = 'RECEIPT' | 'PAYMENT' | 'RECONCILIATION' | 'SETTLEMENT';

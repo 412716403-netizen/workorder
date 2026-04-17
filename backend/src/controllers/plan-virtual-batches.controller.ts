@@ -56,12 +56,6 @@ export const list = asyncHandler(async (req, res) => {
   res.json(result);
 });
 
-export const voidBatch = asyncHandler(async (req, res) => {
-  const db = getTenantPrisma(req.tenantId!);
-  const result = await batchService.voidBatch(db, str(req.params.id));
-  res.json(result);
-});
-
 export const scan = asyncHandler(async (req, res) => {
   const result = await batchService.scanBatch(req.tenantId!, str(req.params.token));
   res.json(result);

@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { X, Trash2, Check, Pencil, UserPlus } from 'lucide-react';
 import {
   ProductionOrder,
@@ -11,6 +11,9 @@ import {
   ProductMilestoneProgress,
   ProductionOpRecord,
   ProcessSequenceMode,
+  OrderFormSettings,
+  PrintTemplate,
+  PrintRenderContext,
 } from '../../types';
 import WorkerSelector from '../../components/WorkerSelector';
 import { buildDefectiveReworkByOrderMilestone } from '../../utils/defectiveReworkByOrderMilestone';
@@ -19,6 +22,7 @@ import { toast } from 'sonner';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { getEffectiveReportTemplate, getReportCustomDataDisplayEntries, mergeCustomDataForTemplate } from '../../utils/effectiveReportTemplate';
 import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
+import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
 
 function fmtDT(ts: string | Date | undefined | null): string {
   if (!ts) return '—';
@@ -68,6 +72,9 @@ interface ReportBatchDetailModalProps {
   productMilestoneProgresses: ProductMilestoneProgress[];
   processSequenceMode: ProcessSequenceMode;
   productionLinkMode: 'order' | 'product';
+  orderFormSettings?: OrderFormSettings;
+  printTemplates?: PrintTemplate[];
+  onOpenOrderFormPrintTab?: () => void;
   onUpdateReport?: (params: ReportUpdateParams) => void;
   onDeleteReport?: (params: { orderId: string; milestoneId: string; reportId: string }) => void;
   onUpdateReportProduct?: (params: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string; customData?: Record<string, any> }) => void;
@@ -89,6 +96,9 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
   productMilestoneProgresses,
   processSequenceMode,
   productionLinkMode,
+  orderFormSettings,
+  printTemplates = [],
+  onOpenOrderFormPrintTab,
   onUpdateReport,
   onDeleteReport,
   onUpdateReportProduct,
@@ -106,6 +116,91 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
   );
   const getDefectiveRework = (orderId: string, templateId: string) =>
     defectiveAndReworkByOrderMilestone.get(`${orderId}|${templateId}`) ?? { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> };
+
+  const variantLabelForPrint = useCallback(
+    (productId: string, variantId?: string) => {
+      const p = productMap.get(productId);
+      if (!variantId || !p?.variants) return '—';
+      const v = p.variants.find((x: { id: string }) => x.id === variantId);
+      if (!v) return variantId;
+      const color = (dictionaries.colors as { id: string; name: string }[] | undefined)?.find(c => c.id === v.colorId);
+      const size = (dictionaries.sizes as { id: string; name: string }[] | undefined)?.find(s => s.id === v.sizeId);
+      const parts: string[] = [];
+      if (color) parts.push(color.name);
+      if (size) parts.push(size.name);
+      return parts.length > 0 ? parts.join(' / ') : ((v as { skuSuffix?: string })?.skuSuffix || variantId);
+    },
+    [productMap, dictionaries.colors, dictionaries.sizes],
+  );
+
+  const buildReportBatchPrintContext = useCallback(
+    (_template: PrintTemplate): PrintRenderContext => {
+      const b = reportDetailBatch;
+      const first = b.first;
+      const fr = first.report;
+      let milestoneName = '';
+      let productName = '';
+      let orderForCtx: ProductionOrder | undefined;
+      if (b.source === 'order') {
+        const fo = first as OrderReportRow;
+        milestoneName = fo.milestone.name;
+        productName = fo.order.productName;
+        orderForCtx = fo.order;
+      } else {
+        milestoneName = b.milestoneName;
+        productName = b.productName;
+        orderForCtx = undefined;
+      }
+      const productId = b.source === 'order' ? (first as OrderReportRow).order.productId : b.productId;
+      const productEntity = productMap.get(productId);
+      const reportBatchPrint: Record<string, string | number | undefined> = {
+        reportNo: (b.reportNo ?? fr.reportNo ?? '') as string,
+        sourceLabel: b.source === 'order' ? '工单' : '产品',
+        milestoneName,
+        productName,
+        totalGood: b.totalGood,
+        totalDefective: b.totalDefective,
+        totalAmount: b.totalAmount,
+        firstOperator: fr.operator,
+        firstTimestamp: fmtDT(fr.timestamp),
+      };
+      const printListRows = b.rows.map((row, idx) => {
+        if (b.source === 'order') {
+          const r = row as OrderReportRow;
+          return {
+            index: idx + 1,
+            quantity: r.report.quantity,
+            defectiveQuantity: r.report.defectiveQuantity ?? 0,
+            operator: r.report.operator,
+            timestamp: fmtDT(r.report.timestamp),
+            variantLabel: variantLabelForPrint(r.order.productId, r.report.variantId),
+            orderNumber: r.order.orderNumber,
+            milestoneName: r.milestone.name,
+          };
+        }
+        const r = row as ProductReportRow;
+        return {
+          index: idx + 1,
+          quantity: r.report.quantity,
+          defectiveQuantity: r.report.defectiveQuantity ?? 0,
+          operator: r.report.operator,
+          timestamp: fmtDT(r.report.timestamp),
+          variantLabel: variantLabelForPrint(r.progress.productId, r.report.variantId),
+          orderNumber: '—',
+          milestoneName: b.milestoneName,
+        };
+      });
+      return {
+        order: orderForCtx,
+        product: productEntity ?? undefined,
+        milestoneName,
+        completedQuantity: b.totalGood,
+        reportBatchPrint,
+        printListRows,
+      };
+    },
+    [reportDetailBatch, productMap, variantLabelForPrint],
+  );
 
   const [editingReport, setEditingReport] = useState<{
     orderId: string;
@@ -202,6 +297,19 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
               </>
             ) : (
               <>
+                <OrderCenterDetailPrintBlock
+                  printSlot={orderFormSettings?.orderCenterPrint?.reportBatchDetail}
+                  printTemplates={printTemplates}
+                  buildContext={buildReportBatchPrintContext}
+                  onAddPrintTemplate={onOpenOrderFormPrintTab}
+                  pickerSubtitle={
+                    reportDetailBatch.reportNo
+                      ? `报工批次 ${reportDetailBatch.reportNo}`
+                      : reportDetailBatch.source === 'order'
+                        ? `工单 ${(reportDetailBatch.first as OrderReportRow).order.orderNumber}`
+                        : reportDetailBatch.productName
+                  }
+                />
                 {reportDetailBatch.source === 'order' && onUpdateReport && reportDetailBatch.rows.length > 0 && hasOrderPerm('production:orders_report_records:edit') && (
                   <button
                     type="button"

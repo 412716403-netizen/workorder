@@ -18,14 +18,9 @@ export const list = asyncHandler(async (req, res) => {
     batchId: optStr(req.query.batchId),
     status: optStr(req.query.status),
     page: Math.max(1, parseInt(String(req.query.page ?? '1'), 10)),
-    pageSize: Math.min(500, Math.max(1, parseInt(String(req.query.pageSize ?? '100'), 10))),
+    /** 上限放宽：计划详情「打印单品码」等需一次拉全量；仍设硬顶以防异常大请求 */
+    pageSize: Math.min(100_000, Math.max(1, parseInt(String(req.query.pageSize ?? '100'), 10))),
   });
-  res.json(result);
-});
-
-export const voidCode = asyncHandler(async (req, res) => {
-  const db = getTenantPrisma(req.tenantId!);
-  const result = await itemCodeService.voidCode(db, str(req.params.id));
   res.json(result);
 });
 

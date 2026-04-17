@@ -16,13 +16,17 @@ import {
 import { toast } from 'sonner';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
+import type { PlanListPrintSettings, PrintRenderContext, PrintTemplate } from '../../types';
 import { Product, Warehouse, ProductCategory, Partner, PartnerCategory, AppDictionaries, ProductVariant } from '../../types';
+import { PsiListPrintPicker } from '../../components/psi/PsiListPrintPicker';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 import { localTodayYmd, localCalendarYmdStartToIso } from '../../utils/localDateTime';
 import { sectionTitleClass } from '../../styles/uiDensity';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
+import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 
 export interface PurchaseBillLineItem {
   id: string;
@@ -66,6 +70,12 @@ interface PurchaseBillFormSectionProps {
   recordsList: any[];
   receivedByOrderLine: Record<string, number>;
   generatePBDocNumber: (partnerId: string, partnerName: string) => string;
+  /** 手动新建时根据当前供应商预览将生成的单号（保存时由父组件自动生成） */
+  previewAutoPbDocNumber?: string;
+  /** 列表与详情页共用：`purchaseBillFormSettings.listPrint` */
+  listPrintSlot?: PlanListPrintSettings;
+  printTemplates?: PrintTemplate[];
+  buildPurchaseBillPrintContext?: (template: PrintTemplate) => PrintRenderContext;
 }
 
 const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
@@ -76,6 +86,10 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
   products, categories, partners, partnerCategories, dictionaries, warehouses,
   productMapPSI, categoryMapPSI, formatQtyDisplay, getUnitName,
   formSettings, partnerLabel, recordsList, receivedByOrderLine, generatePBDocNumber,
+  previewAutoPbDocNumber,
+  listPrintSlot,
+  printTemplates = [],
+  buildPurchaseBillPrintContext,
 }) => {
   const { currentUser } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
@@ -126,13 +140,21 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
     return items;
   }, [selectedPOOrderNums, allPOByGroups, receivedByOrderLine]);
 
+  const firstSelectedPOItem = useMemo(
+    () => availableItemsFromSelectedPOs.find(i => selectedPOItemIds.includes(i.id)),
+    [availableItemsFromSelectedPOs, selectedPOItemIds],
+  );
+  const previewPbFromOrder = !editingDocNumber && firstSelectedPOItem
+    ? generatePBDocNumber(String(firstSelectedPOItem.partnerId || ''), String(firstSelectedPOItem.partner || ''))
+    : undefined;
+
   const handleConvertPOToBill = () => {
     if (selectedPOItemIds.length === 0 || !form.warehouseId) return;
 
     const itemsToBill = availableItemsFromSelectedPOs.filter(item => selectedPOItemIds.includes(item.id));
     const timestampIso = new Date().toISOString();
     const firstItem = itemsToBill[0];
-    let pbDocNumber = form.docNumber?.trim() || generatePBDocNumber(firstItem?.partnerId || '', firstItem?.partner || '');
+    let pbDocNumber = generatePBDocNumber(firstItem?.partnerId || '', firstItem?.partner || '');
     const exists = (n: string) => recordsList.some((r: any) => r.type === 'PURCHASE_BILL' && r.docNumber === n);
     let attempts = 0;
     while (exists(pbDocNumber) && attempts < 50) {
@@ -160,10 +182,10 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
         warehouseId: form.warehouseId,
         timestamp: timestampIso,
         _savedAtMs: Date.now(),
-        note: form.note || `由订单[${item.docNumber}]商品明细转化`,
+        note: `由订单[${item.docNumber}]商品明细转化`,
         operator: `${docOperator}(订单转化)`,
         lineGroupId: item.lineGroupId ?? item.id,
-        createdAt: localCalendarYmdStartToIso(form.createdAt || localTodayYmd()),
+        createdAt: localCalendarYmdStartToIso(localTodayYmd()),
         ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
         ...(batchVal && { batch: batchVal })
       });
@@ -196,6 +218,12 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
           <ArrowLeft className="w-4 h-4" /> 返回列表
         </button>
         <div className="flex items-center gap-3">
+          <PsiListPrintPicker
+            slot={listPrintSlot}
+            printTemplates={printTemplates}
+            buildContext={buildPurchaseBillPrintContext}
+            pickerSubtitle={editingDocNumber || previewAutoPbDocNumber || undefined}
+          />
           {editingDocNumber && onDeleteRecords && hasPsiPerm('psi:purchase_bill:delete') && (
             <button
               type="button"
@@ -255,12 +283,21 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                 <h3 className={sectionTitleClass}>1. 采购单基础信息</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据编号 (选填)</label>
+                <div className="space-y-1 min-w-0">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据编号</label>
                   <div className="relative">
-                    <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                    <input type="text" placeholder="留空则自动生成" value={form.docNumber} onChange={e => setForm({...form, docNumber: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 pl-10 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
+                    <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
+                    <div className="w-full min-w-0 bg-slate-100 border border-slate-100 rounded-xl py-3 pl-10 pr-4 font-bold text-slate-800 h-[52px] flex items-center truncate">
+                      <span className="truncate">
+                        {editingDocNumber
+                          ? editingDocNumber
+                          : form.partner
+                            ? previewAutoPbDocNumber || '保存时自动生成'
+                            : '请先选择供应商'}
+                      </span>
+                    </div>
                   </div>
+                  <p className="text-[10px] font-bold text-slate-400 ml-1 leading-snug">由系统自动生成，不可修改</p>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">供应商</label>
@@ -273,39 +310,26 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">添加日期</label>
-                  <input type="date" value={form.createdAt} onChange={e => setForm({...form, createdAt: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-                </div>
-                <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">入库仓库</label>
                   <select value={form.warehouseId} onChange={e => setForm({...form, warehouseId: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500">
                     <option value="">选择仓库...</option>
                     {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                   </select>
                 </div>
-                {formSettings.standardFields.find(f => f.id === 'note')?.showInCreate !== false && (
-                  <div className="md:col-span-2 space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据备注</label>
-                    <input type="text" value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" placeholder="备注说明..." />
-                  </div>
-                )}
-                {formSettings.customFields.filter(f => f.showInCreate).map(cf => (
-                  <div key={cf.id} className={cf.type === 'text' || cf.type === undefined ? 'md:col-span-2 space-y-1' : 'space-y-1'}>
+                {formSettings.customFields.filter(f => f.showInCreate).map(cf => {
+                  const eff = effectivePlanFormFieldType(cf);
+                  return (
+                  <div key={cf.id} className={eff === 'text' || eff === 'file' ? 'md:col-span-2 space-y-1' : 'space-y-1'}>
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{cf.label}</label>
-                    {cf.type === 'date' ? (
-                      <input type="date" value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-                    ) : cf.type === 'number' ? (
-                      <input type="number" value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value === '' ? '' : Number(e.target.value) } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-                    ) : cf.type === 'select' ? (
-                      <select value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]">
-                        <option value="">请选择</option>
-                        {(cf.options ?? []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                      </select>
-                    ) : (
-                      <input type="text" value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" placeholder={`${cf.label}`} />
-                    )}
+                    <PlanFormCustomFieldInput
+                      cf={cf}
+                      value={form.customData?.[cf.id]}
+                      onChange={next => setForm({ ...form, customData: { ...form.customData, [cf.id]: next } })}
+                      controlClassName="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]"
+                    />
                   </div>
-                ))}
+                );
+                })}
               </div>
             </div>
 
@@ -605,14 +629,16 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
 
             {selectedPOItemIds.length > 0 && (
               <div className="space-y-4 pt-4 border-t border-slate-100">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">本次入库单号 (选填)</label>
-                    <input type="text" placeholder="留空则自动生成" value={form.docNumber} onChange={e => setForm({...form, docNumber: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">添加日期</label>
-                    <input type="date" value={form.createdAt} onChange={e => setForm({...form, createdAt: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1 md:col-span-2 md:max-w-lg">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">单据编号</label>
+                    <div className="relative">
+                      <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
+                      <div className="w-full min-w-0 bg-slate-100 border border-slate-100 rounded-2xl py-3 pl-10 pr-4 text-sm font-bold text-slate-800 min-h-[48px] flex items-center truncate">
+                        <span className="truncate">{previewPbFromOrder || '保存时自动生成'}</span>
+                      </div>
+                    </div>
+                    <p className="text-[10px] font-bold text-slate-400 ml-1 leading-snug">由系统自动生成，不可修改</p>
                   </div>
                   <div className="space-y-1 md:col-span-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">入库至指定仓库 <span className="text-rose-500">*</span></label>
@@ -623,29 +649,20 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {formSettings.standardFields.find(f => f.id === 'note')?.showInCreate !== false && (
-                  <div className="space-y-1 md:col-span-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">单据备注</label>
-                    <textarea rows={2} value={form.note} onChange={e => setForm({...form, note: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none resize-none" placeholder="记录本次引用入库的特别说明..."></textarea>
-                  </div>
-                )}
-                {formSettings.customFields.filter(f => f.showInCreate).map(cf => (
-                  <div key={cf.id} className={cf.type === 'text' || cf.type === undefined ? 'space-y-1 md:col-span-2' : 'space-y-1'}>
+                {formSettings.customFields.filter(f => f.showInCreate).map(cf => {
+                  const eff = effectivePlanFormFieldType(cf);
+                  return (
+                  <div key={cf.id} className={eff === 'text' || eff === 'file' ? 'space-y-1 md:col-span-2' : 'space-y-1'}>
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{cf.label}</label>
-                    {cf.type === 'date' ? (
-                      <input type="date" value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
-                    ) : cf.type === 'number' ? (
-                      <input type="number" value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value === '' ? '' : Number(e.target.value) } })} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
-                    ) : cf.type === 'select' ? (
-                      <select value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500">
-                        <option value="">请选择</option>
-                        {(cf.options ?? []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                      </select>
-                    ) : (
-                      <input type="text" value={form.customData?.[cf.id] ?? ''} onChange={e => setForm({ ...form, customData: { ...form.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder={`${cf.label}`} />
-                    )}
+                    <PlanFormCustomFieldInput
+                      cf={cf}
+                      value={form.customData?.[cf.id]}
+                      onChange={next => setForm({ ...form, customData: { ...form.customData, [cf.id]: next } })}
+                      controlClassName="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
                   </div>
-                ))}
+                );
+                })}
                 </div>
               </div>
             )}

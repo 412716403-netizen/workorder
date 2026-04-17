@@ -11,6 +11,7 @@ import type {
   PrintSalesBillMatrixElementConfig,
   PrintTableElementConfig,
   PrintTemplate,
+  PrintTemplateDocumentType,
   PrintTextElementConfig,
 } from '../../types';
 import type { PrintSelection } from './usePrintEditor';
@@ -34,6 +35,7 @@ export function PropertyPanel({
   selectedElement,
   fieldOptions,
   onSetName,
+  onSetDocumentType,
   setPaperSize,
   setPaperMarginsMm,
   setPaperBackgroundColor,
@@ -53,6 +55,7 @@ export function PropertyPanel({
   selectedElement: PrintBodyElement | null;
   fieldOptions: PrintFieldOption[];
   onSetName: (name: string) => void;
+  onSetDocumentType: (documentType: PrintTemplateDocumentType) => void;
   setPaperSize: (w: number, h: number) => void;
   setPaperMarginsMm: (patch: Partial<{ top: number; bottom: number; left: number; right: number }>) => void;
   setPaperBackgroundColor: (c: string) => void;
@@ -72,6 +75,7 @@ export function PropertyPanel({
       <TemplatePaperSettings
         template={template}
         onSetName={onSetName}
+        onSetDocumentType={onSetDocumentType}
         setPaperSize={setPaperSize}
         setPaperMarginsMm={setPaperMarginsMm}
         setPaperBackgroundColor={setPaperBackgroundColor}
@@ -152,7 +156,13 @@ export function PropertyPanel({
   } else if (el.type === 'dynamicList') {
     const c = el.config as PrintDynamicListElementConfig;
     specific = (
-      <DynamicListPropertyEditor el={el} c={c} fieldOptions={fieldOptions} onUpdateElementConfig={onUpdateElementConfig} />
+      <DynamicListPropertyEditor
+        el={el}
+        c={c}
+        fieldOptions={fieldOptions}
+        templateDocumentType={template.documentType}
+        onUpdateElementConfig={onUpdateElementConfig}
+      />
     );
   } else if (el.type === 'salesBillMatrix') {
     const c = el.config as PrintSalesBillMatrixElementConfig;

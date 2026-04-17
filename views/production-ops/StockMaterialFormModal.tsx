@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
-import type { ProductionOpRecord, ProductionOrder, Product, Warehouse, ProdOpType } from '../../types';
+import React, { useEffect, useMemo, useState } from 'react';
+import type { MaterialFormSettings, ProductionOpRecord, ProductionOrder, Product, Warehouse, ProdOpType } from '../../types';
+import { DEFAULT_MATERIAL_FORM_SETTINGS } from '../../types';
+import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpCollab/material';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 
 export interface StockMaterialFormModalProps {
   visible: boolean;
@@ -11,6 +14,7 @@ export interface StockMaterialFormModalProps {
   products: Product[];
   warehouses: Warehouse[];
   productionLinkMode: 'order' | 'product';
+  materialFormSettings?: MaterialFormSettings;
   onAddRecord: (record: ProductionOpRecord) => void;
   getNextStockDocNo: (type: 'STOCK_OUT' | 'STOCK_RETURN') => string;
 }
@@ -23,6 +27,7 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
   products,
   warehouses,
   productionLinkMode,
+  materialFormSettings = DEFAULT_MATERIAL_FORM_SETTINGS,
   onAddRecord,
   getNextStockDocNo,
 }) => {
@@ -36,6 +41,31 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
     partner: '',
     warehouseId: ''
   });
+  const [customValues, setCustomValues] = useState<Record<string, unknown>>({});
+
+  const materialCustomFieldDefs = useMemo(() => {
+    const wx = Boolean(form.partner?.trim());
+    const raw =
+      stockModalMode === 'stock_return'
+        ? wx
+          ? materialFormSettings.outsourceMaterialReturnCustomFields
+          : materialFormSettings.materialReturnCustomFields
+        : wx
+          ? materialFormSettings.outsourceMaterialIssueCustomFields
+          : materialFormSettings.materialIssueCustomFields;
+    return (raw ?? []).filter(f => f.showInCreate);
+  }, [
+    form.partner,
+    stockModalMode,
+    materialFormSettings.materialIssueCustomFields,
+    materialFormSettings.materialReturnCustomFields,
+    materialFormSettings.outsourceMaterialIssueCustomFields,
+    materialFormSettings.outsourceMaterialReturnCustomFields,
+  ]);
+
+  useEffect(() => {
+    if (visible && stockModalMode) setCustomValues({});
+  }, [visible, stockModalMode]);
 
   if (!visible || !stockModalMode) return null;
 
@@ -43,6 +73,11 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
     const isStockReturn = stockModalMode === 'stock_return';
     const recordType: ProdOpType = isStockReturn ? 'STOCK_RETURN' : 'STOCK_OUT';
     const docNo = getNextStockDocNo(recordType);
+    const collabExtra = buildMaterialStockCustomCollabPayload(
+      customValues,
+      recordType,
+      form.partner?.trim() || undefined,
+    );
     const newRecord: ProductionOpRecord = {
       id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       type: recordType,
@@ -55,10 +90,12 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
       timestamp: new Date().toLocaleString(),
       status: '已完成',
       warehouseId: form.warehouseId || undefined,
-      docNo
+      docNo,
+      ...collabExtra,
     };
     onAddRecord(newRecord);
     setForm({ orderId: '', productId: '', quantity: 0, reason: '', partner: '', warehouseId: '' });
+    setCustomValues({});
     onClose();
   };
 
@@ -126,6 +163,22 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
             placeholder="选填"
           />
         </div>
+        {materialCustomFieldDefs.length > 0 ? (
+          <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500">自定义内容</h4>
+            {materialCustomFieldDefs.map(cf => (
+              <div key={cf.id} className="space-y-1">
+                <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
+                <PlanFormCustomFieldInput
+                  cf={cf}
+                  value={customValues[cf.id]}
+                  onChange={v => setCustomValues(prev => ({ ...prev, [cf.id]: v }))}
+                  controlClassName="h-[48px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            ))}
+          </div>
+        ) : null}
         <div className="flex gap-3 pt-2">
           <button
             type="button"

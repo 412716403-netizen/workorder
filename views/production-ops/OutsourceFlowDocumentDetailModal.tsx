@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ScrollText, X, Check, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
@@ -11,7 +11,11 @@ import type {
   GlobalNodeTemplate,
   Partner,
   PartnerCategory,
+  OutsourceFormSettings,
+  PrintRenderContext,
+  PrintTemplate,
 } from '../../types';
+import { DEFAULT_OUTSOURCE_FORM_SETTINGS } from '../../types';
 import { hasOpsPerm } from './types';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
 import { useConfirm } from '../../contexts/ConfirmContext';
@@ -20,6 +24,10 @@ import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import * as api from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
+import { buildOutsourceFlowPrintContext } from '../../utils/buildOutsourceFlowPrintContext';
+import { OUTSOURCE_DISPATCH_CUSTOM_DATA_KEY, OUTSOURCE_RECEIVE_CUSTOM_DATA_KEY } from '../../utils/productionOpCollab/outsource';
+import { PlanFormCustomFieldInput, PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
 
 export interface OutsourceFlowDocumentDetailModalProps {
   productionLinkMode: 'order' | 'product';
@@ -39,6 +47,10 @@ export interface OutsourceFlowDocumentDetailModalProps {
   onUpdateRecord?: (record: ProductionOpRecord) => void;
   onDeleteRecord?: (recordId: string) => void;
   onClose: () => void;
+  outsourceFormSettings?: OutsourceFormSettings;
+  printTemplates?: PrintTemplate[];
+  /** 从详情「增加打印模版」打开外协表单配置并切到打印页 */
+  onOpenOutsourceFormPrintTab?: () => void;
 }
 
 const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModalProps> = ({
@@ -59,6 +71,9 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   onUpdateRecord,
   onDeleteRecord,
   onClose,
+  outsourceFormSettings = DEFAULT_OUTSOURCE_FORM_SETTINGS,
+  printTemplates = [],
+  onOpenOutsourceFormPrintTab,
 }) => {
   const { currentUser } = useAuth();
   const flowDetailOperatorFallback = currentOperatorDisplayName(currentUser);
@@ -68,11 +83,32 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   const [flowDetailEditRemark, setFlowDetailEditRemark] = useState('');
   const [flowDetailQuantities, setFlowDetailQuantities] = useState<Record<string, number>>({});
   const [flowDetailUnitPrices, setFlowDetailUnitPrices] = useState<Record<string, number>>({});
+  const [flowDetailEditCustom, setFlowDetailEditCustom] = useState<Record<string, unknown>>({});
+
+  const outsourceCustomDefsDetail = useMemo(() => {
+    const dr = records.filter(r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey);
+    if (!dr.length) return [];
+    const recv = dr[0].status === '已收回';
+    const arr = recv ? outsourceFormSettings.outsourceReceiveCustomFields : outsourceFormSettings.outsourceDispatchCustomFields;
+    return (arr ?? []).filter(f => f.showInDetail);
+  }, [records, flowDetailKey, outsourceFormSettings]);
+
+  const outsourceCustomSnapshot = useMemo(() => {
+    const dr = records.filter(r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey);
+    if (!dr.length) return {} as Record<string, unknown>;
+    const recv = dr[0].status === '已收回';
+    const key = recv ? OUTSOURCE_RECEIVE_CUSTOM_DATA_KEY : OUTSOURCE_DISPATCH_CUSTOM_DATA_KEY;
+    const raw = dr[0].collabData?.[key];
+    return typeof raw === 'object' && raw != null && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {};
+  }, [records, flowDetailKey]);
 
   const docRecords = records.filter(r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey);
   if (docRecords.length === 0) return null;
   const first = docRecords[0];
   const isReceiveDoc = first.status === '已收回';
+  const printSlot = isReceiveDoc
+    ? outsourceFormSettings.outsourceCenterPrint?.receiveFlowDetail
+    : outsourceFormSettings.outsourceCenterPrint?.dispatchFlowDetail;
   const isFromCollabReturn = docRecords.some(r => (r as any).collabData?.source === 'collaborationReturn');
   const totalAmount = isReceiveDoc ? docRecords.reduce((s, r) => s + (r.amount ?? 0), 0) : 0;
   const docDateStr = first.timestamp ? (() => { try { const d = new Date(first.timestamp); return isNaN(d.getTime()) ? first.timestamp : d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); } catch { return first.timestamp; } })() : '—';
@@ -98,14 +134,14 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/60" onClick={() => { onClose(); setFlowDetailEditMode(false); }} aria-hidden />
+      <div className="absolute inset-0 bg-slate-900/60" onClick={() => { onClose(); setFlowDetailEditMode(false); setFlowDetailEditCustom({}); }} aria-hidden />
       <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-xl border border-slate-200 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
           <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><ScrollText className="w-5 h-5 text-indigo-600" /> 单据详情 · {flowDetailKey}</h3>
           <div className="flex items-center gap-2">
             {flowDetailEditMode ? (
               <>
-                <button type="button" onClick={() => { setFlowDetailEditMode(false); setFlowDetailUnitPrices({}); }} className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">取消</button>
+                <button type="button" onClick={() => { setFlowDetailEditMode(false); setFlowDetailUnitPrices({}); setFlowDetailEditCustom({}); }} className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">取消</button>
                 <button type="button" onClick={async () => {
                   if (!onDeleteRecord) return;
                   const partnerName = (flowDetailEditPartner || '').trim();
@@ -113,8 +149,23 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                   const entries = (Object.entries(flowDetailQuantities) as [string, number][]).filter(([, qty]) => qty > 0);
                   if (entries.length === 0) { return; }
                   const toDelete = isReceiveDoc ? docRecords : docRecords.filter(r => r.status !== '已收回');
-                  let preservedCollabData: any;
-                  for (const rec of toDelete) { const cd = (rec as any).collabData; if (cd) { preservedCollabData = cd; break; } }
+                  let preservedCollabData: Record<string, unknown> | undefined;
+                  for (const rec of toDelete) {
+                    const cd = rec.collabData;
+                    if (cd && typeof cd === 'object') {
+                      preservedCollabData = { ...(cd as Record<string, unknown>) };
+                      break;
+                    }
+                  }
+                  const customDataKey = isReceiveDoc ? OUTSOURCE_RECEIVE_CUSTOM_DATA_KEY : OUTSOURCE_DISPATCH_CUSTOM_DATA_KEY;
+                  const mergeCollab = (preserved: Record<string, unknown> | undefined): { collabData?: Record<string, unknown> } => {
+                    const base: Record<string, unknown> = preserved && typeof preserved === 'object' ? { ...preserved } : {};
+                    const clean = Object.fromEntries(
+                      Object.entries(flowDetailEditCustom).filter(([, v]) => v !== '' && v != null && v !== undefined),
+                    );
+                    if (Object.keys(clean).length) base[customDataKey] = clean;
+                    return Object.keys(base).length ? { collabData: base } : {};
+                  };
                   for (const rec of toDelete) await onDeleteRecord(rec.id);
                   const timestamp = first.timestamp || new Date().toLocaleString();
                   const newStatus = isReceiveDoc ? '已收回' : '加工中';
@@ -128,7 +179,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                       const bk = parts.length >= 2 ? `${productId}|${nodeId}` : key;
                       const unitPrice = isReceiveDoc ? (flowDetailUnitPrices[key] ?? flowDetailUnitPrices[bk] ?? 0) : undefined;
                       const amount = isReceiveDoc && unitPrice != null ? Number(qty) * unitPrice : undefined;
-                      batch.push({ id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, type: 'OUTSOURCE', productId, quantity: qty, reason: flowDetailEditRemark.trim() || undefined, operator: first.operator || flowDetailOperatorFallback, timestamp, status: newStatus, partner: partnerName, docNo: flowDetailKey, nodeId, variantId: variantId || undefined, unitPrice: unitPrice || undefined, amount: amount ?? undefined, ...(preservedCollabData ? { collabData: preservedCollabData } : {}) } as ProductionOpRecord);
+                      batch.push({ id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, type: 'OUTSOURCE', productId, quantity: qty, reason: flowDetailEditRemark.trim() || undefined, operator: first.operator || flowDetailOperatorFallback, timestamp, status: newStatus, partner: partnerName, docNo: flowDetailKey, nodeId, variantId: variantId || undefined, unitPrice: unitPrice || undefined, amount: amount ?? undefined, ...mergeCollab(preservedCollabData) } as ProductionOpRecord);
                       return;
                     }
                     const orderId = parts[0];
@@ -137,7 +188,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                     if (!order) return;
                     const unitPrice = isReceiveDoc ? (flowDetailUnitPrices[key] ?? flowDetailUnitPrices[bk] ?? 0) : undefined;
                     const amount = isReceiveDoc && unitPrice != null ? Number(qty) * unitPrice : undefined;
-                    batch.push({ id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, type: 'OUTSOURCE', orderId, productId: order.productId, quantity: qty, reason: flowDetailEditRemark.trim() || undefined, operator: first.operator || flowDetailOperatorFallback, timestamp, status: newStatus, partner: partnerName, docNo: flowDetailKey, nodeId, variantId: variantId || undefined, unitPrice: unitPrice || undefined, amount: amount ?? undefined, ...(preservedCollabData ? { collabData: preservedCollabData } : {}) } as ProductionOpRecord);
+                    batch.push({ id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, type: 'OUTSOURCE', orderId, productId: order.productId, quantity: qty, reason: flowDetailEditRemark.trim() || undefined, operator: first.operator || flowDetailOperatorFallback, timestamp, status: newStatus, partner: partnerName, docNo: flowDetailKey, nodeId, variantId: variantId || undefined, unitPrice: unitPrice || undefined, amount: amount ?? undefined, ...mergeCollab(preservedCollabData) } as ProductionOpRecord);
                   });
                   if (onAddRecordBatch && batch.length > 1) { await onAddRecordBatch(batch); } else { for (const rec of batch) await onAddRecord(rec); }
 
@@ -172,16 +223,34 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
 
                   setFlowDetailEditMode(false);
                   setFlowDetailUnitPrices({});
+                  setFlowDetailEditCustom({});
                 }} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700">
                   <Check className="w-4 h-4" /> 保存
                 </button>
               </>
             ) : (
               <>
+                <OrderCenterDetailPrintBlock
+                  printSlot={printSlot}
+                  printTemplates={printTemplates}
+                  buildContext={(_template: PrintTemplate): PrintRenderContext =>
+                    buildOutsourceFlowPrintContext({
+                      docRecords,
+                      isReceiveDoc,
+                      orders,
+                      products,
+                      globalNodes,
+                      dictionaries,
+                    })
+                  }
+                  pickerSubtitle={`单号 ${flowDetailKey}`}
+                  onAddPrintTemplate={onOpenOutsourceFormPrintTab}
+                />
                 {onUpdateRecord && hasOpsPerm(tenantRole, userPermissions, 'production:outsource_records:edit') && (
                   <button type="button" onClick={() => {
                     setFlowDetailEditPartner(docPartner);
                     setFlowDetailEditRemark(docRemark);
+                    setFlowDetailEditCustom({ ...outsourceCustomSnapshot });
                     const initQty: Record<string, number> = {};
                     docRecords.forEach(r => { const k = isProductModeDetail ? `${r.productId}|${r.nodeId}${r.variantId ? '|' + r.variantId : ''}` : `${r.orderId}|${r.nodeId}${r.variantId ? '|' + r.variantId : ''}`; initQty[k] = (initQty[k] || 0) + r.quantity; });
                     setFlowDetailQuantities(initQty);
@@ -203,6 +272,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                       docRecords.forEach(rec => onDeleteRecord(rec.id));
                       onClose();
                       setFlowDetailEditMode(false);
+                      setFlowDetailEditCustom({});
                     });
                   }} className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold">
                     <Trash2 className="w-4 h-4" /> 删除
@@ -210,7 +280,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                 )}
               </>
             )}
-            <button type="button" onClick={() => { onClose(); setFlowDetailEditMode(false); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
+            <button type="button" onClick={() => { onClose(); setFlowDetailEditMode(false); setFlowDetailEditCustom({}); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
           </div>
         </div>
         {flowDetailEditMode && isFromCollabReturn && (
@@ -252,6 +322,35 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                 <div className="w-full h-[52px] rounded-xl border border-slate-200 py-3 px-4 text-sm font-bold text-slate-800 bg-emerald-50 flex items-center">{totalAmount.toFixed(2)}</div>
               </div>
             )}
+            {outsourceCustomDefsDetail.length > 0 ? (
+              <div className="md:col-span-2 w-full rounded-2xl border border-slate-100 bg-slate-50/60 p-4 space-y-3">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500">自定义内容</h4>
+                {flowDetailEditMode ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {outsourceCustomDefsDetail.map(cf => (
+                      <div key={cf.id} className="min-w-0 space-y-1">
+                        <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
+                        <PlanFormCustomFieldInput
+                          cf={cf}
+                          value={flowDetailEditCustom[cf.id]}
+                          onChange={v => setFlowDetailEditCustom(prev => ({ ...prev, [cf.id]: v }))}
+                          controlClassName="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {outsourceCustomDefsDetail.map(cf => (
+                      <div key={cf.id} className="min-w-0">
+                        <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">{cf.label}</p>
+                        <PlanFormCustomFieldReadonly cf={cf} value={outsourceCustomSnapshot[cf.id]} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="flex-1 overflow-auto min-h-0 p-6">

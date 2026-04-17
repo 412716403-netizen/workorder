@@ -43,6 +43,7 @@ export const PRODUCTION_SUB_MODULES: { key: string; label: string; actions: stri
   { key: 'material_form_config', label: '表单配置', actions: ['allow'], group: '生产物料' },
   { key: 'material_issue', label: '领料发出', actions: ['allow'], group: '生产物料' },
   { key: 'material_return', label: '生产退料', actions: ['allow'], group: '生产物料' },
+  { key: 'outsource_form_config', label: '表单配置', actions: ['allow'], group: '外协管理' },
   { key: 'outsource_list', label: '主列表', actions: ['allow'], group: '外协管理' },
   { key: 'outsource_send', label: '待发清单', actions: ['allow'], group: '外协管理' },
   { key: 'outsource_receive', label: '待收回清单', actions: ['allow'], group: '外协管理' },
@@ -55,6 +56,7 @@ export const PRODUCTION_SUB_MODULES: { key: string; label: string; actions: stri
   { key: 'rework_outsource', label: '委外返工', actions: ['allow'], group: '返工管理' },
   { key: 'rework_detail', label: '详情', actions: ['allow'], group: '返工管理' },
   { key: 'rework_material', label: '物料', actions: ['allow'], group: '返工管理' },
+  { key: 'rework_form_config', label: '表单配置', actions: ['allow'], group: '返工管理' },
 ];
 
 export const PSI_SUB_MODULES: { key: string; label: string; actions: string[]; group: string }[] = [

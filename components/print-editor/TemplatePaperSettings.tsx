@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { RectangleHorizontal, RectangleVertical } from 'lucide-react';
-import type { PrintTemplate } from '../../types';
+import type { PrintTemplate, PrintTemplateDocumentType } from '../../types';
 import { getPaperMarginsMm } from './layoutMetrics';
 import { PRINT_PAPER_A4_MM, PRINT_PAPER_A5_MM } from '../../utils/printTemplateDefaults';
 import { Labeled } from './Labeled';
@@ -15,6 +15,7 @@ const PAPER_PRESETS: { label: string; w: number; h: number }[] = [
 function TemplatePaperSettingsInner({
   template,
   onSetName,
+  onSetDocumentType,
   setPaperSize,
   setPaperMarginsMm,
   setPaperBackgroundColor,
@@ -22,6 +23,7 @@ function TemplatePaperSettingsInner({
 }: {
   template: PrintTemplate;
   onSetName: (name: string) => void;
+  onSetDocumentType: (documentType: PrintTemplateDocumentType) => void;
   setPaperSize: (w: number, h: number) => void;
   setPaperMarginsMm: (patch: Partial<{ top: number; bottom: number; left: number; right: number }>) => void;
   setPaperBackgroundColor: (c: string) => void;
@@ -48,6 +50,30 @@ function TemplatePaperSettingsInner({
           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-800"
           placeholder="未命名模板"
         />
+      </Labeled>
+
+      <Labeled label="数据源（单据类型）">
+        <select
+          value={template.documentType ?? 'all'}
+          onChange={e => onSetDocumentType(e.target.value as PrintTemplateDocumentType)}
+          className="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs font-bold text-slate-800"
+        >
+          <option value="all">不限制</option>
+          <option value="plan">计划单</option>
+          <option value="order">工单</option>
+          <option value="salesBill">销售单</option>
+          <option value="productionMaterial">生产物料</option>
+          <option value="outsource">外协管理</option>
+          <option value="rework">返工管理</option>
+          <option value="purchaseOrder">采购订单</option>
+          <option value="salesOrder">销售订单</option>
+          <option value="purchaseBill">采购单</option>
+          <option value="receipt">收款单</option>
+          <option value="payment">付款单</option>
+        </select>
+        <p className="mt-1.5 text-[10px] leading-snug text-slate-400">
+          决定「插入字段」可选分类，以及动态列表列模板中字段分组的排序依据。选「不限制」时与旧模板行为一致（列表字段分组按工单语义排序）。
+        </p>
       </Labeled>
 
       <Labeled label="尺寸及方向">

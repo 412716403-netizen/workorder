@@ -721,11 +721,14 @@ model PsiRecord {
   shippedQuantity    Decimal?  @map("shipped_quantity") @db.Decimal(12, 2)
   allocationWarehouseId String? @map("allocation_warehouse_id") @db.VarChar(50)
   operator           String?   @db.VarChar(100)
+  /// 进销存单据级备注（如销售单「单据备注」；多明细行通常写入相同内容）
   note               String?   @db.Text
   customData         Json      @default("{}") @map("custom_data")
   batchNo            String?   @map("batch_no") @db.VarChar(100)
   sortOrder          Int       @default(0) @map("sort_order")
+  /// 保存/制单时刻（列表排序等可优先用业务添加日期 `created_at`）
   timestamp          DateTime  @default(now()) @db.Timestamptz()
+  /// 业务「添加日期」（销售单等；前端常写入本地日历日 0 点的 ISO）
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz()
 
   updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()

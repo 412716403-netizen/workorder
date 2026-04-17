@@ -1,6 +1,17 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { X, Check, Pencil, Trash2 } from 'lucide-react';
-import { ProductionOpRecord, ProductionOrder, Product, ProductCategory, GlobalNodeTemplate, AppDictionaries, Worker } from '../../types';
+import {
+  ProductionOpRecord,
+  ProductionOrder,
+  Product,
+  ProductCategory,
+  GlobalNodeTemplate,
+  AppDictionaries,
+  Worker,
+  ReworkFormSettings,
+  PrintTemplate,
+  PrintRenderContext,
+} from '../../types';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { groupProductionOpBatchByVariant, mapGroupedOpQuantitiesToRecordIds } from '../../utils/groupProductionOpBatchByVariant';
 import { hasOpsPerm } from './types';
@@ -8,6 +19,10 @@ import { formatTimestamp, timestampFromDatetimeLocal, nowTimestamp } from '../..
 import { useConfirm } from '../../contexts/ConfirmContext';
 import WorkerSelector from '../../components/WorkerSelector';
 import EquipmentSelector from '../../components/EquipmentSelector';
+import { PlanFormCustomFieldInput, PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
+import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
+import { buildReworkReportFlowPrintContext } from '../../utils/buildReworkReportFlowPrintContext';
+import { readReworkReportCustomSnapshot, REWORK_REPORT_CUSTOM_DATA_KEY } from '../../utils/productionOpCollab/rework';
 
 export interface ReworkReportFlowDetailModalProps {
   productionLinkMode: 'order' | 'product';
@@ -22,6 +37,9 @@ export interface ReworkReportFlowDetailModalProps {
   equipment: { id: string; name: string; code?: string; assignedMilestoneIds?: string[] }[];
   userPermissions?: string[];
   tenantRole?: string;
+  reworkFormSettings?: ReworkFormSettings;
+  printTemplates?: PrintTemplate[];
+  onOpenReworkFormPrintTab?: () => void;
   onUpdateRecord?: (record: ProductionOpRecord) => void;
   onDeleteRecord?: (recordId: string) => void;
   onClose: () => void;
@@ -40,6 +58,9 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
   equipment,
   userPermissions,
   tenantRole,
+  reworkFormSettings,
+  printTemplates = [],
+  onOpenReworkFormPrintTab,
   onUpdateRecord,
   onDeleteRecord,
   onClose,
@@ -66,28 +87,36 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
       equipmentId: string;
       reason: string;
       unitPrice: number;
+      customData: Record<string, unknown>;
       rowEdits: { variantId: string; label: string; quantity: number; recordIds: string[] }[];
     };
     firstRecord: ProductionOpRecord;
   } | null>(null);
 
-  if (!first) return null;
-  const order = orders.find(o => o.id === first.orderId);
-  const product = products.find(p => p.id === first.productId);
+  const isReportDetail = first?.type === 'REWORK_REPORT';
+  const order = first ? orders.find(o => o.id === first.orderId) : undefined;
+  const product = first ? products.find(p => p.id === first.productId) : undefined;
   const productCategory = product ? categories.find(c => c.id === product.categoryId) : undefined;
   const unitName = (product?.unitId && dictionaries?.units?.find(u => u.id === product.unitId)?.name) || '件';
-  const reworkOrigin = (records || []).find(x => x.type === 'REWORK' && (x.orderId === first.orderId || (orders.find(o => o.id === first.orderId)?.parentOrderId === x.orderId)) && ((x.reworkNodeIds?.length ? x.reworkNodeIds : x.nodeId ? [x.nodeId] : []).includes(first.nodeId ?? '')));
-  const resolvedSourceNodeId = (reworkOrigin?.sourceNodeId != null ? reworkOrigin.sourceNodeId : first.sourceNodeId) ?? undefined;
+  const reworkOrigin = first
+    ? (records || []).find(x => x.type === 'REWORK' && (x.orderId === first.orderId || (orders.find(o => o.id === first.orderId)?.parentOrderId === x.orderId)) && ((x.reworkNodeIds?.length ? x.reworkNodeIds : x.nodeId ? [x.nodeId] : []).includes(first.nodeId ?? '')))
+    : undefined;
+  const resolvedSourceNodeId = first
+    ? ((reworkOrigin?.sourceNodeId != null ? reworkOrigin.sourceNodeId : first.sourceNodeId) ?? undefined)
+    : undefined;
   const sourceNodeName = resolvedSourceNodeId ? globalNodes.find(n => n.id === resolvedSourceNodeId)?.name : null;
   const totalQty = detailBatch.reduce((s, x) => s + (x.quantity ?? 0), 0);
   const hasColorSize = productHasColorSizeMatrix(product, productCategory);
   const nodeNamesInBatch = [...new Set(detailBatch.map(x => x.nodeId ? (globalNodes.find(n => n.id === x.nodeId)?.name ?? '') : '').filter(Boolean))] as string[];
   const nodeNamesLabel = nodeNamesInBatch.length === 0 ? '—' : nodeNamesInBatch.length === 1 ? nodeNamesInBatch[0]! : nodeNamesInBatch.join('、');
-  const latestBatchTimestamp = detailBatch.reduce<{ t: number; ts?: string }>((best, x) => {
-    const t = new Date(x.timestamp || 0).getTime();
-    if (isNaN(t)) return best;
-    return t >= best.t ? { t, ts: x.timestamp } : best;
-  }, { t: -1 }).ts;
+  const latestBatchTimestamp = detailBatch.reduce(
+    (best: { t: number; ts?: string }, x) => {
+      const t = new Date(x.timestamp || 0).getTime();
+      if (isNaN(t)) return best;
+      return t >= best.t ? { t, ts: x.timestamp } : best;
+    },
+    { t: -1 },
+  ).ts;
   const opsInBatch = [...new Set(detailBatch.map(x => (x.operator ?? '').trim()).filter(Boolean))];
   const operatorsLabel = opsInBatch.length === 0 ? '—' : opsInBatch.length === 1 ? opsInBatch[0]! : `${opsInBatch[0]} 等${opsInBatch.length}人`;
   const pricesInBatch = detailBatch.map(x => x.unitPrice).filter((p): p is number => p != null && p > 0);
@@ -118,12 +147,41 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
     });
   }, [detailBatch, product]);
 
+  const reworkReportFieldsForDetail = useMemo(
+    () => (reworkFormSettings?.reworkReportCustomFields ?? []).filter(f => f.showInDetail),
+    [reworkFormSettings?.reworkReportCustomFields],
+  );
+  const reworkReportCustomSnapshot = useMemo(() => {
+    if (!isReportDetail || !first) return {} as Record<string, unknown>;
+    return readReworkReportCustomSnapshot(records, first.docNo, first.productId);
+  }, [records, first, isReportDetail]);
+
+  const buildPrintContext = useCallback(
+    (template: PrintTemplate): PrintRenderContext =>
+      buildReworkReportFlowPrintContext(template, {
+        productionLinkMode,
+        detailBatch,
+        records,
+        orders,
+        products,
+        globalNodes,
+        workers,
+        equipment,
+      }),
+    [productionLinkMode, detailBatch, records, orders, products, globalNodes, workers, equipment],
+  );
+
+  if (!first) return null;
+
   const handleSave = () => {
     if (!onUpdateRecord || !editing) return;
     const f = editing.form;
     const tsStr = f.timestamp ? timestampFromDatetimeLocal(f.timestamp) : nowTimestamp();
     const opName = (workers?.find(w => w.id === f.workerId)?.name) ?? f.operator;
     const newQtyByRecordId = mapGroupedOpQuantitiesToRecordIds(detailBatch, f.rowEdits);
+    const cleanCustom = Object.fromEntries(
+      Object.entries(f.customData).filter(([, v]) => v !== '' && v != null && v !== undefined),
+    );
     const reworkDeltas = new Map<string, { reworkId: string; nodeId: string; delta: number }>();
     detailBatch.forEach(rec => {
       const newQty = newQtyByRecordId.get(rec.id);
@@ -136,6 +194,11 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
         cur.delta += delta;
         reworkDeltas.set(key, cur);
       }
+      const prevCd = (rec as ProductionOpRecord & { collabData?: Record<string, unknown> }).collabData ?? {};
+      const collabMerged =
+        rec.type === 'REWORK_REPORT'
+          ? { ...prevCd, [REWORK_REPORT_CUSTOM_DATA_KEY]: cleanCustom }
+          : prevCd;
       onUpdateRecord({
         ...rec,
         quantity: newQty,
@@ -146,6 +209,7 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
         equipmentId: f.equipmentId || undefined,
         unitPrice: f.unitPrice > 0 ? f.unitPrice : undefined,
         amount: f.unitPrice > 0 ? newQty * f.unitPrice : undefined,
+        ...(rec.type === 'REWORK_REPORT' ? { collabData: collabMerged } : {}),
       });
     });
     reworkDeltas.forEach(({ reworkId, nodeId, delta }) => {
@@ -213,6 +277,15 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
               </>
             ) : (
               <>
+                {isReportDetail && (
+                  <OrderCenterDetailPrintBlock
+                    printSlot={reworkFormSettings?.reworkCenterPrint?.reworkReportFlowDetail}
+                    printTemplates={printTemplates}
+                    buildContext={buildPrintContext}
+                    onAddPrintTemplate={onOpenReworkFormPrintTab}
+                    pickerSubtitle={`返工报工流水 ${first.docNo ?? '—'}`}
+                  />
+                )}
                 {onUpdateRecord && detailBatch.length > 0 && hasOpsPerm(tenantRole, userPermissions, 'production:rework_report_records:edit') && (
                   <button
                     type="button"
@@ -221,6 +294,10 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
                       let dt = new Date(rec.timestamp || undefined);
                       if (isNaN(dt.getTime())) dt = new Date();
                       const tsStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}T${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+                      const snap =
+                        rec.type === 'REWORK_REPORT'
+                          ? { ...readReworkReportCustomSnapshot(records, rec.docNo, rec.productId) }
+                          : {};
                       setEditing({
                         firstRecord: rec,
                         form: {
@@ -230,6 +307,7 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
                           equipmentId: rec.equipmentId ?? '',
                           reason: rec.reason ?? '',
                           unitPrice: rec.unitPrice ?? 0,
+                          customData: snap,
                           rowEdits: groupProductionOpBatchByVariant(detailBatch, product).map(g => ({
                             variantId: g.variantId,
                             label: g.label,
@@ -317,6 +395,30 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
                   />
                 </div>
               </div>
+              {isReportDetail && reworkReportFieldsForDetail.length > 0 && (
+                <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">返工报工自定义</h4>
+                    <p className="text-[11px] font-bold text-slate-500">自定义单据内容（本批次共用）</p>
+                  </div>
+                  {reworkReportFieldsForDetail.map(cf => (
+                    <div key={cf.id} className="space-y-1">
+                      <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
+                      <PlanFormCustomFieldInput
+                        cf={cf}
+                        value={editing.form.customData[cf.id]}
+                        onChange={v =>
+                          setEditing(prev =>
+                            prev ? { ...prev, form: { ...prev.form, customData: { ...prev.form.customData, [cf.id]: v } } } : prev,
+                          )
+                        }
+                        dictionaries={dictionaries}
+                        controlClassName="h-[44px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-slate-100">
                 <div className="flex items-center gap-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">单价（元/件）</label>
@@ -441,6 +543,20 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
                   </>
                 )}
               </div>
+              {isReportDetail && reworkReportFieldsForDetail.length > 0 && (
+                <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">返工报工自定义</h4>
+                    <p className="text-[11px] font-bold text-slate-500">自定义单据内容（本批次共用）</p>
+                  </div>
+                  {reworkReportFieldsForDetail.map(cf => (
+                    <div key={cf.id} className="space-y-1">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</p>
+                      <PlanFormCustomFieldReadonly cf={cf} value={reworkReportCustomSnapshot[cf.id]} />
+                    </div>
+                  ))}
+                </div>
+              )}
               {showSpecTable && (
               <div className="border border-slate-200 rounded-2xl overflow-hidden">
                 <table className="w-full text-left text-sm">
@@ -476,7 +592,7 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
                 </table>
               </div>
               )}
-              {(first.reworkNodeIds?.length ?? 0) > 0 && (
+              {(first.reworkNodeIds?.length ?? 0) > 0 && first.reworkNodeIds && (
                 <div className="text-sm">
                   <span className="text-slate-400 font-bold">返工目标工序</span>
                   <p className="text-slate-800 mt-1">{first.reworkNodeIds.map(nid => globalNodes.find(n => n.id === nid)?.name ?? nid).join('、')}</p>

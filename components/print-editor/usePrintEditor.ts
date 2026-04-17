@@ -7,6 +7,7 @@ import type {
   PrintLineElementConfig,
   PrintPaperMarginsMm,
   PrintTemplate,
+  PrintTemplateDocumentType,
 } from '../../types';
 import { newElementId } from '../../utils/printTemplateDefaults';
 import {
@@ -63,7 +64,6 @@ function defaultConfigForType(type: PrintBodyElementType): PrintElementConfig {
       };
     case 'dynamicList':
       return {
-        dataSource: 'order',
         dataColumnCount: 3,
         showHeader: true,
         showSerial: true,
@@ -315,6 +315,13 @@ export function usePrintEditor(initial: PrintTemplate) {
     updateTemplate(t => ({ ...t, name }));
   }, [updateTemplate]);
 
+  const setDocumentType = useCallback((documentType: PrintTemplateDocumentType) => {
+    updateTemplate(t => ({
+      ...t,
+      documentType: documentType === 'all' ? undefined : documentType,
+    }));
+  }, [updateTemplate]);
+
   const setPaperSize = useCallback((widthMm: number, heightMm: number) => {
     updateTemplate(t => ({
       ...t,
@@ -367,6 +374,7 @@ export function usePrintEditor(initial: PrintTemplate) {
     removeHeader,
     removeFooter,
     setName,
+    setDocumentType,
     setPaperSize,
     setPaperMarginsMm,
     setPaperBackgroundColor,

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, useDroppable } from '@dnd-kit/core';
 import { toast } from 'sonner';
 import { ArrowLeft, Eye, Minus, Plus, Printer, Save } from 'lucide-react';
-import { useMasterData, useConfigData, useOrdersData, useAppActions } from '../contexts/AppDataContext';
+import { useMasterData, useConfigData, useOrdersData, useFinanceData, useAppActions } from '../contexts/AppDataContext';
 import type {
   PrintBodyElement,
   PrintBodyElementType,
@@ -18,9 +18,12 @@ import type { PaletteDropType } from '../components/print-editor/ComponentLibrar
 import { PrintPaper } from '../components/print-editor/PrintPaper';
 import { PropertyPanel } from '../components/print-editor/PropertyPanel';
 import { usePrintEditor } from '../components/print-editor/usePrintEditor';
-import { buildPrintFieldOptions } from '../components/print-editor/printFieldOptions';
+import { buildPrintFieldOptions, filterPrintFieldOptionsByDocumentType } from '../components/print-editor/printFieldOptions';
 import { HiddenPrintSlot, usePrintTemplateAction } from '../components/print-editor/PrintPreview';
-import { augmentPrintPreviewContext } from '../utils/printPreviewSampleContext';
+import {
+  augmentPrintPreviewContext,
+  type PrintPreviewPsiCustomSamples,
+} from '../utils/printPreviewSampleContext';
 
 function CanvasDropZone({
   children,
@@ -52,8 +55,20 @@ export default function PrintTemplateEditorView() {
   const { id: routeId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { products } = useMasterData();
-  const { printTemplates, planFormSettings } = useConfigData();
+  const {
+    printTemplates,
+    planFormSettings,
+    orderFormSettings,
+    purchaseOrderFormSettings,
+    salesOrderFormSettings,
+    purchaseBillFormSettings,
+    salesBillFormSettings,
+    materialFormSettings,
+    outsourceFormSettings,
+    reworkFormSettings,
+  } = useConfigData();
   const { orders, plans } = useOrdersData();
+  const { financeCategories } = useFinanceData();
   const { onUpdatePrintTemplates } = useAppActions();
 
   const editor = usePrintEditor(createBlankCustomTemplate());
@@ -76,6 +91,7 @@ export default function PrintTemplateEditorView() {
     removeHeader,
     removeFooter,
     setName,
+    setDocumentType,
     setPaperSize,
     setPaperMarginsMm,
     setPaperBackgroundColor,
@@ -96,6 +112,29 @@ export default function PrintTemplateEditorView() {
     [selection, template.elements],
   );
 
+  const psiCustomSamples: PrintPreviewPsiCustomSamples = useMemo(
+    () => ({
+      salesBill: Object.fromEntries(
+        (salesBillFormSettings.customFields ?? []).map(f => [f.id, `「${f.label || f.id}」预览`]),
+      ),
+      purchaseBill: Object.fromEntries(
+        (purchaseBillFormSettings.customFields ?? []).map(f => [f.id, `「${f.label || f.id}」预览`]),
+      ),
+      purchaseOrder: Object.fromEntries(
+        (purchaseOrderFormSettings.customFields ?? []).map(f => [f.id, `「${f.label || f.id}」预览`]),
+      ),
+      salesOrder: Object.fromEntries(
+        (salesOrderFormSettings.customFields ?? []).map(f => [f.id, `「${f.label || f.id}」预览`]),
+      ),
+    }),
+    [
+      salesBillFormSettings.customFields,
+      purchaseBillFormSettings.customFields,
+      purchaseOrderFormSettings.customFields,
+      salesOrderFormSettings.customFields,
+    ],
+  );
+
   const previewCtx: PrintRenderContext = useMemo(() => {
     const plan = plans[0];
     const order = orders[0];
@@ -107,10 +146,50 @@ export default function PrintTemplateEditorView() {
       milestoneName: '示例工序',
       completedQuantity: 12,
     };
-    return augmentPrintPreviewContext(base, template);
-  }, [plans, orders, products, template]);
+    return augmentPrintPreviewContext(base, template, psiCustomSamples);
+  }, [plans, orders, products, template, psiCustomSamples]);
 
-  const fieldOptions = useMemo(() => buildPrintFieldOptions(planFormSettings.customFields), [planFormSettings.customFields]);
+  const fieldOptionsAll = useMemo(
+    () =>
+      buildPrintFieldOptions({
+        planCustomFields: planFormSettings.customFields,
+        stockInCustomFields: orderFormSettings.stockInCustomFields,
+        materialIssueCustomFields: materialFormSettings.materialIssueCustomFields,
+        materialReturnCustomFields: materialFormSettings.materialReturnCustomFields,
+        outsourceMaterialIssueCustomFields: materialFormSettings.outsourceMaterialIssueCustomFields,
+        outsourceMaterialReturnCustomFields: materialFormSettings.outsourceMaterialReturnCustomFields,
+        outsourceDispatchCustomFields: outsourceFormSettings.outsourceDispatchCustomFields,
+        outsourceReceiveCustomFields: outsourceFormSettings.outsourceReceiveCustomFields,
+        defectTreatmentCustomFields: reworkFormSettings.defectTreatmentCustomFields,
+        reworkReportCustomFields: reworkFormSettings.reworkReportCustomFields,
+        purchaseOrderCustomFields: purchaseOrderFormSettings.customFields,
+        salesOrderCustomFields: salesOrderFormSettings.customFields,
+        purchaseBillCustomFields: purchaseBillFormSettings.customFields,
+        salesBillCustomFields: salesBillFormSettings.customFields,
+        financeCategories,
+      }),
+    [
+      planFormSettings.customFields,
+      orderFormSettings.stockInCustomFields,
+      materialFormSettings.materialIssueCustomFields,
+      materialFormSettings.materialReturnCustomFields,
+      materialFormSettings.outsourceMaterialIssueCustomFields,
+      materialFormSettings.outsourceMaterialReturnCustomFields,
+      outsourceFormSettings.outsourceDispatchCustomFields,
+      outsourceFormSettings.outsourceReceiveCustomFields,
+      reworkFormSettings.defectTreatmentCustomFields,
+      reworkFormSettings.reworkReportCustomFields,
+      purchaseOrderFormSettings.customFields,
+      salesOrderFormSettings.customFields,
+      purchaseBillFormSettings.customFields,
+      salesBillFormSettings.customFields,
+      financeCategories,
+    ],
+  );
+  const fieldOptions = useMemo(
+    () => filterPrintFieldOptionsByDocumentType(fieldOptionsAll, template.documentType),
+    [fieldOptionsAll, template.documentType],
+  );
 
   const [zoom, setZoom] = useState(1);
   const [dragging, setDragging] = useState<{
@@ -510,6 +589,7 @@ export default function PrintTemplateEditorView() {
                 selectedElement={selectedElement}
                 fieldOptions={fieldOptions}
                 onSetName={setName}
+                onSetDocumentType={setDocumentType}
                 setPaperSize={setPaperSize}
                 setPaperMarginsMm={setPaperMarginsMm}
                 setPaperBackgroundColor={setPaperBackgroundColor}

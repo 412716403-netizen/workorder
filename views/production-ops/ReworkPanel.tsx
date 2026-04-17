@@ -10,9 +10,11 @@ import {
   ChevronRight,
   User,
   Package,
-  History
+  History,
+  Sliders,
 } from 'lucide-react';
-import { ProductionOpRecord, ProductionOrder } from '../../types';
+import type { PlanOrder, PrintTemplate, ProductionOpRecord, ProductionOrder } from '../../types';
+import { DEFAULT_REWORK_FORM_SETTINGS } from '../../types';
 import {
   moduleHeaderRowClass,
   outlineToolbarButtonClass,
@@ -39,6 +41,7 @@ import ReworkReportFlowListModal from './ReworkReportFlowListModal';
 import ReworkReportFlowDetailModal from './ReworkReportFlowDetailModal';
 import ReworkDefectiveActionModal from './ReworkDefectiveActionModal';
 import ReworkReportSubmitModal from './ReworkReportSubmitModal';
+import ReworkFormConfigModal from './ReworkFormConfigModal';
 import { nextOutsourceDocNumber } from '../../utils/partnerDocNumber';
 
 /** sourceReworkId → partner 的预建索引 */
@@ -61,9 +64,35 @@ function resolveReworkOutsourcePartner(r: ProductionOpRecord, partnerMap: Map<st
 }
 
 const ReworkPanel: React.FC<PanelProps> = ({
-  productionLinkMode = 'order', productMilestoneProgresses = [], records, orders, products, warehouses = [], boms = [], dictionaries, onAddRecord, onAddRecordBatch, onUpdateRecord, onDeleteRecord, globalNodes = [], partners = [], categories = [], partnerCategories = [], workers = [], equipment = [], processSequenceMode = 'free',
-  userPermissions, tenantRole
+  productionLinkMode = 'order',
+  productMilestoneProgresses = [],
+  records,
+  orders,
+  products,
+  warehouses = [],
+  boms = [],
+  dictionaries,
+  onAddRecord,
+  onAddRecordBatch,
+  onUpdateRecord,
+  onDeleteRecord,
+  globalNodes = [],
+  partners = [],
+  categories = [],
+  partnerCategories = [],
+  workers = [],
+  equipment = [],
+  processSequenceMode = 'free',
+  plans = [],
+  reworkFormSettings,
+  onUpdateReworkFormSettings,
+  printTemplates = [],
+  onUpdatePrintTemplates,
+  onRefreshPrintTemplates,
+  userPermissions,
+  tenantRole,
 }) => {
+  const rfSettings = reworkFormSettings ?? DEFAULT_REWORK_FORM_SETTINGS;
   const canViewMainList = hasOpsPerm(tenantRole, userPermissions, 'production:rework_list:allow');
 
   /** 返工管理：待处理不良弹窗 */
@@ -86,6 +115,8 @@ const ReworkPanel: React.FC<PanelProps> = ({
   const [reworkExpandedParents, setReworkExpandedParents] = useState<Set<string>>(new Set());
   /** 返工管理：物料弹窗（该工单 BOM 领料，确认后写入生产物料并在领料退料流水中备注「来自于返工」） */
   const [reworkMaterialOrderId, setReworkMaterialOrderId] = useState<string | null>(null);
+  const [showReworkFormConfigModal, setShowReworkFormConfigModal] = useState(false);
+  const [reworkFormConfigDefaultTab, setReworkFormConfigDefaultTab] = useState<'fields' | 'print'>('fields');
   /** 返工报工弹窗：点击工序标签打开，当前工单 + 工序 */
   const [reworkReportModal, setReworkReportModal] = useState<{ order: ProductionOrder; nodeId: string; nodeName: string; outsourcePartner?: string } | null>(null);
 
@@ -483,6 +514,20 @@ const ReworkPanel: React.FC<PanelProps> = ({
             <History className="w-4 h-4 shrink-0" /> 返工报工流水
           </button>
           )}
+          {hasOpsPerm(tenantRole, userPermissions, 'production:rework_form_config:allow') &&
+            onUpdateReworkFormSettings &&
+            onUpdatePrintTemplates && (
+              <button
+                type="button"
+                onClick={() => {
+                  setReworkFormConfigDefaultTab('fields');
+                  setShowReworkFormConfigModal(true);
+                }}
+                className={outlineToolbarButtonClass}
+              >
+                <Sliders className="w-4 h-4 shrink-0" /> 表单配置
+              </button>
+            )}
         </div>
       </div>
 
@@ -869,8 +914,15 @@ const ReworkPanel: React.FC<PanelProps> = ({
           dictionaries={dictionaries}
           userPermissions={userPermissions}
           tenantRole={tenantRole}
+          reworkFormSettings={rfSettings}
+          printTemplates={printTemplates}
           onUpdateRecord={onUpdateRecord}
           onDeleteRecord={onDeleteRecord}
+          onOpenReworkFormPrintTab={() => {
+            setReworkFormConfigDefaultTab('print');
+            void onRefreshPrintTemplates?.();
+            setShowReworkFormConfigModal(true);
+          }}
           onClose={() => { setDefectFlowDetailRecord(null); }}
         />
       )}
@@ -903,8 +955,15 @@ const ReworkPanel: React.FC<PanelProps> = ({
           equipment={equipment}
           userPermissions={userPermissions}
           tenantRole={tenantRole}
+          reworkFormSettings={rfSettings}
+          printTemplates={printTemplates}
           onUpdateRecord={onUpdateRecord}
           onDeleteRecord={onDeleteRecord}
+          onOpenReworkFormPrintTab={() => {
+            setReworkFormConfigDefaultTab('print');
+            void onRefreshPrintTemplates?.();
+            setShowReworkFormConfigModal(true);
+          }}
           onClose={() => { setReworkFlowDetailRecord(null); }}
         />
       )}
@@ -923,6 +982,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
           partnerCategories={partnerCategories}
           userPermissions={userPermissions}
           tenantRole={tenantRole}
+          defectTreatmentCustomFields={rfSettings.defectTreatmentCustomFields}
           onAddRecord={onAddRecord}
           onAddRecordBatch={onAddRecordBatch}
           getNextReworkDocNo={getNextReworkDocNo}
@@ -944,12 +1004,34 @@ const ReworkPanel: React.FC<PanelProps> = ({
           equipment={equipment}
           processSequenceMode={processSequenceMode}
           partners={partners}
+          reworkReportCustomFields={rfSettings.reworkReportCustomFields}
           onAddRecord={onAddRecord}
           onUpdateRecord={onUpdateRecord}
           getNextReworkReportDocNo={getNextReworkReportDocNo}
           onClose={() => { setReworkReportModal(null); }}
         />
       )}
+
+      {showReworkFormConfigModal &&
+        reworkFormSettings &&
+        onUpdateReworkFormSettings &&
+        onUpdatePrintTemplates && (
+          <ReworkFormConfigModal
+            open={showReworkFormConfigModal}
+            onClose={() => setShowReworkFormConfigModal(false)}
+            defaultTabWhenOpen={reworkFormConfigDefaultTab}
+            reworkFormSettings={rfSettings}
+            onUpdateReworkFormSettings={s => {
+              void onUpdateReworkFormSettings(s);
+            }}
+            printTemplates={printTemplates}
+            onUpdatePrintTemplates={onUpdatePrintTemplates}
+            onRefreshPrintTemplates={onRefreshPrintTemplates}
+            plans={plans}
+            orders={orders}
+            products={products}
+          />
+        )}
     </div>
   );
 };

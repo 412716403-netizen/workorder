@@ -1,7 +1,20 @@
 import React, { useState, useMemo } from 'react';
 import { X, Truck } from 'lucide-react';
 import { toast } from 'sonner';
-import { ProductionOpRecord, ProductionOrder, Product, GlobalNodeTemplate, AppDictionaries, ProductCategory, ProductVariant, ProductMilestoneProgress, Partner, PartnerCategory } from '../../types';
+import {
+  ProductionOpRecord,
+  ProductionOrder,
+  Product,
+  GlobalNodeTemplate,
+  AppDictionaries,
+  ProductCategory,
+  ProductVariant,
+  ProductMilestoneProgress,
+  Partner,
+  PartnerCategory,
+  PlanFormFieldConfig,
+} from '../../types';
+import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { splitQtyBySourceDefectiveAcrossParentOrders } from '../../utils/reworkSplitByProductOrders';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
@@ -9,6 +22,13 @@ import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelec
 import { hasOpsPerm } from './types';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import { DEFECT_TREATMENT_CUSTOM_DATA_KEY } from '../../utils/productionOpCollab/rework';
+
+function defectTreatmentCollabFromValues(values: Record<string, unknown>): { collabData?: Record<string, unknown> } {
+  const clean = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== '' && v != null && v !== undefined));
+  if (!Object.keys(clean).length) return {};
+  return { collabData: { [DEFECT_TREATMENT_CUSTOM_DATA_KEY]: clean } };
+}
 
 export interface ReworkDefectiveActionModalProps {
   reworkActionRow: {
@@ -40,6 +60,7 @@ export interface ReworkDefectiveActionModalProps {
   getNextReworkDocNo: () => string;
   getNextOutsourceReworkDocNo: (partnerName: string) => string;
   onClose: () => void;
+  defectTreatmentCustomFields?: PlanFormFieldConfig[];
 }
 
 const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
@@ -60,6 +81,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
   getNextReworkDocNo,
   getNextOutsourceReworkDocNo,
   onClose,
+  defectTreatmentCustomFields = [],
 }) => {
   const { currentUser } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
@@ -70,6 +92,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
   const [reworkActionNodeIds, setReworkActionNodeIds] = useState<string[]>([]);
   const [reworkActionVariantQuantities, setReworkActionVariantQuantities] = useState<Record<string, number>>({});
   const [outsourcePartnerName, setOutsourcePartnerName] = useState('');
+  const [defectCustomData, setDefectCustomData] = useState<Record<string, unknown>>({});
 
   const reworkActionProduct = useMemo(() => products.find(p => p.id === reworkActionRow.productId) ?? null, [reworkActionRow, products]);
   const reworkActionCategory = useMemo(() => (reworkActionProduct ? categories.find(c => c.id === reworkActionProduct.categoryId) : null), [reworkActionProduct, categories]);
@@ -138,6 +161,25 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
     return pending;
   }, [reworkActionRow, orders, records, reworkActionProduct?.variants, productMilestoneProgresses]);
 
+  /**
+   * 有颜色尺码矩阵，但不良在报工中未按规格登记（待处理容量都在 '' 或已删除的规格 id 上）时，
+   * 矩阵格子的「最多」会全是 0。此时改按合计数录入，提交用无规格 key 走 splitQtyBySourceDefectiveAcrossParentOrders。
+   */
+  const reworkTreatMatrixQtyAsAggregate = useMemo(() => {
+    if (!reworkActionHasColorSize || reworkActionRow.pendingQty <= 0) return false;
+    const ids = reworkActionProduct?.variants?.map(v => v.id) ?? [];
+    const onKnown = ids.reduce((s, id) => s + (reworkActionPendingByVariant[id] ?? 0), 0);
+    return onKnown <= 0;
+  }, [
+    reworkActionHasColorSize,
+    reworkActionRow.pendingQty,
+    reworkActionProduct?.variants,
+    reworkActionPendingByVariant,
+  ]);
+
+  /** true：按规格矩阵录入数量；false：单笔数量（含「有矩阵但不良未分规格」） */
+  const useVariantQtyGrid = reworkActionHasColorSize && !reworkTreatMatrixQtyAsAggregate;
+
   const reworkActionVariantTotal = useMemo(() => (Object.values(reworkActionVariantQuantities) as number[]).reduce((s, q) => s + (Number(q) || 0), 0), [reworkActionVariantQuantities]);
   const reworkActionGroupedVariants = useMemo((): Record<string, ProductVariant[]> => {
     if (!reworkActionProduct?.variants?.length) return {};
@@ -161,7 +203,10 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
     setReworkActionNodeIds([]);
     setReworkActionVariantQuantities({});
     setOutsourcePartnerName('');
+    setDefectCustomData({});
   };
+
+  const defectCollab = () => defectTreatmentCollabFromValues(defectCustomData);
 
   const handleScrapSubmit = () => {
     const reason = reworkActionReason || undefined;
@@ -179,10 +224,11 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
       scrapSavedQty += q;
       onAddRecord({
         id: rid, type: 'SCRAP', orderId: oid || undefined, productId: reworkActionRow.productId, variantId: vid, quantity: q,
-        reason, operator, timestamp, nodeId: nodeIdSc, docNo: scrapDocNo
+        reason, operator, timestamp, nodeId: nodeIdSc, docNo: scrapDocNo,
+        ...defectCollab(),
       });
     };
-    if (reworkActionHasColorSize) {
+    if (useVariantQtyGrid) {
       if (reworkActionVariantTotal <= 0 || reworkActionVariantTotal > reworkActionRow.pendingQty) return;
       if (splitProductSc) {
         const qtyMap: Record<string, number> = {};
@@ -251,10 +297,11 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
       reworkSavedQty += q;
       onAddRecord({
         id: rid, type: 'REWORK', orderId: oid || undefined, productId: reworkActionRow.productId, variantId: vid, quantity: q,
-        reason, operator, timestamp, status: '待返工', sourceNodeId, nodeId: nodeIdFirst, reworkNodeIds: reworkNodeIdsSorted, docNo: reworkDocNo
+        reason, operator, timestamp, status: '待返工', sourceNodeId, nodeId: nodeIdFirst, reworkNodeIds: reworkNodeIdsSorted, docNo: reworkDocNo,
+        ...defectCollab(),
       });
     };
-    if (reworkActionHasColorSize) {
+    if (useVariantQtyGrid) {
       if (reworkActionNodeIds.length === 0 || reworkActionVariantTotal <= 0 || reworkActionVariantTotal > reworkActionRow.pendingQty) return;
       if (splitProductRw) {
         const qtyMap: Record<string, number> = {};
@@ -330,6 +377,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
         variantId: vid, quantity: q, reason, operator, timestamp, status: '委外返工中',
         sourceNodeId, nodeId: nodeIdFirst, reworkNodeIds: reworkNodeIdsSorted,
         partner: partnerName, docNo: reworkDocNo,
+        ...defectCollab(),
       };
       const outsourceRec: ProductionOpRecord = {
         id: `wx-${now}-orw-${idx}-${oid || 'p'}`, type: 'OUTSOURCE',
@@ -343,7 +391,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
     };
 
     const batch: ProductionOpRecord[] = [];
-    if (reworkActionHasColorSize) {
+    if (useVariantQtyGrid) {
       if (reworkActionNodeIds.length === 0 || reworkActionVariantTotal <= 0 || reworkActionVariantTotal > reworkActionRow.pendingQty) return;
       if (splitProductOr) {
         const qtyMap: Record<string, number> = {};
@@ -443,6 +491,25 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
     </div>
   );
 
+  const defectCreateFields = (defectTreatmentCustomFields ?? []).filter(f => f.showInCreate);
+  const defectCustomBlock =
+    reworkActionMode != null && defectCreateFields.length > 0 ? (
+      <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+        <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">处理不良自定义</h4>
+        {defectCreateFields.map(cf => (
+          <div key={cf.id} className="space-y-1">
+            <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
+            <PlanFormCustomFieldInput
+              cf={cf}
+              value={defectCustomData[cf.id]}
+              onChange={v => setDefectCustomData(prev => ({ ...prev, [cf.id]: v }))}
+              controlClassName="h-[44px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+        ))}
+      </div>
+    ) : null;
+
   const renderVariantGrid = (mode: 'scrap' | 'rework' | 'outsource_rework') => (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -536,8 +603,13 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
             </div>
           ) : reworkActionMode === 'scrap' ? (
             <>
-              {reworkActionHasColorSize ? renderVariantGrid('scrap') : (
-                <div>
+              {useVariantQtyGrid ? renderVariantGrid('scrap') : (
+                <div className="space-y-2">
+                  {reworkTreatMatrixQtyAsAggregate ? (
+                    <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                      该工序不良未按颜色尺码登记，请填写合计处理数量（不超过待处理 {reworkActionRow.pendingQty} 件）。
+                    </p>
+                  ) : null}
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">报损数量</label>
                   <input type="number" min={1} max={reworkActionRow.pendingQty} value={reworkActionQty || ''} onChange={e => setReworkActionQty(Math.min(reworkActionRow.pendingQty, Math.max(0, Number(e.target.value) || 0)))} className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-rose-500 outline-none" placeholder={`1 ~ ${reworkActionRow.pendingQty}`} />
                 </div>
@@ -546,11 +618,12 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
                 <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">原因（选填）</label>
                 <input type="text" value={reworkActionReason} onChange={e => setReworkActionReason(e.target.value)} className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-rose-500 outline-none" placeholder="如：不可修复" />
               </div>
+              {defectCustomBlock}
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={resetMode} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200">取消</button>
                 <button
                   type="button"
-                  disabled={reworkActionHasColorSize ? (reworkActionVariantTotal <= 0 || reworkActionVariantTotal > reworkActionRow.pendingQty) : (reworkActionQty <= 0 || reworkActionQty > reworkActionRow.pendingQty)}
+                  disabled={useVariantQtyGrid ? (reworkActionVariantTotal <= 0 || reworkActionVariantTotal > reworkActionRow.pendingQty) : (reworkActionQty <= 0 || reworkActionQty > reworkActionRow.pendingQty)}
                   onClick={handleScrapSubmit}
                   className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50"
                 >
@@ -561,8 +634,13 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
           ) : reworkActionMode === 'rework' ? (
             <>
               {renderNodeSelector()}
-              {reworkActionHasColorSize ? renderVariantGrid('rework') : (
-                <div>
+              {useVariantQtyGrid ? renderVariantGrid('rework') : (
+                <div className="space-y-2">
+                  {reworkTreatMatrixQtyAsAggregate ? (
+                    <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                      该工序不良未按颜色尺码登记，请填写合计处理数量（不超过待处理 {reworkActionRow.pendingQty} 件）。
+                    </p>
+                  ) : null}
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">返工数量</label>
                   <input type="number" min={1} max={reworkActionRow.pendingQty} value={reworkActionQty || ''} onChange={e => setReworkActionQty(Math.min(reworkActionRow.pendingQty, Math.max(0, Number(e.target.value) || 0)))} className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder={`1 ~ ${reworkActionRow.pendingQty}`} />
                 </div>
@@ -571,11 +649,12 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
                 <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">原因（选填）</label>
                 <input type="text" value={reworkActionReason} onChange={e => setReworkActionReason(e.target.value)} className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="如：尺寸不良" />
               </div>
+              {defectCustomBlock}
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={resetMode} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200">取消</button>
                 <button
                   type="button"
-                  disabled={reworkActionNodeIds.length === 0 || (reworkActionHasColorSize ? (reworkActionVariantTotal <= 0 || reworkActionVariantTotal > reworkActionRow.pendingQty) : (reworkActionQty <= 0 || reworkActionQty > reworkActionRow.pendingQty))}
+                  disabled={reworkActionNodeIds.length === 0 || (useVariantQtyGrid ? (reworkActionVariantTotal <= 0 || reworkActionVariantTotal > reworkActionRow.pendingQty) : (reworkActionQty <= 0 || reworkActionQty > reworkActionRow.pendingQty))}
                   onClick={handleReworkSubmit}
                   className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
                 >
@@ -597,8 +676,13 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
                 />
               </div>
               {renderNodeSelector()}
-              {reworkActionHasColorSize ? renderVariantGrid('outsource_rework') : (
-                <div>
+              {useVariantQtyGrid ? renderVariantGrid('outsource_rework') : (
+                <div className="space-y-2">
+                  {reworkTreatMatrixQtyAsAggregate ? (
+                    <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                      该工序不良未按颜色尺码登记，请填写合计处理数量（不超过待处理 {reworkActionRow.pendingQty} 件）。
+                    </p>
+                  ) : null}
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">委外返工数量</label>
                   <input type="number" min={1} max={reworkActionRow.pendingQty} value={reworkActionQty || ''} onChange={e => setReworkActionQty(Math.min(reworkActionRow.pendingQty, Math.max(0, Number(e.target.value) || 0)))} className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder={`1 ~ ${reworkActionRow.pendingQty}`} />
                 </div>
@@ -607,11 +691,12 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
                 <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">原因（选填）</label>
                 <input type="text" value={reworkActionReason} onChange={e => setReworkActionReason(e.target.value)} className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="如：工艺缺陷需外部修复" />
               </div>
+              {defectCustomBlock}
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={resetMode} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200">取消</button>
                 <button
                   type="button"
-                  disabled={!outsourcePartnerName.trim() || reworkActionNodeIds.length === 0 || (reworkActionHasColorSize ? (reworkActionVariantTotal <= 0 || reworkActionVariantTotal > reworkActionRow.pendingQty) : (reworkActionQty <= 0 || reworkActionQty > reworkActionRow.pendingQty))}
+                  disabled={!outsourcePartnerName.trim() || reworkActionNodeIds.length === 0 || (useVariantQtyGrid ? (reworkActionVariantTotal <= 0 || reworkActionVariantTotal > reworkActionRow.pendingQty) : (reworkActionQty <= 0 || reworkActionQty > reworkActionRow.pendingQty))}
                   onClick={handleOutsourceReworkSubmit}
                   className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-1.5"
                 >

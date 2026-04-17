@@ -23,13 +23,13 @@ import {
   Split,
   Printer,
   QrCode,
-  Ban,
   RefreshCw,
   Wrench,
   Plus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useConfirm } from '../../contexts/ConfirmContext';
+import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import {
   PlanOrder,
   Product,
@@ -61,10 +61,8 @@ import { localTodayYmd, planIdToLocalYmd, toLocalDateYmd } from '../../utils/loc
 import { nextPsiDocNumber } from '../../utils/partnerDocNumber';
 import { PlanPrintTemplateManageDialog } from '../../components/plan-print/PlanPrintTemplateManageDialog';
 
-function formatPlanDueDateList(dueDate: string | undefined | null): string {
-  if (!dueDate) return '';
-  return toLocalDateYmd(dueDate) || String(dueDate).trim().slice(0, 10);
-}
+/** 计划详情-追溯码：单品码列表、批次码列表每页行数 */
+const TRACE_CODE_LIST_PAGE_SIZE = 15;
 
 function formatPlanCreatedDateList(created: string | undefined | null): string {
   if (!created) return '';
@@ -194,11 +192,10 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   const [tempAssignments, setTempAssignments] = useState<Record<string, NodeAssignment>>({});
   const [tempPlanInfo, setTempPlanInfo] = useState<{
     customer: string;
-    dueDate: string;
     createdAt: string;
     items: PlanItem[];
     customData?: Record<string, any>;
-  }>({ customer: '', dueDate: '', createdAt: '', items: [] });
+  }>({ customer: '', createdAt: '', items: [] });
 
   const [isSaving, setIsSaving] = useState(false);
   const [tempNodeRates, setTempNodeRates] = useState<Record<string, number>>({});
@@ -212,6 +209,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   const [itemCodesTotal, setItemCodesTotal] = useState(0);
   const [itemCodesPage, setItemCodesPage] = useState(1);
   const [itemCodesLoading, setItemCodesLoading] = useState(false);
+  /** 仅翻页请求：不撤掉整块列表，避免详情弹窗内滚动条跳动 */
+  const [itemCodesPaging, setItemCodesPaging] = useState(false);
   const [itemCodesGenerating, setItemCodesGenerating] = useState(false);
   const [itemCodesVariantFilter, setItemCodesVariantFilter] = useState<string>('');
   const [itemCodesBatchFilter, setItemCodesBatchFilter] = useState<string>('');
@@ -219,6 +218,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   const [virtualBatches, setVirtualBatches] = useState<PlanVirtualBatch[]>([]);
   const [virtualBatchesSubtree, setVirtualBatchesSubtree] = useState<PlanVirtualBatch[]>([]);
   const [virtualBatchesLoading, setVirtualBatchesLoading] = useState(false);
+  const [virtualBatchesPage, setVirtualBatchesPage] = useState(1);
   const [vbCreating, setVbCreating] = useState(false);
   const [vbBulkBatchSize, setVbBulkBatchSize] = useState<string>('');
   const [vbBulkSplitting, setVbBulkSplitting] = useState(false);
@@ -228,9 +228,12 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   const [itemCodePrintOpen, setItemCodePrintOpen] = useState(false);
   const [itemCodePrintPlan, setItemCodePrintPlan] = useState<PlanOrder | null>(null);
   const [itemCodePrintCodes, setItemCodePrintCodes] = useState<ItemCode[]>([]);
-  const [itemCodePrintSelectedIds, setItemCodePrintSelectedIds] = useState<Set<string>>(new Set());
   const [itemCodePrintLoading, setItemCodePrintLoading] = useState(false);
   const [batchPrintModal, setBatchPrintModal] = useState<{ plan: PlanOrder; batch: PlanVirtualBatch } | null>(null);
+  const [itemCodeSinglePrintModal, setItemCodeSinglePrintModal] = useState<{ plan: PlanOrder; code: ItemCode } | null>(
+    null,
+  );
+  const [batchBulkPrintOpen, setBatchBulkPrintOpen] = useState(false);
 
   const sectionBasicRef = useRef<HTMLDivElement>(null);
   const sectionQtyRef = useRef<HTMLDivElement>(null);
@@ -601,10 +604,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     if (viewPlan) {
       setTempAssignments(viewPlan.assignments || {});
       const createdDate = formatPlanCreatedDateList(viewPlan.createdAt || planIdToLocalYmd(viewPlan.id) || localTodayYmd());
-      const dueDateOnly = formatPlanDueDateList(viewPlan.dueDate || '');
       setTempPlanInfo({
         customer: viewPlan.customer,
-        dueDate: dueDateOnly || viewPlan.dueDate || '',
         createdAt: createdDate,
         items: JSON.parse(JSON.stringify(viewPlan.items || [])),
         customData: viewPlan.customData ? { ...viewPlan.customData } : {}
@@ -615,6 +616,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
 
   useEffect(() => {
     if (planId) {
+      setItemCodesPaging(false);
       void loadItemCodes(planId);
       void loadVirtualBatches(planId);
       setItemCodesVariantFilter('');
@@ -623,13 +625,21 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
       setVbQuantity('');
       setVbBulkBatchSize('');
       setTraceGenMode(null);
+      setVirtualBatchesPage(1);
     } else {
       setItemCodes([]);
       setItemCodesTotal(0);
+      setItemCodesPaging(false);
       setVirtualBatches([]);
       setVirtualBatchesSubtree([]);
+      setVirtualBatchesPage(1);
     }
   }, [planId]);
+
+  const virtualBatchesDisplayed = useMemo(() => {
+    const start = (virtualBatchesPage - 1) * TRACE_CODE_LIST_PAGE_SIZE;
+    return virtualBatches.slice(start, start + TRACE_CODE_LIST_PAGE_SIZE);
+  }, [virtualBatches, virtualBatchesPage]);
 
   // --- Callbacks ---
   const handleUpdateDetail = () => {
@@ -638,7 +648,6 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
       onUpdatePlan?.(planId, {
         assignments: tempAssignments,
         customer: tempPlanInfo.customer,
-        dueDate: tempPlanInfo.dueDate,
         createdAt: tempPlanInfo.createdAt,
         items: tempPlanInfo.items,
         customData: tempPlanInfo.customData
@@ -870,22 +879,34 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     }));
   };
 
-  const loadItemCodes = useCallback(async (planOrderId: string, page = 1, variantFilter = '', batchFilter = '') => {
-    setItemCodesLoading(true);
-    try {
-      const params: any = { planOrderId, page, pageSize: 100, status: 'ACTIVE' };
-      if (variantFilter) params.variantId = variantFilter;
-      if (batchFilter) params.batchId = batchFilter;
-      const res = await itemCodesApi.list(params);
-      setItemCodes(res.items);
-      setItemCodesTotal(res.total);
-      setItemCodesPage(res.page);
-    } catch (e: any) {
-      toast.error(e.message || '加载单品码失败');
-    } finally {
-      setItemCodesLoading(false);
-    }
-  }, []);
+  const loadItemCodes = useCallback(
+    async (
+      planOrderId: string,
+      page = 1,
+      variantFilter = '',
+      batchFilter = '',
+      opts?: { silent?: boolean },
+    ) => {
+      const silent = opts?.silent === true;
+      if (silent) setItemCodesPaging(true);
+      else setItemCodesLoading(true);
+      try {
+        const params: any = { planOrderId, page, pageSize: TRACE_CODE_LIST_PAGE_SIZE, status: 'ACTIVE' };
+        if (variantFilter) params.variantId = variantFilter;
+        if (batchFilter) params.batchId = batchFilter;
+        const res = await itemCodesApi.list(params);
+        setItemCodes(res.items);
+        setItemCodesTotal(res.total);
+        setItemCodesPage(res.page);
+      } catch (e: any) {
+        toast.error(e.message || '加载单品码失败');
+      } finally {
+        if (silent) setItemCodesPaging(false);
+        else setItemCodesLoading(false);
+      }
+    },
+    [],
+  );
 
   const handleGenerateItemCodes = useCallback(async (planOrderId: string) => {
     setItemCodesGenerating(true);
@@ -908,16 +929,6 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     }
   }, [loadItemCodes, itemCodesVariantFilter, itemCodesBatchFilter]);
 
-  const handleVoidItemCode = useCallback(async (codeId: string, planOrderId: string) => {
-    try {
-      await itemCodesApi.void(codeId);
-      toast.success('单品码已作废');
-      await loadItemCodes(planOrderId, itemCodesPage, itemCodesVariantFilter, itemCodesBatchFilter);
-    } catch (e: any) {
-      toast.error(e.message || '作废失败');
-    }
-  }, [loadItemCodes, itemCodesPage, itemCodesVariantFilter, itemCodesBatchFilter]);
-
   const loadVirtualBatches = useCallback(async (planOrderId: string) => {
     setVirtualBatchesLoading(true);
     try {
@@ -930,7 +941,10 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
         for (const b of items) byId.set(b.id, b);
       }
       setVirtualBatchesSubtree([...byId.values()]);
-      setVirtualBatches(results.find(r => r.id === planOrderId)?.items ?? []);
+      const items = results.find(r => r.id === planOrderId)?.items ?? [];
+      setVirtualBatches(items);
+      const maxPage = Math.max(1, Math.ceil(items.length / TRACE_CODE_LIST_PAGE_SIZE));
+      setVirtualBatchesPage(p => Math.min(p, maxPage));
     } catch (e: any) {
       toast.error(e.message || '加载批次码失败');
     } finally {
@@ -1010,41 +1024,38 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     [vbBulkBatchSize, traceGenMode, loadVirtualBatches, loadItemCodes, itemCodesVariantFilter, itemCodesBatchFilter],
   );
 
-  const handleVoidVirtualBatch = useCallback(
-    async (id: string, planOrderId: string) => {
-      try {
-        await planVirtualBatchesApi.void(id);
-        toast.success('批次码已作废（关联单品码已同步作废）');
-        await loadVirtualBatches(planOrderId);
-        await loadItemCodes(planOrderId, itemCodesPage, itemCodesVariantFilter, itemCodesBatchFilter);
-      } catch (e: any) {
-        toast.error(e.message || '作废失败');
-      }
-    },
-    [loadVirtualBatches, loadItemCodes, itemCodesPage, itemCodesVariantFilter, itemCodesBatchFilter],
-  );
-
   const openItemCodePrintPicker = useCallback((plan: PlanOrder, variantFilter: string, batchFilter: string) => {
-      setItemCodePrintPlan(plan);
-      setItemCodePrintOpen(true);
-      setItemCodePrintLoading(true);
-      const params: Record<string, string | number> = {
+    setItemCodePrintPlan(plan);
+    setItemCodePrintOpen(true);
+    setItemCodePrintLoading(true);
+    void (async () => {
+      const base: Record<string, string | number> = {
         planOrderId: plan.id,
-        page: 1,
-        pageSize: 500,
         status: 'ACTIVE',
       };
-      if (variantFilter) params.variantId = variantFilter;
-      if (batchFilter) params.batchId = batchFilter;
-      void itemCodesApi
-        .list(params as any)
-        .then(res => {
-          setItemCodePrintCodes(res.items);
-          setItemCodePrintSelectedIds(new Set(res.items.map(c => c.id)));
-        })
-        .catch(() => toast.error('加载单品码失败'))
-        .finally(() => setItemCodePrintLoading(false));
-    }, []);
+      if (variantFilter) base.variantId = variantFilter;
+      if (batchFilter) base.batchId = batchFilter;
+      const chunk = 10_000;
+      try {
+        let page = 1;
+        const acc: ItemCode[] = [];
+        let total = 0;
+        for (;;) {
+          const res = await itemCodesApi.list({ ...base, page, pageSize: chunk } as any);
+          if (page === 1) total = res.total;
+          acc.push(...res.items);
+          if (acc.length >= total || res.items.length === 0 || res.items.length < chunk) break;
+          page++;
+        }
+        setItemCodePrintCodes(acc);
+      } catch {
+        toast.error('加载单品码失败');
+        setItemCodePrintCodes([]);
+      } finally {
+        setItemCodePrintLoading(false);
+      }
+    })();
+  }, []);
 
   // --- Guard: bail out if plan or product not found ---
   if (!viewPlan || !viewProduct) return null;
@@ -1118,35 +1129,32 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                       />
                     </div>
                   )}
+                  {planFormSettings.standardFields.find(f => f.id === 'createdAt')?.showInDetail !== false && (
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">交期截止日期</label>
-                    <div className="relative">
-                      <CalendarDays className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                      <input type="date" value={tempPlanInfo.dueDate || ''} onChange={e => setTempPlanInfo({ ...tempPlanInfo, dueDate: e.target.value })} className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-11 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">添加日期</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">
+                      {planFormSettings.standardFields.find(f => f.id === 'createdAt')?.label ?? '添加日期'}
+                    </label>
                     <div className="relative">
                       <CalendarDays className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
                       <input type="date" value={tempPlanInfo.createdAt || ''} onChange={e => setTempPlanInfo({ ...tempPlanInfo, createdAt: e.target.value })} className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-11 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
                     </div>
                   </div>
+                  )}
                   {planFormSettings.customFields.filter(f => f.showInDetail).map(cf => (
                     <div key={cf.id} className="space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">{cf.label}</label>
-                      {cf.type === 'date' ? (
-                        <input type="date" value={tempPlanInfo.customData?.[cf.id] ?? ''} onChange={e => setTempPlanInfo({ ...tempPlanInfo, customData: { ...tempPlanInfo.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
-                      ) : cf.type === 'number' ? (
-                        <input type="number" value={tempPlanInfo.customData?.[cf.id] ?? ''} onChange={e => setTempPlanInfo({ ...tempPlanInfo, customData: { ...tempPlanInfo.customData, [cf.id]: e.target.value === '' ? '' : Number(e.target.value) } })} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
-                      ) : cf.type === 'select' ? (
-                        <select value={tempPlanInfo.customData?.[cf.id] ?? ''} onChange={e => setTempPlanInfo({ ...tempPlanInfo, customData: { ...tempPlanInfo.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none">
-                          <option value="">请选择</option>
-                          {(cf.options ?? []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                        </select>
-                      ) : (
-                        <input type="text" value={tempPlanInfo.customData?.[cf.id] ?? ''} onChange={e => setTempPlanInfo({ ...tempPlanInfo, customData: { ...tempPlanInfo.customData, [cf.id]: e.target.value } })} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
-                      )}
+                      <PlanFormCustomFieldInput
+                        cf={cf}
+                        value={tempPlanInfo.customData?.[cf.id]}
+                        onChange={next =>
+                          setTempPlanInfo({
+                            ...tempPlanInfo,
+                            customData: { ...tempPlanInfo.customData, [cf.id]: next },
+                          })
+                        }
+                        controlClassName="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                        onFilePreview={onFilePreview}
+                      />
                     </div>
                   ))}
                 </div>
@@ -1902,9 +1910,9 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                       </div>
                     )}
 
-                    {itemCodesLoading ? (
+                    {itemCodesLoading && !itemCodes.length ? (
                       <div className="text-center py-8 text-sm text-slate-400">加载中...</div>
-                    ) : itemCodes.length === 0 ? (
+                    ) : !itemCodes.length && !itemCodesLoading && !itemCodesPaging ? (
                       <div className="text-center py-8 text-sm text-slate-400">
                         暂无单品码
                         {traceGenMode === 'item'
@@ -1915,10 +1923,23 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                       <>
                         <div className="text-xs text-slate-500">
                           共 <span className="font-black text-indigo-600">{itemCodesTotal}</span> 个单品码
-                          {itemCodesTotal > 100 && `（第 ${itemCodesPage} 页）`}
+                          {itemCodesTotal > TRACE_CODE_LIST_PAGE_SIZE && `（第 ${itemCodesPage} 页）`}
                         </div>
-                        <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                          <table className="w-full text-left border-collapse">
+                        <div className="relative border border-slate-200 rounded-2xl overflow-hidden">
+                          {(itemCodesPaging || (itemCodesLoading && itemCodes.length > 0)) && (
+                            <div
+                              className="absolute inset-0 z-10 flex items-center justify-center bg-white/55 backdrop-blur-[1px]"
+                              aria-busy
+                              aria-label="加载中"
+                            >
+                              <RefreshCw className="h-5 w-5 animate-spin text-indigo-500" />
+                            </div>
+                          )}
+                          <table
+                            className={`w-full text-left border-collapse ${
+                              itemCodesPaging || (itemCodesLoading && itemCodes.length > 0) ? 'opacity-70' : ''
+                            }`}
+                          >
                             <thead>
                               <tr className="bg-slate-50 border-b border-slate-200">
                                 <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase">编号</th>
@@ -1928,7 +1949,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                 <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase">规格</th>
                                 <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase">状态</th>
                                 <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase">生成时间</th>
-                                <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase text-right">操作</th>
+                                <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase text-right">打印</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -1962,14 +1983,16 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                     </td>
                                     <td className="px-4 py-2.5 text-[10px] text-slate-400">{new Date(code.createdAt).toLocaleDateString('zh-CN')}</td>
                                     <td className="px-4 py-2.5 text-right">
-                                      {code.status === 'ACTIVE' && (
+                                      {code.status === 'ACTIVE' ? (
                                         <button
                                           type="button"
-                                          onClick={() => viewPlan && handleVoidItemCode(code.id, viewPlan.id)}
-                                          className="text-[10px] font-bold text-rose-400 hover:text-rose-600 px-2 py-1 rounded hover:bg-rose-50 transition-colors"
+                                          onClick={() => viewPlan && setItemCodeSinglePrintModal({ plan: viewPlan, code })}
+                                          className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded hover:bg-indigo-50 transition-colors"
                                         >
-                                          <Ban className="w-3 h-3 inline mr-0.5" />作废
+                                          <Printer className="w-3 h-3 inline mr-0.5" />打印标签
                                         </button>
+                                      ) : (
+                                        <span className="text-[10px] text-slate-300">—</span>
                                       )}
                                     </td>
                                   </tr>
@@ -1978,26 +2001,36 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                             </tbody>
                           </table>
                         </div>
-                        {itemCodesTotal > 100 && (
+                        {itemCodesTotal > TRACE_CODE_LIST_PAGE_SIZE && (
                           <div className="flex items-center justify-center gap-2 pt-2">
                             <button
                               type="button"
-                              disabled={itemCodesPage <= 1}
+                              disabled={itemCodesPage <= 1 || itemCodesPaging || itemCodesLoading}
                               onClick={() =>
                                 viewPlan &&
-                                loadItemCodes(viewPlan.id, itemCodesPage - 1, itemCodesVariantFilter, itemCodesBatchFilter)
+                                loadItemCodes(viewPlan.id, itemCodesPage - 1, itemCodesVariantFilter, itemCodesBatchFilter, {
+                                  silent: true,
+                                })
                               }
                               className="px-3 py-1 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 disabled:opacity-50"
                             >
                               上一页
                             </button>
-                            <span className="text-xs text-slate-500">第 {itemCodesPage} 页 / 共 {Math.ceil(itemCodesTotal / 100)} 页</span>
+                            <span className="text-xs text-slate-500">
+                              第 {itemCodesPage} 页 / 共 {Math.ceil(itemCodesTotal / TRACE_CODE_LIST_PAGE_SIZE)} 页
+                            </span>
                             <button
                               type="button"
-                              disabled={itemCodesPage >= Math.ceil(itemCodesTotal / 100)}
+                              disabled={
+                                itemCodesPaging ||
+                                itemCodesLoading ||
+                                itemCodesPage >= Math.ceil(itemCodesTotal / TRACE_CODE_LIST_PAGE_SIZE)
+                              }
                               onClick={() =>
                                 viewPlan &&
-                                loadItemCodes(viewPlan.id, itemCodesPage + 1, itemCodesVariantFilter, itemCodesBatchFilter)
+                                loadItemCodes(viewPlan.id, itemCodesPage + 1, itemCodesVariantFilter, itemCodesBatchFilter, {
+                                  silent: true,
+                                })
                               }
                               className="px-3 py-1 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 disabled:opacity-50"
                             >
@@ -2012,16 +2045,36 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
 
                   {(traceGenMode === 'batch' || traceGenMode === 'batchWithItems') && (
                   <div ref={traceBatchListRef} className="border-t border-slate-200 pt-8 space-y-4 scroll-mt-4">
-                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                      <Boxes className="w-4 h-4 text-indigo-600 shrink-0" />
-                      批次码一览
-                    </h4>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                        <Boxes className="w-4 h-4 text-indigo-600 shrink-0" />
+                        批次码一览
+                      </h4>
+                      {virtualBatches.some(b => b.status === 'ACTIVE') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!viewPlan) return;
+                            setBatchBulkPrintOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-[11px] font-black text-indigo-700 hover:bg-indigo-100"
+                        >
+                          <Printer className="h-3.5 w-3.5 shrink-0" />
+                          打印批次码
+                        </button>
+                      )}
+                    </div>
                     {virtualBatchesLoading ? (
                       <div className="text-center py-8 text-sm text-slate-400">加载中...</div>
                     ) : virtualBatches.length === 0 ? (
                       <div className="text-center py-8 text-sm text-slate-400">暂无批次码</div>
                     ) : (
-                      <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                      <>
+                        <div className="text-xs text-slate-500">
+                          共 <span className="font-black text-indigo-600">{virtualBatches.length}</span> 条批次码
+                          {virtualBatches.length > TRACE_CODE_LIST_PAGE_SIZE && `（第 ${virtualBatchesPage} 页）`}
+                        </div>
+                        <div className="border border-slate-200 rounded-2xl overflow-hidden">
                         <table className="w-full text-left border-collapse">
                           <thead>
                             <tr className="bg-slate-50 border-b border-slate-200">
@@ -2033,11 +2086,11 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                               )}
                               <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase">状态</th>
                               <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase">创建时间</th>
-                              <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase text-right">操作</th>
+                              <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase text-right">打印</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
-                            {virtualBatches.map(b => {
+                            {virtualBatchesDisplayed.map(b => {
                               const variant = b.variantId ? viewProduct.variants.find(v => v.id === b.variantId) : null;
                               const color = variant?.colorId ? dictionaries.colors.find(c => c.id === variant.colorId) : null;
                               const size = variant?.sizeId ? dictionaries.sizes.find(s => s.id === variant.sizeId) : null;
@@ -2077,24 +2130,17 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                     </span>
                                   </td>
                                   <td className="px-4 py-2.5 text-[10px] text-slate-400">{new Date(b.createdAt).toLocaleString('zh-CN')}</td>
-                                  <td className="px-4 py-2.5 text-right space-x-2">
-                                    {b.status === 'ACTIVE' && (
-                                      <>
-                                        <button
-                                          type="button"
-                                          onClick={() => viewPlan && setBatchPrintModal({ plan: viewPlan, batch: b })}
-                                          className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded hover:bg-indigo-50 transition-colors"
-                                        >
-                                          <Printer className="w-3 h-3 inline mr-0.5" />打印标签
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => viewPlan && handleVoidVirtualBatch(b.id, viewPlan.id)}
-                                          className="text-[10px] font-bold text-rose-400 hover:text-rose-600 px-2 py-1 rounded hover:bg-rose-50 transition-colors"
-                                        >
-                                          <Ban className="w-3 h-3 inline mr-0.5" />作废
-                                        </button>
-                                      </>
+                                  <td className="px-4 py-2.5 text-right">
+                                    {b.status === 'ACTIVE' ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => viewPlan && setBatchPrintModal({ plan: viewPlan, batch: b })}
+                                        className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded hover:bg-indigo-50 transition-colors"
+                                      >
+                                        <Printer className="w-3 h-3 inline mr-0.5" />打印标签
+                                      </button>
+                                    ) : (
+                                      <span className="text-[10px] text-slate-300">—</span>
                                     )}
                                   </td>
                                 </tr>
@@ -2102,7 +2148,38 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                             })}
                           </tbody>
                         </table>
-                      </div>
+                        </div>
+                        {virtualBatches.length > TRACE_CODE_LIST_PAGE_SIZE && (
+                          <div className="flex items-center justify-center gap-2 pt-2">
+                            <button
+                              type="button"
+                              disabled={virtualBatchesPage <= 1}
+                              onClick={() => setVirtualBatchesPage(p => Math.max(1, p - 1))}
+                              className="px-3 py-1 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 disabled:opacity-50"
+                            >
+                              上一页
+                            </button>
+                            <span className="text-xs text-slate-500">
+                              第 {virtualBatchesPage} 页 / 共 {Math.ceil(virtualBatches.length / TRACE_CODE_LIST_PAGE_SIZE)} 页
+                            </span>
+                            <button
+                              type="button"
+                              disabled={virtualBatchesPage >= Math.ceil(virtualBatches.length / TRACE_CODE_LIST_PAGE_SIZE)}
+                              onClick={() =>
+                                setVirtualBatchesPage(p =>
+                                  Math.min(
+                                    Math.ceil(virtualBatches.length / TRACE_CODE_LIST_PAGE_SIZE),
+                                    p + 1,
+                                  ),
+                                )
+                              }
+                              className="px-3 py-1 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 disabled:opacity-50"
+                            >
+                              下一页
+                            </button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                   )}
@@ -2222,9 +2299,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
         const pickerProduct = products.find(p => p.id === pickerPlan.productId);
 
         const handleItemCodeTemplatePick = (t: PrintTemplate) => {
-          const selectedCodes = itemCodePrintCodes.filter(c => itemCodePrintSelectedIds.has(c.id));
-          if (selectedCodes.length === 0) {
-            toast.error('请至少勾选一个单品码');
+          if (itemCodePrintCodes.length === 0) {
+            toast.error('没有可打印的单品码');
             return;
           }
           const orders2 = (orders ?? []).filter((o: any) => o.planOrderId === pickerPlan.id);
@@ -2235,14 +2311,13 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
             variants: pickerProduct?.variants ?? [],
           };
           const baseUrl = window.location.origin;
-          const rows = buildPrintListRowsFromItemCodes(selectedCodes, ctx2, dictionaries, baseUrl);
+          const rows = buildPrintListRowsFromItemCodes(itemCodePrintCodes, ctx2, dictionaries, baseUrl);
           onPrintRun({
             template: t,
             plan: { ...pickerPlan, _printListRows: rows, _labelPerRow: true } as any,
           });
           setItemCodePrintOpen(false);
           setItemCodePrintPlan(null);
-          setItemCodePrintSelectedIds(new Set());
         };
 
         return (
@@ -2254,7 +2329,6 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
             onClick={() => {
               setItemCodePrintOpen(false);
               setItemCodePrintPlan(null);
-              setItemCodePrintSelectedIds(new Set());
             }}
           />
           <div
@@ -2273,7 +2347,6 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                 onClick={() => {
                   setItemCodePrintOpen(false);
                   setItemCodePrintPlan(null);
-                  setItemCodePrintSelectedIds(new Set());
                 }}
                 className="rounded-full p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
               >
@@ -2281,99 +2354,248 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
               </button>
             </div>
 
-            <div className="px-5 py-3 border-b border-slate-100 max-h-48 overflow-y-auto">
+            <div className="border-b border-slate-100 px-5 py-4">
               {itemCodePrintLoading ? (
-                <div className="text-center py-4 text-xs text-slate-400">加载中...</div>
+                <div className="text-center py-2 text-xs text-slate-400">加载中...</div>
               ) : itemCodePrintCodes.length === 0 ? (
-                <div className="text-center py-4 text-xs text-slate-400">暂无单品码，请先生成单品码</div>
+                <div className="text-center py-2 text-xs text-slate-400">暂无单品码，请先生成单品码</div>
               ) : (
-                <div className="space-y-2">
-                  <p className="text-[10px] text-slate-400">
-                    已加载 {itemCodePrintCodes.length} 条（最多 500 条；超出时请用规格/批次筛选后分批打印）
-                  </p>
-                  <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-2 text-xs font-bold text-slate-600 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="h-3.5 w-3.5 rounded text-indigo-600"
-                        checked={itemCodePrintSelectedIds.size === itemCodePrintCodes.length && itemCodePrintCodes.length > 0}
-                        onChange={e => {
-                          setItemCodePrintSelectedIds(
-                            e.target.checked ? new Set(itemCodePrintCodes.map(c => c.id)) : new Set(),
-                          );
-                        }}
-                      />
-                      全选（{itemCodePrintSelectedIds.size}/{itemCodePrintCodes.length}）
-                    </label>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {itemCodePrintCodes.map(code => {
-                      const variant = pickerProduct?.variants.find(v => v.id === code.variantId);
-                      const color = variant?.colorId ? dictionaries.colors.find(c => c.id === variant.colorId) : null;
-                      const size = variant?.sizeId ? dictionaries.sizes.find(s => s.id === variant.sizeId) : null;
-                      const vLabel = [color?.name, size?.name].filter(Boolean).join('-') || variant?.skuSuffix || '';
-                      return (
-                        <label
-                          key={code.id}
-                          className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-bold cursor-pointer transition-colors ${itemCodePrintSelectedIds.has(code.id) ? 'border-indigo-200 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'}`}
-                        >
-                          <input
-                            type="checkbox"
-                            className="h-3 w-3 rounded text-indigo-600"
-                            checked={itemCodePrintSelectedIds.has(code.id)}
-                            onChange={e => {
-                              const next = new Set(itemCodePrintSelectedIds);
-                              if (e.target.checked) next.add(code.id);
-                              else next.delete(code.id);
-                              setItemCodePrintSelectedIds(next);
-                            }}
-                          />
-                          {formatItemCodeSerialLabel(pickerPlan.planNumber, code.serialNo)}
-                          {vLabel ? ` · ${vLabel}` : ''}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
+                <p className="text-[11px] leading-snug text-slate-500">
+                  共{' '}
+                  <span className="font-black text-indigo-600">{itemCodePrintCodes.length}</span> 条有效单品码，各 1
+                  张，合计{' '}
+                  <span className="font-black text-indigo-600">{itemCodePrintCodes.length}</span> 张。全量加载，量多可能稍慢。
+                </p>
               )}
             </div>
 
             <ul className="max-h-[min(40vh,280px)] divide-y divide-slate-100 overflow-y-auto p-2">
               {labelPrintPickerTemplates.length === 0 ? (
                 <li className="px-4 py-6 text-center text-xs leading-relaxed text-slate-400">
-                  暂无标签打印模版。请点击下方「增加模版」创建或加入白名单；若已限制标签可选模版，请先在「表单配置 → 打印模版」中勾选。
+                  暂无标签打印模版。请在「表单配置 → 打印模版」中创建模版或加入白名单。
                 </li>
               ) : (
                 labelPrintPickerTemplates.map(t => (
                   <li key={t.id}>
-                    <button
-                      type="button"
-                      onClick={() => handleItemCodeTemplatePick(t)}
-                      className="flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold text-slate-800 hover:bg-indigo-50"
-                    >
-                      <span className="min-w-0 truncate">{t.name}</span>
-                      <span className="shrink-0 text-xs font-bold text-indigo-600">
-                        {t.paperSize.widthMm}×{t.paperSize.heightMm} mm
-                      </span>
-                    </button>
+                    <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-slate-50/80">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-bold text-slate-800">{t.name}</div>
+                        <div className="mt-0.5 text-xs font-bold text-indigo-600">
+                          {t.paperSize.widthMm}×{t.paperSize.heightMm} mm
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleItemCodeTemplatePick(t)}
+                        className="flex shrink-0 items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700"
+                      >
+                        <Printer className="h-3.5 w-3.5" />
+                        打印
+                      </button>
+                    </div>
                   </li>
                 ))
               )}
             </ul>
-            <div className="flex justify-end border-t border-slate-100 px-3 py-3">
-              <button
-                type="button"
-                onClick={() => {
-                  void onRefreshPrintTemplates?.();
-                  setLabelPrintTemplateManageOpen(true);
-                }}
-                className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-100"
-              >
-                <Plus className="h-4 w-4" /> 增加模版
-              </button>
-            </div>
           </div>
         </div>
+        );
+      })()}
+
+      {/* 批次码：批量选择后打印多页标签 */}
+      {batchBulkPrintOpen && viewPlan && (() => {
+        const plan = viewPlan;
+        const prod = products.find(p => p.id === plan.productId);
+        const activeBatches = virtualBatches.filter(b => b.status === 'ACTIVE');
+
+        const buildRowForBatch = (batch: PlanVirtualBatch) => {
+          const variant = batch.variantId ? prod?.variants.find(v => v.id === batch.variantId) : null;
+          const color = variant?.colorId ? dictionaries.colors.find(c => c.id === variant.colorId) : null;
+          const size = variant?.sizeId ? dictionaries.sizes.find(s => s.id === variant.sizeId) : null;
+          const variantLabel = variant
+            ? [color?.name, size?.name].filter(Boolean).join('-') || variant.skuSuffix || ''
+            : '';
+          const orders2 = (orders ?? []).filter((o: ProductionOrder) => o.planOrderId === plan.id);
+          return buildVirtualBatchPrintRow(
+            batch,
+            {
+              planNumber: plan.planNumber,
+              productName: prod?.name ?? '',
+              sku: prod?.sku ?? '',
+              orderNumbers: orders2.map(o => o.orderNumber).filter(Boolean).join(', '),
+              variantLabel,
+              colorName: color?.name ?? '',
+              sizeName: size?.name ?? '',
+            },
+            window.location.origin,
+          );
+        };
+
+        const pickTemplate = (t: PrintTemplate) => {
+          if (activeBatches.length === 0) {
+            toast.error('没有可打印的有效批次码');
+            return;
+          }
+          const rows = activeBatches.map(buildRowForBatch);
+          onPrintRun({
+            template: t,
+            plan: { ...plan, _virtualBatchRows: rows, _labelPerVirtualBatch: true } as any,
+          });
+          setBatchBulkPrintOpen(false);
+        };
+
+        const closeBulk = () => {
+          setBatchBulkPrintOpen(false);
+        };
+
+        return (
+          <div className="fixed inset-0 z-[73] flex items-center justify-center p-4">
+            <button type="button" className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" aria-label="关闭" onClick={closeBulk} />
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="relative w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                <div>
+                  <h3 className="text-base font-black text-slate-900">打印批次码</h3>
+                  <p className="mt-0.5 text-xs text-slate-500">计划单 {plan.planNumber}</p>
+                </div>
+                <button type="button" onClick={closeBulk} className="rounded-full p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-600">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="border-b border-slate-100 px-5 py-4">
+                {activeBatches.length === 0 ? (
+                  <p className="py-2 text-center text-xs text-slate-400">没有可打印的有效批次码</p>
+                ) : (
+                  <p className="text-[11px] leading-snug text-slate-500">
+                    共{' '}
+                    <span className="font-black text-indigo-600">{activeBatches.length}</span> 条有效批次码，各 1
+                    张，合计{' '}
+                    <span className="font-black text-indigo-600">{activeBatches.length}</span> 张。不含已作废。
+                  </p>
+                )}
+              </div>
+
+              <ul className="max-h-[min(40vh,280px)] divide-y divide-slate-100 overflow-y-auto p-2">
+                {labelPrintPickerTemplates.length === 0 ? (
+                  <li className="px-4 py-6 text-center text-xs leading-relaxed text-slate-400">
+                    暂无标签打印模版。请在「表单配置 → 打印模版」中创建模版或加入白名单。
+                  </li>
+                ) : (
+                  labelPrintPickerTemplates.map(t => (
+                    <li key={t.id}>
+                      <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-slate-50/80">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-bold text-slate-800">{t.name}</div>
+                          <div className="mt-0.5 text-xs font-bold text-indigo-600">
+                            {t.paperSize.widthMm}×{t.paperSize.heightMm} mm
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => pickTemplate(t)}
+                          className="flex shrink-0 items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700"
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                          打印
+                        </button>
+                      </div>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 单品码：单行选择标签模版 */}
+      {itemCodeSinglePrintModal && (() => {
+        const { plan, code } = itemCodeSinglePrintModal;
+        const prod = products.find(p => p.id === plan.productId);
+        const variant = code.variantId ? prod?.variants.find(v => v.id === code.variantId) : null;
+        const color = variant?.colorId ? dictionaries.colors.find(c => c.id === variant.colorId) : null;
+        const size = variant?.sizeId ? dictionaries.sizes.find(s => s.id === variant.sizeId) : null;
+        const variantLabel = [color?.name, size?.name].filter(Boolean).join('-') || variant?.skuSuffix || '';
+        const pickTemplate = (t: PrintTemplate) => {
+          const orders2 = (orders ?? []).filter((o: ProductionOrder) => o.planOrderId === plan.id);
+          const ctx2: ItemCodePrintContext = {
+            planNumber: plan.planNumber,
+            productName: prod?.name ?? '',
+            orderNumbers: orders2.map(o => o.orderNumber),
+            variants: prod?.variants ?? [],
+          };
+          const rows = buildPrintListRowsFromItemCodes([code], ctx2, dictionaries, window.location.origin);
+          onPrintRun({ template: t, plan: { ...plan, _printListRows: rows, _labelPerRow: true } as any });
+          setItemCodeSinglePrintModal(null);
+        };
+        return (
+          <div className="fixed inset-0 z-[73] flex items-center justify-center p-4">
+            <button
+              type="button"
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              aria-label="关闭"
+              onClick={() => setItemCodeSinglePrintModal(null)}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                <div>
+                  <h3 className="text-base font-black text-slate-900">打印单品码标签</h3>
+                  <p className="mt-0.5 text-xs text-slate-500 break-all">
+                    {formatItemCodeSerialLabel(plan.planNumber, code.serialNo)}
+                    {variantLabel ? ` · ${variantLabel}` : ''}
+                  </p>
+                  <p className="mt-1.5 text-[11px] leading-snug text-slate-500">
+                    共 <span className="font-black text-indigo-600">1</span> 张单品码标签。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setItemCodeSinglePrintModal(null)}
+                  className="rounded-full p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <ul className="max-h-[min(40vh,280px)] divide-y divide-slate-100 overflow-y-auto p-2">
+                {labelPrintPickerTemplates.length === 0 ? (
+                  <li className="px-4 py-6 text-center text-xs leading-relaxed text-slate-400">
+                    暂无标签打印模版。请在「表单配置 → 打印模版」中创建模版或加入白名单。
+                  </li>
+                ) : (
+                  labelPrintPickerTemplates.map(t => (
+                    <li key={t.id}>
+                      <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-slate-50/80">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-bold text-slate-800">{t.name}</div>
+                          <div className="mt-0.5 text-xs font-bold text-indigo-600">
+                            {t.paperSize.widthMm}×{t.paperSize.heightMm} mm
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => pickTemplate(t)}
+                          className="flex shrink-0 items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700"
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                          打印
+                        </button>
+                      </div>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
+          </div>
         );
       })()}
 
@@ -2425,6 +2647,9 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                   <p className="mt-0.5 text-xs text-slate-500 break-all">
                     {batch.sequenceNo != null ? formatBatchSerialLabel(plan.planNumber, batch.sequenceNo) : '—'} · {batch.quantity} 件{variantLabel ? ` · ${variantLabel}` : ''}
                   </p>
+                  <p className="mt-1.5 text-[11px] leading-snug text-slate-500">
+                    共 <span className="font-black text-indigo-600">1</span> 张批次标签。
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -2437,37 +2662,31 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
               <ul className="max-h-[min(40vh,280px)] divide-y divide-slate-100 overflow-y-auto p-2">
                 {labelPrintPickerTemplates.length === 0 ? (
                   <li className="px-4 py-6 text-center text-xs leading-relaxed text-slate-400">
-                    暂无标签打印模版。请点击下方「增加模版」创建或加入白名单；若已限制标签可选模版，请先在「表单配置 → 打印模版」中勾选。
+                    暂无标签打印模版。请在「表单配置 → 打印模版」中创建模版或加入白名单。
                   </li>
                 ) : (
                   labelPrintPickerTemplates.map(t => (
                     <li key={t.id}>
-                      <button
-                        type="button"
-                        onClick={() => pickTemplate(t)}
-                        className="flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold text-slate-800 hover:bg-indigo-50"
-                      >
-                        <span className="min-w-0 truncate">{t.name}</span>
-                        <span className="shrink-0 text-xs font-bold text-indigo-600">
-                          {t.paperSize.widthMm}×{t.paperSize.heightMm} mm
-                        </span>
-                      </button>
+                      <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-slate-50/80">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-bold text-slate-800">{t.name}</div>
+                          <div className="mt-0.5 text-xs font-bold text-indigo-600">
+                            {t.paperSize.widthMm}×{t.paperSize.heightMm} mm
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => pickTemplate(t)}
+                          className="flex shrink-0 items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700"
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                          打印
+                        </button>
+                      </div>
                     </li>
                   ))
                 )}
               </ul>
-              <div className="flex justify-end border-t border-slate-100 px-3 py-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void onRefreshPrintTemplates?.();
-                    setLabelPrintTemplateManageOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-100"
-                >
-                  <Plus className="h-4 w-4" /> 增加模版
-                </button>
-              </div>
             </div>
           </div>
         );

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import type { ReportFieldDefinition } from '../types';
+import { localNowForDatetimeLocal, localTodayYmd, toDatetimeLocalInputValue } from '../utils/localDateTime';
 
 interface ReportCustomFieldsEditorProps {
   fields: ReportFieldDefinition[];
@@ -9,6 +10,43 @@ interface ReportCustomFieldsEditorProps {
   inputClassName?: string;
   fileHint?: string;
 }
+
+const ReportDateInput: React.FC<{
+  field: ReportFieldDefinition;
+  value: unknown;
+  onVal: (v: string) => void;
+  inputClassName: string;
+  namePrefix: string;
+}> = ({ field, value, onVal, inputClassName, namePrefix }) => {
+  const withTime = !!field.dateWithTime;
+  const auto = !!field.dateAutoFill;
+  const strVal = value === undefined || value === null ? '' : String(value);
+  const filledOnce = useRef(false);
+  useLayoutEffect(() => {
+    filledOnce.current = false;
+  }, [field.id]);
+  useLayoutEffect(() => {
+    if (!auto) return;
+    if (value != null && String(value).trim() !== '') return;
+    if (filledOnce.current) return;
+    filledOnce.current = true;
+    onVal(withTime ? localNowForDatetimeLocal() : localTodayYmd());
+  }, [auto, withTime, field.id, value, onVal]);
+  const inputType = withTime ? 'datetime-local' : 'date';
+  const inputValue = withTime ? toDatetimeLocalInputValue(strVal) : strVal.slice(0, 10);
+  return (
+    <input
+      tabIndex={-1}
+      type={inputType}
+      name={`${namePrefix}-${field.id}`}
+      autoComplete="off"
+      value={inputValue}
+      step={withTime ? 60 : undefined}
+      onChange={e => onVal(e.target.value)}
+      className={inputClassName}
+    />
+  );
+};
 
 const ReportCustomFieldsEditor: React.FC<ReportCustomFieldsEditorProps> = ({
   fields,
@@ -76,14 +114,12 @@ const ReportCustomFieldsEditor: React.FC<ReportCustomFieldsEditorProps> = ({
             </div>
           )}
           {field.type === 'date' && (
-            <input
-              tabIndex={-1}
-              type="date"
-              name={`${namePrefix}-${field.id}`}
-              autoComplete="off"
-              value={values[field.id] || ''}
-              onChange={e => onChange(field.id, e.target.value)}
-              className={inputClassName}
+            <ReportDateInput
+              field={field}
+              value={values[field.id]}
+              onVal={v => onChange(field.id, v)}
+              inputClassName={inputClassName}
+              namePrefix={namePrefix}
             />
           )}
           {field.type === 'file' && (

@@ -1,7 +1,7 @@
 import React, { Suspense, useEffect, useRef, useLayoutEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Link, Navigate, useParams, useLocation } from 'react-router-dom';
 import {
-  Layout, LayoutDashboard, ClipboardList, Settings as SettingsIcon,
+  LayoutDashboard, ClipboardList, Settings as SettingsIcon,
   Boxes, ShoppingCart, Wallet, LogOut, User, UserCog, Building2, Loader2, Inbox,
 } from 'lucide-react';
 
@@ -25,6 +25,7 @@ import { AppDataProvider, useDataLoading, useMasterData, useConfigData, useOrder
 import ErrorBoundary from './components/ErrorBoundary';
 import { ConfirmProvider } from './contexts/ConfirmContext';
 import { MainScrollSegmentProvider } from './contexts/MainScrollSegmentContext';
+import { BRAND_LOGO_PATH, BRAND_NAME } from './constants/branding';
 
 const RouteFallback = () => (
   <div className="flex items-center justify-center py-32">
@@ -153,12 +154,16 @@ function AppLayout() {
       {/* Sidebar — 打印模板编辑页隐藏，便于全宽画布 */}
       {!printEditorFullscreen && (
       <div className="w-52 bg-white border-r border-slate-200 flex flex-col p-5 gap-8">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-100">
-            <Layout className="w-7 h-7" />
-          </div>
-          <div className="flex flex-col">
-            <h1 className="text-xl font-black tracking-tighter uppercase">智造云 ERP</h1>
+        <div className="flex items-center gap-3">
+          <img
+            src={BRAND_LOGO_PATH}
+            alt=""
+            width={48}
+            height={48}
+            className="h-12 w-12 shrink-0 object-contain"
+          />
+          <div className="flex flex-col min-w-0">
+            <h1 className="text-xl font-black tracking-tight text-slate-900 truncate">{BRAND_NAME}</h1>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enterprise OS</span>
           </div>
         </div>
@@ -303,6 +308,9 @@ function ProductionRoute() {
       onRefreshPrintTemplates={a.refreshPrintTemplates}
       orderFormSettings={c.orderFormSettings} onUpdateOrderFormSettings={a.onUpdateOrderFormSettings}
       materialPanelSettings={c.materialPanelSettings} onUpdateMaterialPanelSettings={a.onUpdateMaterialPanelSettings}
+      materialFormSettings={c.materialFormSettings} onUpdateMaterialFormSettings={a.onUpdateMaterialFormSettings}
+      outsourceFormSettings={c.outsourceFormSettings} onUpdateOutsourceFormSettings={a.onUpdateOutsourceFormSettings}
+      reworkFormSettings={c.reworkFormSettings} onUpdateReworkFormSettings={a.onUpdateReworkFormSettings}
       onCreatePlan={a.onCreatePlan} onUpdateProduct={a.onUpdateProduct}
       onUpdatePlan={a.onUpdatePlan} onSplitPlan={a.onSplitPlan}
       onDeletePlan={a.onDeletePlan} onConvertToOrder={a.onConvertToOrder}
@@ -335,8 +343,12 @@ function PsiRoute() {
       partners={m.partners} partnerCategories={m.partnerCategories} dictionaries={m.dictionaries}
       purchaseOrderFormSettings={c.purchaseOrderFormSettings}
       onUpdatePurchaseOrderFormSettings={a.onUpdatePurchaseOrderFormSettings}
+      salesOrderFormSettings={c.salesOrderFormSettings}
+      onUpdateSalesOrderFormSettings={a.onUpdateSalesOrderFormSettings}
       purchaseBillFormSettings={c.purchaseBillFormSettings}
       onUpdatePurchaseBillFormSettings={a.onUpdatePurchaseBillFormSettings}
+      salesBillFormSettings={c.salesBillFormSettings}
+      onUpdateSalesBillFormSettings={a.onUpdateSalesBillFormSettings}
       onAddRecord={a.onAddPSIRecord} onAddRecordBatch={a.onAddPSIRecordBatch}
       onReplaceRecords={a.onReplacePSIRecords} onDeleteRecords={a.onDeletePSIRecords}
       userPermissions={tenantCtx?.permissions} tenantRole={tenantCtx?.tenantRole || ''}
@@ -347,6 +359,7 @@ function PsiRoute() {
 function FinanceRoute() {
   const m = useMasterData();
   const o = useOrdersData();
+  const c = useConfigData();
   const { psiRecords } = usePsiData();
   const f = useFinanceData();
   const a = useAppActions();
@@ -364,6 +377,14 @@ function FinanceRoute() {
       partnerCategories={m.partnerCategories} categories={m.categories}
       globalNodes={m.globalNodes} dictionaries={m.dictionaries}
       userPermissions={tenantCtx?.permissions} tenantRole={tenantCtx?.tenantRole}
+      plans={o.plans}
+      receiptFormSettings={c.receiptFormSettings}
+      paymentFormSettings={c.paymentFormSettings}
+      onUpdateReceiptFormSettings={a.onUpdateReceiptFormSettings}
+      onUpdatePaymentFormSettings={a.onUpdatePaymentFormSettings}
+      printTemplates={c.printTemplates}
+      onUpdatePrintTemplates={a.onUpdatePrintTemplates}
+      onRefreshPrintTemplates={a.refreshPrintTemplates}
     />
   );
 }

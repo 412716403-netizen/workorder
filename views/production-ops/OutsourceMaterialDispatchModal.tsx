@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Package, X, ArrowUpFromLine } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
@@ -9,10 +9,61 @@ import type {
   BOM,
   GlobalNodeTemplate,
   Warehouse,
+  MaterialFormSettings,
 } from '../../types';
+import { DEFAULT_MATERIAL_FORM_SETTINGS } from '../../types';
 import { toLocalCompactYmd } from '../../utils/localDateTime';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
+import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
+import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpCollab/material';
+
+/**
+ * 子工单等：外协记录上的 variantId 常为父成品规格，与本产品 BOM 规格对不上。
+ * 若按「工序+规格」拆分量对不上，但工序上仍有外协合计，则在「单规格产品」或「无按规格拆分量」时回退为工序级数量。
+ */
+function computeOutsourceQtyForNodeVariant(
+  nodeId: string,
+  variantId: string,
+  outsourceQtyByNode: Map<string, number>,
+  outsourceQtyByNodeVar: Map<string, number>,
+  bomsAtNode: BOM[],
+  productVariantCount: number,
+): number {
+  const direct = outsourceQtyByNodeVar.get(`${nodeId}|${variantId}`) ?? 0;
+  if (direct > 0) return direct;
+  const nodeTotal = outsourceQtyByNode.get(nodeId) ?? 0;
+  if (nodeTotal <= 0) return 0;
+  const prefix = `${nodeId}|`;
+  const reportedIds = [...outsourceQtyByNodeVar.keys()]
+    .filter(k => k.startsWith(prefix))
+    .map(k => k.slice(prefix.length));
+  const siblingVariantIds = new Set(bomsAtNode.map(b => b.variantId).filter((id): id is string => Boolean(id)));
+  const anyReportedHitsSiblingVariant = reportedIds.some(id => siblingVariantIds.has(id));
+  if (anyReportedHitsSiblingVariant) return 0;
+  if (productVariantCount <= 1 || reportedIds.length === 0) return nodeTotal;
+  return 0;
+}
+
+function effectiveOutsourceQtyForBomFallback(
+  bom: BOM,
+  nodeId: string,
+  outsourceQtyByNode: Map<string, number>,
+  outsourceQtyByNodeVar: Map<string, number>,
+  siblingBomsAtNode: BOM[],
+  productVariantCount: number,
+): number {
+  if (!bom.variantId) return outsourceQtyByNode.get(nodeId) ?? 0;
+  return computeOutsourceQtyForNodeVariant(
+    nodeId,
+    bom.variantId,
+    outsourceQtyByNode,
+    outsourceQtyByNodeVar,
+    siblingBomsAtNode,
+    productVariantCount,
+  );
+}
 
 export interface OutsourceMaterialDispatchModalProps {
   productionLinkMode: 'order' | 'product';
@@ -33,6 +84,8 @@ export interface OutsourceMaterialDispatchModalProps {
   globalNodes: GlobalNodeTemplate[];
   records: ProductionOpRecord[];
   warehouses: Warehouse[];
+  /** 外协领料发出自定义字段（生产物料 → 字段配置） */
+  materialFormSettings?: MaterialFormSettings;
   onAddRecord: (record: ProductionOpRecord) => void;
   onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
   onClose: () => void;
@@ -57,12 +110,21 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
   globalNodes,
   records,
   warehouses,
+  materialFormSettings = DEFAULT_MATERIAL_FORM_SETTINGS,
   onAddRecord,
   onAddRecordBatch,
   onClose,
 }) => {
   const { currentUser } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
+  const [matDispatchCustomValues, setMatDispatchCustomValues] = useState<Record<string, unknown>>({});
+  const materialCustomFieldDefs = useMemo(
+    () => (materialFormSettings.outsourceMaterialIssueCustomFields ?? []).filter(f => f.showInCreate),
+    [materialFormSettings.outsourceMaterialIssueCustomFields],
+  );
+  useEffect(() => {
+    setMatDispatchCustomValues({});
+  }, [matDispatchOrderId, matDispatchProductId]);
   const isProductMode = productionLinkMode === 'product';
   const targetOrder = !isProductMode && matDispatchOrderId ? orders.find(o => o.id === matDispatchOrderId) : undefined;
   const targetProductId = isProductMode ? matDispatchProductId : targetOrder?.productId;
@@ -107,6 +169,8 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
   }
   if (targetProduct) {
     const variants = targetProduct.variants ?? [];
+    const productVariantCount = variants.length;
+    const bomsForProduct = boms.filter(b => b.parentProductId === targetProduct.id);
     if (variants.length > 0) {
       for (const v of variants) {
         const seenBomIds = new Set<string>();
@@ -116,27 +180,51 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
             seenBomIds.add(bomId);
             const nodeName = globalNodes.find(n => n.id === nodeId)?.name ?? '';
             const bom = boms.find(b => b.id === bomId);
-            const qty = outsourceQtyByNodeVar.get(`${nodeId}|${v.id}`) ?? 0;
+            const bomsAtNode = bomsForProduct.filter(b => b.nodeId === nodeId);
+            const qty = computeOutsourceQtyForNodeVariant(
+              nodeId,
+              v.id,
+              outsourceQtyByNode,
+              outsourceQtyByNodeVar,
+              bomsAtNode,
+              productVariantCount,
+            );
             if (bom && qty > 0) addBomItems(bom, qty, nodeName);
           });
         } else {
           boms.filter(b => b.parentProductId === targetProduct.id && b.variantId === v.id && b.nodeId).forEach(bom => {
             if (seenBomIds.has(bom.id)) return;
             seenBomIds.add(bom.id);
-            const nodeName = globalNodes.find(n => n.id === bom.nodeId)?.name ?? '';
-            const qty = outsourceQtyByNodeVar.get(`${bom.nodeId!}|${v.id}`) ?? 0;
+            const nodeId = bom.nodeId!;
+            const nodeName = globalNodes.find(n => n.id === nodeId)?.name ?? '';
+            const bomsAtNode = bomsForProduct.filter(b => b.nodeId === nodeId);
+            const qty = computeOutsourceQtyForNodeVariant(
+              nodeId,
+              v.id,
+              outsourceQtyByNode,
+              outsourceQtyByNodeVar,
+              bomsAtNode,
+              productVariantCount,
+            );
             if (qty > 0) addBomItems(bom, qty, nodeName);
           });
         }
       }
     }
     if (matMap.size === 0) {
-      boms.filter(b => b.parentProductId === targetProduct.id && b.nodeId).forEach(bom => {
+      const fallbackBoms = boms.filter(b => b.parentProductId === targetProduct.id && b.nodeId);
+      fallbackBoms.forEach(bom => {
         const nodeId = bom.nodeId!;
         const nodeName = globalNodes.find(n => n.id === nodeId)?.name ?? '';
-        const qty = bom.variantId
-          ? (outsourceQtyByNodeVar.get(`${nodeId}|${bom.variantId}`) ?? 0)
-          : (outsourceQtyByNode.get(nodeId) ?? 0);
+        const siblingAtNode = fallbackBoms.filter(b => b.nodeId === nodeId);
+        const qty = effectiveOutsourceQtyForBomFallback(
+          bom,
+          nodeId,
+          outsourceQtyByNode,
+          outsourceQtyByNodeVar,
+          siblingAtNode,
+          productVariantCount,
+        );
         if (qty > 0) addBomItems(bom, qty, nodeName);
       });
     }
@@ -179,6 +267,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
     }
     const docNo = getNextWfDocNo();
     const timestamp = new Date().toLocaleString();
+    const collabExtra = buildMaterialStockCustomCollabPayload(matDispatchCustomValues, 'STOCK_OUT', matDispatchPartner);
     const batch: ProductionOpRecord[] = toIssue.map(m => ({
       id: `wf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       type: 'STOCK_OUT' as ProdOpType,
@@ -193,6 +282,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
       docNo,
       reason: matDispatchRemark.trim() || undefined,
       sourceProductId: isProductMode ? (targetProductId ?? undefined) : undefined,
+      ...collabExtra,
     }));
     if (onAddRecordBatch && batch.length > 1) {
       await onAddRecordBatch(batch);
@@ -230,7 +320,10 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
               ) : (
                 <select
                   value={matDispatchPartner}
-                  onChange={e => setMatDispatchPartner(e.target.value)}
+                  onChange={e => {
+                    setMatDispatchPartner(e.target.value);
+                    setMatDispatchCustomValues({});
+                  }}
                   className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
                 >
                   {matDispatchPartnerOptions.map(p => (
@@ -264,6 +357,24 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
               className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 bg-white focus:ring-2 focus:ring-indigo-500 outline-none placeholder:text-slate-400"
             />
           </div>
+          {materialCustomFieldDefs.length > 0 ? (
+            <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+              <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">外协领料发出自定义内容</h4>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {materialCustomFieldDefs.map(cf => (
+                  <div key={cf.id} className="space-y-1">
+                    <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
+                    <PlanFormCustomFieldInput
+                      cf={cf}
+                      value={matDispatchCustomValues[cf.id]}
+                      onChange={v => setMatDispatchCustomValues(prev => ({ ...prev, [cf.id]: v }))}
+                      controlClassName="h-[52px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {bomMaterials.length === 0 ? (
             <p className="py-8 text-center text-slate-400 text-sm">该{isProductMode ? '产品' : '工单'}未配置 BOM 物料，无法进行物料外发</p>
           ) : (
@@ -290,7 +401,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
                         </div>
                         {m.sku && <p className="text-[10px] text-slate-400 mt-0.5">{m.sku}</p>}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-slate-600">{m.unitNeeded}</td>
+                      <td className="px-4 py-3 text-right text-sm font-bold text-slate-600 tabular-nums">{formatMaterialQtyDisplay(m.unitNeeded)}</td>
                       <td className="px-4 py-3">
                         {(() => {
                           const needed = m.unitNeeded;
@@ -308,8 +419,15 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
                                   <div className={`h-full rounded-full ${pct >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${pct}%` }} />
                                 )}
                               </div>
-                              <span className="text-[9px] font-bold text-slate-500">
-                                {overIssue ? <span>已发 {issued} <span className="text-rose-500">（超发 {issued - needed}）</span></span> : `已发 ${issued}`}
+                              <span className="text-[9px] font-bold text-slate-500 tabular-nums">
+                                {overIssue ? (
+                                  <span>
+                                    已发 {formatMaterialQtyDisplay(issued)}{' '}
+                                    <span className="text-rose-500">（超发 {formatMaterialQtyDisplay(issued - needed)}）</span>
+                                  </span>
+                                ) : (
+                                  `已发 ${formatMaterialQtyDisplay(issued)}`
+                                )}
                               </span>
                             </div>
                           );

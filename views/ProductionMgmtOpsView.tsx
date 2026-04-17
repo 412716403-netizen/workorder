@@ -2,6 +2,7 @@ import React from 'react';
 import type {
   ProductionOpRecord,
   ProductionOrder,
+  PlanOrder,
   Product,
   ProdOpType,
   Warehouse,
@@ -15,7 +16,12 @@ import type {
   ProcessSequenceMode,
   ProductMilestoneProgress,
   MaterialPanelSettings,
+  MaterialFormSettings,
+  OutsourceFormSettings,
+  ReworkFormSettings,
+  PrintTemplate,
 } from '../types';
+import { DEFAULT_OUTSOURCE_FORM_SETTINGS } from '../types';
 import StockMaterialPanel from './production-ops/StockMaterialPanel';
 import OutsourcePanel from './production-ops/OutsourcePanel';
 import ReworkPanel from './production-ops/ReworkPanel';
@@ -23,6 +29,7 @@ import ReworkPanel from './production-ops/ReworkPanel';
 interface ProductionMgmtOpsViewProps {
   productionLinkMode?: 'order' | 'product';
   productMilestoneProgresses?: ProductMilestoneProgress[];
+  plans?: PlanOrder[];
   records: ProductionOpRecord[];
   orders: ProductionOrder[];
   products: Product[];
@@ -44,6 +51,15 @@ interface ProductionMgmtOpsViewProps {
   processSequenceMode?: ProcessSequenceMode;
   materialPanelSettings?: MaterialPanelSettings;
   onUpdateMaterialPanelSettings?: (settings: MaterialPanelSettings) => void;
+  materialFormSettings: MaterialFormSettings;
+  onUpdateMaterialFormSettings: (settings: MaterialFormSettings) => void;
+  outsourceFormSettings?: OutsourceFormSettings;
+  onUpdateOutsourceFormSettings?: (settings: OutsourceFormSettings) => void | Promise<void>;
+  reworkFormSettings: ReworkFormSettings;
+  onUpdateReworkFormSettings: (settings: ReworkFormSettings) => void | Promise<void>;
+  printTemplates: PrintTemplate[];
+  onUpdatePrintTemplates: (list: PrintTemplate[]) => void | Promise<void>;
+  onRefreshPrintTemplates?: () => void | Promise<void>;
   userPermissions?: string[];
   tenantRole?: string;
 }
@@ -51,6 +67,7 @@ interface ProductionMgmtOpsViewProps {
 const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
   productionLinkMode = 'order',
   productMilestoneProgresses = [],
+  plans = [],
   records,
   orders,
   products,
@@ -71,6 +88,15 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
   processSequenceMode = 'free',
   materialPanelSettings,
   onUpdateMaterialPanelSettings,
+  materialFormSettings,
+  onUpdateMaterialFormSettings,
+  outsourceFormSettings = DEFAULT_OUTSOURCE_FORM_SETTINGS,
+  onUpdateOutsourceFormSettings,
+  reworkFormSettings,
+  onUpdateReworkFormSettings,
+  printTemplates,
+  onUpdatePrintTemplates,
+  onRefreshPrintTemplates,
   userPermissions,
   tenantRole,
 }) => {
@@ -98,9 +124,45 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
     tenantRole,
   } as const;
 
-  if (limitType === 'STOCK_OUT') return <StockMaterialPanel {...panelProps} materialPanelSettings={materialPanelSettings} onUpdateMaterialPanelSettings={onUpdateMaterialPanelSettings} />;
-  if (limitType === 'OUTSOURCE') return <OutsourcePanel {...panelProps} />;
-  if (limitType === 'REWORK') return <ReworkPanel {...panelProps} />;
+  if (limitType === 'STOCK_OUT')
+    return (
+      <StockMaterialPanel
+        {...panelProps}
+        materialPanelSettings={materialPanelSettings}
+        onUpdateMaterialPanelSettings={onUpdateMaterialPanelSettings}
+        materialFormSettings={materialFormSettings}
+        onUpdateMaterialFormSettings={onUpdateMaterialFormSettings}
+        printTemplates={printTemplates}
+        onUpdatePrintTemplates={onUpdatePrintTemplates}
+        onRefreshPrintTemplates={onRefreshPrintTemplates}
+        plans={plans}
+      />
+    );
+  if (limitType === 'OUTSOURCE')
+    return (
+      <OutsourcePanel
+        {...panelProps}
+        plans={plans}
+        materialFormSettings={materialFormSettings}
+        outsourceFormSettings={outsourceFormSettings}
+        onUpdateOutsourceFormSettings={onUpdateOutsourceFormSettings}
+        printTemplates={printTemplates}
+        onUpdatePrintTemplates={onUpdatePrintTemplates}
+        onRefreshPrintTemplates={onRefreshPrintTemplates}
+      />
+    );
+  if (limitType === 'REWORK')
+    return (
+      <ReworkPanel
+        {...panelProps}
+        plans={plans}
+        reworkFormSettings={reworkFormSettings}
+        onUpdateReworkFormSettings={onUpdateReworkFormSettings}
+        printTemplates={printTemplates}
+        onUpdatePrintTemplates={onUpdatePrintTemplates}
+        onRefreshPrintTemplates={onRefreshPrintTemplates}
+      />
+    );
 
   return null;
 };

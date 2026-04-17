@@ -9,7 +9,11 @@ import {
 } from 'lucide-react';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
+import type { PlanListPrintSettings, PrintRenderContext, PrintTemplate } from '../../types';
 import { Product, ProductCategory, Partner, PartnerCategory, AppDictionaries, ProductVariant } from '../../types';
+import { PsiListPrintPicker } from '../../components/psi/PsiListPrintPicker';
+import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
+import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 import { sectionTitleClass } from '../../styles/uiDensity';
 import { useConfirm } from '../../contexts/ConfirmContext';
@@ -45,6 +49,13 @@ interface SalesOrderFormSectionProps {
   formatQtyDisplay: (q: number | string | undefined | null) => number;
   getUnitName: (productId: string) => string;
   partnerLabel: string;
+  /** 新增时展示的将生成单号（保存时由系统自动生成，不可手改） */
+  previewAutoSODocNumber?: string;
+  formSettings: { standardFields: any[]; customFields: any[] };
+  /** 列表与详情页共用：进销存销售订单表单配置 `listPrint` */
+  listPrintSlot?: PlanListPrintSettings;
+  printTemplates?: PrintTemplate[];
+  buildSalesOrderPrintContext?: (template: PrintTemplate) => PrintRenderContext;
 }
 
 const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
@@ -55,16 +66,29 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
   products, categories, partners, partnerCategories, dictionaries,
   productMapPSI, formatQtyDisplay, getUnitName,
   partnerLabel,
+  previewAutoSODocNumber,
+  formSettings,
+  listPrintSlot,
+  printTemplates = [],
+  buildSalesOrderPrintContext,
 }) => {
   const confirm = useConfirm();
 
   return (
-    <div className="max-w-6xl mx-auto space-y-4 animate-in slide-in-from-bottom-4 pb-24">
+    <div className="max-w-5xl mx-auto space-y-4 animate-in slide-in-from-bottom-4 pb-24">
       <div className="flex items-center justify-between sticky top-0 z-40 py-4 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200">
-        <button onClick={onBack} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
+        <button type="button" onClick={onBack} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
           <ArrowLeft className="w-4 h-4" /> 返回列表
         </button>
         <div className="flex items-center gap-3">
+          {!editingDocNumber ? (
+            <PsiListPrintPicker
+              slot={listPrintSlot}
+              printTemplates={printTemplates}
+              buildContext={buildSalesOrderPrintContext}
+              pickerSubtitle={previewAutoSODocNumber || undefined}
+            />
+          ) : null}
           {editingDocNumber && onDeleteRecords && hasPsiPerm('psi:sales_order:delete') && (
             <button
               type="button"
@@ -81,6 +105,7 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
             </button>
           )}
           <button
+            type="button"
             onClick={() => onSave()}
             disabled={!form.partner || salesOrderItems.length === 0 || !salesOrderItems.some(i => {
               if (!i.productId) return false;
@@ -94,52 +119,66 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
         </div>
       </div>
 
-      <div className="bg-white rounded-[40px] p-8 border border-slate-200 shadow-sm space-y-10">
+      <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm space-y-10">
         <div className="space-y-8">
-          <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
+          <div className="flex items-center gap-3 border-b border-slate-200 pb-3">
             <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600"><FileText className="w-5 h-5" /></div>
             <h3 className={sectionTitleClass}>1. 销售订单基础信息</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2 space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{partnerLabel}</label>
-              <SearchablePartnerSelect
-                options={partners}
-                categories={partnerCategories}
-                value={form.partner}
-                onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id })}
-                placeholder={`选择${partnerLabel}...`}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据编号 (选填)</label>
-              <div className="relative">
-                <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                <input type="text" placeholder="留空则自动生成" value={form.docNumber} onChange={e => setForm({ ...form, docNumber: e.target.value })} className="w-full bg-slate-50 border-none rounded-xl py-3 pl-10 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
+            <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5 min-w-0">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{partnerLabel}</label>
+                <SearchablePartnerSelect
+                  options={partners}
+                  categories={partnerCategories}
+                  value={form.partner}
+                  onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id })}
+                  placeholder={`选择${partnerLabel}...`}
+                  triggerClassName="text-sm w-full max-w-full"
+                />
+              </div>
+              <div className="space-y-1 min-w-0">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据编号</label>
+                <div className="relative">
+                  <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
+                  <div className="w-full min-w-0 bg-slate-100 border border-slate-100 rounded-xl py-3 pl-10 pr-4 font-bold text-slate-800 h-[52px] flex items-center truncate">
+                    <span className="truncate">
+                      {editingDocNumber
+                        ? editingDocNumber
+                        : form.partner
+                          ? previewAutoSODocNumber || '保存时自动生成'
+                          : `请先选择${partnerLabel}`}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-[10px] font-bold text-slate-400 ml-1 leading-snug">由系统自动生成，不可修改</p>
               </div>
             </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">期望交货日期</label>
-              <input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">添加日期</label>
-              <input type="date" value={form.createdAt} onChange={e => setForm({ ...form, createdAt: e.target.value })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-            </div>
-            <div className="md:col-span-2 space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据备注</label>
-              <input type="text" value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" placeholder="备注说明..." />
-            </div>
+            {formSettings.customFields.filter(f => f.showInCreate).map(cf => {
+              const eff = effectivePlanFormFieldType(cf);
+              return (
+                <div key={cf.id} className={eff === 'text' || eff === 'file' ? 'md:col-span-2 space-y-1' : 'space-y-1'}>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{cf.label}</label>
+                  <PlanFormCustomFieldInput
+                    cf={cf}
+                    value={form.customData?.[cf.id]}
+                    onChange={next => setForm({ ...form, customData: { ...form.customData, [cf.id]: next } })}
+                    controlClassName="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]"
+                  />
+                </div>
+              );
+            })}
           </div>
         </div>
 
         <div className="pt-10 border-t border-slate-50 space-y-8">
-          <div className="flex items-center justify-between border-b border-slate-50 pb-4">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600"><Layers className="w-5 h-5" /></div>
               <h3 className={sectionTitleClass}>2. 销售明细录入</h3>
             </div>
-            <button onClick={onAddItem} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all">
+            <button type="button" onClick={onAddItem} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm hover:bg-indigo-700 active:scale-[0.98] transition-all">
               <Plus className="w-4 h-4" /> 添加明细行
             </button>
           </div>
@@ -159,11 +198,12 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
                 });
               }
               return (
-              <div key={line.id} className="p-5 bg-slate-50/50 rounded-2xl border border-slate-100 space-y-4">
+              <div key={line.id} className="p-4 bg-slate-50/50 rounded-2xl border border-slate-100 space-y-4 shadow-sm hover:border-indigo-100/80 transition-all">
                 <div className="flex flex-wrap items-end gap-4">
-                  <div className="flex-1 min-w-[240px] space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">目标商品 (支持搜索与分类筛选)</label>
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block tracking-widest">目标商品 (支持搜索与分类筛选)</label>
                     <SearchableProductSelect
+                      compact
                       options={products}
                       categories={categories}
                       value={line.productId}
@@ -216,7 +256,7 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
                       </div>
                     </>
                   )}
-                  <button onClick={() => onRemoveItem(line.id)} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"><Trash2 className="w-5 h-5" /></button>
+                  <button type="button" onClick={() => onRemoveItem(line.id)} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all" aria-label="删除明细行"><Trash2 className="w-5 h-5" /></button>
                 </div>
                 {hasVariants && line.productId && (
                   <div className="pt-4 border-t border-slate-100 space-y-4">
@@ -265,17 +305,17 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
               </div>
             )}
           </div>
-          <div className="flex justify-end p-4 bg-indigo-600 rounded-[24px] text-white shadow-xl shadow-indigo-100 gap-8">
+          <div className="flex justify-end p-5 bg-indigo-600 rounded-2xl text-white shadow-xl shadow-indigo-100 gap-8">
             <div className="flex items-center gap-4">
-              <p className="text-xs font-bold opacity-80">销售总量:</p>
-              <p className="text-xl font-black">{salesOrderItems.reduce((s, i) => {
+              <p className="text-xs font-bold opacity-90">销售总量</p>
+              <p className="text-xl font-black tabular-nums">{salesOrderItems.reduce((s, i) => {
               const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((a, v) => a + v, 0) : (i.quantity || 0);
               return s + q;
-            }, 0)} <span className="text-xs font-medium">PCS</span></p>
+            }, 0)} <span className="text-xs font-semibold opacity-90">PCS</span></p>
             </div>
             <div className="flex items-center gap-4 border-l border-white/30 pl-8">
-              <p className="text-xs font-bold opacity-80">订单金额:</p>
-              <p className="text-xl font-black">¥{salesOrderItems.reduce((s, i) => {
+              <p className="text-xs font-bold opacity-90">订单金额</p>
+              <p className="text-xl font-black tabular-nums">¥{salesOrderItems.reduce((s, i) => {
                 const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((a, v) => a + v, 0) : (i.quantity || 0);
                 return s + q * (i.salesPrice || 0);
               }, 0).toFixed(2)}</p>

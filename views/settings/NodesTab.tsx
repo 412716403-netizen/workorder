@@ -17,6 +17,7 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { GlobalNodeTemplate, ReportFieldDefinition, FieldType } from '../../types';
+import { DateCustomFieldConfigCheckboxes } from '../../components/DateCustomFieldConfigCheckboxes';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { ExtFieldLabelInput, NodeReportTemplateSelectOptions } from './shared';
@@ -347,17 +348,19 @@ const NodesTab: React.FC<NodesTabProps> = ({
 
                        <div className="space-y-4 pt-4 border-t border-slate-100">
                           <div className="flex items-center justify-between">
-                             <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><FileText className="w-4 h-4" /> 报工填报项</h3>
+                             <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><FileText className="w-4 h-4" /> 报工自定义单据内容</h3>
                              <button type="button" onClick={() => addFieldToNode(node.id)} className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black hover:bg-black transition-all">
                                 <PlusCircle className="w-3.5 h-3.5" /> 增加填报项
                              </button>
                           </div>
-                          <p className="text-[10px] text-slate-400 font-medium -mt-2">报工时由工人填写，写入报工记录的自定义字段。</p>
+                          <p className="text-[10px] text-slate-400 font-medium -mt-2">报工时由工人填写，写入报工记录；与工单中心「工序节点」一一对应，不再在工单表单配置中维护。</p>
                           <div className="space-y-3">
                              {node.reportTemplate.length === 0 && <p className="text-center py-10 text-xs text-slate-300 italic border-2 border-dashed border-slate-100 rounded-2xl">暂无表单项，工人只需上报完工数量</p>}
                              {node.reportTemplate.map((field, idx) => {
                                const typeTri: FieldType =
-                                 field.type === 'select' || field.type === 'file' ? field.type : 'text';
+                                 field.type === 'select' || field.type === 'file' || field.type === 'date'
+                                   ? field.type
+                                   : 'text';
                                return (
                                <div key={field.id} className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-3">
                                   <div className="flex flex-col md:flex-row md:items-start gap-4">
@@ -381,14 +384,24 @@ const NodesTab: React.FC<NodesTabProps> = ({
                                                   field.type === 'select' && Array.isArray(field.options) && field.options.length > 0
                                                     ? field.options
                                                     : [],
+                                                dateWithTime: undefined,
+                                                dateAutoFill: undefined,
                                               });
-                                            } else {
+                                            } else if (v === 'date') {
                                               updateNodeField(node.id, field.id, { type: v, options: undefined });
+                                            } else {
+                                              updateNodeField(node.id, field.id, {
+                                                type: v,
+                                                options: undefined,
+                                                dateWithTime: undefined,
+                                                dateAutoFill: undefined,
+                                              });
                                             }
                                           }}
                                           className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold outline-none"
                                         >
                                           <option value="text">文本输入</option>
+                                          <option value="date">日期</option>
                                           <option value="select">下拉选择</option>
                                           <option value="file">上传文件/图片</option>
                                         </select>
@@ -403,6 +416,15 @@ const NodesTab: React.FC<NodesTabProps> = ({
                                             options={field.options || []}
                                             onPersist={(nid, fid, next) => updateNodeField(nid, fid, { options: next })}
                                           />
+                                        )}
+                                        {field.type === 'date' && (
+                                          <div className="sm:col-span-2 md:col-span-3">
+                                            <DateCustomFieldConfigCheckboxes
+                                              dateWithTime={field.dateWithTime}
+                                              dateAutoFill={field.dateAutoFill}
+                                              onPatch={patch => updateNodeField(node.id, field.id, patch)}
+                                            />
+                                          </div>
                                         )}
                                      </div>
                                   </div>

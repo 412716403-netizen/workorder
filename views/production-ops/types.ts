@@ -13,6 +13,11 @@ import type {
   Worker,
   ProcessSequenceMode,
   ProductMilestoneProgress,
+  PlanOrder,
+  PrintTemplate,
+  OutsourceFormSettings,
+  MaterialFormSettings,
+  ReworkFormSettings,
 } from '../../types';
 
 export type OutsourceModalType = 'dispatch' | 'receive' | 'flow';
@@ -69,6 +74,18 @@ export interface PanelProps {
   processSequenceMode: ProcessSequenceMode;
   userPermissions?: string[];
   tenantRole?: string;
+  /** 外协管理专用（可选，仅外协页使用） */
+  plans?: PlanOrder[];
+  outsourceFormSettings?: OutsourceFormSettings;
+  onUpdateOutsourceFormSettings?: (settings: OutsourceFormSettings) => void | Promise<void>;
+  printTemplates?: PrintTemplate[];
+  onUpdatePrintTemplates?: (list: PrintTemplate[]) => void | Promise<void>;
+  onRefreshPrintTemplates?: () => void | Promise<void>;
+  /** 外协物料发出/退回：自定义项定义来源（生产物料表单配置中的外协两套） */
+  materialFormSettings?: MaterialFormSettings;
+  /** 返工管理专用（可选） */
+  reworkFormSettings?: ReworkFormSettings;
+  onUpdateReworkFormSettings?: (settings: ReworkFormSettings) => void | Promise<void>;
 }
 
 export function hasOpsPerm(

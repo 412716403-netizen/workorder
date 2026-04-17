@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Building2, UserPlus, Search, Clock, ArrowLeft, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import * as api from '../services/api';
 import { toast } from 'sonner';
+import { BRAND_LOGO_PATH, BRAND_NAME } from '../constants/branding';
 
 interface OnboardingViewProps {
   onTenantReady: (result: { tenantId: string; tenantName: string; tenantRole: string; permissions: string[] }) => void;
@@ -197,7 +198,16 @@ export default function OnboardingView({ onTenantReady, onBack, onBackToLogin }:
       {backToLoginBtn}
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">欢迎使用 SmartTrack Pro</h1>
+          <div className="inline-flex mb-4">
+            <img
+              src={BRAND_LOGO_PATH}
+              alt=""
+              width={64}
+              height={64}
+              className="h-16 w-16 object-contain"
+            />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">欢迎使用 {BRAND_NAME}</h1>
           <p className="text-gray-500 mt-2">请选择创建企业或加入现有企业</p>
         </div>
         <div className="grid gap-4">
