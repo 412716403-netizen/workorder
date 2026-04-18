@@ -60,6 +60,8 @@ import { SearchableMultiSelectWithProcessTabs } from '../../components/Searchabl
 import { localTodayYmd, planIdToLocalYmd, toLocalDateYmd } from '../../utils/localDateTime';
 import { nextPsiDocNumber } from '../../utils/partnerDocNumber';
 import { PlanPrintTemplateManageDialog } from '../../components/plan-print/PlanPrintTemplateManageDialog';
+import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
+import { isEquipmentAssignmentEnabled, isWorkerAssignmentEnabled } from '../../utils/nodeAssignmentFlags';
 
 /** 计划详情-追溯码：单品码列表、批次码列表每页行数 */
 const TRACE_CODE_LIST_PAGE_SIZE = 15;
@@ -131,7 +133,7 @@ export interface PlanDetailPanelProps {
   onUpdatePlan?: (planId: string, updates: Partial<PlanOrder>) => void;
   onDeletePlan?: (planId: string) => void;
   onConvertToOrder: (planId: string) => void;
-  onUpdateProduct: (product: Product) => Promise<boolean>;
+  onUpdateProduct: (product: Product) => Promise<Product | null>;
   onAddPSIRecord?: (record: any) => void;
   onAddPSIRecordBatch?: (records: any[]) => Promise<void>;
   onCreateSubPlan?: (params: { productId: string; quantity: number; planId: string; bomNodeId: string }) => void;
@@ -185,6 +187,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   onRefreshPrintTemplates,
   onMergeLabelPrintWhitelist,
 }) => {
+  const equipmentFeaturesOn = useEquipmentFeaturesEffective();
   const confirm = useConfirm();
   const [labelPrintTemplateManageOpen, setLabelPrintTemplateManageOpen] = useState(false);
 
@@ -1215,8 +1218,10 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                    {productNodes.map((node, idx) => {
                      const eligibleWorkers = workers.filter(w => w.assignedMilestoneIds?.includes(node.id));
                      const isAssigned = (tempAssignments[node.id] as NodeAssignment)?.workerIds?.length > 0;
-                     const enableWorker = node.enableAssignment !== false && node.enableWorkerAssignment !== false;
-                     const enableEquipment = node.enableAssignment !== false && node.enableEquipmentAssignment !== false;
+                     const enableWorker =
+                      equipmentFeaturesOn && isWorkerAssignmentEnabled(node);
+                     const enableEquipment =
+                       equipmentFeaturesOn && isEquipmentAssignmentEnabled(node);
                      const canAssign = enableWorker || enableEquipment;
                      return (
                        <div key={node.id} className={`flex flex-col md:flex-row md:items-center gap-4 p-5 rounded-[28px] border transition-all ${isAssigned ? 'bg-white border-indigo-200 shadow-md ring-1 ring-indigo-50' : 'bg-white/60 border-slate-200'}`}>

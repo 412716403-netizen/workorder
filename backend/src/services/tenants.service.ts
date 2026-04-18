@@ -35,6 +35,7 @@ export async function listTenants(userId: string) {
       inviteCode: m.tenant.inviteCode, status: m.tenant.status,
       expiresAt: m.tenant.expiresAt?.toISOString() ?? null,
       role: m.role, permissions: perms, joinedAt: m.createdAt,
+      equipmentFeaturesEnabled: m.tenant.equipmentModuleEnabled !== false,
     };
   });
 }

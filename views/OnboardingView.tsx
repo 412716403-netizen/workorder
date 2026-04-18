@@ -5,7 +5,14 @@ import { toast } from 'sonner';
 import { BRAND_LOGO_PATH, BRAND_NAME } from '../constants/branding';
 
 interface OnboardingViewProps {
-  onTenantReady: (result: { tenantId: string; tenantName: string; tenantRole: string; permissions: string[] }) => void;
+  onTenantReady: (result: {
+    tenantId: string;
+    tenantName: string;
+    tenantRole: string;
+    permissions: string[];
+    expiresAt?: string | null;
+    equipmentFeaturesEnabled?: boolean;
+  }) => void;
   onBack?: () => void;
   /** 退出当前会话并回到登录页 */
   onBackToLogin?: () => void;

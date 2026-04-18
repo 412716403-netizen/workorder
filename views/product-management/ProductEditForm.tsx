@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Package, 
@@ -24,7 +24,6 @@ import {
   Zap,
   Hash,
   Search,
-  Filter,
   Settings,
   ArrowRight,
   GripVertical,
@@ -51,6 +50,10 @@ import { useConfirm } from '../../contexts/ConfirmContext';
 import * as api from '../../services/api';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
+import { useAuthOptional } from '../../contexts/AuthContext';
+import { hasSubPermission } from '../../utils/hasSubPermission';
+
+const LazyProductArchiveCreateModal = lazy(() => import('../../components/ProductArchiveCreateModal'));
 
 /** 未手填产品编号时生成：两个大写字母 + 生成时刻的时间戳（毫秒） */
 const AUTO_SKU_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -122,24 +125,27 @@ function FilePreviewPortal({
   );
 }
 
-const SpecSelectorModal = ({ 
-  isOpen, 
-  onClose, 
-  title, 
-  items, 
-  selectedIds, 
-  onToggle, 
+const SpecSelectorModal = ({
+  isOpen,
+  onClose,
+  title,
+  items,
+  selectedIds,
+  onToggle,
   onAddNew,
-  type
-}: { 
-  isOpen: boolean; 
-  onClose: () => void; 
-  title: string; 
-  items: DictionaryItem[]; 
-  selectedIds: string[]; 
+  type,
+  stackZClass = 'z-[10250]',
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  items: DictionaryItem[];
+  selectedIds: string[];
   onToggle: (id: string) => void;
   onAddNew: (name: string) => void;
   type: 'color' | 'size';
+  /** 嵌在 ProductArchiveCreateModal（z=10800）内时需更高，否则被外壳挡住 */
+  stackZClass?: string;
 }) => {
   const [search, setSearch] = useState('');
   const filteredItems = items.filter(item => item.name.toLowerCase().includes(search.toLowerCase()));
@@ -147,7 +153,7 @@ const SpecSelectorModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className={`fixed inset-0 ${stackZClass} flex items-center justify-center p-4`}>
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}></div>
       <div className="relative bg-white w-full max-w-xl rounded-[40px] shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden flex flex-col max-h-[90vh]">
         <div className="px-8 py-6 border-b border-slate-50 flex items-center justify-between">
@@ -240,7 +246,7 @@ const PortalSelect = ({ value, onChange, options, optionPairs, placeholder = '�
   useEffect(() => {
     if (isOpen && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
-      setStyle({ position: 'fixed' as const, top: rect.bottom + 4, left: rect.left, width: rect.width, zIndex: 9999 });
+      setStyle({ position: 'fixed' as const, top: rect.bottom + 4, left: rect.left, width: rect.width, zIndex: 11500 });
     }
   }, [isOpen]);
 
@@ -283,6 +289,7 @@ const BomBatchAddPanel = ({
   blockedProductIds,
   parentProductId,
   onConfirm,
+  allowQuickCreate = true,
 }: {
   open: boolean;
   onClose: () => void;
@@ -293,16 +300,31 @@ const BomBatchAddPanel = ({
   blockedProductIds: string[];
   parentProductId: string;
   onConfirm: (rows: { productId: string; categoryId?: string }[]) => void;
+  /** 在「新增产品」弹窗内嵌编辑时关闭，避免再叠一层新建弹窗 */
+  allowQuickCreate?: boolean;
 }) => {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<string>('all');
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+
+  const auth = useAuthOptional();
+  const canQuickCreate = useMemo(() => {
+    const tctx = auth?.tenantCtx;
+    if (!tctx) return false;
+    if (tctx.tenantRole === 'owner') return true;
+    return (
+      hasSubPermission(tctx.permissions, 'basic:products:view') &&
+      hasSubPermission(tctx.permissions, 'basic:products:create')
+    );
+  }, [auth]);
 
   useEffect(() => {
     if (!open) {
       setSearch('');
       setActiveTab('all');
       setPicked(new Set());
+      setQuickCreateOpen(false);
     }
   }, [open]);
 
@@ -379,9 +401,20 @@ const BomBatchAddPanel = ({
             勾选多个物料后一次加入下方清单，再逐行填写用量；已在本 BOM 中的不可重复勾选。带颜色/尺码的产品不可作 BOM 子件。仍可用「添加物料清单行」逐条搜索单选。
           </p>
         </div>
-        <button type="button" onClick={onClose} className="text-[10px] font-bold text-slate-500 hover:text-slate-800 shrink-0">
-          收起
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {canQuickCreate && allowQuickCreate && (
+            <button
+              type="button"
+              onClick={() => setQuickCreateOpen(true)}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider hover:bg-indigo-700 shadow-sm shadow-indigo-600/20 transition-all"
+            >
+              <Plus className="w-3 h-3" /> 新增产品
+            </button>
+          )}
+          <button type="button" onClick={onClose} className="text-[10px] font-bold text-slate-500 hover:text-slate-800">
+            收起
+          </button>
+        </div>
       </div>
 
       <div className="relative">
@@ -471,6 +504,25 @@ const BomBatchAddPanel = ({
           加入清单 ({pickedValid.length})
         </button>
       </div>
+
+      {allowQuickCreate && quickCreateOpen && (
+        <Suspense fallback={null}>
+          <LazyProductArchiveCreateModal
+            isOpen={quickCreateOpen}
+            onClose={() => setQuickCreateOpen(false)}
+            defaultCategoryId={activeTab !== 'all' ? activeTab : undefined}
+            onCreated={p => {
+              setPicked(prev => {
+                const n = new Set(prev);
+                n.add(p.id);
+                return n;
+              });
+              setActiveTab('all');
+              setSearch('');
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };
@@ -484,13 +536,17 @@ export interface ProductEditFormProps {
   dictionaries: AppDictionaries;
   partners: Partner[];
   partnerCategories: PartnerCategory[];
-  onUpdateProduct: (product: Product) => Promise<boolean>;
+  onUpdateProduct: (product: Product) => Promise<Product | null>;
   onDeleteProduct?: (id: string) => Promise<boolean>;
   onUpdateBOM: (bom: BOM) => Promise<boolean>;
   onRefreshDictionaries: () => Promise<void>;
   onBack: () => void;
   permCanDelete?: boolean;
   isPersistedProduct: boolean;
+  /** 从搜索框等弹窗嵌入时：子层 z-index 已抬高；顶栏「返回」改为「关闭」 */
+  embeddedInQuickCreateModal?: boolean;
+  /** 保存产品资料成功后（在 onBack 之前）回调，便于外层选中新建产品 */
+  onProductPersisted?: (product: Product) => void;
 }
 
 const ProductEditForm: React.FC<ProductEditFormProps> = ({
@@ -509,11 +565,21 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   onBack,
   permCanDelete = true,
   isPersistedProduct,
+  embeddedInQuickCreateModal = false,
+  onProductPersisted,
 }) => {
   const confirm = useConfirm();
+  /** 嵌在「新增产品」全屏弹窗（z=10800）内时，子层须更高，避免颜色/尺码等二级弹窗被挡住 */
+  const nestedOverlayZ = embeddedInQuickCreateModal ? 'z-[11200]' : 'z-[10250]';
   const [workingProduct, setWorkingProduct] = useState<Product>(() => JSON.parse(JSON.stringify(initialProduct)));
 
   const [modalType, setModalType] = useState<'color' | 'size' | null>(null);
+  const [quickAddSpecOpen, setQuickAddSpecOpen] = useState<'color' | 'size' | null>(null);
+  const [quickAddSpecName, setQuickAddSpecName] = useState('');
+  const [quickAddSpecBusy, setQuickAddSpecBusy] = useState(false);
+  const [quickAddUnitOpen, setQuickAddUnitOpen] = useState(false);
+  const [quickAddUnitName, setQuickAddUnitName] = useState('');
+  const [quickAddUnitBusy, setQuickAddUnitBusy] = useState(false);
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<{ src: string; kind: 'image' | 'pdf' } | null>(null);
   const filePreviewRevokeRef = useRef<(() => void) | undefined>(undefined);
@@ -558,9 +624,10 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   useEffect(() => {
     if (copyBOMDropdownOpen && copyBOMTriggerRef.current) {
       const rect = copyBOMTriggerRef.current.getBoundingClientRect();
-      setCopyBOMDropdownStyle({ position: 'fixed', top: rect.bottom + 4, right: window.innerWidth - rect.right, width: 256, zIndex: 9999 });
+      const z = embeddedInQuickCreateModal ? 11350 : 10800;
+      setCopyBOMDropdownStyle({ position: 'fixed', top: rect.bottom + 4, right: window.innerWidth - rect.right, width: 256, zIndex: z });
     }
-  }, [copyBOMDropdownOpen]);
+  }, [copyBOMDropdownOpen, embeddedInQuickCreateModal]);
 
   useEffect(() => {
     if (!activeVariantIdForBOM || !activeNodeIdForBOM) setCopyBOMDropdownOpen(false);
@@ -622,16 +689,85 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
     setWorkingProduct({ ...workingProduct, [key]: current });
   };
 
-  const handleAddNewSpec = async (type: 'colors' | 'sizes', name: string) => {
+  const handleAddNewSpec = async (type: 'colors' | 'sizes', name: string): Promise<boolean> => {
     try {
       const dictType = type === 'colors' ? 'color' : 'size';
       const created = await api.dictionaries.create({ type: dictType, name, value: type === 'colors' ? '#ccc' : name }) as DictionaryItem;
       await onRefreshDictionaries();
-      if (workingProduct) {
-        const key = type === 'colors' ? 'colorIds' : 'sizeIds';
-        setWorkingProduct({ ...workingProduct, [key]: [...workingProduct[key], created.id] });
+      const key = type === 'colors' ? 'colorIds' : 'sizeIds';
+      setWorkingProduct(wp => ({ ...wp, [key]: [...wp[key], created.id] }));
+      return true;
+    } catch (err: any) {
+      toast.error(err.message || '操作失败');
+      return false;
+    }
+  };
+
+  const submitQuickAddSpec = async () => {
+    const kind = quickAddSpecOpen;
+    if (!kind) return;
+    const name = quickAddSpecName.trim();
+    if (!name) {
+      toast.error(kind === 'color' ? '请输入颜色名称' : '请输入尺码名称');
+      return;
+    }
+    const items = kind === 'color' ? dictionaries.colors : dictionaries.sizes;
+    const existing = items.find(i => i.name === name);
+    if (existing) {
+      const key = kind === 'color' ? 'colorIds' : 'sizeIds';
+      if (workingProduct[key].includes(existing.id)) {
+        toast.info(kind === 'color' ? '该颜色已在已选列表中' : '该尺码已在已选列表中');
+      } else {
+        setWorkingProduct({ ...workingProduct, [key]: [...workingProduct[key], existing.id] });
+        toast.info(kind === 'color' ? '该颜色已存在，已加入已选' : '该尺码已存在，已加入已选');
       }
-    } catch (err: any) { toast.error(err.message || '操作失败'); }
+      setQuickAddSpecOpen(null);
+      setQuickAddSpecName('');
+      return;
+    }
+    if (quickAddSpecBusy) return;
+    setQuickAddSpecBusy(true);
+    try {
+      const ok = await handleAddNewSpec(kind === 'color' ? 'colors' : 'sizes', name);
+      if (ok) {
+        toast.success(kind === 'color' ? '已添加颜色' : '已添加尺码');
+        setQuickAddSpecOpen(null);
+        setQuickAddSpecName('');
+      }
+    } finally {
+      setQuickAddSpecBusy(false);
+    }
+  };
+
+  const submitQuickAddUnit = async () => {
+    const name = quickAddUnitName.trim();
+    if (!name) {
+      toast.error('请输入单位名称');
+      return;
+    }
+    const units = dictionaries.units ?? [];
+    const existing = units.find(u => u.name === name);
+    if (existing) {
+      setWorkingProduct({ ...workingProduct, unitId: existing.id });
+      toast.info('该单位已存在，已为您选中');
+      setQuickAddUnitOpen(false);
+      setQuickAddUnitName('');
+      return;
+    }
+    if (quickAddUnitBusy) return;
+    setQuickAddUnitBusy(true);
+    try {
+      const created = await api.dictionaries.create({ type: 'unit', name, value: name }) as DictionaryItem;
+      await onRefreshDictionaries();
+      setWorkingProduct({ ...workingProduct, unitId: created.id });
+      toast.success('已添加产品单位');
+      setQuickAddUnitOpen(false);
+      setQuickAddUnitName('');
+    } catch (err: any) {
+      toast.error(err.message || '添加失败');
+    } finally {
+      setQuickAddUnitBusy(false);
+    }
   };
 
   const validateProductForSave = (p: Product, catalog: Product[]): boolean => {
@@ -681,8 +817,9 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
     };
     setSaveProductBusy(true);
     try {
-      const ok = await onUpdateProduct(toSave);
-      if (ok) {
+      const saved = await onUpdateProduct(toSave);
+      if (saved) {
+        onProductPersisted?.(saved);
         onBack();
         setRouteReportDisplayFieldValues({});
       }
@@ -787,14 +924,14 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
     saveBomInFlightRef.current = true;
     setBomSaving(true);
     try {
-      const productOk = await onUpdateProduct({
+      const savedProduct = await onUpdateProduct({
         ...resolved,
         name: resolved.name.trim(),
         sku: resolved.sku.trim(),
         salesPrice: resolved.salesPrice ?? 0,
         purchasePrice: resolved.purchasePrice ?? 0,
       });
-      if (!productOk) return;
+      if (!savedProduct) return;
       for (const it of workingBOM.items) {
         const pid = it.productId?.trim();
         if (!pid) continue;
@@ -881,23 +1018,161 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   });
 
   return (
-      <div className="max-w-5xl mx-auto space-y-4 animate-in fade-in slide-in-from-bottom-4 pb-32">
-        <SpecSelectorModal 
-          isOpen={modalType === 'color'} 
+      <div className={`max-w-5xl mx-auto space-y-4 animate-in fade-in slide-in-from-bottom-4 ${embeddedInQuickCreateModal ? 'pb-8' : 'pb-32'}`}>
+        <SpecSelectorModal
+          isOpen={modalType === 'color'}
           onClose={() => setModalType(null)} title="选取款式生产颜色" type="color"
           items={dictionaries.colors} selectedIds={workingProduct.colorIds}
           onToggle={(id) => toggleAttribute('color', id)} onAddNew={(name) => handleAddNewSpec('colors', name)}
+          stackZClass={nestedOverlayZ}
         />
-        <SpecSelectorModal 
-          isOpen={modalType === 'size'} 
+        <SpecSelectorModal
+          isOpen={modalType === 'size'}
           onClose={() => setModalType(null)} title="选取款式生产尺码" type="size"
           items={dictionaries.sizes} selectedIds={workingProduct.sizeIds}
           onToggle={(id) => toggleAttribute('size', id)} onAddNew={(name) => handleAddNewSpec('sizes', name)}
+          stackZClass={nestedOverlayZ}
         />
+
+        {quickAddUnitOpen && (
+          <div className={`fixed inset-0 ${nestedOverlayZ} flex items-center justify-center p-4`}>
+            <div
+              role="presentation"
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              onClick={() => !quickAddUnitBusy && setQuickAddUnitOpen(false)}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="quick-add-unit-title"
+              className="relative bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-200"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <h2 id="quick-add-unit-title" className="text-lg font-bold text-slate-800">新增产品单位</h2>
+                <button
+                  type="button"
+                  disabled={quickAddUnitBusy}
+                  onClick={() => setQuickAddUnitOpen(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-full transition-all disabled:opacity-50"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div>
+                <label htmlFor="quick-add-unit-input" className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-0.5">单位名称</label>
+                <input
+                  id="quick-add-unit-input"
+                  autoFocus
+                  type="text"
+                  value={quickAddUnitName}
+                  onChange={e => setQuickAddUnitName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void submitQuickAddUnit();
+                    }
+                  }}
+                  placeholder="例如：件、箱、米"
+                  disabled={quickAddUnitBusy}
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all disabled:opacity-60"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={quickAddUnitBusy}
+                  onClick={() => setQuickAddUnitOpen(false)}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all disabled:opacity-50"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  disabled={quickAddUnitBusy}
+                  onClick={() => void submitQuickAddUnit()}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {quickAddUnitBusy ? '添加中…' : '确定添加'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {quickAddSpecOpen && (
+          <div className={`fixed inset-0 ${nestedOverlayZ} flex items-center justify-center p-4`}>
+            <div
+              role="presentation"
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              onClick={() => !quickAddSpecBusy && setQuickAddSpecOpen(null)}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="quick-add-spec-title"
+              className="relative bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-200"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <h2 id="quick-add-spec-title" className="text-lg font-bold text-slate-800">
+                  {quickAddSpecOpen === 'color' ? '新增颜色' : '新增尺码'}
+                </h2>
+                <button
+                  type="button"
+                  disabled={quickAddSpecBusy}
+                  onClick={() => setQuickAddSpecOpen(null)}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-full transition-all disabled:opacity-50"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div>
+                <label htmlFor="quick-add-spec-input" className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-0.5">
+                  {quickAddSpecOpen === 'color' ? '颜色名称' : '尺码名称'}
+                </label>
+                <input
+                  id="quick-add-spec-input"
+                  autoFocus
+                  type="text"
+                  value={quickAddSpecName}
+                  onChange={e => setQuickAddSpecName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void submitQuickAddSpec();
+                    }
+                  }}
+                  placeholder={quickAddSpecOpen === 'color' ? '例如：藏青、本白' : '例如：M、均码'}
+                  disabled={quickAddSpecBusy}
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all disabled:opacity-60"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={quickAddSpecBusy}
+                  onClick={() => setQuickAddSpecOpen(null)}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all disabled:opacity-50"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  disabled={quickAddSpecBusy}
+                  onClick={() => void submitQuickAddSpec()}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {quickAddSpecBusy ? '添加中…' : '确定添加'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center justify-between sticky top-0 z-40 py-3 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200 gap-2 flex-wrap">
           <button type="button" onClick={onBack} className="flex items-center gap-2 text-slate-500 font-semibold text-sm hover:text-slate-800 transition-all">
-            <ArrowLeft className="w-4 h-4 shrink-0" /> 返回列表
+            <ArrowLeft className="w-4 h-4 shrink-0" /> {embeddedInQuickCreateModal ? '关闭' : '返回列表'}
           </button>
           <div className="flex items-center gap-2 ml-auto">
             {permCanDelete && onDeleteProduct && isPersistedProduct && (
@@ -961,10 +1236,32 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">产品单位</label>
-              <select value={workingProduct.unitId ?? ''} onChange={e => setWorkingProduct({...workingProduct, unitId: e.target.value || undefined})} className="w-full bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none">
-                <option value="">请选择单位</option>
-                {(dictionaries.units ?? []).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
+              <div className="flex gap-2 items-stretch">
+                <select
+                  value={workingProduct.unitId ?? ''}
+                  onChange={e => setWorkingProduct({ ...workingProduct, unitId: e.target.value || undefined })}
+                  className="flex-1 min-w-0 bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                  <option value="">请选择单位</option>
+                  {(dictionaries.units ?? []).map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  title="快速添加产品单位"
+                  aria-label="快速添加产品单位"
+                  onClick={() => {
+                    setQuickAddUnitName('');
+                    setQuickAddUnitOpen(true);
+                  }}
+                  className="shrink-0 inline-flex items-center justify-center px-3 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-0 outline-none transition-all"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* 产品图片 */}
@@ -1203,47 +1500,79 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                <div className="px-4 sm:px-8 py-4 bg-slate-50/50 text-xs font-semibold text-slate-500 flex items-center">已选规格值</div>
                
                <div className="px-4 sm:px-8 py-6 flex items-center justify-center text-sm font-semibold text-slate-700">颜色</div>
-               <div className="px-4 sm:px-8 py-6 flex items-center gap-4 group">
-                  <button type="button" onClick={() => setModalType('color')} className="w-12 h-12 bg-indigo-600 text-white rounded-lg flex flex-col items-center justify-center shadow-sm hover:bg-indigo-700 active:scale-95 transition-all shrink-0">
-                    <Filter className="w-[18px] h-[18px]" />
-                    <div className="flex flex-col gap-0.5 mt-1">
-                      <div className="w-3 h-0.5 bg-white/40 rounded-full"></div>
-                      <div className="w-2 h-0.5 bg-white/40 rounded-full mx-auto"></div>
-                    </div>
-                  </button>
-                  <div className="flex flex-wrap gap-2">
-                    {workingProduct.colorIds.map(id => {
-                      const c = dictionaries.colors.find(i => i.id === id);
-                      const label = (c?.name != null && String(c.name).trim() !== '') ? String(c.name).trim() : '（未命名颜色）';
-                      return (
-                        <span key={id} className="px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-lg text-xs font-semibold text-slate-600 flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full" style={{backgroundColor: c?.value}}></div>
-                          {label}
-                        </span>
-                      );
-                    })}
-                    {workingProduct.colorIds.length === 0 && <span className="text-slate-400 text-xs font-medium">点击图标开启颜色选择器</span>}
+               <div className="px-4 sm:px-8 py-6 flex items-center gap-2 min-w-0">
+                  <div className="flex flex-1 min-w-0 gap-2 items-stretch">
+                    <button
+                      type="button"
+                      onClick={() => setModalType('color')}
+                      className="flex-1 min-w-0 min-h-[42px] flex flex-wrap gap-1.5 items-center text-left bg-slate-50 rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none hover:bg-slate-100/80 transition-colors border border-transparent focus:border-indigo-200"
+                    >
+                      <Palette className="w-4 h-4 text-slate-400 shrink-0" aria-hidden />
+                      {workingProduct.colorIds.length === 0 ? (
+                        <span className="text-slate-400 font-medium text-xs">点击选择颜色…</span>
+                      ) : (
+                        workingProduct.colorIds.map(id => {
+                          const c = dictionaries.colors.find(i => i.id === id);
+                          const label = (c?.name != null && String(c.name).trim() !== '') ? String(c.name).trim() : '（未命名颜色）';
+                          return (
+                            <span key={id} className="px-2 py-1 bg-white border border-slate-100 rounded-md text-[11px] font-semibold text-slate-600 inline-flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full shrink-0 border border-slate-200" style={{ backgroundColor: c?.value }} />
+                              {label}
+                            </span>
+                          );
+                        })
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      title="快速添加颜色"
+                      aria-label="快速添加颜色"
+                      onClick={() => {
+                        setQuickAddSpecName('');
+                        setQuickAddSpecOpen('color');
+                      }}
+                      className="shrink-0 inline-flex items-center justify-center px-3 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-0 outline-none transition-all"
+                    >
+                      <Plus className="w-5 h-5" />
+                    </button>
                   </div>
                </div>
 
                <div className="px-4 sm:px-8 py-6 flex items-center justify-center text-sm font-semibold text-slate-700">尺寸</div>
-               <div className="px-4 sm:px-8 py-6 flex items-center gap-4 group">
-                  <button type="button" onClick={() => setModalType('size')} className="w-12 h-12 bg-indigo-600 text-white rounded-lg flex flex-col items-center justify-center shadow-sm hover:bg-indigo-700 active:scale-95 transition-all shrink-0">
-                    <Filter className="w-[18px] h-[18px]" />
-                    <div className="flex flex-col gap-0.5 mt-1">
-                      <div className="w-3 h-0.5 bg-white/40 rounded-full"></div>
-                      <div className="w-2 h-0.5 bg-white/40 rounded-full mx-auto"></div>
-                    </div>
-                  </button>
-                  <div className="flex flex-wrap gap-2">
-                    {workingProduct.sizeIds.map(id => {
-                      const s = dictionaries.sizes.find(sz => sz.id === id);
-                      const label = (s?.name != null && String(s.name).trim() !== '') ? String(s.name).trim() : '（未命名尺码）';
-                      return (
-                        <span key={id} className="px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-lg text-xs font-semibold text-slate-600">{label}</span>
-                      );
-                    })}
-                    {workingProduct.sizeIds.length === 0 && <span className="text-slate-400 text-xs font-medium">点击图标开启尺寸选择器</span>}
+               <div className="px-4 sm:px-8 py-6 flex items-center gap-2 min-w-0">
+                  <div className="flex flex-1 min-w-0 gap-2 items-stretch">
+                    <button
+                      type="button"
+                      onClick={() => setModalType('size')}
+                      className="flex-1 min-w-0 min-h-[42px] flex flex-wrap gap-1.5 items-center text-left bg-slate-50 rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none hover:bg-slate-100/80 transition-colors border border-transparent focus:border-indigo-200"
+                    >
+                      <Hash className="w-4 h-4 text-slate-400 shrink-0" aria-hidden />
+                      {workingProduct.sizeIds.length === 0 ? (
+                        <span className="text-slate-400 font-medium text-xs">点击选择尺码…</span>
+                      ) : (
+                        workingProduct.sizeIds.map(id => {
+                          const s = dictionaries.sizes.find(sz => sz.id === id);
+                          const label = (s?.name != null && String(s.name).trim() !== '') ? String(s.name).trim() : '（未命名尺码）';
+                          return (
+                            <span key={id} className="px-2 py-1 bg-white border border-slate-100 rounded-md text-[11px] font-semibold text-slate-600">
+                              {label}
+                            </span>
+                          );
+                        })
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      title="快速添加尺码"
+                      aria-label="快速添加尺码"
+                      onClick={() => {
+                        setQuickAddSpecName('');
+                        setQuickAddSpecOpen('size');
+                      }}
+                      className="shrink-0 inline-flex items-center justify-center px-3 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-0 outline-none transition-all"
+                    >
+                      <Plus className="w-5 h-5" />
+                    </button>
                   </div>
                </div>
             </div>
@@ -1644,7 +1973,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                 { kinds: 0, totalQty: 0 },
               );
               return createPortal(
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="bom-editor-title">
+                <div className={`fixed inset-0 ${nestedOverlayZ} flex items-center justify-center p-4`} role="dialog" aria-modal="true" aria-labelledby="bom-editor-title">
                   <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" onClick={closeBOMEditor} aria-hidden />
                   <div
                     className="relative w-full max-w-3xl max-h-[90vh] flex flex-col bg-white rounded-[32px] border-2 border-indigo-600 shadow-[0_32px_64px_-12px_rgba(79,70,229,0.25)] animate-in zoom-in-95 duration-200"
@@ -1714,6 +2043,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                                 value={item.productId}
                                 unavailableProductIds={unavailableProductIds}
                                 disabledProductIds={bomBlockedProductIds}
+                                allowQuickCreate={!embeddedInQuickCreateModal}
                                 onChange={val => {
                                   const p = products.find(x => x.id === val);
                                   updateBOMItem(idx, { productId: val, categoryId: p?.categoryId });
@@ -1768,6 +2098,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                         alreadyUsedProductIds={workingBOM.items.map(i => i.productId).filter(Boolean)}
                         blockedProductIds={bomBlockedProductIds}
                         parentProductId={workingProduct?.id ?? ''}
+                        allowQuickCreate={!embeddedInQuickCreateModal}
                         onConfirm={rows => {
                           setWorkingBOM({
                             ...workingBOM,
@@ -1798,7 +2129,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
         )}
         {/* 图片放大弹窗 */}
         {lightboxImageUrl && (
-          <div className="fixed inset-0 z-[110] flex items-center justify-center p-8" onClick={() => setLightboxImageUrl(null)}>
+          <div className={`fixed inset-0 ${embeddedInQuickCreateModal ? nestedOverlayZ : 'z-[110]'} flex items-center justify-center p-8`} onClick={() => setLightboxImageUrl(null)}>
             <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" />
             <button onClick={() => setLightboxImageUrl(null)} className="absolute top-6 right-6 z-10 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-all">
               <X className="w-8 h-8" />

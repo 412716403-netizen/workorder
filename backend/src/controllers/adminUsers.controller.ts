@@ -47,6 +47,7 @@ export const listTenants = asyncHandler(async (req, res) => {
       name: t.name,
       status: t.status,
       expiresAt: t.expiresAt?.toISOString() ?? null,
+      equipmentFeaturesEnabled: t.equipmentModuleEnabled !== false,
       memberCount: t._count.memberships,
       owner: owner ? { id: owner.id, username: owner.username, displayName: owner.displayName, phone: owner.phone } : null,
       createdAt: t.createdAt.toISOString(),
@@ -56,8 +57,8 @@ export const listTenants = asyncHandler(async (req, res) => {
 
 export const updateTenant = asyncHandler(async (req, res) => {
   const id = str(req.params.id);
-  const { expiresAt, status } = req.body;
-  const data: { expiresAt?: Date | null; status?: string } = {};
+  const { expiresAt, status, equipmentModuleEnabled } = req.body;
+  const data: { expiresAt?: Date | null; status?: string; equipmentModuleEnabled?: boolean } = {};
 
   if (status !== undefined) {
     if (!['active', 'rejected', 'pending'].includes(status)) throw new AppError(400, '无效的状态值');
@@ -71,11 +72,31 @@ export const updateTenant = asyncHandler(async (req, res) => {
     if (Number.isNaN(d.getTime())) throw new AppError(400, '到期时间格式无效');
     data.expiresAt = d;
   }
-  const tenant = await prisma.tenant.update({ where: { id }, data });
+
+  if (equipmentModuleEnabled !== undefined) {
+    if (typeof equipmentModuleEnabled !== 'boolean') throw new AppError(400, 'equipmentModuleEnabled 须为布尔值');
+    data.equipmentModuleEnabled = equipmentModuleEnabled;
+  }
+
+  const tenant = await prisma.$transaction(async (tx) => {
+    const t = await tx.tenant.update({ where: { id }, data });
+    if (data.equipmentModuleEnabled === false) {
+      await tx.globalNodeTemplate.updateMany({
+        where: { tenantId: id },
+        data: {
+          enableWorkerAssignment: false,
+          enableEquipmentAssignment: false,
+          enableEquipmentOnReport: false,
+        },
+      });
+    }
+    return t;
+  });
   res.json({
     id: tenant.id,
     name: tenant.name,
     status: tenant.status,
     expiresAt: tenant.expiresAt?.toISOString() ?? null,
+    equipmentFeaturesEnabled: tenant.equipmentModuleEnabled !== false,
   });
 });

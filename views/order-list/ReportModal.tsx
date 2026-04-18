@@ -23,6 +23,7 @@ import {
 } from '../../utils/productReportAggregates';
 import { buildDefectiveReworkByOrderMilestone } from '../../utils/defectiveReworkByOrderMilestone';
 import { toast } from 'sonner';
+import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
 import { toLocalCompactYmd } from '../../utils/localDateTime';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
@@ -86,6 +87,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
   productMilestoneProgresses,
   prodRecords,
 }) => {
+  const equipmentFeaturesOn = useEquipmentFeaturesEffective();
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
 
@@ -449,7 +451,9 @@ const ReportModal: React.FC<ReportModalProps> = ({
   const canSubmitMatrix = isMatrixMode
     ? (matrixTotalQty + matrixTotalDef) > 0
     : (reportForm.quantity + reportForm.defectiveQuantity) > 0;
-  const needEquipment = globalNodes.find(n => n.id === reportModal.milestone.templateId)?.enableEquipmentOnReport;
+  const needEquipment =
+    equipmentFeaturesOn &&
+    !!globalNodes.find(n => n.id === reportModal.milestone.templateId)?.enableEquipmentOnReport;
 
   if (!open) return null;
 
@@ -647,7 +651,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
               icon={UserPlus}
             />
           </div>
-          {globalNodes.find(n => n.id === reportModal.milestone.templateId)?.enableEquipmentOnReport && (
+          {needEquipment && (
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-400 uppercase">设备 <span className="text-rose-500">*</span></label>
               <EquipmentSelector

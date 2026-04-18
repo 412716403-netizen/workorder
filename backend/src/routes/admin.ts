@@ -34,6 +34,8 @@ router.delete('/users/:id', adminUsersCtrl.remove);
 const tenantUpdateSchema = z.object({
   expiresAt: z.union([z.string().min(1), z.null()]).optional(),
   status: z.enum(['active', 'rejected', 'pending']).optional(),
+  /** 企业是否启用设备模块（设备档案 + 派工/报工选设备） */
+  equipmentModuleEnabled: z.boolean().optional(),
 });
 
 router.get('/tenants', adminUsersCtrl.listTenants);

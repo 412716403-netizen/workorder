@@ -22,6 +22,7 @@ import EquipmentSelector from '../../components/EquipmentSelector';
 import { PlanFormCustomFieldInput, PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
 import { buildReworkReportFlowPrintContext } from '../../utils/buildReworkReportFlowPrintContext';
+import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
 import { readReworkReportCustomSnapshot, REWORK_REPORT_CUSTOM_DATA_KEY } from '../../utils/productionOpCollab/rework';
 
 export interface ReworkReportFlowDetailModalProps {
@@ -65,6 +66,7 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
   onDeleteRecord,
   onClose,
 }) => {
+  const equipmentFeaturesOn = useEquipmentFeaturesEffective();
   const confirm = useConfirm();
   const r = reworkFlowDetailRecord;
   const detailBatch = r.type === 'REWORK_REPORT'
@@ -370,7 +372,10 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
                     />
                   </div>
                 )}
-                {equipment && equipment.length > 0 && globalNodes.find(n => n.id === first.nodeId)?.enableEquipmentOnReport && (
+                {equipmentFeaturesOn &&
+                  equipment &&
+                  equipment.length > 0 &&
+                  globalNodes.find(n => n.id === first.nodeId)?.enableEquipmentOnReport && (
                   <div className="bg-slate-50 rounded-xl px-4 py-2 col-span-2">
                     <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">设备</p>
                     <EquipmentSelector

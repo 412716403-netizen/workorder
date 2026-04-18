@@ -25,7 +25,7 @@ interface ProductManagementViewProps {
   dictionaries: AppDictionaries;
   partners: Partner[];
   partnerCategories: PartnerCategory[];
-  onUpdateProduct: (product: Product) => Promise<boolean>;
+  onUpdateProduct: (product: Product) => Promise<Product | null>;
   onDeleteProduct?: (id: string) => Promise<boolean>;
   onUpdateBOM: (bom: BOM) => Promise<boolean>;
   onRefreshDictionaries: () => Promise<void>;

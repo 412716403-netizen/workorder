@@ -101,7 +101,7 @@ interface OrderListViewExtendedProps extends OrderListViewProps {
   onClearDetailOrderIdFromState?: () => void;
   onUpdateReport?: (params: ReportUpdateParams) => void;
   onDeleteReport?: (params: { orderId: string; milestoneId: string; reportId: string }) => void;
-  onUpdateProduct?: (product: Product) => Promise<boolean>;
+  onUpdateProduct?: (product: Product) => Promise<Product | null>;
   onAddRecord?: (record: ProductionOpRecord) => void;
   onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
   onUpdateRecord?: (record: ProductionOpRecord) => void;

@@ -55,6 +55,8 @@ model Tenant {
   inviteCode String    @unique @map("invite_code") @db.VarChar(50)
   status     String    @default("active") @db.VarChar(20)
   expiresAt  DateTime? @map("expires_at") @db.Timestamptz()
+  /** 平台开启后：该企业是否启用设备管理、工序设备派工与报工选设备（默认开） */
+  equipmentModuleEnabled Boolean @default(true) @map("equipment_module_enabled")
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 

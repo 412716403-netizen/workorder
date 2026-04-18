@@ -196,6 +196,8 @@ export type TenantInfo = {
   permissions: string[];
   status?: string;
   expiresAt?: string | null;
+  /** 企业是否启用设备模块；缺省为开 */
+  equipmentFeaturesEnabled?: boolean;
 };
 
 export type LoginResult = {
@@ -346,6 +348,7 @@ export type AdminTenantRow = {
   name: string;
   status: string;
   expiresAt: string | null;
+  equipmentFeaturesEnabled?: boolean;
   memberCount: number;
   owner: { id: string; username: string; displayName: string | null; phone: string | null } | null;
   createdAt: string;
@@ -356,11 +359,17 @@ export const adminTenants = {
     const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : '';
     return request<AdminTenantRow[]>(`/admin/tenants${qs}`);
   },
-  update: (id: string, data: { expiresAt?: string | null; status?: string }) =>
-    request<{ id: string; name: string; status: string; expiresAt: string | null }>(`/admin/tenants/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
+  update: (
+    id: string,
+    data: { expiresAt?: string | null; status?: string; equipmentModuleEnabled?: boolean },
+  ) =>
+    request<{ id: string; name: string; status: string; expiresAt: string | null; equipmentFeaturesEnabled?: boolean }>(
+      `/admin/tenants/${id}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      },
+    ),
 };
 
 // ── Pagination types ──
@@ -544,7 +553,16 @@ export const tenants = {
   create: (data: { name: string; logo?: string }) =>
     request<{ tenant: { id: string; name: string; status: string }; message: string }>('/tenants', { method: 'POST', body: JSON.stringify(data) }),
   select: async (id: string) => {
-    const result = await request<{ tenantId: string; tenantName: string; tenantRole: string; permissions: string[]; expiresAt?: string | null; accessToken: string; refreshToken: string }>(`/tenants/${id}/select`, { method: 'POST' });
+    const result = await request<{
+      tenantId: string;
+      tenantName: string;
+      tenantRole: string;
+      permissions: string[];
+      expiresAt?: string | null;
+      equipmentFeaturesEnabled?: boolean;
+      accessToken: string;
+      refreshToken: string;
+    }>(`/tenants/${id}/select`, { method: 'POST' });
     if (result.accessToken) persistAccessToken(result.accessToken);
     return result;
   },

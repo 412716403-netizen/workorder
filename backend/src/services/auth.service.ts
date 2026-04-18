@@ -53,7 +53,7 @@ async function buildTenantPayload(userId: string, tenantId?: string) {
   const memberships = await prisma.tenantMembership.findMany({
     where: { userId },
     include: {
-      tenant: { select: { id: true, name: true, status: true, expiresAt: true } },
+      tenant: { select: { id: true, name: true, status: true, expiresAt: true, equipmentModuleEnabled: true } },
       customRole: { select: { permissions: true } },
     },
   });
@@ -69,6 +69,7 @@ async function buildTenantPayload(userId: string, tenantId?: string) {
     permissions: resolveMemberPermissions(m),
     status: m.tenant.status,
     expiresAt: m.tenant.expiresAt?.toISOString() ?? null,
+    equipmentFeaturesEnabled: m.tenant.equipmentModuleEnabled !== false,
   }));
 
   const activeMemberships = memberships.filter(m => m.tenant.status === 'active');
@@ -198,7 +199,7 @@ export async function selectTenant(userId: string, tenantId: string) {
   const membership = await prisma.tenantMembership.findUnique({
     where: { userId_tenantId: { userId, tenantId } },
     include: {
-      tenant: { select: { id: true, name: true, status: true, expiresAt: true } },
+      tenant: { select: { id: true, name: true, status: true, expiresAt: true, equipmentModuleEnabled: true } },
       customRole: { select: { permissions: true } },
     },
   });
@@ -234,6 +235,7 @@ export async function selectTenant(userId: string, tenantId: string) {
     tenantRole: membership.role,
     permissions,
     expiresAt: membership.tenant.expiresAt?.toISOString() ?? null,
+    equipmentFeaturesEnabled: membership.tenant.equipmentModuleEnabled !== false,
     ...tokens,
   };
 }
@@ -296,7 +298,10 @@ export async function getMe(userId: string) {
 
   const memberships = await prisma.tenantMembership.findMany({
     where: { userId },
-    include: { tenant: { select: { id: true, name: true, status: true, expiresAt: true } } },
+    include: {
+      tenant: { select: { id: true, name: true, status: true, expiresAt: true, equipmentModuleEnabled: true } },
+      customRole: { select: { permissions: true } },
+    },
   });
 
   return {
@@ -313,9 +318,10 @@ export async function getMe(userId: string) {
       id: m.tenant.id,
       name: m.tenant.name,
       role: m.role,
-      permissions: m.permissions,
+      permissions: resolveMemberPermissions(m),
       status: m.tenant.status,
       expiresAt: m.tenant.expiresAt?.toISOString() ?? null,
+      equipmentFeaturesEnabled: m.tenant.equipmentModuleEnabled !== false,
     })),
   };
 }

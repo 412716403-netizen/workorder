@@ -90,7 +90,7 @@ interface PlanOrderListViewProps {
   onSplitPlan: (planId: string, newPlans: PlanOrder[]) => void;
   onConvertToOrder: (planId: string) => void;
   onDeletePlan?: (planId: string) => void;
-  onUpdateProduct: (product: Product) => Promise<boolean>;
+  onUpdateProduct: (product: Product) => Promise<Product | null>;
   onUpdatePlan?: (planId: string, updates: Partial<PlanOrder>) => void;
   onAddPSIRecord?: (record: any) => void;
   onAddPSIRecordBatch?: (records: any[]) => Promise<void>;

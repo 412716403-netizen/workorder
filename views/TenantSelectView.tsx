@@ -11,7 +11,14 @@ function isExpired(expiresAt?: string | null): boolean {
 
 interface TenantSelectViewProps {
   tenants: TenantInfo[];
-  onSelect: (result: { tenantId: string; tenantName: string; tenantRole: string; permissions: string[]; expiresAt?: string | null }) => void;
+  onSelect: (result: {
+    tenantId: string;
+    tenantName: string;
+    tenantRole: string;
+    permissions: string[];
+    expiresAt?: string | null;
+    equipmentFeaturesEnabled?: boolean;
+  }) => void;
   onCreateOrJoin: () => void;
   onLogout?: () => void;
 }

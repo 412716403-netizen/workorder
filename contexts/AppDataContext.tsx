@@ -525,7 +525,8 @@ export interface AppDataContextValue {
   onUpdateReworkFormSettings: (v: ReworkFormSettings) => Promise<void>;
   // Product / BOM
   /** 成功返回 true，失败已 toast 并返回 false */
-  onUpdateProduct: (p: Product) => Promise<boolean>;
+  /** 成功返回归一化后的产品实体，失败返回 null（已 toast） */
+  onUpdateProduct: (p: Product) => Promise<Product | null>;
   /** 成功返回 true，失败已 toast 并返回 false */
   onDeleteProduct: (id: string) => Promise<boolean>;
   /** 成功返回 true，失败已 toast 并返回 false */
@@ -1047,7 +1048,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const norm1 = <T,>(item: T): T => normalizeDecimals([item])[0];
 
   // ── Product / BOM handlers ──
-  const onUpdateProduct = useCallback(async (p: Product): Promise<boolean> => {
+  const onUpdateProduct = useCallback(async (p: Product): Promise<Product | null> => {
     try {
       const exists = products.some(px => px.id === p.id);
       const saved = (exists ? await api.products.update(p.id, p) : await api.products.create(p)) as Product;
@@ -1055,10 +1056,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       setProducts(prev => exists ? prev.map(px => px.id === p.id ? normalized : px) : [...prev, normalized]);
       // 工序变更会触发后端回填工单 milestones / 状态；后台刷新，不阻塞调用方
       void Promise.allSettled([refreshOrders(), refreshPMP()]);
-      return true;
+      return normalized;
     } catch (err: any) {
       toast.error(err.message || '操作失败');
-      return false;
+      return null;
     }
   }, [products, refreshOrders, refreshPMP]);
 
@@ -1442,6 +1443,11 @@ export function useAppActions(): AppDataActions {
   const ctx = useContext(ActionsCtx);
   if (!ctx) throw new Error('useAppActions must be used within AppDataProvider');
   return ctx;
+}
+
+/** 无 Provider 时返回 null，避免在独立渲染/测试环境下崩溃。 */
+export function useAppActionsOptional(): AppDataActions | null {
+  return useContext(ActionsCtx);
 }
 
 // ── Backward-compatible aggregate hooks ──

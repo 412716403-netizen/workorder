@@ -47,6 +47,7 @@ import {
   subModuleTabPillClass,
 } from '../styles/uiDensity';
 import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
+import { useEquipmentFeaturesEffective } from '../hooks/useEquipmentFeaturesEffective';
 
 interface BasicInfoViewProps {
   products: Product[];
@@ -57,7 +58,7 @@ interface BasicInfoViewProps {
   equipment: Equipment[];
   dictionaries: AppDictionaries;
   partners: Partner[];
-  onUpdateProduct: (product: Product) => Promise<boolean>;
+  onUpdateProduct: (product: Product) => Promise<Product | null>;
   onDeleteProduct: (id: string) => Promise<boolean>;
   onUpdateBOM: (bom: BOM) => Promise<boolean>;
   onRefreshDictionaries: () => Promise<void>;
@@ -113,6 +114,7 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
     return base ? hasPerm(`${base}:delete`) : true;
   };
 
+  const equipmentFeaturesOn = useEquipmentFeaturesEffective();
   const location = useLocation();
   const navigate = useNavigate();
   const locState = location.state as { editProductId?: string } | null;
@@ -334,7 +336,16 @@ const BasicInfoView: React.FC<BasicInfoViewProps> = ({
     { id: 'EQUIPMENT', label: '设备管理', icon: Cpu },
     { id: 'DICTIONARIES', label: '公共数据字典', icon: Library },
   ];
-  const tabs = allTabs.filter(t => canView(t.id));
+  const tabs = allTabs.filter(
+    t => canView(t.id) && (t.id !== 'EQUIPMENT' || equipmentFeaturesOn),
+  );
+
+  useEffect(() => {
+    if (!equipmentFeaturesOn && activeTab === 'EQUIPMENT') {
+      setActiveTab('PRODUCTS');
+      setShowModal(null);
+    }
+  }, [activeTab, equipmentFeaturesOn]);
 
   // --- 过滤逻辑：合作单位 ---
   const filteredPartners = useMemo(() => {

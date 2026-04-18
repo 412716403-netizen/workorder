@@ -1,7 +1,12 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, Package, ChevronRight } from 'lucide-react';
+import { Search, Package, ChevronRight, Plus } from 'lucide-react';
 import type { Product, ProductCategory } from '../types';
+import { useAuthOptional } from '../contexts/AuthContext';
+import { hasSubPermission } from '../utils/hasSubPermission';
+
+/** 动态加载，避免与 ProductEditForm 形成静态循环依赖（否则 BOM 内 SearchableProductSelect 会整段挂掉） */
+const ProductArchiveCreateModal = lazy(() => import('./ProductArchiveCreateModal'));
 
 function getFileExtFromDataUrl(dataUrl: string): string {
   const m = dataUrl.match(/^data:[^/]+\/([^;]+)/);
@@ -22,6 +27,7 @@ export function SearchableProductSelect({
   disabledProductReason = '该产品含颜色/尺码，不可作为 BOM 子件',
   onFilePreview,
   triggerClassName,
+  allowQuickCreate = true,
 }: {
   options: Product[];
   value: string;
@@ -38,12 +44,28 @@ export function SearchableProductSelect({
   onFilePreview?: (url: string, type: 'image' | 'pdf') => void;
   /** 追加到触发按钮的 className，用于外部覆盖高度/圆角等 */
   triggerClassName?: string;
+  /** 是否在下拉内显示「新增产品」入口；默认 true（仍需权限判断） */
+  allowQuickCreate?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<string>('all');
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
+
+  // 权限：只有 owner 或同时具备 basic:products:view + basic:products:create 才显示「新增」入口
+  const auth = useAuthOptional();
+  const canQuickCreate = useMemo(() => {
+    if (!allowQuickCreate) return false;
+    const tctx = auth?.tenantCtx;
+    if (!tctx) return false;
+    if (tctx.tenantRole === 'owner') return true;
+    return (
+      hasSubPermission(tctx.permissions, 'basic:products:view') &&
+      hasSubPermission(tctx.permissions, 'basic:products:create')
+    );
+  }, [allowQuickCreate, auth]);
 
   const selectedProduct = options.find(p => p.id === value);
 
@@ -65,6 +87,8 @@ export function SearchableProductSelect({
     const rect = el.getBoundingClientRect();
     const gap = 6;
     const pad = 8;
+    /** 须高于 BOM 弹窗、ProductArchiveCreateModal（10800）及嵌套内层（11200） */
+    const dropdownZ = 11500;
     const w = Math.min(Math.max(rect.width, 280), window.innerWidth - pad * 2);
     let left = rect.left;
     if (left + w > window.innerWidth - pad) left = window.innerWidth - w - pad;
@@ -82,7 +106,7 @@ export function SearchableProductSelect({
         left,
         width: w,
         maxHeight: cap,
-        zIndex: 10050,
+        zIndex: dropdownZ,
         display: 'flex',
         flexDirection: 'column',
       });
@@ -93,7 +117,7 @@ export function SearchableProductSelect({
         left,
         width: w,
         maxHeight: cap,
-        zIndex: 10050,
+        zIndex: dropdownZ,
         display: 'flex',
         flexDirection: 'column',
       });
@@ -120,6 +144,8 @@ export function SearchableProductSelect({
       const t = e.target as Node;
       if (triggerRef.current?.contains(t)) return;
       if ((e.target as Element)?.closest?.('[data-searchable-product-dropdown]')) return;
+      // 快速新增弹窗挂在下拉之外：点击它不应关闭下拉
+      if ((e.target as Element)?.closest?.('[data-searchable-product-quick-create]')) return;
       setIsOpen(false);
     };
     if (isOpen) document.addEventListener('mousedown', handleClickOutside);
@@ -159,18 +185,36 @@ export function SearchableProductSelect({
       style={panelStyle}
       onMouseDown={e => e.preventDefault()}
     >
-      <div className={`relative flex-shrink-0 ${compact ? 'mb-2' : 'mb-4'}`}>
-        <Search
-          className={`absolute text-slate-400 ${compact ? 'left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5' : 'left-3.5 top-1/2 -translate-y-1/2 w-4 h-4'}`}
-        />
-        <input
-          autoFocus
-          type="text"
-          className={searchInputCls}
-          placeholder="输入名称或 SKU 搜索..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+      <div className={`flex items-center gap-2 flex-shrink-0 ${compact ? 'mb-2' : 'mb-4'}`}>
+        <div className="relative flex-1 min-w-0">
+          <Search
+            className={`absolute text-slate-400 ${compact ? 'left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5' : 'left-3.5 top-1/2 -translate-y-1/2 w-4 h-4'}`}
+          />
+          <input
+            autoFocus
+            type="text"
+            className={searchInputCls}
+            placeholder="输入名称或 SKU 搜索..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        {canQuickCreate && (
+          <button
+            type="button"
+            onClick={() => {
+              setIsOpen(false);
+              setQuickCreateOpen(true);
+            }}
+            title="新增产品（与基础信息 → 产品档案一致：颜色尺码、工序、BOM 等）"
+            className={`shrink-0 inline-flex items-center gap-1 rounded-xl bg-indigo-600 text-white font-black uppercase tracking-wider hover:bg-indigo-700 active:bg-indigo-800 transition-all shadow-sm shadow-indigo-600/20 ${
+              compact ? 'px-2.5 py-2 text-[10px]' : 'px-3 py-3 text-[11px]'
+            }`}
+          >
+            <Plus className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+            新增
+          </button>
+        )}
       </div>
 
       <div className={`flex items-center gap-1 flex-shrink-0 overflow-x-auto no-scrollbar ${compact ? 'mb-2 pb-0.5' : 'mb-4 pb-1'}`}>
@@ -315,6 +359,25 @@ export function SearchableProductSelect({
       </button>
 
       {dropdownPanel && createPortal(dropdownPanel, document.body)}
+
+      {quickCreateOpen && (
+        <Suspense fallback={null}>
+          <ProductArchiveCreateModal
+            isOpen={quickCreateOpen}
+            onClose={() => {
+              setQuickCreateOpen(false);
+              setIsOpen(false);
+              setSearch('');
+            }}
+            defaultCategoryId={activeTab !== 'all' ? activeTab : undefined}
+            onCreated={p => {
+              onChange(p.id);
+              setIsOpen(false);
+              setSearch('');
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

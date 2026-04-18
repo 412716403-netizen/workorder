@@ -21,6 +21,8 @@ import { DateCustomFieldConfigCheckboxes } from '../../components/DateCustomFiel
 import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { ExtFieldLabelInput, NodeReportTemplateSelectOptions } from './shared';
+import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
+import { isEquipmentAssignmentEnabled, isWorkerAssignmentEnabled } from '../../utils/nodeAssignmentFlags';
 
 interface NodesTabProps {
   globalNodes: GlobalNodeTemplate[];
@@ -35,6 +37,7 @@ const NodesTab: React.FC<NodesTabProps> = ({
   canCreate,
   canDelete,
 }) => {
+  const equipmentFeaturesOn = useEquipmentFeaturesEffective();
   const [newNodeName, setNewNodeName] = useState('');
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [nodeNameDraft, setNodeNameDraft] = useState('');
@@ -228,6 +231,8 @@ const NodesTab: React.FC<NodesTabProps> = ({
                                 </div>
                                 <p className="text-[10px] text-slate-400 font-medium">开启后在此工序报工将扣减关联物料。</p>
                              </div>
+                             {equipmentFeaturesOn && (
+                               <>
                              <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
                                 <div className="flex items-center justify-between mb-2">
                                    <div className="flex items-center gap-2">
@@ -236,11 +241,14 @@ const NodesTab: React.FC<NodesTabProps> = ({
                                    </div>
                                    <button
                                      onClick={() => {
-                                       const next = !(node.enableAssignment !== false && node.enableWorkerAssignment !== false);
-                                       updateNodeConfig(node.id, next ? { enableAssignment: true, enableWorkerAssignment: true } : { enableWorkerAssignment: false });
+                                       const next = !isWorkerAssignmentEnabled(node);
+                                       updateNodeConfig(
+                                         node.id,
+                                         next ? { enableAssignment: true, enableWorkerAssignment: true } : { enableWorkerAssignment: false },
+                                       );
                                      }}
                                    >
-                                     {(node.enableAssignment !== false && node.enableWorkerAssignment !== false) ? <ToggleRight className="w-8 h-8 text-indigo-600" /> : <ToggleLeft className="w-8 h-8 text-slate-300" />}
+                                     {isWorkerAssignmentEnabled(node) ? <ToggleRight className="w-8 h-8 text-indigo-600" /> : <ToggleLeft className="w-8 h-8 text-slate-300" />}
                                    </button>
                                 </div>
                                 <p className="text-[10px] text-slate-400 font-medium">开启后计划单详情中显示该工序的「分派负责人」选项。</p>
@@ -253,11 +261,14 @@ const NodesTab: React.FC<NodesTabProps> = ({
                                    </div>
                                    <button
                                      onClick={() => {
-                                       const next = !(node.enableAssignment !== false && node.enableEquipmentAssignment !== false);
-                                       updateNodeConfig(node.id, next ? { enableAssignment: true, enableEquipmentAssignment: true } : { enableEquipmentAssignment: false });
+                                       const next = !isEquipmentAssignmentEnabled(node);
+                                       updateNodeConfig(
+                                         node.id,
+                                         next ? { enableAssignment: true, enableEquipmentAssignment: true } : { enableEquipmentAssignment: false },
+                                       );
                                      }}
                                    >
-                                     {(node.enableAssignment !== false && node.enableEquipmentAssignment !== false) ? <ToggleRight className="w-8 h-8 text-indigo-600" /> : <ToggleLeft className="w-8 h-8 text-slate-300" />}
+                                     {isEquipmentAssignmentEnabled(node) ? <ToggleRight className="w-8 h-8 text-indigo-600" /> : <ToggleLeft className="w-8 h-8 text-slate-300" />}
                                    </button>
                                 </div>
                                 <p className="text-[10px] text-slate-400 font-medium">开启后计划单详情中显示该工序的「分派设备」选项。</p>
@@ -274,6 +285,8 @@ const NodesTab: React.FC<NodesTabProps> = ({
                                 </div>
                                 <p className="text-[10px] text-slate-400 font-medium">开启后该工序报工时需选择设备（参照设备派工输入框）。</p>
                              </div>
+                               </>
+                             )}
                              <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
                                 <div className="flex items-center justify-between mb-2">
                                    <div className="flex items-center gap-2">

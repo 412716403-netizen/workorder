@@ -65,7 +65,7 @@ interface ProductionManagementViewProps {
   reworkFormSettings: ReworkFormSettings;
   onUpdateReworkFormSettings: (settings: ReworkFormSettings) => void | Promise<void>;
   onCreatePlan: (plan: PlanOrder) => void | Promise<void>;
-  onUpdateProduct: (product: Product) => Promise<boolean>;
+  onUpdateProduct: (product: Product) => Promise<Product | null>;
   onUpdatePlan?: (planId: string, updates: Partial<PlanOrder>) => void;
   onSplitPlan: (planId: string, newPlans: PlanOrder[]) => void;
   onConvertToOrder: (planId: string) => void;

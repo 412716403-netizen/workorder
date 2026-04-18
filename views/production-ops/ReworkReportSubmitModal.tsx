@@ -23,6 +23,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { REWORK_REPORT_CUSTOM_DATA_KEY } from '../../utils/productionOpCollab/rework';
+import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
 
 function reworkReportCollabFromValues(values: Record<string, unknown>): { collabData?: Record<string, unknown> } {
   const clean = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== '' && v != null && v !== undefined));
@@ -67,6 +68,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
   getNextReworkReportDocNo,
   onClose,
 }) => {
+  const equipmentFeaturesOn = useEquipmentFeaturesEffective();
   const { currentUser } = useAuth();
   const docOperatorFallback = currentOperatorDisplayName(currentUser);
   const [reworkReportQuantities, setReworkReportQuantities] = useState<Record<string, number>>({});
@@ -186,7 +188,9 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
         toast.warning('请先选择生产人员');
         return;
       }
-      const needEquip = globalNodes.find(n => n.id === reworkReportModal.nodeId)?.enableEquipmentOnReport;
+      const needEquip =
+        equipmentFeaturesOn &&
+        globalNodes.find(n => n.id === reworkReportModal.nodeId)?.enableEquipmentOnReport;
       if (needEquip && !reworkReportEquipmentId?.trim()) {
         toast.warning('请先选择设备');
         return;
@@ -445,7 +449,9 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
               />
             </div>
           )}
-          {!isOutsourceRework && globalNodes.find(n => n.id === reworkReportModal.nodeId)?.enableEquipmentOnReport && (
+          {!isOutsourceRework &&
+            equipmentFeaturesOn &&
+            globalNodes.find(n => n.id === reworkReportModal.nodeId)?.enableEquipmentOnReport && (
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-400 uppercase">设备 <span className="text-rose-500">*</span></label>
               <EquipmentSelector

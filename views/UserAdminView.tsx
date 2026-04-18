@@ -74,6 +74,7 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
   const [tenantModal, setTenantModal] = useState<{ tenant: AdminTenantRow; action: 'approve' | 'edit' | 'reject' } | null>(null);
   const [tenantNoExpiry, setTenantNoExpiry] = useState(true);
   const [tenantExpiresAtInput, setTenantExpiresAtInput] = useState('');
+  const [tenantEquipmentModule, setTenantEquipmentModule] = useState(true);
   const [tenantSaving, setTenantSaving] = useState(false);
   const [tenantError, setTenantError] = useState('');
 
@@ -94,6 +95,7 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
   function openTenantModal(t: AdminTenantRow, action: 'approve' | 'edit' | 'reject') {
     setTenantModal({ tenant: t, action });
     setTenantError('');
+    setTenantEquipmentModule(t.equipmentFeaturesEnabled !== false);
     if (action === 'approve') {
       setTenantNoExpiry(true);
       setTenantExpiresAtInput('');
@@ -121,6 +123,7 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
         await adminTenants.update(tenant.id, {
           ...(action === 'approve' ? { status: 'active' } : {}),
           expiresAt,
+          equipmentModuleEnabled: tenantEquipmentModule,
         });
       }
       setTenantModal(null);
@@ -350,12 +353,13 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
               <div className="py-16 text-center text-slate-400 text-sm">暂无数据</div>
             ) : (
               <div className="overflow-x-auto -mx-px">
-                <table className="w-full min-w-[700px] text-sm border-collapse">
+                <table className="w-full min-w-[820px] text-sm border-collapse">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-left text-slate-600">
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">企业名称</th>
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">创建者</th>
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500 text-center">成员数</th>
+                      <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500 text-center">设备模块</th>
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">状态</th>
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">到期时间</th>
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">创建时间</th>
@@ -370,6 +374,15 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
                           {t.owner ? (t.owner.displayName || t.owner.username) : <span className="text-slate-400">—</span>}
                         </td>
                         <td className="px-4 py-3.5 text-center text-slate-600">{t.memberCount}</td>
+                        <td className="px-4 py-3.5 text-center whitespace-nowrap">
+                          {t.status !== 'active' ? (
+                            <span className="text-slate-300 text-xs">—</span>
+                          ) : t.equipmentFeaturesEnabled === false ? (
+                            <span className="text-xs font-bold text-slate-400">关</span>
+                          ) : (
+                            <span className="text-xs font-bold text-emerald-600">开</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3.5 whitespace-nowrap">
                           {t.status === 'pending' ? (
                             <span className="inline-flex items-center gap-1 text-amber-700 bg-amber-50 px-2 py-0.5 rounded-lg text-xs font-bold">
@@ -414,7 +427,7 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
                               </>
                             )}
                             {t.status === 'active' && (
-                              <button type="button" onClick={() => openTenantModal(t, 'edit')} className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 transition-colors" title="设置到期时间">
+                              <button type="button" onClick={() => openTenantModal(t, 'edit')} className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 transition-colors" title="企业管理">
                                 <Pencil className="w-4 h-4" />
                               </button>
                             )}
@@ -433,7 +446,7 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
               <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-y-auto">
                 <div className="p-6 border-b border-slate-100">
                   <h2 className="text-lg font-black text-slate-900">
-                    {tenantModal.action === 'approve' ? '审核通过' : '设置到期时间'}：{tenantModal.tenant.name}
+                    {tenantModal.action === 'approve' ? '审核通过' : '企业管理'}：{tenantModal.tenant.name}
                   </h2>
                 </div>
                 <div className="p-6 space-y-4">
@@ -455,6 +468,22 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
                         <input type="datetime-local" className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white" value={tenantExpiresAtInput} onChange={e => setTenantExpiresAtInput(e.target.value)} />
                       </div>
                     )}
+                  </div>
+                  <div className="rounded-xl border border-slate-100 bg-white p-3">
+                    <label className="flex items-start gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={tenantEquipmentModule}
+                        onChange={e => setTenantEquipmentModule(e.target.checked)}
+                        className="mt-0.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div>
+                        <span className="text-sm font-bold text-slate-800">启用设备派工与报工选设备</span>
+                        <p className="text-[11px] text-slate-500 font-medium mt-1 leading-snug">
+                          关闭后该企业内所有账号将隐藏设备管理、计划单分派设备及报工/返工中的设备选择；并会将该企业下所有工序的工人派工、设备派工与报工选设备一并关闭（库内其它数据仍保留）。可与构建环境变量「全站关闭设备」叠加使用。
+                        </p>
+                      </div>
+                    </label>
                   </div>
                   <div className="flex gap-3 pt-2">
                     <button type="button" onClick={() => { setTenantModal(null); setTenantError(''); }} className="flex-1 py-2.5 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-slate-50">取消</button>

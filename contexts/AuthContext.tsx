@@ -11,6 +11,8 @@ export type TenantContext = {
   permissions: string[];
   status?: string;
   expiresAt?: string | null;
+  /** 企业是否启用设备模块（由平台在「企业管理」中配置） */
+  equipmentFeaturesEnabled?: boolean;
 };
 
 type LoginData = {
@@ -27,6 +29,7 @@ type TenantReadyResult = {
   permissions: string[];
   status?: string;
   expiresAt?: string | null;
+  equipmentFeaturesEnabled?: boolean;
 };
 
 interface AuthContextValue {
@@ -101,6 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             permissions: matched.permissions,
             status: matched.status,
             expiresAt: matched.expiresAt ?? null,
+            equipmentFeaturesEnabled: matched.equipmentFeaturesEnabled,
           };
           setTenantCtx(ctx);
           localStorage.setItem('tenantCtx', JSON.stringify(ctx));
@@ -136,6 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         permissions: result.permissions,
         status: result.status,
         expiresAt: result.expiresAt ?? null,
+        equipmentFeaturesEnabled: result.equipmentFeaturesEnabled,
       };
       setTenantCtx(ctx);
       localStorage.setItem('tenantCtx', JSON.stringify(ctx));
@@ -147,6 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             id: t.id, name: t.name, role: t.role,
             permissions: typeof t.permissions === 'string' ? JSON.parse(t.permissions) : (t.permissions || []),
             status: t.status, expiresAt: t.expiresAt ?? null,
+            equipmentFeaturesEnabled: t.equipmentFeaturesEnabled,
           }));
           setUserTenants(infos);
           localStorage.setItem('userTenants', JSON.stringify(infos));
@@ -214,6 +220,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           id: t.id, name: t.name, role: t.role,
           permissions: typeof t.permissions === 'string' ? JSON.parse(t.permissions) : (t.permissions || []),
           status: t.status, expiresAt: t.expiresAt ?? null,
+          equipmentFeaturesEnabled: t.equipmentFeaturesEnabled,
         }));
         setUserTenants(infos);
         localStorage.setItem('userTenants', JSON.stringify(infos));
@@ -226,6 +233,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             permissions: matched.permissions,
             status: matched.status,
             expiresAt: matched.expiresAt ?? null,
+            equipmentFeaturesEnabled: matched.equipmentFeaturesEnabled,
           };
           if (JSON.stringify(next) !== JSON.stringify(tenantCtx)) {
             setTenantCtx(next);
@@ -263,4 +271,9 @@ export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthCtx);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
+}
+
+/** 无 Provider 时返回 null；用于需要在独立/测试场景渲染时避免崩溃的通用组件 */
+export function useAuthOptional(): AuthContextValue | null {
+  return useContext(AuthCtx);
 }

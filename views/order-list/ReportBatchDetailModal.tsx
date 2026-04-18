@@ -79,7 +79,7 @@ interface ReportBatchDetailModalProps {
   onDeleteReport?: (params: { orderId: string; milestoneId: string; reportId: string }) => void;
   onUpdateReportProduct?: (params: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string; customData?: Record<string, any> }) => void;
   onDeleteReportProduct?: (params: { progressId: string; reportId: string }) => void;
-  onUpdateProduct?: (product: Product) => Promise<boolean>;
+  onUpdateProduct?: (product: Product) => Promise<Product | null>;
   hasOrderPerm: (permKey: string) => boolean;
 }
 
