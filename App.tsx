@@ -9,16 +9,17 @@ import LoginView from './views/LoginView';
 import OnboardingView from './views/OnboardingView';
 import TenantSelectView from './views/TenantSelectView';
 import ProfileModal from './views/ProfileModal';
+import { lazyWithReloadOnChunkError } from './utils/lazyWithReloadOnChunkError';
 
-const DashboardView = React.lazy(() => import('./views/DashboardView'));
-const ProductionManagementView = React.lazy(() => import('./views/ProductionManagementView'));
-const PSIView = React.lazy(() => import('./views/PSIView'));
-const FinanceView = React.lazy(() => import('./views/FinanceView'));
-const BasicInfoView = React.lazy(() => import('./views/BasicInfoView'));
-const SettingsView = React.lazy(() => import('./views/SettingsView'));
-const UserAdminView = React.lazy(() => import('./views/UserAdminView'));
-const CollaborationInboxView = React.lazy(() => import('./views/CollaborationInboxView'));
-const PrintTemplateEditorView = React.lazy(() => import('./views/PrintTemplateEditorView'));
+const DashboardView = lazyWithReloadOnChunkError(() => import('./views/DashboardView'));
+const ProductionManagementView = lazyWithReloadOnChunkError(() => import('./views/ProductionManagementView'));
+const PSIView = lazyWithReloadOnChunkError(() => import('./views/PSIView'));
+const FinanceView = lazyWithReloadOnChunkError(() => import('./views/FinanceView'));
+const BasicInfoView = lazyWithReloadOnChunkError(() => import('./views/BasicInfoView'));
+const SettingsView = lazyWithReloadOnChunkError(() => import('./views/SettingsView'));
+const UserAdminView = lazyWithReloadOnChunkError(() => import('./views/UserAdminView'));
+const CollaborationInboxView = lazyWithReloadOnChunkError(() => import('./views/CollaborationInboxView'));
+const PrintTemplateEditorView = lazyWithReloadOnChunkError(() => import('./views/PrintTemplateEditorView'));
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppDataProvider, useDataLoading, useMasterData, useConfigData, useOrdersData, usePsiData, useFinanceData, useAppActions } from './contexts/AppDataContext';

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, Suspense, lazy } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, Suspense } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   CalendarRange, 
@@ -11,9 +11,11 @@ import {
   PlanOrder, ProductionOrder, Product, BOM,
   ProductionOpRecord, GlobalNodeTemplate, ProdOpType, ProductCategory, AppDictionaries, Worker, Equipment,   PlanFormSettings, OrderFormSettings, MaterialPanelSettings, MaterialFormSettings, OutsourceFormSettings, ReworkFormSettings, Partner, PartnerCategory, ProductionLinkMode, ProductMilestoneProgress, ProcessSequenceMode, Warehouse, PrintTemplate
 } from '../types';
-const PlanOrderListView = lazy(() => import('./PlanOrderListView'));
-const OrderListView = lazy(() => import('./OrderListView'));
-const ProductionMgmtOpsView = lazy(() => import('./ProductionMgmtOpsView'));
+import { lazyWithReloadOnChunkError } from '../utils/lazyWithReloadOnChunkError';
+
+const PlanOrderListView = lazyWithReloadOnChunkError(() => import('./PlanOrderListView'));
+const OrderListView = lazyWithReloadOnChunkError(() => import('./OrderListView'));
+const ProductionMgmtOpsView = lazyWithReloadOnChunkError(() => import('./ProductionMgmtOpsView'));
 
 const TabPanelFallback = () => (
   <div className="flex min-h-[320px] items-center justify-center text-sm font-medium text-slate-400">
