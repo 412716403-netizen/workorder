@@ -20,6 +20,7 @@ import type {
   MaterialPanelSettings,
   MaterialFormSettings,
   PrintTemplate,
+  MaterialBreakdownRow,
 } from '../../types';
 import { DEFAULT_MATERIAL_PANEL_SETTINGS, DEFAULT_MATERIAL_FORM_SETTINGS } from '../../types';
 import { PanelProps, hasOpsPerm, getOrderFamilyIds, type StockDocDetail } from './types';
@@ -63,6 +64,26 @@ function resolveBomItems(
     .filter(b => b.nodeId === nodeId)
     .forEach(bom => bom.items.forEach(bi => items.push({ productId: bi.productId, quantity: Number(bi.quantity) })));
   return items;
+}
+
+/**
+ * 若 report / OUTSOURCE 记录里带有按重量拆分的 materialBreakdown 快照，
+ * 则直接把各子物料 actualWeight 计入 addToTheory，并返回 true（表示已替代 BOM×件数 口径）。
+ */
+function applyMaterialBreakdown(
+  source: { materialBreakdown?: MaterialBreakdownRow[] | unknown } | null | undefined,
+  addToTheory: (productId: string, amount: number) => void,
+): boolean {
+  const raw = source ? (source as { materialBreakdown?: unknown }).materialBreakdown : null;
+  const mb = Array.isArray(raw) ? (raw as MaterialBreakdownRow[]) : null;
+  if (!mb || mb.length === 0) return false;
+  for (const row of mb) {
+    const pid = row?.materialProductId;
+    const amt = Number(row?.actualWeight);
+    if (!pid || !Number.isFinite(amt) || amt <= 0) continue;
+    addToTheory(pid, amt);
+  }
+  return true;
 }
 
 /** Reusable material stats table used in all 4 layout branches */
@@ -260,6 +281,10 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         prodMap.get(bi.productId)!.theoryCost += theory;
       };
       const familyOrders = orders.filter(o => familyIds.has(o.id));
+      const addMaterialTheory = (productId: string, amount: number) => {
+        if (!prodMap.has(productId)) prodMap.set(productId, { issue: 0, returnQty: 0, theoryCost: 0 });
+        prodMap.get(productId)!.theoryCost += amount;
+      };
       familyOrders.forEach(ord => {
         const ordProduct = productsById.get(ord.productId);
         const variants = ordProduct?.variants ?? [];
@@ -267,15 +292,19 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         const bestMsIdx = ord.milestones.reduce((bi, ms, i) => ms.completedQuantity > (ord.milestones[bi]?.completedQuantity ?? 0) ? i : bi, 0);
         const bestMs = ord.milestones[bestMsIdx];
         const variantCompletedMap = new Map<string, number>();
+        let totalCompleted = 0;
         if (bestMs) {
           (bestMs.reports || []).forEach(r => {
+            // 开启称重报工的工序：优先按 materialBreakdown 快照回填实际重量，跳过 BOM×件数 口径
+            if (applyMaterialBreakdown(r, addMaterialTheory)) return;
+            const qty = Number(r.quantity);
+            totalCompleted += qty;
             const vid = r.variantId ?? '';
-            variantCompletedMap.set(vid, (variantCompletedMap.get(vid) ?? 0) + Number(r.quantity));
+            variantCompletedMap.set(vid, (variantCompletedMap.get(vid) ?? 0) + qty);
           });
+        } else {
+          totalCompleted = ord.milestones.reduce((max, ms) => Math.max(max, ms.completedQuantity), 0);
         }
-        const totalCompleted = bestMs
-          ? (bestMs.reports || []).reduce((s, r) => s + Number(r.quantity), 0)
-          : ord.milestones.reduce((max, ms) => Math.max(max, ms.completedQuantity), 0);
 
         const hasReportQtyForAnyProductVariant = variants.some(v => (variantCompletedMap.get(v.id) ?? 0) > 0);
         if (variants.length > 0 && variantCompletedMap.size > 0 && hasReportQtyForAnyProductVariant) {
@@ -405,11 +434,21 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
       let totalCompleted2 = 0;
       let usedPmp = false;
 
+      const addMaterialTheory2 = (productId: string, amount: number) => {
+        if (!prodMap.has(productId)) prodMap.set(productId, { issue: 0, returnQty: 0, theoryCost: 0 });
+        prodMap.get(productId)!.theoryCost += amount;
+      };
+
       // 优先使用 PMP reports（关联产品模式的权威数据源，含工单报工 + 外协收回）
       if (productMilestoneProgresses.length > 0) {
         const pmpForProduct = productMilestoneProgresses.filter(p => p.productId === fpId);
         pmpForProduct.forEach(p => {
           (p.reports ?? []).forEach(r => {
+            // 开启称重报工的工序：优先按 materialBreakdown 快照回填实际重量
+            if (applyMaterialBreakdown(r, addMaterialTheory2)) {
+              usedPmp = true;
+              return;
+            }
             const qty = Number(r.quantity);
             totalCompleted2 += qty;
             const vid = r.variantId ?? p.variantId ?? '';
@@ -426,6 +465,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
           const bestMs = ord.milestones[bestMsIdx];
           if (bestMs) {
             (bestMs.reports || []).forEach(r => {
+              if (applyMaterialBreakdown(r, addMaterialTheory2)) return;
               const qty = Number(r.quantity);
               totalCompleted2 += qty;
               const vid = r.variantId ?? '';
@@ -591,12 +631,17 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
       }
       if (!scopeKey || !productForBom) continue;
 
-      const bomItems = resolveBomItems(productsById, bomsById, bomsByParentProduct, productForBom, r.nodeId, r.variantId);
-      for (const bi of bomItems) {
-        const theory = Number(bi.quantity) * r.quantity;
-        ensure(pk, scopeKey, bi.productId).theoryCost += theory;
-        const internal = ensure(INTERNAL_KEY, scopeKey, bi.productId);
-        internal.theoryCost = Math.max(0, internal.theoryCost - theory);
+      const applyPartnerTheory = (pid: string, amt: number) => {
+        ensure(pk, scopeKey!, pid).theoryCost += amt;
+        const internal = ensure(INTERNAL_KEY, scopeKey!, pid);
+        internal.theoryCost = Math.max(0, internal.theoryCost - amt);
+      };
+      // 外协收回若带有 materialBreakdown 快照（工序开启称重），直接按实际重量计入加工厂分桶
+      if (!applyMaterialBreakdown(r, applyPartnerTheory)) {
+        const bomItems = resolveBomItems(productsById, bomsById, bomsByParentProduct, productForBom, r.nodeId, r.variantId);
+        for (const bi of bomItems) {
+          applyPartnerTheory(bi.productId, Number(bi.quantity) * r.quantity);
+        }
       }
     }
 

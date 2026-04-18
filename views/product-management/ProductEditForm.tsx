@@ -1972,6 +1972,19 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                 },
                 { kinds: 0, totalQty: 0 },
               );
+              const bomNode = globalNodes.find(gn => gn.id === (workingBOM.nodeId ?? activeNodeIdForBOM ?? ''));
+              const weightReportEnabledForBom = !!bomNode?.enableWeightOnReport;
+              const shareBase = weightReportEnabledForBom
+                ? workingBOM.items.reduce((sum, it) => {
+                    if (!it.productId?.trim()) return sum;
+                    if (it.excludeFromWeightShare) return sum;
+                    const raw = it.quantityInput !== undefined && it.quantityInput !== ''
+                      ? parseFloat(it.quantityInput)
+                      : (typeof it.quantity === 'number' ? it.quantity : 0);
+                    const n = Number.isFinite(raw) ? raw : 0;
+                    return sum + Math.max(0, n);
+                  }, 0)
+                : 0;
               return createPortal(
                 <div className={`fixed inset-0 ${nestedOverlayZ} flex items-center justify-center p-4`} role="dialog" aria-modal="true" aria-labelledby="bom-editor-title">
                   <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]" onClick={closeBOMEditor} aria-hidden />
@@ -2052,6 +2065,34 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                                 placeholder="搜索并选择产品型号..."
                               />
                             </div>
+                            {weightReportEnabledForBom && (() => {
+                              const rawQty = item.quantityInput !== undefined && item.quantityInput !== ''
+                                ? parseFloat(item.quantityInput)
+                                : (typeof item.quantity === 'number' ? item.quantity : 0);
+                              const qtySafe = Number.isFinite(rawQty) ? Math.max(0, rawQty) : 0;
+                              const ratioPct = (!item.excludeFromWeightShare && shareBase > 0)
+                                ? (qtySafe / shareBase) * 100
+                                : null;
+                              return (
+                                <div className="flex flex-wrap items-center gap-3 pt-1">
+                                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                                    <input
+                                      type="checkbox"
+                                      checked={!!item.excludeFromWeightShare}
+                                      onChange={e => updateBOMItem(idx, { excludeFromWeightShare: e.target.checked })}
+                                      className="w-3.5 h-3.5 rounded text-indigo-600 border-slate-300 focus:ring-indigo-500"
+                                    />
+                                    <span className="text-[10px] font-bold text-slate-500">不参与重量分摊</span>
+                                  </label>
+                                  <span className="text-[10px] font-bold text-slate-400">
+                                    按报工重量分摊占比：
+                                    <span className={`ml-1 tabular-nums ${ratioPct == null ? 'text-slate-300' : 'text-indigo-600'}`}>
+                                      {ratioPct == null ? '—' : `${ratioPct.toFixed(1)}%`}
+                                    </span>
+                                  </span>
+                                </div>
+                              );
+                            })()}
                           </div>
                           <div className="w-full md:w-32">
                             <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block tracking-widest">标准单位用量</label>

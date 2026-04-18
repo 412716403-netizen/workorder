@@ -9,6 +9,7 @@ import {
   Wrench,
   DollarSign,
   Truck,
+  Scale,
   ToggleLeft,
   ToggleRight,
   FileText,
@@ -310,6 +311,18 @@ const NodesTab: React.FC<NodesTabProps> = ({
                                    </button>
                                 </div>
                                 <p className="text-[10px] text-slate-400 font-medium">开启后该工序会在外协管理待发清单中显示，可按工单选择工序发出。</p>
+                             </div>
+                             <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                                <div className="flex items-center justify-between mb-2">
+                                   <div className="flex items-center gap-2">
+                                     <Scale className="w-4 h-4 text-indigo-400" />
+                                     <span className="text-sm font-bold text-slate-800">报工时记录重量</span>
+                                   </div>
+                                   <button onClick={() => updateNodeConfig(node.id, { enableWeightOnReport: !node.enableWeightOnReport })}>
+                                     {node.enableWeightOnReport ? <ToggleRight className="w-8 h-8 text-indigo-600" /> : <ToggleLeft className="w-8 h-8 text-slate-300" />}
+                                   </button>
+                                </div>
+                                <p className="text-[10px] text-slate-400 font-medium">开启后，本工序报工/外协收回时需录入本次交货重量（kg），并按 BOM 子料用量自动分摊为各子物料实际消耗，替代"件数×BOM"的理论口径，用于计算物料损耗。</p>
                              </div>
                           </div>
                        </div>

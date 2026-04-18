@@ -1,5 +1,5 @@
-import React from 'react';
-import { ArrowDownToLine, X, Check } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { ArrowDownToLine, X, Check, Scale } from 'lucide-react';
 import type {
   ProductionOpRecord,
   ProductionOrder,
@@ -9,10 +9,13 @@ import type {
   ProductMilestoneProgress,
   AppDictionaries,
   PlanFormFieldConfig,
+  GlobalNodeTemplate,
+  BOM,
 } from '../../types';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
+import { calcUsageByWeight } from '../../utils/bomMaterialUsageByWeight';
 
 export interface ReceiveRow {
   orderId?: string;
@@ -37,6 +40,12 @@ export interface OutsourceReceiveQuantityModalProps {
   setReceiveFormQuantities: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   receiveFormUnitPrices: Record<string, number>;
   setReceiveFormUnitPrices: React.Dispatch<React.SetStateAction<Record<string, number>>>;
+  /**
+   * 外协收货本次交货总重量（kg），baseKey 维度，与 receiveFormQuantities 一致。
+   * 仅当对应工序开启 `enableWeightOnReport` 时在 UI 上显示并参与提交。
+   */
+  receiveFormWeights?: Record<string, number>;
+  setReceiveFormWeights?: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   receiveFormRemark: string;
   setReceiveFormRemark: React.Dispatch<React.SetStateAction<string>>;
   orders: ProductionOrder[];
@@ -48,6 +57,10 @@ export interface OutsourceReceiveQuantityModalProps {
   receiveCustomFieldDefs?: PlanFormFieldConfig[];
   receiveCustomValues?: Record<string, unknown>;
   setReceiveCustomValues?: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
+  /** 当前租户全局工序模板，用于判断 nodeId 是否开启 `enableWeightOnReport` */
+  globalNodes?: GlobalNodeTemplate[];
+  /** 当前租户全部 BOM，用于根据 nodeId + productId 派生子物料占比并生成预览 */
+  boms?: BOM[];
   onSubmit: () => void;
   onClose: () => void;
 }
@@ -60,6 +73,8 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
   setReceiveFormQuantities,
   receiveFormUnitPrices,
   setReceiveFormUnitPrices,
+  receiveFormWeights,
+  setReceiveFormWeights,
   receiveFormRemark,
   setReceiveFormRemark,
   orders,
@@ -71,9 +86,28 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
   receiveCustomFieldDefs = [],
   receiveCustomValues = {},
   setReceiveCustomValues,
+  globalNodes,
+  boms,
   onSubmit,
   onClose,
 }) => {
+  const productsById = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
+  const weightEnabledByNodeId = useMemo(() => {
+    const m = new Map<string, boolean>();
+    (globalNodes ?? []).forEach(n => m.set(n.id, !!n.enableWeightOnReport));
+    return m;
+  }, [globalNodes]);
+  /** 根据 nodeId + productId（+variantId 可选）挑选 BOM，用于预览与后端一致的拆分口径 */
+  const resolveBom = (productId: string, nodeId: string, variantId?: string): BOM | undefined => {
+    if (!boms?.length) return undefined;
+    const forProduct = boms.filter(b => b.parentProductId === productId && b.nodeId === nodeId);
+    if (forProduct.length === 0) return undefined;
+    if (variantId) {
+      const exact = forProduct.find(b => b.variantId === variantId);
+      if (exact) return exact;
+    }
+    return forProduct.find(b => !b.variantId) ?? forProduct[0];
+  };
   return (
     <div className="fixed inset-0 z-[55] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/60" onClick={onClose} aria-hidden />
@@ -163,6 +197,78 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
               const dispatched = dispatchRecords.filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + r.quantity, 0);
               const received = receiveRecords.filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + r.quantity, 0);
               return Math.max(0, dispatched - received);
+            };
+            const weightReportEnabled = !!weightEnabledByNodeId.get(row.nodeId);
+            const currentRowWeight = receiveFormWeights?.[baseKey] ?? 0;
+            const totalQtyForWeight = productionLinkMode === 'product'
+              ? Object.entries(receiveFormQuantities)
+                  .filter(([k]) => k === baseKey || k.startsWith(`${baseKey}${RECEIVE_VARIANT_SEP}`) || k.startsWith(`${baseKey}|`))
+                  .reduce((s, [, q]) => s + q, 0)
+              : Object.entries(receiveFormQuantities)
+                  .filter(([k]) => k === baseKey || k.startsWith(`${baseKey}|`))
+                  .reduce((s, [, q]) => s + q, 0);
+            const weightPreviewRows = (() => {
+              if (!weightReportEnabled || !(currentRowWeight > 0) || !(totalQtyForWeight > 0)) return [] as ReturnType<typeof calcUsageByWeight>;
+              const bom = resolveBom(row.productId, row.nodeId);
+              if (!bom) return [];
+              return calcUsageByWeight(bom, totalQtyForWeight, currentRowWeight, productsById);
+            })();
+            const renderWeightFooter = () => {
+              if (!weightReportEnabled) return null;
+              return (
+                <div className="mt-2 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 space-y-2">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <label className="text-[10px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-1.5">
+                      <Scale className="w-3.5 h-3.5" /> 本次交货总重量 (kg)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.0001"
+                      value={currentRowWeight === 0 ? '' : currentRowWeight}
+                      onChange={e => {
+                        if (!setReceiveFormWeights) return;
+                        const n = parseFloat(e.target.value);
+                        const v = Number.isFinite(n) && n > 0 ? n : 0;
+                        setReceiveFormWeights(prev => ({ ...prev, [baseKey]: v }));
+                      }}
+                      placeholder="例如 12.5"
+                      className="w-32 rounded-xl border border-indigo-200 bg-white py-2 px-3 text-sm font-bold text-indigo-700 text-right outline-none focus:ring-2 focus:ring-indigo-200"
+                    />
+                    <span className="text-[10px] text-indigo-500 font-bold">将按 BOM 占比分摊为各子物料实际消耗</span>
+                  </div>
+                  {weightPreviewRows.length > 0 ? (
+                    <div className="overflow-hidden rounded-lg border border-indigo-100 bg-white">
+                      <table className="w-full text-[11px]">
+                        <thead className="bg-indigo-50/70 text-[10px] font-bold text-indigo-500 uppercase tracking-widest">
+                          <tr>
+                            <th className="px-2 py-1 text-left">物料</th>
+                            <th className="px-2 py-1 text-right">占比</th>
+                            <th className="px-2 py-1 text-right" title="BOM 单位用量 × 收货件数">理论重量 (kg)</th>
+                            <th className="px-2 py-1 text-right">实际消耗 (kg)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {weightPreviewRows.map(prow => (
+                            <tr key={prow.materialProductId} className="border-t border-slate-100 last:border-b-0">
+                              <td className="px-2 py-1 text-slate-700 font-bold">{prow.materialName || prow.materialProductId}</td>
+                              <td className="px-2 py-1 text-right text-slate-500 tabular-nums">{(prow.ratio * 100).toFixed(1)}%</td>
+                              <td className="px-2 py-1 text-right text-slate-500 tabular-nums">
+                                {prow.theoreticalQty != null ? prow.theoreticalQty.toFixed(4) : '—'}
+                              </td>
+                              <td className="px-2 py-1 text-right text-indigo-600 font-bold tabular-nums">{prow.actualWeight.toFixed(4)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    currentRowWeight > 0 && (
+                      <p className="text-[10px] text-amber-600 font-bold">未找到该工序下适用的 BOM 或无可分摊子项，提交后将仅保存重量。</p>
+                    )
+                  )}
+                </div>
+              );
             };
             const isProductBlockRecv = productionLinkMode === 'product' && row.orderId == null;
             const blockOrdersRecv = isProductBlockRecv ? orders.filter(o => o.productId === row.productId) : [];
@@ -273,6 +379,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                       <div className="w-28 rounded-xl border border-slate-100 bg-slate-50 py-2 px-3 text-sm font-bold text-slate-700 text-center min-h-[40px] flex items-center justify-center">{rowAmountPb.toFixed(2)}</div>
                     </div>
                   </div>
+                  {renderWeightFooter()}
                 </div>
               );
             }
@@ -333,11 +440,12 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                       <div className="w-28 rounded-xl border border-slate-100 bg-slate-50 py-2 px-3 text-sm font-bold text-slate-700 text-center min-h-[40px] flex items-center justify-center">{rowAmount.toFixed(2)}</div>
                     </div>
                   </div>
+                  {renderWeightFooter()}
                 </div>
               );
             }
             return (
-              <div key={baseKey} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-6 flex flex-col sm:flex-row sm:items-center gap-4 flex-wrap">
+              <div key={baseKey} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-6 flex flex-col gap-4"><div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-wrap">
                 <div className="flex items-center gap-3 flex-wrap">
                   {productionLinkMode !== 'product' && row.orderNumber != null && <span className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">{row.orderNumber}</span>}
                   <span className="text-sm font-bold text-slate-800">{row.productName}</span>
@@ -360,6 +468,8 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                     </div>
                   </div>
                 </div>
+                </div>
+                {renderWeightFooter()}
               </div>
             );
           })}

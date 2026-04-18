@@ -217,10 +217,18 @@ interface ProductionOpRecord {
   nodeId?: string;       // 外协/返工：工序；返工时为返工目标工序；SCRAP 为报损所在工序
   sourceNodeId?: string; // 返工专用：不良品来源工序（报工所在工序），用于从待处理不良中扣减
   reworkNodeIds?: string[]; // 返工专用：返工目标工序 id 列表（多选时）
+  weight?: number;                         // 仅当 node.enableWeightOnReport 时写入，本次交货总重量 (kg)
+  materialBreakdown?: MaterialBreakdownRow[]; // 按 BOM 占比把 weight 拆成各子物料实际消耗的快照
 }
 ```
 
 **说明**：领料出库、外协、返工、报损、生产入库通过 `orderId` 关联工单；`orderId` 为可选时表示关联产品模式，详见 [05-production-link-mode.md](./05-production-link-mode.md)。**报损 (SCRAP)**：记录不良品报损数量，工单详情各工序报工汇总中展示「报损」列。**返工 (REWORK)**：`sourceNodeId` 为不良来源工序，`nodeId`/`reworkNodeIds` 为返工目标工序（可多选）。
+
+**按重量报工（`GlobalNodeTemplate.enableWeightOnReport`）**：
+- 工序级开关。开启后，对应工序的工单报工 / 外协收货 / 返工报工三个入口会额外录入 `weight`（单位 kg）。
+- BOM 子项可配置 `excludeFromWeightShare` 排除辅料后，其余子项按 `quantity` 自动派生占比，`weight` 被拆成 `materialBreakdown: { materialProductId, materialName, ratio, actualWeight, theoreticalQty? }[]` 写入 `ProductionOpRecord` + 同步派生的 `MilestoneReport` / `ProductProgressReport`。
+- `StockMaterialPanel` 的"报工耗材"列会在对应工序开启后改用 `actualWeight` 汇总，从而让"结余"列天然体现真实物料损耗/结余。
+- 详细业务规则见 [01-business-rules.md §5.4](./01-business-rules.md)。
 
 ---
 

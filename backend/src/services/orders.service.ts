@@ -4,6 +4,69 @@ import { AppError } from '../middleware/errorHandler.js';
 import { generateReportNo } from '../utils/docNumber.js';
 import { genId } from '../utils/genId.js';
 import { sanitizeUpdate, sanitizeItems, normalizeDates } from '../utils/request.js';
+import { calcUsageByWeight } from '../utils/bomMaterialUsageByWeight.js';
+
+/**
+ * 若工序开启「报工时记录重量」并传入 weight，则按当前 BOM 自动派生占比，
+ * 返回写入 DB 的 weight + materialBreakdown JSON 快照。
+ */
+async function buildReportWeightBreakdown(opts: {
+  productId: string;
+  milestoneTemplateId: string;
+  variantId?: string | null;
+  quantity: number;
+  weight?: unknown;
+}): Promise<{ weight: number | null; materialBreakdown: unknown }> {
+  const rawWeight = typeof opts.weight === 'number'
+    ? opts.weight
+    : typeof opts.weight === 'string' && opts.weight !== ''
+      ? parseFloat(opts.weight)
+      : null;
+  if (rawWeight == null || !Number.isFinite(rawWeight) || rawWeight <= 0) {
+    return { weight: null, materialBreakdown: null };
+  }
+  const node = await basePrisma.globalNodeTemplate.findUnique({
+    where: { id: opts.milestoneTemplateId },
+    select: { enableWeightOnReport: true },
+  });
+  if (!node?.enableWeightOnReport) {
+    return { weight: null, materialBreakdown: null };
+  }
+  const productId = opts.productId;
+  const variantId = opts.variantId || null;
+
+  const boms = await basePrisma.bom.findMany({
+    where: { parentProductId: productId, nodeId: opts.milestoneTemplateId },
+    include: { items: true },
+  });
+  if (boms.length === 0) {
+    return { weight: rawWeight, materialBreakdown: null };
+  }
+  const exactBom = variantId ? boms.find(b => b.variantId === variantId) : undefined;
+  const chosenBom = exactBom ?? boms.find(b => !b.variantId) ?? boms[0];
+
+  const childIds = chosenBom.items.map(it => it.productId);
+  const childProducts = childIds.length
+    ? await basePrisma.product.findMany({
+      where: { id: { in: childIds } },
+      select: { id: true, name: true },
+    })
+    : [];
+  const nameById = new Map(childProducts.map(p => [p.id, p.name]));
+
+  const breakdown = calcUsageByWeight(
+    chosenBom.items.map(it => ({
+      productId: it.productId,
+      quantity: it.quantity,
+      excludeFromWeightShare: it.excludeFromWeightShare,
+    })),
+    opts.quantity,
+    rawWeight,
+    pid => nameById.get(pid) ?? '',
+  );
+
+  return { weight: rawWeight, materialBreakdown: breakdown };
+}
 
 export async function listOrders(
   db: TenantPrismaClient,
@@ -140,6 +203,22 @@ export async function createReport(
 ) {
   await verifyMilestoneTenant(milestoneId, tenantId);
   const reportNo = await generateReportNo('BG', tenantId);
+
+  /** 报工称重：若工序开启 enableWeightOnReport 且传入 weight，拉当前 BOM 现算 breakdown，固化到报工记录 */
+  const milestone = await basePrisma.milestone.findUnique({
+    where: { id: milestoneId },
+    select: { templateId: true, productionOrder: { select: { productId: true } } },
+  });
+  const weightPayload = milestone?.productionOrder?.productId
+    ? await buildReportWeightBreakdown({
+        productId: milestone.productionOrder.productId,
+        milestoneTemplateId: milestone.templateId,
+        variantId: (body.variantId as string | undefined) ?? null,
+        quantity: Number(body.quantity) || 0,
+        weight: body.weight,
+      })
+    : { weight: null, materialBreakdown: null };
+
   const report = await basePrisma.milestoneReport.create({
     data: {
       id: (body.id as string) || genId('rpt'),
@@ -156,6 +235,8 @@ export async function createReport(
       notes: body.notes,
       rate: body.rate,
       workerId: body.workerId,
+      weight: weightPayload.weight,
+      materialBreakdown: weightPayload.materialBreakdown as any,
     } as any,
   });
   await recalcMilestoneCompleted(milestoneId);
@@ -274,6 +355,13 @@ export async function createProductReport(
   }
 
   const reportNo = await generateReportNo('BG', tenantId);
+  const weightPayload = await buildReportWeightBreakdown({
+    productId: productId as string,
+    milestoneTemplateId: milestoneTemplateId as string,
+    variantId: (variantId as string | undefined) ?? null,
+    quantity: Number(reportData.quantity) || 0,
+    weight: reportData.weight,
+  });
   const report = await basePrisma.productProgressReport.create({
     data: {
       id: (reportData.id as string) || genId('ppr'),
@@ -290,6 +378,8 @@ export async function createProductReport(
       notes: reportData.notes,
       rate: reportData.rate,
       workerId: reportData.workerId,
+      weight: weightPayload.weight,
+      materialBreakdown: weightPayload.materialBreakdown as any,
     } as any,
   });
 

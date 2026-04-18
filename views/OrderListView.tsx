@@ -1169,6 +1169,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           orders={orders}
           productMilestoneProgresses={productMilestoneProgresses}
           prodRecords={prodRecords}
+          boms={boms}
         />
       )}
 

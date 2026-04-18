@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { FileText, X, UserPlus } from 'lucide-react';
+import { FileText, X, UserPlus, Scale } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   ProductionOpRecord,
@@ -13,7 +13,10 @@ import {
   ProcessSequenceMode,
   Partner,
   PlanFormFieldConfig,
+  BOM,
+  MaterialBreakdownRow,
 } from '../../types';
+import { calcUsageByWeight } from '../../utils/bomMaterialUsageByWeight';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import WorkerSelector from '../../components/WorkerSelector';
@@ -43,6 +46,7 @@ export interface ReworkReportSubmitModalProps {
   equipment: { id: string; name: string; code?: string; assignedMilestoneIds?: string[] }[];
   processSequenceMode: ProcessSequenceMode;
   partners: Partner[];
+  boms?: BOM[];
   reworkReportCustomFields?: PlanFormFieldConfig[];
   onAddRecord: (record: ProductionOpRecord) => void;
   onUpdateRecord: (record: ProductionOpRecord) => void;
@@ -62,6 +66,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
   equipment,
   processSequenceMode,
   partners,
+  boms = [],
   reworkReportCustomFields = [],
   onAddRecord,
   onUpdateRecord,
@@ -76,6 +81,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
   const [reworkReportEquipmentId, setReworkReportEquipmentId] = useState('');
   const [reworkReportUnitPrice, setReworkReportUnitPrice] = useState<number>(0);
   const [reworkReportCustomData, setReworkReportCustomData] = useState<Record<string, unknown>>({});
+  const [reworkReportTotalWeight, setReworkReportTotalWeight] = useState<number | ''>('');
 
   const reworkReportCreateFields = useMemo(
     () => reworkReportCustomFields.filter(f => f.showInCreate),
@@ -182,6 +188,47 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
     return groups;
   }, [reworkReportProduct?.variants]);
 
+  /**
+   * 返工报工称重：取决于当前工序（currentNodeId）是否开启 enableWeightOnReport。
+   * 委外返工时也沿用外协收回同一套口径：整批总重量由用户录入，按各变体实际报工数量同比分摊到每条派生单据。
+   */
+  const weightReportEnabled = useMemo(
+    () => !!globalNodes.find(n => n.id === currentNodeId)?.enableWeightOnReport,
+    [globalNodes, currentNodeId],
+  );
+  const productsById = useMemo(() => {
+    const m = new Map<string, Product>();
+    products.forEach(p => m.set(p.id, p));
+    return m;
+  }, [products]);
+  const reworkReportBom = useMemo((): BOM | null => {
+    if (!weightReportEnabled || !reworkReportProduct) return null;
+    const nodeBoms = boms.filter(b => b.parentProductId === reworkReportProduct.id && b.nodeId === currentNodeId);
+    if (nodeBoms.length === 0) return null;
+    return nodeBoms.find(b => !b.variantId) ?? nodeBoms[0];
+  }, [weightReportEnabled, boms, reworkReportProduct, currentNodeId]);
+  const reworkReportPlannedTotalQty = useMemo(() => {
+    return reworkReportPaths.reduce((sum, p) => {
+      if (reworkReportHasColorSize && reworkReportProduct?.variants?.length) {
+        const undiffKey = `${p.pathKey}__`;
+        const pu = p.pendingByVariant[''] ?? 0;
+        const onlyU = pu > 0 && Object.keys(p.pendingByVariant).every(k => k === '' || (p.pendingByVariant[k] ?? 0) <= 0);
+        if (onlyU) {
+          return sum + (reworkReportProduct.variants.reduce((vs, v) => vs + (reworkReportQuantities[`${p.pathKey}__${v.id}`] ?? 0), 0));
+        }
+        const undiffQ = (reworkReportQuantities[undiffKey] ?? 0);
+        const variantQ = reworkReportProduct.variants.reduce((vs, v) => vs + (reworkReportQuantities[`${p.pathKey}__${v.id}`] ?? 0), 0);
+        return sum + undiffQ + variantQ;
+      }
+      return sum + (reworkReportQuantities[p.pathKey] ?? 0);
+    }, 0);
+  }, [reworkReportPaths, reworkReportQuantities, reworkReportHasColorSize, reworkReportProduct?.variants]);
+  const reworkReportWeightPreview = useMemo((): MaterialBreakdownRow[] => {
+    const w = typeof reworkReportTotalWeight === 'number' ? reworkReportTotalWeight : 0;
+    if (!weightReportEnabled || !reworkReportBom || w <= 0 || reworkReportPlannedTotalQty <= 0) return [];
+    return calcUsageByWeight(reworkReportBom, reworkReportPlannedTotalQty, w, productsById);
+  }, [weightReportEnabled, reworkReportBom, reworkReportTotalWeight, reworkReportPlannedTotalQty, productsById]);
+
   const handleSubmit = () => {
     if (!isOutsourceRework) {
       if (!reworkReportWorkerId?.trim()) {
@@ -223,6 +270,14 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
     let appliedReportQty = 0;
     const resolveOpName = (fallback?: string) => workers?.find((w: Worker) => w.id === reworkReportWorkerId)?.name ?? fallback ?? docOperatorFallback;
     const collabExtra = reworkReportCollabFromValues(reworkReportCustomData);
+    /**
+     * 本批次总重量按"本次实际报工数量"同比分摊到每条派生的 REWORK_REPORT；
+     * 分母取提交前用预估数量算得的 plannedTotal，以保持前端预览与写入一致。
+     */
+    const totalWeightNum = typeof reworkReportTotalWeight === 'number' && reworkReportTotalWeight > 0
+      ? reworkReportTotalWeight
+      : 0;
+    const canSplitWeight = weightReportEnabled && totalWeightNum > 0 && reworkReportPlannedTotalQty > 0;
     const pushReworkReport = (qty: number, variantId: string | undefined, src: ProductionOpRecord) => {
       if (qty <= 0) return;
       if (!batchDocNo) batchDocNo = getNextReworkReportDocNo();
@@ -230,6 +285,9 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
       const ts = new Date().toLocaleString();
       const opName = isOutsourceRework ? '' : resolveOpName();
       const sid = src.id != null ? String(src.id) : 'x';
+      const weightForThis = canSplitWeight
+        ? Number(((qty / reworkReportPlannedTotalQty) * totalWeightNum).toFixed(4))
+        : undefined;
       onAddRecord({
         id: `rec-rework-report-${Date.now()}-${reportSeq++}-${sid.slice(-8)}`,
         type: 'REWORK_REPORT' as const,
@@ -248,6 +306,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
         unitPrice: reworkReportUnitPrice > 0 ? reworkReportUnitPrice : undefined,
         amount: reworkReportUnitPrice > 0 ? qty * reworkReportUnitPrice : undefined,
         ...(isOutsourceRework && outsourcePartner ? { partner: outsourcePartner } : {}),
+        ...(weightForThis != null ? { weight: weightForThis } : {}),
         ...collabExtra,
       });
     };
@@ -494,6 +553,66 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
               </div>
             </div>
           </div>
+          {weightReportEnabled && (
+            <div className="space-y-3 rounded-2xl border border-amber-100 bg-amber-50/50 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Scale className="h-4 w-4 text-amber-600" />
+                  <span className="text-xs font-black uppercase tracking-widest text-amber-700">本次交货总重量</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={reworkReportTotalWeight === '' ? '' : reworkReportTotalWeight}
+                    onChange={e => {
+                      const raw = e.target.value;
+                      if (raw === '') setReworkReportTotalWeight('');
+                      else setReworkReportTotalWeight(Math.max(0, Number(raw) || 0));
+                    }}
+                    placeholder="0"
+                    className="h-10 w-32 box-border rounded-xl border border-amber-200 bg-white px-3 text-sm font-bold text-slate-800 text-right tabular-nums outline-none focus:ring-2 focus:ring-amber-300"
+                  />
+                  <span className="text-sm font-bold text-slate-600">kg</span>
+                </div>
+              </div>
+              {reworkReportBom == null ? (
+                <p className="text-[11px] font-bold text-amber-700">
+                  当前产品在该工序下暂无 BOM，无法按重量分摊物料消耗。报工仍可提交，但不会生成预估消耗数据。
+                </p>
+              ) : reworkReportWeightPreview.length === 0 ? (
+                <p className="text-[11px] font-bold text-slate-500">
+                  输入本次交货总重量后，将按 BOM 占比预估各物料的实际消耗。
+                </p>
+              ) : (
+                <div className="overflow-hidden rounded-xl border border-amber-100 bg-white">
+                  <table className="w-full text-xs">
+                    <thead className="bg-amber-50/60">
+                      <tr className="text-left text-[10px] font-black uppercase tracking-widest text-amber-700">
+                        <th className="px-3 py-2">物料</th>
+                        <th className="px-3 py-2 text-right">占比</th>
+                        <th className="px-3 py-2 text-right">预估消耗 (kg)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reworkReportWeightPreview.map(row => (
+                        <tr key={row.materialProductId} className="border-t border-amber-50">
+                          <td className="px-3 py-2 font-bold text-slate-800">{row.materialName || '—'}</td>
+                          <td className="px-3 py-2 text-right font-bold text-slate-600 tabular-nums">
+                            {(row.ratio * 100).toFixed(2)}%
+                          </td>
+                          <td className="px-3 py-2 text-right font-black text-slate-900 tabular-nums">
+                            {row.actualWeight.toFixed(4)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
           {reworkReportPaths.length === 0 ? (
             <p className="text-slate-500 py-4">
               {processSequenceMode === 'sequential'

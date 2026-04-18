@@ -1004,6 +1004,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
           equipment={equipment}
           processSequenceMode={processSequenceMode}
           partners={partners}
+          boms={boms}
           reworkReportCustomFields={rfSettings.reworkReportCustomFields}
           onAddRecord={onAddRecord}
           onUpdateRecord={onUpdateRecord}

@@ -229,6 +229,17 @@
 - 未开启的工序不显示工价配置
 - 当前规则以计件为主，计时模式已不作为主路径
 
+### 5.4 报工时记录重量（按重量核算物料损耗）
+
+针对毛衣类横机工序、外协收货等“件数同口径但每件克重浮动”的业务场景，`GlobalNodeTemplate.enableWeightOnReport` 提供**工序级开关**：
+
+- 开启后，对应工序的三个入口（工单报工 / 外协收货 / 返工报工）会额外出现“本次交货总重量 (kg)”输入框，并实时预览按 BOM 占比拆分出的各子物料实际消耗。
+- BOM 子项 (`BomItem.excludeFromWeightShare`) 可勾选“不参与重量分摊”，用于标签、纽扣、吊牌这类辅料；参与分摊的子项占比 = 子项 `quantity` / Σ 参与分摊子项 `quantity`（无需用户手填比例）。
+- 写入时：
+  - `ProductionOpRecord.weight` / `MilestoneReport.weight` / `ProductProgressReport.weight` 固化本次交货总重量；
+  - `materialBreakdown` 固化每个子物料的 `ratio / actualWeight / theoreticalQty` 快照，避免后续改 BOM 后历史记录失真。
+- 消耗口径切换：`StockMaterialPanel` 的“报工耗材(理论)”列在对应工序开启后，自动改用 `materialBreakdown.actualWeight` 汇总；“结余”列（净领用 − 报工耗材）即反映真实物料损耗/结余。未开启工序维持原“件数 × BOM 用量”口径，两种模式可在同一产品不同工序并存。
+
 ---
 
 ## 6. 待持续补充

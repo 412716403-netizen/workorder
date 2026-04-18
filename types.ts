@@ -114,6 +114,13 @@ export interface GlobalNodeTemplate {
   enablePieceRate?: boolean;
   /** 是否可外协；开启后该工序会在外协管理待发清单中显示，可按工单选择工序发出 */
   allowOutsource?: boolean;
+  /**
+   * 是否开启「报工记录重量」。开启后：
+   * 1) 本工序报工/外协收回时会要求录入本次交货重量（kg）；
+   * 2) 报工记录写入时会按 BOM 子项 quantity（排除 `excludeFromWeightShare` 的辅料）自动派生占比，把交货重量拆成各子物料实际消耗快照 `ProductionOpRecord.materialBreakdown`；
+   * 3) 生产物料面板的"报工耗材"列会把该工序报工对应的子物料消耗从"件数×BOM"切换为"重量×占比"，使"结余"自然变为真实损耗量。
+   */
+  enableWeightOnReport?: boolean;
 }
 
 export interface ProductCategory {
@@ -173,6 +180,8 @@ export interface BOMItem {
   note?: string;
   /** 为 true 时，该子项用量按父物料的「缺料数」计算（用于替代料/补料，如毛条按全毛黑色缺料数计算） */
   useShortageOnly?: boolean;
+  /** 报工按重量分摊消耗时：勾选后本子项不参与重量分摊（辅料如标签/纽扣/洗水唛），仍按件数 × quantity 统计 */
+  excludeFromWeightShare?: boolean;
 }
 
 export interface BOM {
@@ -975,6 +984,16 @@ export interface MilestoneReport {
   rate?: number;
   /** 报工人员 id，用于报工结算按工人筛选 */
   workerId?: string;
+  /**
+   * 报工录入的本次交货总重量（kg），仅当所属工序 `enableWeightOnReport` 为 true 时有值。
+   * 用于按 BOM 占比派生各子物料实际消耗，替代传统的"件数 × BOM"理论口径。
+   */
+  weight?: number;
+  /**
+   * 按 BOM 占比把 `weight` 拆成的各子物料实际消耗快照，写入时由后端基于当时 BOM 计算并固化。
+   * 生产物料面板在工序开启称重后会聚合此快照的 `actualWeight`。
+   */
+  materialBreakdown?: MaterialBreakdownRow[];
 }
 
 /** 关联产品模式下，产品 × 规格 × 工序维度的进度独立存储（报工不写入工单） */
@@ -1076,11 +1095,38 @@ export interface ProductionOpRecord {
   /** 外协收回：金额（加工费，元），一般为 quantity * unitPrice */
   amount?: number;
   /**
+   * 报工/外协收货本次交货重量（单位 kg），仅当对应工序 `enableWeightOnReport` 为 true 时有值。
+   * 用于配合 BOM 子项占比自动拆分出各子物料实际消耗。
+   */
+  weight?: number;
+  /**
+   * 按 BOM 占比把 `weight` 拆成的各子物料实际消耗快照。
+   * 生产物料面板的"报工耗材"列在对应工序开启称重后，会按此快照聚合替代传统的"件数×BOM"口径。
+   */
+  materialBreakdown?: MaterialBreakdownRow[];
+  /**
    * 协作同步元数据、入库/领退/外协等单据级自定义字段快照等（与 `ProductionOpRecord` 服务端 JSON 一致）。
    * 外协：`outsourceDispatchCustomData` / `outsourceReceiveCustomData`。
    * 返工管理：`defectTreatmentCustomData`（处理不良批次）、`reworkReportCustomData`（返工报工批次）。
    */
   collabData?: Record<string, unknown>;
+}
+
+/**
+ * 报工/外协收货按重量分摊到各子物料的一行消耗快照。
+ * 数据来源：`ProductionOpRecord.weight` × 运行时派生的子项占比（`BOMItem.quantity` 除以 Σquantity，排除 `excludeFromWeightShare` 的辅料）。
+ */
+export interface MaterialBreakdownRow {
+  /** 子物料 productId */
+  materialProductId: string;
+  /** 子物料名称快照，避免后续改名后历史记录失真 */
+  materialName: string;
+  /** 运行时派生的占比（0~1，所有参与分摊行合计 = 1） */
+  ratio: number;
+  /** 本子物料实际消耗重量（单位 kg，= weight × ratio） */
+  actualWeight: number;
+  /** 理论件数消耗（= 报工件数 × BOMItem.quantity），可选，用于报表层计算损耗差 */
+  theoreticalQty?: number;
 }
 
 export type FinanceOpType = 'RECEIPT' | 'PAYMENT' | 'RECONCILIATION' | 'SETTLEMENT';

@@ -4,6 +4,60 @@ import { generateDocNo } from '../utils/docNumber.js';
 import { nextOutsourceDocNoForPartner } from '../utils/partnerDocNumberServer.js';
 import { genId } from '../utils/genId.js';
 import { sanitizeUpdate, sanitizeCreate, normalizeDates } from '../utils/request.js';
+import { calcUsageByWeight } from '../utils/bomMaterialUsageByWeight.js';
+
+/**
+ * 外协收回 / 生产报工等"按 BOM 占比把录入的本次交货总重量分摊为各子物料实际消耗"的统一算子。
+ * 返回 weight + materialBreakdown，若不满足前置条件（节点未开启、没传 weight、没 BOM 可用）则返回 null。
+ */
+async function buildOpWeightBreakdown(opts: {
+  productId: string;
+  nodeId: string;
+  variantId?: string | null;
+  quantity: number;
+  weight?: unknown;
+}): Promise<{ weight: number; materialBreakdown: unknown } | null> {
+  const rawWeight = typeof opts.weight === 'number'
+    ? opts.weight
+    : typeof opts.weight === 'string' && opts.weight !== ''
+      ? parseFloat(opts.weight)
+      : null;
+  if (rawWeight == null || !Number.isFinite(rawWeight) || rawWeight <= 0) return null;
+
+  const node = await basePrisma.globalNodeTemplate.findUnique({
+    where: { id: opts.nodeId },
+    select: { enableWeightOnReport: true },
+  });
+  if (!node?.enableWeightOnReport) return null;
+
+  const boms = await basePrisma.bom.findMany({
+    where: { parentProductId: opts.productId, nodeId: opts.nodeId },
+    include: { items: true },
+  });
+  if (boms.length === 0) return { weight: rawWeight, materialBreakdown: null };
+
+  const variantId = opts.variantId || null;
+  const exactBom = variantId ? boms.find(b => b.variantId === variantId) : undefined;
+  const chosen = exactBom ?? boms.find(b => !b.variantId) ?? boms[0];
+
+  const childIds = chosen.items.map(it => it.productId);
+  const children = childIds.length
+    ? await basePrisma.product.findMany({ where: { id: { in: childIds } }, select: { id: true, name: true } })
+    : [];
+  const nameById = new Map(children.map(p => [p.id, p.name]));
+
+  const breakdown = calcUsageByWeight(
+    chosen.items.map(it => ({
+      productId: it.productId,
+      quantity: it.quantity,
+      excludeFromWeightShare: it.excludeFromWeightShare,
+    })),
+    opts.quantity,
+    rawWeight,
+    pid => nameById.get(pid) ?? '',
+  );
+  return { weight: rawWeight, materialBreakdown: breakdown };
+}
 
 const DOC_PREFIX: Record<string, string> = {
   STOCK_OUT: 'LL',
@@ -60,6 +114,27 @@ export async function createRecord(
         'doc_no',
         tenantId,
       );
+    }
+  }
+
+  /**
+   * 外协收回 / 返工报工若工序开启称重，则在此统一计算 materialBreakdown，同时写到 OpRecord 和随后派生的 milestone/PMP 报工里。
+   * 其他类型（领退料等）即便传了 weight 也不会分摊。
+   */
+  const isWeightSusceptible =
+    (data.type === 'OUTSOURCE' && data.status === '已收回' && !data.sourceReworkId) ||
+    data.type === 'REWORK_REPORT';
+  if (isWeightSusceptible && data.productId && data.nodeId) {
+    const payload = await buildOpWeightBreakdown({
+      productId: String(data.productId),
+      nodeId: String(data.nodeId),
+      variantId: (data.variantId as string | null | undefined) ?? null,
+      quantity: Number(data.quantity) || 0,
+      weight: (data as Record<string, unknown>).weight,
+    });
+    if (payload) {
+      data.weight = payload.weight;
+      data.materialBreakdown = payload.materialBreakdown as any;
     }
   }
 
@@ -149,12 +224,20 @@ export async function applyOutsourceProgress(record: {
   docNo?: string | null;
   tenantId?: string | null;
   partner?: string | null;
+  /** 外协收回若工序开启称重，会同步把本次重量 + 物料分摊快照写入派生的 milestone/PMP 报工 */
+  weight?: unknown;
+  materialBreakdown?: unknown;
 }) {
   if (!record.nodeId) return;
   const qty = Number(record.quantity);
   if (!qty || qty <= 0) return;
   const ts = record.timestamp ? new Date(record.timestamp as string) : new Date();
   const partnerName = record.partner != null ? String(record.partner).trim() : '';
+  const weightNum = typeof record.weight === 'number'
+    ? record.weight
+    : typeof record.weight === 'string' && record.weight !== ''
+      ? parseFloat(record.weight)
+      : null;
   const reportData = {
     operator: partnerName || '外协收回',
     quantity: qty,
@@ -162,6 +245,8 @@ export async function applyOutsourceProgress(record: {
     variantId: record.variantId || null,
     reportNo: record.docNo ?? null,
     customData: { source: 'outsourceReceive', docNo: record.docNo ?? '' },
+    weight: weightNum != null && Number.isFinite(weightNum) && weightNum > 0 ? weightNum : null,
+    materialBreakdown: (record.materialBreakdown as any) ?? null,
   };
 
   if (record.orderId) {

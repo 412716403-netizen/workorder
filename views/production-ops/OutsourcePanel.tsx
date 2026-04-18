@@ -114,6 +114,8 @@ const OutsourcePanel: React.FC<PanelProps> = ({
   const [receiveFormModalOpen, setReceiveFormModalOpen] = useState(false);
   const [receiveFormQuantities, setReceiveFormQuantities] = useState<Record<string, number>>({});
   const [receiveFormUnitPrices, setReceiveFormUnitPrices] = useState<Record<string, number>>({});
+  /** 外协收货按工序开关录入的本次交货总重量（kg），baseKey 维度，用于 BOM 占比分摊 */
+  const [receiveFormWeights, setReceiveFormWeights] = useState<Record<string, number>>({});
   const [receiveFormRemark, setReceiveFormRemark] = useState('');
   const [receiveModal, setReceiveModal] = useState<{ orderId?: string; nodeId: string; productId: string; orderNumber?: string; productName: string; milestoneName: string; partner: string; pendingQty: number } | null>(null);
   const [receiveQty, setReceiveQty] = useState(0);
@@ -790,6 +792,16 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         const variantId = key.includes(RECEIVE_VARIANT_SEP) ? key.split(RECEIVE_VARIANT_SEP)[1] : undefined;
         const unitPrice = receiveFormUnitPrices[baseKey] ?? 0;
         const amount = qty * unitPrice;
+        /** 按工序开关取该批次总重量，若是按 variant 切的 key 则在 baseKey 维度按 qty 比例分摊 */
+        const nodeEnablesWeight = !!globalNodes.find(n => n.id === nodeId)?.enableWeightOnReport;
+        const rowTotalWeight = receiveFormWeights[baseKey] ?? 0;
+        let weightForThis: number | undefined;
+        if (nodeEnablesWeight && rowTotalWeight > 0) {
+          const rowTotalQty = Object.entries(receiveFormQuantities)
+            .filter(([k]) => k === baseKey || k.startsWith(`${baseKey}${RECEIVE_VARIANT_SEP}`) || k.startsWith(`${baseKey}|`))
+            .reduce((s, [, q]) => s + q, 0);
+          weightForThis = rowTotalQty > 0 ? rowTotalWeight * (qty / rowTotalQty) : rowTotalWeight;
+        }
         onAddRecord({
           id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           type: 'OUTSOURCE',
@@ -805,6 +817,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           docNo: receiveDocNo,
           unitPrice: unitPrice || undefined,
           amount: amount || undefined,
+          weight: weightForThis,
           ...receiveCollab,
         });
       } else {
@@ -816,6 +829,15 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         const amount = qty * unitPrice;
         const order = idx.ordersById.get(orderId);
         if (!order) continue;
+        const nodeEnablesWeight = !!globalNodes.find(n => n.id === nodeId)?.enableWeightOnReport;
+        const rowTotalWeight = receiveFormWeights[baseKey] ?? 0;
+        let weightForThis: number | undefined;
+        if (nodeEnablesWeight && rowTotalWeight > 0) {
+          const rowTotalQty = Object.entries(receiveFormQuantities)
+            .filter(([k]) => k === baseKey || k.startsWith(`${baseKey}|`))
+            .reduce((s, [, q]) => s + q, 0);
+          weightForThis = rowTotalQty > 0 ? rowTotalWeight * (qty / rowTotalQty) : rowTotalWeight;
+        }
         onAddRecord({
           id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           type: 'OUTSOURCE',
@@ -832,6 +854,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           docNo: receiveDocNo,
           unitPrice: unitPrice || undefined,
           amount: amount || undefined,
+          weight: weightForThis,
           ...receiveCollab,
         });
       }
@@ -842,6 +865,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
     });
     setReceiveFormQuantities({});
     setReceiveFormUnitPrices({});
+    setReceiveFormWeights({});
     setReceiveFormRemark('');
     setReceiveFormModalOpen(false);
     setReceiveSelectedKeys(new Set());
@@ -1207,6 +1231,8 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           setReceiveFormQuantities={setReceiveFormQuantities}
           receiveFormUnitPrices={receiveFormUnitPrices}
           setReceiveFormUnitPrices={setReceiveFormUnitPrices}
+          receiveFormWeights={receiveFormWeights}
+          setReceiveFormWeights={setReceiveFormWeights}
           receiveFormRemark={receiveFormRemark}
           setReceiveFormRemark={setReceiveFormRemark}
           orders={orders}
@@ -1218,6 +1244,8 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           receiveCustomFieldDefs={receiveCustomCreateDefs}
           receiveCustomValues={receiveCustomValues}
           setReceiveCustomValues={setReceiveCustomValues}
+          globalNodes={globalNodes}
+          boms={boms}
           onSubmit={handleReceiveFormSubmit}
           onClose={() => setReceiveFormModalOpen(false)}
         />
