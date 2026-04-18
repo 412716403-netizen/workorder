@@ -1,9 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ArrowUpFromLine, Package, X } from 'lucide-react';
 import { ProductionOpRecord, ProductionOrder, Product, Warehouse, BOM, GlobalNodeTemplate } from '../../types';
 import { toLocalCompactYmd } from '../../utils/localDateTime';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import {
+  readWarehousePreference,
+  writeWarehousePreference,
+  resolvePreferredSingleWarehouse,
+  WAREHOUSE_DOC_KIND,
+} from '../../utils/warehouseDocPreference';
 
 export interface ReworkMaterialIssueModalProps {
   reworkMaterialOrderId: string;
@@ -30,10 +36,23 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
   onAddRecordBatch,
   onClose,
 }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, tenantCtx, userId } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
   const [reworkMaterialQty, setReworkMaterialQty] = useState<Record<string, number>>({});
   const [reworkMaterialWarehouseId, setReworkMaterialWarehouseId] = useState<string>(() => warehouses[0]?.id ?? '');
+  const reworkIssueOpenKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!reworkMaterialOrderId) {
+      reworkIssueOpenKeyRef.current = null;
+      return;
+    }
+    if (reworkIssueOpenKeyRef.current === reworkMaterialOrderId) return;
+    reworkIssueOpenKeyRef.current = reworkMaterialOrderId;
+    const pref = readWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PROD_REWORK_MATERIAL_ISSUE);
+    const wid = resolvePreferredSingleWarehouse(warehouses, pref, warehouses[0]?.id ?? '');
+    setReworkMaterialWarehouseId(wid || '');
+  }, [reworkMaterialOrderId, warehouses, tenantCtx?.tenantId, userId]);
 
   const order = orders.find(o => o.id === reworkMaterialOrderId);
   if (!order) return null;
@@ -108,6 +127,11 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
     } as ProductionOpRecord));
     if (onAddRecordBatch && batch.length > 1) { await onAddRecordBatch(batch); }
     else { for (const rec of batch) await onAddRecord(rec); }
+    if (warehouseId) {
+      writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PROD_REWORK_MATERIAL_ISSUE, {
+        warehouseId,
+      });
+    }
     onClose();
   };
 

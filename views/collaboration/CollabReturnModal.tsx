@@ -2,6 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
+import {
+  readWarehousePreference,
+  writeWarehousePreference,
+  resolvePreferredSingleWarehouse,
+  WAREHOUSE_DOC_KIND,
+} from '../../utils/warehouseDocPreference';
 import type { Product, ProductionOpRecord, AppDictionaries, Warehouse } from '../../types';
 import { collabVariantKey, computeCollaborationReturnableRows } from './collabHelpers';
 import type { CollabReturnRow } from './collabHelpers';
@@ -20,6 +27,7 @@ interface CollabReturnModalProps {
 const CollabReturnModal: React.FC<CollabReturnModalProps> = ({
   open, onClose, transfer, warehouses, products, prodRecords, dictionaries, onReturned,
 }) => {
+  const { tenantCtx, userId } = useAuth();
   const [returnRows, setReturnRows] = useState<CollabReturnRow[]>([]);
   const [returnNote, setReturnNote] = useState('');
   const [returnWarehouseId, setReturnWarehouseId] = useState('');
@@ -29,10 +37,11 @@ const CollabReturnModal: React.FC<CollabReturnModalProps> = ({
   useEffect(() => {
     if (open && !prevOpenRef.current) {
       setReturnNote('');
-      setReturnWarehouseId(warehouses[0]?.id ?? '');
+      const pref = readWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.COLLAB_RETURN);
+      setReturnWarehouseId(resolvePreferredSingleWarehouse(warehouses, pref, warehouses[0]?.id ?? '') || '');
     }
     prevOpenRef.current = open;
-  }, [open, warehouses]);
+  }, [open, warehouses, tenantCtx?.tenantId, userId]);
 
   useEffect(() => {
     if (!open || !transfer) return;
@@ -84,6 +93,11 @@ const CollabReturnModal: React.FC<CollabReturnModalProps> = ({
         note: returnNote || undefined,
         warehouseId: returnWarehouseId || undefined,
       });
+      if (returnWarehouseId) {
+        writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.COLLAB_RETURN, {
+          warehouseId: returnWarehouseId,
+        });
+      }
       toast.success('回传提交成功（已自动从仓库出库）');
       onClose();
       await onReturned();

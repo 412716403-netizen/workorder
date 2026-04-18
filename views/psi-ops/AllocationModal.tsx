@@ -21,6 +21,8 @@ interface AllocationModalProps {
   dictionaries: AppDictionaries;
   recordsList: any[];
   onReplaceRecords?: (type: string, docNumber: string, newRecords: any[]) => void;
+  /** 配货确定且已写入记录后回调，用于记忆出库仓 */
+  onCommittedWarehouse?: (warehouseId: string) => void;
   onClose: () => void;
 }
 
@@ -34,6 +36,7 @@ const AllocationModal: React.FC<AllocationModalProps> = ({
   dictionaries,
   recordsList,
   onReplaceRecords,
+  onCommittedWarehouse,
   onClose,
 }) => {
   return (
@@ -165,6 +168,7 @@ const AllocationModal: React.FC<AllocationModalProps> = ({
                 return { ...r, allocatedQuantity: (r.allocatedQuantity ?? 0) + remaining, allocationWarehouseId: allocationWarehouseId };
               });
               onReplaceRecords('SALES_ORDER', allocationModal.docNumber, newRecords);
+              onCommittedWarehouse?.(allocationWarehouseId);
               onClose();
             }}
             disabled={!allocationWarehouseId}

@@ -28,6 +28,10 @@ import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderC
 import { buildOutsourceFlowPrintContext } from '../../utils/buildOutsourceFlowPrintContext';
 import { OUTSOURCE_DISPATCH_CUSTOM_DATA_KEY, OUTSOURCE_RECEIVE_CUSTOM_DATA_KEY } from '../../utils/productionOpCollab/outsource';
 import { PlanFormCustomFieldInput, PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
+import {
+  buildOutsourceReceiveLastPriceIndex,
+  lookupOutsourceReceiveLastPrice,
+} from '../../utils/outsourceReceiveLastUnitPrice';
 
 export interface OutsourceFlowDocumentDetailModalProps {
   productionLinkMode: 'order' | 'product';
@@ -258,6 +262,17 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                       const initUnitPrice: Record<string, number> = {};
                       docRecords.forEach(r => { const k = isProductModeDetail ? `${r.productId}|${r.nodeId}${r.variantId ? '|' + r.variantId : ''}` : `${r.orderId}|${r.nodeId}${r.variantId ? '|' + r.variantId : ''}`; initUnitPrice[k] = r.unitPrice ?? 0; });
                       docRecords.forEach(r => { if (r.variantId) { const base = isProductModeDetail ? `${r.productId}|${r.nodeId}` : `${r.orderId}|${r.nodeId}`; if (initUnitPrice[base] == null) initUnitPrice[base] = r.unitPrice ?? 0; } });
+                      // 补录空单价：本单已有非零价不覆盖；仅对当前为 0 的键按「合作单位 + 商品 + 工序」查历史上次单价，排除本单自身。
+                      const priceIdx = buildOutsourceReceiveLastPriceIndex(records, { excludeDocNo: flowDetailKey });
+                      if (priceIdx.size > 0) {
+                        docRecords.forEach(r => {
+                          const k = isProductModeDetail ? `${r.productId}|${r.nodeId}${r.variantId ? '|' + r.variantId : ''}` : `${r.orderId}|${r.nodeId}${r.variantId ? '|' + r.variantId : ''}`;
+                          const curr = initUnitPrice[k];
+                          if (curr != null && curr > 0) return;
+                          const last = lookupOutsourceReceiveLastPrice(priceIdx, r.partner ?? docPartner, r.productId ?? '', r.nodeId ?? '');
+                          if (last != null) initUnitPrice[k] = last;
+                        });
+                      }
                       setFlowDetailUnitPrices(initUnitPrice);
                     } else { setFlowDetailUnitPrices({}); }
                     setFlowDetailEditMode(true);

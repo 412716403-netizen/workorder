@@ -105,11 +105,8 @@ const TransferOrderModal: React.FC<TransferOrderModalProps> = ({
             </div>
           </div>
           <div>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center mb-3">
               <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Layers className="w-4 h-4 text-indigo-500" /> 调拨明细</h4>
-              <button type="button" onClick={addTransferItem} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-sm">
-                <Plus className="w-4 h-4" /> 添加明细行
-              </button>
             </div>
             <div className="space-y-3">
               {transferItems.map((line) => {
@@ -196,6 +193,11 @@ const TransferOrderModal: React.FC<TransferOrderModalProps> = ({
                   <p className="text-slate-500 text-sm font-medium">暂无明细，点击「添加明细行」添加调拨产品</p>
                 </div>
               )}
+            </div>
+            <div className="flex justify-start mt-3">
+              <button type="button" onClick={addTransferItem} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-sm">
+                <Plus className="w-4 h-4" /> 添加明细行
+              </button>
             </div>
           </div>
         </div>

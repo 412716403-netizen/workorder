@@ -47,6 +47,10 @@ import {
 } from '../../utils/orderCenterSort';
 import { buildDefectiveReworkByOrderMilestone } from '../../utils/defectiveReworkByOrderMilestone';
 import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
+import {
+  buildOutsourceReceiveLastPriceIndex,
+  lookupOutsourceReceiveLastPrice,
+} from '../../utils/outsourceReceiveLastUnitPrice';
 import { nextOutsourceDocNumber } from '../../utils/partnerDocNumber';
 import OutsourceMaterialDispatchModal from './OutsourceMaterialDispatchModal';
 import OutsourceMaterialReturnModal from './OutsourceMaterialReturnModal';
@@ -58,6 +62,11 @@ import OutsourceFlowListModal, { type OutsourceFlowOpenSeed } from './OutsourceF
 import OutsourceFlowDocumentDetailModal from './OutsourceFlowDocumentDetailModal';
 import OutsourceCollabSyncModal from './OutsourceCollabSyncModal';
 import { useAuth } from '../../contexts/AuthContext';
+import {
+  readWarehousePreference,
+  resolvePreferredSingleWarehouse,
+  WAREHOUSE_DOC_KIND,
+} from '../../utils/warehouseDocPreference';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import { outsourceCustomCollabPart } from '../../utils/productionOpCollab/outsource';
 import OutsourceFormConfigModal from './OutsourceFormConfigModal';
@@ -93,7 +102,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
   onRefreshPrintTemplates,
   materialFormSettings = DEFAULT_MATERIAL_FORM_SETTINGS,
 }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, tenantCtx, userId } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
   const canViewMainList = hasOpsPerm(tenantRole, userPermissions, 'production:outsource_list:allow');
 
@@ -382,6 +391,34 @@ const OutsourcePanel: React.FC<PanelProps> = ({
       return (a.orderNumber || '').localeCompare(b.orderNumber || '');
     });
   }, [productionLinkMode, records, orders, products, globalNodes, productMilestoneProgresses, idx]);
+
+  /**
+   * 外协收货模态框打开时，按「合作单位 + 商品 + 工序」查询上次收回单价；
+   * 仅对当前为 0/未定义的 baseKey 预填，不覆盖用户已填的非零价。
+   */
+  useEffect(() => {
+    if (!receiveFormModalOpen) return;
+    const priceIndex = buildOutsourceReceiveLastPriceIndex(records);
+    if (priceIndex.size === 0) return;
+    setReceiveFormUnitPrices(prev => {
+      const next = { ...prev };
+      let changed = false;
+      for (const row of outsourceReceiveRows) {
+        const baseKey = row.orderId != null
+          ? `${row.orderId}|${row.nodeId}`
+          : `${row.productId}|${row.nodeId}|${row.partner ?? ''}`;
+        if (!receiveSelectedKeys.has(baseKey)) continue;
+        const existing = next[baseKey];
+        if (existing != null && existing > 0) continue;
+        const last = lookupOutsourceReceiveLastPrice(priceIndex, row.partner, row.productId, row.nodeId);
+        if (last != null) {
+          next[baseKey] = last;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [receiveFormModalOpen, outsourceReceiveRows, receiveSelectedKeys, records]);
 
   const outsourceStatsByOrder = useMemo(() => {
     const isProductMode = productionLinkMode === 'product';
@@ -1035,7 +1072,13 @@ const OutsourcePanel: React.FC<PanelProps> = ({
                           const uniquePartners = [...new Set(ptnrs.map(p => p.partner))];
                           setMatDispatchPartnerOptions(uniquePartners);
                           setMatDispatchPartner(uniquePartners[0] ?? '');
-                          setMatDispatchWarehouseId(warehouses[0]?.id ?? '');
+                          setMatDispatchWarehouseId(
+                            resolvePreferredSingleWarehouse(
+                              warehouses,
+                              readWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.OUTSOURCE_MAT_DISPATCH),
+                              warehouses[0]?.id ?? '',
+                            ) || '',
+                          );
                           setMatDispatchRemark('');
                           setMatDispatchQty({});
                           if (productionLinkMode === 'product') {
@@ -1067,7 +1110,13 @@ const OutsourcePanel: React.FC<PanelProps> = ({
                           }
                           setMatReturnPartnerOptions(outsourceDispatchPartners);
                           setMatReturnPartner(outsourceDispatchPartners[0] ?? '');
-                          setMatReturnWarehouseId(warehouses[0]?.id ?? '');
+                          setMatReturnWarehouseId(
+                            resolvePreferredSingleWarehouse(
+                              warehouses,
+                              readWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.OUTSOURCE_MAT_RETURN),
+                              warehouses[0]?.id ?? '',
+                            ) || '',
+                          );
                           setMatReturnRemark('');
                           setMatReturnQty({});
                           if (productionLinkMode === 'product') {

@@ -8,7 +8,6 @@ import {
   AlertCircle,
   Save,
   FileText,
-  CalendarDays,
   Info,
   Users,
   UserPlus,
@@ -59,6 +58,7 @@ import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelec
 import { SearchableMultiSelectWithProcessTabs } from '../../components/SearchableMultiSelect';
 import { localTodayYmd, planIdToLocalYmd, toLocalDateYmd } from '../../utils/localDateTime';
 import { nextPsiDocNumber } from '../../utils/partnerDocNumber';
+import { getLastPurchaseUnitPrice } from '../../utils/psiPartnerProductLastPrice';
 import { PlanPrintTemplateManageDialog } from '../../components/plan-print/PlanPrintTemplateManageDialog';
 import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
 import { isEquipmentAssignmentEnabled, isWorkerAssignmentEnabled } from '../../utils/nodeAssignmentFlags';
@@ -104,6 +104,8 @@ interface ProposedOrder {
     quantity: number;
     suggestedQty: number;
     nodeName: string;
+    /** 与保存至采购订单的 purchasePrice 一致；可预览中微调 */
+    purchasePrice: number;
   }[];
 }
 
@@ -778,6 +780,13 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
         groupedMap[supplier.id] = { orderNumber, partnerId: supplier.id, partnerName: supplier.name, items: [] };
       }
       const qtyRounded = Math.round(Number(item.plannedQty ?? item.shortage) * 100) / 100;
+      const prod = products.find(p => p.id === item.materialId);
+      const lastPrice = getLastPurchaseUnitPrice(psiRecords, {
+        partnerId: supplier.id,
+        partnerName: supplier.name,
+        productId: item.materialId,
+      });
+      const purchasePrice = lastPrice ?? prod?.purchasePrice ?? 0;
       groupedMap[supplier.id].items.push({
         id: `item-${Date.now()}-${item.materialId}-${index}`,
         productId: item.materialId,
@@ -785,7 +794,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
         materialSku: item.materialSku,
         quantity: qtyRounded,
         suggestedQty: qtyRounded,
-        nodeName: item.nodeName
+        nodeName: item.nodeName,
+        purchasePrice,
       });
     });
 
@@ -822,7 +832,16 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                 const qty = item.quantity ?? 0;
                 if (qty <= 0) return;
                 const prod = products.find(p => p.id === item.productId);
-                const purchasePrice = prod?.purchasePrice ?? 0;
+                const lastPrice = getLastPurchaseUnitPrice(psiRecords, {
+                  partnerId: order.partnerId,
+                  partnerName: order.partnerName,
+                  productId: item.productId,
+                });
+                const purchasePrice =
+                  item.purchasePrice != null && Number.isFinite(Number(item.purchasePrice))
+                    ? Number(item.purchasePrice)
+                    : (lastPrice ?? prod?.purchasePrice ?? 0);
+                const amount = Math.round(qty * purchasePrice * 100) / 100;
                 allRecs.push({
                     id: `psi-po-${baseId}-${oi}-${ii}`,
                     docNumber: docNum,
@@ -830,6 +849,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                     productId: item.productId,
                     quantity: qty,
                     purchasePrice,
+                    amount,
                     partner: order.partnerName,
                     partnerId: order.partnerId,
                     warehouseId: 'wh-1',
@@ -866,6 +886,19 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
             ...order,
             items: order.items.map(item => item.id === itemId ? { ...item, quantity: qty } : item)
         };
+    }));
+  };
+
+  const updateProposedItemPurchasePrice = (orderNum: string, itemId: string, val: string) => {
+    const trimmed = val.trim();
+    const n = trimmed === '' ? 0 : parseFloat(trimmed);
+    const purchasePrice = Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 0;
+    setProposedOrders(prev => prev.map(order => {
+      if (order.orderNumber !== orderNum) return order;
+      return {
+        ...order,
+        items: order.items.map(item => (item.id === itemId ? { ...item, purchasePrice } : item)),
+      };
     }));
   };
 
@@ -1131,17 +1164,6 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                         placeholder="搜索并选择合作单位..."
                       />
                     </div>
-                  )}
-                  {planFormSettings.standardFields.find(f => f.id === 'createdAt')?.showInDetail !== false && (
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">
-                      {planFormSettings.standardFields.find(f => f.id === 'createdAt')?.label ?? '添加日期'}
-                    </label>
-                    <div className="relative">
-                      <CalendarDays className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                      <input type="date" value={tempPlanInfo.createdAt || ''} onChange={e => setTempPlanInfo({ ...tempPlanInfo, createdAt: e.target.value })} className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-11 pr-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
-                    </div>
-                  </div>
                   )}
                   {planFormSettings.customFields.filter(f => f.showInDetail).map(cf => (
                     <div key={cf.id} className="space-y-2">
@@ -1563,6 +1585,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                          <th className="pb-4 text-center">对应生产环节</th>
                                          <th className="pb-4 text-center">系统缺料数</th>
                                          <th className="pb-4 text-right">拟采购数量 (可编辑)</th>
+                                         <th className="pb-4 text-right">单价 (元)</th>
+                                         <th className="pb-4 text-right">金额 (元)</th>
                                          <th className="pb-4 pr-2 w-16 text-center">操作</th>
                                       </tr>
                                    </thead>
@@ -1611,6 +1635,26 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                                  <span className="text-[10px] font-bold text-slate-400">{getUnitName(item.productId)}</span>
                                               </div>
                                            </td>
+                                           <td className="py-4 text-right">
+                                              <input
+                                                 type="number"
+                                                 min={0}
+                                                 step={0.01}
+                                                 value={Number.isFinite(item.purchasePrice) ? item.purchasePrice : 0}
+                                                 onChange={e => updateProposedItemPurchasePrice(order.orderNumber, item.id, e.target.value)}
+                                                 className="w-24 bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
+                                                 title="与保存至采购订单的单价一致"
+                                              />
+                                           </td>
+                                           <td className="py-4 text-right">
+                                              <span className="text-sm font-black text-emerald-700 tabular-nums">
+                                                 {(() => {
+                                                    const q = Number(item.quantity) || 0;
+                                                    const p = Number(item.purchasePrice) || 0;
+                                                    return (Math.round(q * p * 100) / 100).toFixed(2);
+                                                 })()}
+                                              </span>
+                                           </td>
                                            <td className="py-4 pr-2 text-center">
                                               <button
                                                  type="button"
@@ -1632,9 +1676,20 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                    <AlertCircle className="w-3.5 h-3.5" />
                                    <span>请确认各明细项数量是否满足最小包装量</span>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                   <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">单据预估总量：</span>
-                                   <span className="text-lg font-black text-slate-900">{Number(order.items.reduce((s, i) => s + (i.quantity ?? 0), 0)).toFixed(2)} {getUnitName(viewPlan.productId)}</span>
+                                <div className="flex flex-wrap items-center gap-4 justify-end">
+                                   <div className="flex items-center gap-2">
+                                      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">单据预估总量：</span>
+                                      <span className="text-lg font-black text-slate-900">{Number(order.items.reduce((s, i) => s + (i.quantity ?? 0), 0)).toFixed(2)} {getUnitName(viewPlan.productId)}</span>
+                                   </div>
+                                   <div className="flex items-center gap-2">
+                                      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">单据合计金额：</span>
+                                      <span className="text-lg font-black text-emerald-700 tabular-nums">
+                                         {order.items
+                                            .reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.purchasePrice) || 0), 0)
+                                            .toFixed(2)}
+                                      </span>
+                                      <span className="text-[10px] font-bold text-slate-400">元</span>
+                                   </div>
                                 </div>
                              </div>
                           </div>

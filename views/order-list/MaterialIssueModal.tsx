@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Package, X, ArrowUpFromLine } from 'lucide-react';
 import {
   ProductionOrder,
@@ -14,6 +14,12 @@ import {
 import { toLocalCompactYmd } from '../../utils/localDateTime';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import {
+  readWarehousePreference,
+  writeWarehousePreference,
+  resolvePreferredSingleWarehouse,
+  WAREHOUSE_DOC_KIND,
+} from '../../utils/warehouseDocPreference';
 import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
 
 interface MaterialIssueModalProps {
@@ -76,10 +82,25 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
   onAddRecord,
   onClose,
 }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, tenantCtx, userId } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
   const [materialIssueQty, setMaterialIssueQty] = useState<Record<string, number>>({});
   const [materialIssueWarehouseId, setMaterialIssueWarehouseId] = useState<string>(warehouses[0]?.id ?? '');
+  const materialIssueOpenKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!orderId && !forProduct) {
+      materialIssueOpenKeyRef.current = null;
+      return;
+    }
+    const key = orderId ?? (forProduct ? `fp:${forProduct.productId}` : '');
+    if (!key) return;
+    if (materialIssueOpenKeyRef.current === key) return;
+    materialIssueOpenKeyRef.current = key;
+    const pref = readWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PROD_MATERIAL_ISSUE);
+    const wid = resolvePreferredSingleWarehouse(warehouses, pref, warehouses[0]?.id ?? '');
+    setMaterialIssueWarehouseId(wid || '');
+  }, [orderId, forProduct?.productId, forProduct, warehouses, tenantCtx?.tenantId, userId]);
 
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
 
@@ -187,6 +208,11 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
         };
         onAddRecord(rec);
       });
+      if (materialIssueWarehouseId) {
+        writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PROD_MATERIAL_ISSUE, {
+          warehouseId: materialIssueWarehouseId,
+        });
+      }
       handleClose();
     };
     return (
@@ -433,6 +459,11 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
           sourceProductId
         });
       });
+      if (materialIssueWarehouseId) {
+        writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PROD_MATERIAL_ISSUE, {
+          warehouseId: materialIssueWarehouseId,
+        });
+      }
       handleClose();
     };
     const orderLabels = groupOrders.map(o => o.orderNumber).filter(Boolean).join('、');

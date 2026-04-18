@@ -94,13 +94,12 @@ export const DEFAULT_PLAN_FORM_SETTINGS: PlanFormSettings = {
   standardFields: [
     { id: 'planNumber', label: '计划单号', showInList: true, showInCreate: false, showInDetail: true },
     { id: 'customer', label: '客户', showInList: true, showInCreate: true, showInDetail: true },
-    { id: 'createdAt', label: '添加日期', showInList: true, showInCreate: true, showInDetail: true },
   ],
   customFields: [],
   listPrint: { showPrintButton: true },
 };
 
-/** 合并租户已存配置与默认标准字段，避免旧数据缺少 createdAt 等项导致表单配置与新建/详情不同步 */
+/** 合并租户已存配置与默认标准字段，避免旧数据缺少某项导致表单配置与新建/详情不同步 */
 function mergePlanStandardFields(
   saved: PlanFormSettings['standardFields'] | undefined,
 ): PlanFormSettings['standardFields'] {
@@ -124,7 +123,7 @@ export function normalizePlanFormSettings(raw: PlanFormSettings | null | undefin
   const allowedLabel = s.labelPrint?.allowedTemplateIds?.filter(Boolean) ?? [];
   return {
     ...s,
-    standardFields: mergePlanStandardFields(s.standardFields).filter(f => f.id !== 'dueDate'),
+    standardFields: mergePlanStandardFields(s.standardFields).filter(f => f.id !== 'dueDate' && f.id !== 'createdAt'),
     customFields: normalizePlanFormFieldConfigArray(s.customFields),
     listPrint: {
       showPrintButton: s.listPrint?.showPrintButton !== false,

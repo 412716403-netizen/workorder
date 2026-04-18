@@ -18,6 +18,14 @@ import { sortedColorEntries } from '../../utils/sortVariantsByProduct';
 import { useProgressiveList } from '../../hooks/useProgressiveList';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { localTodayYmd, toLocalDateYmd } from '../../utils/localDateTime';
+import { useAuth } from '../../contexts/AuthContext';
+import {
+  readWarehousePreference,
+  writeWarehousePreference,
+  resolvePreferredSingleWarehouse,
+  resolvePreferredTransferWarehouses,
+  WAREHOUSE_DOC_KIND,
+} from '../../utils/warehouseDocPreference';
 import StocktakeListModal from './StocktakeListModal';
 import TransferListModal from './TransferListModal';
 import TransferOrderModal from './TransferOrderModal';
@@ -77,6 +85,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   formatQtyDisplay,
   parseRecordTime,
 }) => {
+  const { tenantCtx, userId } = useAuth();
   const recordsList = records ?? [];
   const ordersList = orders ?? [];
 
@@ -247,6 +256,10 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
     setEditingTransferDocNumber(null);
     setTransferForm({ fromWarehouseId: '', toWarehouseId: '', transferDate: localTodayYmd(), note: '' });
     setTransferItems([]);
+    writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PSI_TRANSFER, {
+      fromWarehouseId: fromId,
+      toWarehouseId: toId,
+    });
   };
 
   // ── 保存盘点单 ──
@@ -339,16 +352,21 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
     setEditingStocktakeDocNumber(null);
     setStocktakeForm({ warehouseId: '', stocktakeDate: localTodayYmd(), note: '' });
     setStocktakeItems([]);
+    writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PSI_STOCKTAKE, {
+      warehouseId,
+    });
   };
 
   // ── 列表弹层回调 ──
   const handleCreateStocktake = useCallback(() => {
     setEditingStocktakeDocNumber(null);
-    setStocktakeForm({ warehouseId: '', stocktakeDate: localTodayYmd(), note: '' });
+    const pref = readWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PSI_STOCKTAKE);
+    const wh = resolvePreferredSingleWarehouse(warehouses, pref, '');
+    setStocktakeForm({ warehouseId: wh, stocktakeDate: localTodayYmd(), note: '' });
     setStocktakeItems([]);
     setStocktakeListModalOpen(false);
     setStocktakeModalOpen(true);
-  }, []);
+  }, [tenantCtx?.tenantId, userId, warehouses]);
 
   const handleEditStocktake = useCallback((docNumber: string, docItems: any[]) => {
     setEditingStocktakeDocNumber(docNumber);
@@ -386,11 +404,18 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
 
   const handleCreateTransfer = useCallback(() => {
     setEditingTransferDocNumber(null);
-    setTransferForm({ fromWarehouseId: '', toWarehouseId: '', transferDate: localTodayYmd(), note: '' });
+    const pref = readWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PSI_TRANSFER);
+    const { fromWarehouseId, toWarehouseId } = resolvePreferredTransferWarehouses(warehouses, pref);
+    setTransferForm({
+      fromWarehouseId,
+      toWarehouseId,
+      transferDate: localTodayYmd(),
+      note: '',
+    });
     setTransferItems([]);
     setTransferListModalOpen(false);
     setTransferModalOpen(true);
-  }, []);
+  }, [tenantCtx?.tenantId, userId, warehouses]);
 
   const handleEditTransfer = useCallback((docNumber: string, docItems: any[]) => {
     setEditingTransferDocNumber(docNumber);

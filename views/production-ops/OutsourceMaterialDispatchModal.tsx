@@ -18,6 +18,7 @@ import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayNa
 import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpCollab/material';
+import { writeWarehousePreference, WAREHOUSE_DOC_KIND } from '../../utils/warehouseDocPreference';
 
 /**
  * 子工单等：外协记录上的 variantId 常为父成品规格，与本产品 BOM 规格对不上。
@@ -115,7 +116,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
   onAddRecordBatch,
   onClose,
 }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, tenantCtx, userId } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
   const [matDispatchCustomValues, setMatDispatchCustomValues] = useState<Record<string, unknown>>({});
   const materialCustomFieldDefs = useMemo(
@@ -288,6 +289,11 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
       await onAddRecordBatch(batch);
     } else {
       for (const rec of batch) onAddRecord(rec);
+    }
+    if (matDispatchWarehouseId) {
+      writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.OUTSOURCE_MAT_DISPATCH, {
+        warehouseId: matDispatchWarehouseId,
+      });
     }
     toast.success(`已外发 ${toIssue.length} 种物料至「${matDispatchPartner}」`);
     onClose();

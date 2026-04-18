@@ -520,11 +520,6 @@ export const finance = {
     request<PaginatedResponse<any>>(`/finance/records${buildQs(params)}`),
 };
 
-// ── Dashboard ──
-export const dashboard = {
-  getStats: () => request('/dashboard/stats'),
-};
-
 // ── Roles ──
 export type RoleRow = {
   id: string;

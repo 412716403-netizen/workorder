@@ -8,6 +8,7 @@ import type { FormConfigSchema } from '../formConfigSchema';
 
 const HIDDEN_STANDARD_IDS = [
   'dueDate',
+  'createdAt',
   'product',
   'totalQty',
   'status',

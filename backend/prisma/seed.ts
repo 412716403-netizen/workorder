@@ -5,7 +5,7 @@ import crypto from 'crypto';
 const prisma = new PrismaClient();
 
 const ALL_PERMISSIONS = [
-  'dashboard', 'production', 'psi', 'finance', 'basic', 'settings', 'members',
+  'production', 'psi', 'finance', 'basic', 'settings', 'members',
 ];
 
 const DEFAULT_TENANT_ID = '00000000-0000-0000-0000-000000000001';
@@ -69,7 +69,6 @@ async function main() {
       standardFields: [
         { id: 'planNumber', label: '计划单号', showInList: true, showInCreate: false, showInDetail: true },
         { id: 'customer', label: '客户', showInList: true, showInCreate: true, showInDetail: true },
-        { id: 'createdAt', label: '添加日期', showInList: true, showInCreate: true, showInDetail: true },
         { id: 'startDate', label: '开始日期', showInList: false, showInCreate: true, showInDetail: true },
         { id: 'priority', label: '优先级', showInList: true, showInCreate: true, showInDetail: true },
       ],

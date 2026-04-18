@@ -22,7 +22,6 @@ import ordersRoutes from './routes/orders.js';
 import productionRoutes from './routes/production.js';
 import psiRoutes from './routes/psi.js';
 import financeRoutes from './routes/finance.js';
-import dashboardRoutes from './routes/dashboard.js';
 import rolesRoutes from './routes/roles.js';
 import collaborationRoutes from './routes/collaboration.js';
 import itemCodesRoutes from './routes/item-codes.js';
@@ -101,7 +100,6 @@ app.use('/api/orders',     authMiddleware, requireTenant, requirePermission('pro
 app.use('/api/production', authMiddleware, requireTenant, requirePermission('production'), apiLimiter, productionRoutes);
 app.use('/api/psi',        authMiddleware, requireTenant, requirePermission('psi'),        apiLimiter, psiRoutes);
 app.use('/api/finance',    authMiddleware, requireTenant, requirePermission('finance'),    apiLimiter, financeRoutes);
-app.use('/api/dashboard',  authMiddleware, requireTenant, requirePermission('dashboard'),  apiLimiter, dashboardRoutes);
 
 app.use('/api/collaboration', authMiddleware, requireTenant, apiLimiter, collaborationRoutes);
 app.use('/api/item-codes',    authMiddleware, requireTenant, requirePermission('production'), apiLimiter, itemCodesRoutes);

@@ -81,7 +81,7 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
       await api.tenants.reviewApplication(tenantId, appId, {
         action,
         role: 'worker',
-        permissions: ['dashboard', 'production'],
+        permissions: ['production'],
       });
       toast.success(action === 'APPROVED' ? '已通过' : '已拒绝');
       await loadData();

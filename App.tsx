@@ -1,7 +1,7 @@
 import React, { Suspense, useEffect, useRef, useLayoutEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Link, Navigate, useParams, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, ClipboardList, Settings as SettingsIcon,
+  ClipboardList, Settings as SettingsIcon,
   Boxes, ShoppingCart, Wallet, LogOut, User, UserCog, Building2, Loader2, Inbox,
 } from 'lucide-react';
 
@@ -11,7 +11,6 @@ import TenantSelectView from './views/TenantSelectView';
 import ProfileModal from './views/ProfileModal';
 import { lazyWithReloadOnChunkError } from './utils/lazyWithReloadOnChunkError';
 
-const DashboardView = lazyWithReloadOnChunkError(() => import('./views/DashboardView'));
 const ProductionManagementView = lazyWithReloadOnChunkError(() => import('./views/ProductionManagementView'));
 const PSIView = lazyWithReloadOnChunkError(() => import('./views/PSIView'));
 const FinanceView = lazyWithReloadOnChunkError(() => import('./views/FinanceView'));
@@ -179,11 +178,6 @@ function AppLayout() {
         </button>
 
         <nav className="flex flex-col gap-1.5">
-          {hasPerm('dashboard') && (
-            <Link to="/" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
-              <LayoutDashboard className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 经营看板
-            </Link>
-          )}
           {hasPerm('production') && (
             <Link to="/production" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
               <ClipboardList className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 生产管理
@@ -283,8 +277,15 @@ function AppLayout() {
 
 // ── Route wrappers: each subscribes only to the domains it needs ──
 
-function DashboardRoute() {
-  return <DashboardView />;
+/** 根路径与通配：进入首个有模块权限的业务页 */
+function DefaultHomeRedirect() {
+  const { hasPerm } = useAuth();
+  if (hasPerm('production')) return <Navigate to="/production" replace />;
+  if (hasPerm('psi')) return <Navigate to="/psi" replace />;
+  if (hasPerm('finance')) return <Navigate to="/finance" replace />;
+  if (hasPerm('basic')) return <Navigate to="/basic" replace />;
+  if (hasPerm('settings')) return <Navigate to="/settings" replace />;
+  return <Navigate to="/collaboration" replace />;
 }
 
 function ProductionRoute() {
@@ -459,7 +460,7 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/" element={<DashboardRoute />} />
+      <Route path="/" element={<DefaultHomeRedirect />} />
       <Route path="/production" element={<ProductionRoute />} />
       <Route path="/psi" element={<PsiRoute />} />
       <Route path="/finance" element={<FinanceRoute />} />
@@ -488,7 +489,7 @@ function AppRoutes() {
           </Suspense>
         }
       />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<DefaultHomeRedirect />} />
     </Routes>
   );
 }

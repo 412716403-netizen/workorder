@@ -1,7 +1,6 @@
 import type { RoleRow } from '../../services/api';
 
 export const ALL_PERMISSIONS = [
-  { id: 'dashboard', label: '经营看板' },
   { id: 'production', label: '生产管理' },
   { id: 'process_report', label: '工序报工' },
   { id: 'psi', label: '进销存' },

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   Product,
   Warehouse,
@@ -24,6 +24,16 @@ import { buildPurchaseBillPrintRenderContext } from '../../utils/buildPurchaseBi
 import { useAuth } from '../../contexts/AuthContext';
 import { useConfigData } from '../../contexts/AppDataContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import {
+  readWarehousePreference,
+  writeWarehousePreference,
+  resolvePreferredSingleWarehouse,
+  WAREHOUSE_DOC_KIND,
+} from '../../utils/warehouseDocPreference';
+import {
+  buildPsiLastPriceIndex,
+  lookupLastPrice,
+} from '../../utils/psiPartnerProductLastPrice';
 
 type FormType = 'PURCHASE_ORDER' | 'PURCHASE_BILL' | 'SALES_ORDER' | 'SALES_BILL';
 
@@ -144,7 +154,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   prodRecords = [],
   orderBillPrintTemplates,
 }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, tenantCtx, userId } = useAuth();
   const { printTemplates: configPrintTemplates } = useConfigData();
   const mergedPrintTemplates = orderBillPrintTemplates ?? configPrintTemplates;
   const docOperator = currentOperatorDisplayName(currentUser);
@@ -214,9 +224,34 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         }
         base.customData = first.customData ?? {};
       }
+    } else if (formType === 'PURCHASE_BILL' || formType === 'SALES_BILL') {
+      const pref = readWarehousePreference(
+        tenantCtx?.tenantId,
+        userId,
+        formType === 'PURCHASE_BILL' ? WAREHOUSE_DOC_KIND.PURCHASE_BILL : WAREHOUSE_DOC_KIND.SALES_BILL,
+      );
+      const wid = resolvePreferredSingleWarehouse(warehouses, pref, '');
+      if (wid) base.warehouseId = wid;
     }
     return base;
   });
+
+  useEffect(() => {
+    if (editingDocNumber) return;
+    if (formType !== 'PURCHASE_BILL' && formType !== 'SALES_BILL') return;
+    if (!warehouses.length) return;
+    setForm((prev: any) => {
+      if (prev?.warehouseId) return prev;
+      const pref = readWarehousePreference(
+        tenantCtx?.tenantId,
+        userId,
+        formType === 'PURCHASE_BILL' ? WAREHOUSE_DOC_KIND.PURCHASE_BILL : WAREHOUSE_DOC_KIND.SALES_BILL,
+      );
+      const wid = resolvePreferredSingleWarehouse(warehouses, pref, '');
+      if (!wid) return prev;
+      return { ...prev, warehouseId: wid };
+    });
+  }, [warehouses, editingDocNumber, formType, tenantCtx?.tenantId, userId]);
 
   // ── Purchase order items ──
   const [purchaseOrderItems, setPurchaseOrderItems] = useState<
@@ -361,6 +396,84 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   const [allocationModal, setAllocationModal] = useState<{ docNumber: string; lineGroupId: string; product: Product; grp: any[] } | null>(null);
   const [allocationQuantities, setAllocationQuantities] = useState<number | Record<string, number> | null>(null);
   const [allocationWarehouseId, setAllocationWarehouseId] = useState<string>('');
+
+  /**
+   * 「合作单位 + 商品」上次单价索引：采购/销售两侧共用一个 Map。
+   * 编辑模式下排除本单（避免将本单旧行当作外部的上次成交价）。
+   */
+  const psiLastPriceIndex = useMemo(
+    () => buildPsiLastPriceIndex(recordsList, { excludeDocNumber: editingDocNumber || '' }),
+    [recordsList, editingDocNumber],
+  );
+
+  /** 新建时用；有合作单位且有历史则用上次价，否则用产品档案采购价。 */
+  const resolveDefaultPurchasePrice = useCallback(
+    (productId: string): number => {
+      if (!productId) return 0;
+      if (form.partner?.trim() || form.partnerId) {
+        const last = lookupLastPrice(psiLastPriceIndex, 'PURCHASE', form.partnerId, form.partner, productId);
+        if (last != null) return last;
+      }
+      return productMapPSI.get(productId)?.purchasePrice ?? 0;
+    },
+    [psiLastPriceIndex, form.partner, form.partnerId, productMapPSI],
+  );
+
+  /** 新建时用；有合作单位且有历史则用上次价，否则用产品档案销售价。 */
+  const resolveDefaultSalesPrice = useCallback(
+    (productId: string): number => {
+      if (!productId) return 0;
+      if (form.partner?.trim() || form.partnerId) {
+        const last = lookupLastPrice(psiLastPriceIndex, 'SALES', form.partnerId, form.partner, productId);
+        if (last != null) return last;
+      }
+      return productMapPSI.get(productId)?.salesPrice ?? 0;
+    },
+    [psiLastPriceIndex, form.partner, form.partnerId, productMapPSI],
+  );
+
+  /**
+   * 新建模式下合作单位变更 → 对已有明细行整体按解析函数刷新单价。
+   * 初始挂载不触发（初次没有「之前的合作单位」基线）；编辑模式不自动重算，避免覆盖用户在本单内的调整。
+   */
+  const prevPartnerKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const currentKey = `${form.partnerId || ''}::${(form.partner || '').trim()}`;
+    if (editingDocNumber) {
+      prevPartnerKeyRef.current = currentKey;
+      return;
+    }
+    if (prevPartnerKeyRef.current === null) {
+      prevPartnerKeyRef.current = currentKey;
+      return;
+    }
+    if (prevPartnerKeyRef.current === currentKey) return;
+    prevPartnerKeyRef.current = currentKey;
+    if (formType === 'PURCHASE_ORDER') {
+      setPurchaseOrderItems(prev =>
+        prev.map(it => (it.productId ? { ...it, purchasePrice: resolveDefaultPurchasePrice(it.productId) } : it)),
+      );
+    } else if (formType === 'PURCHASE_BILL') {
+      setPurchaseBillItems(prev =>
+        prev.map(it => (it.productId ? { ...it, purchasePrice: resolveDefaultPurchasePrice(it.productId) } : it)),
+      );
+    } else if (formType === 'SALES_ORDER') {
+      setSalesOrderItems(prev =>
+        prev.map(it => (it.productId ? { ...it, salesPrice: resolveDefaultSalesPrice(it.productId) } : it)),
+      );
+    } else if (formType === 'SALES_BILL') {
+      setSalesBillItems(prev =>
+        prev.map(it => (it.productId ? { ...it, salesPrice: resolveDefaultSalesPrice(it.productId) } : it)),
+      );
+    }
+  }, [
+    form.partnerId,
+    form.partner,
+    editingDocNumber,
+    formType,
+    resolveDefaultPurchasePrice,
+    resolveDefaultSalesPrice,
+  ]);
 
   // ── Doc number generators ──
   const generatePODocNumber = (): string => {
@@ -732,6 +845,9 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         if (onSaveBatch) await onSaveBatch(newRecords);
         else { for (const r of newRecords) await onSave(r); }
       }
+      writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PURCHASE_BILL, {
+        warehouseId: form.warehouseId,
+      });
       onBack();
       return;
     }
@@ -930,6 +1046,9 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         if (onSaveBatch) await onSaveBatch(newRecords);
         else { for (const r of newRecords) await onSave(r); }
       }
+      writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.SALES_BILL, {
+        warehouseId: form.warehouseId,
+      });
       onBack();
       return;
     }
@@ -963,6 +1082,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         formSettings={safePurchaseOrderFormSettings}
         partnerLabel={partnerLabel}
         receivedByOrderLine={receivedByOrderLine}
+        resolveDefaultPurchasePrice={resolveDefaultPurchasePrice}
       />
     );
   }
@@ -996,6 +1116,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         listPrintSlot={safeSalesOrderFormSettings.listPrint}
         printTemplates={mergedPrintTemplates}
         buildSalesOrderPrintContext={buildSalesOrderPrintContext}
+        resolveDefaultSalesPrice={resolveDefaultSalesPrice}
       />
     );
   }
@@ -1027,6 +1148,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         getUnitName={getUnitName}
         partnerLabel={partnerLabel}
         formSettings={safeSalesBillFormSettings}
+        resolveDefaultSalesPrice={resolveDefaultSalesPrice}
       />
     );
   }
@@ -1068,6 +1190,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         listPrintSlot={safePurchaseBillFormSettings.listPrint}
         printTemplates={mergedPrintTemplates}
         buildPurchaseBillPrintContext={buildPurchaseBillPrintContext}
+        resolveDefaultPurchasePrice={resolveDefaultPurchasePrice}
       />
     );
   }

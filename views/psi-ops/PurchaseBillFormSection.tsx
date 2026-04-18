@@ -21,7 +21,19 @@ import { Product, Warehouse, ProductCategory, Partner, PartnerCategory, AppDicti
 import { PsiListPrintPicker } from '../../components/psi/PsiListPrintPicker';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 import { localTodayYmd, localCalendarYmdStartToIso } from '../../utils/localDateTime';
-import { sectionTitleClass } from '../../styles/uiDensity';
+import {
+  sectionTitleClass,
+  psiOrderBillFormShellClass,
+  psiOrderBillFormStickyBarClass,
+  psiOrderBillFormCardClass,
+  psiOrderBillFormSectionStackClass,
+  psiOrderBillFormDetailSplitClass,
+  psiOrderBillFormGridGapClass,
+  psiOrderBillFormFieldControlClass,
+  psiOrderBillFormReadonlyBoxClass,
+  psiOrderBillFormSectionIconIndigoClass,
+  psiOrderBillFormPartnerTriggerClass,
+} from '../../styles/uiDensity';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
@@ -76,6 +88,8 @@ interface PurchaseBillFormSectionProps {
   listPrintSlot?: PlanListPrintSettings;
   printTemplates?: PrintTemplate[];
   buildPurchaseBillPrintContext?: (template: PrintTemplate) => PrintRenderContext;
+  /** 按合作单位 + 商品 解析默认采购价（优先上次成交价，回退产品档案价） */
+  resolveDefaultPurchasePrice?: (productId: string) => number;
 }
 
 const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
@@ -90,6 +104,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
   listPrintSlot,
   printTemplates = [],
   buildPurchaseBillPrintContext,
+  resolveDefaultPurchasePrice,
 }) => {
   const { currentUser } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
@@ -207,9 +222,10 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-4 animate-in slide-in-from-bottom-4 pb-24">
-      <div className="flex items-center justify-between sticky top-0 z-40 py-4 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200">
+    <div className={psiOrderBillFormShellClass}>
+      <div className={psiOrderBillFormStickyBarClass}>
         <button
+          type="button"
           onClick={() => {
             onBack();
           }}
@@ -234,38 +250,40 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                   onBack();
                 });
               }}
-              className="flex items-center gap-2 px-4 py-2.5 text-rose-600 font-bold rounded-xl border border-rose-200 bg-white hover:bg-rose-50 transition-all"
+              className="flex items-center gap-2 px-4 py-2 text-rose-600 font-bold rounded-xl border border-rose-200 bg-white hover:bg-rose-50 transition-all"
             >
               <Trash2 className="w-4 h-4" /> 删除
             </button>
           )}
           {!editingDocNumber && (
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-sm">
-            <button onClick={() => { setCreationMethod('MANUAL'); onResetItems(); }} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${creationMethod === 'MANUAL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+          <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200 shadow-sm">
+            <button type="button" onClick={() => { setCreationMethod('MANUAL'); onResetItems(); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${creationMethod === 'MANUAL' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
               <Plus className="w-3 h-3" /> 直接手动创建
             </button>
-            <button onClick={() => { setCreationMethod('FROM_ORDER'); onResetItems(); }} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${creationMethod === 'FROM_ORDER' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+            <button type="button" onClick={() => { setCreationMethod('FROM_ORDER'); onResetItems(); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${creationMethod === 'FROM_ORDER' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
               <ClipboardList className="w-3 h-3" /> 引用采购订单生成
             </button>
           </div>
           )}
           {(!editingDocNumber ? creationMethod === 'MANUAL' : true) ? (
             <button
+              type="button"
               onClick={() => onSaveManual()}
               disabled={!form.partner || !form.warehouseId || purchaseBillItems.length === 0 || !purchaseBillItems.some(i => {
               if (!i.productId) return false;
               const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((s, v) => s + v, 0) : (i.quantity ?? 0);
               return q > 0;
             })}
-              className="bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
+              className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
             >
               <Save className="w-4 h-4" /> {editingDocNumber ? '保存修改' : '确认保存采购单'}
             </button>
           ) : (
             <button
+              type="button"
               onClick={handleConvertPOToBill}
               disabled={!form.warehouseId || selectedPOItemIds.length === 0 || selectedPOItemIds.every(id => (selectedPOItemQuantities[id] ?? 0) <= 0)}
-              className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 text-sm"
+              className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
             >
               <ArrowDownToLine className="w-4 h-4" />
               执行入库 ({selectedPOItemIds.filter(id => (selectedPOItemQuantities[id] ?? 0) > 0).length} 条)
@@ -274,31 +292,15 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
         </div>
       </div>
 
-      <div className="bg-white rounded-[40px] p-8 border border-slate-200 shadow-sm space-y-10">
+      <div className={psiOrderBillFormCardClass}>
         {(!editingDocNumber ? creationMethod === 'MANUAL' : true) ? (
           <>
-            <div className="space-y-8">
-              <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
-                <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600"><FileText className="w-5 h-5" /></div>
+            <div className={psiOrderBillFormSectionStackClass}>
+              <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
+                <div className={psiOrderBillFormSectionIconIndigoClass}><FileText className="w-4 h-4" /></div>
                 <h3 className={sectionTitleClass}>1. 采购单基础信息</h3>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1 min-w-0">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据编号</label>
-                  <div className="relative">
-                    <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
-                    <div className="w-full min-w-0 bg-slate-100 border border-slate-100 rounded-xl py-3 pl-10 pr-4 font-bold text-slate-800 h-[52px] flex items-center truncate">
-                      <span className="truncate">
-                        {editingDocNumber
-                          ? editingDocNumber
-                          : form.partner
-                            ? previewAutoPbDocNumber || '保存时自动生成'
-                            : '请先选择供应商'}
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-[10px] font-bold text-slate-400 ml-1 leading-snug">由系统自动生成，不可修改</p>
-                </div>
+              <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">供应商</label>
                   <SearchablePartnerSelect
@@ -307,11 +309,28 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                     value={form.partner}
                     onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id })}
                     placeholder="选择供应商..."
+                    triggerClassName={psiOrderBillFormPartnerTriggerClass}
                   />
+                </div>
+                <div className="space-y-1 min-w-0">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据编号</label>
+                  <div className="relative">
+                    <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
+                    <div className={psiOrderBillFormReadonlyBoxClass}>
+                      {editingDocNumber ? (
+                        <span className="truncate">{editingDocNumber}</span>
+                      ) : form.partner ? (
+                        <span className="truncate">{previewAutoPbDocNumber || '保存时自动生成'}</span>
+                      ) : (
+                        <span className="text-slate-400 font-bold text-sm truncate">选择合作单位后自动生成</span>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-[10px] font-bold text-slate-400 ml-1 leading-snug">由系统自动生成，不可修改</p>
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">入库仓库</label>
-                  <select value={form.warehouseId} onChange={e => setForm({...form, warehouseId: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500">
+                  <select value={form.warehouseId} onChange={e => setForm({...form, warehouseId: e.target.value})} className={`${psiOrderBillFormFieldControlClass} text-sm`}>
                     <option value="">选择仓库...</option>
                     {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                   </select>
@@ -325,7 +344,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                       cf={cf}
                       value={form.customData?.[cf.id]}
                       onChange={next => setForm({ ...form, customData: { ...form.customData, [cf.id]: next } })}
-                      controlClassName="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]"
+                      controlClassName={psiOrderBillFormFieldControlClass}
                     />
                   </div>
                 );
@@ -333,17 +352,14 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
               </div>
             </div>
 
-            <div className="pt-10 border-t border-slate-50 space-y-8">
-              <div className="flex items-center justify-between border-b border-slate-50 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600"><Layers className="w-5 h-5" /></div>
+            <div className={psiOrderBillFormDetailSplitClass}>
+              <div className="flex items-center border-b border-slate-200 pb-2.5">
+                <div className="flex items-center gap-2.5">
+                  <div className={psiOrderBillFormSectionIconIndigoClass}><Layers className="w-4 h-4" /></div>
                   <h3 className={sectionTitleClass}>2. 入库明细录入</h3>
                 </div>
-                <button onClick={onAddItem} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all">
-                  <Plus className="w-4 h-4" /> 添加明细行
-                </button>
               </div>
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {purchaseBillItems.map((line) => {
                   const pbProd = productMapPSI.get(line.productId);
                   const pbHasVariants = pbProd?.variants && pbProd.variants.length > 0;
@@ -359,16 +375,19 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                     });
                   }
                   return (
-                  <div key={line.id} className="p-4 bg-slate-50/50 rounded-2xl border border-slate-100 space-y-4">
-                    <div className="flex flex-wrap items-end gap-4">
+                  <div key={line.id} className="p-3 bg-slate-50/50 rounded-xl border border-slate-100 space-y-3">
+                    <div className="flex flex-wrap items-end gap-3">
                       <div className="flex-1 min-w-[200px] space-y-1">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">目标采购品项 (支持搜索与分类筛选)</label>
                         <SearchableProductSelect options={products} categories={categories} value={line.productId} onChange={(id) => {
                           const p = productMapPSI.get(id);
                           const hv = p?.variants && p.variants.length > 0;
+                          const price = resolveDefaultPurchasePrice
+                            ? resolveDefaultPurchasePrice(id)
+                            : (p?.purchasePrice ?? 0);
                           onUpdateItem(line.id, {
                             productId: id,
-                            purchasePrice: p?.purchasePrice ?? 0,
+                            purchasePrice: price,
                             quantity: hv ? undefined : 0,
                             variantQuantities: hv ? {} : undefined,
                             batch: undefined
@@ -424,7 +443,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                           )}
                         </>
                       )}
-                      <button onClick={() => onRemoveItem(line.id)} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"><Trash2 className="w-5 h-5" /></button>
+                      <button type="button" onClick={() => onRemoveItem(line.id)} className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"><Trash2 className="w-4 h-4" /></button>
                     </div>
                     {pbHasVariants && line.productId && (
                       <div className="pt-2 border-t border-slate-100 space-y-3">
@@ -432,7 +451,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                         {sortedVariantColorEntries(pbGroupedByColor, pbProd?.colorIds, pbProd?.sizeIds).map(([colorId, colorVariants]) => {
                           const color = dictionaries.colors.find(c => c.id === colorId);
                           return (
-                            <div key={colorId} className="flex flex-wrap items-center gap-4 bg-white/80 p-3 rounded-xl border border-slate-100">
+                            <div key={colorId} className="flex flex-wrap items-center gap-3 bg-white/80 p-2.5 rounded-lg border border-slate-100">
                               <div className="flex items-center gap-2 w-28 shrink-0">
                                 <div className="w-4 h-4 rounded-full border border-slate-200 shrink-0" style={{ backgroundColor: (color as any)?.value || '#e2e8f0' }} />
                                 <span className="text-xs font-bold text-slate-700">{color?.name || '未命名'}</span>
@@ -467,30 +486,35 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                   </div>
                 );})}
                 {purchaseBillItems.length === 0 && (
-                  <div className="py-12 border-2 border-dashed border-slate-100 rounded-2xl text-center">
-                    <Layers className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+                  <div className="py-8 border-2 border-dashed border-slate-100 rounded-xl text-center">
+                    <Layers className="w-8 h-8 text-slate-200 mx-auto mb-2" />
                     <p className="text-slate-400 text-sm font-medium">点击「添加明细行」开始录入入库明细</p>
                   </div>
                 )}
               </div>
-              <div className="flex justify-end p-4 bg-indigo-600 rounded-[24px] text-white shadow-xl shadow-indigo-100 gap-8">
-                <div className="flex items-center gap-4">
+              <div className="flex justify-start pt-3">
+                <button type="button" onClick={onAddItem} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all">
+                  <Plus className="w-4 h-4" /> 添加明细行
+                </button>
+              </div>
+              <div className="flex justify-end p-4 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-100/80 gap-6">
+                <div className="flex items-center gap-3">
                   <p className="text-xs font-bold opacity-80">入库总量:</p>
-                  <p className="text-xl font-black">{purchaseBillItems.reduce((s, i) => s + (i.quantity || 0), 0)} <span className="text-xs font-medium">PCS</span></p>
+                  <p className="text-lg font-black">{purchaseBillItems.reduce((s, i) => s + (i.quantity || 0), 0)} <span className="text-xs font-medium">PCS</span></p>
                 </div>
-                <div className="flex items-center gap-4 border-l border-white/30 pl-8">
+                <div className="flex items-center gap-3 border-l border-white/30 pl-6">
                   <p className="text-xs font-bold opacity-80">总金额:</p>
-                  <p className="text-xl font-black">¥{purchaseBillItems.reduce((s, i) => s + (i.quantity || 0) * (i.purchasePrice || 0), 0).toFixed(2)}</p>
+                  <p className="text-lg font-black">¥{purchaseBillItems.reduce((s, i) => s + (i.quantity || 0) * (i.purchasePrice || 0), 0).toFixed(2)}</p>
                 </div>
               </div>
             </div>
           </>
         ) : (
-          <div className="space-y-8">
-            <div className="space-y-4">
+          <div className="space-y-5">
+            <div className="space-y-3">
               <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><ClipboardList className="w-4 h-4" /> 1. 选择来源订单</h4>
               {pendingPOs.length === 0 ? (
-                <div className="py-12 border-2 border-dashed border-slate-100 rounded-3xl text-center">
+                <div className="py-8 border-2 border-dashed border-slate-100 rounded-xl text-center">
                   <AlertCircle className="w-8 h-8 text-slate-200 mx-auto mb-2" />
                   <p className="text-slate-400 font-bold italic text-xs">暂无未入库完成的采购订单</p>
                 </div>
@@ -512,7 +536,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                           }
                           setSelectedPOOrderNums(prev => prev.includes(docNum) ? prev.filter(n => n !== docNum) : [...prev, docNum]);
                         }}
-                        className={`p-4 rounded-[24px] border-2 text-left transition-all flex items-center justify-between ${isSelected ? 'border-indigo-600 bg-indigo-50' : 'border-slate-50 bg-slate-50 hover:border-indigo-200'}`}
+                        className={`p-3 rounded-2xl border-2 text-left transition-all flex items-center justify-between ${isSelected ? 'border-indigo-600 bg-indigo-50' : 'border-slate-50 bg-slate-50 hover:border-indigo-200'}`}
                       >
                         <div>
                           <p className="text-sm font-black text-slate-800">{docNum}</p>
@@ -527,13 +551,13 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
             </div>
 
             {selectedPOOrderNums.length > 0 && (
-              <div className="space-y-4 pt-4 border-t border-slate-100">
+              <div className="space-y-3 pt-3 border-t border-slate-100">
                 <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><ListFilter className="w-4 h-4" /> 2. 勾选并填写本次入库数量 (支持部分到货)</h4>
-                <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                   <table className="w-full text-left">
                     <thead>
                       <tr className="bg-slate-50/80 border-b border-slate-100">
-                        <th className="px-4 py-3 w-10 text-center">
+                        <th className="px-3 py-2 w-10 text-center">
                           <button onClick={(e) => {
                             e.stopPropagation();
                             if (selectedPOItemIds.length === availableItemsFromSelectedPOs.length) {
@@ -553,13 +577,13 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                             {selectedPOItemIds.length === availableItemsFromSelectedPOs.length ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                           </button>
                         </th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">源订单 / 商品</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">采购价</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">订单数量</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">已收</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">待收</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">本次入库数量</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">批次</th>
+                        <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">源订单 / 商品</th>
+                        <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">采购价</th>
+                        <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">订单数量</th>
+                        <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">已收</th>
+                        <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">待收</th>
+                        <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">本次入库数量</th>
+                        <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">批次</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
@@ -581,10 +605,10 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                         };
                         return (
                           <tr key={item.id} onClick={() => handleToggle()} className={`cursor-pointer transition-colors ${isChecked ? 'bg-indigo-50/30' : 'hover:bg-slate-50/50'}`}>
-                            <td className="px-4 py-3 text-center">
+                            <td className="px-3 py-2 text-center">
                               {isChecked ? <CheckSquare className="w-4 h-4 text-indigo-600" /> : <Square className="w-4 h-4 text-slate-300" />}
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-3 py-2">
                               <div className="flex flex-col">
                                 <span className="text-[9px] font-black text-slate-300 uppercase">{item.docNumber}</span>
                                 <span className="text-xs font-bold text-slate-700">{product?.name}</span>
@@ -600,11 +624,11 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                                 </span>
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-right"><span className="text-xs font-bold text-slate-500">¥{(item.purchasePrice ?? 0).toFixed(2)}</span></td>
-                            <td className="px-4 py-3 text-right"><span className="text-sm font-bold text-slate-600">{formatQtyDisplay(item.quantity)} {item.productId ? getUnitName(item.productId) : 'PCS'}</span></td>
-                            <td className="px-4 py-3 text-right"><span className="text-xs font-bold text-slate-400">{item.receivedQty}</span></td>
-                            <td className="px-4 py-3 text-right"><span className="text-sm font-black text-indigo-600">{item.remainingQty}</span></td>
-                            <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                            <td className="px-3 py-2 text-right"><span className="text-xs font-bold text-slate-500">¥{(item.purchasePrice ?? 0).toFixed(2)}</span></td>
+                            <td className="px-3 py-2 text-right"><span className="text-sm font-bold text-slate-600">{formatQtyDisplay(item.quantity)} {item.productId ? getUnitName(item.productId) : 'PCS'}</span></td>
+                            <td className="px-3 py-2 text-right"><span className="text-xs font-bold text-slate-400">{item.receivedQty}</span></td>
+                            <td className="px-3 py-2 text-right"><span className="text-sm font-black text-indigo-600">{item.remainingQty}</span></td>
+                            <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
                               {isChecked ? (
                                 <input type="number" min={0} value={qty} onChange={e => {
                                   const v = parseFloat(e.target.value);
@@ -613,7 +637,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                                 }} className="w-20 text-right py-1.5 px-2 rounded-lg border border-slate-200 text-sm font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none" title="允许超过采购订单数量（如超收）" />
                               ) : <span className="text-slate-300">—</span>}
                             </td>
-                            <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                            <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
                               {isChecked && hasBatch ? (
                                 <input type="text" value={selectedPOItemBatches[item.id] ?? ''} onChange={e => setSelectedPOItemBatches(prev => ({ ...prev, [item.id]: e.target.value }))} placeholder="批号" className="w-24 py-1.5 px-2 rounded-lg border border-slate-200 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
                               ) : <span className="text-slate-300">—</span>}
@@ -628,13 +652,13 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
             )}
 
             {selectedPOItemIds.length > 0 && (
-              <div className="space-y-4 pt-4 border-t border-slate-100">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3 pt-3 border-t border-slate-100">
+                <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
                   <div className="space-y-1 md:col-span-2 md:max-w-lg">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">单据编号</label>
                     <div className="relative">
                       <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
-                      <div className="w-full min-w-0 bg-slate-100 border border-slate-100 rounded-2xl py-3 pl-10 pr-4 text-sm font-bold text-slate-800 min-h-[48px] flex items-center truncate">
+                      <div className={psiOrderBillFormReadonlyBoxClass}>
                         <span className="truncate">{previewPbFromOrder || '保存时自动生成'}</span>
                       </div>
                     </div>
@@ -642,13 +666,13 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                   </div>
                   <div className="space-y-1 md:col-span-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">入库至指定仓库 <span className="text-rose-500">*</span></label>
-                    <select value={form.warehouseId} onChange={e => setForm({...form, warehouseId: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <select value={form.warehouseId} onChange={e => setForm({...form, warehouseId: e.target.value})} className={`${psiOrderBillFormFieldControlClass} text-sm`}>
                       <option value="">点击选择入库仓...</option>
                       {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                     </select>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
                 {formSettings.customFields.filter(f => f.showInCreate).map(cf => {
                   const eff = effectivePlanFormFieldType(cf);
                   return (
@@ -658,7 +682,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                       cf={cf}
                       value={form.customData?.[cf.id]}
                       onChange={next => setForm({ ...form, customData: { ...form.customData, [cf.id]: next } })}
-                      controlClassName="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                      controlClassName={psiOrderBillFormFieldControlClass}
                     />
                   </div>
                 );

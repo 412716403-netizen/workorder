@@ -8,7 +8,6 @@ import {
   FileText,
   Building2,
   CheckCircle2,
-  Sliders,
   PackageCheck,
   Printer,
 } from 'lucide-react';
@@ -35,7 +34,11 @@ import {
   pageSubtitleClass,
   pageTitleClass,
   primaryToolbarButtonClass,
-  secondaryToolbarButtonClass,
+  psiOrderBillListStackClass,
+  psiOrderBillListEmptyClass,
+  psiOrderBillListCardClass,
+  psiOrderBillListCardHeaderClass,
+  psiOrderBillListTableWrapClass,
 } from '../styles/uiDensity';
 import WarehousePanel from './psi-ops/WarehousePanel';
 import OrderBillFormPage from './psi-ops/OrderBillFormPage';
@@ -80,6 +83,13 @@ import {
   DEFAULT_PURCHASE_BILL_FORM_SETTINGS,
   DEFAULT_SALES_BILL_FORM_SETTINGS,
 } from '../contexts/AppDataContext';
+import { useAuth } from '../contexts/AuthContext';
+import {
+  readWarehousePreference,
+  writeWarehousePreference,
+  resolvePreferredSingleWarehouse,
+  WAREHOUSE_DOC_KIND,
+} from '../utils/warehouseDocPreference';
 
 interface PSIOpsViewProps {
   type: string;
@@ -139,6 +149,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
   userPermissions,
   tenantRole,
 }) => {
+  const { tenantCtx, userId } = useAuth();
   const _isOwner = tenantRole === 'owner';
   const hasPsiPerm = (perm: string): boolean => {
     if (_isOwner) return true;
@@ -527,54 +538,6 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
         </div>
         
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          {type === 'PURCHASE_ORDER' && onUpdatePurchaseOrderFormSettings && (
-            <button
-              type="button"
-              onClick={() => {
-                setPoFormConfigEntryTab('fields');
-                setShowPOFormConfigModal(true);
-              }}
-              className={secondaryToolbarButtonClass}
-            >
-              <Sliders className="w-4 h-4 shrink-0" /> 表单配置
-            </button>
-          )}
-          {type === 'PURCHASE_BILL' && onUpdatePurchaseBillFormSettings && (
-            <button
-              type="button"
-              onClick={() => {
-                setPbFormConfigEntryTab('fields');
-                setShowPBFormConfigModal(true);
-              }}
-              className={secondaryToolbarButtonClass}
-            >
-              <Sliders className="w-4 h-4 shrink-0" /> 表单配置
-            </button>
-          )}
-          {type === 'SALES_ORDER' && onUpdateSalesOrderFormSettings && (
-            <button
-              type="button"
-              onClick={() => {
-                setSoFormConfigEntryTab('fields');
-                setShowSOFormConfigModal(true);
-              }}
-              className={secondaryToolbarButtonClass}
-            >
-              <Sliders className="w-4 h-4 shrink-0" /> 表单配置
-            </button>
-          )}
-          {type === 'SALES_BILL' && onUpdateSalesBillFormSettings && (
-            <button
-              type="button"
-              onClick={() => {
-                setSbFormConfigEntryTab('fields');
-                setShowSBFormConfigModal(true);
-              }}
-              className={secondaryToolbarButtonClass}
-            >
-              <Sliders className="w-4 h-4 shrink-0" /> 表单配置
-            </button>
-          )}
           {type === 'SALES_ORDER' && !showModal && hasPsiPerm('psi:sales_order_pending_shipment:allow') && (
             <button
               type="button"
@@ -690,10 +653,10 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           parseRecordTime={parseRecordTime}
         />
       ) : (
-        <div className="space-y-4">
+        <div className={psiOrderBillListStackClass}>
           {pagedGroupedEntries.length === 0 && sortedGroupedEntries.length === 0 ? (
-            <div className="bg-white rounded-[32px] border-2 border-dashed border-slate-200 py-24 text-center">
-              <FileText className="w-16 h-16 text-slate-100 mx-auto mb-4" />
+            <div className={psiOrderBillListEmptyClass}>
+              <FileText className="w-12 h-12 text-slate-100 mx-auto mb-3" />
               <p className="text-slate-400 font-medium italic">暂无{current.label}流水记录</p>
             </div>
           ) : (
@@ -710,17 +673,24 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               const openPurchaseBillDetail = () => { setEditingPBDocNumber(docNum); setShowModal('PURCHASE_BILL'); };
 
               return (
-                <div key={docNum} className="bg-white border border-slate-200 rounded-[32px] shadow-sm hover:shadow-lg transition-all overflow-hidden group">
-                  <div className="px-8 py-5 bg-slate-50/50 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-center gap-5">
-                      <div className={`w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm border border-slate-100 group-hover:border-indigo-100 transition-all ${isConverted ? 'text-emerald-500' : 'text-slate-400 group-hover:text-indigo-600'}`}>
-                        {isConverted ? <CheckCircle2 className="w-6 h-6" /> : <Building2 className="w-6 h-6" />}
+                <div key={docNum} className={psiOrderBillListCardClass}>
+                  <div className={psiOrderBillListCardHeaderClass}>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm border border-slate-100 group-hover:border-indigo-100 transition-all ${isConverted ? 'text-emerald-500' : 'text-slate-400 group-hover:text-indigo-600'}`}>
+                        {isConverted ? <CheckCircle2 className="w-5 h-5" /> : <Building2 className="w-5 h-5" />}
                       </div>
                       <div>
                         <div className="flex items-center gap-3">
                           {type === 'PURCHASE_ORDER' ? (
                             <>
-                              <h3 className="text-base font-black text-slate-800">采购订单</h3>
+                              <h3 className="text-sm font-black text-slate-800">{mainInfo.partner || '未指定单位'}</h3>
+                              <span
+                                className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest border ${
+                                  isConverted ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'
+                                }`}
+                              >
+                                {docNum.startsWith('UNGROUPED-') ? '独立单据' : docNum}
+                              </span>
                               {isConverted && (
                                 <span className="text-[10px] font-black text-emerald-500 uppercase tracking-tighter bg-white px-2 py-0.5 rounded-full border border-emerald-50 shadow-sm">
                                   已入库完成
@@ -729,7 +699,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                             </>
                           ) : (
                             <>
-                              <h3 className="text-base font-black text-slate-800">{mainInfo.partner || '未指定单位'}</h3>
+                              <h3 className="text-sm font-black text-slate-800">{mainInfo.partner || '未指定单位'}</h3>
                               <span
                                 className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest border ${
                                   isConverted ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'
@@ -849,15 +819,15 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right mr-2">
+                    <div className="flex items-center gap-3">
+                      <div className="text-right mr-1">
                         <p className="text-[9px] text-slate-300 font-black uppercase tracking-tighter">单据总量</p>
-                        <p className={`text-lg font-black ${type === 'SALES_BILL' && totalQty < 0 ? 'text-amber-600' : 'text-slate-900'}`}>{totalQty.toLocaleString()} <span className="text-xs font-medium text-slate-400">PCS</span></p>
+                        <p className={`text-base font-black ${type === 'SALES_BILL' && totalQty < 0 ? 'text-amber-600' : 'text-slate-900'}`}>{totalQty.toLocaleString()} <span className="text-xs font-medium text-slate-400">PCS</span></p>
                       </div>
                       {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL' || type === 'SALES_ORDER' || type === 'SALES_BILL') && (
-                        <div className="text-right mr-2">
+                        <div className="text-right mr-1">
                           <p className="text-[9px] text-slate-300 font-black uppercase tracking-tighter">单据金额</p>
-                          <p className={`text-lg font-black ${type === 'SALES_BILL' && totalAmount < 0 ? 'text-amber-600' : 'text-emerald-600'}`}>¥{totalAmount.toFixed(2)}</p>
+                          <p className={`text-base font-black ${type === 'SALES_BILL' && totalAmount < 0 ? 'text-amber-600' : 'text-emerald-600'}`}>¥{totalAmount.toFixed(2)}</p>
                         </div>
                       )}
                       {type === 'PURCHASE_ORDER' && hasPsiPerm('psi:purchase_order:view') && (
@@ -869,7 +839,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                 void refreshPrintTemplates();
                                 poListPrintControllerRef.current?.openPicker(docNum);
                               }}
-                              className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-700 transition-all hover:bg-slate-50"
+                              className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black text-slate-700 transition-all hover:bg-slate-50"
                             >
                               <Printer className="h-3.5 w-3.5" /> 打印
                             </button>
@@ -877,7 +847,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                           <button
                             type="button"
                             onClick={openPurchaseOrderDetail}
-                            className="flex items-center gap-1 rounded-xl border border-indigo-100 bg-white px-3 py-1.5 text-[11px] font-black text-indigo-600 transition-all hover:bg-indigo-50"
+                            className="flex items-center gap-1 rounded-lg border border-indigo-100 bg-white px-2.5 py-1 text-[10px] font-black text-indigo-600 transition-all hover:bg-indigo-50"
                           >
                             <FileText className="w-3.5 h-3.5" /> 详情
                           </button>
@@ -892,7 +862,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                 void refreshPrintTemplates();
                                 pbListPrintControllerRef.current?.openPicker(docNum);
                               }}
-                              className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-700 transition-all hover:bg-slate-50"
+                              className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black text-slate-700 transition-all hover:bg-slate-50"
                             >
                               <Printer className="h-3.5 w-3.5" /> 打印
                             </button>
@@ -900,7 +870,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                           <button
                             type="button"
                             onClick={openPurchaseBillDetail}
-                            className="px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1"
+                            className="px-2.5 py-1 text-[10px] font-black rounded-lg border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1"
                           >
                             <FileText className="w-3.5 h-3.5" /> 详情
                           </button>
@@ -915,7 +885,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                 void refreshPrintTemplates();
                                 soListPrintControllerRef.current?.openPicker(docNum);
                               }}
-                              className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-700 transition-all hover:bg-slate-50"
+                              className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black text-slate-700 transition-all hover:bg-slate-50"
                             >
                               <Printer className="h-3.5 w-3.5" /> 打印
                             </button>
@@ -923,7 +893,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                           <button
                             type="button"
                             onClick={openSalesOrderDetail}
-                            className="px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1"
+                            className="px-2.5 py-1 text-[10px] font-black rounded-lg border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1"
                           >
                             <FileText className="w-3.5 h-3.5" /> 详情
                           </button>
@@ -938,7 +908,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                 void refreshPrintTemplates();
                                 sbListPrintControllerRef.current?.openPicker(docNum);
                               }}
-                              className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-black text-slate-700 transition-all hover:bg-slate-50"
+                              className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-black text-slate-700 transition-all hover:bg-slate-50"
                             >
                               <Printer className="h-3.5 w-3.5" /> 打印
                             </button>
@@ -946,17 +916,17 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                           <button
                             type="button"
                             onClick={openSalesBillDetail}
-                            className="px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1"
+                            className="px-2.5 py-1 text-[10px] font-black rounded-lg border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1"
                           >
                             <FileText className="w-3.5 h-3.5" /> 详情
                           </button>
                         </>
                       )}
-                      <ChevronRight className="w-5 h-5 text-slate-200 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all" />
+                      <ChevronRight className="w-4 h-4 text-slate-200 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all" />
                     </div>
                   </div>
 
-                  <div className="px-8 py-4 overflow-x-auto">
+                  <div className={psiOrderBillListTableWrapClass}>
                     <table className="w-full text-left" style={{ tableLayout: 'fixed' }}>
                       <colgroup>
                         <col style={{ width: 'auto' }} />
@@ -975,19 +945,19 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                       </colgroup>
                       <thead>
                         <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50">
-                          <th className="pb-3 pr-6 text-left">产品信息 / SKU</th>
-                          {!current.hideWarehouse && <th className="pb-3 px-3 text-center">{type === 'SALES_BILL' ? '出库仓库' : '入库仓库'}</th>}
-                          {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <th className="pb-3 px-3 text-right">采购价</th>}
-                          {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <th className="pb-3 px-3 text-right">金额</th>}
-                          {type === 'SALES_ORDER' && <th className="pb-3 px-3 text-right">数量</th>}
-                          {type === 'SALES_ORDER' && <th className="pb-3 px-3 text-right">销售价</th>}
-                          {type === 'SALES_ORDER' && <th className="pb-3 px-3 text-right">金额</th>}
-                          {type === 'SALES_BILL' && <th className="pb-3 px-3 text-right">销售价</th>}
-                          {type === 'SALES_BILL' && <th className="pb-3 px-3 text-right">金额</th>}
-                          {type !== 'SALES_ORDER' && <th className="pb-3 px-3 text-right">数量</th>}
-                          {type === 'SALES_ORDER' && <th className="pb-3 px-3 text-left">配货进度</th>}
-                          {type === 'SALES_ORDER' && <th className="pb-3 px-3 text-center">操作</th>}
-                          {type === 'PURCHASE_ORDER' && <th className="pb-3 px-3 text-left">入库进度</th>}
+                          <th className="pb-2 pr-3 text-left">产品信息 / SKU</th>
+                          {!current.hideWarehouse && <th className="pb-2 px-3 text-center">{type === 'SALES_BILL' ? '出库仓库' : '入库仓库'}</th>}
+                          {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <th className="pb-2 px-3 text-right">采购价</th>}
+                          {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <th className="pb-2 px-3 text-right">金额</th>}
+                          {type === 'SALES_ORDER' && <th className="pb-2 px-3 text-right">数量</th>}
+                          {type === 'SALES_ORDER' && <th className="pb-2 px-3 text-right">销售价</th>}
+                          {type === 'SALES_ORDER' && <th className="pb-2 px-3 text-right">金额</th>}
+                          {type === 'SALES_BILL' && <th className="pb-2 px-3 text-right">销售价</th>}
+                          {type === 'SALES_BILL' && <th className="pb-2 px-3 text-right">金额</th>}
+                          {type !== 'SALES_ORDER' && <th className="pb-2 px-3 text-right">数量</th>}
+                          {type === 'SALES_ORDER' && <th className="pb-2 px-3 text-left">配货进度</th>}
+                          {type === 'SALES_ORDER' && <th className="pb-2 px-3 text-center">操作</th>}
+                          {type === 'PURCHASE_ORDER' && <th className="pb-2 px-3 text-left">入库进度</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
@@ -1051,9 +1021,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                             }
                           return (
                               <tr key={gid} className="hover:bg-slate-50/30 transition-colors">
-                                <td className="py-4 pr-6">
-                                  <div className="flex items-start gap-3 min-w-0">
-                                    <div className="w-8 h-8 shrink-0 bg-slate-50 rounded-lg flex items-center justify-center text-slate-300">
+                                <td className="py-2.5 pr-3">
+                                  <div className="flex items-start gap-2 min-w-0">
+                                    <div className="w-7 h-7 shrink-0 bg-slate-50 rounded-lg flex items-center justify-center text-slate-300">
                                       <Package className="w-4 h-4" />
                                     </div>
                                     <div className="min-w-0 flex-1">
@@ -1070,51 +1040,51 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                   </div>
                                 </td>
                               {!current.hideWarehouse && (
-                                  <td className="py-4 px-3 text-center">
+                                  <td className="py-2.5 px-3 text-center">
                                   <span className="px-2 py-0.5 rounded-md bg-slate-50 text-slate-500 text-[10px] font-black uppercase border border-slate-100">
                                     {warehouse?.name || '默认库'}
                                   </span>
                                 </td>
                               )}
                                 {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && (
-                                  <td className="py-4 px-3 text-right">
+                                  <td className="py-2.5 px-3 text-right">
                                     <span className="text-sm font-bold text-slate-600">¥{avgPrice.toFixed(2)}</span>
                               </td>
                                 )}
                                 {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && (
-                                  <td className="py-4 px-3 text-right">
+                                  <td className="py-2.5 px-3 text-right">
                                     <span className="text-sm font-black text-indigo-600">¥{rowAmount.toFixed(2)}</span>
                                   </td>
                                 )}
                                 {type === 'SALES_ORDER' && (
-                                  <td className="py-4 px-3 text-right">
+                                  <td className="py-2.5 px-3 text-right">
                                     <span className="text-sm font-black text-indigo-600">
                                       {orderQty.toLocaleString()} {first.productId ? getUnitName(first.productId) : 'PCS'}
                                     </span>
                                   </td>
                                 )}
                                 {type === 'SALES_ORDER' && (
-                                  <td className="py-4 px-3 text-right">
+                                  <td className="py-2.5 px-3 text-right">
                                     <span className="text-sm font-bold text-slate-600">¥{avgPrice.toFixed(2)}</span>
                                   </td>
                                 )}
                                 {type === 'SALES_ORDER' && (
-                                  <td className="py-4 px-3 text-right">
+                                  <td className="py-2.5 px-3 text-right">
                                     <span className="text-sm font-black text-indigo-600">¥{rowAmount.toFixed(2)}</span>
                                   </td>
                                 )}
                                 {type === 'SALES_BILL' && (
-                                  <td className="py-4 px-3 text-right">
+                                  <td className="py-2.5 px-3 text-right">
                                     <span className="text-sm font-bold text-slate-600">¥{avgPrice.toFixed(2)}</span>
                                   </td>
                                 )}
                                 {type === 'SALES_BILL' && (
-                                  <td className="py-4 px-3 text-right">
+                                  <td className="py-2.5 px-3 text-right">
                                     <span className="text-sm font-black text-indigo-600">¥{rowAmount.toFixed(2)}</span>
                                   </td>
                                 )}
                                 {type !== 'SALES_ORDER' && (
-                                  <td className="py-4 px-3 text-right">
+                                  <td className="py-2.5 px-3 text-right">
                                     <span className={`text-sm font-black ${type.includes('BILL') ? 'text-indigo-600' : 'text-slate-700'}`}>
                                       {type === 'PURCHASE_ORDER' && received > orderQty
                                         ? `${received.toLocaleString()} / ${orderQty.toLocaleString()}`
@@ -1124,7 +1094,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                   </td>
                                 )}
                                 {type === 'SALES_ORDER' && (
-                                  <td className="py-4 px-3">
+                                  <td className="py-2.5 px-3">
                                     <div className="flex flex-col gap-2">
                                       <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-full flex">
                                         {orderQty <= 0 ? null : (
@@ -1150,7 +1120,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                   </td>
                                 )}
                                 {type === 'SALES_ORDER' && hasPsiPerm('psi:sales_order_allocation:allow') && (
-                                  <td className="py-4 px-3 text-center">
+                                  <td className="py-2.5 px-3 text-center">
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -1168,7 +1138,23 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                           } as Product,
                                           grp,
                                         });
-                                        setAllocationWarehouseId(grp[0]?.allocationWarehouseId ?? warehouses[0]?.id ?? '');
+                                        (() => {
+                                          const lineWh = grp[0]?.allocationWarehouseId as string | undefined;
+                                          const whIds = new Set(warehouses.map(w => w.id));
+                                          const lineOk = lineWh && whIds.has(lineWh) ? lineWh : '';
+                                          const prefWh = resolvePreferredSingleWarehouse(
+                                            warehouses,
+                                            readWarehousePreference(
+                                              tenantCtx?.tenantId,
+                                              userId,
+                                              WAREHOUSE_DOC_KIND.SALES_ORDER_ALLOCATION,
+                                            ),
+                                            '',
+                                          );
+                                          setAllocationWarehouseId(
+                                            lineOk || prefWh || warehouses[0]?.id || '',
+                                          );
+                                        })();
                                         const hasVariants = grp.some((i: any) => i.variantId);
                                         if (hasVariants) {
                                           const agg: Record<string, { order: number; allocated: number; shipped: number }> = {};
@@ -1194,14 +1180,14 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                           setAllocationQuantities(Math.max(0, order - eff));
                                         }
                                       }}
-                                      className="px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1 inline-flex whitespace-nowrap"
+                                      className="px-2.5 py-1 text-[10px] font-black rounded-lg border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all flex items-center gap-1 inline-flex whitespace-nowrap"
                                     >
                                       <PackageCheck className="w-3.5 h-3.5 shrink-0" /> 配货
                                     </button>
                                   </td>
                                 )}
                                 {type === 'PURCHASE_ORDER' && (
-                                  <td className="py-4 px-3">
+                                  <td className="py-2.5 px-3">
                                     <div className="flex flex-col gap-2">
                                       <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden w-full flex">
                                         {received > orderQty ? (
@@ -1234,7 +1220,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
             })
           )}
           {psiTotalPages > 1 && (
-            <div className="flex items-center justify-center gap-3 py-4">
+            <div className="flex items-center justify-center gap-3 py-2">
               <span className="text-xs text-slate-400">共 {sortedGroupedEntries.length} 条单据，第 {psiPage} / {psiTotalPages} 页</span>
               <button type="button" disabled={psiPage <= 1} onClick={() => setPsiPage(p => p - 1)} className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed">上一页</button>
               <button type="button" disabled={psiPage >= psiTotalPages} onClick={() => setPsiPage(p => p + 1)} className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed">下一页</button>
@@ -1255,6 +1241,13 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           dictionaries={dictionaries}
           recordsList={recordsList}
           onReplaceRecords={onReplaceRecords}
+          onCommittedWarehouse={wid => {
+            if (wid) {
+              writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.SALES_ORDER_ALLOCATION, {
+                warehouseId: wid,
+              });
+            }
+          }}
           onClose={() => { setAllocationModal(null); setAllocationQuantities(null); }}
         />
       )}

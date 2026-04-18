@@ -60,13 +60,11 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
   onImagePreview,
   onFilePreview,
 }) => {
-  const today = localTodayYmd();
   const createLock = useAsyncSubmitLock();
   const [form, setForm] = useState<{
     categoryId: string;
     productId: string;
     customer: string;
-    createdAt: string;
     variantQuantities: Record<string, number>;
     singleQuantity: number;
     customData: Record<string, any>;
@@ -74,7 +72,6 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
     categoryId: '',
     productId: '',
     customer: '',
-    createdAt: today,
     variantQuantities: {},
     singleQuantity: 0,
     customData: {},
@@ -152,7 +149,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
       priority: 'Medium',
       assignments: {},
       customData: Object.keys(form.customData || {}).length ? form.customData : undefined,
-      createdAt: form.createdAt || localTodayYmd(),
+      createdAt: localTodayYmd(),
     };
 
     const ok = await createLock.run(async () => {
@@ -161,8 +158,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
     });
     if (!ok) return;
     onClose();
-    const nextToday = localTodayYmd();
-    setForm({ categoryId: '', productId: '', customer: '', createdAt: nextToday, variantQuantities: {}, singleQuantity: 0, customData: {} });
+    setForm({ categoryId: '', productId: '', customer: '', variantQuantities: {}, singleQuantity: 0, customData: {} });
   };
 
   if (!open) return null;
@@ -250,14 +246,6 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
                       placeholder="搜索并选择合作单位..."
                     />
                   </div>
-                )}
-                {planFormSettings.standardFields.find(f => f.id === 'createdAt')?.showInCreate !== false && (
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">
-                    {planFormSettings.standardFields.find(f => f.id === 'createdAt')?.label ?? '添加日期'}
-                  </label>
-                  <input type="date" value={form.createdAt} onChange={e => setForm({...form, createdAt: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]" />
-                </div>
                 )}
                 {planFormSettings.customFields.filter(f => f.showInCreate).map(cf => (
                   <div key={cf.id} className="space-y-1">

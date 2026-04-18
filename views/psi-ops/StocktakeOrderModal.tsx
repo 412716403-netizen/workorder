@@ -100,11 +100,8 @@ const StocktakeOrderModal: React.FC<StocktakeOrderModalProps> = ({
             </div>
           </div>
           <div>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center mb-3">
               <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Layers className="w-4 h-4 text-indigo-500" /> 盘点明细（可多产品）</h4>
-              <button type="button" onClick={addStocktakeItem} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-sm">
-                <Plus className="w-4 h-4" /> 添加明细行
-              </button>
             </div>
             <p className="text-xs text-slate-500 mb-3">每行会显示当前「系统数量」供参考，录入实盘数量保存后将按差异调整库存。</p>
             <div className="space-y-3">
@@ -208,7 +205,10 @@ const StocktakeOrderModal: React.FC<StocktakeOrderModalProps> = ({
                 </div>
               )}
             </div>
-            <div className="mt-6 flex justify-end">
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+              <button type="button" onClick={addStocktakeItem} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-sm">
+                <Plus className="w-4 h-4" /> 添加明细行
+              </button>
               <button
                 type="button"
                 onClick={handleSaveStocktake}

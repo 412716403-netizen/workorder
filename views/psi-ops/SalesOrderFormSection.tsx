@@ -15,7 +15,20 @@ import { PsiListPrintPicker } from '../../components/psi/PsiListPrintPicker';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
-import { sectionTitleClass } from '../../styles/uiDensity';
+import {
+  sectionTitleClass,
+  psiOrderBillFormShellClass,
+  psiOrderBillFormStickyBarClass,
+  psiOrderBillFormCardClass,
+  psiOrderBillFormSectionStackClass,
+  psiOrderBillFormDetailSplitClass,
+  psiOrderBillFormGridGapClass,
+  psiOrderBillFormFieldControlClass,
+  psiOrderBillFormReadonlyBoxClass,
+  psiOrderBillFormSectionIconIndigoClass,
+  psiOrderBillFormSectionIconEmeraldClass,
+  psiOrderBillFormPartnerTriggerClass,
+} from '../../styles/uiDensity';
 import { useConfirm } from '../../contexts/ConfirmContext';
 
 export interface SalesOrderLineItem {
@@ -56,6 +69,8 @@ interface SalesOrderFormSectionProps {
   listPrintSlot?: PlanListPrintSettings;
   printTemplates?: PrintTemplate[];
   buildSalesOrderPrintContext?: (template: PrintTemplate) => PrintRenderContext;
+  /** 按合作单位 + 商品 解析默认销售价（优先上次成交价，回退产品档案价） */
+  resolveDefaultSalesPrice?: (productId: string) => number;
 }
 
 const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
@@ -71,12 +86,13 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
   listPrintSlot,
   printTemplates = [],
   buildSalesOrderPrintContext,
+  resolveDefaultSalesPrice,
 }) => {
   const confirm = useConfirm();
 
   return (
-    <div className="max-w-5xl mx-auto space-y-4 animate-in slide-in-from-bottom-4 pb-24">
-      <div className="flex items-center justify-between sticky top-0 z-40 py-4 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200">
+    <div className={psiOrderBillFormShellClass}>
+      <div className={psiOrderBillFormStickyBarClass}>
         <button type="button" onClick={onBack} className="flex items-center gap-2 text-slate-500 font-bold text-sm hover:text-slate-800 transition-all">
           <ArrowLeft className="w-4 h-4" /> 返回列表
         </button>
@@ -99,7 +115,7 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
                   onBack();
                 });
               }}
-              className="flex items-center gap-2 px-4 py-2.5 text-rose-600 font-bold rounded-xl border border-rose-200 bg-white hover:bg-rose-50 transition-all"
+              className="flex items-center gap-2 px-4 py-2 text-rose-600 font-bold rounded-xl border border-rose-200 bg-white hover:bg-rose-50 transition-all"
             >
               <Trash2 className="w-4 h-4" /> 删除
             </button>
@@ -112,21 +128,21 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
               const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((s, v) => s + v, 0) : (i.quantity ?? 0);
               return q > 0;
             })}
-            className="bg-indigo-600 text-white px-8 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
+            className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
           >
             <Save className="w-4 h-4" /> {editingDocNumber ? '保存修改' : '确认保存销售订单'}
           </button>
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm space-y-10">
-        <div className="space-y-8">
-          <div className="flex items-center gap-3 border-b border-slate-200 pb-3">
-            <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600"><FileText className="w-5 h-5" /></div>
+      <div className={psiOrderBillFormCardClass}>
+        <div className={psiOrderBillFormSectionStackClass}>
+          <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
+            <div className={psiOrderBillFormSectionIconIndigoClass}><FileText className="w-4 h-4" /></div>
             <h3 className={sectionTitleClass}>1. 销售订单基础信息</h3>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
+            <div className={`md:col-span-2 grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
               <div className="space-y-1.5 min-w-0">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{partnerLabel}</label>
                 <SearchablePartnerSelect
@@ -135,21 +151,21 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
                   value={form.partner}
                   onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id })}
                   placeholder={`选择${partnerLabel}...`}
-                  triggerClassName="text-sm w-full max-w-full"
+                  triggerClassName={psiOrderBillFormPartnerTriggerClass}
                 />
               </div>
               <div className="space-y-1 min-w-0">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据编号</label>
                 <div className="relative">
                   <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
-                  <div className="w-full min-w-0 bg-slate-100 border border-slate-100 rounded-xl py-3 pl-10 pr-4 font-bold text-slate-800 h-[52px] flex items-center truncate">
-                    <span className="truncate">
-                      {editingDocNumber
-                        ? editingDocNumber
-                        : form.partner
-                          ? previewAutoSODocNumber || '保存时自动生成'
-                          : `请先选择${partnerLabel}`}
-                    </span>
+                  <div className={psiOrderBillFormReadonlyBoxClass}>
+                    {editingDocNumber ? (
+                      <span className="truncate">{editingDocNumber}</span>
+                    ) : form.partner ? (
+                      <span className="truncate">{previewAutoSODocNumber || '保存时自动生成'}</span>
+                    ) : (
+                      <span className="text-slate-400 font-bold text-sm truncate">选择合作单位后自动生成</span>
+                    )}
                   </div>
                 </div>
                 <p className="text-[10px] font-bold text-slate-400 ml-1 leading-snug">由系统自动生成，不可修改</p>
@@ -164,7 +180,7 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
                     cf={cf}
                     value={form.customData?.[cf.id]}
                     onChange={next => setForm({ ...form, customData: { ...form.customData, [cf.id]: next } })}
-                    controlClassName="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]"
+                    controlClassName={psiOrderBillFormFieldControlClass}
                   />
                 </div>
               );
@@ -172,17 +188,14 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
           </div>
         </div>
 
-        <div className="pt-10 border-t border-slate-50 space-y-8">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600"><Layers className="w-5 h-5" /></div>
+        <div className={psiOrderBillFormDetailSplitClass}>
+          <div className="flex items-center border-b border-slate-200 pb-2.5">
+            <div className="flex items-center gap-2.5">
+              <div className={psiOrderBillFormSectionIconEmeraldClass}><Layers className="w-4 h-4" /></div>
               <h3 className={sectionTitleClass}>2. 销售明细录入</h3>
             </div>
-            <button type="button" onClick={onAddItem} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm hover:bg-indigo-700 active:scale-[0.98] transition-all">
-              <Plus className="w-4 h-4" /> 添加明细行
-            </button>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-3">
             {salesOrderItems.map((line) => {
               const prod = productMapPSI.get(line.productId);
               const hasVariants = prod?.variants && prod.variants.length > 0;
@@ -198,9 +211,9 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
                 });
               }
               return (
-              <div key={line.id} className="p-4 bg-slate-50/50 rounded-2xl border border-slate-100 space-y-4 shadow-sm hover:border-indigo-100/80 transition-all">
-                <div className="flex flex-wrap items-end gap-4">
-                  <div className="flex-1 min-w-0 space-y-2">
+              <div key={line.id} className="p-3 bg-slate-50/50 rounded-xl border border-slate-100 space-y-3 shadow-sm hover:border-indigo-100/80 transition-all">
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="flex-1 min-w-0 space-y-1.5">
                     <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block tracking-widest">目标商品 (支持搜索与分类筛选)</label>
                     <SearchableProductSelect
                       compact
@@ -210,9 +223,12 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
                       onChange={(id) => {
                         const p = productMapPSI.get(id);
                         const hv = p?.variants && p.variants.length > 0;
+                        const price = resolveDefaultSalesPrice
+                          ? resolveDefaultSalesPrice(id)
+                          : (p?.salesPrice ?? 0);
                         onUpdateItem(line.id, {
                           productId: id,
-                          salesPrice: p?.salesPrice ?? 0,
+                          salesPrice: price,
                           quantity: hv ? undefined : 0,
                           variantQuantities: hv ? {} : undefined
                         });
@@ -256,15 +272,15 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
                       </div>
                     </>
                   )}
-                  <button type="button" onClick={() => onRemoveItem(line.id)} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all" aria-label="删除明细行"><Trash2 className="w-5 h-5" /></button>
+                  <button type="button" onClick={() => onRemoveItem(line.id)} className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all" aria-label="删除明细行"><Trash2 className="w-4 h-4" /></button>
                 </div>
                 {hasVariants && line.productId && (
-                  <div className="pt-4 border-t border-slate-100 space-y-4">
+                  <div className="pt-2 border-t border-slate-100 space-y-3">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">数量明细（有颜色尺码）</p>
                     {sortedVariantColorEntries(groupedByColor, prod?.colorIds, prod?.sizeIds).map(([colorId, colorVariants]) => {
                       const color = dictionaries.colors.find(c => c.id === colorId);
                       return (
-                        <div key={colorId} className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-[20px] border border-slate-100 shadow-sm">
+                        <div key={colorId} className="flex flex-wrap items-center gap-3 bg-white p-2.5 rounded-lg border border-slate-100 shadow-sm">
                           <div className="flex items-center gap-2 w-28 shrink-0">
                             <div className="w-4 h-4 rounded-full border border-slate-200 shrink-0" style={{ backgroundColor: (color as any)?.value || '#e2e8f0' }} />
                             <span className="text-xs font-bold text-slate-700">{color?.name || '未命名'}</span>
@@ -299,23 +315,28 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
               </div>
             );})}
             {salesOrderItems.length === 0 && (
-              <div className="py-12 border-2 border-dashed border-slate-100 rounded-2xl text-center">
-                <Layers className="w-10 h-10 text-slate-200 mx-auto mb-2" />
+              <div className="py-8 border-2 border-dashed border-slate-100 rounded-xl text-center">
+                <Layers className="w-8 h-8 text-slate-200 mx-auto mb-2" />
                 <p className="text-slate-400 text-sm font-medium">点击「添加明细行」开始录入销售明细</p>
               </div>
             )}
           </div>
-          <div className="flex justify-end p-5 bg-indigo-600 rounded-2xl text-white shadow-xl shadow-indigo-100 gap-8">
-            <div className="flex items-center gap-4">
+          <div className="flex justify-start pt-3">
+            <button type="button" onClick={onAddItem} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm hover:bg-indigo-700 active:scale-[0.98] transition-all">
+              <Plus className="w-4 h-4" /> 添加明细行
+            </button>
+          </div>
+          <div className="flex justify-end p-4 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-100/80 gap-6">
+            <div className="flex items-center gap-3">
               <p className="text-xs font-bold opacity-90">销售总量</p>
-              <p className="text-xl font-black tabular-nums">{salesOrderItems.reduce((s, i) => {
+              <p className="text-lg font-black tabular-nums">{salesOrderItems.reduce((s, i) => {
               const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((a, v) => a + v, 0) : (i.quantity || 0);
               return s + q;
             }, 0)} <span className="text-xs font-semibold opacity-90">PCS</span></p>
             </div>
-            <div className="flex items-center gap-4 border-l border-white/30 pl-8">
+            <div className="flex items-center gap-3 border-l border-white/30 pl-6">
               <p className="text-xs font-bold opacity-90">订单金额</p>
-              <p className="text-xl font-black tabular-nums">¥{salesOrderItems.reduce((s, i) => {
+              <p className="text-lg font-black tabular-nums">¥{salesOrderItems.reduce((s, i) => {
                 const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((a, v) => a + v, 0) : (i.quantity || 0);
                 return s + q * (i.salesPrice || 0);
               }, 0).toFixed(2)}</p>

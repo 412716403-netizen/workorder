@@ -17,6 +17,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpCollab/material';
+import { writeWarehousePreference, WAREHOUSE_DOC_KIND } from '../../utils/warehouseDocPreference';
 
 export interface OutsourceMaterialReturnModalProps {
   productionLinkMode: 'order' | 'product';
@@ -66,7 +67,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
   onAddRecordBatch,
   onClose,
 }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, tenantCtx, userId } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
   const [matReturnCustomValues, setMatReturnCustomValues] = useState<Record<string, unknown>>({});
   const materialCustomFieldDefs = useMemo(
@@ -207,6 +208,11 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
       ...collabExtra,
     }));
     if (onAddRecordBatch && batch.length > 1) { await onAddRecordBatch(batch); } else { for (const rec of batch) onAddRecord(rec); }
+    if (matReturnWarehouseId) {
+      writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.OUTSOURCE_MAT_RETURN, {
+        warehouseId: matReturnWarehouseId,
+      });
+    }
     toast.success(`已退回 ${toReturn.length} 种物料，来自「${matReturnPartner}」`);
     onClose();
   };

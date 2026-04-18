@@ -4,6 +4,12 @@ import { DEFAULT_MATERIAL_FORM_SETTINGS } from '../../types';
 import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpCollab/material';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import {
+  readWarehousePreference,
+  writeWarehousePreference,
+  resolvePreferredSingleWarehouse,
+  WAREHOUSE_DOC_KIND,
+} from '../../utils/warehouseDocPreference';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 
 export interface StockMaterialFormModalProps {
@@ -31,7 +37,7 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
   onAddRecord,
   getNextStockDocNo,
 }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, tenantCtx, userId } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
   const [form, setForm] = useState({
     orderId: '',
@@ -67,6 +73,17 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
     if (visible && stockModalMode) setCustomValues({});
   }, [visible, stockModalMode]);
 
+  useEffect(() => {
+    if (!visible || !stockModalMode) return;
+    const kind =
+      stockModalMode === 'stock_return'
+        ? WAREHOUSE_DOC_KIND.PROD_STOCK_MATERIAL_FORM_IN
+        : WAREHOUSE_DOC_KIND.PROD_STOCK_MATERIAL_FORM_OUT;
+    const pref = readWarehousePreference(tenantCtx?.tenantId, userId, kind);
+    const wid = resolvePreferredSingleWarehouse(warehouses, pref, '');
+    setForm(f => ({ ...f, warehouseId: wid }));
+  }, [visible, stockModalMode, warehouses, tenantCtx?.tenantId, userId]);
+
   if (!visible || !stockModalMode) return null;
 
   const handleAdd = () => {
@@ -94,6 +111,13 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
       ...collabExtra,
     };
     onAddRecord(newRecord);
+    const kind =
+      stockModalMode === 'stock_return'
+        ? WAREHOUSE_DOC_KIND.PROD_STOCK_MATERIAL_FORM_IN
+        : WAREHOUSE_DOC_KIND.PROD_STOCK_MATERIAL_FORM_OUT;
+    if (form.warehouseId) {
+      writeWarehousePreference(tenantCtx?.tenantId, userId, kind, { warehouseId: form.warehouseId });
+    }
     setForm({ orderId: '', productId: '', quantity: 0, reason: '', partner: '', warehouseId: '' });
     setCustomValues({});
     onClose();

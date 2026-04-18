@@ -202,6 +202,13 @@ import StockDocDetailModal from './StockDocDetailModal';
 import StockFlowListModal from './StockFlowListModal';
 import StockMaterialFormModal from './StockMaterialFormModal';
 import MaterialFormConfigModal from './MaterialFormConfigModal';
+import { useAuth } from '../../contexts/AuthContext';
+import {
+  readWarehousePreference,
+  writeWarehousePreference,
+  resolvePreferredSingleWarehouse,
+  WAREHOUSE_DOC_KIND,
+} from '../../utils/warehouseDocPreference';
 
 const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   productionLinkMode,
@@ -227,6 +234,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   onUpdatePrintTemplates,
   onRefreshPrintTemplates,
 }) => {
+  const { tenantCtx, userId } = useAuth();
   const canViewMainList = hasOpsPerm(tenantRole, userPermissions, 'production:material_list:allow');
   const toggleSelect = (productId: string) => setStockSelectedIds(prev => { const next = new Set(prev); if (next.has(productId)) next.delete(productId); else next.add(productId); return next; });
 
@@ -254,6 +262,16 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   useEffect(() => { setStockPage(1); }, [productionLinkMode, materialPanelSettings.groupByOutsourcePartner, debouncedMaterialSearch]);
 
   const idx = useDataIndexes(orders, products, boms, [] /* no globalNodes needed */, productMilestoneProgresses);
+
+  const resolveConfirmDefaultWarehouse = useCallback(
+    (mode: 'stock_out' | 'stock_return') => {
+      const kind =
+        mode === 'stock_out' ? WAREHOUSE_DOC_KIND.PROD_STOCK_CONFIRM_OUT : WAREHOUSE_DOC_KIND.PROD_STOCK_CONFIRM_IN;
+      const pref = readWarehousePreference(tenantCtx?.tenantId, userId, kind);
+      return resolvePreferredSingleWarehouse(warehouses, pref, warehouses[0]?.id ?? '') || '';
+    },
+    [warehouses, tenantCtx?.tenantId, userId],
+  );
 
   const parentOrders = useMemo(() => orders.filter(o => !o.parentOrderId), [orders]);
 
@@ -789,6 +807,8 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
 
   const handleStockConfirmSubmit = async () => {
     if (!stockSelectMode) return;
+    const modeForPref = stockSelectMode;
+    const widForPref = stockConfirmWarehouseId;
     const toSubmit = Array.from(stockSelectedIds).filter(pid => (stockConfirmQuantities[pid] ?? 0) > 0);
     if (toSubmit.length === 0) return;
     const recordType: ProdOpType = stockSelectMode === 'stock_out' ? 'STOCK_OUT' : 'STOCK_RETURN';
@@ -866,6 +886,14 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         partner: partnerForRecord,
       });
     } else return;
+    if (widForPref) {
+      writeWarehousePreference(
+        tenantCtx?.tenantId,
+        userId,
+        modeForPref === 'stock_out' ? WAREHOUSE_DOC_KIND.PROD_STOCK_CONFIRM_OUT : WAREHOUSE_DOC_KIND.PROD_STOCK_CONFIRM_IN,
+        { warehouseId: widForPref },
+      );
+    }
     setShowStockConfirmModal(false);
     setStockSelectOrderId(null);
     setStockSelectSourceProductId(null);
@@ -992,7 +1020,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                     {selecting ? (
                                       <>
                                         <span className="text-xs font-bold text-slate-500">已选 {stockSelectedIds.size} 项</span>
-                                        <button type="button" onClick={() => { if (stockSelectedIds.size === 0) return; setStockConfirmQuantities({}); setStockConfirmCustomValues({}); setStockConfirmWarehouseId(warehouses[0]?.id ?? ''); setShowStockConfirmModal(true); }} disabled={stockSelectedIds.size === 0} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm disabled:opacity-50 ${stockSelectMode === 'stock_out' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'}`}><Check className="w-3 h-3" /> {stockSelectMode === 'stock_out' ? '确认领料' : '确认退料'}</button>
+                                        <button type="button" onClick={() => { if (stockSelectedIds.size === 0) return; setStockConfirmQuantities({}); setStockConfirmCustomValues({}); setStockConfirmWarehouseId(stockSelectMode ? resolveConfirmDefaultWarehouse(stockSelectMode) : ''); setShowStockConfirmModal(true); }} disabled={stockSelectedIds.size === 0} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm disabled:opacity-50 ${stockSelectMode === 'stock_out' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'}`}><Check className="w-3 h-3" /> {stockSelectMode === 'stock_out' ? '确认领料' : '确认退料'}</button>
                                         <button type="button" onClick={() => { setStockSelectSourceProductId(null); setStockSelectPartner(null); setStockSelectMode(null); setStockSelectedIds(new Set()); }} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all">取消</button>
                                       </>
                                     ) : (
@@ -1030,7 +1058,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                     {selecting ? (
                                       <>
                                         <span className="text-xs font-bold text-slate-500">已选 {stockSelectedIds.size} 项</span>
-                                        <button type="button" onClick={() => { if (stockSelectedIds.size === 0) return; setStockConfirmQuantities({}); setStockConfirmCustomValues({}); setStockConfirmWarehouseId(warehouses[0]?.id ?? ''); setShowStockConfirmModal(true); }} disabled={stockSelectedIds.size === 0} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm disabled:opacity-50 ${stockSelectMode === 'stock_out' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'}`}><Check className="w-3 h-3" /> {stockSelectMode === 'stock_out' ? '确认领料' : '确认退料'}</button>
+                                        <button type="button" onClick={() => { if (stockSelectedIds.size === 0) return; setStockConfirmQuantities({}); setStockConfirmCustomValues({}); setStockConfirmWarehouseId(stockSelectMode ? resolveConfirmDefaultWarehouse(stockSelectMode) : ''); setShowStockConfirmModal(true); }} disabled={stockSelectedIds.size === 0} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm disabled:opacity-50 ${stockSelectMode === 'stock_out' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'}`}><Check className="w-3 h-3" /> {stockSelectMode === 'stock_out' ? '确认领料' : '确认退料'}</button>
                                         <button type="button" onClick={() => { setStockSelectOrderId(null); setStockSelectPartner(null); setStockSelectMode(null); setStockSelectedIds(new Set()); }} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all">取消</button>
                                       </>
                                     ) : (
@@ -1103,7 +1131,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                 if (stockSelectedIds.size === 0) return;
                                 setStockConfirmQuantities({});
                                 setStockConfirmCustomValues({});
-                                setStockConfirmWarehouseId(warehouses[0]?.id ?? '');
+                                setStockConfirmWarehouseId(stockSelectMode ? resolveConfirmDefaultWarehouse(stockSelectMode) : '');
                                 setShowStockConfirmModal(true);
                               }}
                               disabled={stockSelectedIds.size === 0}
@@ -1207,7 +1235,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                               if (stockSelectedIds.size === 0) return;
                               setStockConfirmQuantities({});
                               setStockConfirmCustomValues({});
-                              setStockConfirmWarehouseId(warehouses[0]?.id ?? '');
+                              setStockConfirmWarehouseId(stockSelectMode ? resolveConfirmDefaultWarehouse(stockSelectMode) : '');
                               setShowStockConfirmModal(true);
                             }}
                             disabled={stockSelectedIds.size === 0}

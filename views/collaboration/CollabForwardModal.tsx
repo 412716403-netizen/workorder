@@ -2,6 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Forward } from 'lucide-react';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
+import {
+  readWarehousePreference,
+  writeWarehousePreference,
+  resolvePreferredSingleWarehouse,
+  WAREHOUSE_DOC_KIND,
+} from '../../utils/warehouseDocPreference';
 import type { Product, ProductionOpRecord, AppDictionaries, Warehouse } from '../../types';
 import { collabVariantKey } from './collabHelpers';
 import type { CollabReturnRow } from './collabHelpers';
@@ -20,6 +27,7 @@ interface CollabForwardModalProps {
 const CollabForwardModal: React.FC<CollabForwardModalProps> = ({
   open, onClose, transfer, warehouses, products, prodRecords, dictionaries, onForwarded,
 }) => {
+  const { tenantCtx, userId } = useAuth();
   const [forwardRows, setForwardRows] = useState<CollabReturnRow[]>([]);
   const [forwardNote, setForwardNote] = useState('');
   const [forwardWarehouseId, setForwardWarehouseId] = useState('');
@@ -29,10 +37,11 @@ const CollabForwardModal: React.FC<CollabForwardModalProps> = ({
   useEffect(() => {
     if (open && !prevOpenRef.current) {
       setForwardNote('');
-      setForwardWarehouseId(warehouses[0]?.id ?? '');
+      const pref = readWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.COLLAB_FORWARD);
+      setForwardWarehouseId(resolvePreferredSingleWarehouse(warehouses, pref, warehouses[0]?.id ?? '') || '');
     }
     prevOpenRef.current = open;
-  }, [open, warehouses]);
+  }, [open, warehouses, tenantCtx?.tenantId, userId]);
 
   useEffect(() => {
     if (!open || !transfer) return;
@@ -138,6 +147,11 @@ const CollabForwardModal: React.FC<CollabForwardModalProps> = ({
     setForwarding(true);
     try {
       const res = await api.collaboration.forwardTransfer(transfer.id, { items, note: forwardNote || undefined, warehouseId: forwardWarehouseId || undefined });
+      if (forwardWarehouseId) {
+        writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.COLLAB_FORWARD, {
+          warehouseId: forwardWarehouseId,
+        });
+      }
       toast.success(`已转发到下一站: ${res.nextStep?.receiverTenantName ?? ''}`);
       onClose();
       await onForwarded();

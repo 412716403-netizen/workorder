@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { ArrowDownToLine, X, History, Check, Filter, FileText, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -27,6 +27,12 @@ import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 import { computePendingStockOrders } from '../../utils/pendingStockCompute';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import {
+  readWarehousePreference,
+  writeWarehousePreference,
+  resolvePreferredSingleWarehouse,
+  WAREHOUSE_DOC_KIND,
+} from '../../utils/warehouseDocPreference';
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
 import { PlanFormCustomFieldInput, PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
 
@@ -155,9 +161,19 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
   userPermissions,
   tenantRole,
 }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, tenantCtx, userId } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
   const confirm = useConfirm();
+
+  const singlePendingStockInDefaultWh = useCallback(() => {
+    const pref = readWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PROD_PENDING_STOCK_IN);
+    return resolvePreferredSingleWarehouse(warehouses, pref, warehouses[0]?.id ?? '') || '';
+  }, [warehouses, tenantCtx?.tenantId, userId]);
+
+  const batchPendingStockInDefaultWh = useCallback(() => {
+    const pref = readWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PROD_PENDING_STOCK_IN_BATCH);
+    return resolvePreferredSingleWarehouse(warehouses, pref, warehouses[0]?.id ?? '') || '';
+  }, [warehouses, tenantCtx?.tenantId, userId]);
   const [stockInFilePreview, setStockInFilePreview] = useState<{ url: string; type: 'image' | 'pdf' } | null>(null);
 
   const hasPerm = (perm: string): boolean => {
@@ -533,6 +549,11 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                       if (records.length === 0) return;
                       if (onAddRecordBatch) await onAddRecordBatch(records);
                       else for (const rec of records) await onAddRecord!(rec);
+                      if (batchStockForm.warehouseId) {
+                        writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PROD_PENDING_STOCK_IN_BATCH, {
+                          warehouseId: batchStockForm.warehouseId,
+                        });
+                      }
                       const batchTotalQty = records.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
                       toast.success('批量入库已保存', {
                         description: `入库单号 ${docNo}，${records.length} 条明细，合计 ${batchTotalQty} 件`,
@@ -556,11 +577,11 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
           const unitName = getUnitName(order.productId);
           return (
             <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
-              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: warehouses[0]?.id ?? '', variantQuantities: {}, singleQuantity: 0, customData: {} }); }} />
+              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: singlePendingStockInDefaultWh(), variantQuantities: {}, singleQuantity: 0, customData: {} }); }} />
               <div className="relative bg-white w-full max-w-2xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
                 <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
                   <h3 className="font-bold text-slate-800 flex items-center gap-2"><ArrowDownToLine className="w-5 h-5 text-indigo-600" /> 选择入库 — {productionLinkMode === 'product' ? (order.productName || product?.name || '关联产品') : order.orderNumber}</h3>
-                  <button onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: warehouses[0]?.id ?? '', variantQuantities: {}, singleQuantity: 0, customData: {} }); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
+                  <button onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: singlePendingStockInDefaultWh(), variantQuantities: {}, singleQuantity: 0, customData: {} }); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
                 </div>
                 <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
                   <p className="text-sm font-bold text-slate-700">{order.productName || product?.name}</p>
@@ -665,7 +686,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                 <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
                   <button
                     type="button"
-                    onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: warehouses[0]?.id ?? '', variantQuantities: {}, singleQuantity: 0, customData: {} }); }}
+                    onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: singlePendingStockInDefaultWh(), variantQuantities: {}, singleQuantity: 0, customData: {} }); }}
                     className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200"
                   >
                     返回列表
@@ -731,6 +752,11 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                           toast.success('入库已保存', {
                             description: `入库单号 ${docNo}，${records.length} 条明细，合计 ${t} ${unitName}`,
                           });
+                          if (stockInForm.warehouseId) {
+                            writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PROD_PENDING_STOCK_IN, {
+                              warehouseId: stockInForm.warehouseId,
+                            });
+                          }
                         }
                       } else if (hasColorSize && product?.variants?.length) {
                         const records = (Object.entries(stockInForm.variantQuantities) as [string, number][])
@@ -759,6 +785,11 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                           toast.success('入库已保存', {
                             description: `入库单号 ${docNo}，${records.length} 条明细，合计 ${t} ${unitName}`,
                           });
+                          if (stockInForm.warehouseId) {
+                            writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PROD_PENDING_STOCK_IN, {
+                              warehouseId: stockInForm.warehouseId,
+                            });
+                          }
                         }
                       } else {
                         const qty = stockInForm.singleQuantity || 0;
@@ -779,9 +810,14 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                         toast.success('入库已保存', {
                           description: `入库单号 ${docNo}，1 条明细，合计 ${qty} ${unitName}`,
                         });
+                        if (stockInForm.warehouseId) {
+                          writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PROD_PENDING_STOCK_IN, {
+                            warehouseId: stockInForm.warehouseId,
+                          });
+                        }
                       }
                       setStockInOrder(null);
-                      setStockInForm({ warehouseId: warehouses[0]?.id ?? '', variantQuantities: {}, singleQuantity: 0, customData: {} });
+                      setStockInForm({ warehouseId: singlePendingStockInDefaultWh(), variantQuantities: {}, singleQuantity: 0, customData: {} });
                     }}
                     className="px-6 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
@@ -813,7 +849,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                           lines[it.rowKey] = defaultQuantitiesForPendingItem(it);
                         });
                         setStockInOrder(null);
-                        setBatchStockForm({ warehouseId: warehouses[0]?.id ?? '', customData: {}, lines });
+                        setBatchStockForm({ warehouseId: batchPendingStockInDefaultWh(), customData: {}, lines });
                         setBatchStockInItems(rows);
                       }}
                       className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
@@ -926,7 +962,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                                     setStockInOrder(item);
                                     const d = defaultQuantitiesForPendingItem(item);
                                     setStockInForm({
-                                      warehouseId: warehouses[0]?.id ?? '',
+                                      warehouseId: singlePendingStockInDefaultWh(),
                                       variantQuantities: d.variantQuantities,
                                       singleQuantity: d.singleQuantity,
                                       customData: {},
