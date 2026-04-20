@@ -10,6 +10,8 @@ import {
   CheckCircle2,
   PackageCheck,
   Printer,
+  Search,
+  Sliders,
 } from 'lucide-react';
 import {
   Product,
@@ -29,8 +31,9 @@ import {
   ProductionOrder,
 } from '../types';
 import {
+  formConfigToolbarButtonClass,
   moduleHeaderRowClass,
-  outlineAccentToolbarButtonClass,
+  outlineToolbarButtonClass,
   pageSubtitleClass,
   pageTitleClass,
   primaryToolbarButtonClass,
@@ -90,6 +93,7 @@ import {
   resolvePreferredSingleWarehouse,
   WAREHOUSE_DOC_KIND,
 } from '../utils/warehouseDocPreference';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 interface PSIOpsViewProps {
   type: string;
@@ -493,11 +497,48 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
 
   const PSI_PAGE_SIZE = 20;
   const [psiPage, setPsiPage] = useState(1);
+  const [psiListSearch, setPsiListSearch] = useState('');
+  const debouncedPsiListSearch = useDebouncedValue(psiListSearch, 300);
   useEffect(() => { setPsiPage(1); }, [type]);
-  const psiTotalPages = Math.max(1, Math.ceil(sortedGroupedEntries.length / PSI_PAGE_SIZE));
+  useEffect(() => { setPsiPage(1); }, [debouncedPsiListSearch]);
+
+  const filteredGroupedEntries = useMemo(() => {
+    const docTypes = ['PURCHASE_ORDER', 'PURCHASE_BILL', 'SALES_ORDER', 'SALES_BILL'];
+    if (!docTypes.includes(type)) return sortedGroupedEntries;
+    const q = debouncedPsiListSearch.trim().toLowerCase();
+    if (!q) return sortedGroupedEntries;
+    return sortedGroupedEntries.filter(([docNum, docItems]) => {
+      const parts: string[] = [docNum, formatPsiDocNumForList(docNum)];
+      const main = docItems[0] as Record<string, unknown> | undefined;
+      if (main) {
+        ['partner', 'operator', 'note', 'productName', 'productSku'].forEach(k => {
+          const v = main[k];
+          if (v != null && v !== '') parts.push(String(v));
+        });
+        const cd = main.customData;
+        if (cd && typeof cd === 'object' && !Array.isArray(cd)) {
+          for (const v of Object.values(cd as Record<string, unknown>)) {
+            if (v != null && v !== '') parts.push(String(v));
+          }
+        }
+      }
+      for (const line of docItems as Record<string, unknown>[]) {
+        const pid = line.productId as string | undefined;
+        const p = pid ? productMapPSI.get(pid) : undefined;
+        ['productName', 'productSku', 'note', 'lineNote'].forEach(k => {
+          const v = line[k];
+          if (v != null && v !== '') parts.push(String(v));
+        });
+        parts.push(p?.name ?? '', p?.sku ?? '', String(line.quantity ?? ''));
+      }
+      return parts.filter(Boolean).join('\0').toLowerCase().includes(q);
+    });
+  }, [sortedGroupedEntries, type, debouncedPsiListSearch, productMapPSI]);
+
+  const psiTotalPages = Math.max(1, Math.ceil(filteredGroupedEntries.length / PSI_PAGE_SIZE));
   const pagedGroupedEntries = useMemo(
-    () => sortedGroupedEntries.slice((psiPage - 1) * PSI_PAGE_SIZE, psiPage * PSI_PAGE_SIZE),
-    [sortedGroupedEntries, psiPage],
+    () => filteredGroupedEntries.slice((psiPage - 1) * PSI_PAGE_SIZE, psiPage * PSI_PAGE_SIZE),
+    [filteredGroupedEntries, psiPage],
   );
 
   /** 调拨单按单号分组（列表弹窗用） */
@@ -536,13 +577,76 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           <h1 className={pageTitleClass}>{current.label}</h1>
           <p className={pageSubtitleClass}>{current.sub || '管理业务单据与记录'}</p>
         </div>
-        
+
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 shrink-0 w-full sm:w-auto">
+          {['PURCHASE_ORDER', 'PURCHASE_BILL', 'SALES_ORDER', 'SALES_BILL'].includes(type) &&
+            !(showModal && showModal === type) &&
+            sortedGroupedEntries.length > 0 && (
+            <div className="relative w-full sm:w-56 sm:max-w-xs">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              <input
+                type="search"
+                placeholder="搜索单号、往来单位、产品、SKU、备注…"
+                value={psiListSearch}
+                onChange={e => setPsiListSearch(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-3 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+              />
+            </div>
+          )}
         <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {type === 'PURCHASE_ORDER' && onUpdatePurchaseOrderFormSettings && (
+            <button
+              type="button"
+              onClick={() => {
+                setPoFormConfigEntryTab('fields');
+                setShowPOFormConfigModal(true);
+              }}
+              className={formConfigToolbarButtonClass}
+            >
+              <Sliders className="w-4 h-4 shrink-0" /> 表单配置
+            </button>
+          )}
+          {type === 'PURCHASE_BILL' && onUpdatePurchaseBillFormSettings && (
+            <button
+              type="button"
+              onClick={() => {
+                setPbFormConfigEntryTab('fields');
+                setShowPBFormConfigModal(true);
+              }}
+              className={formConfigToolbarButtonClass}
+            >
+              <Sliders className="w-4 h-4 shrink-0" /> 表单配置
+            </button>
+          )}
+          {type === 'SALES_ORDER' && onUpdateSalesOrderFormSettings && (
+            <button
+              type="button"
+              onClick={() => {
+                setSoFormConfigEntryTab('fields');
+                setShowSOFormConfigModal(true);
+              }}
+              className={formConfigToolbarButtonClass}
+            >
+              <Sliders className="w-4 h-4 shrink-0" /> 表单配置
+            </button>
+          )}
+          {type === 'SALES_BILL' && onUpdateSalesBillFormSettings && (
+            <button
+              type="button"
+              onClick={() => {
+                setSbFormConfigEntryTab('fields');
+                setShowSBFormConfigModal(true);
+              }}
+              className={formConfigToolbarButtonClass}
+            >
+              <Sliders className="w-4 h-4 shrink-0" /> 表单配置
+            </button>
+          )}
           {type === 'SALES_ORDER' && !showModal && hasPsiPerm('psi:sales_order_pending_shipment:allow') && (
             <button
               type="button"
               onClick={() => setShowPendingShipmentModal(true)}
-              className={outlineAccentToolbarButtonClass}
+              className={outlineToolbarButtonClass}
             >
               <PackageCheck className="w-4 h-4 shrink-0" /> 待发货清单
               {pendingShipmentGroups.length > 0 && (
@@ -561,6 +665,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
             <Plus className="w-4 h-4 shrink-0" /> 登记新{current.label}
           </button>
         )}
+        </div>
         </div>
       </div>
 
@@ -658,6 +763,11 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
             <div className={psiOrderBillListEmptyClass}>
               <FileText className="w-12 h-12 text-slate-100 mx-auto mb-3" />
               <p className="text-slate-400 font-medium italic">暂无{current.label}流水记录</p>
+            </div>
+          ) : pagedGroupedEntries.length === 0 && filteredGroupedEntries.length === 0 && sortedGroupedEntries.length > 0 ? (
+            <div className={psiOrderBillListEmptyClass}>
+              <FileText className="w-12 h-12 text-slate-100 mx-auto mb-3" />
+              <p className="text-slate-400 font-medium italic">无匹配项，请调整搜索关键词</p>
             </div>
           ) : (
             pagedGroupedEntries.map(([docNum, docItems]) => {
@@ -1221,7 +1331,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           )}
           {psiTotalPages > 1 && (
             <div className="flex items-center justify-center gap-3 py-2">
-              <span className="text-xs text-slate-400">共 {sortedGroupedEntries.length} 条单据，第 {psiPage} / {psiTotalPages} 页</span>
+              <span className="text-xs text-slate-400">共 {filteredGroupedEntries.length} 条单据，第 {psiPage} / {psiTotalPages} 页</span>
               <button type="button" disabled={psiPage <= 1} onClick={() => setPsiPage(p => p - 1)} className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed">上一页</button>
               <button type="button" disabled={psiPage >= psiTotalPages} onClick={() => setPsiPage(p => p + 1)} className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed">下一页</button>
             </div>

@@ -44,11 +44,11 @@ import { HiddenPrintSlot, usePrintTemplateAction } from '../components/print-edi
 import { createBlankCustomTemplate } from '../utils/printTemplateDefaults';
 import { buildPlanPrintListRows } from '../utils/buildPlanPrintListRows';
 import {
+  formConfigToolbarButtonClass,
   moduleHeaderRowClass,
   pageSubtitleClass,
   pageTitleClass,
   primaryToolbarButtonClass,
-  secondaryToolbarButtonClass,
 } from '../styles/uiDensity';
 import PlanFormModal from './plan-order-list/PlanFormModal';
 import PlanProductDetail from './plan-order-list/PlanProductDetail';
@@ -475,7 +475,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                 setPlanFormConfigEntryTab('fields');
                 setShowPlanFormConfigModal(true);
               }}
-              className={secondaryToolbarButtonClass}
+              className={formConfigToolbarButtonClass}
             >
               <Sliders className="w-4 h-4 shrink-0" /> 表单配置
             </button>
@@ -517,7 +517,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         <div className="flex items-center gap-3 mb-1 flex-wrap">
                         <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-widest">{plan.planNumber}</span>
                           {showInList('product') && product && (
-                            <button type="button" onClick={(e) => { e.stopPropagation(); setViewProductId(product.id); }} className="text-left text-lg font-bold text-slate-800 hover:text-indigo-600 hover:underline transition-colors">
+                            <button type="button" onClick={(e) => { e.stopPropagation(); setViewProductId(product.id); }} className="text-left text-base font-bold text-slate-800 hover:text-indigo-600 hover:underline transition-colors">
                               {product.name || '未知产品'}
                             </button>
                           )}
@@ -554,7 +554,9 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         <ArrowRightCircle className="w-3.5 h-3.5" /> 补充下达子工单
                       </button>
                     ) : (
-                      <div className="px-4 py-2 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold border border-emerald-200">已转正式工单</div>
+                      <span className="flex items-center px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-xs font-bold border border-slate-100 select-none" aria-hidden>
+                        已转正式工单
+                      </span>
                     )}
                     </div>
                   </div>
@@ -594,7 +596,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                   <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase">{plan.planNumber}</span>
                                   {isChild && <span className="text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">子计划</span>}
                                   {showInList('product') && product && (
-                                    <button type="button" onClick={(e) => { e.stopPropagation(); setViewProductId(product.id); }} className="text-left text-base font-bold text-slate-800 hover:text-indigo-600 hover:underline">{product.name || '未知产品'}</button>
+                                    <button type="button" onClick={(e) => { e.stopPropagation(); setViewProductId(product.id); }} className="text-left text-sm font-bold text-slate-800 hover:text-indigo-600 hover:underline">{product.name || '未知产品'}</button>
                                   )}
                                   {showInList('assignedCount') && assignedCount > 0 && <span className="text-[9px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">已派发 {assignedCount} 工序</span>}
                                 </div>
@@ -624,7 +626,11 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                               {!isChild && plan.status === PlanStatus.CONVERTED && hasUnconvertedSubPlans(plan.id) && (
                                 <button onClick={() => onConvertToOrder(plan.id)} className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white hover:bg-amber-600 rounded-xl text-xs font-bold border border-amber-400"><ArrowRightCircle className="w-3.5 h-3.5" /> 补充下达子工单</button>
                               )}
-                              {!isChild && plan.status === PlanStatus.CONVERTED && !hasUnconvertedSubPlans(plan.id) && <div className="px-4 py-2 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold border border-emerald-200">已转工单</div>}
+                              {!isChild && plan.status === PlanStatus.CONVERTED && !hasUnconvertedSubPlans(plan.id) && (
+                                <span className="flex items-center px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-xs font-bold border border-slate-100 select-none" aria-hidden>
+                                  已转工单
+                                </span>
+                              )}
                             </div>
                           </div>
                         );
@@ -671,7 +677,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                 <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-widest">{plan.planNumber}</span>
                                 {isChild && <span className="text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">子计划</span>}
                                 {showInList('product') && product && (
-                                  <button type="button" onClick={(e) => { e.stopPropagation(); setViewProductId(product.id); }} className="text-left text-base font-bold text-slate-800 hover:text-indigo-600 hover:underline transition-colors">
+                                  <button type="button" onClick={(e) => { e.stopPropagation(); setViewProductId(product.id); }} className="text-left text-sm font-bold text-slate-800 hover:text-indigo-600 hover:underline transition-colors">
                                     {product.name || '未知产品'}
                                   </button>
                                 )}
@@ -707,7 +713,11 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                               {!isChild && plan.status === PlanStatus.CONVERTED && hasUnconvertedSubPlans(plan.id) && (
                                 <button onClick={() => onConvertToOrder(plan.id)} className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white hover:bg-amber-600 rounded-xl text-xs font-bold border border-amber-400"><ArrowRightCircle className="w-3.5 h-3.5" /> 补充下达子工单</button>
                               )}
-                              {!isChild && plan.status === PlanStatus.CONVERTED && !hasUnconvertedSubPlans(plan.id) && <div className="px-4 py-2 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold border border-emerald-200">已转工单</div>}
+                              {!isChild && plan.status === PlanStatus.CONVERTED && !hasUnconvertedSubPlans(plan.id) && (
+                                <span className="flex items-center px-4 py-2 bg-slate-50 text-slate-600 rounded-xl text-xs font-bold border border-slate-100 select-none" aria-hidden>
+                                  已转工单
+                                </span>
+                              )}
                             </div>
                           </div>
                         );

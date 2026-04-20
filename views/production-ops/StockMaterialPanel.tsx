@@ -135,9 +135,16 @@ const MaterialStatsTable: React.FC<{
             const net = issue - returnQty;
             const balance = Math.round((net - theoryCost) * 100) / 100;
             return (
-              <tr key={productId} className="hover:bg-slate-50/50 transition-colors">
+              <tr
+                key={productId}
+                className={`hover:bg-slate-50/50 transition-colors${selecting ? ' cursor-pointer' : ''}`}
+                onClick={selecting ? () => onToggleSelect(productId) : undefined}
+              >
                 {selecting && (
-                  <td className={compact ? 'px-2 py-2 align-middle w-10' : 'px-4 py-3'}>
+                  <td
+                    className={compact ? 'px-2 py-2 align-middle w-10' : 'px-4 py-3'}
+                    onClick={e => e.stopPropagation()}
+                  >
                     <input type="checkbox" checked={selectedIds.has(productId)} onChange={() => onToggleSelect(productId)} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                   </td>
                 )}
@@ -192,8 +199,9 @@ interface StockMaterialPanelProps extends PanelProps {
 }
 import { useDataIndexes } from './useDataIndexes';
 import {
+  formConfigToolbarButtonClass,
   moduleHeaderRowClass,
-  outlineAccentToolbarButtonClass,
+  outlineToolbarButtonClass,
   pageSubtitleClass,
   pageTitleClass,
 } from '../../styles/uiDensity';
@@ -932,9 +940,9 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
           <h1 className={pageTitleClass}>生产物料</h1>
           <p className={pageSubtitleClass}>物料下发与库存扣减</p>
         </div>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 shrink-0 w-full sm:w-auto justify-end sm:justify-start">
         {!showModal && (
-            <div className="relative w-full sm:w-56 sm:max-w-xs order-last sm:order-none">
+            <div className="relative w-full sm:w-56 sm:max-w-xs">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               <input
                 type="search"
@@ -945,17 +953,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
               />
             </div>
         )}
-        <div className="flex flex-wrap items-center gap-2 justify-end">
-        {!showModal && hasOpsPerm(tenantRole, userPermissions, 'production:material_records:view') && (
-            <button
-              type="button"
-              onClick={() => setShowStockFlowModal(true)}
-              className={outlineAccentToolbarButtonClass}
-            >
-              <ScrollText className="w-4 h-4 shrink-0" />
-              领料退料流水
-            </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2 justify-end sm:justify-start">
         {!showModal && hasOpsPerm(tenantRole, userPermissions, 'production:material_form_config:allow') && (
             <button
               type="button"
@@ -963,10 +961,20 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                 setMaterialFormConfigEntryTab('fields');
                 setShowConfigModal(true);
               }}
-              className={outlineAccentToolbarButtonClass}
+              className={formConfigToolbarButtonClass}
             >
               <Sliders className="w-4 h-4 shrink-0" />
               表单配置
+            </button>
+        )}
+        {!showModal && hasOpsPerm(tenantRole, userPermissions, 'production:material_records:view') && (
+            <button
+              type="button"
+              onClick={() => setShowStockFlowModal(true)}
+              className={outlineToolbarButtonClass}
+            >
+              <ScrollText className="w-4 h-4 shrink-0" />
+              领料退料流水
             </button>
         )}
         </div>

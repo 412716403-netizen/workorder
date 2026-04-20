@@ -12,10 +12,12 @@ import {
   Package,
   History,
   Sliders,
+  Search,
 } from 'lucide-react';
 import type { PlanOrder, PrintTemplate, ProductionOpRecord, ProductionOrder } from '../../types';
 import { DEFAULT_REWORK_FORM_SETTINGS } from '../../types';
 import {
+  formConfigToolbarButtonClass,
   moduleHeaderRowClass,
   outlineToolbarButtonClass,
   pageTitleClass,
@@ -43,6 +45,7 @@ import ReworkDefectiveActionModal from './ReworkDefectiveActionModal';
 import ReworkReportSubmitModal from './ReworkReportSubmitModal';
 import ReworkFormConfigModal from './ReworkFormConfigModal';
 import { nextOutsourceDocNumber } from '../../utils/partnerDocNumber';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 
 /** sourceReworkId → partner 的预建索引 */
 function buildReworkPartnerMap(allRecords: ProductionOpRecord[]): Map<string, string> {
@@ -122,7 +125,10 @@ const ReworkPanel: React.FC<PanelProps> = ({
 
   const REWORK_PAGE_SIZE = 10;
   const [reworkPage, setReworkPage] = useState(1);
+  const [reworkMainSearch, setReworkMainSearch] = useState('');
+  const debouncedReworkMainSearch = useDebouncedValue(reworkMainSearch, 300);
   useEffect(() => { setReworkPage(1); }, [productionLinkMode]);
+  useEffect(() => { setReworkPage(1); }, [debouncedReworkMainSearch]);
 
   const idx = useDataIndexes(orders, products, boms, globalNodes, productMilestoneProgresses);
 
@@ -474,6 +480,34 @@ const ReworkPanel: React.FC<PanelProps> = ({
     );
   }, [productionLinkMode, parentOrders, orders, reworkStatsByOrderId, reworkStatsByProductId, products, productMilestoneProgresses, idx]);
 
+  const displayReworkListBlocks = useMemo(() => {
+    const q = debouncedReworkMainSearch.trim().toLowerCase();
+    if (!q) return reworkListBlocks;
+    const orderHay = (order: ProductionOrder) => {
+      const p = idx.productsById.get(order.productId);
+      return [order.orderNumber, order.productName, order.sku, order.customer, p?.name, p?.sku]
+        .filter(Boolean)
+        .join('\0')
+        .toLowerCase();
+    };
+    return reworkListBlocks.filter(block => {
+      if (block.type === 'productAggregate') {
+        const fp = idx.productsById.get(block.productId);
+        const stats = reworkStatsByProductId.get(block.productId) ?? [];
+        const parts: string[] = [fp?.name ?? '', fp?.sku ?? '', block.productId];
+        stats.forEach(s => {
+          parts.push(s.nodeName, s.outsourcePartner ?? '');
+        });
+        return parts.filter(Boolean).join('\0').toLowerCase().includes(q);
+      }
+      if (block.type === 'single') {
+        return orderHay(block.order).includes(q);
+      }
+      const childHay = block.children.map(orderHay).join('\0');
+      return (orderHay(block.parent) + '\0' + childHay).includes(q);
+    });
+  }, [reworkListBlocks, debouncedReworkMainSearch, idx, reworkStatsByProductId]);
+
   // ── JSX ──────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4">
@@ -482,7 +516,34 @@ const ReworkPanel: React.FC<PanelProps> = ({
           <h1 className={pageTitleClass}>返工管理</h1>
           <p className={pageSubtitleClass}>不良品处理与返工报工追踪</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 shrink-0 justify-end">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 shrink-0 w-full sm:w-auto">
+          {!reworkPendingModalOpen && canViewMainList && parentOrders.length > 0 && reworkListBlocks.length > 0 && (
+            <div className="relative w-full sm:w-56 sm:max-w-xs">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              <input
+                type="search"
+                placeholder="搜索工单号、产品、客户、工序、外协厂…"
+                value={reworkMainSearch}
+                onChange={e => setReworkMainSearch(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-3 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+              />
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2 shrink-0 justify-end sm:justify-start">
+          {hasOpsPerm(tenantRole, userPermissions, 'production:rework_form_config:allow') &&
+            onUpdateReworkFormSettings &&
+            onUpdatePrintTemplates && (
+              <button
+                type="button"
+                onClick={() => {
+                  setReworkFormConfigDefaultTab('fields');
+                  setShowReworkFormConfigModal(true);
+                }}
+                className={formConfigToolbarButtonClass}
+              >
+                <Sliders className="w-4 h-4 shrink-0" /> 表单配置
+              </button>
+            )}
           {hasOpsPerm(tenantRole, userPermissions, 'production:rework_defective:allow') && (
           <button
             type="button"
@@ -500,7 +561,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
                 setDefectFlowModalOpen(true);
                 setDefectFlowDetailRecord(null);
               }}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-all"
+              className={outlineToolbarButtonClass}
             >
               <ScrollText className="w-4 h-4 shrink-0" /> 处理不良品流水
             </button>
@@ -514,20 +575,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
             <History className="w-4 h-4 shrink-0" /> 返工报工流水
           </button>
           )}
-          {hasOpsPerm(tenantRole, userPermissions, 'production:rework_form_config:allow') &&
-            onUpdateReworkFormSettings &&
-            onUpdatePrintTemplates && (
-              <button
-                type="button"
-                onClick={() => {
-                  setReworkFormConfigDefaultTab('fields');
-                  setShowReworkFormConfigModal(true);
-                }}
-                className={outlineToolbarButtonClass}
-              >
-                <Sliders className="w-4 h-4 shrink-0" /> 表单配置
-              </button>
-            )}
+          </div>
         </div>
       </div>
 
@@ -550,10 +598,14 @@ const ReworkPanel: React.FC<PanelProps> = ({
             <div className="bg-white rounded-[32px] border border-slate-200 p-12 text-center">
               <p className="text-slate-400 text-sm">暂无返工记录，请先在「待处理不良」中处理不良品</p>
             </div>
+          ) : displayReworkListBlocks.length === 0 ? (
+            <div className="bg-white rounded-[32px] border border-slate-200 p-12 text-center">
+              <p className="text-slate-400 text-sm">无匹配项，请调整搜索关键词。</p>
+            </div>
           ) : (
             (() => {
-              const reworkTotalPages = Math.max(1, Math.ceil(reworkListBlocks.length / REWORK_PAGE_SIZE));
-              const pagedBlocks = reworkListBlocks.slice((reworkPage - 1) * REWORK_PAGE_SIZE, reworkPage * REWORK_PAGE_SIZE);
+              const reworkTotalPages = Math.max(1, Math.ceil(displayReworkListBlocks.length / REWORK_PAGE_SIZE));
+              const pagedBlocks = displayReworkListBlocks.slice((reworkPage - 1) * REWORK_PAGE_SIZE, reworkPage * REWORK_PAGE_SIZE);
               return (<>
             {pagedBlocks.map((block) => {
               const renderReworkCard = (order: ProductionOrder, isChild?: boolean, indentPx?: number) => {
@@ -579,7 +631,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
                         <div className="flex items-center gap-3 mb-1 flex-wrap">
                           <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-widest">{order.orderNumber}</span>
                           {isChild && <span className="text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">子工单</span>}
-                          <span className={`font-bold text-slate-800 ${isChild ? 'text-base' : 'text-lg'}`}>{order.productName || '未知产品'}</span>
+                          <span className={`font-bold text-slate-800 ${isChild ? 'text-sm' : 'text-base'}`}>{order.productName || '未知产品'}</span>
                           {order.sku && <span className="text-[10px] font-bold text-slate-500">{order.sku}</span>}
                         </div>
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
@@ -701,8 +753,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
                       )}
                       <div>
                         <div className="flex items-center gap-3 mb-1 flex-wrap">
-                          <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-widest">按产品汇总</span>
-                          <span className="font-bold text-slate-800 text-lg">{fp?.name ?? '未知产品'}</span>
+                          <span className="font-bold text-slate-800 text-base">{fp?.name ?? '未知产品'}</span>
                           {fp?.sku && <span className="text-[10px] font-bold text-slate-500">{fp.sku}</span>}
                         </div>
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
@@ -823,7 +874,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
             })}
             {reworkTotalPages > 1 && (
               <div className="flex items-center justify-center gap-3 py-4">
-                <span className="text-xs text-slate-400">共 {reworkListBlocks.length} 项，第 {reworkPage} / {reworkTotalPages} 页</span>
+                <span className="text-xs text-slate-400">共 {displayReworkListBlocks.length} 项，第 {reworkPage} / {reworkTotalPages} 页</span>
                 <button type="button" disabled={reworkPage <= 1} onClick={() => setReworkPage(p => p - 1)} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all">上一页</button>
                 <button type="button" disabled={reworkPage >= reworkTotalPages} onClick={() => setReworkPage(p => p + 1)} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all">下一页</button>
               </div>

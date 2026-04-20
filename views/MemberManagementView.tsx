@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Users, Shield, ShieldCheck, KeyRound, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Users, Shield, ShieldCheck, KeyRound, Loader2, Search } from 'lucide-react';
 import * as api from '../services/api';
 import type { RoleRow } from '../services/api';
 import type { GlobalNodeTemplate } from '../types';
@@ -12,6 +12,8 @@ import MembersTab from './member-management/MembersTab';
 import RolesTab from './member-management/RolesTab';
 import RoleEditModal from './member-management/RoleEditModal';
 import MilestoneAssignModal from './member-management/MilestoneAssignModal';
+import { moduleHeaderRowClass } from '../styles/uiDensity';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 interface MemberManagementViewProps {
   tenantId: string;
@@ -35,8 +37,27 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
 
   const [milestoneModalOpen, setMilestoneModalOpen] = useState(false);
   const [milestoneEditMember, setMilestoneEditMember] = useState<Member | null>(null);
+  const [memberListSearch, setMemberListSearch] = useState('');
+  const debouncedMemberListSearch = useDebouncedValue(memberListSearch, 300);
 
   const canManage = tenantRole === 'owner' || tenantRole === 'admin';
+
+  useEffect(() => {
+    if (tab !== 'members') setMemberListSearch('');
+  }, [tab]);
+
+  const filteredMembersForList = useMemo(() => {
+    if (tab !== 'members') return members;
+    const q = debouncedMemberListSearch.trim().toLowerCase();
+    if (!q) return members;
+    return members.filter(m => {
+      const hay = [m.displayName, m.username, m.phone, m.roleName, m.userId]
+        .filter(Boolean)
+        .join('\0')
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [tab, members, debouncedMemberListSearch]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -183,16 +204,39 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
       )}
 
       {tab === 'members' && (
-        <MembersTab
-          members={members}
-          canManage={canManage}
-          tenantRole={tenantRole}
-          currentUserId={currentUserId}
-          rolesList={rolesList}
-          onAssignRole={handleAssignRole}
-          onRemoveMember={handleRemoveMember}
-          onOpenMilestoneModal={openMilestoneModal}
-        />
+        <>
+          <div className={moduleHeaderRowClass}>
+            <div className="min-w-0">
+              <h2 className="text-base font-bold text-slate-900 tracking-tight">成员列表</h2>
+              <p className="text-sm text-slate-500 mt-0.5">共 {members.length} 人，支持按姓名、账号等筛选</p>
+            </div>
+            {members.length > 0 && (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 shrink-0 w-full sm:w-auto">
+                <div className="relative w-full sm:w-56 sm:max-w-xs">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="search"
+                    placeholder="搜索姓名、用户名、手机、角色…"
+                    value={memberListSearch}
+                    onChange={e => setMemberListSearch(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-3 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+          <MembersTab
+            members={filteredMembersForList}
+            sourceMemberCount={members.length}
+            canManage={canManage}
+            tenantRole={tenantRole}
+            currentUserId={currentUserId}
+            rolesList={rolesList}
+            onAssignRole={handleAssignRole}
+            onRemoveMember={handleRemoveMember}
+            onOpenMilestoneModal={openMilestoneModal}
+          />
+        </>
       )}
 
       {tab === 'roles' && canManage && (

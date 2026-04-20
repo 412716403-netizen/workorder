@@ -93,13 +93,17 @@ export const moduleHeaderRowClass =
 export const primaryToolbarButtonClass =
   'bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm hover:bg-indigo-700 active:scale-[0.98] transition-all';
 
-/** 次操作：浅灰底（如「表单配置」） */
+/** 次操作：浅灰底（通用次要；顶栏「表单配置」请用 formConfigToolbarButtonClass） */
 export const secondaryToolbarButtonClass =
   'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-[0.98] transition-all';
 
+/** 顶栏「表单配置」：浅靛蓝底 + 深字（与工单中心等界面参考一致） */
+export const formConfigToolbarButtonClass =
+  'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border border-indigo-100 bg-indigo-50 text-slate-700 hover:bg-indigo-100/90 hover:border-indigo-200 active:scale-[0.98] transition-all';
+
 /** 次操作：白底描边 */
 export const outlineToolbarButtonClass =
-  'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 active:scale-[0.98] transition-all';
+  'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 active:scale-[0.98] transition-all';
 
 /** 次操作：强调描边（进销存待发货等） */
 export const outlineAccentToolbarButtonClass =

@@ -41,11 +41,11 @@ import {
 import { computePendingStockOrders } from '../utils/pendingStockCompute';
 import { buildDefectiveReworkByOrderMilestone } from '../utils/defectiveReworkByOrderMilestone';
 import {
+  formConfigToolbarButtonClass,
   moduleHeaderRowClass,
   outlineToolbarButtonClass,
   pageSubtitleClass,
   pageTitleClass,
-  secondaryToolbarButtonClass,
 } from '../styles/uiDensity';
 import { useConfirm } from '../contexts/ConfirmContext';
 import {
@@ -578,7 +578,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
               setOrderFormConfigEntryTab('fields');
               setShowOrderFormConfigModal(true);
             }}
-            className={secondaryToolbarButtonClass}
+            className={formConfigToolbarButtonClass}
           >
             <Sliders className="w-4 h-4 shrink-0" /> 表单配置
           </button>
@@ -664,7 +664,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         <div className="flex items-center gap-3 mb-1 flex-wrap">
                           <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-widest">{order.orderNumber}</span>
                           {isChild && <span className="text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">子工单</span>}
-                          <button type="button" onClick={(e) => { e.stopPropagation(); product && setViewProductId(product.id); }} className={`text-left font-bold text-slate-800 hover:text-indigo-600 hover:underline transition-colors ${isChild ? 'text-base' : 'text-lg'}`}>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); product && setViewProductId(product.id); }} className={`text-left font-bold text-slate-800 hover:text-indigo-600 hover:underline transition-colors ${isChild ? 'text-sm' : 'text-base'}`}>
                             {order.productName || '未知产品'}
                           </button>
                           <span className="text-[10px] font-bold text-slate-500">{order.sku}</span>
@@ -870,7 +870,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                             )}
                             <div>
                               <div className="flex items-center gap-3 mb-1 flex-wrap">
-                                <button type="button" onClick={e => { e.stopPropagation(); product && setViewProductId(product.id); }} className="text-left text-lg font-bold text-slate-800 hover:text-indigo-600 hover:underline transition-colors">
+                                <button type="button" onClick={e => { e.stopPropagation(); product && setViewProductId(product.id); }} className="text-left text-base font-bold text-slate-800 hover:text-indigo-600 hover:underline transition-colors">
                                   {block.productName}
                                 </button>
                                 <span className="text-[10px] font-bold text-slate-500">{product?.sku || block.orders[0]?.sku}</span>

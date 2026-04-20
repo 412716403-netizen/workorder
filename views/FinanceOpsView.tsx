@@ -25,11 +25,11 @@ import { SearchableProductSelect } from '../components/SearchableProductSelect';
 import { SearchablePartnerSelect } from '../components/SearchablePartnerSelect';
 import type { ProductionOpRecord } from '../types';
 import {
+  formConfigToolbarButtonClass,
   moduleHeaderRowClass,
   pageSubtitleClass,
   pageTitleClass,
   primaryToolbarButtonClass,
-  secondaryToolbarButtonClass,
 } from '../styles/uiDensity';
 import { PsiListPrintController, type PsiListPrintControllerHandle } from '../components/psi/PsiListPrintPicker';
 import { buildReceiptPrintContextFromRecord } from '../utils/buildReceiptPrintContext';
@@ -40,6 +40,7 @@ import { DEFAULT_RECEIPT_FORM_SETTINGS, DEFAULT_PAYMENT_FORM_SETTINGS } from '..
 import { useConfirm } from '../contexts/ConfirmContext';
 import { toLocalCompactYmd, toLocalDateYmd } from '../utils/localDateTime';
 import { productHasColorSizeMatrix } from '../utils/productColorSize';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 function CustomFieldInput({ field, value, onChange }: { field: ReportFieldDefinition; value: any; onChange: (v: any) => void }) {
   const v = value ?? '';
@@ -363,6 +364,12 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
   const [reconQueryDateTo, setReconQueryDateTo] = useState('');
   const [reconQueryPartnerId, setReconQueryPartnerId] = useState('');
   const [reconQueryWorkerId, setReconQueryWorkerId] = useState('');
+  const [financeListSearch, setFinanceListSearch] = useState('');
+  const debouncedFinanceListSearch = useDebouncedValue(financeListSearch, 300);
+
+  useEffect(() => {
+    setFinanceListSearch('');
+  }, [type, reconciliationSubTab]);
 
   /** 参照报工单：前缀 + yyyyMMdd + '-' + 4位序号，按同类型当日已有记录数+1 */
   const getNextDocNo = useCallback(() => {
@@ -645,6 +652,45 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
     return rows;
   }, [type, reconciliationSubTab, reconQueryWorkerId, reconQueryDateFromT, reconQueryDateToT, orders, productMilestoneProgresses, productMap, workerMap, prodRecords, allRecords, inFinanceDateRangeQuery, globalNodes, dictionaries]);
 
+  const partnerReconListFiltered = useMemo(() => {
+    const q = debouncedFinanceListSearch.trim().toLowerCase();
+    if (!q) return partnerReconList;
+    return partnerReconList.filter(row => {
+      const parts: string[] = [];
+      if (row.source === 'finance') {
+        const r = row.rec;
+        parts.push(r.docNo ?? '', r.id, r.partner ?? '', r.note ?? '', r.type, String(r.amount));
+      } else if (row.source === 'psi') {
+        parts.push(row.docNo, row.docType, row.partner ?? '', row.operator ?? '', row.note ?? '', String(row.amount));
+      } else {
+        const r = row.rec;
+        parts.push(r.docNo ?? '', r.id, r.partner ?? '', r.note ?? '', String(r.amount));
+      }
+      return parts.filter(Boolean).join('\0').toLowerCase().includes(q);
+    });
+  }, [partnerReconList, debouncedFinanceListSearch]);
+
+  const settlementReconListFiltered = useMemo(() => {
+    const q = debouncedFinanceListSearch.trim().toLowerCase();
+    if (!q) return settlementReconList;
+    return settlementReconList.filter(row => {
+      const parts: string[] = [];
+      if (row.source === 'work_report') {
+        parts.push(row.reportNo, row.workerName, String(row.amount));
+        row.items.forEach(i => {
+          parts.push(i.orderNumber, i.productName, i.milestoneName, String(i.quantity), String(i.amount));
+        });
+      } else if (row.source === 'rework_report') {
+        const r = row.rec;
+        parts.push(r.docNo ?? '', r.id, String(r.amount), r.workerId ?? '', workerMap.get(r.workerId ?? '')?.name ?? '');
+      } else {
+        const r = row.rec;
+        parts.push(r.docNo ?? '', r.id, r.partner ?? '', r.note ?? '', r.type, String(r.amount), workerMap.get(r.workerId ?? '')?.name ?? '');
+      }
+      return parts.filter(Boolean).join('\0').toLowerCase().includes(q);
+    });
+  }, [settlementReconList, debouncedFinanceListSearch, workerMap]);
+
   const FIN_PAGE_SIZE = 20;
   const [finPage, setFinPage] = useState(1);
 
@@ -664,18 +710,35 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
     });
   }, [type, records, allRecords, reconciliationSubTab, reconQueryDateFromT, reconQueryDateToT, reconQueryWorkerId, inFinanceDateRangeQuery]);
 
-  useEffect(() => { setFinPage(1); }, [type]);
-  const finTotalPages = Math.max(1, Math.ceil(displayRecords.length / FIN_PAGE_SIZE));
+  const tableSourceRecords = useMemo(() => {
+    if (type === 'RECONCILIATION') return displayRecords;
+    const q = debouncedFinanceListSearch.trim().toLowerCase();
+    if (!q) return displayRecords;
+    return displayRecords.filter(rec => {
+      const catName = financeCatMap.get(rec.categoryId ?? '')?.name ?? '';
+      const workerName = rec.workerId ? (workerMap.get(rec.workerId)?.name ?? rec.workerId) : '';
+      const parts = [rec.docNo ?? '', rec.id, rec.partner ?? '', rec.note ?? '', String(rec.amount), catName, workerName, rec.relatedId ?? ''];
+      if (rec.customData && typeof rec.customData === 'object') {
+        for (const v of Object.values(rec.customData)) {
+          if (v != null && v !== '') parts.push(String(v));
+        }
+      }
+      return parts.filter(Boolean).join('\0').toLowerCase().includes(q);
+    });
+  }, [type, displayRecords, debouncedFinanceListSearch, financeCatMap, workerMap]);
+
+  useEffect(() => { setFinPage(1); }, [type, debouncedFinanceListSearch, reconciliationSubTab, reconQueryPartnerId, reconQueryWorkerId]);
+  const finTotalPages = Math.max(1, Math.ceil(tableSourceRecords.length / FIN_PAGE_SIZE));
   const pagedDisplayRecords = useMemo(
-    () => displayRecords.slice((finPage - 1) * FIN_PAGE_SIZE, finPage * FIN_PAGE_SIZE),
-    [displayRecords, finPage],
+    () => tableSourceRecords.slice((finPage - 1) * FIN_PAGE_SIZE, finPage * FIN_PAGE_SIZE),
+    [tableSourceRecords, finPage],
   );
 
   /** 报工结算：每行应收增加、应收减少及逐行应收余额。应收减少=报工单、返工报工、收款单；应收增加=付款单 */
   const settlementReconWithBalance = useMemo(() => {
-    if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'settlement' || settlementReconList.length === 0) return [];
+    if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'settlement' || settlementReconListFiltered.length === 0) return [];
     let running = 0;
-    return settlementReconList.map(row => {
+    return settlementReconListFiltered.map(row => {
       let inc = 0;
       let dec = 0;
       if (row.source === 'work_report') dec = row.amount;
@@ -687,13 +750,13 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
       running += inc - dec;
       return { row, receivableInc: inc, receivableDec: dec, balance: running };
     });
-  }, [type, reconciliationSubTab, settlementReconList]);
+  }, [type, reconciliationSubTab, settlementReconListFiltered]);
 
   /** 合作单位对账：每行应收增加、应收减少及逐行应收余额。应收增加=销售单、付款单；应收减少=采购单、外协收回、收款单 */
   const partnerReconWithBalance = useMemo(() => {
-    if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'partner' || partnerReconList.length === 0) return [];
+    if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'partner' || partnerReconListFiltered.length === 0) return [];
     let running = 0;
-    return partnerReconList.map(row => {
+    return partnerReconListFiltered.map(row => {
       let inc = 0;
       let dec = 0;
       if (row.source === 'finance') {
@@ -712,7 +775,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
       running += inc - dec;
       return { row, receivableInc: inc, receivableDec: dec, balance: running };
     });
-  }, [type, reconciliationSubTab, partnerReconList]);
+  }, [type, reconciliationSubTab, partnerReconListFiltered]);
 
   if (!canView) {
     return (
@@ -757,51 +820,65 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
               <p className={pageSubtitleClass}>{current.sub}</p>
             )}
           </div>
-          {type !== 'RECONCILIATION' &&
-            (canCreate ||
-              (isReceiptOrPayment &&
-                canEdit &&
-                (type === 'RECEIPT' ? onUpdateReceiptFormSettings : onUpdatePaymentFormSettings))) && (
-              <div className="flex items-center gap-2 shrink-0 mt-4 sm:mt-0">
-                {isReceiptOrPayment && canEdit && type === 'RECEIPT' && onUpdateReceiptFormSettings && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFinanceFormConfigTab('fields');
-                      setShowReceiptFormConfig(true);
-                    }}
-                    className={secondaryToolbarButtonClass}
-                  >
-                    <Sliders className="w-4 h-4 shrink-0" /> 表单配置
-                  </button>
-                )}
-                {isReceiptOrPayment && canEdit && type === 'PAYMENT' && onUpdatePaymentFormSettings && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFinanceFormConfigTab('fields');
-                      setShowPaymentFormConfig(true);
-                    }}
-                    className={secondaryToolbarButtonClass}
-                  >
-                    <Sliders className="w-4 h-4 shrink-0" /> 表单配置
-                  </button>
-                )}
-                {canCreate && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingRecordId(null);
-                      setForm(emptyForm);
-                      setShowModal(true);
-                    }}
-                    className={primaryToolbarButtonClass}
-                  >
-                    <Plus className="w-4 h-4 shrink-0" /> 新增{current.label}
-                  </button>
-                )}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 shrink-0 w-full sm:w-auto">
+            {(type !== 'RECONCILIATION' || reconHasFilter) && (
+              <div className="relative w-full sm:w-56 sm:max-w-xs">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                <input
+                  type="search"
+                  placeholder={type === 'RECONCILIATION' ? '在当前对账结果中搜索…' : '搜索单号、对方、金额、备注、分类…'}
+                  value={financeListSearch}
+                  onChange={e => setFinanceListSearch(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-3 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                />
               </div>
             )}
+            {type !== 'RECONCILIATION' &&
+              (canCreate ||
+                (isReceiptOrPayment &&
+                  canEdit &&
+                  (type === 'RECEIPT' ? onUpdateReceiptFormSettings : onUpdatePaymentFormSettings))) && (
+                <div className="flex flex-wrap items-center gap-2 shrink-0 mt-0 sm:mt-0">
+                  {isReceiptOrPayment && canEdit && type === 'RECEIPT' && onUpdateReceiptFormSettings && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFinanceFormConfigTab('fields');
+                        setShowReceiptFormConfig(true);
+                      }}
+                      className={formConfigToolbarButtonClass}
+                    >
+                      <Sliders className="w-4 h-4 shrink-0" /> 表单配置
+                    </button>
+                  )}
+                  {isReceiptOrPayment && canEdit && type === 'PAYMENT' && onUpdatePaymentFormSettings && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFinanceFormConfigTab('fields');
+                        setShowPaymentFormConfig(true);
+                      }}
+                      className={formConfigToolbarButtonClass}
+                    >
+                      <Sliders className="w-4 h-4 shrink-0" /> 表单配置
+                    </button>
+                  )}
+                  {canCreate && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingRecordId(null);
+                        setForm(emptyForm);
+                        setShowModal(true);
+                      }}
+                      className={primaryToolbarButtonClass}
+                    >
+                      <Plus className="w-4 h-4 shrink-0" /> 新增{current.label}
+                    </button>
+                  )}
+                </div>
+              )}
+          </div>
         </div>
         {type === 'RECONCILIATION' && (
           <div className="flex flex-wrap items-center gap-3">
@@ -895,7 +972,23 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
                 const isSettlementRecon = type === 'RECONCILIATION' && reconciliationSubTab === 'settlement';
                 const listLength = isPartnerRecon ? partnerReconWithBalance.length : isSettlementRecon ? settlementReconWithBalance.length : pagedDisplayRecords.length;
                 const colSpan = (isPartnerRecon || isSettlementRecon) ? 8 : 6;
-                const emptyMsg = type === 'RECONCILIATION' ? (reconHasFilter ? '该条件下暂无对账单据' : (reconciliationSubTab === 'partner' ? '请选择合作单位后点击查询' : '请选择工人后点击查询')) : '暂无该模块财务记录';
+                const qFin = debouncedFinanceListSearch.trim();
+                let emptyMsg =
+                  type === 'RECONCILIATION'
+                    ? !reconHasFilter
+                      ? reconciliationSubTab === 'partner'
+                        ? '请选择合作单位后点击查询'
+                        : '请选择工人后点击查询'
+                      : '该条件下暂无对账单据'
+                    : records.length === 0
+                      ? '暂无该模块财务记录'
+                      : '暂无该模块财务记录';
+                if (type === 'RECONCILIATION' && reconHasFilter) {
+                  if (isPartnerRecon && partnerReconList.length > 0 && partnerReconWithBalance.length === 0 && qFin) emptyMsg = '无匹配项，请调整搜索关键词';
+                  else if (isSettlementRecon && settlementReconList.length > 0 && settlementReconWithBalance.length === 0 && qFin) emptyMsg = '无匹配项，请调整搜索关键词';
+                } else if (type !== 'RECONCILIATION' && records.length > 0 && tableSourceRecords.length === 0 && qFin) {
+                  emptyMsg = '无匹配项，请调整搜索关键词';
+                }
                 if (listLength === 0) {
                   return (
                     <tr>
@@ -1066,7 +1159,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
           </table>
           {finTotalPages > 1 && type !== 'RECONCILIATION' && (
             <div className="flex items-center justify-center gap-3 py-4">
-              <span className="text-xs text-slate-400">共 {displayRecords.length} 条，第 {finPage} / {finTotalPages} 页</span>
+              <span className="text-xs text-slate-400">共 {tableSourceRecords.length} 条，第 {finPage} / {finTotalPages} 页</span>
               <button type="button" disabled={finPage <= 1} onClick={() => setFinPage(p => p - 1)} className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed">上一页</button>
               <button type="button" disabled={finPage >= finTotalPages} onClick={() => setFinPage(p => p + 1)} className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed">下一页</button>
             </div>

@@ -12,6 +12,7 @@ import {
   Package,
   Truck,
   Sliders,
+  Search,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
@@ -33,6 +34,7 @@ import { PanelProps, hasOpsPerm, OutsourceModalType } from './types';
 import { useDataIndexes } from './useDataIndexes';
 import * as api from '../../services/api';
 import {
+  formConfigToolbarButtonClass,
   moduleHeaderRowClass,
   outlineToolbarButtonClass,
   pageSubtitleClass,
@@ -71,6 +73,7 @@ import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayNa
 import { outsourceCustomCollabPart } from '../../utils/productionOpCollab/outsource';
 import OutsourceFormConfigModal from './OutsourceFormConfigModal';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 
 const OutsourcePanel: React.FC<PanelProps> = ({
   productionLinkMode,
@@ -153,7 +156,10 @@ const OutsourcePanel: React.FC<PanelProps> = ({
 
   const OUTS_PAGE_SIZE = 10;
   const [outsPage, setOutsPage] = useState(1);
+  const [outsourceSearch, setOutsourceSearch] = useState('');
+  const debouncedOutsourceSearch = useDebouncedValue(outsourceSearch, 300);
   useEffect(() => { setOutsPage(1); }, [productionLinkMode]);
+  useEffect(() => { setOutsPage(1); }, [debouncedOutsourceSearch]);
   useEffect(() => {
     if (dispatchFormModalOpen) setDispatchCustomValues({});
   }, [dispatchFormModalOpen]);
@@ -507,6 +513,33 @@ const OutsourcePanel: React.FC<PanelProps> = ({
         return (a.orderNumber || '').localeCompare(b.orderNumber || '');
       });
   }, [productionLinkMode, records, orders, products, globalNodes, productMilestoneProgresses, idx]);
+
+  const displayOutsourceStats = useMemo(() => {
+    const q = debouncedOutsourceSearch.trim().toLowerCase();
+    if (!q) return outsourceStatsByOrder;
+    const isProductMode = productionLinkMode === 'product';
+    return outsourceStatsByOrder.filter(item => {
+      const parts: string[] = [];
+      if ('productName' in item) parts.push(String(item.productName ?? ''));
+      if ('orderNumber' in item && item.orderNumber != null) parts.push(String(item.orderNumber));
+      const pid = 'productId' in item ? String(item.productId ?? '') : '';
+      if (pid) {
+        const p = idx.productsById.get(pid);
+        parts.push(p?.sku ?? '', p?.name ?? '');
+      }
+      if (!isProductMode && 'orderId' in item && item.orderId) {
+        const ord = idx.ordersById.get(item.orderId);
+        parts.push(ord?.customer ?? '', ord?.productName ?? '', ord?.sku ?? '');
+      }
+      if ('partners' in item && Array.isArray(item.partners)) {
+        item.partners.forEach((pt: { partner?: string; nodeName?: string }) => {
+          parts.push(pt.partner ?? '', pt.nodeName ?? '');
+        });
+      }
+      const hay = parts.join('\u0000').toLowerCase();
+      return hay.includes(q);
+    });
+  }, [outsourceStatsByOrder, debouncedOutsourceSearch, productionLinkMode, idx]);
 
   const outsourceFlowSummaryRows = useMemo(() => {
     const isProductMode = productionLinkMode === 'product';
@@ -915,7 +948,32 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           <h1 className={pageTitleClass}>外协管理</h1>
           <p className={pageSubtitleClass}>外部委托加工业务追踪</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 shrink-0 justify-end">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 shrink-0 w-full sm:w-auto">
+          {outsourceModal === null && canViewMainList && outsourceStatsByOrder.length > 0 && (
+            <div className="relative w-full sm:w-56 sm:max-w-xs">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              <input
+                type="search"
+                placeholder="搜索工单号、产品、客户、外协厂、工序…"
+                value={outsourceSearch}
+                onChange={e => setOutsourceSearch(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-3 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+              />
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2 shrink-0 justify-end sm:justify-start">
+          {hasOpsPerm(tenantRole, userPermissions, 'production:outsource_form_config:allow') && onUpdateOutsourceFormSettings && (
+            <button
+              type="button"
+              onClick={() => {
+                setOutsourceConfigDefaultTab('fields');
+                setShowOutsourceConfig(true);
+              }}
+              className={formConfigToolbarButtonClass}
+            >
+              <Sliders className="w-4 h-4 shrink-0" /> 表单配置
+            </button>
+          )}
           {hasOpsPerm(tenantRole, userPermissions, 'production:outsource_send:allow') && (
             <button
               type="button"
@@ -947,18 +1005,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
               <ScrollText className="w-4 h-4 shrink-0" /> 外协流水
             </button>
           )}
-          {hasOpsPerm(tenantRole, userPermissions, 'production:outsource_form_config:allow') && onUpdateOutsourceFormSettings && (
-            <button
-              type="button"
-              onClick={() => {
-                setOutsourceConfigDefaultTab('fields');
-                setShowOutsourceConfig(true);
-              }}
-              className={outlineToolbarButtonClass}
-            >
-              <Sliders className="w-4 h-4 shrink-0" /> 表单配置
-            </button>
-          )}
+          </div>
         </div>
       </div>
 
@@ -975,11 +1022,15 @@ const OutsourcePanel: React.FC<PanelProps> = ({
               <Truck className="w-12 h-12 text-slate-200 mx-auto mb-4" />
               <p className="text-slate-400 text-sm">暂无委外数据，请点击上方「待发清单」「待收回清单」或「外协流水」操作。</p>
             </div>
+          ) : displayOutsourceStats.length === 0 ? (
+            <div className="bg-white rounded-[32px] border border-slate-200 p-12 text-center">
+              <p className="text-slate-400 text-sm">无匹配项，请调整搜索关键词。</p>
+            </div>
           ) : (
             <div className="grid grid-cols-1 gap-2">
               {(() => {
-                const outsTotalPages = Math.max(1, Math.ceil(outsourceStatsByOrder.length / OUTS_PAGE_SIZE));
-                const pagedStats = outsourceStatsByOrder.slice((outsPage - 1) * OUTS_PAGE_SIZE, outsPage * OUTS_PAGE_SIZE);
+                const outsTotalPages = Math.max(1, Math.ceil(displayOutsourceStats.length / OUTS_PAGE_SIZE));
+                const pagedStats = displayOutsourceStats.slice((outsPage - 1) * OUTS_PAGE_SIZE, outsPage * OUTS_PAGE_SIZE);
                 return (<>
               {pagedStats.map((item) => {
                 const orderId = 'orderId' in item ? item.orderId : undefined;
@@ -1008,7 +1059,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
                     <div className="min-w-0">
                       <div className="flex items-center gap-3 mb-1 flex-wrap">
                         {productionLinkMode !== 'product' && orderNumber != null && <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-widest">{orderNumber}</span>}
-                        <span className="text-lg font-bold text-slate-800">{productName}</span>
+                        <span className="text-base font-bold text-slate-800">{productName}</span>
                         {product?.sku && <span className="text-[10px] font-bold text-slate-500">{product.sku}</span>}
                         {product && categories.find(c => c.id === product.categoryId)?.customFields?.filter(f => f.showInForm !== false && f.type !== 'file').map(f => {
                           const val = product.categoryCustomData?.[f.id];
@@ -1138,7 +1189,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
               })}
               {outsTotalPages > 1 && (
                 <div className="flex items-center justify-center gap-3 py-4">
-                  <span className="text-xs text-slate-400">共 {outsourceStatsByOrder.length} 项，第 {outsPage} / {outsTotalPages} 页</span>
+                  <span className="text-xs text-slate-400">共 {displayOutsourceStats.length} 项，第 {outsPage} / {outsTotalPages} 页</span>
                   <button type="button" disabled={outsPage <= 1} onClick={() => setOutsPage(p => p - 1)} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all">上一页</button>
                   <button type="button" disabled={outsPage >= outsTotalPages} onClick={() => setOutsPage(p => p + 1)} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all">下一页</button>
                 </div>
