@@ -19,7 +19,7 @@ import { DEFAULT_OUTSOURCE_FORM_SETTINGS } from '../../types';
 import { hasOpsPerm } from './types';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
 import { useConfirm } from '../../contexts/ConfirmContext';
-import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import * as api from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -384,9 +384,17 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                 if (variantsForDetail.length === 0) variantsForDetail = [...allProductVariants];
               }
               const showVariantQtyGrid = matrixEnabled && variantsForDetail.length > 0;
-              if (showVariantQtyGrid) {
-                const groupedByColor: Record<string, ProductVariant[]> = {};
-                variantsForDetail.forEach(v => { if (!groupedByColor[v.colorId]) groupedByColor[v.colorId] = []; groupedByColor[v.colorId].push(v); });
+              if (showVariantQtyGrid && product && dictionaries) {
+                const matrixFlowProduct = { ...product, variants: variantsForDetail, colorIds: undefined, sizeIds: undefined } as Product;
+                const qtyRecord = Object.fromEntries(
+                  variantsForDetail.map(v => {
+                    const qtyKey = `${key}|${v.id}`;
+                    const q = flowDetailEditMode
+                      ? (flowDetailQuantities[qtyKey] ?? variantQty[v.id] ?? 0)
+                      : (variantQty[v.id] ?? 0);
+                    return [v.id, q];
+                  }),
+                );
                 return (
                   <div key={key} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-4 space-y-4">
                     <div className="flex items-center gap-3 flex-wrap">
@@ -395,34 +403,16 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                       <span className="text-sm font-bold text-indigo-600">{nodeName}</span>
                     </div>
                     <div className="space-y-4">
-                      {sortedVariantColorEntries(groupedByColor, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
-                        const color = dictionaries?.colors?.find(c => c.id === colorId);
-                        return (
-                          <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white rounded-xl border border-slate-100">
-                            <div className="flex items-center gap-3 w-40 shrink-0">
-                              <div className="w-5 h-5 rounded-full border border-slate-200" style={{ backgroundColor: color?.value }} />
-                              <span className="text-sm font-black text-slate-700">{color?.name ?? colorId}</span>
-                            </div>
-                            <div className="flex-1 flex flex-wrap gap-4">
-                              {colorVariants.map(v => {
-                                const size = dictionaries?.sizes?.find(s => s.id === v.sizeId);
-                                const qtyKey = `${key}|${v.id}`;
-                                const qty = flowDetailEditMode ? (flowDetailQuantities[qtyKey] ?? variantQty[v.id] ?? 0) : (variantQty[v.id] ?? 0);
-                                return (
-                                  <div key={v.id} className="flex flex-col gap-1.5 w-24">
-                                    <span className="text-[10px] font-black text-slate-400 text-center uppercase">{size?.name ?? v.sizeId}</span>
-                                    {flowDetailEditMode ? (
-                                      <input type="number" min={0} value={flowDetailQuantities[qtyKey] ?? ''} onChange={e => setFlowDetailQuantities(prev => ({ ...prev, [qtyKey]: Number(e.target.value) || 0 }))} className="w-full rounded-xl border border-slate-200 py-2 px-3 text-sm font-bold text-indigo-600 text-center focus:outline-none" />
-                                    ) : (
-                                      <div className="flex items-center justify-center bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold text-indigo-600 min-h-[40px]">{qty}</div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
+                      <VariantQtyMatrixInputs
+                        product={matrixFlowProduct}
+                        dictionaries={dictionaries}
+                        quantities={qtyRecord}
+                        readOnly={!flowDetailEditMode}
+                        onVariantQtyChange={(variantId, qty) => {
+                          const qtyKey = `${key}|${variantId}`;
+                          setFlowDetailQuantities(prev => ({ ...prev, [qtyKey]: qty }));
+                        }}
+                      />
                     </div>
                     {isReceiveDoc && (
                       <div className="flex flex-wrap items-center gap-4 pt-4 mt-4 border-t border-slate-100">

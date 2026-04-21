@@ -233,8 +233,17 @@ const CollabReturnFlowPanel: React.FC<CollabReturnFlowPanelProps> = ({
 
         <div className={`overflow-auto ${embeddedInModal ? 'max-h-[min(55vh,calc(90vh-22rem))]' : 'max-h-[55vh]'}`}>
           {pagedRows.length === 0 ? (
-            <div className="px-6 py-16 text-center text-slate-400 text-sm">
-              {returnFlowRecords.length === 0 ? '暂无回传出库记录' : '无匹配项，请调整筛选条件'}
+            <div className="px-6 py-16 text-center text-slate-400 text-sm space-y-2 max-w-lg mx-auto">
+              {returnFlowRecords.length === 0 ? (
+                <>
+                  <p className="font-bold text-slate-600">暂无回传出库记录</p>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    此处展示本企业在协作场景下的「协作回传出库」履历。若尚未产生回传出库单，或接收方尚未提交回传，列表会为空，属正常情况。
+                  </p>
+                </>
+              ) : (
+                '无匹配项，请调整筛选条件'
+              )}
             </div>
           ) : (
             <table className="w-full text-left text-sm">

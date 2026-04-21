@@ -88,3 +88,6 @@ export function buildVariantQtyMatrixLayout(
 
   return { sizeColumns, colorRows };
 }
+
+/** 与计划文档命名一致，等价于 `buildVariantQtyMatrixLayout` */
+export const buildVariantQtyMatrixModel = buildVariantQtyMatrixLayout;

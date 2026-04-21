@@ -8,8 +8,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
-import { Product, Warehouse, ProductCategory, AppDictionaries, ProductVariant } from '../../types';
-import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import { Product, Warehouse, ProductCategory, AppDictionaries } from '../../types';
+import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 
 interface StocktakeItem {
   id: string;
@@ -111,13 +111,6 @@ const StocktakeOrderModal: React.FC<StocktakeOrderModalProps> = ({
                 const stLineQty = stHasVariants
                   ? Object.values(line.variantQuantities || {}).reduce((s, q) => s + q, 0)
                   : (line.quantity ?? 0);
-                const stGroupedByColor: Record<string, ProductVariant[]> = {};
-                if (stProd?.variants) {
-                  stProd.variants.forEach(v => {
-                    if (!stGroupedByColor[v.colorId]) stGroupedByColor[v.colorId] = [];
-                    stGroupedByColor[v.colorId].push(v);
-                  });
-                }
                 const isLineEmpty = !line.productId;
                 const systemQtyForLine = line.productId && stocktakeForm.warehouseId
                   ? (stHasVariants && stProd?.variants
@@ -162,37 +155,25 @@ const StocktakeOrderModal: React.FC<StocktakeOrderModalProps> = ({
                       )}
                       <button type="button" onClick={() => removeStocktakeItem(line.id)} className="p-2.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all shrink-0" title="删除该行"><Trash2 className="w-5 h-5" /></button>
                     </div>
-                    {stHasVariants && line.productId && (
+                    {stHasVariants && line.productId && stProd && (
                       <div className="pt-3 border-t border-slate-100 space-y-3">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">颜色尺码（{stocktakeForm.warehouseId ? '系统数量供参考，请录入实盘数量' : '请先选择盘点仓库后可显示系统数量' }）</label>
-                        {sortedVariantColorEntries(stGroupedByColor, stProd?.colorIds, stProd?.sizeIds).map(([colorId, colorVariants]) => {
-                          const color = dictionaries.colors.find(c => c.id === colorId);
-                          return (
-                            <div key={colorId} className="flex flex-wrap items-center gap-4 bg-slate-50/80 p-3 rounded-xl border border-slate-100">
-                              <div className="flex items-center gap-2 w-28 shrink-0">
-                                <div className="w-4 h-4 rounded-full border border-slate-200 shrink-0" style={{ backgroundColor: (color as any)?.value || '#e2e8f0' }} />
-                                <span className="text-xs font-bold text-slate-700">{color?.name || '未命名'}</span>
-                              </div>
-                              <div className="flex flex-wrap gap-3">
-                                {colorVariants.map(v => {
-                                  const size = dictionaries.sizes.find(s => s.id === v.sizeId);
-                                  const sysQtyV = stocktakeForm.warehouseId ? getVariantDisplayQty(line.productId, stocktakeForm.warehouseId, v.id) : null;
-                                  return (
-                                    <div key={v.id} className="flex flex-col gap-0.5 w-20">
-                                      <span className="text-[9px] font-bold text-slate-400 uppercase">{size?.name || v.skuSuffix}</span>
-                                      {sysQtyV != null && <span className="text-[9px] text-slate-500">系统 {sysQtyV}</span>}
-                                      <input type="number" min={0} placeholder="0" value={line.variantQuantities?.[v.id] ?? ''} onChange={e => updateStocktakeVariantQty(line.id, v.id, parseInt(e.target.value) || 0)} className="w-full bg-white border border-slate-200 rounded-lg py-1.5 px-2 text-sm font-bold text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500 text-center" />
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                              <div className="ml-auto text-right shrink-0">
-                                <span className="text-[9px] font-bold text-slate-400">小计</span>
-                                <p className="text-sm font-black text-slate-600">{(colorVariants as ProductVariant[]).reduce((s, v) => s + (line.variantQuantities?.[v.id] || 0), 0)}</p>
-                              </div>
-                            </div>
-                          );
-                        })}
+                        <VariantQtyMatrixInputs
+                          product={stProd}
+                          dictionaries={dictionaries}
+                          quantities={line.variantQuantities ?? {}}
+                          onVariantQtyChange={(variantId, qty) => updateStocktakeVariantQty(line.id, variantId, qty)}
+                          systemQtyByVariantId={
+                            stocktakeForm.warehouseId
+                              ? Object.fromEntries(
+                                  stProd.variants!.map(v => [
+                                    v.id,
+                                    getVariantDisplayQty(line.productId, stocktakeForm.warehouseId, v.id),
+                                  ]),
+                                )
+                              : undefined
+                          }
+                        />
                       </div>
                     )}
                   </div>

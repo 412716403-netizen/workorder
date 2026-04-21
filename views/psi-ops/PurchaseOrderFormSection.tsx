@@ -9,8 +9,8 @@ import {
 } from 'lucide-react';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
-import { Product, ProductCategory, Partner, PartnerCategory, AppDictionaries, ProductVariant } from '../../types';
-import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import { Product, ProductCategory, Partner, PartnerCategory, AppDictionaries } from '../../types';
+import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import {
   sectionTitleClass,
   psiOrderBillFormShellClass,
@@ -202,13 +202,6 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
                 ? Object.values(line.variantQuantities || {}).reduce((s, q) => s + q, 0)
                 : (line.quantity ?? 0);
               const lineAmount = lineQty * (line.purchasePrice || 0);
-              const groupedByColor: Record<string, ProductVariant[]> = {};
-              if (prod?.variants) {
-                prod.variants.forEach(v => {
-                  if (!groupedByColor[v.colorId]) groupedByColor[v.colorId] = [];
-                  groupedByColor[v.colorId].push(v);
-                });
-              }
               const poDocNum = editingDocNumber || form.docNumber || '';
               const received = poDocNum && line.sourceRecordIds
                 ? line.sourceRecordIds.reduce((s, rid) => s + (receivedByOrderLine[`${poDocNum}::${rid}`] ?? 0), 0)
@@ -299,44 +292,17 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
                   )}
                   <button type="button" onClick={() => onRemoveItem(line.id)} className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all" aria-label="删除明细行"><Trash2 className="w-4 h-4" /></button>
                 </div>
-                {hasVariants && line.productId && (
+                {hasVariants && line.productId && prod && (
                   <div className="pt-2 border-t border-slate-100 space-y-3">
                     <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 ml-1">
                       <Layers className="w-3.5 h-3.5" /> 颜色尺码数量
                     </label>
-                    {sortedVariantColorEntries(groupedByColor, prod?.colorIds, prod?.sizeIds).map(([colorId, colorVariants]) => {
-                      const color = dictionaries.colors.find(c => c.id === colorId);
-                      return (
-                        <div key={colorId} className="flex flex-wrap items-center gap-3 bg-white/80 p-2.5 rounded-lg border border-slate-100">
-                          <div className="flex items-center gap-2 w-28 shrink-0">
-                            <div className="w-4 h-4 rounded-full border border-slate-200 shrink-0" style={{ backgroundColor: (color as any)?.value || '#e2e8f0' }} />
-                            <span className="text-xs font-bold text-slate-700">{color?.name || '未命名'}</span>
-                          </div>
-                          <div className="flex flex-wrap gap-3">
-                            {colorVariants.map(v => {
-                              const size = dictionaries.sizes.find(s => s.id === v.sizeId);
-                              return (
-                                <div key={v.id} className="flex flex-col gap-0.5 w-20">
-                                  <span className="text-[9px] font-black text-slate-400 uppercase">{size?.name || v.skuSuffix}</span>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    placeholder="0"
-                                    value={line.variantQuantities?.[v.id] ?? ''}
-                                    onChange={e => onUpdateVariantQty(line.id, v.id, parseInt(e.target.value) || 0)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-sm font-black text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500 text-center"
-                                  />
-                                </div>
-                              );
-                            })}
-                          </div>
-                          <div className="ml-auto text-right shrink-0">
-                            <span className="text-[9px] font-black text-slate-400">小计</span>
-                            <p className="text-sm font-black text-slate-600">{(colorVariants as ProductVariant[]).reduce((s, v) => s + (line.variantQuantities?.[v.id] || 0), 0)}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    <VariantQtyMatrixInputs
+                      product={prod}
+                      dictionaries={dictionaries}
+                      quantities={line.variantQuantities ?? {}}
+                      onVariantQtyChange={(variantId, qty) => onUpdateVariantQty(line.id, variantId, qty)}
+                    />
                   </div>
                 )}
               </div>

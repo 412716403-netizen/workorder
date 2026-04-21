@@ -16,7 +16,7 @@ import type {
 } from '../../types';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
-import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { variantMaxGoodProductMode } from '../../utils/productReportAggregates';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 
@@ -223,8 +223,10 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
                 const dispatched = outsourceDispatchedForNode.filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + r.quantity, 0);
                 return Math.max(0, base + reworkForVariant - dispatched);
               };
-              const groupedByColor: Record<string, ProductVariant[]> = {};
-              variantsInOrder.forEach(v => { if (!groupedByColor[v.colorId]) groupedByColor[v.colorId] = []; groupedByColor[v.colorId].push(v); });
+              const matrixProductOrder =
+                product && dictionaries
+                  ? ({ ...product, variants: variantsInOrder, colorIds: undefined, sizeIds: undefined } as Product)
+                  : null;
               return (
                 <div key={baseKey} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-4 space-y-4">
                   <div className="flex items-center gap-3 flex-wrap">
@@ -237,31 +239,24 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
                     )}
                   </div>
                   <div className="space-y-4">
-                    {sortedVariantColorEntries(groupedByColor, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
-                      const color = dictionaries?.colors?.find(c => c.id === colorId);
-                      return (
-                        <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white rounded-xl border border-slate-100">
-                          <div className="flex items-center gap-3 w-40 shrink-0">
-                            <div className="w-5 h-5 rounded-full border border-slate-200" style={{ backgroundColor: color?.value }} />
-                            <span className="text-sm font-black text-slate-700">{color?.name ?? colorId}</span>
-                          </div>
-                          <div className="flex-1 flex flex-wrap gap-4">
-                            {colorVariants.map(v => {
-                              const size = dictionaries?.sizes?.find(s => s.id === v.sizeId);
-                              const qtyKey = `${baseKey}|${v.id}`;
-                              const maxVariant = getAvailableForVariant(v.id);
-                              const cellQty = dispatchFormQuantities[qtyKey] ?? 0;
-                              return (
-                                <div key={v.id} className="flex flex-col gap-1 min-w-[64px]">
-                                  <span className="text-[10px] font-bold text-slate-400">{size?.name ?? v.sizeId}</span>
-                                  <input type="number" min={0} max={maxVariant} value={cellQty === 0 ? '' : cellQty} onChange={e => { const raw = Math.max(0, Math.floor(Number(e.target.value) || 0)); setDispatchFormQuantities(prev => ({ ...prev, [qtyKey]: Math.min(raw, maxVariant) })); }} placeholder={`最多${maxVariant}`} className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200 placeholder:text-[10px] placeholder:text-slate-400" />
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {matrixProductOrder && (
+                      <VariantQtyMatrixInputs
+                        product={matrixProductOrder}
+                        dictionaries={dictionaries}
+                        quantities={Object.fromEntries(
+                          variantsInOrder.map(v => [v.id, dispatchFormQuantities[`${baseKey}|${v.id}`] ?? 0]),
+                        )}
+                        onVariantQtyChange={(variantId, qty) => {
+                          const maxVariant = getAvailableForVariant(variantId);
+                          const qtyKey = `${baseKey}|${variantId}`;
+                          setDispatchFormQuantities(prev => ({ ...prev, [qtyKey]: Math.min(qty, maxVariant) }));
+                        }}
+                        getCellExtras={v => {
+                          const maxVariant = getAvailableForVariant(v.id);
+                          return { max: maxVariant, hint: `最多${maxVariant}` };
+                        }}
+                      />
+                    )}
                   </div>
                 </div>
               );
@@ -285,8 +280,10 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
                 const dispatched = outsourcedProductNode.filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + r.quantity, 0);
                 return Math.max(0, maxGood - dispatched);
               };
-              const groupedByColor: Record<string, ProductVariant[]> = {};
-              variantsInProductBlock.forEach(v => { if (!groupedByColor[v.colorId]) groupedByColor[v.colorId] = []; groupedByColor[v.colorId].push(v); });
+              const matrixProductBlock =
+                product && dictionaries
+                  ? ({ ...product, variants: variantsInProductBlock, colorIds: undefined, sizeIds: undefined } as Product)
+                  : null;
               return (
                 <div key={baseKey} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-4 space-y-4">
                   <div className="flex items-center gap-3 flex-wrap">
@@ -300,31 +297,24 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
                     </span>
                   </div>
                   <div className="space-y-4">
-                    {sortedVariantColorEntries(groupedByColor, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
-                      const color = dictionaries?.colors?.find(c => c.id === colorId);
-                      return (
-                        <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white rounded-xl border border-slate-100">
-                          <div className="flex items-center gap-3 w-40 shrink-0">
-                            <div className="w-5 h-5 rounded-full border border-slate-200" style={{ backgroundColor: color?.value }} />
-                            <span className="text-sm font-black text-slate-700">{color?.name ?? colorId}</span>
-                          </div>
-                          <div className="flex-1 flex flex-wrap gap-4">
-                            {colorVariants.map(v => {
-                              const size = dictionaries?.sizes?.find(s => s.id === v.sizeId);
-                              const qtyKey = `${baseKey}|${v.id}`;
-                              const maxVariant = getAvailableForVariantProduct(v.id);
-                              const cellQty = dispatchFormQuantities[qtyKey] ?? 0;
-                              return (
-                                <div key={v.id} className="flex flex-col gap-1 min-w-[64px]">
-                                  <span className="text-[10px] font-bold text-slate-400">{size?.name ?? v.sizeId}</span>
-                                  <input type="number" min={0} max={maxVariant} value={cellQty === 0 ? '' : cellQty} onChange={e => { const raw = Math.max(0, Math.floor(Number(e.target.value) || 0)); setDispatchFormQuantities(prev => ({ ...prev, [qtyKey]: Math.min(raw, maxVariant) })); }} placeholder={`最多${maxVariant}`} className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200 placeholder:text-[10px] placeholder:text-slate-400" />
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {matrixProductBlock && (
+                      <VariantQtyMatrixInputs
+                        product={matrixProductBlock}
+                        dictionaries={dictionaries}
+                        quantities={Object.fromEntries(
+                          variantsInProductBlock.map(v => [v.id, dispatchFormQuantities[`${baseKey}|${v.id}`] ?? 0]),
+                        )}
+                        onVariantQtyChange={(variantId, qty) => {
+                          const maxVariant = getAvailableForVariantProduct(variantId);
+                          const qtyKey = `${baseKey}|${variantId}`;
+                          setDispatchFormQuantities(prev => ({ ...prev, [qtyKey]: Math.min(qty, maxVariant) }));
+                        }}
+                        getCellExtras={v => {
+                          const maxVariant = getAvailableForVariantProduct(v.id);
+                          return { max: maxVariant, hint: `最多${maxVariant}` };
+                        }}
+                      />
+                    )}
                   </div>
                 </div>
               );

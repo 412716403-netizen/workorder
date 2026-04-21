@@ -1,8 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ClipboardList, X, Check } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Product, ProductCategory } from '../../types';
-import { productHasColorSizeMatrix } from '../../utils/productColorSize';
+import type { Product } from '../../types';
 
 export interface DispatchRow {
   orderId?: string;
@@ -21,7 +20,6 @@ export interface OutsourceDispatchListModalProps {
   productionLinkMode: 'order' | 'product';
   outsourceDispatchRows: DispatchRow[];
   products: Product[];
-  categories: ProductCategory[];
   dispatchSelectedKeys: Set<string>;
   setDispatchSelectedKeys: React.Dispatch<React.SetStateAction<Set<string>>>;
   onDispatchFormOpen: () => void;
@@ -32,7 +30,6 @@ const OutsourceDispatchListModal: React.FC<OutsourceDispatchListModalProps> = ({
   productionLinkMode,
   outsourceDispatchRows,
   products,
-  categories,
   dispatchSelectedKeys,
   setDispatchSelectedKeys,
   onDispatchFormOpen,
@@ -124,9 +121,6 @@ const OutsourceDispatchListModal: React.FC<OutsourceDispatchListModalProps> = ({
                 filteredRows.map(row => {
                   const key = row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}`;
                   const checked = dispatchSelectedKeys.has(key);
-                  const product = products.find(p => p.id === row.productId);
-                  const category = categories.find(c => c.id === product?.categoryId);
-                  const showVariantBadge = productHasColorSizeMatrix(product, category);
                   return (
                     <tr key={key} className="hover:bg-slate-50/50 bg-white">
                       <td className="w-12 px-4 py-3 align-middle">
@@ -147,9 +141,6 @@ const OutsourceDispatchListModal: React.FC<OutsourceDispatchListModalProps> = ({
                       <td className="px-6 py-3 align-middle min-w-0">
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="text-sm font-bold text-slate-800 truncate" title={row.productName}>{row.productName}</span>
-                          {showVariantBadge && (
-                            <span className="shrink-0 text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded whitespace-nowrap">颜色尺码</span>
-                          )}
                         </div>
                       </td>
                       <td className="px-6 py-3 text-sm font-bold text-indigo-600 align-middle truncate" title={row.milestoneName}>{row.milestoneName}</td>

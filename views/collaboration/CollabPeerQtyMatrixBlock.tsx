@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Package } from 'lucide-react';
 import QtyMatrixTable, { type QtyMatrixTableRow } from '../../components/variant-matrix/QtyMatrixTable';
+import { VariantQtyMatrixHint } from '../../components/variant-matrix/VariantQtyMatrixHint';
 import { buildCollabQtyMatrix, collabVariantKey, type CollabReturnRow } from './collabHelpers';
 
 function specLabel(v: string | null) {
@@ -66,9 +67,9 @@ const CollabPeerQtyMatrixBlock: React.FC<Props> = ({
               disabled={!selected}
               className={`h-9 w-[3.25rem] shrink-0 rounded-lg border border-slate-200 bg-slate-50/90 px-2 text-left text-sm font-bold text-slate-900 shadow-sm outline-none transition-shadow disabled:opacity-50 ${ringClass}`}
             />
-            <span className="text-[11px] font-medium tabular-nums leading-none text-slate-400">
+            <VariantQtyMatrixHint>
               {capColumnTitle} {row.maxReturnable}
-            </span>
+            </VariantQtyMatrixHint>
           </div>
         );
       });

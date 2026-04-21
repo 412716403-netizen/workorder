@@ -167,7 +167,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({
             onClick={() => setSettingsModalOpen(false)}
           />
           <div
-            className="relative w-full max-w-[min(96rem,calc(100vw-1.5rem))] max-h-[92vh] flex flex-col rounded-2xl shadow-2xl border border-slate-200 bg-slate-50 overflow-hidden"
+            className="relative w-full max-w-2xl max-h-[92vh] flex flex-col rounded-2xl shadow-2xl border border-slate-200 bg-slate-50 overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-200 bg-white shrink-0">

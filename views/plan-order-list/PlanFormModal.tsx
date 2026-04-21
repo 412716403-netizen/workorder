@@ -14,14 +14,13 @@ import type {
   Product,
   ProductCategory,
   AppDictionaries,
-  ProductVariant,
   PlanItem,
   PlanFormSettings,
   Partner,
   PartnerCategory,
 } from '../../types';
 import { PlanStatus } from '../../types';
-import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
@@ -80,16 +79,6 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
   const selectedProduct = products.find(p => p.id === form.productId);
   const activeCategory = categories.find(c => c.id === form.categoryId);
   const usePlanVariantMatrix = productHasColorSizeMatrix(selectedProduct, activeCategory);
-
-  const groupedVariants = useMemo((): Record<string, ProductVariant[]> => {
-    if (!selectedProduct || !selectedProduct.variants) return {};
-    const groups: Record<string, ProductVariant[]> = {};
-    selectedProduct.variants.forEach(v => {
-      if (!groups[v.colorId]) groups[v.colorId] = [];
-      groups[v.colorId].push(v);
-    });
-    return groups;
-  }, [selectedProduct]);
 
   const canSave = useMemo(() => {
     if (!form.productId) return false;
@@ -271,38 +260,12 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
 
                 {usePlanVariantMatrix && selectedProduct.variants && selectedProduct.variants.length > 0 ? (
                   <div className="space-y-4">
-                    {sortedVariantColorEntries(groupedVariants, selectedProduct?.colorIds, selectedProduct?.sizeIds).map(([colorId, colorVariants]) => {
-                      const color = dictionaries.colors.find(c => c.id === colorId);
-                      return (
-                        <div key={colorId} className="bg-slate-50/50 p-6 rounded-[32px] border border-slate-100 flex flex-col md:flex-row md:items-center gap-8 group hover:border-indigo-200 transition-all overflow-hidden">
-                          <div className="flex items-center gap-3 w-40 shrink-0">
-                            <div className="w-5 h-5 rounded-full border border-slate-200 shadow-inner" style={{backgroundColor: color?.value}}></div>
-                            <span className="text-sm font-black text-slate-700">{color?.name}</span>
-                          </div>
-                          <div className="flex-1 flex flex-wrap gap-4">
-                            {(colorVariants as ProductVariant[]).map(v => {
-                              const size = dictionaries.sizes.find(s => s.id === v.sizeId);
-                              return (
-                                <div key={v.id} className="flex flex-col gap-1.5 w-24">
-                                  <span className="text-[10px] font-black text-slate-400 text-center uppercase tracking-tighter">{size?.name}</span>
-                                  <input
-                                    type="number"
-                                    placeholder="0"
-                                    value={form.variantQuantities[v.id] || ''}
-                                    onChange={e => updateVariantQty(v.id, e.target.value)}
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-2 px-2 text-sm font-black text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500 text-center shadow-sm"
-                                  />
-                                </div>
-                              )
-                            })}
-                          </div>
-                          <div className="hidden md:block shrink-0 text-right bg-white/60 px-4 py-2 rounded-2xl border border-slate-100">
-                             <p className="text-[9px] font-black text-slate-300 uppercase">颜色小计</p>
-                             <p className="text-sm font-black text-slate-600">{(colorVariants as ProductVariant[]).reduce((s, v) => s + (form.variantQuantities[v.id] || 0), 0)}</p>
-                          </div>
-                        </div>
-                      )
-                    })}
+                    <VariantQtyMatrixInputs
+                      product={selectedProduct}
+                      dictionaries={dictionaries}
+                      quantities={form.variantQuantities}
+                      onVariantQtyChange={(variantId, qty) => updateVariantQty(variantId, String(qty))}
+                    />
                     <div className="flex justify-end p-4 bg-indigo-600 rounded-[24px] text-white shadow-xl shadow-indigo-100">
                        <div className="flex items-center gap-4">
                           <p className="text-xs font-bold opacity-80">计划生产汇总总量:</p>

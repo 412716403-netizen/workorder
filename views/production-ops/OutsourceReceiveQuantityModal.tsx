@@ -13,7 +13,7 @@ import type {
   BOM,
 } from '../../types';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
-import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { calcUsageByWeight } from '../../utils/bomMaterialUsageByWeight';
 
@@ -316,8 +316,10 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
             };
 
             if (isProductBlockRecv && variantsInProductBlockRecv.length > 0 && (hasVariantProductDispatchesRecv || aggregateProductReceive)) {
-              const groupedPb: Record<string, ProductVariant[]> = {};
-              variantsInProductBlockRecv.forEach(v => { if (!groupedPb[v.colorId]) groupedPb[v.colorId] = []; groupedPb[v.colorId].push(v); });
+              const matrixProductRecvPb =
+                product && dictionaries
+                  ? ({ ...product, variants: variantsInProductBlockRecv, colorIds: undefined, sizeIds: undefined } as Product)
+                  : null;
               const rowTotalPb = variantsInProductBlockRecv.reduce((s, v) => s + (receiveFormQuantities[`${baseKey}${RECEIVE_VARIANT_SEP}${v.id}`] ?? 0), 0) + (pendingNoVarRecv > 0 && !aggregateProductReceive ? receiveFormQuantities[baseKey] ?? 0 : 0);
               const rowUnitPb = receiveFormUnitPrices[baseKey] ?? 0;
               const rowAmountPb = rowTotalPb * rowUnitPb;
@@ -334,31 +336,27 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                     </span>
                   </div>
                   <div className="space-y-4">
-                    {sortedVariantColorEntries(groupedPb, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
-                      const color = dictionaries?.colors?.find(c => c.id === colorId);
-                      return (
-                        <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white rounded-xl border border-slate-100">
-                          <div className="flex items-center gap-3 w-40 shrink-0">
-                            <div className="w-5 h-5 rounded-full border border-slate-200" style={{ backgroundColor: color?.value }} />
-                            <span className="text-sm font-black text-slate-700">{color?.name ?? colorId}</span>
-                          </div>
-                          <div className="flex-1 flex flex-wrap gap-4">
-                            {colorVariants.map(v => {
-                              const size = dictionaries?.sizes?.find(s => s.id === v.sizeId);
-                              const qtyKey = `${baseKey}${RECEIVE_VARIANT_SEP}${v.id}`;
-                              const maxV = getPendingForVariantProduct(v.id);
-                              const cellQ = receiveFormQuantities[qtyKey] ?? 0;
-                              return (
-                                <div key={v.id} className="flex flex-col gap-1 min-w-[64px]">
-                                  <span className="text-[10px] font-bold text-slate-400">{size?.name ?? v.sizeId}</span>
-                                  <input type="number" min={0} max={maxV} value={cellQ === 0 ? '' : cellQ} onChange={e => { const raw = Math.max(0, Math.floor(Number(e.target.value) || 0)); setReceiveFormQuantities(prev => ({ ...prev, [qtyKey]: Math.min(raw, maxV) })); }} placeholder={`最多${maxV}`} className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200 placeholder:text-[10px] placeholder:text-slate-400" />
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {matrixProductRecvPb && dictionaries && (
+                      <VariantQtyMatrixInputs
+                        product={matrixProductRecvPb}
+                        dictionaries={dictionaries}
+                        quantities={Object.fromEntries(
+                          variantsInProductBlockRecv.map(v => [
+                            v.id,
+                            receiveFormQuantities[`${baseKey}${RECEIVE_VARIANT_SEP}${v.id}`] ?? 0,
+                          ]),
+                        )}
+                        onVariantQtyChange={(variantId, qty) => {
+                          const maxV = getPendingForVariantProduct(variantId);
+                          const qtyKey = `${baseKey}${RECEIVE_VARIANT_SEP}${variantId}`;
+                          setReceiveFormQuantities(prev => ({ ...prev, [qtyKey]: Math.min(qty, maxV) }));
+                        }}
+                        getCellExtras={v => {
+                          const maxV = getPendingForVariantProduct(v.id);
+                          return { max: maxV, hint: `最多${maxV}` };
+                        }}
+                      />
+                    )}
                   </div>
                   {pendingNoVarRecv > 0 && !aggregateProductReceive && (
                     <div className="p-4 bg-white rounded-xl border border-dashed border-slate-200 flex flex-wrap items-center gap-4">
@@ -385,8 +383,10 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
             }
 
             if (variantsInOrder.length > 0) {
-              const groupedByColor: Record<string, ProductVariant[]> = {};
-              variantsInOrder.forEach(v => { if (!groupedByColor[v.colorId]) groupedByColor[v.colorId] = []; groupedByColor[v.colorId].push(v); });
+              const matrixProductRecvOrder =
+                product && dictionaries
+                  ? ({ ...product, variants: variantsInOrder, colorIds: undefined, sizeIds: undefined } as Product)
+                  : null;
               const rowTotalQty = variantsInOrder.reduce((s, v) => s + (receiveFormQuantities[`${baseKey}|${v.id}`] ?? 0), 0);
               const rowUnitPrice = receiveFormUnitPrices[baseKey] ?? 0;
               const rowAmount = rowTotalQty * rowUnitPrice;
@@ -402,33 +402,24 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                     )}
                   </div>
                   <div className="space-y-4">
-                    {sortedVariantColorEntries(groupedByColor, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
-                      const color = dictionaries?.colors?.find(c => c.id === colorId);
-                      return (
-                        <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white rounded-xl border border-slate-100">
-                          <div className="flex items-center gap-3 w-40 shrink-0">
-                            <div className="w-5 h-5 rounded-full border border-slate-200" style={{ backgroundColor: color?.value }} />
-                            <span className="text-sm font-black text-slate-700">{color?.name ?? colorId}</span>
-                          </div>
-                          <div className="flex-1 flex flex-wrap gap-4">
-                            {colorVariants.map(v => {
-                              const size = dictionaries?.sizes?.find(s => s.id === v.sizeId);
-                              const qtyKey = `${baseKey}|${v.id}`;
-                              const maxVariant = getPendingForVariant(v.id);
-                              return (
-                                <div key={v.id} className="flex flex-col gap-1.5 w-24">
-                                  <span className="text-[10px] font-black text-slate-400 text-center uppercase">{size?.name ?? v.sizeId}</span>
-                                  <div className="relative flex items-center bg-white border border-slate-200 rounded-xl focus-within:ring-2 focus-within:ring-indigo-500">
-                                    <input type="number" min={0} max={maxVariant} value={receiveFormQuantities[qtyKey] ?? ''} onChange={e => setReceiveFormQuantities(prev => ({ ...prev, [qtyKey]: Number(e.target.value) || 0 }))} className="w-full bg-transparent rounded-xl py-1.5 pl-2 pr-12 text-sm font-bold text-indigo-600 text-center focus:ring-0 focus:outline-none" />
-                                    <span className="absolute right-2 text-[10px] text-slate-400 pointer-events-none">最多{maxVariant}</span>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {matrixProductRecvOrder && (
+                      <VariantQtyMatrixInputs
+                        product={matrixProductRecvOrder}
+                        dictionaries={dictionaries}
+                        quantities={Object.fromEntries(
+                          variantsInOrder.map(v => [v.id, receiveFormQuantities[`${baseKey}|${v.id}`] ?? 0]),
+                        )}
+                        onVariantQtyChange={(variantId, qty) => {
+                          const maxVariant = getPendingForVariant(variantId);
+                          const qtyKey = `${baseKey}|${variantId}`;
+                          setReceiveFormQuantities(prev => ({ ...prev, [qtyKey]: Math.min(Math.max(0, qty), maxVariant) }));
+                        }}
+                        getCellExtras={v => {
+                          const maxVariant = getPendingForVariant(v.id);
+                          return { max: maxVariant, hint: `最多${maxVariant}` };
+                        }}
+                      />
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-slate-100">
                     <div className="flex items-center gap-2">

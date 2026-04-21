@@ -83,7 +83,7 @@ const CollabSettingsPanel: React.FC<CollabSettingsPanelProps> = ({
         </div>
       )}
 
-      <div className={embeddedInModal ? 'grid grid-cols-1 xl:grid-cols-2 gap-4 xl:gap-5 xl:items-stretch' : 'space-y-4'}>
+      <div className={embeddedInModal ? 'flex flex-col gap-4' : 'space-y-4'}>
       {/* 建立企业协作 */}
       <div className={`bg-white border border-slate-200 shadow-sm overflow-hidden min-w-0 ${cardShell}`}>
         <div className={`${sectionPad} py-4 border-b border-slate-100 flex items-start gap-3`}>
@@ -183,7 +183,7 @@ const CollabSettingsPanel: React.FC<CollabSettingsPanelProps> = ({
 
         {activeCollabs.length === 0 && (
           <div className={`${sectionPad} py-8 text-center text-slate-400 text-sm`}>
-            {embeddedInModal ? '请先在左侧建立企业协作' : '请先在上方建立企业协作'}
+            请先在上方建立企业协作
           </div>
         )}
 

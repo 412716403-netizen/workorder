@@ -10,11 +10,11 @@ import {
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
 import type { PlanListPrintSettings, PrintRenderContext, PrintTemplate } from '../../types';
-import { Product, ProductCategory, Partner, PartnerCategory, AppDictionaries, ProductVariant } from '../../types';
+import { Product, ProductCategory, Partner, PartnerCategory, AppDictionaries } from '../../types';
 import { PsiListPrintPicker } from '../../components/psi/PsiListPrintPicker';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
-import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import {
   sectionTitleClass,
   psiOrderBillFormShellClass,
@@ -203,13 +203,6 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
                 ? Object.values(line.variantQuantities || {}).reduce((s, q) => s + q, 0)
                 : (line.quantity ?? 0);
               const lineAmount = lineQty * (line.salesPrice || 0);
-              const groupedByColor: Record<string, ProductVariant[]> = {};
-              if (prod?.variants) {
-                prod.variants.forEach(v => {
-                  if (!groupedByColor[v.colorId]) groupedByColor[v.colorId] = [];
-                  groupedByColor[v.colorId].push(v);
-                });
-              }
               return (
               <div key={line.id} className="p-3 bg-slate-50/50 rounded-xl border border-slate-100 space-y-3 shadow-sm hover:border-indigo-100/80 transition-all">
                 <div className="flex flex-wrap items-end gap-3">
@@ -274,42 +267,15 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
                   )}
                   <button type="button" onClick={() => onRemoveItem(line.id)} className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all" aria-label="删除明细行"><Trash2 className="w-4 h-4" /></button>
                 </div>
-                {hasVariants && line.productId && (
+                {hasVariants && line.productId && prod && (
                   <div className="pt-2 border-t border-slate-100 space-y-3">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">数量明细（有颜色尺码）</p>
-                    {sortedVariantColorEntries(groupedByColor, prod?.colorIds, prod?.sizeIds).map(([colorId, colorVariants]) => {
-                      const color = dictionaries.colors.find(c => c.id === colorId);
-                      return (
-                        <div key={colorId} className="flex flex-wrap items-center gap-3 bg-white p-2.5 rounded-lg border border-slate-100 shadow-sm">
-                          <div className="flex items-center gap-2 w-28 shrink-0">
-                            <div className="w-4 h-4 rounded-full border border-slate-200 shrink-0" style={{ backgroundColor: (color as any)?.value || '#e2e8f0' }} />
-                            <span className="text-xs font-bold text-slate-700">{color?.name || '未命名'}</span>
-                          </div>
-                          <div className="flex flex-wrap gap-3">
-                            {colorVariants.map(v => {
-                              const size = dictionaries.sizes.find(s => s.id === v.sizeId);
-                              return (
-                                <div key={v.id} className="flex flex-col gap-0.5 w-20">
-                                  <span className="text-[9px] font-black text-slate-400 uppercase">{size?.name || v.skuSuffix}</span>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    placeholder="0"
-                                    value={line.variantQuantities?.[v.id] ?? ''}
-                                    onChange={e => onUpdateVariantQty(line.id, v.id, parseInt(e.target.value) || 0)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-sm font-black text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500 text-center"
-                                  />
-                                </div>
-                              );
-                            })}
-                          </div>
-                          <div className="ml-auto text-right shrink-0 bg-slate-50/80 px-3 py-2 rounded-xl border border-slate-100">
-                            <p className="text-[9px] font-black text-slate-400 uppercase">颜色小计</p>
-                            <p className="text-sm font-black text-slate-600">{(colorVariants as ProductVariant[]).reduce((s, v) => s + (line.variantQuantities?.[v.id] || 0), 0)}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    <VariantQtyMatrixInputs
+                      product={prod}
+                      dictionaries={dictionaries}
+                      quantities={line.variantQuantities ?? {}}
+                      onVariantQtyChange={(variantId, qty) => onUpdateVariantQty(line.id, variantId, qty)}
+                    />
                   </div>
                 )}
               </div>

@@ -28,7 +28,8 @@ import { toast } from 'sonner';
 import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
 import { toLocalCompactYmd } from '../../utils/localDateTime';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
-import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import { buildVariantQtyMatrixLayout } from '../../utils/variantQtyMatrix';
+import QtyMatrixTable, { type QtyMatrixTableRow } from '../../components/variant-matrix/QtyMatrixTable';
 import { parseRouteReportFileUrls, dataUrlToBlobUrl } from '../../utils/routeReportFileUrls';
 import { coerceRouteReportDefaultForField, getEffectiveReportTemplate } from '../../utils/effectiveReportTemplate';
 import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
@@ -587,13 +588,13 @@ const ReportModal: React.FC<ReportModalProps> = ({
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
-      <div className="relative bg-white w-full max-w-lg min-h-0 max-h-[min(90vh,calc(100dvh-2rem))] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+      <div className="relative bg-white w-full max-w-4xl min-h-0 max-h-[min(90vh,calc(100dvh-2rem))] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
           <h3 className="font-bold text-slate-800 flex items-center gap-2"><FileText className="w-5 h-5 text-indigo-600" /> {reportModal.milestone.name} · 报工</h3>
           <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
         </div>
         <form className="flex flex-col flex-1 min-h-0" autoComplete="off" onSubmit={e => e.preventDefault()}>
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-4">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3 sm:px-4 sm:py-4 space-y-3">
           <div className="text-xs text-slate-500 font-medium">
             <span className="font-bold text-slate-700">{reportModal.order.productName}</span>
             {reportModal.productTotalQty != null ? (
@@ -736,12 +737,12 @@ const ReportModal: React.FC<ReportModalProps> = ({
             </div>
           )}
           {isMatrixMode ? (
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">本次完成数量（按规格）</label>
-                <span className="text-sm font-bold text-indigo-600">合计 {matrixTotalQty} 件</span>
+            <div className="space-y-1.5">
+              <div className="flex items-baseline justify-between gap-3">
+                <label className="text-[10px] font-bold text-slate-400 uppercase shrink-0">本次完成数量（按规格）</label>
+                <span className="text-xs sm:text-sm font-bold text-indigo-600 tabular-nums">合计 {matrixTotalQty} 件</span>
               </div>
-              <div className="space-y-3 bg-slate-50/50 rounded-2xl p-3">
+              <div className="rounded-xl bg-slate-50/50 p-2 sm:p-2.5 ring-1 ring-slate-100/80">
                 {(() => {
                   const product = productMap.get(reportModal.order.productId);
                   const category = categoryMap.get(product?.categoryId);
@@ -778,92 +779,80 @@ const ReportModal: React.FC<ReportModalProps> = ({
                     const outsourcedForVariant = outsourcedByVariantId[variant.id] ?? 0;
                     variantRemainingBaseMap.set(variant.id, Math.max(0, base + reworkForVariant - outsourcedForVariant));
                   }
-                  const renderVariantCell = (variant: ProductVariant, colLabel: string) => {
+                  const renderVariantCellMatrix = (variant: ProductVariant) => {
                     const qty = reportForm.variantQuantities?.[variant.id] ?? 0;
                     const remaining = Math.max(0, variantRemainingBaseMap.get(variant.id) ?? 0);
                     const currentCellQty = reportForm.variantQuantities?.[variant.id] ?? 0;
                     const otherTotal = matrixTotalQty - currentCellQty;
                     const maxAllowed = Math.max(0, allowExceedMaxReportQty ? remaining : Math.min(remaining, effectiveRemainingForModal - otherTotal));
                     return (
-                      <div key={variant.id} className="flex flex-col gap-1 min-w-[64px]">
-                        <span className="text-[10px] font-bold text-slate-400">{colLabel}</span>
-                        <input
-                          type="number"
-                          min={0}
-                          value={qty === 0 ? '' : qty}
-                          onChange={e => {
-                            const raw = parseInt(e.target.value) || 0;
-                            const next = allowExceedMaxReportQty ? raw : Math.min(raw, maxAllowed);
-                            handleVariantQuantityChange(variant.id, next);
-                          }}
-                          className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200 placeholder:text-[10px] placeholder:text-slate-400"
-                          placeholder={`最多${maxAllowed}`}
-                        />
-                        <input
-                          type="number"
-                          min={0}
-                          tabIndex={-1}
-                          value={(reportForm.variantDefectiveQuantities?.[variant.id] ?? 0) === 0 ? '' : (reportForm.variantDefectiveQuantities?.[variant.id] ?? 0)}
-                          onChange={e => handleVariantDefectiveChange(variant.id, parseInt(e.target.value) || 0)}
-                          className="w-full bg-amber-50/80 border border-amber-100 rounded-lg px-2 py-1 text-[10px] text-amber-800 text-right outline-none placeholder:text-amber-400"
-                          placeholder="不良"
-                        />
+                      <div key={variant.id} className="flex min-w-0 flex-col gap-1">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <input
+                            type="number"
+                            min={0}
+                            value={qty === 0 ? '' : qty}
+                            onChange={e => {
+                              const raw = parseInt(e.target.value) || 0;
+                              const next = allowExceedMaxReportQty ? raw : Math.min(raw, maxAllowed);
+                              handleVariantQuantityChange(variant.id, next);
+                            }}
+                            className="h-8 w-[3rem] shrink-0 rounded-md border border-slate-200 bg-white px-1.5 text-left text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200 placeholder:text-[9px] placeholder:text-slate-400"
+                            placeholder="0"
+                            title={`良品，最多 ${maxAllowed}`}
+                          />
+                          <span className="min-w-0 text-[10px] font-medium tabular-nums leading-none text-slate-400">
+                            最多 {maxAllowed}
+                          </span>
+                        </div>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <input
+                            type="number"
+                            min={0}
+                            tabIndex={-1}
+                            value={(reportForm.variantDefectiveQuantities?.[variant.id] ?? 0) === 0 ? '' : (reportForm.variantDefectiveQuantities?.[variant.id] ?? 0)}
+                            onChange={e => handleVariantDefectiveChange(variant.id, parseInt(e.target.value) || 0)}
+                            className="h-8 w-[3rem] shrink-0 rounded-md border border-amber-200/90 bg-amber-50/90 px-1.5 text-left text-sm font-bold text-amber-900 shadow-sm outline-none focus:ring-2 focus:ring-amber-200 placeholder:text-[9px] placeholder:text-amber-400/80"
+                            placeholder="0"
+                            title="不良品"
+                          />
+                          <span className="min-w-0 text-[10px] font-medium tabular-nums leading-none text-amber-700/70">不良品</span>
+                        </div>
                       </div>
                     );
                   };
-                  const hasFullColorSizeGrid =
-                    Boolean(product.colorIds?.length && product.sizeIds?.length && dictionaries.colors?.length && dictionaries.sizes?.length);
-                  if (hasFullColorSizeGrid) {
-                    return product.colorIds!.map(colorId => {
-                      const color = dictionaries.colors!.find((c: { id: string; name: string; value: string }) => c.id === colorId);
-                      if (!color) return null;
-                      return (
-                        <div key={colorId} className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex items-center gap-4 flex-wrap">
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="w-4 h-4 rounded-full border border-slate-200" style={{ backgroundColor: color.value }} />
-                            <span className="text-sm font-bold text-slate-800">{color.name}</span>
-                          </div>
-                          <div className="flex items-center gap-3 flex-1 flex-wrap">
-                            {product.sizeIds!.map(sizeId => {
-                              const size = dictionaries.sizes!.find((s: { id: string; name: string }) => s.id === sizeId);
-                              const variant = product.variants?.find(v => v.colorId === colorId && v.sizeId === sizeId);
-                              if (!size || !variant) return null;
-                              return renderVariantCell(variant, size.name);
-                            })}
-                          </div>
-                        </div>
-                      );
+                  const layout = buildVariantQtyMatrixLayout(product, dictionaries);
+                  if (!layout) return null;
+                  const rows: QtyMatrixTableRow[] = layout.colorRows.map(row => {
+                    let rowSum = 0;
+                    const cells = row.variantAtSize.map((variant, si) => {
+                      if (!variant) {
+                        return <span key={`${row.key}-e-${si}`} className="text-sm text-slate-300">—</span>;
+                      }
+                      rowSum += reportForm.variantQuantities?.[variant.id] ?? 0;
+                      return renderVariantCellMatrix(variant);
                     });
-                  }
-                  const groupedByColor: Record<string, ProductVariant[]> = {};
-                  for (const v of product.variants ?? []) {
-                    const cid = v.colorId || '_';
-                    if (!groupedByColor[cid]) groupedByColor[cid] = [];
-                    groupedByColor[cid].push(v);
-                  }
-                  return sortedVariantColorEntries(groupedByColor, product.colorIds, product.sizeIds).map(([colorId, colorVariants]) => {
-                    const color = colorId !== '_' ? dictionaries.colors?.find((c: { id: string; name: string; value: string }) => c.id === colorId) : undefined;
-                    return (
-                      <div key={colorId} className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex items-center gap-4 flex-wrap">
-                        <div className="flex items-center gap-2 shrink-0">
-                          {color ? (
-                            <>
-                              <span className="w-4 h-4 rounded-full border border-slate-200" style={{ backgroundColor: color.value }} />
-                              <span className="text-sm font-bold text-slate-800">{color.name}</span>
-                            </>
-                          ) : (
-                            <span className="text-sm font-bold text-slate-800">{colorId === '_' ? '规格' : colorId}</span>
-                          )}
+                    return {
+                      key: row.key,
+                      colorCell: (
+                        <div className="flex items-center gap-2">
+                          {row.colorSwatch ? (
+                            <span className="h-4 w-4 shrink-0 rounded-full border border-slate-200" style={{ backgroundColor: row.colorSwatch }} />
+                          ) : null}
+                          <span>{row.colorLabel}</span>
                         </div>
-                        <div className="flex items-center gap-3 flex-1 flex-wrap">
-                          {colorVariants.map(v => {
-                            const size = dictionaries.sizes?.find((s: { id: string; name: string }) => s.id === v.sizeId);
-                            return renderVariantCell(v, (size?.name ?? v.sizeId) || '—');
-                          })}
-                        </div>
-                      </div>
-                    );
+                      ),
+                      cells,
+                      subtotalCell: rowSum,
+                    };
                   });
+                  return (
+                    <QtyMatrixTable
+                      sizeHeaders={layout.sizeColumns.map(c => c.header)}
+                      rows={rows}
+                      dense
+                    />
+                  );
                 })()}
               </div>
             </div>
@@ -918,17 +907,17 @@ const ReportModal: React.FC<ReportModalProps> = ({
                   tabIndex={-1}
                   value={reportForm.defectiveQuantity === 0 ? '' : reportForm.defectiveQuantity}
                   onChange={(e) => setReportForm({ ...reportForm, defectiveQuantity: parseInt(e.target.value) || 0 })}
-                  className="w-full bg-amber-50/80 border border-amber-100 rounded-xl py-2.5 px-3 text-sm font-bold text-amber-800 text-right outline-none focus:ring-2 focus:ring-amber-200"
+                  className="w-full bg-amber-50/80 border border-amber-200 rounded-lg px-2 py-1.5 text-sm font-bold text-amber-800 text-right outline-none focus:ring-2 focus:ring-amber-200 placeholder:text-[10px] placeholder:text-amber-400/80"
                   placeholder="0"
                 />
               </div>
             </>
           )}
           {weightReportEnabled && (
-            <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4 space-y-3">
-              <div className="flex items-center justify-between">
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 space-y-2">
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 <label className="text-[11px] font-bold text-indigo-700 uppercase tracking-widest">本次交货总重量 (kg)</label>
-                <span className="text-[10px] text-indigo-400 font-bold">将按 BOM 自动分摊到各子物料</span>
+                <span className="text-[10px] text-indigo-500 font-medium leading-snug sm:text-right">将按 BOM 自动分摊到各子物料</span>
               </div>
               <input
                 type="number"
@@ -939,7 +928,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
                   const n = parseFloat(e.target.value);
                   setReportForm(prev => ({ ...prev, weight: Number.isFinite(n) && n > 0 ? n : 0 }));
                 }}
-                className="w-full bg-white border border-indigo-200 rounded-xl py-2.5 px-3 text-sm font-bold text-indigo-700 text-right outline-none focus:ring-2 focus:ring-indigo-200"
+                className="w-full bg-white border border-indigo-200 rounded-lg py-2 px-3 text-sm font-bold text-indigo-700 text-right outline-none focus:ring-2 focus:ring-indigo-200"
                 placeholder="例如 12.5"
               />
               {weightPreviewRows.length > 0 ? (

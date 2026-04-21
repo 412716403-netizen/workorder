@@ -19,7 +19,7 @@ import {
   PrintRenderContext,
   PlanFormFieldConfig,
 } from '../../types';
-import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { toLocalCompactYmd, toLocalDateYmd } from '../../utils/localDateTime';
@@ -267,15 +267,6 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
         const product = stockInOrder ? productMap.get(stockInOrder.order.productId) : null;
         const category = product ? categoryMap.get(product.categoryId) : null;
         const hasColorSize = productHasColorSizeMatrix(product ?? undefined, category ?? undefined);
-        const groupedVariantsForStock: Record<string, ProductVariant[]> = (() => {
-          if (!product?.variants?.length) return {};
-          const groups: Record<string, ProductVariant[]> = {};
-          product.variants.forEach(v => {
-            if (!groups[v.colorId]) groups[v.colorId] = [];
-            groups[v.colorId].push(v);
-          });
-          return groups;
-        })();
         const totalStockInQty = hasColorSize
           ? (Object.values(stockInForm.variantQuantities) as number[]).reduce((s, q) => s + (q || 0), 0)
           : stockInForm.singleQuantity;
@@ -374,11 +365,6 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                     const cat = p ? categoryMap.get(p.categoryId) : undefined;
                     const hasCS = productHasColorSizeMatrix(p ?? undefined, cat ?? undefined);
                     const unitName = getUnitName(order.productId);
-                    const grouped: Record<string, ProductVariant[]> = {};
-                    (p?.variants ?? []).forEach(v => {
-                      if (!grouped[v.colorId]) grouped[v.colorId] = [];
-                      grouped[v.colorId].push(v);
-                    });
                     const patchLine = (patch: Partial<{ variantQuantities: Record<string, number>; singleQuantity: number }>) => {
                       setBatchStockForm(f => {
                         const cur = f.lines[lineKey] ?? { variantQuantities: {}, singleQuantity: 0 };
@@ -408,41 +394,18 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                         </div>
                         <p className="text-xs text-slate-500">本单待入库 {stockItem.pendingTotal} {unitName}</p>
                         {hasCS && p?.variants?.length ? (
-                          <div className="space-y-3">
-                            {sortedVariantColorEntries(grouped, p.colorIds, p.sizeIds).map(([colorId, colorVariants]) => {
-                              const color = (dictionaries.colors as { id: string; name: string; value: string }[] | undefined)?.find(c => c.id === colorId);
-                              return (
-                                <div key={colorId} className="bg-slate-50/80 p-3 rounded-xl border border-slate-100 flex flex-col md:flex-row md:items-center gap-3">
-                                  <div className="flex items-center gap-2 w-28 shrink-0">
-                                    <div className="w-3 h-3 rounded-full border border-slate-200" style={{ backgroundColor: (color as { value?: string })?.value }} />
-                                    <span className="text-xs font-bold text-slate-700">{color?.name ?? colorId}</span>
-                                  </div>
-                                  <div className="flex-1 flex flex-wrap gap-2">
-                                    {(colorVariants as ProductVariant[]).map(v => {
-                                      const size = (dictionaries.sizes as { id: string; name: string }[] | undefined)?.find(s => s.id === v.sizeId);
-                                      const pending = stockItem.pendingByVariant[v.id] ?? 0;
-                                      return (
-                                        <div key={v.id} className="flex flex-col gap-0.5 w-[4.5rem]">
-                                          <span className="text-[9px] font-black text-slate-400 text-center uppercase">{size?.name ?? v.skuSuffix}</span>
-                                          <input
-                                            type="number"
-                                            min={0}
-                                            placeholder={`≤${pending}`}
-                                            value={line.variantQuantities[v.id] ?? ''}
-                                            onChange={e => {
-                                              const n = Math.max(0, parseInt(e.target.value, 10) || 0);
-                                              patchLine({ variantQuantities: { [v.id]: n } });
-                                            }}
-                                            className="w-full bg-white border border-slate-200 rounded-lg py-1.5 px-1 text-xs font-bold text-indigo-600 text-center"
-                                          />
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
+                          <VariantQtyMatrixInputs
+                            product={p}
+                            dictionaries={dictionaries}
+                            quantities={line.variantQuantities}
+                            onVariantQtyChange={(variantId, qty) => {
+                              patchLine({ variantQuantities: { [variantId]: qty } });
+                            }}
+                            getCellExtras={v => {
+                              const pending = stockItem.pendingByVariant[v.id] ?? 0;
+                              return { max: pending, hint: `最多 ${pending}`, placeholder: `≤${pending}` };
+                            }}
+                          />
                         ) : (
                           <input
                             type="number"
@@ -621,43 +584,21 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                   {hasColorSize && product?.variants?.length ? (
                     <div className="space-y-4">
                       <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider">入库数量明细（颜色尺码）</h4>
-                      {sortedVariantColorEntries(groupedVariantsForStock, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
-                        const color = (dictionaries.colors as { id: string; name: string; value: string }[] | undefined)?.find(c => c.id === colorId);
-                        return (
-                          <div key={colorId} className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 flex flex-col md:flex-row md:items-center gap-4">
-                            <div className="flex items-center gap-2 w-32 shrink-0">
-                              <div className="w-4 h-4 rounded-full border border-slate-200" style={{ backgroundColor: (color as { value?: string })?.value }} />
-                              <span className="text-sm font-bold text-slate-700">{color?.name ?? colorId}</span>
-                            </div>
-                            <div className="flex-1 flex flex-wrap gap-3">
-                              {(colorVariants as ProductVariant[]).map(v => {
-                                const size = (dictionaries.sizes as { id: string; name: string }[] | undefined)?.find(s => s.id === v.sizeId);
-                                const pending = stockInOrder.pendingByVariant[v.id] ?? 0;
-                                return (
-                                  <div key={v.id} className="flex flex-col gap-1 w-20">
-                                    <span className="text-[10px] font-black text-slate-400 text-center uppercase">{size?.name ?? v.skuSuffix}</span>
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      placeholder={`待入库 ${pending}`}
-                                      value={stockInForm.variantQuantities[v.id] ?? ''}
-                                      onChange={e => setStockInForm(f => ({
-                                        ...f,
-                                        variantQuantities: { ...f.variantQuantities, [v.id]: Math.max(0, parseInt(e.target.value, 10) || 0) }
-                                      }))}
-                                      className="w-full bg-white border border-slate-200 rounded-xl py-2 px-2 text-sm font-bold text-indigo-600 text-center focus:ring-2 focus:ring-indigo-500 outline-none"
-                                    />
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            <div className="shrink-0 text-right">
-                              <p className="text-[9px] font-black text-slate-300 uppercase">颜色小计</p>
-                              <p className="text-sm font-bold text-slate-600">{(colorVariants as ProductVariant[]).reduce((s, v) => s + (stockInForm.variantQuantities[v.id] || 0), 0)}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
+                      <VariantQtyMatrixInputs
+                        product={product}
+                        dictionaries={dictionaries}
+                        quantities={stockInForm.variantQuantities}
+                        onVariantQtyChange={(variantId, qty) =>
+                          setStockInForm(f => ({
+                            ...f,
+                            variantQuantities: { ...f.variantQuantities, [variantId]: qty },
+                          }))
+                        }
+                        getCellExtras={v => {
+                          const pending = stockInOrder.pendingByVariant[v.id] ?? 0;
+                          return { max: pending, hint: `待入库 ${pending}` };
+                        }}
+                      />
                       <div className="flex flex-col items-end gap-1 p-3 bg-indigo-600 rounded-2xl text-white">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-bold opacity-80">本次入库合计:</span>

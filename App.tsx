@@ -164,7 +164,6 @@ function AppLayout() {
           />
           <div className="flex flex-col min-w-0">
             <h1 className="text-xl font-black tracking-tight text-slate-900 truncate">{BRAND_NAME}</h1>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enterprise OS</span>
           </div>
         </div>
 

@@ -1271,7 +1271,6 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           productionLinkMode={productionLinkMode}
           outsourceDispatchRows={outsourceDispatchRows}
           products={products}
-          categories={categories}
           dispatchSelectedKeys={dispatchSelectedKeys}
           setDispatchSelectedKeys={setDispatchSelectedKeys}
           onDispatchFormOpen={() => setDispatchFormModalOpen(true)}

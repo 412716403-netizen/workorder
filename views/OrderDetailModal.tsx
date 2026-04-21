@@ -17,7 +17,8 @@ import {
 } from '../types';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { productHasColorSizeMatrix } from '../utils/productColorSize';
-import { sortedVariantColorEntries } from '../utils/sortVariantsByProduct';
+import { buildVariantQtyMatrixLayout } from '../utils/variantQtyMatrix';
+import QtyMatrixTable, { type QtyMatrixTableRow } from '../components/variant-matrix/QtyMatrixTable';
 import { getEffectiveReportTemplate, getReportCustomDataDisplayEntries } from '../utils/effectiveReportTemplate';
 import { buildPrintListRowsFromOrderItems } from '../utils/printListPagination';
 import { OrderCenterDetailPrintBlock } from '../components/order-print/OrderCenterDetailPrintBlock';
@@ -442,84 +443,56 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             </h4>
             {product && dictionaries && product.variants?.length ? (
               (() => {
-                const hasFullGrid =
-                  Boolean(product.colorIds?.length && product.sizeIds?.length && dictionaries.colors?.length && dictionaries.sizes?.length);
-                const renderQtyCell = (variant: ProductVariant, colLabel: string) => {
+                const renderQtyCell = (variant: ProductVariant) => {
                   const qty = getQuantityByVariant(variant.id);
                   return (
-                    <div key={variant.id} className="flex flex-col gap-1 min-w-[64px]">
-                      <span className="text-[10px] font-bold text-slate-400">{colLabel}</span>
+                    <div key={variant.id} className="flex min-w-0 flex-col gap-0.5">
                       {isEditing ? (
                         <input
                           type="number"
                           min={0}
                           value={qty}
                           onChange={e => handleItemQuantityChangeByVariant(variant.id, parseInt(e.target.value) || 0)}
-                          className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200"
+                          className="h-9 w-[3.25rem] shrink-0 rounded-lg border border-slate-200 bg-slate-50/90 px-2 text-left text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200"
                         />
                       ) : (
-                        <span className="text-sm font-bold text-indigo-600">{qty}</span>
+                        <span className="text-sm font-bold text-indigo-600 tabular-nums">{qty}</span>
                       )}
                     </div>
                   );
                 };
-                if (hasFullGrid) {
-                  return (
-                    <div className="space-y-3 bg-slate-50/50 rounded-2xl p-3">
-                      {product.colorIds!.map(colorId => {
-                        const color = dictionaries.colors!.find(c => c.id === colorId);
-                        if (!color) return null;
-                        return (
-                          <div key={colorId} className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex items-center gap-4 flex-wrap">
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="w-4 h-4 rounded-full border border-slate-200" style={{ backgroundColor: color.value }} />
-                              <span className="text-sm font-bold text-slate-800">{color.name}</span>
-                            </div>
-                            <div className="flex items-center gap-3 flex-1 flex-wrap">
-                              {product.sizeIds!.map(sizeId => {
-                                const size = dictionaries.sizes!.find(s => s.id === sizeId);
-                                const variant = product.variants!.find(v => v.colorId === colorId && v.sizeId === sizeId);
-                                if (!size || !variant) return null;
-                                return renderQtyCell(variant, size.name);
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                }
-                const groupedByColor: Record<string, ProductVariant[]> = {};
-                for (const v of product.variants) {
-                  const cid = v.colorId || '_';
-                  if (!groupedByColor[cid]) groupedByColor[cid] = [];
-                  groupedByColor[cid].push(v);
-                }
+                const layout = buildVariantQtyMatrixLayout(product, dictionaries);
+                if (!layout) return null;
+                const rows: QtyMatrixTableRow[] = layout.colorRows.map(row => {
+                  let rowSum = 0;
+                  const cells = row.variantAtSize.map((variant, si) => {
+                    if (!variant) {
+                      return <span key={`${row.key}-e-${si}`} className="text-sm text-slate-300">—</span>;
+                    }
+                    rowSum += getQuantityByVariant(variant.id);
+                    return renderQtyCell(variant);
+                  });
+                  return {
+                    key: row.key,
+                    colorCell: (
+                      <div className="flex items-center gap-2">
+                        {row.colorSwatch ? (
+                          <span className="h-4 w-4 shrink-0 rounded-full border border-slate-200" style={{ backgroundColor: row.colorSwatch }} />
+                        ) : null}
+                        <span>{row.colorLabel}</span>
+                      </div>
+                    ),
+                    cells,
+                    subtotalCell: rowSum,
+                  };
+                });
                 return (
-                  <div className="space-y-3 bg-slate-50/50 rounded-2xl p-3">
-                    {sortedVariantColorEntries(groupedByColor, product.colorIds, product.sizeIds).map(([colorId, colorVariants]) => {
-                      const color = colorId !== '_' ? dictionaries.colors?.find(c => c.id === colorId) : undefined;
-                      return (
-                        <div key={colorId} className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex items-center gap-4 flex-wrap">
-                          <div className="flex items-center gap-2 shrink-0">
-                            {color ? (
-                              <>
-                                <span className="w-4 h-4 rounded-full border border-slate-200" style={{ backgroundColor: color.value }} />
-                                <span className="text-sm font-bold text-slate-800">{color.name}</span>
-                              </>
-                            ) : (
-                              <span className="text-sm font-bold text-slate-800">{colorId === '_' ? '规格' : colorId}</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 flex-1 flex-wrap">
-                            {colorVariants.map(v => {
-                              const size = dictionaries.sizes?.find(s => s.id === v.sizeId);
-                              return renderQtyCell(v, (size?.name ?? v.sizeId) || '—');
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="bg-slate-50/50 rounded-2xl p-3">
+                    <QtyMatrixTable
+                      sizeHeaders={layout.sizeColumns.map(c => c.header)}
+                      rows={rows}
+                      compactSizeColumns
+                    />
                   </div>
                 );
               })()

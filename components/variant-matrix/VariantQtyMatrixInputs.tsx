@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import type { AppDictionaries, Product, ProductVariant } from '../../types';
 import { buildVariantQtyMatrixLayout } from '../../utils/variantQtyMatrix';
 import QtyMatrixTable from './QtyMatrixTable';
+import { VariantQtyMatrixHint } from './VariantQtyMatrixHint';
 
 export type VariantQtyMatrixCellExtras = {
   max?: number;
@@ -53,9 +54,9 @@ const VariantQtyMatrixInputs: React.FC<VariantQtyMatrixInputsProps> = ({
         return (
           <div key={v.id} className="flex min-w-0 flex-col gap-0.5">
             {sys != null && <span className="text-[9px] text-slate-500">系统 {sys}</span>}
-            <div className="flex flex-wrap items-center gap-x-2">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className="text-sm font-bold text-slate-800 tabular-nums">{q}</span>
-              {extras?.hint}
+              {extras?.hint != null ? <VariantQtyMatrixHint>{extras.hint}</VariantQtyMatrixHint> : null}
             </div>
           </div>
         );
@@ -79,7 +80,7 @@ const VariantQtyMatrixInputs: React.FC<VariantQtyMatrixInputsProps> = ({
               }}
               className={`${inputClassName}${extras?.disabled ? ' opacity-50' : ''}`}
             />
-            {extras?.hint}
+            {extras?.hint != null ? <VariantQtyMatrixHint>{extras.hint}</VariantQtyMatrixHint> : null}
           </div>
         </div>
       );

@@ -8,8 +8,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
-import { Product, Warehouse, ProductCategory, AppDictionaries, ProductVariant } from '../../types';
-import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import { Product, Warehouse, ProductCategory, AppDictionaries } from '../../types';
+import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 
 interface TransferItem {
   id: string;
@@ -115,13 +115,6 @@ const TransferOrderModal: React.FC<TransferOrderModalProps> = ({
                 const trLineQty = trHasVariants
                   ? Object.values(line.variantQuantities || {}).reduce((s, q) => s + q, 0)
                   : (line.quantity ?? 0);
-                const trGroupedByColor: Record<string, ProductVariant[]> = {};
-                if (trProd?.variants) {
-                  trProd.variants.forEach(v => {
-                    if (!trGroupedByColor[v.colorId]) trGroupedByColor[v.colorId] = [];
-                    trGroupedByColor[v.colorId].push(v);
-                  });
-                }
                 const isLineEmpty = !line.productId;
                 return (
                   <div key={line.id} className={`rounded-2xl border space-y-4 transition-all ${isLineEmpty ? 'bg-white border-slate-200 p-4 border-dashed' : 'bg-white border-slate-200 p-4 shadow-sm'}`}>
@@ -153,35 +146,15 @@ const TransferOrderModal: React.FC<TransferOrderModalProps> = ({
                       )}
                       <button type="button" onClick={() => removeTransferItem(line.id)} className="p-2.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all shrink-0" title="删除该行"><Trash2 className="w-5 h-5" /></button>
                     </div>
-                    {trHasVariants && line.productId && (
+                    {trHasVariants && line.productId && trProd && (
                       <div className="pt-3 border-t border-slate-100 space-y-3">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block">颜色尺码数量</label>
-                        {sortedVariantColorEntries(trGroupedByColor, trProd?.colorIds, trProd?.sizeIds).map(([colorId, colorVariants]) => {
-                          const color = dictionaries.colors.find(c => c.id === colorId);
-                          return (
-                            <div key={colorId} className="flex flex-wrap items-center gap-4 bg-slate-50/80 p-3 rounded-xl border border-slate-100">
-                              <div className="flex items-center gap-2 w-28 shrink-0">
-                                <div className="w-4 h-4 rounded-full border border-slate-200 shrink-0" style={{ backgroundColor: (color as any)?.value || '#e2e8f0' }} />
-                                <span className="text-xs font-bold text-slate-700">{color?.name || '未命名'}</span>
-                              </div>
-                              <div className="flex flex-wrap gap-3">
-                                {colorVariants.map(v => {
-                                  const size = dictionaries.sizes.find(s => s.id === v.sizeId);
-                                  return (
-                                    <div key={v.id} className="flex flex-col gap-0.5 w-20">
-                                      <span className="text-[9px] font-bold text-slate-400 uppercase">{size?.name || v.skuSuffix}</span>
-                                      <input type="number" min={0} placeholder="0" value={line.variantQuantities?.[v.id] ?? ''} onChange={e => updateTransferVariantQty(line.id, v.id, parseInt(e.target.value) || 0)} className="w-full bg-white border border-slate-200 rounded-lg py-1.5 px-2 text-sm font-bold text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500 text-center" />
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                              <div className="ml-auto text-right shrink-0">
-                                <span className="text-[9px] font-bold text-slate-400">小计</span>
-                                <p className="text-sm font-black text-slate-600">{(colorVariants as ProductVariant[]).reduce((s, v) => s + (line.variantQuantities?.[v.id] || 0), 0)}</p>
-                              </div>
-                            </div>
-                          );
-                        })}
+                        <VariantQtyMatrixInputs
+                          product={trProd}
+                          dictionaries={dictionaries}
+                          quantities={line.variantQuantities ?? {}}
+                          onVariantQtyChange={(variantId, qty) => updateTransferVariantQty(line.id, variantId, qty)}
+                        />
                       </div>
                     )}
                   </div>

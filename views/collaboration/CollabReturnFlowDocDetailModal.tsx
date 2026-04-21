@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import type { ProductionOpRecord, Product, Warehouse, AppDictionaries } from '../../types';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import * as api from '../../services/api';
-import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 
 type ProductVariant = { id: string; colorId: string; sizeId: string; [k: string]: any };
 
@@ -368,49 +368,14 @@ const CollabReturnFlowDocDetailModal: React.FC<CollabReturnFlowDocDetailModalPro
         <div className="flex-1 overflow-auto min-h-0 p-6">
           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">明细</h4>
 
-          {showVariantGrid ? (
-            <div className="space-y-4">
-              {(() => {
-                const groupedByColor: Record<string, ProductVariant[]> = {};
-                variantsForDetail.forEach(v => {
-                  if (!groupedByColor[v.colorId]) groupedByColor[v.colorId] = [];
-                  groupedByColor[v.colorId].push(v);
-                });
-                return sortedVariantColorEntries(groupedByColor, product?.colorIds, product?.sizeIds).map(([colorId, colorVariants]) => {
-                  const color = dictionaries.colors.find(c => c.id === colorId);
-                  return (
-                    <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-slate-50/50 rounded-xl border border-slate-200">
-                      <div className="flex items-center gap-3 w-36 shrink-0">
-                        <div className="w-5 h-5 rounded-full border border-slate-200" style={{ backgroundColor: color?.value }} />
-                        <span className="text-sm font-black text-slate-700">{color?.name ?? colorId}</span>
-                      </div>
-                      <div className="flex-1 flex flex-wrap gap-4">
-                        {colorVariants.map(v => {
-                          const size = dictionaries.sizes.find(s => s.id === v.sizeId);
-                          const qty = editMode ? (editQuantities[v.id] ?? 0) : (displayVariantQty[v.id] ?? 0);
-                          return (
-                            <div key={v.id} className="flex flex-col gap-1.5 w-24">
-                              <span className="text-[10px] font-black text-slate-400 text-center uppercase">{size?.name ?? v.sizeId}</span>
-                              {editMode ? (
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={editQuantities[v.id] ?? ''}
-                                  onChange={e => setEditQuantities(prev => ({ ...prev, [v.id]: Number(e.target.value) || 0 }))}
-                                  className="w-full rounded-xl border border-slate-200 py-2 px-3 text-sm font-bold text-indigo-600 text-center focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                                />
-                              ) : (
-                                <div className="flex items-center justify-center bg-white border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold text-indigo-600 min-h-[40px]">{qty}</div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                });
-              })()}
-            </div>
+          {showVariantGrid && product ? (
+            <VariantQtyMatrixInputs
+              product={{ ...product, variants: variantsForDetail, colorIds: undefined, sizeIds: undefined } as Product}
+              dictionaries={dictionaries}
+              quantities={editMode ? editQuantities : displayVariantQty}
+              readOnly={!editMode}
+              onVariantQtyChange={(variantId, qty) => setEditQuantities(prev => ({ ...prev, [variantId]: qty }))}
+            />
           ) : (
             <div className="bg-slate-50/50 rounded-2xl border border-slate-200 p-6">
               <div className="flex items-center gap-4">

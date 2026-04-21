@@ -20,7 +20,7 @@ import {
   ProcessSequenceMode,
   Warehouse,
 } from '../types';
-import ProductDetailModal from './ProductDetailModal';
+import PlanProductDetail from './plan-order-list/PlanProductDetail';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { orders as ordersApi } from '../services/api';
 import OrderDetailModal from './OrderDetailModal';
@@ -261,6 +261,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     | null
   >(null);
   const [viewProductId, setViewProductId] = useState<string | null>(null);
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
+  const [filePreviewType, setFilePreviewType] = useState<'image' | 'pdf'>('image');
   const [showOrderFormConfigModal, setShowOrderFormConfigModal] = useState(false);
   /** 打开工单表单配置时默认页签（工具栏为字段；详情「增加打印模版」为打印） */
   const [orderFormConfigEntryTab, setOrderFormConfigEntryTab] = useState<'fields' | 'print'>('fields');
@@ -1257,16 +1259,37 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         onDeleteOrder={hasOrderPerm('production:orders_detail:delete') && onDeleteOrder ? (id) => { onDeleteOrder(id); closeOrderDetail(); } : undefined}
       />
 
-      <ProductDetailModal
-        productId={viewProductId}
-        onClose={() => setViewProductId(null)}
-        products={products}
-        categories={categories}
-        dictionaries={dictionaries}
-        partners={partners}
-        boms={boms}
-        globalNodes={globalNodes}
-      />
+      {filePreviewUrl && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-8 bg-slate-900/80 backdrop-blur-sm" onClick={() => setFilePreviewUrl(null)}>
+          <button type="button" onClick={() => setFilePreviewUrl(null)} className="absolute top-6 right-6 z-10 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-all">
+            <X className="w-8 h-8" />
+          </button>
+          <div className="relative z-10 w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            {filePreviewType === 'image' ? (
+              <img src={filePreviewUrl} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
+            ) : (
+              <iframe src={filePreviewUrl} title="PDF 预览" className="w-full h-[85vh] border-0" />
+            )}
+          </div>
+        </div>
+      )}
+
+      {viewProductId && (
+        <PlanProductDetail
+          viewProductId={viewProductId}
+          products={products}
+          categories={categories}
+          dictionaries={dictionaries}
+          partners={partners}
+          globalNodes={globalNodes}
+          boms={boms}
+          onClose={() => setViewProductId(null)}
+          onFilePreview={(url, type) => {
+            setFilePreviewUrl(url);
+            setFilePreviewType(type);
+          }}
+        />
+      )}
 
       {reworkDetailOrderId && (
         <ReworkDetailModal

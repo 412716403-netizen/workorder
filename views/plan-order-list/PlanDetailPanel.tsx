@@ -29,6 +29,7 @@ import {
 import { toast } from 'sonner';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
+import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import {
   PlanOrder,
   Product,
@@ -1192,35 +1193,17 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                   <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">2. 生产数量明细录入 (可编辑)</h3>
                 </div>
                 <div className="bg-white p-8 rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
-                  {tempPlanInfo.items && tempPlanInfo.items.length > 0 && tempPlanInfo.items[0].variantId ? (
-                      <div className="space-y-4">
-                          {(Object.entries(tempPlanInfo.items.reduce((acc: Record<string, any[]>, item) => {
-                              const v = viewProduct.variants.find(vx => vx.id === item.variantId);
-                              if (v) { if (!acc[v.colorId]) acc[v.colorId] = []; acc[v.colorId].push({ ...item, variant: v }); }
-                              return acc;
-                          }, {})) as [string, any[]][]).map(([colorId, colorItems]) => {
-                              const color = dictionaries.colors.find(c => c.id === colorId);
-                              return (
-                                  <div key={colorId} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                      <div className="flex items-center gap-3 w-40 shrink-0">
-                                          <div className="w-6 h-6 rounded-full border border-slate-200" style={{backgroundColor: color?.value}}></div>
-                                          <span className="text-sm font-black text-slate-700">{color?.name}</span>
-                                      </div>
-                                      <div className="flex-1 flex flex-wrap gap-4">
-                                          {colorItems.map((item: any, idx: number) => {
-                                              const size = dictionaries.sizes.find(s => s.id === item.variant.sizeId);
-                                              return (
-                                                  <div key={idx} className="flex flex-col gap-1 w-20">
-                                                      <span className="text-[10px] font-black text-slate-400 uppercase text-center">{size?.name}</span>
-                                                      <input type="number" value={item.quantity} onChange={e => updateDetailItemQty(item.variantId, e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg py-1.5 px-2 text-sm font-black text-indigo-600 text-center focus:ring-2 focus:ring-indigo-500 outline-none" />
-                                                  </div>
-                                              )
-                                          })}
-                                      </div>
-                                  </div>
-                              )
-                          })}
-                      </div>
+                  {tempPlanInfo.items && tempPlanInfo.items.length > 0 && tempPlanInfo.items[0].variantId && viewProduct ? (
+                      <VariantQtyMatrixInputs
+                        product={viewProduct}
+                        dictionaries={dictionaries}
+                        quantities={Object.fromEntries(
+                          (tempPlanInfo.items ?? [])
+                            .filter((i): i is PlanItem & { variantId: string } => Boolean(i.variantId))
+                            .map(i => [i.variantId, Number(i.quantity) || 0]),
+                        )}
+                        onVariantQtyChange={(variantId, qty) => updateDetailItemQty(variantId, String(qty))}
+                      />
                   ) : (
                       <div className="max-w-xs space-y-2">
                            <label className="text-[10px] font-black text-slate-400 uppercase">总量 ({getUnitName(viewPlan.productId)})</label>
