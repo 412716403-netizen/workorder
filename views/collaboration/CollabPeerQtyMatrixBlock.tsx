@@ -2,7 +2,9 @@ import React, { useMemo } from 'react';
 import { Package } from 'lucide-react';
 import QtyMatrixTable, { type QtyMatrixTableRow } from '../../components/variant-matrix/QtyMatrixTable';
 import { VariantQtyMatrixHint } from '../../components/variant-matrix/VariantQtyMatrixHint';
-import { buildCollabQtyMatrix, collabVariantKey, type CollabReturnRow } from './collabHelpers';
+import {
+  buildCollabQtyMatrix, collabVariantKey, type BuildCollabQtyMatrixOpts, type CollabReturnRow,
+} from './collabHelpers';
 
 function specLabel(v: string | null) {
   if (v == null || v === '') return '—';
@@ -23,6 +25,8 @@ type Props = {
   capColumnTitle: string;
   ringClass: string;
   onUpdateRow: (blockIdx: number, rowIdx: number, qty: string) => void;
+  /** 与派发 payload / 本企业商品规格矩阵一致的色、码列顺序 */
+  matrixOrder?: BuildCollabQtyMatrixOpts;
 };
 
 const CollabPeerQtyMatrixBlock: React.FC<Props> = ({
@@ -37,11 +41,16 @@ const CollabPeerQtyMatrixBlock: React.FC<Props> = ({
   capColumnTitle,
   ringClass,
   onUpdateRow,
+  matrixOrder,
 }) => {
   const matrixKey = rows.map(r => collabVariantKey(r)).sort().join('|');
+  const orderKey = `${matrixOrder?.preferredColorOrder?.join('\t') ?? ''}|${matrixOrder?.preferredSizeOrder?.join('\t') ?? ''}`;
   const { colors, sizes, cellRowIdx } = useMemo(
-    () => buildCollabQtyMatrix(rows.map(r => ({ colorName: r.colorName, sizeName: r.sizeName }))),
-    [matrixKey],
+    () => buildCollabQtyMatrix(
+      rows.map(r => ({ colorName: r.colorName, sizeName: r.sizeName })),
+      matrixOrder,
+    ),
+    [matrixKey, orderKey],
   );
 
   const sizeHeaders = useMemo(() => sizes.map(s => specLabel(s)), [sizes]);

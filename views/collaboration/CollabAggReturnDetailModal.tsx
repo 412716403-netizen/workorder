@@ -3,7 +3,8 @@ import { Truck, X, RotateCcw, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import * as api from '../../services/api';
-import { returnStatusLabel } from './collabHelpers';
+import type { AppDictionaries, Product } from '../../types';
+import { collabFirstDispatchPayload, returnStatusLabel, resolvePreferredCollabMatrixOrder } from './collabHelpers';
 import QtyMatrixTable from '../../components/variant-matrix/QtyMatrixTable';
 import { collabPayloadItemsToQtyMatrixProps } from './collabDocDisplay';
 
@@ -16,6 +17,8 @@ interface CollabAggReturnDetailModalProps {
   open: boolean;
   docNo: string;
   items: AggReturnItem[];
+  products: Product[];
+  dictionaries: AppDictionaries;
   onClose: () => void;
   onRefreshList: () => void | Promise<void>;
   onRefreshProdRecords?: () => void | Promise<void>;
@@ -34,6 +37,8 @@ const CollabAggReturnDetailModal: React.FC<CollabAggReturnDetailModalProps> = ({
   open,
   docNo,
   items,
+  products,
+  dictionaries,
   onClose,
   onRefreshList,
   onRefreshProdRecords,
@@ -156,7 +161,13 @@ const CollabAggReturnDetailModal: React.FC<CollabAggReturnDetailModalProps> = ({
             {items.map(({ doc, transfer }) => {
               const rows: any[] = doc?.payload?.items ?? [];
               const sub = sumItemsQty(rows);
-              const specMatrix = collabPayloadItemsToQtyMatrixProps(rows, { showPricing: true });
+              const receiverProduct = products.find(p => p.id === transfer.receiverProductId) ?? null;
+              const ord = resolvePreferredCollabMatrixOrder({
+                payload: collabFirstDispatchPayload(transfer) ?? doc?.payload,
+                product: receiverProduct,
+                dictionaries,
+              });
+              const specMatrix = collabPayloadItemsToQtyMatrixProps(rows, { showPricing: true, ...ord });
               return (
                 <div key={doc.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2.5">

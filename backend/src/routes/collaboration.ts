@@ -39,6 +39,7 @@ const forwardTransferSchema = z.object({
   items: z.array(z.object({
     quantity: z.number().positive('转发数量必须大于0'),
   }).passthrough()).min(1, '至少需要一条转发明细'),
+  unitPrice: z.number().finite().min(0).optional(),
 }).passthrough();
 
 // 租户互信

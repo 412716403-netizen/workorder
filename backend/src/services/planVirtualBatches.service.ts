@@ -8,6 +8,7 @@ import {
   collectPlanSubtreeIds,
   loadVirtualBatchQuota,
   variantKey,
+  resolveCallerContext,
   resolveVariantLabel,
   verifyCollaborationAccess,
 } from './planTreeQuota.service.js';
@@ -421,11 +422,18 @@ export async function scanBatch(callerTenantId: string, token: string) {
     orderBy: { serialNo: 'asc' },
   });
 
+  const callerContext = await resolveCallerContext({
+    callerTenantId,
+    ownerTenantId,
+    ownerPlanOrderId: batch.planOrderId,
+  });
+
   return {
     kind: 'VIRTUAL_BATCH' as const,
     status: batch.status,
     batchId: batch.id,
     quantity: batch.quantity,
+    planOrderId: batch.planOrderId,
     planNumber: plan?.planNumber ?? null,
     orderNumbers: orders.map((o) => o.orderNumber),
     productId: batch.productId,
@@ -438,5 +446,6 @@ export async function scanBatch(callerTenantId: string, token: string) {
     ownerTenantId,
     ownerTenantName: tenant?.name ?? null,
     itemCodes,
+    callerContext,
   };
 }

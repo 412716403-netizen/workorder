@@ -7,6 +7,7 @@ router.post('/bulk-split-all', ctrl.bulkSplitAllVariants);
 router.post('/bulk-split', ctrl.bulkSplit);
 router.post('/', ctrl.create);
 router.get('/scan/:token', ctrl.scan);
+router.get('/trace/:token', ctrl.trace);
 router.get('/', ctrl.list);
 
 export default router;

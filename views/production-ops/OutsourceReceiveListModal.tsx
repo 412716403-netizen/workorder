@@ -127,25 +127,26 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
                 filteredRows.map(row => {
                   const key = row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}|${row.partner}`;
                   const checked = receiveSelectedKeys.has(key);
+                  const toggleRow = () => {
+                    setReceiveSelectedKeys(prev => {
+                      const next = new Set(prev);
+                      if (next.has(key)) { next.delete(key); return next; }
+                      if (next.size > 0) {
+                        const firstKey = next.values().next().value;
+                        const firstRow = outsourceReceiveRows.find(r => (r.orderId != null ? `${r.orderId}|${r.nodeId}` : `${r.productId}|${r.nodeId}|${r.partner}`) === firstKey);
+                        const selectedPartner = firstRow?.partner ?? '';
+                        if (selectedPartner !== (row.partner ?? '')) { toast.warning('只能选择同一外协工厂同时收货，请先取消其他加工厂的勾选。'); return prev; }
+                        const selectedNodeId = firstKey?.split('|')[1];
+                        if (selectedNodeId !== row.nodeId) { toast.warning('只能选择同一工序同时收货，请先取消其他工序的勾选。'); return prev; }
+                      }
+                      next.add(key);
+                      return next;
+                    });
+                  };
                   return (
-                    <tr key={key} className="hover:bg-slate-50/50 bg-white">
-                      <td className="w-12 px-3 py-3 align-middle">
-                        <input type="checkbox" checked={checked} onChange={() => {
-                          setReceiveSelectedKeys(prev => {
-                            const next = new Set(prev);
-                            if (next.has(key)) { next.delete(key); return next; }
-                            if (next.size > 0) {
-                              const firstKey = next.values().next().value;
-                              const firstRow = outsourceReceiveRows.find(r => (r.orderId != null ? `${r.orderId}|${r.nodeId}` : `${r.productId}|${r.nodeId}|${r.partner}`) === firstKey);
-                              const selectedPartner = firstRow?.partner ?? '';
-                              if (selectedPartner !== (row.partner ?? '')) { toast.warning('只能选择同一外协工厂同时收货，请先取消其他加工厂的勾选。'); return prev; }
-                              const selectedNodeId = firstKey?.split('|')[1];
-                              if (selectedNodeId !== row.nodeId) { toast.warning('只能选择同一工序同时收货，请先取消其他工序的勾选。'); return prev; }
-                            }
-                            next.add(key);
-                            return next;
-                          });
-                        }} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                    <tr key={key} className="hover:bg-slate-50/50 bg-white cursor-pointer" onClick={toggleRow}>
+                      <td className="w-12 px-3 py-3 align-middle" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={checked} onChange={toggleRow} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                       </td>
                       {productionLinkMode !== 'product' && <td className="px-4 py-3 text-sm font-bold text-slate-800 align-middle truncate" title={row.orderNumber}>{row.orderNumber}</td>}
                       <td className="px-4 py-3 text-sm font-bold text-slate-800 align-middle truncate" title={row.productName}>

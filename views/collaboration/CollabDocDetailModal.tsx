@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Package, Truck, X, Check, RotateCcw, Trash2, RefreshCw,
 } from 'lucide-react';
@@ -6,7 +7,9 @@ import { toast } from 'sonner';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import * as api from '../../services/api';
 import type { Partner, Product, ProductionOpRecord, AppDictionaries, Warehouse } from '../../types';
-import { dispatchStatusLabel, returnStatusLabel } from './collabHelpers';
+import {
+  dispatchStatusLabel, normalizeAcceptSpecList, returnStatusLabel, resolvePreferredCollabMatrixOrder,
+} from './collabHelpers';
 import QtyMatrixTable from '../../components/variant-matrix/QtyMatrixTable';
 import { collabPayloadItemsToQtyMatrixProps, type CollabPayloadItem } from './collabDocDisplay';
 
@@ -52,14 +55,26 @@ function formatDocNo(doc: any, kind: DocKind): string {
 
 const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
   open, onClose, docKind, doc: initialDoc, transfer: initialTransfer,
+  products,
+  dictionaries,
   onRefreshList, onRefreshOrders, onRefreshProdRecords, onRefreshPMP, onRefreshProducts,
 }) => {
   const confirm = useConfirm();
+  const navigate = useNavigate();
   const [transfer, setTransfer] = useState<any>(initialTransfer);
   const [doc, setDoc] = useState<any>(initialDoc);
   const [refreshing, setRefreshing] = useState(false);
 
   const [busy, setBusy] = useState(false);
+
+  /** 乙方接受派发：与批量接受弹窗同一接口，仅针对当前这一条派发 */
+  const [acceptName, setAcceptName] = useState('');
+  const [acceptSku, setAcceptSku] = useState('');
+  const [acceptDesc, setAcceptDesc] = useState('');
+  const [acceptColors, setAcceptColors] = useState<string[]>([]);
+  const [acceptSizes, setAcceptSizes] = useState<string[]>([]);
+  /** 打开待接受派发时拉取 getTransfer，以使用后端 _acceptDispatchMode（CREATE / UPDATE_ACK / READY） */
+  const [acceptUiLoading, setAcceptUiLoading] = useState(false);
 
   // 弹窗打开时以入参为准
   const openRef = useRef(false);
@@ -264,17 +279,166 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
 
   const items: any[] = doc?.payload?.items ?? [];
   const totalQty = sumItemsQty(items);
-  const specMatrix = useMemo(
-    () => collabPayloadItemsToQtyMatrixProps(items, { showPricing: docKind === 'return' }),
-    [items, docKind],
+  const receiverProduct = useMemo(
+    () => products.find(p => p.id === transfer?.receiverProductId),
+    [products, transfer?.receiverProductId],
   );
-  const amendmentMatrix = useMemo(
-    () =>
-      collabPayloadItemsToQtyMatrixProps((doc?.amendmentPayload?.items ?? []) as CollabPayloadItem[], {
-        showPricing: docKind === 'return',
-      }),
-    [doc?.amendmentPayload?.items, docKind],
-  );
+  const specMatrix = useMemo(() => {
+    const ord = resolvePreferredCollabMatrixOrder({
+      payload: doc?.payload,
+      product: receiverProduct ?? null,
+      dictionaries,
+    });
+    return collabPayloadItemsToQtyMatrixProps(items, { showPricing: docKind === 'return', ...ord });
+  }, [items, docKind, doc?.payload, receiverProduct, dictionaries]);
+  const amendmentMatrix = useMemo(() => {
+    const ord = resolvePreferredCollabMatrixOrder({
+      payload: doc?.amendmentPayload,
+      product: receiverProduct ?? null,
+      dictionaries,
+    });
+    return collabPayloadItemsToQtyMatrixProps((doc?.amendmentPayload?.items ?? []) as CollabPayloadItem[], {
+      showPricing: docKind === 'return',
+      ...ord,
+    });
+  }, [doc?.amendmentPayload, docKind, receiverProduct, dictionaries]);
+
+  useEffect(() => {
+    if (!open || docKind !== 'dispatch' || !transfer?.id || !doc?.id) {
+      setAcceptUiLoading(false);
+      return;
+    }
+    if (transfer.senderTenantName === '本企业') {
+      setAcceptUiLoading(false);
+      return;
+    }
+    if (doc.status !== 'PENDING') {
+      setAcceptUiLoading(false);
+      return;
+    }
+    const m = transfer._acceptDispatchMode as string | undefined;
+    if (m === 'CREATE' || m === 'UPDATE_ACK' || m === 'READY') {
+      setAcceptUiLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setAcceptUiLoading(true);
+    (async () => {
+      try {
+        const detail = await api.collaboration.getTransfer(transfer.id);
+        if (cancelled) return;
+        setTransfer(detail);
+        const nd = (detail.dispatches || []).find((x: any) => x.id === doc.id);
+        if (nd) setDoc(nd);
+      } catch {
+        if (!cancelled) {
+          setTransfer((prev: any) => ({ ...prev, _acceptDispatchMode: 'CREATE', _acceptResolvedReceiverProductId: null }));
+        }
+      } finally {
+        if (!cancelled) setAcceptUiLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, docKind, doc?.id, doc?.status, transfer?.id, transfer?.senderTenantName, transfer?._acceptDispatchMode]);
+
+  /** 派发详情打开时，预填乙方接受产品字段（与批量接受弹窗一致）；按派发 id 去重，避免刷新 doc 引用时冲掉用户正在编辑的内容 */
+  const acceptInitKeyRef = useRef('');
+  useEffect(() => {
+    if (!open) {
+      acceptInitKeyRef.current = '';
+      return;
+    }
+    if (docKind !== 'dispatch' || !doc || !transfer) return;
+    if (transfer.senderTenantName === '本企业') return;
+    if (doc.status !== 'PENDING') return;
+    if (transfer._acceptDispatchMode !== 'CREATE') return;
+    const key = `${doc.id}|${transfer.id}`;
+    if (acceptInitKeyRef.current === key) return;
+    acceptInitKeyRef.current = key;
+    const payload = doc.payload || {};
+    let colors = normalizeAcceptSpecList(payload.colorNames);
+    let sizes = normalizeAcceptSpecList(payload.sizeNames);
+    const itemList: any[] = payload.items ?? [];
+    if (!colors.length) colors = [...new Set(itemList.map(i => i.colorName).filter(Boolean))] as string[];
+    if (!sizes.length) sizes = [...new Set(itemList.map(i => i.sizeName).filter(Boolean))] as string[];
+    setAcceptName(transfer.senderProductName || '');
+    setAcceptSku(transfer.senderProductSku || '');
+    setAcceptDesc(typeof payload.description === 'string' ? payload.description : '');
+    setAcceptColors(colors);
+    setAcceptSizes(sizes);
+  }, [open, docKind, doc, transfer]);
+
+  const handleAcceptDispatch = async () => {
+    if (acceptUiLoading) return;
+    const mode = transfer._acceptDispatchMode as string | undefined;
+    if (mode !== 'CREATE' && mode !== 'UPDATE_ACK' && mode !== 'READY') {
+      toast.warning('正在获取派发绑定状态，请稍后再试');
+      return;
+    }
+    const payload: Record<string, unknown> = { dispatchIds: [doc.id] };
+    if (mode === 'CREATE') {
+      const name = acceptName.trim();
+      const sku = acceptSku.trim();
+      if (!name) {
+        toast.warning('请填写乙方产品名称');
+        return;
+      }
+      if (!sku) {
+        toast.warning('请填写乙方产品编号/SKU');
+        return;
+      }
+      const specColors = normalizeAcceptSpecList(acceptColors);
+      const specSizes = normalizeAcceptSpecList(acceptSizes);
+      Object.assign(payload, {
+        createProduct: {
+          name,
+          sku,
+          description: acceptDesc.trim() || undefined,
+          colorNames: specColors.length ? specColors : undefined,
+          sizeNames: specSizes.length ? specSizes : undefined,
+        },
+      });
+    }
+    const msg =
+      mode === 'UPDATE_ACK'
+        ? '确认接受该派发？将把甲方本次名称/SKU/描述及色码变更同步到本地已关联产品，并生成或并入工单。'
+        : mode === 'READY'
+          ? '确认接受该派发？将生成或并入工单。'
+          : '确认接受该派发？将创建乙方产品并生成对应工单。';
+    const ok = await confirm({ message: msg });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const res: any = await api.collaboration.acceptTransfer(transfer.id, payload);
+      const accepted = Number(res?.accepted) || 0;
+      const ordersLen = Array.isArray(res?.createdOrders) ? res.createdOrders.length : 0;
+      toast.success(
+        res?.pendingProcess
+          ? `已接受派发 · ${accepted} 条 · 生成 ${ordersLen} 张工单（部分待配工序）`
+          : `已接受派发 · ${accepted} 条 · 生成 ${ordersLen} 张工单`,
+        {
+          duration: 8000,
+          action: res?.pendingProcess && res?.receiverProductId
+            ? {
+                label: '去配置工序 →',
+                onClick: () => navigate('/basic', { state: { editProductId: res.receiverProductId } }),
+              }
+            : undefined,
+        },
+      );
+      if (Array.isArray(res?.productInfoChanges) && res.productInfoChanges.length > 0) {
+        const lines: string[] = res.productInfoChanges.map((c: any) =>
+          c.skipped ? `· ${c.field}：未同步（${c.reason || '存在冲突'}）` : `· ${c.field}：${c.from || '—'} → ${c.to}`,
+        );
+        toast.info(`商品信息已根据甲方最新数据同步：\n${lines.join('\n')}`, { duration: 12000 });
+      }
+      await afterMutation({ refreshOrders: true, refreshProd: true, refreshProducts: true, refreshPMP: true, closeAfter: true });
+    } catch (err: any) {
+      toast.error(err?.message || '接受失败');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (!open) return null;
 
@@ -287,9 +451,20 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
   const kindIconCls = docKind === 'dispatch' ? 'text-indigo-600' : 'text-emerald-600';
   const statusNode = docKind === 'dispatch' ? dispatchStatusLabel(doc.status) : returnStatusLabel(doc.status);
 
-  // ── 按条件判定动作按钮（接受/回传/转发/确认收回/确认转发 已迁移至右侧栏批量入口，此处仅保留撤回/删除/修订） ──
+  // ── 按条件判定动作按钮（派发「接受」、转发「确认」在详情内；其余批量入口在收件箱右上） ──
   const isMidChainDispatch = transfer._chainTransfers && doc?.transferId
     && (transfer._chainTransfers as any[]).some((ct: any) => ct.id === doc.transferId && ct.chainStep > 0);
+
+  /** 乙方：待接受派发 — 在派发详情弹窗内确认接受（单条 dispatchIds） */
+  const canAcceptDispatch = docKind === 'dispatch' && !isSender && doc.status === 'PENDING';
+  const acceptMode = transfer._acceptDispatchMode as string | undefined;
+  const linkedProduct = transfer._acceptResolvedReceiverProductId
+    ? products.find(p => p.id === transfer._acceptResolvedReceiverProductId)
+    : undefined;
+  const linkedProductLabel =
+    linkedProduct?.name?.trim()
+    || linkedProduct?.sku?.trim()
+    || (transfer._acceptResolvedReceiverProductId ? `产品 ${transfer._acceptResolvedReceiverProductId}` : '—');
 
   // 派发单
   const canWithdrawDispatch = docKind === 'dispatch' && isSender && doc.status === 'PENDING' && !isMidChainDispatch;
@@ -395,6 +570,113 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
                 <QtyMatrixTable sizeHeaders={specMatrix.sizeHeaders} rows={specMatrix.rows} />
               )}
             </div>
+
+            {/* 乙方：派发单详情内确认接受 — CREATE 显示新建表单；UPDATE_ACK 为甲方信息变更确认；READY 为已绑定一键接受 */}
+            {canAcceptDispatch && acceptUiLoading && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                正在检测产品绑定与甲方变更…
+              </div>
+            )}
+            {canAcceptDispatch && !acceptUiLoading && acceptMode === 'CREATE' && (
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50/90 p-4 space-y-3">
+                <p className="text-sm text-indigo-950 font-bold leading-relaxed">
+                  该派发为「待接受」，且尚未绑定乙方本地产品。请确认新建产品信息后接受，将创建本企业产品并生成对应工单。
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-500 uppercase block ml-0.5">产品名称 *</label>
+                    <input
+                      type="text"
+                      value={acceptName}
+                      onChange={e => setAcceptName(e.target.value)}
+                      disabled={busy}
+                      className="w-full bg-white border border-slate-200 rounded-lg py-2 px-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-500 uppercase block ml-0.5">产品编号/SKU *</label>
+                    <input
+                      type="text"
+                      value={acceptSku}
+                      onChange={e => setAcceptSku(e.target.value)}
+                      disabled={busy}
+                      className="w-full bg-white border border-slate-200 rounded-lg py-2 px-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase block ml-0.5">描述</label>
+                  <input
+                    type="text"
+                    value={acceptDesc}
+                    onChange={e => setAcceptDesc(e.target.value)}
+                    disabled={busy}
+                    placeholder="选填"
+                    className="w-full bg-white border border-slate-200 rounded-lg py-2 px-3 text-sm font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
+                  />
+                </div>
+                {(acceptColors.length > 0 || acceptSizes.length > 0) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {acceptColors.length > 0 && (
+                      <div>
+                        <span className="text-[10px] font-black text-slate-500 uppercase block ml-0.5 mb-1">颜色（来自甲方）</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {acceptColors.map((c, i) => (
+                            <span key={i} className="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded text-xs font-bold">{c}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {acceptSizes.length > 0 && (
+                      <div>
+                        <span className="text-[10px] font-black text-slate-500 uppercase block ml-0.5 mb-1">尺码（来自甲方）</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {acceptSizes.map((s, i) => (
+                            <span key={i} className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-xs font-bold">{s}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={handleAcceptDispatch}
+                  disabled={busy}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-sm"
+                >
+                  <Check className="w-4 h-4 shrink-0" />
+                  {busy ? '处理中…' : '确认接受派发'}
+                </button>
+              </div>
+            )}
+            {canAcceptDispatch && !acceptUiLoading && acceptMode === 'UPDATE_ACK' && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-4 space-y-3">
+                <p className="text-sm text-amber-950 font-bold leading-relaxed">
+                  已关联本地产品「{linkedProductLabel}」。甲方本次派发的名称、SKU、描述或色码与本地不一致，确认接受后将把甲方数据同步到该产品（若个别字段在本地存在冲突则会跳过并提示）。
+                </p>
+                <button
+                  type="button"
+                  onClick={handleAcceptDispatch}
+                  disabled={busy}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 transition-colors shadow-sm"
+                >
+                  <Check className="w-4 h-4 shrink-0" />
+                  {busy ? '处理中…' : '确认接受派发'}
+                </button>
+              </div>
+            )}
+            {canAcceptDispatch && !acceptUiLoading && acceptMode === 'READY' && (
+              <button
+                type="button"
+                onClick={handleAcceptDispatch}
+                disabled={busy}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-sm"
+              >
+                <Check className="w-4 h-4 shrink-0" />
+                {busy ? '处理中…' : '确认接受派发'}
+              </button>
+            )}
 
             {/* 甲方：回传单详情内确认收货（与批量确认收回同一接口） */}
             {canReceiveReturn && (

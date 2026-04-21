@@ -10,7 +10,13 @@ import {
   WAREHOUSE_DOC_KIND,
 } from '../../utils/warehouseDocPreference';
 import type { Product, ProductionOpRecord, AppDictionaries, Warehouse } from '../../types';
-import { computeCollaborationReturnableRows, resolveCollabPeerDefaultUnitPriceString, type CollabReturnRow } from './collabHelpers';
+import {
+  collabFirstDispatchPayload,
+  computeCollaborationReturnableRows,
+  resolveCollabPeerDefaultUnitPriceString,
+  resolvePreferredCollabMatrixOrder,
+  type CollabReturnRow,
+} from './collabHelpers';
 import CollabPeerQtyMatrixBlock from './CollabPeerQtyMatrixBlock';
 
 interface CollabPeerReturnModalProps {
@@ -69,7 +75,7 @@ const CollabPeerReturnModal: React.FC<CollabPeerReturnModalProps> = ({
 
     const requireWarehouse = warehouses.length > 0;
     setBlocks(prev => {
-      const prevById = new Map(prev.map(b => [b.transfer.id, b]));
+      const prevById = new Map<string, TransferBlock>(prev.map(b => [b.transfer.id, b] as const));
       const next: TransferBlock[] = [];
       for (const t of eligibleTransfers) {
         const rows = computeCollaborationReturnableRows(
@@ -302,16 +308,18 @@ const CollabPeerReturnModal: React.FC<CollabPeerReturnModalProps> = ({
           {blocks.map((b, blockIdx) => {
             return (
               <div key={b.transfer.id} className={`rounded-xl border ${b.selected ? 'border-emerald-300 bg-white' : 'border-slate-200 bg-white/60'} overflow-hidden`}>
-                <div className="flex items-center gap-3 px-4 py-3">
-                  <input
-                    type="checkbox"
-                    checked={b.selected}
-                    onChange={() => toggleSelect(blockIdx)}
-                    className="w-4 h-4 accent-emerald-600"
-                  />
+                <div className="flex items-center gap-3 px-4 py-3 cursor-pointer" onClick={() => toggleSelect(blockIdx)}>
+                  <div className="shrink-0" onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={b.selected}
+                      onChange={() => toggleSelect(blockIdx)}
+                      className="w-4 h-4 accent-emerald-600"
+                    />
+                  </div>
                   <button
                     type="button"
-                    onClick={() => toggleExpand(blockIdx)}
+                    onClick={e => { e.stopPropagation(); toggleExpand(blockIdx); }}
                     className="flex items-center gap-1 text-slate-400 hover:text-slate-600"
                   >
                     {b.expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -343,6 +351,11 @@ const CollabPeerReturnModal: React.FC<CollabPeerReturnModalProps> = ({
                       unitPrice={b.unitPrice}
                       onUnitPriceChange={updateUnitPrice}
                       rows={b.rows}
+                      matrixOrder={resolvePreferredCollabMatrixOrder({
+                        payload: collabFirstDispatchPayload(b.transfer),
+                        product: products.find(p => p.id === b.transfer.receiverProductId) ?? null,
+                        dictionaries,
+                      })}
                       capColumnTitle="可回"
                       ringClass="focus:ring-2 focus:ring-emerald-500"
                       onUpdateRow={updateRow}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useLayoutEffect } from 'react';
 import { Truck, X, Check } from 'lucide-react';
 import type {
   ProductionOpRecord,
@@ -61,6 +61,216 @@ export interface OutsourceDispatchQuantityModalProps {
   onClose: () => void;
 }
 
+/** 与各输入旁「最多」一致：单格填该上限；多规格共享可委外池时按余量依次填满（与录入区校验一致） */
+function buildDefaultDispatchQuantities(
+  productionLinkMode: 'order' | 'product',
+  outsourceDispatchRows: DispatchRow[],
+  dispatchSelectedKeys: Set<string>,
+  orders: ProductionOrder[],
+  products: Product[],
+  categories: ProductCategory[],
+  records: ProductionOpRecord[],
+  processSequenceMode: ProcessSequenceMode,
+  productMilestoneProgresses: ProductMilestoneProgress[],
+  defectiveReworkByOrderForOutsource: Map<string, { defective: number; rework: number; reworkByVariant?: Record<string, number> }>,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  const selectedRows = outsourceDispatchRows.filter(row =>
+    dispatchSelectedKeys.has(row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}`),
+  );
+
+  for (const row of selectedRows) {
+    const baseKey = row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}`;
+    const order = row.orderId != null ? orders.find(o => o.id === row.orderId) : undefined;
+    const product = products.find(p => p.id === row.productId);
+    const category = categories.find(c => c.id === product?.categoryId);
+    const isProductBlock = productionLinkMode === 'product' && row.orderId == null;
+    const blockOrders = isProductBlock ? orders.filter(o => o.productId === row.productId) : [];
+    const variantIdsInBlock = new Set<string>();
+    blockOrders.forEach(o => {
+      (o.items ?? []).forEach(i => {
+        if ((i.quantity ?? 0) > 0 && i.variantId) variantIdsInBlock.add(i.variantId);
+      });
+    });
+    const variantIdsInOrderItems = new Set((order?.items ?? []).map(i => i.variantId).filter(Boolean) as string[]);
+    const variantIdsFromOrderMilestone = new Set<string>();
+    const msRow = order?.milestones?.find(m => m.templateId === row.nodeId);
+    (msRow?.reports ?? []).forEach(r => {
+      if (r.variantId) variantIdsFromOrderMilestone.add(r.variantId);
+    });
+    const variantIdsForOrderGrid = new Set([...variantIdsInOrderItems, ...variantIdsFromOrderMilestone]);
+    const orderHasSpecBreakdown = variantIdsForOrderGrid.size > 0;
+    const hasColorSizeMatrix = productHasColorSizeMatrix(product, category);
+    const hasColorSizeOrder = productionLinkMode === 'order' && hasColorSizeMatrix;
+    const hasColorSizeProduct = isProductBlock && hasColorSizeMatrix;
+
+    let variantsInOrder: ProductVariant[] =
+      hasColorSizeOrder && product?.variants
+        ? (product.variants as ProductVariant[]).filter(v => variantIdsForOrderGrid.has(v.id))
+        : [];
+    if (hasColorSizeOrder && product?.variants && product.variants.length > 0 && variantsInOrder.length === 0) {
+      variantsInOrder = [...(product.variants as ProductVariant[])];
+    }
+    const aggregateOrderVariantDispatch = hasColorSizeOrder && variantsInOrder.length > 0 && !orderHasSpecBreakdown;
+
+    let variantsInProductBlock: ProductVariant[] = [];
+    const variantIdsFromProgress = new Set<string>();
+    if (hasColorSizeProduct) {
+      (productMilestoneProgresses ?? []).forEach(pmp => {
+        if (pmp.productId !== row.productId || pmp.milestoneTemplateId !== row.nodeId) return;
+        if (pmp.variantId) variantIdsFromProgress.add(pmp.variantId);
+        (pmp.reports ?? []).forEach(r => {
+          if (r.variantId) variantIdsFromProgress.add(r.variantId);
+        });
+      });
+      blockOrders.forEach(o => {
+        const ms = o.milestones?.find(m => m.templateId === row.nodeId);
+        (ms?.reports ?? []).forEach(r => {
+          if (r.variantId) variantIdsFromProgress.add(r.variantId);
+        });
+      });
+    }
+    const variantIdsForProductBlockSet = new Set([...variantIdsInBlock, ...variantIdsFromProgress]);
+    if (hasColorSizeProduct && product?.variants) {
+      variantsInProductBlock = (product.variants as ProductVariant[]).filter(v => variantIdsForProductBlockSet.has(v.id));
+    }
+    if (hasColorSizeProduct && product?.variants && product.variants.length > 0 && variantsInProductBlock.length === 0) {
+      variantsInProductBlock = [...(product.variants as ProductVariant[])];
+    }
+    const aggregateProductVariantDispatch =
+      hasColorSizeProduct && variantsInProductBlock.length > 0 && variantIdsForProductBlockSet.size === 0;
+
+    if (variantsInOrder.length > 0) {
+      const ms = msRow;
+      const msIdx = order?.milestones?.findIndex(m => m.templateId === row.nodeId) ?? -1;
+      const prevMs = processSequenceMode === 'sequential' && msIdx > 0 ? order?.milestones?.[msIdx - 1] : undefined;
+      const outsourceForNode = records.filter(
+        r => r.type === 'OUTSOURCE' && r.orderId === row.orderId && r.nodeId === row.nodeId,
+      );
+      const drForNode = row.orderId
+        ? defectiveReworkByOrderForOutsource.get(`${row.orderId}|${row.nodeId}`) ?? {
+            defective: 0,
+            rework: 0,
+            reworkByVariant: {} as Record<string, number>,
+          }
+        : { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> };
+
+      const sumOtherVariantQtyOrder = (currentId: string, qtyMap: Record<string, number>) =>
+        variantsInOrder.reduce((s, v) => (v.id === currentId ? s : s + (qtyMap[`${baseKey}|${v.id}`] ?? 0)), 0);
+
+      const netDispatchedForVariantOrder = (vid: string) => {
+        const sent = outsourceForNode.filter(r => r.status === '加工中' && (r.variantId || '') === vid).reduce((s, r) => s + r.quantity, 0);
+        const recv = outsourceForNode.filter(r => r.status === '已收回' && (r.variantId || '') === vid).reduce((s, r) => s + r.quantity, 0);
+        return Math.max(0, sent - recv);
+      };
+
+      const getAvailableForVariant = (variantId: string, qtyMap: Record<string, number>) => {
+        if (aggregateOrderVariantDispatch) {
+          return Math.max(0, row.availableQty - sumOtherVariantQtyOrder(variantId, qtyMap));
+        }
+        const completedInMs = (ms?.reports ?? [])
+          .filter(r => (r.variantId || '') === variantId)
+          .reduce((s, r) => s + Number(r.quantity), 0);
+        const defectiveForVariant = (ms?.reports ?? [])
+          .filter(r => (r.variantId || '') === variantId)
+          .reduce((s, r) => s + Number(r.defectiveQuantity ?? 0), 0);
+        let seqRemaining: number;
+        if (prevMs) {
+          const prevCompleted = (prevMs.reports ?? [])
+            .filter(r => (r.variantId || '') === variantId)
+            .reduce((s, r) => s + Number(r.quantity), 0);
+          seqRemaining = prevCompleted - completedInMs;
+        } else {
+          const orderItem = order?.items?.find(i => (i.variantId || '') === variantId);
+          seqRemaining = (orderItem?.quantity ?? 0) - completedInMs;
+        }
+        const base = Math.max(0, seqRemaining - defectiveForVariant);
+        const reworkForVariant = drForNode.reworkByVariant?.[variantId] ?? 0;
+        const dispatched = netDispatchedForVariantOrder(variantId);
+        return Math.max(0, base + reworkForVariant - dispatched);
+      };
+
+      if (aggregateOrderVariantDispatch) {
+        const n = variantsInOrder.length;
+        const total = row.availableQty;
+        const base = Math.floor(total / n);
+        const rem = total - base * n;
+        variantsInOrder.forEach((v, i) => {
+          out[`${baseKey}|${v.id}`] = base + (i < rem ? 1 : 0);
+        });
+      } else {
+        let remaining = row.availableQty;
+        for (const v of variantsInOrder) {
+          const cap = getAvailableForVariant(v.id, out);
+          const take = Math.min(Math.max(0, cap), remaining);
+          out[`${baseKey}|${v.id}`] = take;
+          remaining -= take;
+        }
+      }
+      continue;
+    }
+
+    if (variantsInProductBlock.length > 0) {
+      const getDr = (oid: string, tid: string) =>
+        defectiveReworkByOrderForOutsource.get(`${oid}|${tid}`) ?? { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> };
+      const milestoneNodeIds = product?.milestoneNodeIds || [];
+      const seq = (processSequenceMode ?? 'free') as ProcessSequenceMode;
+      const outsourceForProductNode = records.filter(
+        r => r.type === 'OUTSOURCE' && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId,
+      );
+      const sumOtherVariantQtyProduct = (currentId: string, qtyMap: Record<string, number>) =>
+        variantsInProductBlock.reduce((s, v) => (v.id === currentId ? s : s + (qtyMap[`${baseKey}|${v.id}`] ?? 0)), 0);
+
+      const netDispatchedForVariantProduct = (vid: string) => {
+        const sent = outsourceForProductNode.filter(r => r.status === '加工中' && (r.variantId || '') === vid).reduce((s, r) => s + r.quantity, 0);
+        const recv = outsourceForProductNode.filter(r => r.status === '已收回' && (r.variantId || '') === vid).reduce((s, r) => s + r.quantity, 0);
+        return Math.max(0, sent - recv);
+      };
+
+      const getAvailableForVariantProduct = (variantId: string, qtyMap: Record<string, number>) => {
+        if (aggregateProductVariantDispatch) {
+          return Math.max(0, row.availableQty - sumOtherVariantQtyProduct(variantId, qtyMap));
+        }
+        const maxGood = variantMaxGoodProductMode(
+          variantId,
+          row.nodeId,
+          row.productId,
+          blockOrders,
+          productMilestoneProgresses || [],
+          seq,
+          milestoneNodeIds,
+          getDr,
+        );
+        const dispatched = netDispatchedForVariantProduct(variantId);
+        return Math.max(0, maxGood - dispatched);
+      };
+
+      if (aggregateProductVariantDispatch) {
+        const n = variantsInProductBlock.length;
+        const total = row.availableQty;
+        const base = Math.floor(total / n);
+        const rem = total - base * n;
+        variantsInProductBlock.forEach((v, i) => {
+          out[`${baseKey}|${v.id}`] = base + (i < rem ? 1 : 0);
+        });
+      } else {
+        let remaining = row.availableQty;
+        for (const v of variantsInProductBlock) {
+          const cap = getAvailableForVariantProduct(v.id, out);
+          const take = Math.min(Math.max(0, cap), remaining);
+          out[`${baseKey}|${v.id}`] = take;
+          remaining -= take;
+        }
+      }
+      continue;
+    }
+
+    out[baseKey] = row.availableQty;
+  }
+
+  return out;
+}
+
 const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalProps> = ({
   productionLinkMode,
   outsourceDispatchRows,
@@ -88,6 +298,35 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
   onSubmit,
   onClose,
 }) => {
+  useLayoutEffect(() => {
+    setDispatchFormQuantities(
+      buildDefaultDispatchQuantities(
+        productionLinkMode,
+        outsourceDispatchRows,
+        dispatchSelectedKeys,
+        orders,
+        products,
+        categories,
+        records,
+        processSequenceMode,
+        productMilestoneProgresses,
+        defectiveReworkByOrderForOutsource,
+      ),
+    );
+  }, [
+    productionLinkMode,
+    outsourceDispatchRows,
+    dispatchSelectedKeys,
+    orders,
+    products,
+    categories,
+    records,
+    processSequenceMode,
+    productMilestoneProgresses,
+    defectiveReworkByOrderForOutsource,
+    setDispatchFormQuantities,
+  ]);
+
   return (
     <div className="fixed inset-0 z-[55] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/60" onClick={onClose} aria-hidden />
@@ -197,13 +436,18 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
               const ms = msRow;
               const msIdx = order?.milestones?.findIndex(m => m.templateId === row.nodeId) ?? -1;
               const prevMs = (processSequenceMode === 'sequential' && msIdx > 0) ? order?.milestones?.[msIdx - 1] : undefined;
-              const outsourceDispatchedForNode = records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && r.orderId === row.orderId && r.nodeId === row.nodeId);
+              const outsourceForNodeRender = records.filter(r => r.type === 'OUTSOURCE' && r.orderId === row.orderId && r.nodeId === row.nodeId);
               const drForNode = row.orderId ? (defectiveReworkByOrderForOutsource.get(`${row.orderId}|${row.nodeId}`) ?? { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> }) : { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> };
               const sumOtherVariantQtyOrder = (currentId: string) =>
                 variantsInOrder.reduce(
                   (s, v) => (v.id === currentId ? s : s + (dispatchFormQuantities[`${baseKey}|${v.id}`] ?? 0)),
                   0,
                 );
+              const netDispatchedForVariantOrderRender = (vid: string) => {
+                const sent = outsourceForNodeRender.filter(r => r.status === '加工中' && (r.variantId || '') === vid).reduce((s, r) => s + r.quantity, 0);
+                const recv = outsourceForNodeRender.filter(r => r.status === '已收回' && (r.variantId || '') === vid).reduce((s, r) => s + r.quantity, 0);
+                return Math.max(0, sent - recv);
+              };
               const getAvailableForVariant = (variantId: string) => {
                 if (aggregateOrderVariantDispatch) {
                   return Math.max(0, row.availableQty - sumOtherVariantQtyOrder(variantId));
@@ -220,7 +464,7 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
                 }
                 const base = Math.max(0, seqRemaining - defectiveForVariant);
                 const reworkForVariant = drForNode.reworkByVariant?.[variantId] ?? 0;
-                const dispatched = outsourceDispatchedForNode.filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + r.quantity, 0);
+                const dispatched = netDispatchedForVariantOrderRender(variantId);
                 return Math.max(0, base + reworkForVariant - dispatched);
               };
               const matrixProductOrder =
@@ -266,18 +510,23 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
               const getDr = (oid: string, tid: string) => defectiveReworkByOrderForOutsource.get(`${oid}|${tid}`) ?? { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> };
               const milestoneNodeIds = product?.milestoneNodeIds || [];
               const seq = (processSequenceMode ?? 'free') as ProcessSequenceMode;
-              const outsourcedProductNode = records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId);
+              const outsourceForProductNodeRender = records.filter(r => r.type === 'OUTSOURCE' && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId);
               const sumOtherVariantQtyProduct = (currentId: string) =>
                 variantsInProductBlock.reduce(
                   (s, v) => (v.id === currentId ? s : s + (dispatchFormQuantities[`${baseKey}|${v.id}`] ?? 0)),
                   0,
                 );
+              const netDispatchedForVariantProductRender = (vid: string) => {
+                const sent = outsourceForProductNodeRender.filter(r => r.status === '加工中' && (r.variantId || '') === vid).reduce((s, r) => s + r.quantity, 0);
+                const recv = outsourceForProductNodeRender.filter(r => r.status === '已收回' && (r.variantId || '') === vid).reduce((s, r) => s + r.quantity, 0);
+                return Math.max(0, sent - recv);
+              };
               const getAvailableForVariantProduct = (variantId: string) => {
                 if (aggregateProductVariantDispatch) {
                   return Math.max(0, row.availableQty - sumOtherVariantQtyProduct(variantId));
                 }
                 const maxGood = variantMaxGoodProductMode(variantId, row.nodeId, row.productId, blockOrders, productMilestoneProgresses || [], seq, milestoneNodeIds, getDr);
-                const dispatched = outsourcedProductNode.filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + r.quantity, 0);
+                const dispatched = netDispatchedForVariantProductRender(variantId);
                 return Math.max(0, maxGood - dispatched);
               };
               const matrixProductBlock =

@@ -28,3 +28,8 @@ export const scan = asyncHandler(async (req, res) => {
   const result = await itemCodeService.scanItemCode(req.tenantId!, str(req.params.token));
   res.json(result);
 });
+
+export const trace = asyncHandler(async (req, res) => {
+  const result = await itemCodeService.traceItemCode(req.tenantId!, str(req.params.token));
+  res.json(result);
+});

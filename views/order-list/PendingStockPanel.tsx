@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { ArrowDownToLine, X, History, Check, Filter, FileText, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -10,7 +10,6 @@ import {
   BOM,
   ProductionOpRecord,
   Warehouse,
-  ProductVariant,
   ProductCategory,
   ProcessSequenceMode,
   ProductMilestoneProgress,
@@ -35,6 +34,9 @@ import {
 } from '../../utils/warehouseDocPreference';
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
 import { PlanFormCustomFieldInput, PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
+import { ScanInputButton } from '../../components/scan/ScanInputButton';
+import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
+import type { ScanPayload } from '../../utils/scanPayload';
 
 function fmtDT(ts: string | Date | undefined | null): string {
   if (!ts) return '—';
@@ -216,6 +218,8 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
 
   /** 待入库清单弹窗 & 选择入库表单 */
   const [stockInOrder, setStockInOrder] = useState<PendingStockItem | null>(null);
+  const stockInScannedItemRef = useRef<Set<string>>(new Set());
+  const stockInScannedBatchRef = useRef<Set<string>>(new Set());
   const [stockInForm, setStockInForm] = useState<{
     warehouseId: string;
     variantQuantities: Record<string, number>;
@@ -224,6 +228,14 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
   }>({ warehouseId: '', variantQuantities: {}, singleQuantity: 0, customData: {} });
 
   const [selectedPendingRowKeys, setSelectedPendingRowKeys] = useState<Set<string>>(new Set());
+  const togglePendingRowKey = useCallback((rowKey: string) => {
+    setSelectedPendingRowKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(rowKey)) next.delete(rowKey);
+      else next.add(rowKey);
+      return next;
+    });
+  }, []);
   const [batchStockInItems, setBatchStockInItems] = useState<PendingStockItem[] | null>(null);
   const [batchStockForm, setBatchStockForm] = useState<{
     warehouseId: string;
@@ -257,6 +269,13 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
       return next.size === prev.size && [...prev].every(id => next.has(id)) ? prev : next;
     });
   }, [pendingStockOrders]);
+
+  useEffect(() => {
+    if (!stockInOrder) {
+      stockInScannedItemRef.current.clear();
+      stockInScannedBatchRef.current.clear();
+    }
+  }, [stockInOrder]);
 
   if (!open) return null;
 
@@ -538,6 +557,101 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
         if (stockInOrder) {
           const order = stockInOrder.order;
           const unitName = getUnitName(order.productId);
+
+          const handleStockInScan = async (payload: ScanPayload) => {
+            if (!payload.token) return;
+            try {
+              if (payload.kind === 'ITEM') {
+                if (stockInScannedItemRef.current.has(payload.token)) {
+                  toast.warning('此单品码已扫描过');
+                  return;
+                }
+                const res = await itemCodesApi.scan(payload.token);
+                if (res.kind !== 'ITEM_CODE' || res.status !== 'ACTIVE') {
+                  toast.error(res.message || '单品码不可用');
+                  return;
+                }
+                if (res.productId !== order.productId) {
+                  toast.error('此码产品与当前入库工单不一致');
+                  return;
+                }
+                const callerPlanId = res.callerContext?.callerPlanOrderId ?? res.planOrderId;
+                if (order.planOrderId && callerPlanId !== order.planOrderId) {
+                  toast.error('此码不属于当前工单所在计划');
+                  return;
+                }
+                stockInScannedItemRef.current.add(payload.token);
+                const vid = res.variantId || '';
+                if (hasColorSize) {
+                  if (!vid) {
+                    stockInScannedItemRef.current.delete(payload.token);
+                    toast.error('产品按规格管理，码未带规格');
+                    return;
+                  }
+                  setStockInForm((f) => ({
+                    ...f,
+                    variantQuantities: { ...f.variantQuantities, [vid]: (f.variantQuantities[vid] ?? 0) + 1 },
+                  }));
+                } else {
+                  setStockInForm((f) => ({
+                    ...f,
+                    singleQuantity: Math.min(stockInOrder.pendingTotal, (f.singleQuantity || 0) + 1),
+                  }));
+                }
+                toast.success(
+                  `扫码入库 +1${res.variantLabel ? `（${res.variantLabel}）` : ''}${
+                    res.ownerTenantName && res.callerContext?.relation !== 'OWNER' ? ` · 来自 ${res.ownerTenantName}` : ''
+                  }`,
+                );
+              } else if (payload.kind === 'BATCH') {
+                if (stockInScannedBatchRef.current.has(payload.token)) {
+                  toast.warning('此批次码已扫描过');
+                  return;
+                }
+                const res = await planVirtualBatchesApi.scan(payload.token);
+                if (res.kind !== 'VIRTUAL_BATCH' || res.status !== 'ACTIVE') {
+                  toast.error(res.message || '批次码不可用');
+                  return;
+                }
+                if (res.productId !== order.productId) {
+                  toast.error('此批次码产品与当前入库工单不一致');
+                  return;
+                }
+                const callerPlanId = res.callerContext?.callerPlanOrderId ?? res.planOrderId;
+                if (order.planOrderId && callerPlanId !== order.planOrderId) {
+                  toast.error('此批次码不属于当前工单所在计划');
+                  return;
+                }
+                stockInScannedBatchRef.current.add(payload.token);
+                const qty = res.quantity ?? 0;
+                const vid = res.variantId || '';
+                if (hasColorSize) {
+                  if (!vid) {
+                    stockInScannedBatchRef.current.delete(payload.token);
+                    toast.error('产品按规格管理，码未带规格');
+                    return;
+                  }
+                  setStockInForm((f) => ({
+                    ...f,
+                    variantQuantities: { ...f.variantQuantities, [vid]: (f.variantQuantities[vid] ?? 0) + qty },
+                  }));
+                } else {
+                  setStockInForm((f) => ({
+                    ...f,
+                    singleQuantity: Math.min(stockInOrder.pendingTotal, (f.singleQuantity || 0) + qty),
+                  }));
+                }
+                toast.success(
+                  `批次码入库 +${qty}${res.variantLabel ? `（${res.variantLabel}）` : ''}${
+                    res.ownerTenantName && res.callerContext?.relation !== 'OWNER' ? ` · 来自 ${res.ownerTenantName}` : ''
+                  }`,
+                );
+              }
+            } catch (e) {
+              toast.error((e as Error)?.message || '扫码查询失败');
+            }
+          };
+
           return (
             <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
               <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: singlePendingStockInDefaultWh(), variantQuantities: {}, singleQuantity: 0, customData: {} }); }} />
@@ -583,7 +697,10 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                   />
                   {hasColorSize && product?.variants?.length ? (
                     <div className="space-y-4">
-                      <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider">入库数量明细（颜色尺码）</h4>
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider">入库数量明细（颜色尺码）</h4>
+                        <ScanInputButton onScan={handleStockInScan} hint="扫码入库" />
+                      </div>
                       <VariantQtyMatrixInputs
                         product={product}
                         dictionaries={dictionaries}
@@ -611,7 +728,10 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                     </div>
                   ) : (
                     <div>
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">入库数量 ({unitName})</label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">入库数量 ({unitName})</label>
+                        <ScanInputButton onScan={handleStockInScan} hint="扫码入库" />
+                      </div>
                       <input
                         type="number"
                         min={0}
@@ -858,21 +978,21 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                         {pendingStockOrders.map(item => {
                           const unitName = getUnitName(item.order.productId);
                           return (
-                            <tr key={item.rowKey} className="border-b border-slate-100 hover:bg-slate-50/50">
+                            <tr
+                              key={item.rowKey}
+                              className={`border-b border-slate-100 hover:bg-slate-50/50${hasPerm('production:orders_pending_stock_in:create') ? ' cursor-pointer' : ''}`}
+                              onClick={
+                                hasPerm('production:orders_pending_stock_in:create')
+                                  ? () => togglePendingRowKey(item.rowKey)
+                                  : undefined
+                              }
+                            >
                               {hasPerm('production:orders_pending_stock_in:create') && (
-                                <td className="px-2 py-3 text-center align-middle">
+                                <td className="px-2 py-3 text-center align-middle" onClick={e => e.stopPropagation()}>
                                   <input
                                     type="checkbox"
                                     checked={selectedPendingRowKeys.has(item.rowKey)}
-                                    onChange={e => {
-                                      e.stopPropagation();
-                                      setSelectedPendingRowKeys(prev => {
-                                        const next = new Set(prev);
-                                        if (next.has(item.rowKey)) next.delete(item.rowKey);
-                                        else next.add(item.rowKey);
-                                        return next;
-                                      });
-                                    }}
+                                    onChange={() => togglePendingRowKey(item.rowKey)}
                                     className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                                   />
                                 </td>
@@ -893,7 +1013,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                                 <td className="px-4 py-3 text-slate-600 text-right">{item.alreadyIn} {unitName}</td>
                               )}
                               <td className="px-4 py-3 font-bold text-indigo-600 text-right">{item.pendingTotal} {unitName}</td>
-                              <td className="px-4 py-3">
+                              <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                                 {hasPerm('production:orders_pending_stock_in:create') && (
                                 <button
                                   type="button"

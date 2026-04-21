@@ -1,5 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback, useRef } from 'react';
 import { ArrowDownToLine, X, Check, Scale } from 'lucide-react';
+import { toast } from 'sonner';
+import { ScanInputButton } from '../../components/scan/ScanInputButton';
+import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
+import type { ScanPayload } from '../../utils/scanPayload';
 import type {
   ProductionOpRecord,
   ProductionOrder,
@@ -92,6 +96,98 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
   onClose,
 }) => {
   const productsById = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
+
+  const scannedItemRef = useRef<Set<string>>(new Set());
+  const scannedBatchRef = useRef<Set<string>>(new Set());
+
+  const visibleRows = useMemo(
+    () =>
+      outsourceReceiveRows.filter((row) =>
+        receiveSelectedKeys.has(
+          row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}|${row.partner}`,
+        ),
+      ),
+    [outsourceReceiveRows, receiveSelectedKeys],
+  );
+
+  const handleScanPayload = useCallback(
+    async (payload: ScanPayload) => {
+      if (!payload.token || visibleRows.length === 0) return;
+      try {
+        let productId = '';
+        let variantId: string | null = null;
+        let addQty = 0;
+        let tip = '';
+        if (payload.kind === 'ITEM') {
+          if (scannedItemRef.current.has(payload.token)) {
+            toast.warning('此单品码已扫描过');
+            return;
+          }
+          const res = await itemCodesApi.scan(payload.token);
+          if (res.kind !== 'ITEM_CODE' || res.status !== 'ACTIVE') {
+            toast.error(res.message || '单品码不可用');
+            return;
+          }
+          productId = res.productId ?? '';
+          variantId = res.variantId ?? null;
+          addQty = 1;
+          tip = `${res.variantLabel || res.productName || ''}${
+            res.ownerTenantName && res.callerContext?.relation !== 'OWNER' ? ` · 来自 ${res.ownerTenantName}` : ''
+          }`;
+        } else if (payload.kind === 'BATCH') {
+          if (scannedBatchRef.current.has(payload.token)) {
+            toast.warning('此批次码已扫描过');
+            return;
+          }
+          const res = await planVirtualBatchesApi.scan(payload.token);
+          if (res.kind !== 'VIRTUAL_BATCH' || res.status !== 'ACTIVE') {
+            toast.error(res.message || '批次码不可用');
+            return;
+          }
+          productId = res.productId ?? '';
+          variantId = res.variantId ?? null;
+          addQty = res.quantity ?? 0;
+          tip = `${res.variantLabel || res.productName || ''}${
+            res.ownerTenantName && res.callerContext?.relation !== 'OWNER' ? ` · 来自 ${res.ownerTenantName}` : ''
+          }`;
+        }
+        if (!productId) {
+          toast.error('扫码结果缺少产品信息');
+          return;
+        }
+        const row = visibleRows.find((r) => r.productId === productId);
+        if (!row) {
+          toast.error('此码对应产品不在本次收货列表中');
+          return;
+        }
+        const baseKey = row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}|${row.partner}`;
+        const product = products.find((p) => p.id === row.productId);
+        const category = categories.find((c) => c.id === product?.categoryId);
+        const hasColorSizeMatrix = productHasColorSizeMatrix(product, category);
+        const isProductBlockRecv = productionLinkMode === 'product' && row.orderId == null;
+
+        let key = baseKey;
+        if (hasColorSizeMatrix && variantId) {
+          key = isProductBlockRecv ? `${baseKey}${RECEIVE_VARIANT_SEP}${variantId}` : `${baseKey}|${variantId}`;
+        } else if (hasColorSizeMatrix && !variantId) {
+          toast.error('当前产品按规格管理，码未带规格');
+          return;
+        }
+
+        setReceiveFormQuantities((prev) => ({
+          ...prev,
+          [key]: (prev[key] ?? 0) + addQty,
+        }));
+        if (payload.kind === 'ITEM') scannedItemRef.current.add(payload.token);
+        if (payload.kind === 'BATCH') scannedBatchRef.current.add(payload.token);
+        toast.success(`外协收货 +${addQty}${tip ? ` ${tip}` : ''}`);
+      } catch (e) {
+        toast.error((e as Error)?.message || '扫码查询失败');
+      }
+    },
+    [visibleRows, productionLinkMode, products, categories, setReceiveFormQuantities],
+  );
+
   const weightEnabledByNodeId = useMemo(() => {
     const m = new Map<string, boolean>();
     (globalNodes ?? []).forEach(n => m.set(n.id, !!n.enableWeightOnReport));
@@ -150,7 +246,13 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
           ) : null}
         </div>
         <div className="flex-1 overflow-auto min-h-0 p-6">
-          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">商品明细</h4>
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">商品明细</h4>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase">扫码录入</span>
+              <ScanInputButton onScan={handleScanPayload} hint="扫码收货" />
+            </div>
+          </div>
           <p className="text-xs text-slate-500 mb-4 leading-relaxed">
             {productionLinkMode === 'product'
               ? '关联产品且发出单按颜色尺码录入时，按规格收回；每格「最多」= 该规格已发出未收回数。若有未带规格的发出的数量，在下方「未按规格」行收回。'

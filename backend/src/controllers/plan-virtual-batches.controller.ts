@@ -1,6 +1,7 @@
 import { getTenantPrisma } from '../lib/prisma.js';
 import { str, optStr } from '../utils/request.js';
 import * as batchService from '../services/planVirtualBatches.service.js';
+import * as itemCodeService from '../services/itemCodes.service.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 
 function parseWithItemCodes(body: unknown): boolean {
@@ -58,5 +59,10 @@ export const list = asyncHandler(async (req, res) => {
 
 export const scan = asyncHandler(async (req, res) => {
   const result = await batchService.scanBatch(req.tenantId!, str(req.params.token));
+  res.json(result);
+});
+
+export const trace = asyncHandler(async (req, res) => {
+  const result = await itemCodeService.traceVirtualBatch(req.tenantId!, str(req.params.token));
   res.json(result);
 });

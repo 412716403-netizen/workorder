@@ -141,13 +141,43 @@ export async function resolveVariantLabel(
   return { colorName, sizeName, variantLabel };
 }
 
-/** Verify cross-tenant collaboration access for scan operations. */
+const MAX_COLLABORATION_HOPS = 4;
+const COLLAB_CACHE_TTL_MS = 60_000;
+const collabCache = new Map<string, { ok: boolean; exp: number }>();
+
+function collabCacheKey(a: string, b: string): string {
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+function collabCacheGet(a: string, b: string): boolean | null {
+  const k = collabCacheKey(a, b);
+  const hit = collabCache.get(k);
+  if (!hit) return null;
+  if (hit.exp < Date.now()) {
+    collabCache.delete(k);
+    return null;
+  }
+  return hit.ok;
+}
+
+function collabCacheSet(a: string, b: string, ok: boolean): void {
+  collabCache.set(collabCacheKey(a, b), { ok, exp: Date.now() + COLLAB_CACHE_TTL_MS });
+}
+
+/**
+ * 跨租户协作可达性（传递信任）：在 ACTIVE 的 tenantCollaboration 图上 BFS，
+ * 最多 MAX_COLLABORATION_HOPS 跳；结果缓存约 60s。
+ */
 export async function verifyCollaborationAccess(
   callerTenantId: string,
   ownerTenantId: string,
 ): Promise<boolean> {
   if (callerTenantId === ownerTenantId) return true;
-  const collab = await basePrisma.tenantCollaboration.findFirst({
+
+  const cached = collabCacheGet(callerTenantId, ownerTenantId);
+  if (cached !== null) return cached;
+
+  const direct = await basePrisma.tenantCollaboration.findFirst({
     where: {
       status: 'ACTIVE',
       OR: [
@@ -155,6 +185,206 @@ export async function verifyCollaborationAccess(
         { tenantAId: callerTenantId, tenantBId: ownerTenantId },
       ],
     },
+    select: { id: true },
   });
-  return !!collab;
+  if (direct) {
+    collabCacheSet(callerTenantId, ownerTenantId, true);
+    return true;
+  }
+
+  const visited = new Set<string>([callerTenantId]);
+  let frontier: string[] = [callerTenantId];
+  for (let hop = 0; hop < MAX_COLLABORATION_HOPS && frontier.length > 0; hop++) {
+    const edges = await basePrisma.tenantCollaboration.findMany({
+      where: {
+        status: 'ACTIVE',
+        OR: [{ tenantAId: { in: frontier } }, { tenantBId: { in: frontier } }],
+      },
+      select: { tenantAId: true, tenantBId: true },
+    });
+
+    const nextFrontier: string[] = [];
+    for (const e of edges) {
+      for (const p of [e.tenantAId, e.tenantBId]) {
+        if (visited.has(p)) continue;
+        visited.add(p);
+        if (p === ownerTenantId) {
+          collabCacheSet(callerTenantId, ownerTenantId, true);
+          return true;
+        }
+        nextFrontier.push(p);
+      }
+    }
+    frontier = nextFrontier;
+  }
+
+  collabCacheSet(callerTenantId, ownerTenantId, false);
+  return false;
+}
+
+export function invalidateCollaborationCache(): void {
+  collabCache.clear();
+}
+
+export type PlanTreeNodeRow = {
+  id: string;
+  tenantId: string;
+  parentPlanId: string | null;
+  productId: string;
+  planNumber: string;
+};
+
+/** 从任意计划节点上溯到 root，再向下收集整棵子树（跨租户，用 basePrisma）。 */
+export async function collectPlanTreeFromNode(nodeId: string): Promise<PlanTreeNodeRow[]> {
+  let cur: string | null = nodeId;
+  let rootId = nodeId;
+  const guardUp = new Set<string>();
+  while (cur && !guardUp.has(cur)) {
+    guardUp.add(cur);
+    const row: { parentPlanId: string | null } | null = await basePrisma.planOrder.findUnique({
+      where: { id: cur },
+      select: { parentPlanId: true },
+    });
+    if (!row || !row.parentPlanId) {
+      rootId = cur;
+      break;
+    }
+    cur = row.parentPlanId;
+  }
+
+  const all: PlanTreeNodeRow[] = [];
+  const seen = new Set<string>();
+  const rootFull = await basePrisma.planOrder.findUnique({
+    where: { id: rootId },
+    select: { id: true, tenantId: true, parentPlanId: true, productId: true, planNumber: true },
+  });
+  if (rootFull) {
+    all.push(rootFull);
+    seen.add(rootFull.id);
+  }
+
+  let frontier: string[] = [rootId];
+  while (frontier.length > 0) {
+    const children = await basePrisma.planOrder.findMany({
+      where: { parentPlanId: { in: frontier } },
+      select: { id: true, tenantId: true, parentPlanId: true, productId: true, planNumber: true },
+    });
+    const next: string[] = [];
+    for (const c of children) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      all.push(c);
+      next.push(c.id);
+    }
+    frontier = next;
+  }
+  return all;
+}
+
+function isPlanAncestorOf(
+  idToParent: Map<string, string | null>,
+  ancestorId: string,
+  nodeId: string,
+): boolean {
+  const guard = new Set<string>();
+  let cur: string | null = nodeId;
+  while (cur && !guard.has(cur)) {
+    guard.add(cur);
+    if (cur === ancestorId) return true;
+    cur = idToParent.get(cur) ?? null;
+  }
+  return false;
+}
+
+/**
+ * 调用方在码所属计划树中的节点与工单（协作时多为下游子计划）。
+ */
+export async function resolveCallerContext(params: {
+  callerTenantId: string;
+  ownerTenantId: string;
+  ownerPlanOrderId: string;
+}): Promise<{
+  callerPlanOrderId: string | null;
+  callerPlanNumber: string | null;
+  callerOrderNumbers: string[];
+  relation: 'OWNER' | 'DOWNSTREAM' | 'UPSTREAM' | 'PEER';
+}> {
+  const { callerTenantId, ownerTenantId, ownerPlanOrderId } = params;
+
+  if (callerTenantId === ownerTenantId) {
+    const plan = await basePrisma.planOrder.findUnique({
+      where: { id: ownerPlanOrderId },
+      select: { id: true, planNumber: true },
+    });
+    const orders = await basePrisma.productionOrder.findMany({
+      where: { planOrderId: ownerPlanOrderId, tenantId: callerTenantId },
+      select: { orderNumber: true },
+    });
+    return {
+      callerPlanOrderId: plan?.id ?? null,
+      callerPlanNumber: plan?.planNumber ?? null,
+      callerOrderNumbers: orders.map((o) => o.orderNumber),
+      relation: 'OWNER',
+    };
+  }
+
+  const tree = await collectPlanTreeFromNode(ownerPlanOrderId);
+  const idToParent = new Map(tree.map((n) => [n.id, n.parentPlanId] as const));
+  const callerNodes = tree.filter((n) => n.tenantId === callerTenantId);
+  if (callerNodes.length === 0) {
+    return {
+      callerPlanOrderId: null,
+      callerPlanNumber: null,
+      callerOrderNumbers: [],
+      relation: 'PEER',
+    };
+  }
+
+  let relation: 'OWNER' | 'DOWNSTREAM' | 'UPSTREAM' | 'PEER' = 'PEER';
+  let picked = callerNodes[0]!;
+
+  const downstream = callerNodes.filter((n) => isPlanAncestorOf(idToParent, ownerPlanOrderId, n.id));
+  if (downstream.length > 0) {
+    relation = 'DOWNSTREAM';
+    picked = downstream.reduce((best, n) => {
+      const bd = depthFrom(idToParent, ownerPlanOrderId, n.id);
+      const bestD = depthFrom(idToParent, ownerPlanOrderId, best.id);
+      return bd > bestD ? n : best;
+    });
+  } else {
+    const upstream = callerNodes.filter((n) => isPlanAncestorOf(idToParent, n.id, ownerPlanOrderId));
+    if (upstream.length > 0) {
+      relation = 'UPSTREAM';
+      picked = upstream[0]!;
+    }
+  }
+
+  const orders = await basePrisma.productionOrder.findMany({
+    where: { planOrderId: picked.id, tenantId: callerTenantId },
+    select: { orderNumber: true },
+  });
+
+  return {
+    callerPlanOrderId: picked.id,
+    callerPlanNumber: picked.planNumber,
+    callerOrderNumbers: orders.map((o) => o.orderNumber),
+    relation,
+  };
+}
+
+function depthFrom(
+  idToParent: Map<string, string | null>,
+  fromId: string,
+  toId: string,
+): number {
+  let d = 0;
+  const guard = new Set<string>();
+  let cur: string | null = toId;
+  while (cur && !guard.has(cur)) {
+    guard.add(cur);
+    if (cur === fromId) return d;
+    d += 1;
+    cur = idToParent.get(cur) ?? null;
+  }
+  return d;
 }

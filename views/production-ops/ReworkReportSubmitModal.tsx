@@ -1,6 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { FileText, X, UserPlus, Scale } from 'lucide-react';
 import { toast } from 'sonner';
+import { ScanInputButton } from '../../components/scan/ScanInputButton';
+import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
+import type { ScanPayload } from '../../utils/scanPayload';
 import {
   ProductionOpRecord,
   ProductionOrder,
@@ -228,6 +231,124 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
     if (!weightReportEnabled || !reworkReportBom || w <= 0 || reworkReportPlannedTotalQty <= 0) return [];
     return calcUsageByWeight(reworkReportBom, reworkReportPlannedTotalQty, w, productsById);
   }, [weightReportEnabled, reworkReportBom, reworkReportTotalWeight, reworkReportPlannedTotalQty, productsById]);
+
+  const scannedItemTokensRef = useRef<Set<string>>(new Set());
+  const scannedBatchTokensRef = useRef<Set<string>>(new Set());
+
+  const applyScanQuantity = useCallback(
+    (params: {
+      vid: string;
+      add: number;
+      ownerTenantName?: string | null;
+      relation?: 'OWNER' | 'DOWNSTREAM' | 'UPSTREAM' | 'PEER';
+      variantLabel?: string | null;
+    }): boolean => {
+      const { vid, add, ownerTenantName, relation, variantLabel } = params;
+      if (add <= 0 || reworkReportPaths.length === 0) {
+        toast.error('暂无待返工路径可累加');
+        return false;
+      }
+      if (reworkReportHasColorSize) {
+        if (!vid) {
+          toast.error('当前产品按规格管理，单品/批次码未带规格');
+          return false;
+        }
+        const target = reworkReportPaths.find((p) => (p.pendingByVariant[vid] ?? 0) > 0);
+        if (!target) {
+          toast.error('没有匹配此规格的待返工路径');
+          return false;
+        }
+        const key = `${target.pathKey}__${vid}`;
+        setReworkReportQuantities((prev) => {
+          const prevV = prev[key] ?? 0;
+          const cap = target.pendingByVariant[vid] ?? 0;
+          return { ...prev, [key]: Math.min(cap, prevV + add) };
+        });
+        toast.success(
+          `扫码 +${add}${variantLabel ? `（${variantLabel}）` : ''} → ${target.pathLabel}${
+            ownerTenantName && relation !== 'OWNER' ? ` · 来自 ${ownerTenantName}` : ''
+          }`,
+        );
+      } else {
+        const target = reworkReportPaths[0];
+        setReworkReportQuantities((prev) => {
+          const prevV = prev[target.pathKey] ?? 0;
+          return { ...prev, [target.pathKey]: Math.min(target.totalPending, prevV + add) };
+        });
+        toast.success(
+          `扫码 +${add} → ${target.pathLabel}${
+            ownerTenantName && relation !== 'OWNER' ? ` · 来自 ${ownerTenantName}` : ''
+          }`,
+        );
+      }
+      return true;
+    },
+    [reworkReportPaths, reworkReportHasColorSize],
+  );
+
+  const handleScanPayload = useCallback(
+    async (payload: ScanPayload) => {
+      if (!payload.token) return;
+      try {
+        if (payload.kind === 'ITEM') {
+          if (scannedItemTokensRef.current.has(payload.token)) {
+            toast.warning('此单品码已扫描过');
+            return;
+          }
+          const res = await itemCodesApi.scan(payload.token);
+          if (res.kind !== 'ITEM_CODE' || res.status !== 'ACTIVE') {
+            toast.error(res.message || '单品码不可用');
+            return;
+          }
+          if (res.productId !== order.productId) {
+            toast.error('此码产品与当前工单不一致');
+            return;
+          }
+          if (
+            !applyScanQuantity({
+              vid: res.variantId || '',
+              add: 1,
+              ownerTenantName: res.ownerTenantName,
+              relation: res.callerContext?.relation,
+              variantLabel: res.variantLabel,
+            })
+          ) {
+            return;
+          }
+          scannedItemTokensRef.current.add(payload.token);
+        } else if (payload.kind === 'BATCH') {
+          if (scannedBatchTokensRef.current.has(payload.token)) {
+            toast.warning('此批次码已扫描过');
+            return;
+          }
+          const res = await planVirtualBatchesApi.scan(payload.token);
+          if (res.kind !== 'VIRTUAL_BATCH' || res.status !== 'ACTIVE') {
+            toast.error(res.message || '批次码不可用');
+            return;
+          }
+          if (res.productId !== order.productId) {
+            toast.error('此批次码产品与当前工单不一致');
+            return;
+          }
+          if (
+            !applyScanQuantity({
+              vid: res.variantId || '',
+              add: res.quantity ?? 0,
+              ownerTenantName: res.ownerTenantName,
+              relation: res.callerContext?.relation,
+              variantLabel: res.variantLabel,
+            })
+          ) {
+            return;
+          }
+          scannedBatchTokensRef.current.add(payload.token);
+        }
+      } catch (e) {
+        toast.error((e as Error)?.message || '扫码查询失败');
+      }
+    },
+    [order.productId, applyScanQuantity],
+  );
 
   const handleSubmit = () => {
     if (!isOutsourceRework) {
@@ -526,6 +647,12 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
           )}
           {reworkReportCustomBlock}
           <div className="flex flex-wrap items-end gap-6 pt-2 border-t border-slate-100">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">扫码累加</label>
+              <div className="h-10 flex items-center">
+                <ScanInputButton onScan={handleScanPayload} hint="扫码录入" />
+              </div>
+            </div>
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">单价（元/件）</label>
               <input

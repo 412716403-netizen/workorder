@@ -279,6 +279,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     /** 关联产品模式：产品级总量与完成量，用于弹窗展示 */
     productTotalQty?: number;
     productCompletedQty?: number;
+    /** 顺序工序模式下该工序实际可报基数（扣不良+返工后），用于提示文案 */
+    productMaxReportableQty?: number;
     /** 关联产品模式：按规格汇总的 { variantId, quantity, completedQuantity }，用于多规格时的下拉选项 */
     productItems?: { variantId?: string; quantity: number; completedQuantity: number }[];
     /** 关联产品模式：所有相关工单，用于提交时确定更新目标 */
@@ -519,7 +521,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   const handleOpenReport = (
     order: ProductionOrder,
     ms: Milestone,
-    productAggregate?: { totalQty: number; completedQty: number; orders: ProductionOrder[]; items?: { variantId?: string; quantity: number; completedQuantity: number }[] }
+    productAggregate?: { totalQty: number; completedQty: number; maxReportableQty?: number; orders: ProductionOrder[]; items?: { variantId?: string; quantity: number; completedQuantity: number }[] }
   ) => {
     if (processSequenceMode === 'sequential') {
       const idx = order.milestones.findIndex(m => m.id === ms.id);
@@ -548,6 +550,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
       milestone: ms,
       productTotalQty: productAggregate?.totalQty,
       productCompletedQty: productAggregate?.completedQty,
+      productMaxReportableQty: productAggregate?.maxReportableQty,
       productItems: productAggregate?.items,
       productOrders: productAggregate?.orders
     });
@@ -647,6 +650,15 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                       (order.milestones.reduce((acc, m) => acc + (m.completedQuantity / orderTotalQty), 0) / totalMilestones) * 100
                     )
                   : 0;
+                /**
+                 * 产品上是否已绑工序模板（产品管理里的工序顺序）。
+                 * 协作接受派发时若产品无工序，后端可能从「同产品旧工单」复制 milestones 到本单，此时工单上有圆点但产品仍为未配置，
+                 * 必须仍提示「去配置工序」，否则列表只显示工序条、用户找不到入口（如万濮服饰毛衣 10 类场景）。
+                 */
+                const productHasMilestoneTemplate = (product?.milestoneNodeIds?.length ?? 0) > 0;
+                const showConfigureProcessHint =
+                  order.status === 'PENDING_PROCESS' ||
+                  (product != null && !productHasMilestoneTemplate);
                 const cardClass = isChild
                   ? 'bg-white px-5 py-2 rounded-2xl border border-l-4 border-l-slate-300 border-slate-200 hover:shadow-lg hover:border-slate-300 transition-all grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3 lg:gap-4 items-center'
                   : 'bg-white px-5 py-2 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3 lg:gap-4 items-center';
@@ -685,22 +697,31 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-1 min-w-0 -my-0.5">
-                      {order.status === 'PENDING_PROCESS' ? (
-                        <div className="flex items-center gap-3 flex-1">
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-black bg-amber-50 text-amber-600 border border-amber-200">
-                            待配工序
-                          </span>
-                          {onNavigateToProductEdit && (
-                            <button
-                              type="button"
-                              onClick={e => { e.stopPropagation(); onNavigateToProductEdit(order.productId); }}
-                              className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-[11px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition-colors"
-                            >
-                              <Pencil className="w-3 h-3" /> 去配置工序
-                            </button>
-                          )}
-                        </div>
-                      ) : order.milestones.length > 0 ? (
+                      <div className="flex flex-col gap-2 flex-1 min-w-0 min-h-0">
+                        {showConfigureProcessHint ? (
+                          <div className="flex flex-col sm:flex-row sm:items-start gap-2 rounded-xl border border-amber-100 bg-amber-50/40 px-3 py-2">
+                            <div className="flex items-center gap-3 flex-wrap shrink-0">
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-black bg-amber-50 text-amber-600 border border-amber-200">
+                                待配工序
+                              </span>
+                              {onNavigateToProductEdit && (
+                                <button
+                                  type="button"
+                                  onClick={e => { e.stopPropagation(); onNavigateToProductEdit(order.productId); }}
+                                  className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-[11px] font-bold text-indigo-600 bg-white border border-indigo-200 hover:bg-indigo-50 transition-colors"
+                                >
+                                  <Pencil className="w-3 h-3" /> 去配置工序
+                                </button>
+                              )}
+                            </div>
+                            <p className="text-[10px] font-medium text-slate-600 leading-snug flex-1 min-w-0">
+                              {order.milestones.length > 0
+                                ? '工单上的工序来自历史工单复制，本产品仍未在产品管理中绑定工序，请先配置后再稳定报工。'
+                                : '本企业产品尚未配置工序，无法报工。请到「资料与配置 → 产品管理」为该产品添加工序。'}
+                            </p>
+                          </div>
+                        ) : null}
+                        {order.milestones.length > 0 ? (
                         <div className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden scroll-smooth custom-scrollbar touch-pan-x -mx-0.5">
                           <div className="flex items-stretch gap-1.5 flex-nowrap py-0.5 w-max px-0.5">
                             {order.milestones.map((ms) => {
@@ -759,8 +780,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                             })}
                           </div>
                         </div>
-                      ) : (
-                        <div className="w-40 text-right">
+                        ) : !showConfigureProcessHint ? (
+                        <div className="w-40 text-right self-center">
                           <div className="flex justify-between items-center mb-1">
                             <span className="text-[10px] font-bold text-slate-400">进度</span>
                             <span className="text-xs font-black text-indigo-600">{overallProgress}%</span>
@@ -769,7 +790,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                             <div className="h-full bg-indigo-500 transition-all duration-500 rounded-full" style={{ width: `${overallProgress}%` }} />
                           </div>
                         </div>
-                      )}
+                        ) : null}
+                      </div>
                       <div className="flex flex-col gap-2 shrink-0">
                         {hasOrderPerm('production:orders_detail:view') && (
                         <button
@@ -829,6 +851,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                 const orderCount = block.orders.length;
                 const byTemplate = new Map<string, { name: string; completed: number }>();
                 if (productionLinkMode === 'product' && productMilestoneProgresses.length > 0) {
+                  // 关联产品模式：PMP（产品报工）与工单里程碑（关联工单报工 / 外协收回写回）都会产生完成量，
+                  // 必须将两路完成量相加；任一路被忽略都会导致「毛衣9 横机 24 件显示成 4」这类漏报。
                   productMilestoneProgresses.filter(p => p.productId === block.productId).forEach(pmp => {
                     const name = globalNodes.find(n => n.id === pmp.milestoneTemplateId)?.name ?? '';
                     const cur = byTemplate.get(pmp.milestoneTemplateId);
@@ -838,7 +862,11 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                     });
                   });
                   block.orders.forEach(o => o.milestones.forEach(m => {
-                    if (!byTemplate.has(m.templateId)) byTemplate.set(m.templateId, { name: m.name, completed: 0 });
+                    const cur = byTemplate.get(m.templateId);
+                    byTemplate.set(m.templateId, {
+                      name: cur?.name || m.name,
+                      completed: (cur?.completed ?? 0) + (m.completedQuantity ?? 0),
+                    });
                   }));
                 }
                 if (byTemplate.size === 0) {
@@ -856,6 +884,11 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                 const overallProgress = totalQty > 0 && totalMilestones > 0
                   ? Math.round((Array.from(byTemplate.values()).reduce((acc, m) => acc + m.completed / totalQty, 0) / totalMilestones) * 100)
                   : 0;
+                const pgProductHasMilestoneTemplate = (product?.milestoneNodeIds?.length ?? 0) > 0;
+                const pgShowConfigureProcessHint =
+                  (product != null && !pgProductHasMilestoneTemplate) ||
+                  block.orders.some(o => o.status === 'PENDING_PROCESS');
+                const pgHasMilestoneStrip = Array.from(byTemplate.entries()).length > 0;
                 return (
                   <div key={`productGroup-${block.productId}`}>
                     <div className="pt-0">
@@ -883,7 +916,31 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                             </div>
                           </div>
                           <div className="flex items-center gap-2 flex-1 min-w-0 -my-0.5">
-                            {Array.from(byTemplate.entries()).length > 0 ? (
+                            <div className="flex flex-col gap-2 flex-1 min-w-0 min-h-0">
+                              {pgShowConfigureProcessHint ? (
+                                <div className="flex flex-col sm:flex-row sm:items-start gap-2 rounded-xl border border-amber-100 bg-amber-50/40 px-3 py-2">
+                                  <div className="flex items-center gap-3 flex-wrap shrink-0">
+                                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-black bg-amber-50 text-amber-600 border border-amber-200">
+                                      待配工序
+                                    </span>
+                                    {onNavigateToProductEdit && (
+                                      <button
+                                        type="button"
+                                        onClick={e => { e.stopPropagation(); onNavigateToProductEdit(block.productId); }}
+                                        className="inline-flex items-center gap-1 px-3 py-1 rounded-lg text-[11px] font-bold text-indigo-600 bg-white border border-indigo-200 hover:bg-indigo-50 transition-colors"
+                                      >
+                                        <Pencil className="w-3 h-3" /> 去配置工序
+                                      </button>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] font-medium text-slate-600 leading-snug flex-1 min-w-0">
+                                    {pgHasMilestoneStrip
+                                      ? '工单上的工序来自历史工单复制，本产品仍未在产品管理中绑定工序，请先配置后再稳定报工。'
+                                      : '本企业产品尚未配置工序，无法报工。请到「资料与配置 → 产品管理」为该产品添加工序。'}
+                                  </p>
+                                </div>
+                              ) : null}
+                              {pgHasMilestoneStrip ? (
                               <div className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden -mx-0.5">
                                 <div className="flex items-stretch gap-1.5 flex-nowrap py-0.5 w-max px-0.5">
                                   {(() => {
@@ -945,12 +1002,20 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                           cur.completedQuantity += pmp.completedQuantity ?? 0;
                                           variantMap.set(vid, cur);
                                         });
-                                        block.orders.forEach(o => o.items.forEach(item => {
-                                          const vid = item.variantId ?? '';
-                                          const cur = variantMap.get(vid) ?? { quantity: 0, completedQuantity: 0 };
-                                          cur.quantity += item.quantity;
-                                          variantMap.set(vid, cur);
-                                        }));
+                                        // 外协收回等将完成量直接写到工单里程碑 reports 上，需合入规格维度汇总，避免仅 PMP 渠道的数据导致已报量偏小。
+                                        block.orders.forEach(o => {
+                                          const msForOrder = o.milestones.find(x => x.templateId === tid);
+                                          o.items.forEach(item => {
+                                            const vid = item.variantId ?? '';
+                                            const cur = variantMap.get(vid) ?? { quantity: 0, completedQuantity: 0 };
+                                            cur.quantity += item.quantity;
+                                            const reportQty = msForOrder?.reports
+                                              ?.filter(r => (r.variantId || '') === vid)
+                                              .reduce((a, r) => a + r.quantity, 0) ?? 0;
+                                            cur.completedQuantity += reportQty;
+                                            variantMap.set(vid, cur);
+                                          });
+                                        });
                                       } else {
                                         block.orders.forEach(o => {
                                           const msForOrder = o.milestones.find(x => x.templateId === tid);
@@ -976,6 +1041,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                       handleOpenReport(first.order, first.ms, {
                                         totalQty,
                                         completedQty,
+                                        maxReportableQty: Math.max(0, Math.round(Number(availableQty) || 0)),
                                         orders: ordersWithMs.map(x => x.order),
                                         items: productItems
                                       });
@@ -1020,8 +1086,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                   })()}
                                 </div>
                               </div>
-                            ) : (
-                              <div className="w-40">
+                              ) : !pgShowConfigureProcessHint ? (
+                              <div className="w-40 self-center">
                                 <div className="flex justify-between items-center mb-1">
                                   <span className="text-[10px] font-bold text-slate-400">进度</span>
                                   <span className="text-xs font-black text-indigo-600">{Math.min(100, overallProgress)}%</span>
@@ -1030,7 +1096,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                   <div className="h-full bg-indigo-500 transition-all rounded-full" style={{ width: `${Math.min(100, overallProgress)}%` }} />
                                 </div>
                               </div>
-                            )}
+                              ) : null}
+                            </div>
                             <div className="flex flex-col gap-2 shrink-0">
                               {hasOrderPerm('production:orders_detail:view') && (
                               <button

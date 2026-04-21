@@ -121,3 +121,72 @@ export function resolvePreferredTransferWarehouses(
   const to = pref?.toWarehouseId && ids.has(pref.toWarehouseId) ? pref.toWarehouseId : '';
   return { fromWarehouseId: from, toWarehouseId: to };
 }
+
+/** 协作回传/转发按「合作单位」维度记忆的复合键 */
+export function compositeCollabPeerKey(
+  tenantId: string,
+  userId: string,
+  docKind: WarehouseDocKind,
+  peerTenantId: string,
+): string {
+  const uid = userId?.trim() || 'unknown';
+  const peer = peerTenantId?.trim() || 'unknown-peer';
+  return `${tenantId}|${uid}|${docKind}|peer:${peer}`;
+}
+
+/**
+ * 读「协作回传/转发 + 合作单位」级别的仓库偏好（localStorage）。
+ * 独立于全局 `readWarehousePreference`，用于「同一用户对不同合作单位」的记忆差异化。
+ */
+export function readCollabPeerWarehousePreference(
+  tenantId: string | undefined | null,
+  userId: string | undefined | null,
+  docKind: WarehouseDocKind,
+  peerTenantId: string | undefined | null,
+): WarehousePreferencePayload | null {
+  if (!tenantId?.trim() || !peerTenantId?.trim()) return null;
+  const key = compositeCollabPeerKey(tenantId.trim(), userId ?? '', docKind, peerTenantId.trim());
+  const store = loadStore();
+  const v = store[key];
+  if (!v || typeof v !== 'object') return null;
+  return v;
+}
+
+export function writeCollabPeerWarehousePreference(
+  tenantId: string | undefined | null,
+  userId: string | undefined | null,
+  docKind: WarehouseDocKind,
+  peerTenantId: string | undefined | null,
+  payload: WarehousePreferencePayload,
+): void {
+  if (!tenantId?.trim() || !peerTenantId?.trim()) return;
+  const key = compositeCollabPeerKey(tenantId.trim(), userId ?? '', docKind, peerTenantId.trim());
+  const store = loadStore();
+  store[key] = { ...payload };
+  saveStore(store);
+}
+
+/**
+ * 协作回传/转发出库仓解析优先级：
+ * 1) 「该合作单位 + 该单据类型」最近一次选择的仓
+ * 2) 「该单据类型」全局最近一次选择的仓
+ * 3) 仅一个仓时自动选中该仓
+ * 4) 空串（由调用方提示用户选择）
+ */
+export function resolveCollabOutboundWarehouseId(
+  warehouses: Pick<Warehouse, 'id'>[],
+  tenantId: string | undefined | null,
+  userId: string | undefined | null,
+  docKind: WarehouseDocKind,
+  peerTenantId: string | undefined | null,
+): string {
+  const ids = new Set(warehouses.map(w => w.id));
+  if (peerTenantId) {
+    const peerPref = readCollabPeerWarehousePreference(tenantId, userId, docKind, peerTenantId);
+    if (peerPref?.warehouseId && ids.has(peerPref.warehouseId)) return peerPref.warehouseId;
+  }
+  const globalPref = readWarehousePreference(tenantId, userId, docKind);
+  if (globalPref?.warehouseId && ids.has(globalPref.warehouseId)) return globalPref.warehouseId;
+  if (warehouses.length === 1) return warehouses[0]!.id;
+  return '';
+}

@@ -11,9 +11,12 @@ import {
 } from '../../utils/warehouseDocPreference';
 import type { Product, ProductionOpRecord, AppDictionaries, Warehouse } from '../../types';
 import {
+  collabFirstDispatchPayload,
   computeCollaborationForwardableRows,
   getNextForwardStep,
   getNextForwardStepKey,
+  resolveCollabPeerDefaultUnitPriceString,
+  resolvePreferredCollabMatrixOrder,
   type CollabReturnRow,
 } from './collabHelpers';
 import CollabPeerQtyMatrixBlock from './CollabPeerQtyMatrixBlock';
@@ -22,6 +25,10 @@ interface CollabPeerForwardModalProps {
   open: boolean;
   onClose: () => void;
   eligibleTransfers: any[];
+  /** 同合作单位 transfers，用于默认单价（历史回传 / 历史转发申报） */
+  peerTransfers?: any[];
+  /** listTransfers 全量（用于扣减已转发到子单的累计量）；不传则无法计算「部分转发后」的余量。 */
+  allChainTransfers?: any[] | null;
   warehouses: Warehouse[];
   products: Product[];
   prodRecords: ProductionOpRecord[];
@@ -37,10 +44,12 @@ type TransferBlock = {
   expanded: boolean;
   rows: CollabReturnRow[];
   note: string;
+  /** 单价（元），写入 originSettlement 供甲方确认转发时写入外协收货；下一站 API 不可见 */
+  unitPrice: string;
 };
 
 const CollabPeerForwardModal: React.FC<CollabPeerForwardModalProps> = ({
-  open, onClose, eligibleTransfers, warehouses, products, prodRecords, dictionaries, onDone,
+  open, onClose, eligibleTransfers, peerTransfers, allChainTransfers, warehouses, products, prodRecords, dictionaries, onDone,
 }) => {
   const { tenantCtx, userId } = useAuth();
   const [warehouseId, setWarehouseId] = useState('');
@@ -70,17 +79,21 @@ const CollabPeerForwardModal: React.FC<CollabPeerForwardModalProps> = ({
     }
 
     setBlocks(prev => {
-      const prevById = new Map(prev.map(b => [b.transfer.id, b]));
+      const prevById = new Map<string, TransferBlock>(prev.map(b => [b.transfer.id, b] as const));
       const next: TransferBlock[] = [];
       for (const t of eligibleTransfers) {
         const rows = computeCollaborationForwardableRows(
-          t, effectiveWarehouseId || undefined, products, prodRecords, dictionaries,
+          t, effectiveWarehouseId || undefined, products, prodRecords, dictionaries, allChainTransfers ?? undefined,
         );
         if (rows.length === 0) continue;
         const step = getNextForwardStep(t);
         const nextStepLabel = step
           ? `${step.nodeName ?? '未命名工序'} · ${step.receiverTenantName ?? '未知工厂'}`
           : '下一站未知';
+        const defaultPrice = resolveCollabPeerDefaultUnitPriceString({
+          peerTransfers: peerTransfers ?? eligibleTransfers,
+          receiverProductId: t.receiverProductId,
+        });
         const existing = !isFirstOpen ? prevById.get(t.id) : undefined;
         if (existing) {
           const mergedRows = rows.map(r => {
@@ -90,12 +103,14 @@ const CollabPeerForwardModal: React.FC<CollabPeerForwardModalProps> = ({
             if (Number.isFinite(n) && n > r.maxReturnable) qty = String(r.maxReturnable);
             return { ...r, qty };
           });
+          const prevPrice = String(existing.unitPrice ?? '').trim();
           next.push({
             ...existing,
             transfer: t,
             nextStepKey: getNextForwardStepKey(t),
             nextStepLabel,
             rows: mergedRows,
+            unitPrice: prevPrice !== '' ? existing.unitPrice : defaultPrice,
           });
         } else {
           next.push({
@@ -106,13 +121,14 @@ const CollabPeerForwardModal: React.FC<CollabPeerForwardModalProps> = ({
             expanded: true,
             rows: rows.map(r => ({ ...r, qty: String(r.maxReturnable) })),
             note: '',
+            unitPrice: defaultPrice,
           });
         }
       }
       return next;
     });
   }, [
-    open, eligibleTransfers, warehouses, warehouseId, products,
+    open, eligibleTransfers, peerTransfers, allChainTransfers, warehouses, warehouseId, products,
     prodRecords, dictionaries, tenantCtx?.tenantId, userId,
   ]);
 
@@ -143,6 +159,9 @@ const CollabPeerForwardModal: React.FC<CollabPeerForwardModalProps> = ({
   const updateNote = (blockIdx: number, note: string) => {
     setBlocks(prev => prev.map((b, i) => i === blockIdx ? { ...b, note } : b));
   };
+  const updateUnitPrice = (blockIdx: number, value: string) => {
+    setBlocks(prev => prev.map((b, i) => i === blockIdx ? { ...b, unitPrice: value } : b));
+  };
   const toggleSelectAll = () => {
     const all = blocks.every(b => b.selected);
     setBlocks(prev => prev.map(b => ({ ...b, selected: !all })));
@@ -170,7 +189,13 @@ const CollabPeerForwardModal: React.FC<CollabPeerForwardModalProps> = ({
           return;
         }
       }
-      /** 转发单不携带单价/金额：下一站加工厂视图、甲方确认转发气泡均按数量展示。 */
+      const priceTrim = String(b.unitPrice ?? '').trim();
+      const up = Number(priceTrim);
+      const hasUnit = priceTrim !== '' && Number.isFinite(up) && up >= 0;
+      if (priceTrim !== '' && !hasUnit) {
+        toast.error(`「${b.transfer.senderProductName}」单价无效，请填写非负数字或留空`);
+        return;
+      }
       const items = b.rows
         .map(r => {
           const q = Number(r.qty) || 0;
@@ -182,7 +207,12 @@ const CollabPeerForwardModal: React.FC<CollabPeerForwardModalProps> = ({
       payloads.push({
         transferId: b.transfer.id,
         productName: b.transfer.senderProductName || '',
-        body: { items, note: b.note || undefined, warehouseId: warehouseId || undefined },
+        body: {
+          items,
+          note: b.note || undefined,
+          warehouseId: warehouseId || undefined,
+          ...(hasUnit ? { unitPrice: up } : {}),
+        },
       });
     }
     if (payloads.length === 0) {
@@ -310,16 +340,18 @@ const CollabPeerForwardModal: React.FC<CollabPeerForwardModalProps> = ({
           {blocks.map((b, blockIdx) => {
             return (
               <div key={b.transfer.id} className={`rounded-xl border ${b.selected ? 'border-orange-300 bg-white' : 'border-slate-200 bg-white/60'} overflow-hidden`}>
-                <div className="flex items-center gap-3 px-4 py-3">
-                  <input
-                    type="checkbox"
-                    checked={b.selected}
-                    onChange={() => toggleSelect(blockIdx)}
-                    className="w-4 h-4 accent-orange-500"
-                  />
+                <div className="flex items-center gap-3 px-4 py-3 cursor-pointer" onClick={() => toggleSelect(blockIdx)}>
+                  <div className="shrink-0" onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={b.selected}
+                      onChange={() => toggleSelect(blockIdx)}
+                      className="w-4 h-4 accent-orange-500"
+                    />
+                  </div>
                   <button
                     type="button"
-                    onClick={() => toggleExpand(blockIdx)}
+                    onClick={e => { e.stopPropagation(); toggleExpand(blockIdx); }}
                     className="flex items-center gap-1 text-slate-400 hover:text-slate-600"
                   >
                     {b.expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -348,8 +380,15 @@ const CollabPeerForwardModal: React.FC<CollabPeerForwardModalProps> = ({
                         products.find(p => p.id === b.transfer.receiverProductId)?.sku
                         ?? b.transfer.senderProductSku
                       }
-                      showPricing={false}
+                      unitPrice={b.unitPrice}
+                      onUnitPriceChange={updateUnitPrice}
+                      showPricing
                       rows={b.rows}
+                      matrixOrder={resolvePreferredCollabMatrixOrder({
+                        payload: collabFirstDispatchPayload(b.transfer),
+                        product: products.find(p => p.id === b.transfer.receiverProductId) ?? null,
+                        dictionaries,
+                      })}
                       capColumnTitle="可转"
                       ringClass="focus:ring-2 focus:ring-orange-500"
                       onUpdateRow={updateRow}

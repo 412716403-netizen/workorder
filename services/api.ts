@@ -607,8 +607,8 @@ export const collaboration = {
 
   acceptTransfer: (id: string, data: any) =>
     request<any>(`/collaboration/subcontract-transfers/${id}/accept`, { method: 'POST', body: JSON.stringify(data) }),
-  forwardTransfer: (id: string, data: { items: Array<{ colorName: string | null; sizeName: string | null; quantity: number }>; note?: string; warehouseId?: string }) =>
-    request<any>(`/collaboration/subcontract-transfers/${id}/forward`, { method: 'POST', body: JSON.stringify(data) }),
+  forwardTransfer: (id: string, data: { items: Array<{ colorName: string | null; sizeName: string | null; quantity: number }>; note?: string; warehouseId?: string; sharedDispatchDocNo?: string; unitPrice?: number }) =>
+    request<{ newTransferId: string; dispatchId: string; nextStep: any; dispatchDocNo: string | null }>(`/collaboration/subcontract-transfers/${id}/forward`, { method: 'POST', body: JSON.stringify(data) }),
   confirmForward: (id: string) =>
     request<any>(`/collaboration/subcontract-transfers/${id}/confirm-forward`, { method: 'PATCH' }),
   createReturn: (id: string, data: any) =>
@@ -696,7 +696,10 @@ export const itemCodesApi = {
   },
 
   scan: (token: string) =>
-    request<any>(`/item-codes/scan/${token}`),
+    request<import('../types').ScanResult>(`/item-codes/scan/${encodeURIComponent(token)}`),
+
+  trace: (token: string) =>
+    request<import('../types').TraceResult>(`/item-codes/trace/${encodeURIComponent(token)}`),
 };
 
 export const planVirtualBatchesApi = {
@@ -757,5 +760,9 @@ export const planVirtualBatchesApi = {
     );
   },
 
-  scan: (token: string) => request<any>(`/plan-virtual-batches/scan/${encodeURIComponent(token)}`),
+  scan: (token: string) =>
+    request<import('../types').ScanResult>(`/plan-virtual-batches/scan/${encodeURIComponent(token)}`),
+
+  trace: (token: string) =>
+    request<import('../types').TraceResult>(`/plan-virtual-batches/trace/${encodeURIComponent(token)}`),
 };

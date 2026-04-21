@@ -34,6 +34,73 @@ export function pmpCompletedAtTemplateVariant(
 }
 
 /**
+ * 同一产品 + 工序模板下，PMP（产品关联报工）与 工单里程碑（关联工单报工 / 外协收回计入）的「完成量」合并汇总。
+ * 关联产品模式下，一次报工会写入 PMP；但外协收回且带 orderId 时会累加到工单里程碑的 completedQuantity——
+ * 这两条路径互不覆盖，任何一处只看 PMP 或只看里程碑都会漏报。本函数将两路完成量求和。
+ */
+export function combinedCompletedAtTemplate(
+  blockOrders: ProductionOrder[],
+  pmp: ProductMilestoneProgress[],
+  productId: string,
+  templateId: string,
+): number {
+  const pmpTotal = pmp
+    .filter(p => p.productId === productId && p.milestoneTemplateId === templateId)
+    .reduce((s, p) => s + (p.completedQuantity ?? 0), 0);
+  const mileTotal = blockOrders.reduce((s, o) => {
+    const m = o.milestones.find(x => x.templateId === templateId);
+    return s + (m?.completedQuantity ?? 0);
+  }, 0);
+  return pmpTotal + mileTotal;
+}
+
+/** 同 {@link combinedCompletedAtTemplate}，但按规格（variantId）拆分结果。 */
+export function combinedCompletedByVariantAtTemplate(
+  blockOrders: ProductionOrder[],
+  pmp: ProductMilestoneProgress[],
+  productId: string,
+  templateId: string,
+): Record<string, number> {
+  const byVariant: Record<string, number> = {};
+  const add = (vid: string, q: number) => {
+    if (!(q > 0)) return;
+    const key = vid || '';
+    byVariant[key] = (byVariant[key] ?? 0) + q;
+  };
+  pmp
+    .filter(p => p.productId === productId && p.milestoneTemplateId === templateId)
+    .forEach(row => {
+      const reps = row.reports;
+      if (reps && reps.length > 0) {
+        reps.forEach(r => add(r.variantId ?? row.variantId ?? '', Number(r.quantity) || 0));
+      } else {
+        add(row.variantId ?? '', Number(row.completedQuantity) || 0);
+      }
+    });
+  for (const o of blockOrders) {
+    const m = o.milestones.find(x => x.templateId === templateId);
+    if (!m) continue;
+    const reps = m.reports;
+    if (reps && reps.length > 0) {
+      reps.forEach(r => add((r as any).variantId ?? '', Number(r.quantity) || 0));
+    } else {
+      // 里程碑 completedQuantity 没有按规格拆分的 reports 时，按工单 items 数量占比分摊
+      const total = m.completedQuantity ?? 0;
+      if (total <= 0) continue;
+      const totalQty = o.items.reduce((s, i) => s + i.quantity, 0);
+      if (totalQty <= 0) { add('', total); continue; }
+      let rem = total;
+      o.items.forEach((item, idx) => {
+        const part = idx === o.items.length - 1 ? rem : Math.floor((total * item.quantity) / totalQty);
+        rem -= part;
+        add(item.variantId ?? '', part);
+      });
+    }
+  }
+  return byVariant;
+}
+
+/**
  * 单工单在某工序的「可报最多」= 基数 - 本工序不良 + 本工序返工完成（与工单中心一致）。
  * 关联产品 + 顺序模式：基数 = 上一道工序完成量——优先用该单里程碑上的完成数；否则按本单数量占同产品工单块的比例分摊产品报工中上一道的完成总量（与关联工单「上道完成限制本道」一致）。
  */

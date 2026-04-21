@@ -231,3 +231,38 @@ PrintRenderContext.virtualBatch
 
 的完整链路。  
 单品码、虚拟批次、标签打印都已经是这条链路中的正式业务能力，不再只是前端小工具。
+
+---
+
+## 10. 码的消费侧：扫码报工 / 收货 / 入库 / 返工 / 追溯
+
+### 10.1 扫码入口一览
+
+| 场景 | 文件 | 入口位置 | 累加规则 |
+|------|------|----------|----------|
+| 工单报工 | `views/order-list/ReportModal.tsx` | 「本次完成数量」标题行右侧小按钮 | 单品 +1；批次 +`quantity`；`callerContext.callerPlanOrderId`（或 `planOrderId`）须与当前工单 `planOrderId` 一致；防重扫 |
+| 返工报工 | `views/production-ops/ReworkReportSubmitModal.tsx` | 「扫码累加」+ 摄像头/扫码枪 | 产品须一致；按规格匹配首条有待返工的路径累加 |
+| 外协收货 | `views/production-ops/OutsourceReceiveQuantityModal.tsx` | 「商品明细」标题栏右侧 | 在已选行中按 `productId` 匹配行，规格 key 使用 `__v__`（关联产品块）或 `\|`（工单按规格） |
+| 生产入库 | `views/order-list/PendingStockPanel.tsx` | 入库弹窗内「入库数量明细」/「入库数量」标题旁 | 同上计划校验 + 矩阵写 `variantQuantities` / 否则 `singleQuantity` |
+| 产品追溯 | `views/TraceView.tsx` | `App.tsx` 侧栏「切换企业」与主导航之间独立「扫码追溯」 | `ScanPanel` + `scan` + `trace` 展示时间轴 |
+
+通用能力：`utils/scanPayload.ts`、`hooks/useScanGun.ts`、`components/scan/ScanInputButton.tsx`、`components/scan/ScanPanel.tsx`；摄像头依赖 `@zxing/browser`。
+
+### 10.2 后端接口
+
+| 接口 | 说明 |
+|------|------|
+| `GET /item-codes/scan/:token` | 单品码解析；返回 `kind: 'ITEM_CODE'`、`planOrderId`、`callerContext` |
+| `GET /plan-virtual-batches/scan/:token` | 批次码解析；返回 `kind: 'VIRTUAL_BATCH'`、`planOrderId`、`callerContext` |
+| `GET /item-codes/trace/:token` | 追溯时间轴（按产品 + 规格 + 计划树聚合） |
+| `GET /plan-virtual-batches/trace/:token` | 同上（入口在 `itemCodes.service` 的 `traceVirtualBatch`） |
+
+### 10.3 多级协作
+
+- `verifyCollaborationAccess`（`backend/src/services/planTreeQuota.service.ts`）在 ACTIVE 的 `tenantCollaboration` 图上 **BFS**，最多 4 跳，结果约 **60s** 内存缓存。
+- `callerContext` 由 `resolveCallerContext` + `collectPlanTreeFromNode` 计算：在码所属计划树中定位**扫码租户**对应的计划节点与工单号，便于乙方使用甲方原码。
+- 本期**不做**协作侧批次拆分子码。
+
+### 10.4 追溯粒度说明
+
+报工与 `ProductionOpRecord` 当前**未**持久化 `itemCodeId` / `batchId`，因此 `trace` 时间轴为「同产品 + 规格 + 计划树」上的事件汇总，而非单件码专属轨迹。若要单件级追溯，需在写入链路增加字段并回填。

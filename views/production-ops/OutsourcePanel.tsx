@@ -40,7 +40,7 @@ import {
   pageSubtitleClass,
   pageTitleClass,
 } from '../../styles/uiDensity';
-import { productGroupMaxReportableSum, pmpCompletedAtTemplate } from '../../utils/productReportAggregates';
+import { productGroupMaxReportableSum, combinedCompletedAtTemplate } from '../../utils/productReportAggregates';
 import {
   milestoneIndexInOrder,
   milestoneIndexInProduct,
@@ -226,7 +226,9 @@ const OutsourcePanel: React.FC<PanelProps> = ({
                   pmpByKey
                 )
               : 0;
-          const reportedQty = pmpCompletedAtTemplate(productMilestoneProgresses || [], productId, nodeId, pmpByKey);
+          // 关联产品 + 外协发出侧「已报」应同时覆盖 PMP 与工单里程碑写入（后者来自外协收回自动回写 / 关联工单直接报工），
+          // 只用 pmpCompletedAtTemplate 会漏掉经过里程碑的那部分，外协发出可用数被错误抬高。
+          const reportedQty = combinedCompletedAtTemplate(blockOrders, productMilestoneProgresses || [], productId, nodeId);
           const key = `${productId}|${nodeId}`;
           const dispatchedQty = Math.max(0, (dispatchedByKey[key] ?? 0) - (receivedByKey[key] ?? 0));
           const availableQty = Math.max(0, maxReportable - reportedQty - dispatchedQty);
@@ -1273,7 +1275,10 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           products={products}
           dispatchSelectedKeys={dispatchSelectedKeys}
           setDispatchSelectedKeys={setDispatchSelectedKeys}
-          onDispatchFormOpen={() => setDispatchFormModalOpen(true)}
+          onDispatchFormOpen={() => {
+            setDispatchFormQuantities({});
+            setDispatchFormModalOpen(true);
+          }}
           onClose={() => setOutsourceModal(null)}
         />
       )}

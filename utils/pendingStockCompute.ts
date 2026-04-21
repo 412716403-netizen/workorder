@@ -1,5 +1,5 @@
 import type { ProductionOrder, ProductionOpRecord, ProductMilestoneProgress } from '../types';
-import { pmpCompletedAtTemplate, sumBlockOrderQty } from './productReportAggregates';
+import { combinedCompletedAtTemplate, combinedCompletedByVariantAtTemplate, sumBlockOrderQty } from './productReportAggregates';
 
 export type PendingStockComputeItem = {
   /** 列表行键：关联产品合并行为 productId，关联工单为工单 id */
@@ -31,28 +31,18 @@ function stockInAggregatesForOrder(order: ProductionOrder, prodRecords: Producti
   return { alreadyIn, alreadyInByVariant };
 }
 
-/** 产品在「最后一道工序模板」上的全局完成量（按规格汇总，与 PMP 存数一致） */
+/**
+ * 产品在「最后一道工序模板」上的全局完成量（按规格汇总）。
+ * 同时汇总 PMP（关联产品报工）与工单里程碑（关联工单报工 / 外协收回）两路数据——
+ * 任何一路单独使用都会导致 `验片 最后一道工序报 4 件` 等场景漏入 待入库清单。
+ */
 function globalCompletedByVariantAtTemplate(
+  blockOrders: ProductionOrder[],
   pmp: ProductMilestoneProgress[],
   productId: string,
   templateId: string,
 ): Record<string, number> {
-  const globalByVariant: Record<string, number> = {};
-  pmp
-    .filter(p => p.productId === productId && p.milestoneTemplateId === templateId)
-    .forEach(row => {
-      const reps = row.reports;
-      if (reps && reps.length > 0) {
-        reps.forEach(r => {
-          const vid = r.variantId ?? row.variantId ?? '';
-          globalByVariant[vid] = (globalByVariant[vid] ?? 0) + (Number(r.quantity) || 0);
-        });
-      } else {
-        const vid = row.variantId ?? '';
-        globalByVariant[vid] = (globalByVariant[vid] ?? 0) + (Number(row.completedQuantity) || 0);
-      }
-    });
-  return globalByVariant;
+  return combinedCompletedByVariantAtTemplate(blockOrders, pmp, productId, templateId);
 }
 
 /**
@@ -148,7 +138,7 @@ function computeProductMode(
     if (!lastMilestone) continue;
     const lastTid = lastMilestone.templateId;
 
-    const globalByVariant = globalCompletedByVariantAtTemplate(pmp, productId, lastTid);
+    const globalByVariant = globalCompletedByVariantAtTemplate(blockOrders, pmp, productId, lastTid);
     const globalKeys = Object.keys(globalByVariant);
 
     const productStockInRecords = prodRecords.filter(r => r.type === 'STOCK_IN' && r.productId === productId);
@@ -174,7 +164,7 @@ function computeProductMode(
     } else {
       globalCompleted = globalKeys.length > 0
         ? globalKeys.reduce((s, k) => s + (globalByVariant[k] ?? 0), 0)
-        : pmpCompletedAtTemplate(pmp, productId, lastTid);
+        : combinedCompletedAtTemplate(blockOrders, pmp, productId, lastTid);
     }
 
     const pendingTotal = Math.max(0, globalCompleted - productAlreadyIn);

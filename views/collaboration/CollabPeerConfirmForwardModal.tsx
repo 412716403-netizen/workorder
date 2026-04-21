@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import * as api from '../../services/api';
 import QtyMatrixTable from '../../components/variant-matrix/QtyMatrixTable';
 import { collabPayloadItemsToQtyMatrixProps, type CollabPayloadItem } from './collabDocDisplay';
+import { resolvePreferredCollabMatrixOrder } from './collabHelpers';
 
 interface CollabPeerConfirmForwardModalProps {
   open: boolean;
@@ -14,6 +15,7 @@ interface CollabPeerConfirmForwardModalProps {
 
 type Row = {
   transferId: string;
+  transfer: any;
   productName: string;
   productSku: string;
   createdAt: string;
@@ -24,6 +26,7 @@ type Row = {
   note: string;
   docNo: string;
   selected: boolean;
+  originUnitPrice: number | null;
 };
 
 function sumItemsQty(items: any[] | undefined): number {
@@ -49,10 +52,14 @@ const CollabPeerConfirmForwardModal: React.FC<CollabPeerConfirmForwardModalProps
           ? `${currStep.nodeName ?? '未命名工序'} · ${currStep.receiverTenantName ?? '未知工厂'}`
           : `链上 ${t.chainStep} 步`;
         const firstDispatch = (t.dispatches || [])[0];
-        const docNo = (firstDispatch?.payload as any)?.stockOutDocNo || '';
-        const note = (firstDispatch?.payload as any)?.note || '';
+        const fp = firstDispatch?.payload as any;
+        const docNo = fp?.stockOutDocNo || '';
+        const note = fp?.note || '';
+        const up = Number(fp?.originSettlement?.unitPrice);
+        const originUnitPrice = Number.isFinite(up) && up >= 0 ? up : null;
         return {
           transferId: t.id,
+          transfer: t,
           productName: t.senderProductName || '—',
           productSku: t.senderProductSku || '',
           createdAt: t.createdAt,
@@ -63,6 +70,7 @@ const CollabPeerConfirmForwardModal: React.FC<CollabPeerConfirmForwardModalProps
           note,
           docNo,
           selected: true,
+          originUnitPrice,
         };
       });
       setRows(next);
@@ -79,7 +87,11 @@ const CollabPeerConfirmForwardModal: React.FC<CollabPeerConfirmForwardModalProps
 
   /** 预生成各行规格矩阵；转发链不含价格，矩阵按纯数量渲染。 */
   const rowMatrices = useMemo(
-    () => rows.map(r => collabPayloadItemsToQtyMatrixProps(r.items, { showPricing: false })),
+    () => rows.map(r => {
+      const fp = (r.transfer.dispatches || [])[0]?.payload;
+      const ord = resolvePreferredCollabMatrixOrder({ payload: fp });
+      return collabPayloadItemsToQtyMatrixProps(r.items, { showPricing: false, ...ord });
+    }),
     [rows],
   );
 
@@ -229,6 +241,13 @@ const CollabPeerConfirmForwardModal: React.FC<CollabPeerConfirmForwardModalProps
                     ) : (
                       <div className="p-3">
                         <QtyMatrixTable sizeHeaders={matrix.sizeHeaders} rows={matrix.rows} />
+                      </div>
+                    )}
+
+                    {r.originUnitPrice != null && (
+                      <div className="border-t border-amber-100 bg-amber-50/80 px-4 py-2 text-[11px] text-amber-950">
+                        <span className="font-bold">乙方申报单价（确认后写入外协收货）：</span>
+                        <span className="tabular-nums font-black">{r.originUnitPrice}</span> 元/件
                       </div>
                     )}
 

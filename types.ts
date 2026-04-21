@@ -53,6 +53,88 @@ export interface PlanVirtualBatch {
   itemCodeCount?: number;
 }
 
+/**
+ * 扫码接口调用方上下文：后端根据 callerTenantId 在码所在计划树里定位
+ * 「本租户的计划节点与工单号」。
+ */
+export interface ScanCallerContext {
+  callerPlanOrderId: string | null;
+  callerPlanNumber: string | null;
+  callerOrderNumbers: string[];
+  relation: 'OWNER' | 'DOWNSTREAM' | 'UPSTREAM' | 'PEER';
+}
+
+export interface ScanItemCodeResult {
+  kind: 'ITEM_CODE';
+  status: 'ACTIVE' | 'VOIDED';
+  message?: string;
+  itemCodeId?: string;
+  serialNo?: number;
+  planOrderId?: string;
+  planNumber?: string | null;
+  orderNumbers?: string[];
+  productId?: string;
+  productName?: string | null;
+  sku?: string | null;
+  variantId?: string | null;
+  variantLabel?: string | null;
+  colorName?: string | null;
+  sizeName?: string | null;
+  ownerTenantId?: string;
+  ownerTenantName?: string | null;
+  batchId?: string | null;
+  batchSequenceNo?: number | null;
+  batchSerialLabel?: string | null;
+  callerContext?: ScanCallerContext;
+}
+
+export interface ScanVirtualBatchResult {
+  kind: 'VIRTUAL_BATCH';
+  status: 'ACTIVE' | 'VOIDED';
+  message?: string;
+  batchId?: string;
+  quantity?: number;
+  planOrderId?: string;
+  planNumber?: string | null;
+  orderNumbers?: string[];
+  productId?: string;
+  productName?: string | null;
+  sku?: string | null;
+  variantId?: string | null;
+  variantLabel?: string | null;
+  colorName?: string | null;
+  sizeName?: string | null;
+  ownerTenantId?: string;
+  ownerTenantName?: string | null;
+  itemCodes?: Array<{ id: string; serialNo: number; scanToken: string; status: 'ACTIVE' | 'VOIDED' }>;
+  callerContext?: ScanCallerContext;
+}
+
+export type ScanResult = ScanItemCodeResult | ScanVirtualBatchResult;
+
+export interface TraceEvent {
+  kind: 'REPORT' | 'OUTSOURCE' | 'REWORK' | 'STOCK' | 'TRANSFER' | 'OTHER';
+  subKind: string;
+  id: string;
+  tenantId: string;
+  tenantName: string | null;
+  timestamp: string;
+  quantity: number;
+  orderId?: string | null;
+  orderNumber?: string | null;
+  nodeName?: string | null;
+  operator?: string | null;
+  notes?: string | null;
+  partner?: string | null;
+  warehouseId?: string | null;
+}
+
+export interface TraceResult {
+  events: TraceEvent[];
+  tenants: Array<{ id: string; name: string | null }>;
+  planTree: Array<{ id: string; tenantId: string; planNumber: string; parentPlanId: string | null }>;
+}
+
 export type FieldType = 'text' | 'number' | 'select' | 'boolean' | 'date' | 'file';
 
 /** 工序节点库「报工自定义单据内容」推荐类型；历史数据可能含 number / boolean */

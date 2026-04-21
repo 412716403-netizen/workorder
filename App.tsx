@@ -2,7 +2,7 @@ import React, { Suspense, useEffect, useRef, useLayoutEffect, useState } from 'r
 import { BrowserRouter, Routes, Route, Link, Navigate, useParams, useLocation } from 'react-router-dom';
 import {
   ClipboardList, Settings as SettingsIcon,
-  Boxes, ShoppingCart, Wallet, LogOut, User, UserCog, Building2, Loader2, Inbox,
+  Boxes, ShoppingCart, Wallet, LogOut, User, UserCog, Building2, Loader2, Inbox, ScanLine,
 } from 'lucide-react';
 
 import LoginView from './views/LoginView';
@@ -19,9 +19,11 @@ const SettingsView = lazyWithReloadOnChunkError(() => import('./views/SettingsVi
 const UserAdminView = lazyWithReloadOnChunkError(() => import('./views/UserAdminView'));
 const CollaborationInboxView = lazyWithReloadOnChunkError(() => import('./views/CollaborationInboxView'));
 const PrintTemplateEditorView = lazyWithReloadOnChunkError(() => import('./views/PrintTemplateEditorView'));
+const TraceView = lazyWithReloadOnChunkError(() => import('./views/TraceView'));
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppDataProvider, useDataLoading, useMasterData, useConfigData, useOrdersData, usePsiData, useFinanceData, useAppActions } from './contexts/AppDataContext';
+import { useCollabPendingIndicator } from './hooks/useCollabPendingIndicator';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ConfirmProvider } from './contexts/ConfirmContext';
 import { MainScrollSegmentProvider } from './contexts/MainScrollSegmentContext';
@@ -136,6 +138,7 @@ function AppLayout() {
 
   const { currentUser, tenantCtx, hasPerm, handleLogout, handleSwitchTenant } = auth;
   const { profileOpen, setProfileOpen, onProfileUpdate, onTenantCtxUpdate } = auth;
+  const collabHasPending = useCollabPendingIndicator(tenantCtx?.tenantId ?? null);
 
   if (dataLoading) {
     return (
@@ -153,7 +156,7 @@ function AppLayout() {
     <div className="flex h-screen bg-slate-50 text-slate-900 font-sans">
       {/* Sidebar — 打印模板编辑页隐藏，便于全宽画布 */}
       {!printEditorFullscreen && (
-      <div className="w-52 bg-white border-r border-slate-200 flex flex-col p-5 gap-8">
+      <div className="w-44 bg-white border-r border-slate-200 flex flex-col p-5 gap-8">
         <div className="flex items-center gap-3">
           <img
             src={BRAND_LOGO_PATH}
@@ -167,47 +170,60 @@ function AppLayout() {
           </div>
         </div>
 
-        <button
-          onClick={handleSwitchTenant}
-          className="flex items-center gap-2 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors text-left"
-          title="切换企业"
-        >
-          <Building2 className="w-4 h-4 text-indigo-500 flex-shrink-0" />
-          <span className="truncate text-xs font-bold text-indigo-700">{tenantCtx!.tenantName}</span>
-        </button>
+        <div className="flex items-center gap-0.5 min-w-0">
+          <button
+            type="button"
+            onClick={handleSwitchTenant}
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-full bg-violet-50 py-2 pl-3 pr-2 text-left transition-colors hover:bg-violet-100"
+            title="切换企业"
+          >
+            <Building2 className="h-4 w-4 shrink-0 text-violet-600" />
+            <span className="truncate text-xs font-bold text-violet-800">{tenantCtx!.tenantName}</span>
+          </button>
+          <Link
+            to="/trace"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-800 transition-colors hover:bg-slate-100 hover:text-slate-900"
+            title="扫码追溯 / 产品追溯"
+          >
+            <ScanLine className="h-5 w-5" strokeWidth={2.25} />
+          </Link>
+        </div>
 
         <nav className="flex flex-col gap-1.5">
           {hasPerm('production') && (
             <Link to="/production" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
-              <ClipboardList className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 生产管理
+              <ClipboardList className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 生产管理
             </Link>
           )}
           {hasPerm('psi') && (
             <Link to="/psi" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
-              <ShoppingCart className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 进销存
+              <ShoppingCart className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 进销存
             </Link>
           )}
           {hasPerm('finance') && (
             <Link to="/finance" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
-              <Wallet className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 财务结算
+              <Wallet className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 财务结算
             </Link>
           )}
-          <Link to="/collaboration" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
-            <Inbox className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 协作管理
+          <Link to="/collaboration" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group relative">
+            <Inbox className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 协作管理
+            {collabHasPending && (
+              <span className="absolute top-2.5 right-3 w-2 h-2 rounded-full bg-rose-500" aria-label="有待办" />
+            )}
           </Link>
           {hasPerm('basic') && (
             <Link to="/basic" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
-              <Boxes className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 基础信息
+              <Boxes className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 基础信息
             </Link>
           )}
           {hasPerm('settings') && (
             <Link to="/settings" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
-              <SettingsIcon className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 系统设置
+              <SettingsIcon className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 系统设置
             </Link>
           )}
           {(currentUser as Record<string, unknown>)?.role === 'admin' && (
             <Link to="/admin/users" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
-              <UserCog className="w-5 h-5 text-slate-300 group-hover:text-indigo-600" /> 账号管理
+              <UserCog className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 账号管理
             </Link>
           )}
         </nav>
@@ -480,6 +496,14 @@ function AppRoutes() {
         }
       />
       <Route path="/orders/:id" element={<Navigate to="/production" replace state={{ tab: 'orders' }} />} />
+      <Route
+        path="/trace"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <TraceView />
+          </Suspense>
+        }
+      />
       <Route
         path="/print-editor/:id"
         element={

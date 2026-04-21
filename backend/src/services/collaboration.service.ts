@@ -101,9 +101,10 @@ function aggregateDispatchedByVariant(
   return map;
 }
 
-function aggregateReturnedByVariant(returns: { payload: unknown }[]): Map<string, number> {
+function aggregateReturnedByVariant(returns: { payload: unknown; status?: string }[]): Map<string, number> {
   const map = new Map<string, number>();
   for (const r of returns) {
+    if ((r as any).status === 'WITHDRAWN') continue;
     for (const it of ((r.payload as any)?.items ?? [])) {
       const k = collabVariantKey(it);
       map.set(k, (map.get(k) || 0) + (Number(it.quantity) || 0));
@@ -143,6 +144,21 @@ function normalizeSpecLabel(v: unknown): string | null {
   if (v == null) return null;
   const s = String(v).trim();
   return s.length > 0 ? s : null;
+}
+
+/** 链式转发派发上的 `originSettlement` 仅给甲方/填报方核算；下一站接收方 API 中脱敏。 */
+function sanitizeCollabTransferForViewer(tenantId: string, t: any): any {
+  if (!t?.dispatches?.length) return t;
+  const dispatches = t.dispatches.map((d: any) => {
+    const p = d.payload as Record<string, unknown> | null;
+    if (!p || typeof p !== 'object') return d;
+    const forwardedFrom = (p as any).forwardedFrom;
+    const originSettlement = (p as any).originSettlement;
+    if (!forwardedFrom || !originSettlement || t.receiverTenantId !== tenantId) return d;
+    const { originSettlement: _removed, ...rest } = p as any;
+    return { ...d, payload: rest };
+  });
+  return { ...t, dispatches };
 }
 
 function jsonToStringIds(v: unknown): string[] {
@@ -219,6 +235,152 @@ function dedupeTrimmedNames(names?: string[]): string[] {
   const out: string[] = [];
   for (const raw of names) { const t = normalizeSpecLabel(raw); if (!t || seen.has(t)) continue; seen.add(t); out.push(t); }
   return out;
+}
+
+/**
+ * 从若干派发 payload 按创建时间合并 colorNames/sizeNames（保序去重）。
+ * 用于转发：优先沿用链头甲方派发单上的全量色码，避免中间站本地产品缺规格导致下游只看到部分颜色尺码。
+ */
+function mergedColorSizeNamesFromDispatches(dispatches: { payload: unknown; createdAt?: Date | string }[] | null | undefined): { colorNames: string[]; sizeNames: string[] } {
+  const sorted = [...(dispatches ?? [])].sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  const colorNames: string[] = [];
+  const sizeNames: string[] = [];
+  const seenC = new Set<string>();
+  const seenS = new Set<string>();
+  for (const d of sorted) {
+    const p = d.payload as { colorNames?: unknown; sizeNames?: unknown } | null;
+    if (!p) continue;
+    const cnArr = Array.isArray(p.colorNames) ? (p.colorNames as string[]) : [];
+    const snArr = Array.isArray(p.sizeNames) ? (p.sizeNames as string[]) : [];
+    for (const t of dedupeTrimmedNames(cnArr)) {
+      if (!seenC.has(t)) { seenC.add(t); colorNames.push(t); }
+    }
+    for (const t of dedupeTrimmedNames(snArr)) {
+      if (!seenS.has(t)) { seenS.add(t); sizeNames.push(t); }
+    }
+  }
+  return { colorNames, sizeNames };
+}
+
+async function getOriginChainDispatchSpecNames(originTransferId: string): Promise<{ colorNames: string[]; sizeNames: string[] }> {
+  const origin = await basePrisma.interTenantSubcontractTransfer.findUnique({
+    where: { id: originTransferId },
+    include: { dispatches: true },
+  });
+  if (!origin) return { colorNames: [], sizeNames: [] };
+  return mergedColorSizeNamesFromDispatches(origin.dispatches as any[]);
+}
+
+/** 与 acceptTransfer 中解析乙方产品 id 的前几步一致（不含按 createProduct 在本地按名/SKU 匹配） */
+async function resolveReceiverProductIdForAcceptPreview(transfer: {
+  id: string;
+  receiverTenantId: string;
+  senderTenantId: string;
+  collaborationId: string | null;
+  senderProductSku: string | null;
+  senderProductId: string | null;
+  receiverProductId: string | null;
+}): Promise<string | null> {
+  let finalProductId = transfer.receiverProductId;
+  if (!finalProductId && transfer.senderProductSku && transfer.collaborationId) {
+    const mapped = await basePrisma.collaborationProductMap.findUnique({
+      where: { collaborationId_senderSku: { collaborationId: transfer.collaborationId, senderSku: transfer.senderProductSku } },
+    });
+    if (mapped?.receiverProductId) finalProductId = mapped.receiverProductId;
+  }
+  if (!finalProductId && transfer.senderProductId) {
+    const resolvedTransfer = await basePrisma.interTenantSubcontractTransfer.findFirst({
+      where: {
+        senderTenantId: transfer.senderTenantId,
+        receiverTenantId: transfer.receiverTenantId,
+        senderProductId: transfer.senderProductId,
+        receiverProductId: { not: null },
+        id: { not: transfer.id },
+      },
+      select: { receiverProductId: true },
+    });
+    if (resolvedTransfer?.receiverProductId) finalProductId = resolvedTransfer.receiverProductId;
+  }
+  return finalProductId;
+}
+
+export type AcceptDispatchUiMode = 'CREATE' | 'UPDATE_ACK' | 'READY';
+
+/**
+ * 派发「接受」弹窗展示模式：
+ * · CREATE — 尚未绑定乙方产品，须填写/确认新建产品信息；
+ * · UPDATE_ACK — 已绑定，但甲方名称/SKU/描述/色码相对本地有增量，接受后会同步（需用户知情确认）；
+ * · READY — 已绑定且无上述差异，一键接受即可。
+ */
+async function computeAcceptDispatchUiMode(tenantId: string, transfer: any): Promise<{
+  mode: AcceptDispatchUiMode;
+  resolvedReceiverProductId: string | null;
+}> {
+  const pending = (transfer.dispatches || []).filter((d: any) => d.status === 'PENDING');
+  const resolved = await resolveReceiverProductIdForAcceptPreview({
+    id: transfer.id,
+    receiverTenantId: transfer.receiverTenantId,
+    senderTenantId: transfer.senderTenantId,
+    collaborationId: transfer.collaborationId ?? null,
+    senderProductSku: transfer.senderProductSku ?? null,
+    senderProductId: transfer.senderProductId ?? null,
+    receiverProductId: transfer.receiverProductId ?? null,
+  });
+  if (!pending.length) {
+    return { mode: 'READY', resolvedReceiverProductId: resolved };
+  }
+  if (!resolved) {
+    return { mode: 'CREATE', resolvedReceiverProductId: null };
+  }
+  const product = await basePrisma.product.findFirst({ where: { id: resolved, tenantId } });
+  if (!product) {
+    return { mode: 'CREATE', resolvedReceiverProductId: null };
+  }
+  const firstPayload = pending[0]?.payload as any;
+  const senderName = String(transfer.senderProductName || '').trim();
+  const senderSku = String(transfer.senderProductSku || '').trim();
+  const senderDesc = String(firstPayload?.description ?? '').trim();
+
+  const dictItems = await basePrisma.dictionaryItem.findMany({ where: { tenantId } });
+  const dictById = Object.fromEntries(dictItems.map(d => [d.id, d.name]));
+
+  const existingColorNames = new Set<string>();
+  for (const cid of jsonToStringIds((product as any).colorIds)) {
+    const n = normalizeSpecLabel(dictById[cid]);
+    if (n) existingColorNames.add(n);
+  }
+  const existingSizeNames = new Set<string>();
+  for (const sid of jsonToStringIds((product as any).sizeIds)) {
+    const n = normalizeSpecLabel(dictById[sid]);
+    if (n) existingSizeNames.add(n);
+  }
+
+  const senderColorNames = new Set<string>(dedupeTrimmedNames(firstPayload?.colorNames));
+  const senderSizeNames = new Set<string>(dedupeTrimmedNames(firstPayload?.sizeNames));
+  for (const it of firstPayload?.items || []) {
+    const cn = normalizeSpecLabel((it as any).colorName);
+    const sn = normalizeSpecLabel((it as any).sizeName);
+    if (cn) senderColorNames.add(cn);
+    if (sn) senderSizeNames.add(sn);
+  }
+
+  let drift = false;
+  if (senderName && senderName !== String(product.name || '').trim()) drift = true;
+  if (senderSku && senderSku !== String(product.sku || '').trim()) drift = true;
+  if (senderDesc && senderDesc !== String((product as any).description ?? '').trim()) drift = true;
+  if (!drift) {
+    for (const c of senderColorNames) {
+      if (c && !existingColorNames.has(c)) { drift = true; break; }
+    }
+  }
+  if (!drift) {
+    for (const s of senderSizeNames) {
+      if (s && !existingSizeNames.has(s)) { drift = true; break; }
+    }
+  }
+
+  if (drift) return { mode: 'UPDATE_ACK', resolvedReceiverProductId: resolved };
+  return { mode: 'READY', resolvedReceiverProductId: resolved };
 }
 
 async function ensureDictionaryItem(tenantId: string, type: string, name: string): Promise<string> {
@@ -411,15 +573,49 @@ export async function listTransfers(tenantId: string, opts: { role?: string; sta
   const tenants = await basePrisma.tenant.findMany({ where: { id: { in: [...peerIds] } }, select: { id: true, name: true } });
   const nameMap = Object.fromEntries(tenants.map(t => [t.id, t.name]));
   const enriched = transfers.map(t => ({ ...t, senderTenantName: t.senderTenantId === tenantId ? '本企业' : (nameMap[t.senderTenantId] ?? ''), receiverTenantName: t.receiverTenantId === tenantId ? '本企业' : (nameMap[t.receiverTenantId] ?? '') }));
-  const groupMap = new Map<string, any[]>();
+
+  /**
+   * 链上每一步独立返回：让「阿华↔万濮」「万濮↔阿卡」等窗口各自拥有自己的 dispatch/return/forward 气泡。
+   * 对每条链记录附带 `chainMembers`（全链静态成员视图），前端可据此渲染「下一站接受状态」等附属指示，
+   * 不再按 originTransferId 合并为单行，否则会出现「A↔B 窗口吃掉子转发单」。
+   */
+  const chainGroups = new Map<string, any[]>();
   for (const t of enriched) {
-    let routeKey = '';
-    if (t.outsourceRouteSnapshot) routeKey = t.originTransferId ?? t.id;
-    const key = routeKey ? `chain::${routeKey}` : `${t.senderProductId}::${t.senderTenantId}::${t.receiverTenantId}`;
-    const list = groupMap.get(key) ?? [];
-    list.push(t); groupMap.set(key, list);
+    if (!t.outsourceRouteSnapshot) continue;
+    const key = t.originTransferId ?? t.id;
+    const list = chainGroups.get(key) ?? [];
+    list.push(t);
+    chainGroups.set(key, list);
   }
-  return [...groupMap.values()].map(mergeTransferGroup);
+  const chainMembersByGroupKey = new Map<string, Array<{ id: string; chainStep: number; status: string; receiverTenantId: string; receiverTenantName?: string }>>();
+  for (const [key, list] of chainGroups) {
+    const sorted = [...list].sort((a: any, b: any) => (a.chainStep ?? 0) - (b.chainStep ?? 0));
+    chainMembersByGroupKey.set(key, sorted.map((t: any) => ({
+      id: t.id,
+      chainStep: t.chainStep ?? 0,
+      status: t.status,
+      receiverTenantId: t.receiverTenantId,
+      receiverTenantName: t.receiverTenantName,
+    })));
+  }
+
+  const out: any[] = [];
+  const nonChainGroup = new Map<string, any[]>();
+  for (const t of enriched) {
+    if (t.outsourceRouteSnapshot) {
+      const key = t.originTransferId ?? t.id;
+      const members = chainMembersByGroupKey.get(key) ?? [];
+      out.push({ ...t, chainMembers: members });
+      continue;
+    }
+    const key = `${t.senderProductId}::${t.senderTenantId}::${t.receiverTenantId}`;
+    const list = nonChainGroup.get(key) ?? [];
+    list.push(t);
+    nonChainGroup.set(key, list);
+  }
+  for (const list of nonChainGroup.values()) out.push(mergeTransferGroup(list));
+  out.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return out.map(t => sanitizeCollabTransferForViewer(tenantId, t));
 }
 
 export async function getTransfer(tenantId: string, id: string) {
@@ -444,7 +640,21 @@ export async function getTransfer(tenantId: string, id: string) {
   const enrich = (t: any) => ({ ...t, senderTenantName: t.senderTenantId === tenantId ? '本企业' : (nameMap[t.senderTenantId] ?? ''), receiverTenantName: t.receiverTenantId === tenantId ? '本企业' : (nameMap[t.receiverTenantId] ?? '') });
   const merged = mergeTransferGroup(allTransfers.map(enrich));
   if (childTransfer) { merged.childTransferId = childTransfer.id; merged.childConfirmed = !!childTransfer.originConfirmedAt; }
-  return merged;
+
+  let _acceptDispatchMode: AcceptDispatchUiMode | 'NA' = 'NA';
+  let _acceptResolvedReceiverProductId: string | null = null;
+  if (tenantId === merged.receiverTenantId) {
+    try {
+      const ui = await computeAcceptDispatchUiMode(tenantId, merged);
+      _acceptDispatchMode = ui.mode;
+      _acceptResolvedReceiverProductId = ui.resolvedReceiverProductId;
+    } catch {
+      _acceptDispatchMode = 'CREATE';
+      _acceptResolvedReceiverProductId = merged.receiverProductId ?? null;
+    }
+  }
+  const sanitized = sanitizeCollabTransferForViewer(tenantId, merged);
+  return { ...sanitized, _acceptDispatchMode, _acceptResolvedReceiverProductId };
 }
 
 export async function acceptTransfer(tenantId: string, transferId: string, body: { createProduct?: { name: string; sku: string; description?: string; colorNames?: string[]; sizeNames?: string[] }; dispatchIds?: string[] }) {
@@ -454,20 +664,127 @@ export async function acceptTransfer(tenantId: string, transferId: string, body:
   const pendingDispatches = transfer.dispatches.filter(d => d.status === 'PENDING');
   const toAccept = body.dispatchIds ? pendingDispatches.filter(d => body.dispatchIds!.includes(d.id)) : pendingDispatches;
   if (!toAccept.length) throw new AppError(400, '没有待接受的 Dispatch');
-  let finalProductId = transfer.receiverProductId;
-  if (!finalProductId && transfer.senderProductSku) {
-    const mapped = await basePrisma.collaborationProductMap.findUnique({ where: { collaborationId_senderSku: { collaborationId: transfer.collaborationId, senderSku: transfer.senderProductSku } } });
-    if (mapped?.receiverProductId) finalProductId = mapped.receiverProductId;
-  }
-  if (!finalProductId && transfer.senderProductId) {
-    const resolvedTransfer = await basePrisma.interTenantSubcontractTransfer.findFirst({ where: { senderTenantId: transfer.senderTenantId, receiverTenantId: transfer.receiverTenantId, senderProductId: transfer.senderProductId, receiverProductId: { not: null }, id: { not: transferId } }, select: { receiverProductId: true } });
-    if (resolvedTransfer?.receiverProductId) finalProductId = resolvedTransfer.receiverProductId;
+  let finalProductId = await resolveReceiverProductIdForAcceptPreview({
+    id: transfer.id,
+    receiverTenantId: transfer.receiverTenantId,
+    senderTenantId: transfer.senderTenantId,
+    collaborationId: transfer.collaborationId ?? null,
+    senderProductSku: transfer.senderProductSku ?? null,
+    senderProductId: transfer.senderProductId ?? null,
+    receiverProductId: transfer.receiverProductId ?? null,
+  });
+  /**
+   * 若 map / 主单历史都未解析出 finalProductId，先尝试用「乙方本地已有同 SKU / 同名产品」复用，避免盲目
+   * createReceiverProduct 直接触发 P2002。这样「甲方此前已经让乙方建过产品 → 乙方手动改过名或 SKU」
+   * 也能自然续接，避免「数据重复，违反唯一约束」报错。
+   */
+  if (!finalProductId && body.createProduct) {
+    const cp = body.createProduct;
+    const skuTrim = cp.sku?.trim() || '';
+    const nameTrim = cp.name?.trim() || '';
+    if (skuTrim) {
+      const bySku = await basePrisma.product.findFirst({ where: { tenantId, sku: skuTrim } });
+      if (bySku) finalProductId = bySku.id;
+    }
+    if (!finalProductId && nameTrim) {
+      const byName = await basePrisma.product.findFirst({ where: { tenantId, name: nameTrim } });
+      if (byName) finalProductId = byName.id;
+    }
   }
   if (!finalProductId && body.createProduct) {
     const firstPayload = toAccept[0]?.payload as any;
     finalProductId = await createReceiverProduct(tenantId, { ...body.createProduct, categoryName: firstPayload?.categoryName ?? null });
   }
   if (!finalProductId) throw new AppError(400, '请提供或新建乙方产品');
+
+  /**
+   * 乙方本地产品字段同步：把「甲方本次派发里携带的产品信息」同步到乙方本地产品，解决「甲方改了产品信息 / 色码，
+   * 乙方那边未同步导致出现错配（圆领毛衣→v 领打底、阿卡转发单色码缺失等）」的历史问题。
+   * 规则：
+   *   · name / sku：尝试 update，命中 P2002（与乙方另一产品冲突）则跳过并记录 reason；
+   *   · description：有差异直接覆盖；
+   *   · colorIds / sizeIds：取「当前 ∪ 新增」，避免剔除已存在的变体依赖；同时补建 productVariant 全组合；
+   *   · 变更结果以 `productInfoChanges[]` 返回给前端 toast.info 提示（由接受派发的前端流程汇总展示）。
+   */
+  const productInfoChanges: Array<{ field: string; from: string; to: string; skipped?: boolean; reason?: string }> = [];
+  try {
+    const existingProduct = await basePrisma.product.findUnique({ where: { id: finalProductId } });
+    if (existingProduct) {
+      const firstPayload = toAccept[0]?.payload as any;
+      const senderName = String(transfer.senderProductName || '').trim();
+      const senderSku = String(transfer.senderProductSku || '').trim();
+      const senderDesc = String(firstPayload?.description ?? '').trim();
+      const senderColorNames: string[] = dedupeTrimmedNames(firstPayload?.colorNames);
+      const senderSizeNames: string[] = dedupeTrimmedNames(firstPayload?.sizeNames);
+
+      if (senderName && senderName !== existingProduct.name) {
+        try {
+          await basePrisma.product.update({ where: { id: finalProductId }, data: { name: senderName } });
+          productInfoChanges.push({ field: '产品名称', from: existingProduct.name, to: senderName });
+        } catch (err: any) {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+            productInfoChanges.push({ field: '产品名称', from: existingProduct.name, to: senderName, skipped: true, reason: '乙方已有同名产品' });
+          } else throw err;
+        }
+      }
+      if (senderSku && senderSku !== existingProduct.sku) {
+        try {
+          await basePrisma.product.update({ where: { id: finalProductId }, data: { sku: senderSku } });
+          productInfoChanges.push({ field: 'SKU', from: existingProduct.sku, to: senderSku });
+        } catch (err: any) {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+            productInfoChanges.push({ field: 'SKU', from: existingProduct.sku, to: senderSku, skipped: true, reason: '乙方已有同 SKU 产品' });
+          } else throw err;
+        }
+      }
+      if (senderDesc && senderDesc !== (existingProduct.description ?? '').trim()) {
+        await basePrisma.product.update({ where: { id: finalProductId }, data: { description: senderDesc } });
+        productInfoChanges.push({ field: '描述', from: existingProduct.description ?? '', to: senderDesc });
+      }
+
+      if (senderColorNames.length > 0 || senderSizeNames.length > 0) {
+        const tenantDictItems = await basePrisma.dictionaryItem.findMany({ where: { tenantId } });
+        const colorNameToId = new Map(tenantDictItems.filter(d => d.type === 'color').map(d => [d.name, d.id]));
+        const sizeNameToId = new Map(tenantDictItems.filter(d => d.type === 'size').map(d => [d.name, d.id]));
+        const ensureColorId = async (name: string) => { const hit = colorNameToId.get(name); if (hit) return hit; const id = await ensureDictionaryItem(tenantId, 'color', name); colorNameToId.set(name, id); return id; };
+        const ensureSizeId = async (name: string) => { const hit = sizeNameToId.get(name); if (hit) return hit; const id = await ensureDictionaryItem(tenantId, 'size', name); sizeNameToId.set(name, id); return id; };
+
+        const existingColorIds = new Set<string>(jsonToStringIds((existingProduct as any).colorIds));
+        const existingSizeIds = new Set<string>(jsonToStringIds((existingProduct as any).sizeIds));
+        const newColorIds: string[] = []; for (const n of senderColorNames) newColorIds.push(await ensureColorId(n));
+        const newSizeIds: string[] = []; for (const n of senderSizeNames) newSizeIds.push(await ensureSizeId(n));
+        const colorAdded = newColorIds.filter(id => !existingColorIds.has(id));
+        const sizeAdded = newSizeIds.filter(id => !existingSizeIds.has(id));
+        if (colorAdded.length || sizeAdded.length) {
+          const mergedColorIds = [...existingColorIds, ...colorAdded];
+          const mergedSizeIds = [...existingSizeIds, ...sizeAdded];
+          await basePrisma.product.update({ where: { id: finalProductId }, data: { colorIds: mergedColorIds as any, sizeIds: mergedSizeIds as any } });
+          const existingVariants = await basePrisma.productVariant.findMany({ where: { productId: finalProductId } });
+          const haveKey = new Set(existingVariants.map(v => `${v.colorId ?? ''}|${v.sizeId ?? ''}`));
+          for (const cId of mergedColorIds) {
+            for (const sId of mergedSizeIds) {
+              const k = `${cId}|${sId}`;
+              if (!haveKey.has(k)) {
+                await basePrisma.productVariant.create({ data: { id: genId('pv'), productId: finalProductId, colorId: cId, sizeId: sId } });
+                haveKey.add(k);
+              }
+            }
+          }
+          if (colorAdded.length) {
+            const colorIdToName = Object.fromEntries([...colorNameToId].map(([n, id]) => [id, n]));
+            productInfoChanges.push({ field: '颜色', from: [...existingColorIds].map(id => colorIdToName[id] ?? id).filter(Boolean).join('/'), to: mergedColorIds.map(id => colorIdToName[id] ?? id).filter(Boolean).join('/') });
+          }
+          if (sizeAdded.length) {
+            const sizeIdToName = Object.fromEntries([...sizeNameToId].map(([n, id]) => [id, n]));
+            productInfoChanges.push({ field: '尺码', from: [...existingSizeIds].map(id => sizeIdToName[id] ?? id).filter(Boolean).join('/'), to: mergedSizeIds.map(id => sizeIdToName[id] ?? id).filter(Boolean).join('/') });
+          }
+        }
+      }
+    }
+  } catch (err) {
+    // 同步失败不阻断接受流程；前端仍会收到 productInfoChanges（已记录条目）。
+    console.error('[acceptTransfer] product info sync failed:', err);
+  }
   const effectiveMode = transfer.bReceiveMode ?? await getProductionLinkMode(tenantId);
   if (!transfer.bReceiveMode || !transfer.receiverProductId) {
     await basePrisma.interTenantSubcontractTransfer.update({ where: { id: transferId }, data: { bReceiveMode: effectiveMode, receiverProductId: finalProductId } });
@@ -538,10 +855,10 @@ export async function acceptTransfer(tenantId: string, transferId: string, body:
       createdOrders.push(orderId);
     }
   }
-  return { accepted: toAccept.length, bReceiveMode: effectiveMode, receiverProductId: finalProductId, createdOrders, pendingProcess: !hasProcesses };
+  return { accepted: toAccept.length, bReceiveMode: effectiveMode, receiverProductId: finalProductId, createdOrders, pendingProcess: !hasProcesses, productInfoChanges };
 }
 
-export async function createReturn(tenantId: string, transferId: string, body: { items: any[]; note?: string; dispatchId?: string; receiverProductionOrderId?: string; warehouseId?: string }) {
+export async function createReturn(tenantId: string, transferId: string, body: { items: any[]; note?: string; dispatchId?: string; receiverProductionOrderId?: string; warehouseId?: string; returnGroupId?: string; sharedStockOutDocNo?: string }) {
   if (!body.items?.length) throw new AppError(400, '请提供回传明细');
   const cleanItems = body.items.filter((i: any) => (Number(i.quantity) || 0) > 0);
   if (!cleanItems.length) throw new AppError(400, '回传数量须大于 0');
@@ -563,14 +880,24 @@ export async function createReturn(tenantId: string, transferId: string, body: {
   if (alreadyReturnedTotal + thisReturn > totalDispatchedAccepted) throw new AppError(400, `回传数量超限：已回传 ${alreadyReturnedTotal} + 本次 ${thisReturn} > 已接受发出总量 ${totalDispatchedAccepted}`);
   await assertReceiverPartnerBindingForReturn(tenantId, transfer.senderTenantId);
   const partnerName = await getSenderPartnerName(tenantId, transfer.senderTenantId);
-  const stockOutDocNo = await generateReturnFlowDocNo(tenantId, partnerName);
+  /**
+   * 出库单号复用优先级：
+   *   1) 调用方传入 `sharedStockOutDocNo`（批量回传保持同单号）；
+   *   2) 否则按合作单位新生成。
+   * `returnGroupId` 作为「同一批回传」的聚合依据，供前端时间轴把同批次归入一个气泡；
+   * 撤回后再回传同单号时，由前端使用新的 `returnGroupId` → 形成新气泡，与原用户原话一致。
+   */
+  const stockOutDocNo = (typeof body.sharedStockOutDocNo === 'string' && body.sharedStockOutDocNo.trim())
+    ? body.sharedStockOutDocNo.trim()
+    : await generateReturnFlowDocNo(tenantId, partnerName);
   const receiverProductId = transfer.receiverProductId;
   const dictItems = receiverProductId ? await basePrisma.dictionaryItem.findMany({ where: { tenantId } }) : [];
   const dictByName = new Map(dictItems.map(d => [`${d.type}:${d.name}`, d.id]));
   const variants = receiverProductId ? await basePrisma.productVariant.findMany({ where: { productId: receiverProductId } }) : [];
   const orderIds = transfer.dispatches.map(d => d.receiverProductionOrderId).filter((v): v is string => !!v);
   const firstOrderId = orderIds[0] ?? null;
-  const ret = await basePrisma.subcontractCollaborationReturn.create({ data: { transferId, dispatchId: body.dispatchId ?? null, receiverProductionOrderId: body.receiverProductionOrderId ?? null, payload: { items: cleanItems, note: body.note, stockOutDocNo, warehouseId: body.warehouseId } } });
+  const returnGroupId = (typeof body.returnGroupId === 'string' && body.returnGroupId.trim()) ? body.returnGroupId.trim() : null;
+  const ret = await basePrisma.subcontractCollaborationReturn.create({ data: { transferId, dispatchId: body.dispatchId ?? null, receiverProductionOrderId: body.receiverProductionOrderId ?? null, payload: { items: cleanItems, note: body.note, stockOutDocNo, warehouseId: body.warehouseId, ...(returnGroupId ? { returnGroupId } : {}) } } });
   if (receiverProductId) {
     for (const item of cleanItems) {
       const qty = Number(item.quantity) || 0; if (qty <= 0) continue;
@@ -631,7 +958,26 @@ export async function receiveReturn(tenantId: string, returnId: string) {
     if (!variantId && chainResolveVariantId) variantId = chainResolveVariantId(normalizeSpecLabel(item.colorName) ?? null, normalizeSpecLabel(item.sizeName) ?? null);
     const orderId = (variantId && orderIdByVariant.get(variantId)) ?? null;
     const nodeId = chainStepDef?.nodeId ?? dInfo?.nodeId ?? null;
-    const data = { id: genId('prodop'), tenantId, type: 'OUTSOURCE', productId: transfer.senderProductId, variantId, quantity: qty, operator: '协作回收', timestamp: new Date(), status: '已收回', partner: localPartnerName, nodeId, orderId, docNo: receiptDocNo, collabData: { source: 'collaborationReturn', returnId: ret.id, transferId: transfer.id } };
+    /**
+     * 把回传单上的 `unitPrice / amount` 同步写入自动生成的「外协回收」记录，
+     * 保证后续外协核销/对账视图读取的是乙方实际申报价（避免只能看到数量）。
+     * 缺省（乙方未填单价）时保留 null，数据库字段可空。
+     */
+    const itemUnitPrice = Number((item as any).unitPrice);
+    const hasUnitPrice = Number.isFinite(itemUnitPrice) && itemUnitPrice >= 0;
+    const itemAmountRaw = Number((item as any).amount);
+    const hasAmount = Number.isFinite(itemAmountRaw) && itemAmountRaw >= 0;
+    const computedAmount = hasUnitPrice ? Math.round(qty * itemUnitPrice * 100) / 100 : null;
+    const data = {
+      id: genId('prodop'), tenantId, type: 'OUTSOURCE', productId: transfer.senderProductId, variantId,
+      quantity: qty, operator: '协作回收', timestamp: new Date(), status: '已收回', partner: localPartnerName,
+      nodeId, orderId, docNo: receiptDocNo,
+      ...(hasUnitPrice ? { unitPrice: new Prisma.Decimal(itemUnitPrice) } : {}),
+      ...((hasAmount || hasUnitPrice)
+        ? { amount: new Prisma.Decimal(hasAmount ? itemAmountRaw : (computedAmount ?? 0)) }
+        : {}),
+      collabData: { source: 'collaborationReturn', returnId: ret.id, transferId: transfer.id },
+    };
     await basePrisma.productionOpRecord.create({ data });
     await applyOutsourceProgress({ ...data, tenantId });
   }
@@ -657,7 +1003,11 @@ export async function receiveReturn(tenantId: string, returnId: string) {
   return { success: true, receiptDocNo };
 }
 
-export async function forwardTransfer(tenantId: string, transferId: string, body: { items: any[]; note?: string; warehouseId?: string }) {
+export async function forwardTransfer(
+  tenantId: string,
+  transferId: string,
+  body: { items: any[]; note?: string; warehouseId?: string; sharedDispatchDocNo?: string; unitPrice?: number },
+) {
   if (!Array.isArray(body.items) || body.items.length === 0) throw new AppError(400, '请提供转发明细 (items)');
   for (const it of body.items) if (!it.quantity || Number(it.quantity) <= 0) throw new AppError(400, '转发数量必须大于 0');
   const transfer = await basePrisma.interTenantSubcontractTransfer.findUnique({ where: { id: transferId }, include: { dispatches: true, returns: true } });
@@ -670,23 +1020,95 @@ export async function forwardTransfer(tenantId: string, transferId: string, body
   if (!nextStep) throw new AppError(400, '已是路线最后一站，请使用回传功能');
   const acceptedDispatches = transfer.dispatches.filter(d => d.status === 'ACCEPTED' || d.status === 'FORWARDED');
   if (!acceptedDispatches.length) throw new AppError(400, '没有已接受的 Dispatch 可转发');
+  const childTransfers = await basePrisma.interTenantSubcontractTransfer.findMany({
+    where: { parentTransferId: transferId, status: { not: 'CANCELLED' } },
+    include: { dispatches: true },
+  });
+  const forwardedOutBySpec = new Map<string, number>();
+  for (const ct of childTransfers) {
+    for (const d of ct.dispatches || []) {
+      if (d.status === 'WITHDRAWN') continue;
+      for (const it of ((d.payload as any)?.items ?? [])) {
+        const cn = normalizeSpecLabel(it.colorName);
+        const sn = normalizeSpecLabel(it.sizeName);
+        const k = `${cn ?? ''}\t${sn ?? ''}`;
+        forwardedOutBySpec.set(k, (forwardedOutBySpec.get(k) || 0) + (Number(it.quantity) || 0));
+      }
+    }
+  }
   // validate capacity
   const dispatchedBySpec = new Map<string, number>();
   for (const d of acceptedDispatches) for (const it of ((d.payload as any)?.items ?? [])) { const cn = normalizeSpecLabel(it.colorName); const sn = normalizeSpecLabel(it.sizeName); const k = `${cn ?? ''}\t${sn ?? ''}`; dispatchedBySpec.set(k, (dispatchedBySpec.get(k) || 0) + (Number(it.quantity) || 0)); }
   const returnedBySpec = new Map<string, number>();
   for (const r of (transfer.returns || []).filter(r => r.status !== 'WITHDRAWN')) for (const it of ((r.payload as any)?.items ?? [])) { const cn = normalizeSpecLabel(it.colorName); const sn = normalizeSpecLabel(it.sizeName); const k = `${cn ?? ''}\t${sn ?? ''}`; returnedBySpec.set(k, (returnedBySpec.get(k) || 0) + (Number(it.quantity) || 0)); }
-  for (const it of body.items) { const cn = normalizeSpecLabel(it.colorName); const sn = normalizeSpecLabel(it.sizeName); const k = `${cn ?? ''}\t${sn ?? ''}`; const max = (dispatchedBySpec.get(k) || 0) - (returnedBySpec.get(k) || 0); if (Number(it.quantity) > max) throw new AppError(400, `「${[cn, sn].filter(Boolean).join('/') || '无规格'}」转发数量 ${it.quantity} 超过可转发上限 ${max}`); }
+  for (const it of body.items) { const cn = normalizeSpecLabel(it.colorName); const sn = normalizeSpecLabel(it.sizeName); const k = `${cn ?? ''}\t${sn ?? ''}`; const max = (dispatchedBySpec.get(k) || 0) - (returnedBySpec.get(k) || 0) - (forwardedOutBySpec.get(k) || 0); if (Number(it.quantity) > max) throw new AppError(400, `「${[cn, sn].filter(Boolean).join('/') || '无规格'}」转发数量 ${it.quantity} 超过可转发上限 ${max}`); }
   const originTenantId = transfer.originTenantId ?? transfer.senderTenantId;
   const originTransferId = transfer.originTransferId ?? transfer.id;
   const collab = await findCollaboration(originTenantId, nextStep.receiverTenantId);
   if (!collab) throw new AppError(400, `甲方与「${nextStep.receiverTenantName || ''}」未建立协作关系`);
   for (const d of acceptedDispatches) await basePrisma.subcontractCollaborationDispatch.update({ where: { id: d.id }, data: { status: 'FORWARDED' } });
   await updateTransferStatus(transferId);
+
+  /** 转发明细 items 仅色码/数量；单价写入 `originSettlement` 供甲方确认转发时写入外协收货，下一站 API 中脱敏。 */
   const forwardItems = body.items.map((it: any) => ({ colorName: normalizeSpecLabel(it.colorName), sizeName: normalizeSpecLabel(it.sizeName), quantity: Number(it.quantity) }));
-  let forwardStockOutDocNo: string | null = null;
+
+  /**
+   * 下游派发单 colorNames/sizeNames：
+   * 1) 优先链头 originTransfer 各派发 payload（与甲方建派发时一致的全量色码）；
+   * 2) 仍缺则补「转发方本企业 receiverProduct」本地产品色码；
+   * 3) 再缺才用本次转发明细里出现的色码（避免中间站本地产品不完整时阿卡只看到 1 色 2 码）。
+   */
+  let fullColorNames: string[] = [];
+  let fullSizeNames: string[] = [];
+  const fromOrigin = await getOriginChainDispatchSpecNames(originTransferId);
+  if (fromOrigin.colorNames.length) fullColorNames = fromOrigin.colorNames;
+  if (fromOrigin.sizeNames.length) fullSizeNames = fromOrigin.sizeNames;
+
   const receiverProductId = transfer.receiverProductId;
-  if (receiverProductId) forwardStockOutDocNo = await generateDocNo('CK', 'production_op_records', 'doc_no', tenantId);
-  const payload = { productName: transfer.senderProductName, productSku: transfer.senderProductSku, colorNames: [...new Set(forwardItems.map((i: any) => i.colorName).filter(Boolean))], sizeNames: [...new Set(forwardItems.map((i: any) => i.sizeName).filter(Boolean))], items: forwardItems, aLinkMode: transfer.aLinkMode, senderRef: { productId: transfer.senderProductId }, forwardedFrom: { transferId: transfer.id, factoryTenantId: tenantId }, ...(body.note ? { note: body.note } : {}), ...(forwardStockOutDocNo ? { stockOutDocNo: forwardStockOutDocNo } : {}), ...(body.warehouseId ? { warehouseId: body.warehouseId } : {}) };
+  if ((!fullColorNames.length || !fullSizeNames.length) && receiverProductId) {
+    const localProduct = await basePrisma.product.findUnique({ where: { id: receiverProductId } });
+    if (localProduct) {
+      const dictItems = await basePrisma.dictionaryItem.findMany({ where: { tenantId } });
+      const colorMap = Object.fromEntries(dictItems.filter(d => d.type === 'color').map(d => [d.id, d.name]));
+      const sizeMap = Object.fromEntries(dictItems.filter(d => d.type === 'size').map(d => [d.id, d.name]));
+      if (!fullColorNames.length) {
+        fullColorNames = jsonToStringIds((localProduct as any).colorIds).map(id => colorMap[id]).filter((n): n is string => !!n);
+      }
+      if (!fullSizeNames.length) {
+        fullSizeNames = jsonToStringIds((localProduct as any).sizeIds).map(id => sizeMap[id]).filter((n): n is string => !!n);
+      }
+    }
+  }
+  if (!fullColorNames.length) fullColorNames = [...new Set(forwardItems.map((i: any) => i.colorName).filter(Boolean))] as string[];
+  if (!fullSizeNames.length) fullSizeNames = [...new Set(forwardItems.map((i: any) => i.sizeName).filter(Boolean))] as string[];
+
+  let forwardStockOutDocNo: string | null = null;
+  /**
+   * 批量同批次转发多产品时，调用方可传入 `sharedDispatchDocNo` 复用单号（第一笔成功后返回给后续笔）。
+   * 只有在「本企业有对应 receiverProduct」需要写 STOCK_OUT 时才会用到该单号；若无 receiverProduct 则整批不涉及出库记录。
+   */
+  if (receiverProductId) {
+    const shared = (typeof body.sharedDispatchDocNo === 'string' && body.sharedDispatchDocNo.trim()) ? body.sharedDispatchDocNo.trim() : '';
+    forwardStockOutDocNo = shared || await generateDocNo('CK', 'production_op_records', 'doc_no', tenantId);
+  }
+
+  const upRaw = Number((body as any).unitPrice);
+  const originSettlement = Number.isFinite(upRaw) && upRaw >= 0 ? { unitPrice: upRaw } : undefined;
+
+  const payload = {
+    productName: transfer.senderProductName,
+    productSku: transfer.senderProductSku,
+    colorNames: fullColorNames,
+    sizeNames: fullSizeNames,
+    items: forwardItems,
+    aLinkMode: transfer.aLinkMode,
+    senderRef: { productId: transfer.senderProductId },
+    forwardedFrom: { transferId: transfer.id, factoryTenantId: tenantId },
+    ...(originSettlement ? { originSettlement } : {}),
+    ...(body.note ? { note: body.note } : {}),
+    ...(forwardStockOutDocNo ? { stockOutDocNo: forwardStockOutDocNo } : {}),
+    ...(body.warehouseId ? { warehouseId: body.warehouseId } : {}),
+  };
   const allSenderRecordIds = acceptedDispatches.flatMap(d => (d.senderDispatchRecordIds as string[]) ?? []);
   const newTransfer = await basePrisma.interTenantSubcontractTransfer.create({ data: { collaborationId: collab.id, senderTenantId: originTenantId, receiverTenantId: nextStep.receiverTenantId, senderProductId: transfer.senderProductId, senderProductSku: transfer.senderProductSku, senderProductName: transfer.senderProductName, aLinkMode: transfer.aLinkMode, originTransferId, parentTransferId: transfer.id, chainStep: nextStepIdx, originTenantId, outsourceRouteSnapshot: route } });
   const dispatch = await basePrisma.subcontractCollaborationDispatch.create({ data: { transferId: newTransfer.id, payload: payload as Prisma.InputJsonValue, senderDispatchRecordIds: allSenderRecordIds } });
@@ -698,7 +1120,7 @@ export async function forwardTransfer(tenantId: string, transferId: string, body
     const firstOrderId = orderIds[0] ?? null;
     for (const item of forwardItems) { const qty = Number(item.quantity) || 0; if (qty <= 0) continue; let variantId: string | null = null; if (item.colorName || item.sizeName) { const colorId = item.colorName ? dictByName.get(`color:${item.colorName}`) ?? null : null; const sizeId = item.sizeName ? dictByName.get(`size:${item.sizeName}`) ?? null : null; variantId = variants.find(v => (colorId ? v.colorId === colorId : !v.colorId) && (sizeId ? v.sizeId === sizeId : !v.sizeId))?.id ?? null; } await basePrisma.productionOpRecord.create({ data: { id: genId('prodop'), tenantId, type: 'STOCK_OUT', productId: receiverProductId, variantId, orderId: firstOrderId, quantity: qty, operator: '协作转发出库', timestamp: new Date(), status: '已完成', warehouseId: body.warehouseId ?? null, docNo: forwardStockOutDocNo } }); }
   }
-  return { newTransferId: newTransfer.id, dispatchId: dispatch.id, nextStep };
+  return { newTransferId: newTransfer.id, dispatchId: dispatch.id, nextStep, dispatchDocNo: forwardStockOutDocNo ?? null };
 }
 
 export async function confirmForward(tenantId: string, transferId: string) {
@@ -730,11 +1152,18 @@ export async function confirmForward(tenantId: string, transferId: string) {
   const resolveVariantId = (cn: string | null, sn: string | null): string | null => { if (!senderProduct?.variants?.length) return null; return senderProduct.variants.find(v => { const vc = v.colorId ? (senderDictById[v.colorId] ?? null) : null; const vs = v.sizeId ? (senderDictById[v.sizeId] ?? null) : null; return (vc ?? null) === (cn ?? null) && (vs ?? null) === (sn ?? null); })?.id ?? null; };
   const receiveDocNo = await nextOutsourceDocNoForPartner(tenantId, 'receive', prevPartnerName);
   const dispatchDocNo = await nextOutsourceDocNoForPartner(tenantId, 'dispatch', currPartnerName);
+  const firstDispatchPayload = (transfer.dispatches?.[0]?.payload ?? null) as any;
+  const settleUnit = Number(firstDispatchPayload?.originSettlement?.unitPrice);
+  const hasSettleUnit = Number.isFinite(settleUnit) && settleUnit >= 0;
   for (const item of dispatchItems) {
     const qty = Number(item.quantity) || 0; if (qty <= 0) continue;
     const variantId = item.variantId ?? resolveVariantId(item.colorName ?? null, item.sizeName ?? null);
     const orderId = (variantId && orderIdByVariant.get(variantId)) ?? null;
-    const receiveData = { id: genId('prodop'), tenantId, type: 'OUTSOURCE', productId: transfer.senderProductId, variantId, quantity: qty, operator: '链式转发-自动收回', timestamp: new Date(), status: '已收回', partner: prevPartnerName, nodeId: prevStepDef.nodeId ?? null, orderId, docNo: receiveDocNo, collabData: { source: 'chainForwardReceive', transferId: transfer.parentTransferId, chainStep: transfer.chainStep - 1 } };
+    const computedAmount = hasSettleUnit ? Math.round(qty * settleUnit * 100) / 100 : null;
+    const receiveData = {
+      id: genId('prodop'), tenantId, type: 'OUTSOURCE', productId: transfer.senderProductId, variantId, quantity: qty, operator: '链式转发-自动收回', timestamp: new Date(), status: '已收回', partner: prevPartnerName, nodeId: prevStepDef.nodeId ?? null, orderId, docNo: receiveDocNo, collabData: { source: 'chainForwardReceive', transferId: transfer.parentTransferId, chainStep: transfer.chainStep - 1 },
+      ...(hasSettleUnit ? { unitPrice: new Prisma.Decimal(settleUnit), amount: new Prisma.Decimal(computedAmount ?? 0) } : {}),
+    };
     await basePrisma.productionOpRecord.create({ data: receiveData });
     await applyOutsourceProgress({ ...receiveData, tenantId });
     await basePrisma.productionOpRecord.create({ data: { id: genId('prodop'), tenantId, type: 'OUTSOURCE', productId: transfer.senderProductId, variantId, quantity: qty, operator: '链式转发-自动发出', timestamp: new Date(), status: '加工中', partner: currPartnerName, nodeId: currStepDef.nodeId ?? null, orderId, docNo: dispatchDocNo, collabData: { source: 'chainForwardDispatch', transferId: transfer.id, chainStep: transfer.chainStep } } });

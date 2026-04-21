@@ -1,6 +1,9 @@
 
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { FileText, X, Check, UserPlus, BookOpen } from 'lucide-react';
+import { ScanInputButton } from '../../components/scan/ScanInputButton';
+import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
+import type { ScanPayload } from '../../utils/scanPayload';
 import {
   ProductionOrder,
   Milestone,
@@ -20,6 +23,7 @@ import WorkerSelector from '../../components/WorkerSelector';
 import EquipmentSelector from '../../components/EquipmentSelector';
 import {
   pmpCompletedAtTemplate,
+  combinedCompletedAtTemplate,
   productGroupMaxReportableSum,
   variantMaxGoodProductMode,
 } from '../../utils/productReportAggregates';
@@ -39,6 +43,8 @@ export interface ReportModalData {
   milestone: Milestone;
   productTotalQty?: number;
   productCompletedQty?: number;
+  /** 顺序工序模式下该工序实际可报基数（扣不良+返工后），用于提示文案 */
+  productMaxReportableQty?: number;
   productItems?: { variantId?: string; quantity: number; completedQuantity: number }[];
   productOrders?: ProductionOrder[];
 }
@@ -293,6 +299,100 @@ const ReportModal: React.FC<ReportModalProps> = ({
       variantDefectiveQuantities: { ...(prev.variantDefectiveQuantities ?? {}), [variantId]: Math.max(0, qty) },
     }));
   };
+
+  const scannedItemTokensRef = useRef<Set<string>>(new Set());
+  const scannedBatchTokensRef = useRef<Set<string>>(new Set());
+
+  const handleScanPayload = useCallback(
+    async (payload: ScanPayload) => {
+      if (!payload.token) return;
+      const currentPlanOrderId = reportModal.order.planOrderId;
+      if (!currentPlanOrderId) {
+        toast.error('当前工单未关联计划，无法校验扫码');
+        return;
+      }
+      try {
+        if (payload.kind === 'ITEM') {
+          if (scannedItemTokensRef.current.has(payload.token)) {
+            toast.warning('此单品码已扫描过');
+            return;
+          }
+          const res = await itemCodesApi.scan(payload.token);
+          if (res.kind !== 'ITEM_CODE') {
+            toast.error('识别到批次码，请改用批次扫码逻辑');
+            return;
+          }
+          if (res.status === 'VOIDED') {
+            toast.error(res.message || '单品码已作废');
+            return;
+          }
+          const callerPlanId = res.callerContext?.callerPlanOrderId ?? res.planOrderId;
+          if (callerPlanId !== currentPlanOrderId) {
+            toast.error('此码不属于当前工单所在计划');
+            return;
+          }
+          scannedItemTokensRef.current.add(payload.token);
+          const vid = res.variantId || '';
+          if (reportForm.variantQuantities && !vid) {
+            scannedItemTokensRef.current.delete(payload.token);
+            toast.error('单品码未带规格，无法在按规格模式下累加');
+            return;
+          }
+          setReportForm(f => {
+            if (f.variantQuantities) {
+              const prev = f.variantQuantities[vid] ?? 0;
+              return { ...f, variantQuantities: { ...f.variantQuantities, [vid]: prev + 1 } };
+            }
+            return { ...f, quantity: (f.quantity || 0) + 1, variantId: vid || f.variantId };
+          });
+          toast.success(
+            `扫码 +1${res.variantLabel || res.productName ? `（${res.variantLabel || res.productName}）` : ''}${
+              res.ownerTenantName && res.callerContext?.relation !== 'OWNER' ? ` · 来自 ${res.ownerTenantName}` : ''
+            }`,
+          );
+        } else if (payload.kind === 'BATCH') {
+          if (scannedBatchTokensRef.current.has(payload.token)) {
+            toast.warning('此批次码已扫描过');
+            return;
+          }
+          const res = await planVirtualBatchesApi.scan(payload.token);
+          if (res.kind !== 'VIRTUAL_BATCH') return;
+          if (res.status === 'VOIDED') {
+            toast.error(res.message || '批次码已作废');
+            return;
+          }
+          const callerPlanId = res.callerContext?.callerPlanOrderId ?? res.planOrderId;
+          if (callerPlanId !== currentPlanOrderId) {
+            toast.error('此批次码不属于当前工单所在计划');
+            return;
+          }
+          scannedBatchTokensRef.current.add(payload.token);
+          const qty = res.quantity ?? 0;
+          const vid = res.variantId || '';
+          if (reportForm.variantQuantities && !vid) {
+            scannedBatchTokensRef.current.delete(payload.token);
+            toast.error('批次码未带规格，无法在按规格模式下累加');
+            return;
+          }
+          setReportForm(f => {
+            if (f.variantQuantities) {
+              const prev = f.variantQuantities[vid] ?? 0;
+              return { ...f, variantQuantities: { ...f.variantQuantities, [vid]: prev + qty } };
+            }
+            return { ...f, quantity: (f.quantity || 0) + qty, variantId: vid || f.variantId };
+          });
+          toast.success(
+            `批次码 +${qty}${res.variantLabel || res.productName ? `（${res.variantLabel || res.productName}）` : ''}${
+              res.ownerTenantName && res.callerContext?.relation !== 'OWNER' ? ` · 来自 ${res.ownerTenantName}` : ''
+            }`,
+          );
+        }
+      } catch (e) {
+        toast.error((e as Error)?.message || '扫码查询失败');
+      }
+    },
+    [reportModal.order.planOrderId, reportForm.variantQuantities],
+  );
 
   const getSeqRemainingForVariant = useCallback((variantId: string): number => {
     const productId = reportModal.order.productId;
@@ -555,8 +655,9 @@ const ReportModal: React.FC<ReportModalProps> = ({
       : ordersInModal.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0);
   const totalDefective = ordersInModal.reduce((s, o) => s + getDefectiveRework(o.id, tid).defective, 0);
   const totalRework = ordersInModal.reduce((s, o) => s + getDefectiveRework(o.id, tid).rework, 0);
+  // 关联产品：PMP + 工单里程碑（外协收回会写回里程碑）双路径求和，避免「已报」数显示偏小。
   const totalCompleted = useProductPmp
-    ? pmpCompletedAtTemplate(productMilestoneProgresses, pid, tid)
+    ? combinedCompletedAtTemplate(ordersInModal, productMilestoneProgresses, pid, tid)
     : ordersInModal.reduce((s, o) => s + (o.milestones.find(m => m.templateId === tid)?.completedQuantity ?? 0), 0);
   const outsourceFilter = useProductPmp
     ? (r: ProductionOpRecord) => r.type === 'OUTSOURCE' && !r.sourceReworkId && !r.orderId && r.productId === pid && r.nodeId === tid
@@ -600,17 +701,23 @@ const ReportModal: React.FC<ReportModalProps> = ({
             {reportModal.productTotalQty != null ? (
               <>
                 <span className="mx-2">·</span>
-                <span>产品合计 {reportModal.productTotalQty} 件</span>
-                {reportModal.productCompletedQty != null && (
-                  <span className="ml-2">
-                    该工序已完成 {reportModal.productCompletedQty} 件，剩余{' '}
-                    {Math.max(0, (reportModal.productTotalQty ?? 0) - (reportModal.productCompletedQty ?? 0) - (useProductPmp ? totalOutsourcedAtNode : 0))}{' '}
-                    件
-                    {useProductPmp && totalOutsourcedAtNode > 0 && (
-                      <span className="text-slate-400">（已扣外协未收回 {totalOutsourcedAtNode}）</span>
-                    )}
-                  </span>
+                {reportModal.productMaxReportableQty != null && reportModal.productMaxReportableQty !== reportModal.productTotalQty ? (
+                  <span>该工序可报 {reportModal.productMaxReportableQty} 件<span className="text-slate-400">（产品合计 {reportModal.productTotalQty}）</span></span>
+                ) : (
+                  <span>产品合计 {reportModal.productTotalQty} 件</span>
                 )}
+                {reportModal.productCompletedQty != null && (() => {
+                  const baseQty = reportModal.productMaxReportableQty ?? reportModal.productTotalQty ?? 0;
+                  const remaining = Math.max(0, baseQty - (reportModal.productCompletedQty ?? 0) - (useProductPmp ? totalOutsourcedAtNode : 0));
+                  return (
+                    <span className="ml-2">
+                      该工序已完成 {reportModal.productCompletedQty} 件，剩余 {remaining} 件
+                      {useProductPmp && totalOutsourcedAtNode > 0 && (
+                        <span className="text-slate-400">（已扣外协未收回 {totalOutsourcedAtNode}）</span>
+                      )}
+                    </span>
+                  );
+                })()}
               </>
             ) : (
               <>
@@ -740,7 +847,10 @@ const ReportModal: React.FC<ReportModalProps> = ({
             <div className="space-y-1.5">
               <div className="flex items-baseline justify-between gap-3">
                 <label className="text-[10px] font-bold text-slate-400 uppercase shrink-0">本次完成数量（按规格）</label>
-                <span className="text-xs sm:text-sm font-bold text-indigo-600 tabular-nums">合计 {matrixTotalQty} 件</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <ScanInputButton onScan={handleScanPayload} size="sm" hint="扫码录入" />
+                  <span className="text-xs sm:text-sm font-bold text-indigo-600 tabular-nums">合计 {matrixTotalQty} 件</span>
+                </div>
               </div>
               <div className="rounded-xl bg-slate-50/50 p-2 sm:p-2.5 ring-1 ring-slate-100/80">
                 {(() => {
@@ -786,7 +896,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
                     const otherTotal = matrixTotalQty - currentCellQty;
                     const maxAllowed = Math.max(0, allowExceedMaxReportQty ? remaining : Math.min(remaining, effectiveRemainingForModal - otherTotal));
                     return (
-                      <div key={variant.id} className="flex min-w-0 flex-col gap-1">
+                      <div key={variant.id} className="flex min-w-0 flex-col gap-0.5">
                         <div className="flex min-w-0 items-center gap-1.5">
                           <input
                             type="number"
@@ -805,18 +915,18 @@ const ReportModal: React.FC<ReportModalProps> = ({
                             最多 {maxAllowed}
                           </span>
                         </div>
-                        <div className="flex min-w-0 items-center gap-1.5">
+                        <div className="flex min-w-0 items-center gap-1">
                           <input
                             type="number"
                             min={0}
                             tabIndex={-1}
                             value={(reportForm.variantDefectiveQuantities?.[variant.id] ?? 0) === 0 ? '' : (reportForm.variantDefectiveQuantities?.[variant.id] ?? 0)}
                             onChange={e => handleVariantDefectiveChange(variant.id, parseInt(e.target.value) || 0)}
-                            className="h-8 w-[3rem] shrink-0 rounded-md border border-amber-200/90 bg-amber-50/90 px-1.5 text-left text-sm font-bold text-amber-900 shadow-sm outline-none focus:ring-2 focus:ring-amber-200 placeholder:text-[9px] placeholder:text-amber-400/80"
+                            className="h-6 w-[2.75rem] shrink-0 rounded border border-amber-200/90 bg-amber-50/90 px-1 text-left text-xs font-bold text-amber-900 shadow-sm outline-none focus:ring-2 focus:ring-amber-200 placeholder:text-[8px] placeholder:text-amber-400/80"
                             placeholder="0"
                             title="不良品"
                           />
-                          <span className="min-w-0 text-[10px] font-medium tabular-nums leading-none text-amber-700/70">不良品</span>
+                          <span className="min-w-0 text-[9px] font-medium tabular-nums leading-none text-amber-700/70">不良品</span>
                         </div>
                       </div>
                     );
@@ -885,7 +995,10 @@ const ReportModal: React.FC<ReportModalProps> = ({
             </div>
           )}
           <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">本次完成数量（良品）</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">本次完成数量（良品）</label>
+                  <ScanInputButton onScan={handleScanPayload} size="sm" hint="扫码录入" />
+                </div>
                 <input
                   type="number"
                   min={0}
@@ -907,7 +1020,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
                   tabIndex={-1}
                   value={reportForm.defectiveQuantity === 0 ? '' : reportForm.defectiveQuantity}
                   onChange={(e) => setReportForm({ ...reportForm, defectiveQuantity: parseInt(e.target.value) || 0 })}
-                  className="w-full bg-amber-50/80 border border-amber-200 rounded-lg px-2 py-1.5 text-sm font-bold text-amber-800 text-right outline-none focus:ring-2 focus:ring-amber-200 placeholder:text-[10px] placeholder:text-amber-400/80"
+                  className="w-full bg-amber-50/80 border border-amber-200 rounded-lg px-2 py-1 text-xs font-bold text-amber-800 text-right outline-none focus:ring-2 focus:ring-amber-200 placeholder:text-[10px] placeholder:text-amber-400/80"
                   placeholder="0"
                 />
               </div>

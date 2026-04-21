@@ -1,6 +1,6 @@
 import React from 'react';
 import type { QtyMatrixTableRow } from '../../components/variant-matrix/QtyMatrixTable';
-import { buildCollabQtyMatrix } from './collabHelpers';
+import { buildCollabQtyMatrix, type BuildCollabQtyMatrixOpts } from './collabHelpers';
 
 export type CollabPayloadItem = {
   colorName?: string | null;
@@ -18,7 +18,7 @@ export function collabSpecLabel(v: string | null) {
 /** 协作 payload 行（颜色名/尺码名）→ 与全站一致的只读 QtyMatrixTable 行列数据 */
 export function collabPayloadItemsToQtyMatrixProps(
   items: CollabPayloadItem[],
-  options?: { showPricing?: boolean },
+  options?: { showPricing?: boolean } & BuildCollabQtyMatrixOpts,
 ): { sizeHeaders: string[]; rows: QtyMatrixTableRow[] } {
   if (!Array.isArray(items) || items.length === 0) {
     return { sizeHeaders: [], rows: [] };
@@ -27,7 +27,11 @@ export function collabPayloadItemsToQtyMatrixProps(
     colorName: it.colorName ?? null,
     sizeName: it.sizeName ?? null,
   }));
-  const { colors, sizes } = buildCollabQtyMatrix(matrixInputs);
+  const matrixOpts: BuildCollabQtyMatrixOpts = {
+    preferredColorOrder: options?.preferredColorOrder,
+    preferredSizeOrder: options?.preferredSizeOrder,
+  };
+  const { colors, sizes } = buildCollabQtyMatrix(matrixInputs, matrixOpts);
   const sizeHeaders = sizes.map(s => collabSpecLabel(s));
 
   const matchesForCell = (c: string | null, s: string | null) =>

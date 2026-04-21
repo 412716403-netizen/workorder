@@ -121,21 +121,22 @@ const OutsourceDispatchListModal: React.FC<OutsourceDispatchListModalProps> = ({
                 filteredRows.map(row => {
                   const key = row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}`;
                   const checked = dispatchSelectedKeys.has(key);
+                  const toggleRow = () => {
+                    setDispatchSelectedKeys(prev => {
+                      const next = new Set(prev);
+                      if (next.has(key)) { next.delete(key); return next; }
+                      if (next.size > 0) {
+                        const selectedNodeId = next.values().next().value?.split('|')[1];
+                        if (selectedNodeId !== row.nodeId) { toast.warning('只能选择同一工序同时发出，请先取消其他工序的勾选。'); return prev; }
+                      }
+                      next.add(key);
+                      return next;
+                    });
+                  };
                   return (
-                    <tr key={key} className="hover:bg-slate-50/50 bg-white">
-                      <td className="w-12 px-4 py-3 align-middle">
-                        <input type="checkbox" checked={checked} onChange={() => {
-                          setDispatchSelectedKeys(prev => {
-                            const next = new Set(prev);
-                            if (next.has(key)) { next.delete(key); return next; }
-                            if (next.size > 0) {
-                              const selectedNodeId = next.values().next().value?.split('|')[1];
-                              if (selectedNodeId !== row.nodeId) { toast.warning('只能选择同一工序同时发出，请先取消其他工序的勾选。'); return prev; }
-                            }
-                            next.add(key);
-                            return next;
-                          });
-                        }} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
+                    <tr key={key} className="hover:bg-slate-50/50 bg-white cursor-pointer" onClick={toggleRow}>
+                      <td className="w-12 px-4 py-3 align-middle" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={checked} onChange={toggleRow} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                       </td>
                       {productionLinkMode !== 'product' && <td className="px-6 py-3 text-sm font-bold text-slate-800 align-middle truncate" title={row.orderNumber}>{row.orderNumber}</td>}
                       <td className="px-6 py-3 align-middle min-w-0">
