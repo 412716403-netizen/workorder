@@ -334,7 +334,6 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                         const v = Number.isFinite(n) && n > 0 ? n : 0;
                         setReceiveFormWeights(prev => ({ ...prev, [baseKey]: v }));
                       }}
-                      placeholder="例如 12.5"
                       className="w-32 rounded-xl border border-indigo-200 bg-white py-2 px-3 text-sm font-bold text-indigo-700 text-right outline-none focus:ring-2 focus:ring-indigo-200"
                     />
                     <span className="text-[10px] text-indigo-500 font-bold">将按 BOM 占比分摊为各子物料实际消耗</span>
@@ -538,29 +537,57 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
               );
             }
             return (
-              <div key={baseKey} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-6 flex flex-col gap-4"><div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-wrap">
-                <div className="flex items-center gap-3 flex-wrap">
-                  {productionLinkMode !== 'product' && row.orderNumber != null && <span className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">{row.orderNumber}</span>}
-                  <span className="text-sm font-bold text-slate-800">{row.productName}</span>
-                  <span className="text-sm font-bold text-indigo-600">{row.milestoneName}</span>
-                </div>
-                <div className="flex items-center gap-4 flex-wrap flex-1">
-                  <div className="flex items-center gap-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">本次收回数量</label>
-                    <div className="relative flex items-center bg-white border border-slate-200 rounded-xl w-32 focus-within:ring-2 focus-within:ring-indigo-500">
-                      <input type="number" min={0} max={row.pending} value={receiveFormQuantities[baseKey] ?? ''} onChange={e => setReceiveFormQuantities(prev => ({ ...prev, [baseKey]: Number(e.target.value) || 0 }))} className="w-full bg-transparent rounded-xl py-2 pl-3 pr-10 text-sm font-bold text-indigo-600 text-center focus:ring-0 focus:outline-none" />
-                      <span className="absolute right-2 text-[10px] text-slate-400 pointer-events-none">最多{row.pending}</span>
+              <div key={baseKey} className="rounded-xl border border-slate-200 bg-slate-50/40 px-4 pb-4 pt-3.5 space-y-2">
+                <div className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-2.5">
+                  <div className="min-w-0 max-w-[min(100%,15rem)] shrink sm:max-w-[18rem]">
+                    <div className="flex min-w-0 items-baseline gap-x-2">
+                      <span className="truncate text-base font-bold leading-snug text-slate-900 sm:text-lg" title={row.productName}>
+                        {row.productName}
+                      </span>
+                      <span className="shrink-0 text-[10px] font-bold text-indigo-600 sm:text-[11px]">{row.milestoneName}</span>
+                    </div>
+                    {productionLinkMode !== 'product' && row.orderNumber != null ? (
+                      <div className="mt-0.5 truncate text-[10px] font-medium text-slate-500 sm:text-[11px]">
+                        工单 <span className="font-bold text-slate-600 tabular-nums">{row.orderNumber}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 flex-wrap items-end gap-x-2.5 gap-y-2 sm:flex-nowrap sm:gap-x-3">
+                    <div className="flex flex-col gap-0.5">
+                      <label className="text-[9px] font-black uppercase tracking-wide text-slate-400 whitespace-nowrap">本次收回</label>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={0}
+                          max={row.pending}
+                          value={(receiveFormQuantities[baseKey] ?? 0) === 0 ? '' : receiveFormQuantities[baseKey]}
+                          onChange={e => setReceiveFormQuantities(prev => ({ ...prev, [baseKey]: Number(e.target.value) || 0 }))}
+                          placeholder="0"
+                          title={`最多 ${row.pending}`}
+                          className="h-8 w-[4.5rem] rounded-md border border-slate-200 bg-white px-2 text-left text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200 tabular-nums placeholder:text-[9px] placeholder:text-slate-400"
+                        />
+                        <span className="text-[10px] font-medium tabular-nums text-slate-400 whitespace-nowrap">最多 {row.pending}</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <label className="text-[9px] font-black uppercase tracking-wide text-slate-400 whitespace-nowrap">单价（元/件）</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={receiveFormUnitPrices[baseKey] ?? ''}
+                        onChange={e => setReceiveFormUnitPrices(prev => ({ ...prev, [baseKey]: Number(e.target.value) || 0 }))}
+                        placeholder="0"
+                        className="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-200 tabular-nums sm:w-[5.25rem]"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <label className="text-[9px] font-black uppercase tracking-wide text-slate-400 whitespace-nowrap">金额（元）</label>
+                      <div className="flex h-8 w-20 min-w-[4.5rem] items-center justify-center rounded-md border border-slate-100 bg-white px-1.5 text-xs font-bold text-slate-700 tabular-nums sm:w-[5.25rem]">
+                        {((receiveFormQuantities[baseKey] ?? 0) * (receiveFormUnitPrices[baseKey] ?? 0)).toFixed(2)}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">单价（元/件）</label>
-                    <input type="number" min={0} step={0.01} value={receiveFormUnitPrices[baseKey] ?? ''} onChange={e => setReceiveFormUnitPrices(prev => ({ ...prev, [baseKey]: Number(e.target.value) || 0 }))} placeholder="0" className="w-28 rounded-xl border border-slate-200 py-2 px-3 text-sm font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500 outline-none" />
-                    <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">金额（元）</label>
-                    <div className="w-28 rounded-xl border border-slate-100 bg-slate-50 py-2 px-3 text-sm font-bold text-slate-700 text-center min-h-[40px] flex items-center justify-center">
-                      {((receiveFormQuantities[baseKey] ?? 0) * (receiveFormUnitPrices[baseKey] ?? 0)).toFixed(2)}
-                    </div>
-                  </div>
-                </div>
                 </div>
                 {renderWeightFooter()}
               </div>

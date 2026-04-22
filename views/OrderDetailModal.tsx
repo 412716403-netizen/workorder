@@ -22,12 +22,23 @@ import QtyMatrixTable, { type QtyMatrixTableRow } from '../components/variant-ma
 import { getEffectiveReportTemplate, getReportCustomDataDisplayEntries } from '../utils/effectiveReportTemplate';
 import { buildPrintListRowsFromOrderItems } from '../utils/printListPagination';
 import { OrderCenterDetailPrintBlock } from '../components/order-print/OrderCenterDetailPrintBlock';
+import {
+  formatLocalDateTimeZh,
+  localCalendarYmdStartToIso,
+  parseProductionOpTimestampMs,
+  toLocalDateYmd,
+  YMD_ONLY,
+} from '../utils/localDateTime';
 
 function fmtReportDetailTs(ts: string | Date | undefined | null): string {
-  if (!ts) return '—';
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return String(ts);
-  return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  if (ts == null || ts === '') return '—';
+  if (ts instanceof Date) {
+    const ms = ts.getTime();
+    return Number.isNaN(ms) ? '—' : formatLocalDateTimeZh(ts);
+  }
+  const ms = parseProductionOpTimestampMs(ts);
+  if (ms > 0) return formatLocalDateTimeZh(new Date(ms));
+  return String(ts);
 }
 
 interface OrderDetailModalProps {
@@ -121,13 +132,13 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       }
       setEditForm({
         customer: order.customer || '',
-        dueDate: order.dueDate || '',
-        startDate: order.startDate || '',
+        dueDate: toLocalDateYmd(order.dueDate) || (order.dueDate || '').trim(),
+        startDate: toLocalDateYmd(order.startDate) || (order.startDate || '').trim(),
         items
       });
       setIsEditing(false);
     }
-  }, [order?.id, product?.id, hasColorSize]);
+  }, [order?.id, order?.dueDate, order?.startDate, product?.id, hasColorSize]);
 
   /** 关联产品模式：该产品下所有工单及工序进度汇总 */
   const productOrders = useMemo(() => order ? orders.filter(o => o.productId === order.productId) : [], [orders, order?.productId]);
@@ -178,10 +189,16 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       ...item,
       completedQuantity: Math.min(item.completedQuantity, item.quantity)
     }));
+    const normalizeOrderDateField = (v: string): string => {
+      const t = (v || '').trim();
+      if (!t) return '';
+      if (YMD_ONLY.test(t)) return localCalendarYmdStartToIso(t);
+      return t;
+    };
     onUpdateOrder(order.id, {
       customer: editForm.customer,
-      dueDate: editForm.dueDate,
-      startDate: editForm.startDate,
+      dueDate: normalizeOrderDateField(editForm.dueDate),
+      startDate: normalizeOrderDateField(editForm.startDate),
       items: sanitizedItems
     });
     setIsEditing(false);
@@ -197,12 +214,15 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   };
 
   const handleItemQuantityChangeByVariant = (variantId: string, quantity: number) => {
-    setEditForm(prev => ({
-      ...prev,
-      items: prev.items.map(item =>
-        item.variantId === variantId ? { ...item, quantity: Math.max(0, quantity) } : item
-      )
-    }));
+    setEditForm(prev => {
+      const item = prev.items.find(i => i.variantId === variantId);
+      const minQ = item?.completedQuantity ?? 0;
+      const q = Math.max(minQ, Math.max(0, quantity));
+      return {
+        ...prev,
+        items: prev.items.map(it => (it.variantId === variantId ? { ...it, quantity: q } : it)),
+      };
+    });
   };
 
   const handleSingleQuantityChange = (quantity: number) => {
@@ -413,7 +433,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold outline-none"
                     />
                   ) : (
-                    <p className="text-sm font-bold text-slate-800">{order.dueDate || '—'}</p>
+                    <p className="text-sm font-bold text-slate-800">{toLocalDateYmd(order.dueDate) || order.dueDate || '—'}</p>
                   )}
                 </div>
               )}
@@ -428,7 +448,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold outline-none"
                     />
                   ) : (
-                    <p className="text-sm font-bold text-slate-800">{order.startDate || '—'}</p>
+                    <p className="text-sm font-bold text-slate-800">{toLocalDateYmd(order.startDate) || order.startDate || '—'}</p>
                   )}
                 </div>
               )}
@@ -438,25 +458,42 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           {/* 工单明细（仅在有颜色尺码时显示） */}
           {hasColorSize && (
           <div>
-            <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-3">
+            <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-2">
               <Layers className="w-3.5 h-3.5" /> 工单明细
             </h4>
             {product && dictionaries && product.variants?.length ? (
               (() => {
+                const itemsForCells = isEditing ? editForm.items : (order?.items ?? []);
+                const getItemForVariant = (variantId: string) => itemsForCells.find(i => i.variantId === variantId);
                 const renderQtyCell = (variant: ProductVariant) => {
                   const qty = getQuantityByVariant(variant.id);
+                  const completed = getItemForVariant(variant.id)?.completedQuantity ?? 0;
                   return (
-                    <div key={variant.id} className="flex min-w-0 flex-col gap-0.5">
+                    <div key={variant.id} className="flex min-w-0 flex-col gap-1">
                       {isEditing ? (
-                        <input
-                          type="number"
-                          min={0}
-                          value={qty}
-                          onChange={e => handleItemQuantityChangeByVariant(variant.id, parseInt(e.target.value) || 0)}
-                          className="h-9 w-[3.25rem] shrink-0 rounded-lg border border-slate-200 bg-slate-50/90 px-2 text-left text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                        />
+                        <>
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <input
+                              type="number"
+                              min={completed}
+                              value={qty}
+                              onChange={e =>
+                                handleItemQuantityChangeByVariant(variant.id, parseInt(e.target.value, 10) || 0)
+                              }
+                              className="h-8 w-[3rem] shrink-0 rounded-md border border-slate-200 bg-white px-1.5 text-left text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200"
+                            />
+                            <span className="min-w-0 text-[10px] font-medium tabular-nums leading-none text-slate-400">
+                              最少 {completed}
+                            </span>
+                          </div>
+                        </>
                       ) : (
-                        <span className="text-sm font-bold text-indigo-600 tabular-nums">{qty}</span>
+                        <>
+                          <span className="text-sm font-bold text-indigo-600 tabular-nums">{qty}</span>
+                          {completed > 0 ? (
+                            <span className="text-[10px] font-medium tabular-nums text-slate-400">已下工 {completed}</span>
+                          ) : null}
+                        </>
                       )}
                     </div>
                   );
@@ -487,11 +524,11 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   };
                 });
                 return (
-                  <div className="bg-slate-50/50 rounded-2xl p-3">
+                  <div className="rounded-xl bg-slate-50/50 p-2 sm:p-2.5 ring-1 ring-slate-100/80">
                     <QtyMatrixTable
                       sizeHeaders={layout.sizeColumns.map(c => c.header)}
                       rows={rows}
-                      compactSizeColumns
+                      dense
                     />
                   </div>
                 );

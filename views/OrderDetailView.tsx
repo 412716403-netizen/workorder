@@ -2,15 +2,19 @@ import React, { useMemo } from 'react';
 import { toast } from 'sonner';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Layers, Trash2, ClipboardList } from 'lucide-react';
-import { ProductionOrder, Product, OrderFormSettings, ProductionOpRecord, ProductionLinkMode } from '../types';
+import { ProductionOrder, Product, OrderFormSettings, ProductionOpRecord, ProductionLinkMode, AppDictionaries } from '../types';
 import { useConfirm } from '../contexts/ConfirmContext';
+import { productHasColorSizeMatrix } from '../utils/productColorSize';
+import { buildVariantQtyMatrixLayout } from '../utils/variantQtyMatrix';
+import QtyMatrixTable, { type QtyMatrixTableRow } from '../components/variant-matrix/QtyMatrixTable';
+import { toLocalDateYmd } from '../utils/localDateTime';
 
 interface OrderDetailViewProps {
   productionLinkMode?: ProductionLinkMode;
   orders: ProductionOrder[];
   products: Product[];
   prodRecords: ProductionOpRecord[];
-  dictionaries: { colors?: { id: string; name: string }[]; sizes?: { id: string; name: string }[]; units?: { id: string; name: string }[] };
+  dictionaries: AppDictionaries;
   workers?: { id: string; name: string }[];
   equipment?: { id: string; name: string }[];
   orderFormSettings?: OrderFormSettings;
@@ -19,7 +23,7 @@ interface OrderDetailViewProps {
 }
 
 const OrderDetailView: React.FC<OrderDetailViewProps> = ({
-  orders, products, prodRecords, orderFormSettings, onDeleteOrder, productionLinkMode
+  orders, products, prodRecords, dictionaries, orderFormSettings, onDeleteOrder, productionLinkMode
 }) => {
   const confirm = useConfirm();
   const showInDetail = (id: string) => orderFormSettings?.standardFields.find(f => f.id === id)?.showInDetail ?? true;
@@ -29,6 +33,7 @@ const OrderDetailView: React.FC<OrderDetailViewProps> = ({
   const product = products.find(p => p.id === order?.productId);
 
   const orderTotalQty = useMemo(() => order?.items.reduce((s, i) => s + i.quantity, 0) || 0, [order]);
+  const hasColorSizeMatrix = productHasColorSizeMatrix(product, undefined);
 
   if (!order) return <div className="p-8 text-center text-slate-500 font-bold">工单未找到</div>;
 
@@ -91,46 +96,98 @@ const OrderDetailView: React.FC<OrderDetailViewProps> = ({
             {showInDetail('dueDate') && (
               <div>
                 <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">交期</p>
-                <p className="text-sm font-bold text-slate-800">{order.dueDate}</p>
+                <p className="text-sm font-bold text-slate-800">{toLocalDateYmd(order.dueDate) || order.dueDate}</p>
               </div>
             )}
             {showInDetail('startDate') && order.startDate && (
               <div>
                 <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">开始日期</p>
-                <p className="text-sm font-bold text-slate-800">{order.startDate}</p>
+                <p className="text-sm font-bold text-slate-800">{toLocalDateYmd(order.startDate) || order.startDate}</p>
               </div>
             )}
           </div>
         </div>
 
         {/* 工单明细 */}
-        <div className="space-y-4">
+        <div className="space-y-3">
           <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
             <Layers className="w-3.5 h-3.5" /> 工单明细
           </h4>
-          <div className="border border-slate-200 rounded-2xl overflow-hidden">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">序号</th>
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider">规格</th>
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-wider text-right">数量</th>
-                </tr>
-              </thead>
-              <tbody>
-                {order.items.map((item, idx) => {
-                  const variant = product?.variants.find(v => v.id === item.variantId);
+          {hasColorSizeMatrix && product && product.variants?.length ? (
+            (() => {
+              const layout = buildVariantQtyMatrixLayout(product, dictionaries);
+              if (!layout) {
+                return (
+                  <div className="rounded-xl border border-amber-100 bg-amber-50/60 px-4 py-3 text-xs font-bold text-amber-800">
+                    无法生成颜色×尺码矩阵，请检查产品与字典配置。
+                  </div>
+                );
+              }
+              const qtyByVariant = (vid: string) => order.items.find(i => i.variantId === vid)?.quantity ?? 0;
+              const completedByVariant = (vid: string) => order.items.find(i => i.variantId === vid)?.completedQuantity ?? 0;
+              const rows: QtyMatrixTableRow[] = layout.colorRows.map(row => {
+                let rowSum = 0;
+                const cells = row.variantAtSize.map((variant, si) => {
+                  if (!variant) {
+                    return <span key={`${row.key}-e-${si}`} className="text-sm text-slate-300">—</span>;
+                  }
+                  const q = qtyByVariant(variant.id);
+                  const c = completedByVariant(variant.id);
+                  rowSum += q;
                   return (
-                    <tr key={idx} className="border-b border-slate-100 last:border-0">
-                      <td className="px-6 py-4 text-sm font-bold text-slate-700">{idx + 1}</td>
-                      <td className="px-6 py-4 text-sm font-bold text-slate-800">{variant?.skuSuffix || '默认规格'}</td>
-                      <td className="px-6 py-4 text-sm font-bold text-slate-800 text-right">{item.quantity} 件</td>
-                    </tr>
+                    <div key={variant.id} className="flex min-w-0 flex-col gap-1">
+                      <span className="text-sm font-bold text-indigo-600 tabular-nums">{q}</span>
+                      {c > 0 ? (
+                        <span className="text-[10px] font-medium tabular-nums text-slate-400">已下工 {c}</span>
+                      ) : null}
+                    </div>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
+                });
+                return {
+                  key: row.key,
+                  colorCell: (
+                    <div className="flex items-center gap-2">
+                      {row.colorSwatch ? (
+                        <span className="h-4 w-4 shrink-0 rounded-full border border-slate-200" style={{ backgroundColor: row.colorSwatch }} />
+                      ) : null}
+                      <span>{row.colorLabel}</span>
+                    </div>
+                  ),
+                  cells,
+                  subtotalCell: rowSum,
+                };
+              });
+              return (
+                <div className="rounded-xl bg-slate-50/50 p-2 sm:p-2.5 ring-1 ring-slate-100/80">
+                  <QtyMatrixTable sizeHeaders={layout.sizeColumns.map(c => c.header)} rows={rows} dense />
+                </div>
+              );
+            })()
+          ) : (
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase tracking-wider sm:px-6 sm:py-3">序号</th>
+                    <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase tracking-wider sm:px-6 sm:py-3">规格</th>
+                    <th className="px-4 py-2.5 text-[10px] font-black text-slate-500 uppercase tracking-wider text-right sm:px-6 sm:py-3">数量</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {order.items.map((item, idx) => {
+                    const variant = product?.variants.find(v => v.id === item.variantId);
+                    return (
+                      <tr key={idx} className="border-b border-slate-100 last:border-0">
+                        <td className="px-4 py-3 text-sm font-bold text-slate-700 sm:px-6 sm:py-4">{idx + 1}</td>
+                        <td className="px-4 py-3 text-sm font-bold text-slate-800 sm:px-6 sm:py-4">{variant?.skuSuffix || '默认规格'}</td>
+                        <td className="px-4 py-3 text-sm font-bold text-slate-800 text-right sm:px-6 sm:py-4">{item.quantity} 件</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         {/* 各工序报工汇总 */}
         {order.milestones.some(m => (m.reports?.length ?? 0) > 0) && (
           <div className="space-y-4 pt-6">

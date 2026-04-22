@@ -46,6 +46,7 @@ import ReworkReportSubmitModal from './ReworkReportSubmitModal';
 import ReworkFormConfigModal from './ReworkFormConfigModal';
 import { nextOutsourceDocNumber } from '../../utils/partnerDocNumber';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import { orderBelongsToProductInList } from '../../utils/reworkMergeBucketOrderId';
 
 /** sourceReworkId → partner 的预建索引 */
 function buildReworkPartnerMap(allRecords: ProductionOpRecord[]): Map<string, string> {
@@ -294,19 +295,11 @@ const ReworkPanel: React.FC<PanelProps> = ({
     }
     const reworkPartnerMap = buildReworkPartnerMap(records);
     const reworkRecords = records.filter(r => r.type === 'REWORK');
-    const orderIdSetByProduct = new Map<string, Set<string>>();
-    orders.forEach(o => {
-      if (!orderIdSetByProduct.has(o.productId)) orderIdSetByProduct.set(o.productId, new Set());
-      orderIdSetByProduct.get(o.productId)!.add(o.id);
-    });
     const byProduct = new Map<string, Map<string, { nodeId: string; totalQty: number; completedQty: number; pendingSeq: number; outsourcePartner: string }>>();
     reworkRecords.forEach(r => {
       const pid = r.productId;
       if (!pid || !idx.productsById.has(pid)) return;
-      if (r.orderId) {
-        const knownOrders = orderIdSetByProduct.get(pid);
-        if (knownOrders && !knownOrders.has(r.orderId)) return;
-      }
+      if (r.orderId && !orderBelongsToProductInList(r.orderId, pid, orders)) return;
       const byKey = byProduct.get(pid) ?? new Map();
       const targetNodes = (r.reworkNodeIds && r.reworkNodeIds.length > 0) ? r.reworkNodeIds : (r.nodeId ? [r.nodeId] : []);
       const completed =

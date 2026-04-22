@@ -40,6 +40,7 @@ import {
 } from '../utils/productReportAggregates';
 import { computePendingStockOrders } from '../utils/pendingStockCompute';
 import { buildDefectiveReworkByOrderMilestone } from '../utils/defectiveReworkByOrderMilestone';
+import { toLocalDateYmd } from '../utils/localDateTime';
 import {
   formConfigToolbarButtonClass,
   moduleHeaderRowClass,
@@ -189,7 +190,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
 
   const [detailOrderId, setDetailOrderId] = useState<string | null>(initialDetailOrderId ?? null);
-  /** 关联产品模式下：从「工单流水」打开详情时用单工单布局（编辑/删除、颜色尺码，不显示产品工序进度汇总） */
+  /** 是否从「工单流水」打开详情；关联产品模式下与详情弹窗联用以单工单布局展示 */
   const [orderDetailFromFlow, setOrderDetailFromFlow] = useState(false);
   const openOrderDetail = useCallback((orderId: string, fromOrderFlow = false) => {
     setDetailOrderId(orderId);
@@ -588,16 +589,14 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
             <Sliders className="w-4 h-4 shrink-0" /> 表单配置
           </button>
           )}
-          {productionLinkMode === 'product' && (
-            <button
-              type="button"
-              onClick={() => { setOrderFlowProductId(null); setShowOrderFlowModal(true); }}
-              className={outlineToolbarButtonClass}
-            >
-              <ScrollText className="w-4 h-4 shrink-0" />
-              工单流水
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => { setOrderFlowProductId(null); setShowOrderFlowModal(true); }}
+            className={outlineToolbarButtonClass}
+          >
+            <ScrollText className="w-4 h-4 shrink-0" />
+            工单流水
+          </button>
           {hasOrderPerm('production:orders_report_records:view') && (
           <button 
             type="button"
@@ -691,8 +690,16 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                           {showInList('customer') && productionLinkMode !== 'product' && order.customer && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {order.customer}</span>}
                           <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 总数: {orderTotalQty}</span>
-                          {showInList('dueDate') && order.dueDate && <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> 交期: {order.dueDate}</span>}
-                          {showInList('startDate') && order.startDate && <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> 开始: {order.startDate}</span>}
+                          {showInList('dueDate') && order.dueDate && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" /> 交期: {toLocalDateYmd(order.dueDate) || order.dueDate}
+                            </span>
+                          )}
+                          {showInList('startDate') && order.startDate && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" /> 开始: {toLocalDateYmd(order.startDate) || order.startDate}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -963,7 +970,9 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                             block.productId,
                                             productMilestoneProgresses,
                                             processSequenceMode,
-                                            (oid, t) => getDefectiveRework(oid, t)
+                                            (oid, t) => getDefectiveRework(oid, t),
+                                            undefined,
+                                            orders,
                                           )
                                         : (() => {
                                             let baseQty = totalQty;

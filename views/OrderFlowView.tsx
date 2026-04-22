@@ -2,11 +2,15 @@ import React, { useMemo, useState } from 'react';
 import { ScrollText, FileText, Package, Search } from 'lucide-react';
 import { ProductionOrder, Product, OrderStatus } from '../types';
 import { STATUS_COLORS, ORDER_STATUS_MAP } from '../constants';
-import { formatLocalDateTimeZh, localTodayYmd, toLocalDateYmd } from '../utils/localDateTime';
+import { formatOrderFlowPlacedDisplay, localTodayYmd, toLocalDateYmd, YMD_ONLY } from '../utils/localDateTime';
 
 /** 用于筛选/排序的本地日历日（YYYY-MM-DD） */
 function getOrderDateYmd(order: ProductionOrder): string {
-  if (order.createdAt) return toLocalDateYmd(order.createdAt);
+  if (order.createdAt) {
+    const t = order.createdAt.trim();
+    if (YMD_ONLY.test(t)) return t;
+    return toLocalDateYmd(order.createdAt);
+  }
   const m = order.id.match(/^ord-([^-]+)-/);
   if (m) {
     const ts = parseInt(m[1], 36);
@@ -15,14 +19,10 @@ function getOrderDateYmd(order: ProductionOrder): string {
   return order.startDate ? toLocalDateYmd(order.startDate) : '';
 }
 
-/** 列表展示：本地日期+时间 */
+/** 列表展示：与工单 createdAt 语义一致（仅日期不补 08:00） */
 function getOrderPlacedDisplay(order: ProductionOrder): string {
-  if (order.createdAt) return formatLocalDateTimeZh(order.createdAt);
-  const m = order.id.match(/^ord-([^-]+)-/);
-  if (m) {
-    const ts = parseInt(m[1], 36);
-    if (!Number.isNaN(ts)) return formatLocalDateTimeZh(new Date(ts));
-  }
+  const fromCreated = formatOrderFlowPlacedDisplay(order.createdAt, order.id);
+  if (fromCreated) return fromCreated;
   if (order.startDate) return toLocalDateYmd(order.startDate) || order.startDate;
   return '';
 }

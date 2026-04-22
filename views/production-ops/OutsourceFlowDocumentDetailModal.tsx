@@ -395,14 +395,65 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                     return [v.id, q];
                   }),
                 );
+                const matrixLineTotalQty = variantsForDetail.reduce(
+                  (s, v) => s + (flowDetailEditMode ? (flowDetailQuantities[`${key}|${v.id}`] ?? variantQty[v.id] ?? 0) : (variantQty[v.id] ?? 0)),
+                  0,
+                );
+                const matrixLineAmount = flowDetailEditMode
+                  ? variantsForDetail.reduce((sum, v) => {
+                      const qk = `${key}|${v.id}`;
+                      const q = flowDetailQuantities[qk] ?? variantQty[v.id] ?? 0;
+                      const up = flowDetailUnitPrices[qk] ?? flowDetailUnitPrices[key] ?? lineRecords.find(r => (r.variantId || '') === v.id)?.unitPrice ?? 0;
+                      return sum + q * up;
+                    }, 0)
+                  : lineRecords.reduce((s, r) => s + (r.amount ?? 0), 0);
+                const matrixLineUnitPriceDisplay = lineRecords[0]?.unitPrice != null ? Number(lineRecords[0].unitPrice).toFixed(2) : '—';
                 return (
-                  <div key={key} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-4 space-y-4">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      {productionLinkMode !== 'product' && orderNumber != null && orderNumber !== '' && <span className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">{orderNumber}</span>}
-                      <span className="text-sm font-bold text-slate-800">{productName}</span>
-                      <span className="text-sm font-bold text-indigo-600">{nodeName}</span>
+                  <div key={key} className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                    <div className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-2">
+                      <div className="min-w-0 max-w-full shrink basis-[min(100%,11rem)] sm:max-w-[min(16rem,calc(100%-12rem))] sm:basis-auto">
+                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          {productionLinkMode !== 'product' && orderNumber != null && orderNumber !== '' && (
+                            <span className="shrink-0 text-[10px] font-black uppercase tracking-wider text-indigo-600">{orderNumber}</span>
+                          )}
+                          <span className="min-w-0 truncate text-sm font-bold text-slate-800" title={productName}>
+                            {productName}
+                          </span>
+                          <span className="shrink-0 text-sm font-bold text-indigo-600">{nodeName}</span>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap items-end gap-x-3 sm:gap-x-4">
+                        <div className="flex flex-col gap-0.5">
+                          <label className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide text-slate-400">数量（合计）</label>
+                          <div className="flex h-9 w-[7.5rem] items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-indigo-600 tabular-nums">{matrixLineTotalQty}</div>
+                        </div>
+                        {isReceiveDoc ? (
+                          <>
+                            <div className="flex flex-col gap-0.5">
+                              <label className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide text-slate-400">单价（元/件）</label>
+                              {flowDetailEditMode ? (
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={0.01}
+                                  value={flowDetailUnitPrices[key] ?? ''}
+                                  onChange={e => setFlowDetailUnitPrices(prev => ({ ...prev, [key]: Number(e.target.value) || 0 }))}
+                                  placeholder="0"
+                                  className="h-9 w-[7.5rem] rounded-lg border border-slate-200 bg-white px-2 text-center text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                              ) : (
+                                <div className="flex h-9 w-[7.5rem] items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-sm font-bold text-slate-700 tabular-nums">{matrixLineUnitPriceDisplay}</div>
+                              )}
+                            </div>
+                            <div className="flex flex-col gap-0.5">
+                              <label className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide text-slate-400">金额（元）</label>
+                              <div className="flex h-9 w-[7.5rem] items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-sm font-bold text-slate-700 tabular-nums">{matrixLineAmount.toFixed(2)}</div>
+                            </div>
+                          </>
+                        ) : null}
+                      </div>
                     </div>
-                    <div className="space-y-4">
+                    <div className="space-y-4 border-t border-slate-100 pt-3">
                       <VariantQtyMatrixInputs
                         product={matrixFlowProduct}
                         dictionaries={dictionaries}
@@ -414,26 +465,6 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                         }}
                       />
                     </div>
-                    {isReceiveDoc && (
-                      <div className="flex flex-wrap items-center gap-4 pt-4 mt-4 border-t border-slate-100">
-                        <div className="flex items-center gap-2">
-                          <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">单价（元/件）</label>
-                          {flowDetailEditMode ? (
-                            <input type="number" min={0} step={0.01} value={flowDetailUnitPrices[key] ?? ''} onChange={e => setFlowDetailUnitPrices(prev => ({ ...prev, [key]: Number(e.target.value) || 0 }))} placeholder="0" className="w-28 rounded-xl border border-slate-200 py-2 px-3 text-sm font-bold text-slate-800 text-center focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                          ) : (
-                            <div className="w-28 rounded-xl border border-slate-100 bg-slate-50 py-2 px-3 text-sm font-bold text-slate-700 text-center min-h-[40px] flex items-center justify-center">{lineRecords[0]?.unitPrice != null ? Number(lineRecords[0].unitPrice).toFixed(2) : '—'}</div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">本行金额（元）</label>
-                          <div className="w-28 rounded-xl border border-slate-100 bg-slate-50 py-2 px-3 text-sm font-bold text-slate-700 text-center min-h-[40px] flex items-center justify-center">
-                            {flowDetailEditMode
-                              ? variantsForDetail.reduce((sum, v) => { const qk = `${key}|${v.id}`; const q = flowDetailQuantities[qk] ?? variantQty[v.id] ?? 0; const up = flowDetailUnitPrices[qk] ?? flowDetailUnitPrices[key] ?? lineRecords.find(r => (r.variantId || '') === v.id)?.unitPrice ?? 0; return sum + q * up; }, 0).toFixed(2)
-                              : lineRecords.reduce((s, r) => s + (r.amount ?? 0), 0).toFixed(2)}
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 );
               }
@@ -443,38 +474,46 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
               const lineUnitPrice = flowDetailEditMode && isReceiveDoc ? (flowDetailUnitPrices[key] ?? lineRec?.unitPrice ?? 0) : (lineRec?.unitPrice ?? 0);
               const lineAmount = flowDetailEditMode && isReceiveDoc ? (singleQty * lineUnitPrice) : (lineRec?.amount ?? 0);
               return (
-                <div key={key} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-6 flex flex-col gap-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-wrap">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      {productionLinkMode !== 'product' && orderNumber != null && orderNumber !== '' && <span className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">{orderNumber}</span>}
-                      <span className="text-sm font-bold text-slate-800">{productName}</span>
-                      <span className="text-sm font-bold text-indigo-600">{nodeName}</span>
+                <div key={key} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-6">
+                  <div className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-2">
+                    <div className="min-w-0 max-w-full shrink basis-[min(100%,11rem)] sm:max-w-[min(16rem,calc(100%-12rem))] sm:basis-auto">
+                      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        {productionLinkMode !== 'product' && orderNumber != null && orderNumber !== '' && (
+                          <span className="shrink-0 text-[10px] font-black uppercase tracking-wider text-indigo-600">{orderNumber}</span>
+                        )}
+                        <span className="min-w-0 truncate text-sm font-bold text-slate-800" title={productName}>
+                          {productName}
+                        </span>
+                        <span className="shrink-0 text-sm font-bold text-indigo-600">{nodeName}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3 flex-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">委外数量</label>
-                      {flowDetailEditMode ? (
-                        <input type="number" min={0} value={flowDetailQuantities[key] ?? ''} onChange={e => setFlowDetailQuantities(prev => ({ ...prev, [key]: Number(e.target.value) || 0 }))} className="w-32 rounded-xl border border-slate-200 py-2 px-3 text-sm font-bold text-indigo-600 text-center focus:outline-none" />
-                      ) : (
-                        <div className="flex items-center justify-center bg-slate-50 border border-slate-200 rounded-xl w-32 py-2 px-3 text-sm font-bold text-indigo-600 min-h-[40px]">{totalQty}</div>
-                      )}
-                    </div>
-                  </div>
-                  {isReceiveDoc && (
-                    <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-slate-100">
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">单价（元/件）</label>
+                    <div className="flex shrink-0 flex-wrap items-end gap-x-3 sm:gap-x-4">
+                      <div className="flex flex-col gap-0.5">
+                        <label className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide text-slate-400">委外数量</label>
                         {flowDetailEditMode ? (
-                          <input type="number" min={0} step={0.01} value={flowDetailUnitPrices[key] ?? ''} onChange={e => setFlowDetailUnitPrices(prev => ({ ...prev, [key]: Number(e.target.value) || 0 }))} className="w-28 rounded-xl border border-slate-200 py-2 px-3 text-sm font-bold text-slate-700 text-center focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                          <input type="number" min={0} value={flowDetailQuantities[key] ?? ''} onChange={e => setFlowDetailQuantities(prev => ({ ...prev, [key]: Number(e.target.value) || 0 }))} className="h-9 w-[7.5rem] rounded-lg border border-slate-200 bg-white px-2 text-center text-sm font-bold text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-200" />
                         ) : (
-                          <div className="w-28 rounded-xl border border-slate-100 bg-slate-50 py-2 px-3 text-sm font-bold text-slate-700 text-center min-h-[40px] flex items-center justify-center">{lineUnitPrice.toFixed(2)}</div>
+                          <div className="flex h-9 w-[7.5rem] items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-indigo-600 tabular-nums">{totalQty}</div>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">金额（元）</label>
-                        <div className="w-28 rounded-xl border border-slate-100 bg-slate-50 py-2 px-3 text-sm font-bold text-slate-700 text-center min-h-[40px] flex items-center justify-center">{lineAmount.toFixed(2)}</div>
-                      </div>
+                      {isReceiveDoc ? (
+                        <>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide text-slate-400">单价（元/件）</label>
+                            {flowDetailEditMode ? (
+                              <input type="number" min={0} step={0.01} value={flowDetailUnitPrices[key] ?? ''} onChange={e => setFlowDetailUnitPrices(prev => ({ ...prev, [key]: Number(e.target.value) || 0 }))} className="h-9 w-[7.5rem] rounded-lg border border-slate-200 bg-white px-2 text-center text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500" />
+                            ) : (
+                              <div className="flex h-9 w-[7.5rem] items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-sm font-bold text-slate-700 tabular-nums">{lineUnitPrice.toFixed(2)}</div>
+                            )}
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide text-slate-400">金额（元）</label>
+                            <div className="flex h-9 w-[7.5rem] items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-sm font-bold text-slate-700 tabular-nums">{lineAmount.toFixed(2)}</div>
+                          </div>
+                        </>
+                      ) : null}
                     </div>
-                  )}
+                  </div>
                 </div>
               );
             })}

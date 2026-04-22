@@ -13,6 +13,8 @@ export interface ScanInputButtonProps {
   disabled?: boolean;
   className?: string;
   title?: string;
+  /** 是否显示摄像头扫码按钮；为 false 时不展示摄像头入口，且扫码键不再长按打开摄像头 */
+  showCameraButton?: boolean;
 }
 
 /**
@@ -26,6 +28,7 @@ export function ScanInputButton({
   disabled,
   className = '',
   title,
+  showCameraButton = true,
 }: ScanInputButtonProps) {
   const [active, setActive] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -63,12 +66,23 @@ export function ScanInputButton({
         <button
           type="button"
           disabled={disabled}
-          title={title ?? (active ? '扫码中，扫码枪扫一下即可' : '点击激活扫码枪 / 长按打开摄像头')}
+          title={
+            title ??
+            (active
+              ? '扫码中，扫码枪扫一下即可'
+              : showCameraButton
+                ? '点击激活扫码枪 / 长按打开摄像头'
+                : '点击激活扫码枪')
+          }
           onClick={() => setActive(v => !v)}
-          onContextMenu={e => {
-            e.preventDefault();
-            setCameraOpen(true);
-          }}
+          onContextMenu={
+            showCameraButton
+              ? e => {
+                  e.preventDefault();
+                  setCameraOpen(true);
+                }
+              : undefined
+          }
           className={`${dim} inline-flex items-center justify-center rounded-lg border transition-colors ${
             active
               ? 'bg-indigo-600 border-indigo-600 text-white animate-pulse'
@@ -77,7 +91,7 @@ export function ScanInputButton({
         >
           <ScanLine className={iconDim} />
         </button>
-        {size !== 'sm' && (
+        {showCameraButton && size !== 'sm' && (
           <button
             type="button"
             disabled={disabled}

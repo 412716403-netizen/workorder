@@ -103,11 +103,16 @@ export interface FormConfigToggleSection {
   defaultChecked?: boolean;
 }
 
+/** customSlot.render 第二参数：由 BusinessFormConfigModal 注入，各 schema 按需使用 */
+export interface FormConfigCustomSlotExtras {
+  productionLinkMode?: 'order' | 'product';
+}
+
 /** 完全自定义的 JSX 逃生舱（不要为了奇形怪状的 section 去膨胀 schema） */
 export interface FormConfigCustomSlotSection {
   kind: 'customSlot';
   id: string;
-  render: (ctx: FormConfigSlotContext) => ReactNode;
+  render: (ctx: FormConfigSlotContext, extras?: FormConfigCustomSlotExtras) => ReactNode;
 }
 
 export type FormConfigSection =

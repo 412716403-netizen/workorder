@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { X, Truck } from 'lucide-react';
+import { X, Truck, FileText, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   ProductionOpRecord,
@@ -8,17 +8,25 @@ import {
   GlobalNodeTemplate,
   AppDictionaries,
   ProductCategory,
-  ProductVariant,
   ProductMilestoneProgress,
   Partner,
   PartnerCategory,
   PlanFormFieldConfig,
 } from '../../types';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
+import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { splitQtyBySourceDefectiveAcrossParentOrders } from '../../utils/reworkSplitByProductOrders';
-import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
+import {
+  sectionTitleClass,
+  psiOrderBillFormSectionStackClass,
+  psiOrderBillFormDetailSplitClass,
+  psiOrderBillFormSectionIconIndigoClass,
+  psiOrderBillFormSectionIconEmeraldClass,
+  psiOrderBillFormFieldControlClass,
+  psiOrderBillFormPartnerTriggerClass,
+} from '../../styles/uiDensity';
 import { hasOpsPerm } from './types';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
@@ -181,16 +189,13 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
   const useVariantQtyGrid = reworkActionHasColorSize && !reworkTreatMatrixQtyAsAggregate;
 
   const reworkActionVariantTotal = useMemo(() => (Object.values(reworkActionVariantQuantities) as number[]).reduce((s, q) => s + (Number(q) || 0), 0), [reworkActionVariantQuantities]);
-  const reworkActionGroupedVariants = useMemo((): Record<string, ProductVariant[]> => {
-    if (!reworkActionProduct?.variants?.length) return {};
-    const groups: Record<string, ProductVariant[]> = {};
-    reworkActionProduct.variants.forEach(v => {
-      const c = v.colorId || 'none';
-      if (!groups[c]) groups[c] = [];
-      groups[c].push(v);
-    });
-    return groups;
-  }, [reworkActionProduct?.variants]);
+  const defectMatrixProduct = useMemo(
+    () =>
+      reworkActionProduct && reworkActionProduct.variants?.length
+        ? ({ ...reworkActionProduct, colorIds: undefined, sizeIds: undefined } as Product)
+        : null,
+    [reworkActionProduct],
+  );
 
   const resetAndClose = () => {
     onClose();
@@ -492,10 +497,58 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
   );
 
   const defectCreateFields = (defectTreatmentCustomFields ?? []).filter(f => f.showInCreate);
-  const defectCustomBlock =
+  const matrixInputClassScrap =
+    'h-11 w-[3.25rem] shrink-0 rounded-xl border border-rose-200 bg-white px-2 text-left text-sm font-bold text-rose-700 shadow-sm outline-none focus:ring-2 focus:ring-rose-200 tabular-nums';
+  const matrixInputClassRework =
+    'h-11 w-[3.25rem] shrink-0 rounded-xl border border-slate-200 bg-white px-2 text-left text-sm font-bold text-indigo-600 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200 tabular-nums';
+
+  const renderDefectVariantMatrix = (mode: 'scrap' | 'rework' | 'outsource_rework') => {
+    if (!useVariantQtyGrid) return null;
+    if (!defectMatrixProduct) return null;
+    if (!dictionaries) {
+      return (
+        <p className="rounded-xl border border-amber-100 bg-amber-50/90 px-3 py-2 text-sm font-bold text-amber-900">
+          缺少颜色尺码字典，请先在基础资料维护后再按规格录入。
+        </p>
+      );
+    }
+    const inputClass = mode === 'scrap' ? matrixInputClassScrap : matrixInputClassRework;
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">数量明细（有颜色尺码）</p>
+          <span className={`shrink-0 text-sm font-bold tabular-nums ${mode === 'scrap' ? 'text-rose-600' : 'text-indigo-600'}`}>
+            合计 {reworkActionVariantTotal} 件
+          </span>
+        </div>
+        <div className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm">
+          <VariantQtyMatrixInputs
+            product={defectMatrixProduct}
+            dictionaries={dictionaries}
+            quantities={reworkActionVariantQuantities}
+            onVariantQtyChange={(variantId, qty) => {
+              const maxVariant = reworkActionPendingByVariant[variantId] ?? 0;
+              setReworkActionVariantQuantities(prev => ({ ...prev, [variantId]: Math.min(maxVariant, Math.max(0, qty)) }));
+            }}
+            getCellExtras={v => {
+              const maxVariant = reworkActionPendingByVariant[v.id] ?? 0;
+              return {
+                max: maxVariant,
+                disabled: maxVariant <= 0,
+                placeholder: maxVariant <= 0 ? '—' : '0',
+                hint: maxVariant > 0 ? `最多${maxVariant}` : undefined,
+              };
+            }}
+            inputClassName={inputClass}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  const defectCustomFieldsOnly =
     reworkActionMode != null && defectCreateFields.length > 0 ? (
       <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
-        <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">处理不良自定义</h4>
         {defectCreateFields.map(cf => (
           <div key={cf.id} className="space-y-1">
             <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
@@ -503,67 +556,12 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
               cf={cf}
               value={defectCustomData[cf.id]}
               onChange={v => setDefectCustomData(prev => ({ ...prev, [cf.id]: v }))}
-              controlClassName="h-[44px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+              controlClassName={psiOrderBillFormFieldControlClass}
             />
           </div>
         ))}
       </div>
     ) : null;
-
-  const renderVariantGrid = (mode: 'scrap' | 'rework' | 'outsource_rework') => (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <label className="text-[10px] font-bold text-slate-400 uppercase">{mode === 'scrap' ? '报损' : mode === 'outsource_rework' ? '委外返工' : '返工'}数量明细（按规格）</label>
-        <span className={`text-sm font-bold ${mode === 'scrap' ? 'text-rose-600' : 'text-indigo-600'}`}>合计 {reworkActionVariantTotal} 件</span>
-      </div>
-      <div className="space-y-3 bg-slate-50/50 rounded-2xl p-3">
-        {sortedVariantColorEntries(reworkActionGroupedVariants, reworkActionProduct?.colorIds, reworkActionProduct?.sizeIds).map(([colorId, colorVariants]) => {
-          const color = dictionaries?.colors?.find((c: { id: string; name: string; value?: string }) => c.id === colorId);
-          return (
-            <div
-              key={colorId}
-              className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4"
-            >
-              <div className="flex items-center gap-2.5 w-40 shrink-0 sm:pb-0.5 min-w-0">
-                {color && (
-                  <span
-                    className="w-5 h-5 rounded-full border border-slate-200 shrink-0"
-                    style={{ backgroundColor: (color as { value?: string }).value }}
-                  />
-                )}
-                <span className="text-sm font-bold text-slate-800 leading-tight truncate" title={(color as { name?: string })?.name ?? colorId}>
-                  {(color as { name?: string })?.name ?? colorId}
-                </span>
-              </div>
-              <div className="flex flex-wrap items-end gap-x-4 gap-y-3 flex-1 min-w-0">
-                {colorVariants.map(v => {
-                  const size = dictionaries?.sizes?.find((s: { id: string; name: string }) => s.id === v.sizeId);
-                  const maxVariant = reworkActionPendingByVariant[v.id] ?? 0;
-                  const qty = reworkActionVariantQuantities[v.id] ?? 0;
-                  return (
-                    <div key={v.id} className="flex flex-col gap-1 w-[4.75rem] flex-none">
-                      <span className="text-[10px] font-bold text-slate-400 text-center leading-none min-h-[14px] flex items-end justify-center">
-                        {size?.name ?? v.sizeId}
-                      </span>
-                      <input
-                        type="number"
-                        min={0}
-                        max={maxVariant}
-                        value={qty === 0 ? '' : qty}
-                        onChange={e => setReworkActionVariantQuantities(prev => ({ ...prev, [v.id]: Math.min(maxVariant, Math.max(0, Number(e.target.value) || 0)) }))}
-                        className={`h-10 w-full box-border bg-white border border-slate-200 rounded-lg px-2 text-sm font-bold tabular-nums ${mode === 'scrap' ? 'text-rose-600 focus:ring-2 focus:ring-rose-200' : 'text-indigo-600 focus:ring-2 focus:ring-indigo-200'} text-right outline-none placeholder:text-[10px] placeholder:text-slate-400 placeholder:text-right`}
-                        placeholder={`最多${maxVariant}`}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
 
   return (
     <div className="fixed inset-0 z-[55] flex items-center justify-center p-4">
@@ -574,137 +572,185 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
           <button type="button" onClick={resetAndClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100"><X className="w-5 h-5" /></button>
         </div>
         <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
-          <p className="text-sm text-slate-600">
-            {reworkActionRow.scope === 'product' ? (
-              <>
-                <span className="font-bold text-indigo-700">按产品汇总</span>
-                <span className="mx-1">·</span>
-                <span className="font-bold text-slate-800">{reworkActionRow.orderNumber}</span>
-              </>
-            ) : (
-              <span className="font-bold text-slate-800">{reworkActionRow.orderNumber}</span>
-            )}
-            <span className="mx-1">·</span>
-            {reworkActionRow.productName} · {reworkActionRow.milestoneName} · 待处理 <span className="font-bold text-indigo-600">{reworkActionRow.pendingQty}</span> 件
-          </p>
           {reworkActionMode === null ? (
-            <div className="flex gap-3 pt-2">
-              <button type="button" onClick={() => setReworkActionMode('scrap')} className="flex-1 py-3 rounded-xl text-sm font-bold border-2 border-slate-200 text-slate-700 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-800 transition-colors">
-                报损
-              </button>
-              <button type="button" onClick={() => setReworkActionMode('rework')} className="flex-1 py-3 rounded-xl text-sm font-bold border-2 border-indigo-200 text-indigo-700 hover:border-indigo-400 hover:bg-indigo-50 transition-colors">
-                返工到指定工序
-              </button>
-              {canOutsourceRework && (
-                <button type="button" onClick={() => setReworkActionMode('outsource_rework')} className="flex-1 py-3 rounded-xl text-sm font-bold border-2 border-indigo-200 text-indigo-700 hover:border-indigo-400 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-1.5">
-                  <Truck className="w-4 h-4" /> 委外返工
+            <>
+              <div className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-3 sm:px-4">
+                <p className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{reworkActionRow.productName}</p>
+                <p className="mt-0.5 text-[10px] sm:text-[11px] font-medium text-slate-500">
+                  {reworkActionRow.scope === 'product' ? (
+                    <>
+                      <span className="font-bold text-indigo-700">按产品汇总</span>
+                      <span className="mx-1 text-slate-300">·</span>
+                      <span className="font-bold text-slate-600 tabular-nums">{reworkActionRow.orderNumber}</span>
+                    </>
+                  ) : (
+                    <span className="font-bold text-slate-600 tabular-nums">工单 {reworkActionRow.orderNumber}</span>
+                  )}
+                  <span className="mx-1.5 text-slate-300">·</span>
+                  <span className="font-bold text-indigo-600">{reworkActionRow.milestoneName}</span>
+                  <span className="mx-1.5 text-slate-300">·</span>
+                  待处理 <span className="font-bold text-indigo-600 tabular-nums">{reworkActionRow.pendingQty}</span> 件
+                </p>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setReworkActionMode('scrap')} className="flex-1 py-3 rounded-xl text-sm font-bold border-2 border-slate-200 text-slate-700 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-800 transition-colors">
+                  报损
                 </button>
-              )}
+                <button type="button" onClick={() => setReworkActionMode('rework')} className="flex-1 py-3 rounded-xl text-sm font-bold border-2 border-indigo-200 text-indigo-700 hover:border-indigo-400 hover:bg-indigo-50 transition-colors">
+                  返工到指定工序
+                </button>
+                {canOutsourceRework && (
+                  <button type="button" onClick={() => setReworkActionMode('outsource_rework')} className="flex-1 py-3 rounded-xl text-sm font-bold border-2 border-indigo-200 text-indigo-700 hover:border-indigo-400 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-1.5">
+                    <Truck className="w-4 h-4" /> 委外返工
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className={psiOrderBillFormSectionStackClass}>
+              <div className="space-y-4">
+                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
+                  <div className={psiOrderBillFormSectionIconIndigoClass}><FileText className="w-4 h-4" /></div>
+                  <h3 className={sectionTitleClass}>1. 基础信息</h3>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-3 sm:px-4">
+                  <p className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{reworkActionRow.productName}</p>
+                  <p className="mt-0.5 text-[10px] sm:text-[11px] font-medium text-slate-500">
+                    {reworkActionRow.scope === 'product' ? (
+                      <>
+                        <span className="font-bold text-indigo-700">按产品汇总</span>
+                        <span className="mx-1 text-slate-300">·</span>
+                        <span className="font-bold text-slate-600 tabular-nums">{reworkActionRow.orderNumber}</span>
+                      </>
+                    ) : (
+                      <span className="font-bold text-slate-600 tabular-nums">工单 {reworkActionRow.orderNumber}</span>
+                    )}
+                    <span className="mx-1.5 text-slate-300">·</span>
+                    <span className="font-bold text-indigo-600">{reworkActionRow.milestoneName}</span>
+                    <span className="mx-1.5 text-slate-300">·</span>
+                    待处理 <span className="font-bold text-indigo-600 tabular-nums">{reworkActionRow.pendingQty}</span> 件
+                  </p>
+                </div>
+                {reworkActionMode === 'outsource_rework' && (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">外协工厂</label>
+                    <SearchablePartnerSelect
+                      options={partners}
+                      categories={partnerCategories}
+                      value={outsourcePartnerName}
+                      onChange={name => setOutsourcePartnerName(name)}
+                      placeholder="搜索并选择外协工厂..."
+                      triggerClassName={psiOrderBillFormPartnerTriggerClass}
+                    />
+                  </div>
+                )}
+                {(reworkActionMode === 'rework' || reworkActionMode === 'outsource_rework') && renderNodeSelector()}
+              </div>
+
+              <div className={psiOrderBillFormDetailSplitClass}>
+                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
+                  <div className={psiOrderBillFormSectionIconEmeraldClass}><Layers className="w-4 h-4" /></div>
+                  <h3 className={sectionTitleClass}>2. 数量明细</h3>
+                </div>
+                <div className="mt-3 space-y-3">
+                  {useVariantQtyGrid ? (
+                    renderDefectVariantMatrix(
+                      reworkActionMode === 'scrap' ? 'scrap' : 'rework',
+                    )
+                  ) : (
+                    <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+                      {reworkTreatMatrixQtyAsAggregate ? (
+                        <p className="text-[11px] font-bold text-amber-900 bg-amber-50/90 border border-amber-100 rounded-lg px-2.5 py-2">
+                          该工序不良未按颜色尺码登记，请填写合计处理数量（不超过待处理 {reworkActionRow.pendingQty} 件）。
+                        </p>
+                      ) : null}
+                      <div className="flex flex-wrap items-end gap-3">
+                        <div className="w-28 space-y-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">
+                            {reworkActionMode === 'scrap' ? '报损数量' : reworkActionMode === 'outsource_rework' ? '委外返工数量' : '返工数量'}
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min={0}
+                              max={reworkActionRow.pendingQty}
+                              value={(reworkActionQty ?? 0) === 0 ? '' : reworkActionQty}
+                              onChange={e => setReworkActionQty(Math.min(reworkActionRow.pendingQty, Math.max(0, Number(e.target.value) || 0)))}
+                              className={
+                                reworkActionMode === 'scrap'
+                                  ? 'w-full bg-white border border-rose-200 rounded-xl py-2.5 px-3 text-sm font-bold text-rose-800 outline-none focus:ring-2 focus:ring-rose-500'
+                                  : 'w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500'
+                              }
+                              placeholder="0"
+                              title={`最多 ${reworkActionRow.pendingQty}`}
+                            />
+                            <span className="text-[10px] font-bold text-slate-400 shrink-0">件</span>
+                          </div>
+                        </div>
+                        <span className="pb-2 text-[10px] font-medium tabular-nums text-slate-400">最多 {reworkActionRow.pendingQty}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3 border-t border-slate-100 pt-4">
+                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
+                  <div className={psiOrderBillFormSectionIconIndigoClass}><FileText className="w-4 h-4" /></div>
+                  <h3 className={sectionTitleClass}>3. 备注与扩展</h3>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">原因（选填）</label>
+                  <input
+                    type="text"
+                    value={reworkActionReason}
+                    onChange={e => setReworkActionReason(e.target.value)}
+                    className={psiOrderBillFormFieldControlClass}
+                    placeholder={
+                      reworkActionMode === 'scrap'
+                        ? '如：不可修复'
+                        : reworkActionMode === 'outsource_rework'
+                          ? '如：工艺缺陷需外部修复'
+                          : '如：尺寸不良'
+                    }
+                  />
+                </div>
+                {defectCustomFieldsOnly}
+              </div>
+
+              <div className="flex gap-3 border-t border-slate-100 pt-4">
+                <button type="button" onClick={resetMode} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200">取消</button>
+                {reworkActionMode === 'scrap' ? (
+                  <button
+                    type="button"
+                    disabled={useVariantQtyGrid ? (reworkActionVariantTotal <= 0 || reworkActionVariantTotal > reworkActionRow.pendingQty) : (reworkActionQty <= 0 || reworkActionQty > reworkActionRow.pendingQty)}
+                    onClick={handleScrapSubmit}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50"
+                  >
+                    确定报损
+                  </button>
+                ) : reworkActionMode === 'rework' ? (
+                  <button
+                    type="button"
+                    disabled={reworkActionNodeIds.length === 0 || (useVariantQtyGrid ? (reworkActionVariantTotal <= 0 || reworkActionVariantTotal > reworkActionRow.pendingQty) : (reworkActionQty <= 0 || reworkActionQty > reworkActionRow.pendingQty))}
+                    onClick={handleReworkSubmit}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    生成返工
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={!outsourcePartnerName.trim() || reworkActionNodeIds.length === 0 || (useVariantQtyGrid ? (reworkActionVariantTotal <= 0 || reworkActionVariantTotal > reworkActionRow.pendingQty) : (reworkActionQty <= 0 || reworkActionQty > reworkActionRow.pendingQty))}
+                    onClick={handleOutsourceReworkSubmit}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    <Truck className="w-4 h-4" /> 确认委外返工
+                  </button>
+                )}
+              </div>
             </div>
-          ) : reworkActionMode === 'scrap' ? (
-            <>
-              {useVariantQtyGrid ? renderVariantGrid('scrap') : (
-                <div className="space-y-2">
-                  {reworkTreatMatrixQtyAsAggregate ? (
-                    <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
-                      该工序不良未按颜色尺码登记，请填写合计处理数量（不超过待处理 {reworkActionRow.pendingQty} 件）。
-                    </p>
-                  ) : null}
-                  <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">报损数量</label>
-                  <input type="number" min={1} max={reworkActionRow.pendingQty} value={reworkActionQty || ''} onChange={e => setReworkActionQty(Math.min(reworkActionRow.pendingQty, Math.max(0, Number(e.target.value) || 0)))} className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-rose-500 outline-none" placeholder={`1 ~ ${reworkActionRow.pendingQty}`} />
-                </div>
-              )}
-              <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">原因（选填）</label>
-                <input type="text" value={reworkActionReason} onChange={e => setReworkActionReason(e.target.value)} className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-rose-500 outline-none" placeholder="如：不可修复" />
-              </div>
-              {defectCustomBlock}
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={resetMode} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200">取消</button>
-                <button
-                  type="button"
-                  disabled={useVariantQtyGrid ? (reworkActionVariantTotal <= 0 || reworkActionVariantTotal > reworkActionRow.pendingQty) : (reworkActionQty <= 0 || reworkActionQty > reworkActionRow.pendingQty)}
-                  onClick={handleScrapSubmit}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50"
-                >
-                  确定报损
-                </button>
-              </div>
-            </>
-          ) : reworkActionMode === 'rework' ? (
-            <>
-              {renderNodeSelector()}
-              {useVariantQtyGrid ? renderVariantGrid('rework') : (
-                <div className="space-y-2">
-                  {reworkTreatMatrixQtyAsAggregate ? (
-                    <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
-                      该工序不良未按颜色尺码登记，请填写合计处理数量（不超过待处理 {reworkActionRow.pendingQty} 件）。
-                    </p>
-                  ) : null}
-                  <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">返工数量</label>
-                  <input type="number" min={1} max={reworkActionRow.pendingQty} value={reworkActionQty || ''} onChange={e => setReworkActionQty(Math.min(reworkActionRow.pendingQty, Math.max(0, Number(e.target.value) || 0)))} className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder={`1 ~ ${reworkActionRow.pendingQty}`} />
-                </div>
-              )}
-              <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">原因（选填）</label>
-                <input type="text" value={reworkActionReason} onChange={e => setReworkActionReason(e.target.value)} className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="如：尺寸不良" />
-              </div>
-              {defectCustomBlock}
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={resetMode} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200">取消</button>
-                <button
-                  type="button"
-                  disabled={reworkActionNodeIds.length === 0 || (useVariantQtyGrid ? (reworkActionVariantTotal <= 0 || reworkActionVariantTotal > reworkActionRow.pendingQty) : (reworkActionQty <= 0 || reworkActionQty > reworkActionRow.pendingQty))}
-                  onClick={handleReworkSubmit}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  生成返工
-                </button>
-              </div>
-            </>
-          ) : reworkActionMode === 'outsource_rework' ? (
-            <>
-              <div className="space-y-1.5">
-                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">外协工厂</label>
-                <SearchablePartnerSelect
-                  options={partners}
-                  categories={partnerCategories}
-                  value={outsourcePartnerName}
-                  onChange={name => setOutsourcePartnerName(name)}
-                  placeholder="搜索并选择外协工厂..."
-                  triggerClassName="bg-white border border-slate-200 min-h-[44px] rounded-xl"
-                />
-              </div>
-              {renderNodeSelector()}
-              {useVariantQtyGrid ? renderVariantGrid('outsource_rework') : (
-                <div className="space-y-2">
-                  {reworkTreatMatrixQtyAsAggregate ? (
-                    <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
-                      该工序不良未按颜色尺码登记，请填写合计处理数量（不超过待处理 {reworkActionRow.pendingQty} 件）。
-                    </p>
-                  ) : null}
-                  <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">委外返工数量</label>
-                  <input type="number" min={1} max={reworkActionRow.pendingQty} value={reworkActionQty || ''} onChange={e => setReworkActionQty(Math.min(reworkActionRow.pendingQty, Math.max(0, Number(e.target.value) || 0)))} className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder={`1 ~ ${reworkActionRow.pendingQty}`} />
-                </div>
-              )}
-              <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">原因（选填）</label>
-                <input type="text" value={reworkActionReason} onChange={e => setReworkActionReason(e.target.value)} className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="如：工艺缺陷需外部修复" />
-              </div>
-              {defectCustomBlock}
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={resetMode} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200">取消</button>
-                <button
-                  type="button"
-                  disabled={!outsourcePartnerName.trim() || reworkActionNodeIds.length === 0 || (useVariantQtyGrid ? (reworkActionVariantTotal <= 0 || reworkActionVariantTotal > reworkActionRow.pendingQty) : (reworkActionQty <= 0 || reworkActionQty > reworkActionRow.pendingQty))}
-                  onClick={handleOutsourceReworkSubmit}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-1.5"
-                >
-                  <Truck className="w-4 h-4" /> 确认委外返工
-                </button>
-              </div>
-            </>
-          ) : null}
+          )}
         </div>
       </div>
     </div>

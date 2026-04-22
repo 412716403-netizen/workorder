@@ -253,7 +253,7 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
                   {!hasVariants && (
                     <>
                       <div className="w-28 space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">出库数量（负数=退货）</label>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">数量</label>
                         <div className="flex items-center gap-1.5">
                           <input type="number" value={line.quantity ?? ''} onChange={e => { const v = parseInt(e.target.value, 10); onUpdateItem(line.id, { quantity: Number.isNaN(v) ? 0 : v }); }} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="0" />
                           <span className="text-[10px] font-bold text-slate-400 shrink-0">{line.productId ? getUnitName(line.productId) : '—'}</span>

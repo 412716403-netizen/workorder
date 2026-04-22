@@ -15,6 +15,7 @@ import {
   Sliders,
   Printer,
   Search,
+  CalendarClock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { comparePlansNewestFirst, planNumberSeqForSort, planOrderListSortMs } from '../utils/planOrderSort';
@@ -56,6 +57,7 @@ import PlanDetailPanel from './plan-order-list/PlanDetailPanel';
 import { PlanPrintTemplateManageDialog } from '../components/plan-print/PlanPrintTemplateManageDialog';
 import { plans as plansApi } from '../services/api';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { formatPlanOrderCreatedAtForList } from '../utils/localDateTime';
 
 interface PlanOrderListViewProps {
   productionLinkMode?: 'order' | 'product';
@@ -499,6 +501,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
               const product = products.find(p => p.id === plan.productId);
               const totalQty = plan.items && Array.isArray(plan.items) ? plan.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) : 0;
               const assignedCount = plan.assignments ? Object.values(plan.assignments).filter(a => (a as NodeAssignment).workerIds && (a as NodeAssignment).workerIds.length > 0).length : 0;
+              const createdListLabel = formatPlanOrderCreatedAtForList(plan.createdAt, plan.id);
                 const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
                 const customListFields = planFormSettings.customFields.filter(f => f.showInList);
               return (
@@ -526,6 +529,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                           {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
                           {showInList('totalQty') && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 计划总量: {totalQty}</span>}
+                          {showInList('createdAt') && createdListLabel && (
+                            <span className="flex items-center gap-1 shrink-0" title="单据创建时间">
+                              <CalendarClock className="w-3 h-3 shrink-0" />
+                              {createdListLabel}
+                            </span>
+                          )}
                           {customListFields.map(cf =>
                             renderPlanListCustomFieldValue(cf, plan, setImagePreviewUrl, setFilePreviewUrl, setFilePreviewType),
                           )}
@@ -579,6 +588,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         const isChild = depth > 0;
                         const indentPx = isChild ? 24 * depth : 0;
                         const assignedCount = plan.assignments ? Object.values(plan.assignments).filter(a => (a as NodeAssignment).workerIds && (a as NodeAssignment).workerIds.length > 0).length : 0;
+                        const createdListLabel = formatPlanOrderCreatedAtForList(plan.createdAt, plan.id);
                         const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
                         const customListFields = planFormSettings.customFields.filter(f => f.showInList);
                         return (
@@ -603,6 +613,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                 <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                                   {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
                                   {showInList('totalQty') && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 计划总量: {totalQty}</span>}
+                                  {showInList('createdAt') && createdListLabel && (
+                                    <span className="flex items-center gap-1 shrink-0" title="单据创建时间">
+                                      <CalendarClock className="w-3 h-3 shrink-0" />
+                                      {createdListLabel}
+                                    </span>
+                                  )}
                                   {customListFields.map(cf =>
                             renderPlanListCustomFieldValue(cf, plan, setImagePreviewUrl, setFilePreviewUrl, setFilePreviewType),
                           )}
@@ -657,6 +673,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         const product = products.find(pr => pr.id === plan.productId);
                         const totalQty = plan.items && Array.isArray(plan.items) ? plan.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) : 0;
                         const assignedCount = plan.assignments ? Object.values(plan.assignments).filter(a => (a as NodeAssignment).workerIds && (a as NodeAssignment).workerIds.length > 0).length : 0;
+                        const createdListLabel = formatPlanOrderCreatedAtForList(plan.createdAt, plan.id);
                         const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
                         const customListFields = planFormSettings.customFields.filter(f => f.showInList);
                         const indentPx = isChild ? 24 * depth : 0;
@@ -686,6 +703,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                               <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                                 {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
                                 {showInList('totalQty') && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 计划总量: {totalQty}</span>}
+                                {showInList('createdAt') && createdListLabel && (
+                                  <span className="flex items-center gap-1 shrink-0" title="单据创建时间">
+                                    <CalendarClock className="w-3 h-3 shrink-0" />
+                                    {createdListLabel}
+                                  </span>
+                                )}
                                 {customListFields.map(cf =>
                             renderPlanListCustomFieldValue(cf, plan, setImagePreviewUrl, setFilePreviewUrl, setFilePreviewType),
                           )}

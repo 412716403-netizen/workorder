@@ -5,6 +5,7 @@ import {
   ProductionOrder,
   Product,
   ProductCategory,
+  ProductVariant,
   GlobalNodeTemplate,
   AppDictionaries,
   Worker,
@@ -20,6 +21,8 @@ import { buildDefectiveReworkByOrderMilestone } from '../../utils/defectiveRewor
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { toast } from 'sonner';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
+import { buildVariantQtyMatrixLayout } from '../../utils/variantQtyMatrix';
+import QtyMatrixTable, { type QtyMatrixTableRow } from '../../components/variant-matrix/QtyMatrixTable';
 import { getEffectiveReportTemplate, getReportCustomDataDisplayEntries, mergeCustomDataForTemplate } from '../../utils/effectiveReportTemplate';
 import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
@@ -109,6 +112,48 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
   const confirm = useConfirm();
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+
+  /** 批次内每条记录对应唯一规格时，报工明细可用颜色×尺码矩阵展示（与报工弹窗一致） */
+  const batchDetailMatrix = useMemo(() => {
+    const b = reportDetailBatch;
+    const productId = b.source === 'order' ? b.first.order.productId : b.productId;
+    const p = products.find(px => px.id === productId);
+    if (!p?.variants?.length) return null;
+    const cat = p.categoryId ? categoryMap.get(p.categoryId) : undefined;
+    if (!productHasColorSizeMatrix(p, cat)) return null;
+
+    const variantToReportId = new Map<string, string>();
+    const goodByVariant: Record<string, number> = {};
+    const defectiveByVariant: Record<string, number> = {};
+
+    if (b.source === 'order') {
+      for (const { report } of b.rows as OrderReportRow[]) {
+        if (!report.variantId) return null;
+        if (variantToReportId.has(report.variantId)) return null;
+        variantToReportId.set(report.variantId, report.id);
+        goodByVariant[report.variantId] = report.quantity;
+        defectiveByVariant[report.variantId] = report.defectiveQuantity ?? 0;
+      }
+    } else {
+      for (const { progress, report } of b.rows as ProductReportRow[]) {
+        if (!progress.variantId) return null;
+        if (variantToReportId.has(progress.variantId)) return null;
+        variantToReportId.set(progress.variantId, report.id);
+        goodByVariant[progress.variantId] = report.quantity;
+        defectiveByVariant[progress.variantId] = report.defectiveQuantity ?? 0;
+      }
+    }
+
+    const layout = buildVariantQtyMatrixLayout(p, dictionaries);
+    if (!layout) return null;
+    return {
+      product: p,
+      layout,
+      variantToReportId,
+      goodByVariant,
+      defectiveByVariant,
+    };
+  }, [reportDetailBatch, products, categoryMap, dictionaries]);
 
   const defectiveAndReworkByOrderMilestone = useMemo(
     () => buildDefectiveReworkByOrderMilestone(orders, prodRecords),
@@ -227,7 +272,7 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { onClose(); setEditingReport(null); }} />
-      <div className="relative bg-white w-full max-w-2xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+      <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
           <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
             <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
@@ -455,8 +500,14 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
             </button>
           </div>
         </div>
-        <div className="flex-1 overflow-auto p-4 space-y-4">
-          <h2 className="text-xl font-bold text-slate-900">{reportDetailBatch.source === 'order' ? reportDetailBatch.first.order.productName : reportDetailBatch.productName}</h2>
+        <div className="flex-1 overflow-auto p-4 sm:p-5 space-y-4">
+          {reportDetailBatch.source === 'order' ? (
+            <div className="space-y-0.5">
+              <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium">
+                工单 <span className="font-bold text-slate-600 tabular-nums">{reportDetailBatch.first.order.orderNumber}</span>
+              </p>
+            </div>
+          ) : null}
           {editingReport ? (() => {
             const order = reportDetailBatch.source === 'order' ? orders.find(o => o.id === editingReport.orderId) : null;
             const milestone = order?.milestones.find(m => m.templateId === editingReport.templateId);
@@ -579,15 +630,193 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                   </div>
                 );
               })()}
-              <div className="border border-slate-200 rounded-2xl overflow-hidden">
+              {batchDetailMatrix ? (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">报工明细（按规格）</p>
+                  <div className="rounded-xl bg-slate-50/50 p-2 ring-1 ring-slate-100/80">
+                    {(() => {
+                      const { layout, variantToReportId } = batchDetailMatrix;
+                      const isOrderBatch = reportDetailBatch.source === 'order';
+                      const rows: QtyMatrixTableRow[] = layout.colorRows.map(row => {
+                        let rowSum = 0;
+                        const cells = row.variantAtSize.map((variant: ProductVariant | null, si: number) => {
+                          if (!variant) {
+                            return <span key={`${row.key}-e-${si}`} className="text-sm text-slate-300">—</span>;
+                          }
+                          const reportId = variantToReportId.get(variant.id);
+                          const rowEdit = reportId
+                            ? editingReport.form.rowEdits.find(r => r.reportId === reportId)
+                            : undefined;
+                          if (!reportId || !rowEdit) {
+                            return <span key={variant.id} className="text-sm text-slate-300">—</span>;
+                          }
+                          rowSum += rowEdit.quantity;
+                          const otherGoodSum = editingReport.form.rowEdits
+                            .filter(r => r.reportId !== reportId)
+                            .reduce((s, r) => s + r.quantity, 0);
+                          const maxThisRow = isOrderBatch ? Math.max(0, maxBatchGood - otherGoodSum) : Number.POSITIVE_INFINITY;
+                          return (
+                            <div key={variant.id} className="flex min-w-0 flex-col gap-0.5">
+                              <div className="flex min-w-0 items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={isOrderBatch && maxBatchGood >= 0 ? maxThisRow : undefined}
+                                  title={isOrderBatch && maxBatchGood >= 0 ? `本批良品合计最多 ${maxBatchGood} 件` : undefined}
+                                  value={rowEdit.quantity}
+                                  onChange={e => {
+                                    const raw = parseInt(e.target.value, 10) || 0;
+                                    const v =
+                                      isOrderBatch && maxBatchGood >= 0 ? Math.min(raw, maxThisRow) : raw;
+                                    setEditingReport(prev =>
+                                      prev
+                                        ? {
+                                            ...prev,
+                                            form: {
+                                              ...prev.form,
+                                              rowEdits: prev.form.rowEdits.map(r =>
+                                                r.reportId === reportId ? { ...r, quantity: v } : r,
+                                              ),
+                                            },
+                                          }
+                                        : prev,
+                                    );
+                                  }}
+                                  className="h-8 w-[3rem] shrink-0 rounded-md border border-slate-200 bg-white px-1.5 text-left text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200"
+                                />
+                                {isOrderBatch && maxBatchGood >= 0 ? (
+                                  <span className="min-w-0 text-[10px] font-medium tabular-nums leading-none text-slate-400">
+                                    最多 {maxThisRow}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className="flex min-w-0 items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  tabIndex={-1}
+                                  value={rowEdit.defectiveQuantity}
+                                  onChange={e => {
+                                    const v = Math.max(0, parseInt(e.target.value, 10) || 0);
+                                    setEditingReport(prev => {
+                                      if (!prev) return prev;
+                                      const nextEdits = prev.form.rowEdits.map(r =>
+                                        r.reportId === reportId ? { ...r, defectiveQuantity: v } : r,
+                                      );
+                                      if (!isOrderBatch) {
+                                        return { ...prev, form: { ...prev.form, rowEdits: nextEdits } };
+                                      }
+                                      const newDefSum = nextEdits.reduce((s, r) => s + r.defectiveQuantity, 0);
+                                      const newMaxBatchGood =
+                                        effectiveRemainingSaved +
+                                        reportDetailBatch.totalGood +
+                                        reportDetailBatch.totalDefective -
+                                        newDefSum;
+                                      const totalQty = nextEdits.reduce((s, r) => s + r.quantity, 0);
+                                      if (totalQty > newMaxBatchGood && newMaxBatchGood >= 0) {
+                                        const scale = totalQty > 0 ? newMaxBatchGood / totalQty : 0;
+                                        const clamped = nextEdits.map(r => ({
+                                          ...r,
+                                          quantity: Math.floor(r.quantity * scale),
+                                        }));
+                                        const remainder =
+                                          newMaxBatchGood - clamped.reduce((s, r) => s + r.quantity, 0);
+                                        const final =
+                                          clamped.length > 0 && remainder > 0
+                                            ? clamped.map((r, i) =>
+                                                i === 0 ? { ...r, quantity: r.quantity + remainder } : r,
+                                              )
+                                            : clamped;
+                                        return { ...prev, form: { ...prev.form, rowEdits: final } };
+                                      }
+                                      return { ...prev, form: { ...prev.form, rowEdits: nextEdits } };
+                                    });
+                                  }}
+                                  className="h-8 w-[3rem] shrink-0 rounded-md border border-amber-200/90 bg-amber-50/90 px-1.5 text-left text-sm font-bold text-amber-900 shadow-sm outline-none focus:ring-2 focus:ring-amber-200 placeholder:text-[9px] placeholder:text-amber-400/80"
+                                  placeholder="0"
+                                  title="不良品"
+                                />
+                                <span className="min-w-0 text-[10px] font-medium tabular-nums leading-none text-amber-800">不良品</span>
+                              </div>
+                            </div>
+                          );
+                        });
+                        return {
+                          key: row.key,
+                          colorCell: (
+                            <div className="flex items-center gap-2">
+                              {row.colorSwatch ? (
+                                <span
+                                  className="h-4 w-4 shrink-0 rounded-full border border-slate-200"
+                                  style={{ backgroundColor: row.colorSwatch }}
+                                />
+                              ) : null}
+                              <span>{row.colorLabel}</span>
+                            </div>
+                          ),
+                          cells,
+                          subtotalCell: rowSum,
+                        };
+                      });
+                      return (
+                        <QtyMatrixTable
+                          sizeHeaders={layout.sizeColumns.map(c => c.header)}
+                          rows={rows}
+                          dense
+                        />
+                      );
+                    })()}
+                  </div>
+                  <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-indigo-50/50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="font-bold text-slate-600">工价</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={editingReport.form.rate}
+                        onChange={e =>
+                          setEditingReport(prev =>
+                            prev ? { ...prev, form: { ...prev.form, rate: parseFloat(e.target.value) || 0 } } : prev,
+                          )
+                        }
+                        className="h-8 w-[5.25rem] rounded-lg border border-slate-200 bg-white px-1.5 text-xs font-bold text-slate-800 text-right outline-none focus:ring-2 focus:ring-indigo-200"
+                      />
+                      <span className="text-slate-500">
+                        元/
+                        {(batchDetailMatrix.product.unitId &&
+                          dictionaries.units.find(u => u.id === batchDetailMatrix.product.unitId)?.name) ||
+                          '件'}
+                      </span>
+                    </div>
+                    <div className="text-xs font-bold text-indigo-700 tabular-nums">
+                      合计 良品 {editingReport.form.rowEdits.reduce((s, r) => s + r.quantity, 0)}{' '}
+                      {(batchDetailMatrix.product.unitId &&
+                        dictionaries.units.find(u => u.id === batchDetailMatrix.product.unitId)?.name) ||
+                        '件'}
+                      {' · '}
+                      不良{' '}
+                      {editingReport.form.rowEdits.reduce((s, r) => s + r.defectiveQuantity, 0)}{' '}
+                      {(batchDetailMatrix.product.unitId &&
+                        dictionaries.units.find(u => u.id === batchDetailMatrix.product.unitId)?.name) ||
+                        '件'}
+                      {' · '}
+                      金额 {editingReport.form.rowEdits.reduce((s, r) => s + r.quantity * editingReport.form.rate, 0).toFixed(2)} 元
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">报工明细</p>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-2 sm:p-3 space-y-2">
+                    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200">
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">规格</th>
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">良品</th>
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">不良品</th>
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">工价</th>
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">金额(元)</th>
+                      <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase">产品</th>
+                      <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-left">数量</th>
+                      <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">工价</th>
+                      <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">金额(元)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -599,86 +828,80 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                           const maxThisRow = Math.max(0, maxBatchGood - otherGoodSum);
                           const p = products.find(px => px.id === order.productId);
                           const detailUnit = (p?.unitId && dictionaries?.units?.find(u => u.id === p.unitId)?.name) || '件';
-                          const variantSuffix = report.variantId && (() => {
-                            const v = p?.variants?.find((x: { id: string }) => x.id === report.variantId);
-                            return (v as { skuSuffix?: string })?.skuSuffix;
-                          })();
                           const rate = editingReport.form.rate;
                           const amount = rowEdit.quantity * rate;
                           return (
                             <tr key={report.id} className="border-b border-slate-100">
-                              <td className="px-4 py-3 text-slate-800">{variantSuffix || '—'}</td>
-                              <td className="px-4 py-3 text-right">
-                                <div className="flex items-center justify-end gap-1">
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    max={maxThisRow || undefined}
-                                    title={maxBatchGood >= 0 ? `本批良品合计最多 ${maxBatchGood} 件` : ''}
-                                    value={rowEdit.quantity}
-                                    onChange={e => {
-                                      const raw = parseInt(e.target.value) || 0;
-                                      const v = maxBatchGood >= 0 ? Math.min(raw, maxThisRow) : raw;
-                                      setEditingReport(prev => prev ? {
-                                        ...prev,
-                                        form: {
-                                          ...prev.form,
-                                          rowEdits: prev.form.rowEdits.map(r => r.reportId === report.id ? { ...r, quantity: v } : r)
-                                        }
-                                      } : prev);
-                                    }}
-                                    className="w-20 bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200"
-                                  />
-                                  <span className="text-slate-600 text-sm">{detailUnit}</span>
-                                </div>
+                              <td className="px-3 py-2.5 sm:px-4 align-middle min-w-0 max-w-[11rem] sm:max-w-[14rem]">
+                                <span className="text-sm sm:text-base font-bold text-slate-900 leading-tight block truncate" title={order.productName}>
+                                  {order.productName}
+                                </span>
+                                <span className="mt-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-500 truncate" title={order.orderNumber}>
+                                  {order.orderNumber}
+                                </span>
                               </td>
-                              <td className="px-4 py-3 text-right">
-                                <div className="flex items-center justify-end gap-1">
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    value={rowEdit.defectiveQuantity}
-                                    onChange={e => {
-                                      const v = Math.max(0, parseInt(e.target.value) || 0);
-                                      setEditingReport(prev => {
-                                        if (!prev) return prev;
-                                        const nextEdits = prev.form.rowEdits.map(r => r.reportId === report.id ? { ...r, defectiveQuantity: v } : r);
-                                        const newDefSum = nextEdits.reduce((s, r) => s + r.defectiveQuantity, 0);
-                                        const newMaxBatchGood = effectiveRemainingSaved + reportDetailBatch.totalGood + reportDetailBatch.totalDefective - newDefSum;
-                                        const totalQty = nextEdits.reduce((s, r) => s + r.quantity, 0);
-                                        if (totalQty > newMaxBatchGood && newMaxBatchGood >= 0) {
-                                          const scale = totalQty > 0 ? newMaxBatchGood / totalQty : 0;
-                                          const clamped = nextEdits.map(r => ({ ...r, quantity: Math.floor(r.quantity * scale) }));
-                                          const remainder = newMaxBatchGood - clamped.reduce((s, r) => s + r.quantity, 0);
-                                          const final = clamped.length > 0 && remainder > 0 ? clamped.map((r, i) => i === 0 ? { ...r, quantity: r.quantity + remainder } : r) : clamped;
-                                          return { ...prev, form: { ...prev.form, rowEdits: final } };
-                                        }
-                                        return { ...prev, form: { ...prev.form, rowEdits: nextEdits } };
-                                      });
-                                    }}
-                                    className="w-20 bg-amber-50/80 border border-amber-100 rounded-lg px-2 py-1 text-sm font-bold text-amber-800 text-right outline-none focus:ring-2 focus:ring-amber-200"
-                                  />
-                                  <span className="text-slate-600 text-sm">{detailUnit}</span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                {reportDetailBatch.rows.findIndex(x => x.report.id === report.id) === 0 ? (
-                                  <div className="flex items-center justify-end gap-1">
+                              <td className="px-3 py-2.5 sm:px-4 align-middle">
+                                <div className="flex min-w-0 flex-col gap-0.5">
+                                  <div className="flex min-w-0 items-center gap-1.5">
                                     <input
                                       type="number"
                                       min={0}
-                                      step={0.01}
-                                      value={editingReport.form.rate}
-                                      onChange={e => setEditingReport(prev => prev ? { ...prev, form: { ...prev.form, rate: parseFloat(e.target.value) || 0 } } : prev)}
-                                      className="w-24 bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold text-slate-800 text-right outline-none focus:ring-2 focus:ring-indigo-200"
+                                      max={maxThisRow || undefined}
+                                      title={maxBatchGood >= 0 ? `本批良品合计最多 ${maxBatchGood} 件` : ''}
+                                      value={rowEdit.quantity}
+                                      onChange={e => {
+                                        const raw = parseInt(e.target.value) || 0;
+                                        const v = maxBatchGood >= 0 ? Math.min(raw, maxThisRow) : raw;
+                                        setEditingReport(prev => prev ? {
+                                          ...prev,
+                                          form: {
+                                            ...prev.form,
+                                            rowEdits: prev.form.rowEdits.map(r => r.reportId === report.id ? { ...r, quantity: v } : r)
+                                          }
+                                        } : prev);
+                                      }}
+                                      className="h-8 w-[4.75rem] shrink-0 box-border rounded-md border border-slate-200 bg-white px-2 text-left text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200 tabular-nums"
                                     />
-                                    <span className="text-slate-500 text-xs">元/{detailUnit}</span>
+                                    {maxBatchGood >= 0 ? (
+                                      <span className="text-[10px] font-medium tabular-nums text-slate-400">最多 {maxThisRow}</span>
+                                    ) : null}
                                   </div>
-                                ) : (
-                                  <span className="text-slate-600 text-sm">{editingReport.form.rate > 0 ? `${editingReport.form.rate.toFixed(2)} 元/${detailUnit}` : '—'}</span>
-                                )}
+                                  <div className="flex min-w-0 items-center gap-1.5">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      tabIndex={-1}
+                                      value={rowEdit.defectiveQuantity}
+                                      onChange={e => {
+                                        const v = Math.max(0, parseInt(e.target.value) || 0);
+                                        setEditingReport(prev => {
+                                          if (!prev) return prev;
+                                          const nextEdits = prev.form.rowEdits.map(r => r.reportId === report.id ? { ...r, defectiveQuantity: v } : r);
+                                          const newDefSum = nextEdits.reduce((s, r) => s + r.defectiveQuantity, 0);
+                                          const newMaxBatchGood = effectiveRemainingSaved + reportDetailBatch.totalGood + reportDetailBatch.totalDefective - newDefSum;
+                                          const totalQty = nextEdits.reduce((s, r) => s + r.quantity, 0);
+                                          if (totalQty > newMaxBatchGood && newMaxBatchGood >= 0) {
+                                            const scale = totalQty > 0 ? newMaxBatchGood / totalQty : 0;
+                                            const clamped = nextEdits.map(r => ({ ...r, quantity: Math.floor(r.quantity * scale) }));
+                                            const remainder = newMaxBatchGood - clamped.reduce((s, r) => s + r.quantity, 0);
+                                            const final = clamped.length > 0 && remainder > 0 ? clamped.map((r, i) => i === 0 ? { ...r, quantity: r.quantity + remainder } : r) : clamped;
+                                            return { ...prev, form: { ...prev.form, rowEdits: final } };
+                                          }
+                                          return { ...prev, form: { ...prev.form, rowEdits: nextEdits } };
+                                        });
+                                      }}
+                                      className="h-8 w-[4.75rem] shrink-0 box-border rounded-md border border-amber-200/90 bg-amber-50/90 px-2 text-left text-sm font-bold text-amber-900 shadow-sm outline-none focus:ring-2 focus:ring-amber-200 tabular-nums"
+                                      placeholder="0"
+                                      title="不良品"
+                                    />
+                                    <span className="text-[10px] font-medium tabular-nums text-amber-800">不良品</span>
+                                  </div>
+                                </div>
                               </td>
-                              <td className="px-4 py-3 font-bold text-indigo-600 text-right">{amount >= 0 ? amount.toFixed(2) : '—'}</td>
+                              <td className="px-3 py-2.5 sm:px-4 align-middle text-right">
+                                <span className="text-slate-600 text-xs">{editingReport.form.rate > 0 ? `${editingReport.form.rate.toFixed(2)} 元/${detailUnit}` : '—'}</span>
+                              </td>
+                              <td className="px-3 py-2.5 sm:px-4 align-middle text-sm font-bold text-indigo-600 text-right tabular-nums">{amount >= 0 ? amount.toFixed(2) : '—'}</td>
                             </tr>
                           );
                         })
@@ -687,105 +910,112 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                           if (!rowEdit) return null;
                           const p = products.find(px => px.id === progress.productId);
                           const detailUnit = (p?.unitId && dictionaries?.units?.find(u => u.id === p.unitId)?.name) || '件';
-                          const variantSuffix = progress.variantId && (() => {
-                            const v = p?.variants?.find((x: { id: string }) => x.id === progress.variantId);
-                            return (v as { skuSuffix?: string })?.skuSuffix;
-                          })();
                           const rate = editingReport.form.rate;
                           const amount = rowEdit.quantity * rate;
                           return (
                             <tr key={report.id} className="border-b border-slate-100">
-                              <td className="px-4 py-3 text-slate-800">{variantSuffix || '—'}</td>
-                              <td className="px-4 py-3 text-right">
-                                <div className="flex items-center justify-end gap-1">
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    value={rowEdit.quantity}
-                                    onChange={e => {
-                                      const v = parseInt(e.target.value) || 0;
-                                      setEditingReport(prev => prev ? {
-                                        ...prev,
-                                        form: {
-                                          ...prev.form,
-                                          rowEdits: prev.form.rowEdits.map(r => r.reportId === report.id ? { ...r, quantity: v } : r)
-                                        }
-                                      } : prev);
-                                    }}
-                                    className="w-20 bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200"
-                                  />
-                                  <span className="text-slate-600 text-sm">{detailUnit}</span>
-                                </div>
+                              <td className="px-3 py-2.5 sm:px-4 align-middle min-w-0 max-w-[11rem] sm:max-w-[14rem]">
+                                <span className="text-sm sm:text-base font-bold text-slate-900 leading-tight block truncate" title={reportDetailBatch.productName}>
+                                  {reportDetailBatch.productName}
+                                </span>
                               </td>
-                              <td className="px-4 py-3 text-right">
-                                <div className="flex items-center justify-end gap-1">
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    value={rowEdit.defectiveQuantity}
-                                    onChange={e => {
-                                      const v = parseInt(e.target.value) || 0;
-                                      setEditingReport(prev => prev ? {
-                                        ...prev,
-                                        form: {
-                                          ...prev.form,
-                                          rowEdits: prev.form.rowEdits.map(r => r.reportId === report.id ? { ...r, defectiveQuantity: v } : r)
-                                        }
-                                      } : prev);
-                                    }}
-                                    className="w-20 bg-amber-50/80 border border-amber-100 rounded-lg px-2 py-1 text-sm font-bold text-amber-800 text-right outline-none focus:ring-2 focus:ring-amber-200"
-                                  />
-                                  <span className="text-slate-600 text-sm">{detailUnit}</span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                {reportDetailBatch.rows.findIndex(x => x.report.id === report.id) === 0 ? (
-                                  <div className="flex items-center justify-end gap-1">
+                              <td className="px-3 py-2.5 sm:px-4 align-middle">
+                                <div className="flex min-w-0 flex-col gap-0.5">
+                                  <div className="flex min-w-0 items-center gap-1.5">
                                     <input
                                       type="number"
                                       min={0}
-                                      step={0.01}
-                                      value={editingReport.form.rate}
-                                      onChange={e => setEditingReport(prev => prev ? { ...prev, form: { ...prev.form, rate: parseFloat(e.target.value) || 0 } } : prev)}
-                                      className="w-24 bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold text-slate-800 text-right outline-none focus:ring-2 focus:ring-indigo-200"
+                                      value={rowEdit.quantity}
+                                      onChange={e => {
+                                        const v = parseInt(e.target.value) || 0;
+                                        setEditingReport(prev => prev ? {
+                                          ...prev,
+                                          form: {
+                                            ...prev.form,
+                                            rowEdits: prev.form.rowEdits.map(r => r.reportId === report.id ? { ...r, quantity: v } : r)
+                                          }
+                                        } : prev);
+                                      }}
+                                      className="h-8 w-[4.75rem] shrink-0 box-border rounded-md border border-slate-200 bg-white px-2 text-left text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200 tabular-nums"
                                     />
-                                    <span className="text-slate-500 text-xs">元/{detailUnit}</span>
                                   </div>
-                                ) : (
-                                  <span className="text-slate-600 text-sm">{editingReport.form.rate > 0 ? `${editingReport.form.rate.toFixed(2)} 元/${detailUnit}` : '—'}</span>
-                                )}
+                                  <div className="flex min-w-0 items-center gap-1.5">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      tabIndex={-1}
+                                      value={rowEdit.defectiveQuantity}
+                                      onChange={e => {
+                                        const v = parseInt(e.target.value) || 0;
+                                        setEditingReport(prev => prev ? {
+                                          ...prev,
+                                          form: {
+                                            ...prev.form,
+                                            rowEdits: prev.form.rowEdits.map(r => r.reportId === report.id ? { ...r, defectiveQuantity: v } : r)
+                                          }
+                                        } : prev);
+                                      }}
+                                      className="h-8 w-[4.75rem] shrink-0 box-border rounded-md border border-amber-200/90 bg-amber-50/90 px-2 text-left text-sm font-bold text-amber-900 shadow-sm outline-none focus:ring-2 focus:ring-amber-200 tabular-nums"
+                                      placeholder="0"
+                                      title="不良品"
+                                    />
+                                    <span className="text-[10px] font-medium tabular-nums text-amber-800">不良品</span>
+                                  </div>
+                                </div>
                               </td>
-                              <td className="px-4 py-3 font-bold text-indigo-600 text-right">{amount >= 0 ? amount.toFixed(2) : '—'}</td>
+                              <td className="px-3 py-2.5 sm:px-4 align-middle text-right">
+                                <span className="text-slate-600 text-xs">{editingReport.form.rate > 0 ? `${editingReport.form.rate.toFixed(2)} 元/${detailUnit}` : '—'}</span>
+                              </td>
+                              <td className="px-3 py-2.5 sm:px-4 align-middle text-sm font-bold text-indigo-600 text-right tabular-nums">{amount >= 0 ? amount.toFixed(2) : '—'}</td>
                             </tr>
                           );
                         })}
                   </tbody>
-                  <tfoot>
-                    <tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold">
-                      <td className="px-4 py-3">合计</td>
-                      <td className="px-4 py-3 text-emerald-600 text-right">
-                        {editingReport.form.rowEdits.reduce((s, r) => s + r.quantity, 0)} {(products.find(px => px.id === editingReport.productId)?.unitId && dictionaries?.units?.find(u => u.id === products.find(px => px.id === editingReport.productId)?.unitId)?.name) || '件'}
-                      </td>
-                      <td className="px-4 py-3 text-amber-600 text-right">
-                        {(() => {
-                          const totalDef = editingReport.form.rowEdits.reduce((s, r) => s + r.defectiveQuantity, 0);
-                          const unitName = (products.find(px => px.id === editingReport.productId)?.unitId && dictionaries?.units?.find(u => u.id === products.find(px => px.id === editingReport.productId)?.unitId)?.name) || '件';
-                          return totalDef > 0 ? `${totalDef} ${unitName}` : '—';
-                        })()}
-                      </td>
-                      <td className="px-4 py-3"></td>
-                      <td className="px-4 py-3 text-indigo-600 text-right">
-                        {editingReport.form.rowEdits.reduce((s, r) => s + r.quantity * editingReport.form.rate, 0).toFixed(2)}
-                      </td>
-                    </tr>
-                  </tfoot>
                 </table>
-              </div>
+                    </div>
+                    <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-indigo-50/50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="font-bold text-slate-600">工价</span>
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={editingReport.form.rate}
+                          onChange={e =>
+                            setEditingReport(prev =>
+                              prev ? { ...prev, form: { ...prev.form, rate: parseFloat(e.target.value) || 0 } } : prev,
+                            )
+                          }
+                          className="h-8 w-[5.25rem] rounded-lg border border-slate-200 bg-white px-1.5 text-xs font-bold text-slate-800 text-right outline-none focus:ring-2 focus:ring-indigo-200"
+                        />
+                        <span className="text-slate-500">
+                          元/
+                          {(products.find(px => px.id === editingReport.productId)?.unitId &&
+                            dictionaries.units.find(u => u.id === products.find(px => px.id === editingReport.productId)?.unitId)?.name) ||
+                            '件'}
+                        </span>
+                      </div>
+                      <div className="text-xs font-bold text-indigo-700 tabular-nums">
+                        合计 良品 {editingReport.form.rowEdits.reduce((s, r) => s + r.quantity, 0)}{' '}
+                        {(products.find(px => px.id === editingReport.productId)?.unitId &&
+                          dictionaries.units.find(u => u.id === products.find(px => px.id === editingReport.productId)?.unitId)?.name) ||
+                          '件'}
+                        {' · '}不良{' '}
+                        {editingReport.form.rowEdits.reduce((s, r) => s + r.defectiveQuantity, 0)}{' '}
+                        {(products.find(px => px.id === editingReport.productId)?.unitId &&
+                          dictionaries.units.find(u => u.id === products.find(px => px.id === editingReport.productId)?.unitId)?.name) ||
+                          '件'}
+                        {' · '}金额 {editingReport.form.rowEdits.reduce((s, r) => s + r.quantity * editingReport.form.rate, 0).toFixed(2)} 元
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           );
           })() : (
             <>
-              <div className="flex flex-wrap gap-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-3 sm:px-4">
                 {(() => {
                   const productId = reportDetailBatch.source === 'order' ? reportDetailBatch.first.order.productId : reportDetailBatch.productId;
                   const p = products.find(px => px.id === productId);
@@ -806,30 +1036,33 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                   ).reduce((s, r) => s + (r.quantity ?? 0), 0) : 0;
                   const effectiveRemainingView = order && ms ? Math.max(0, totalBase - drDef + drRework - (ms.completedQuantity ?? 0) - outsourcedPendingView) : null;
                   return (
-                    <>
-                      <div className="bg-slate-50 rounded-xl px-4 py-2">
-                        <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">工序</p>
-                        <p className="text-sm font-bold text-slate-800">{milestoneName || '—'}</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
+                      <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">工序</p>
+                        <p className="text-xs sm:text-sm font-bold text-slate-800">{milestoneName || '—'}</p>
                       </div>
                       {effectiveRemainingView != null && (
-                        <div className="bg-slate-50 rounded-xl px-4 py-2">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">本工序可报最多</p>
-                          <p className="text-sm font-bold text-indigo-600">{effectiveRemainingView} {unitName} <span className="text-[10px] font-normal text-slate-400">（已扣不良、加返工、已外协）</span></p>
+                        <div>
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">本工序可报最多</p>
+                          <p className="text-xs sm:text-sm font-bold text-indigo-600 tabular-nums">
+                            {effectiveRemainingView} {unitName}
+                            <span className="block text-[10px] font-normal text-slate-400 mt-0.5">已扣不良、返工、外协在制</span>
+                          </p>
                         </div>
                       )}
-                      <div className="bg-slate-50 rounded-xl px-4 py-2">
-                        <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">本次报工量</p>
-                        <p className="text-sm font-bold text-indigo-600">{reportDetailBatch.totalGood} {unitName}</p>
+                      <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">本次报工量</p>
+                        <p className="text-xs sm:text-sm font-bold text-indigo-600 tabular-nums">{reportDetailBatch.totalGood} {unitName}</p>
                       </div>
-                      <div className="bg-slate-50 rounded-xl px-4 py-2">
-                        <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">报工时间</p>
-                        <p className="text-sm font-bold text-slate-800">{fmtDT(reportDetailBatch.first.report.timestamp)}</p>
+                      <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">报工时间</p>
+                        <p className="text-xs sm:text-sm font-bold text-slate-800">{fmtDT(reportDetailBatch.first.report.timestamp)}</p>
                       </div>
-                      <div className="bg-slate-50 rounded-xl px-4 py-2">
-                        <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">操作人</p>
-                        <p className="text-sm font-bold text-slate-800">{reportDetailBatch.first.report.operator}</p>
+                      <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">操作人</p>
+                        <p className="text-xs sm:text-sm font-bold text-slate-800">{reportDetailBatch.first.report.operator}</p>
                       </div>
-                    </>
+                    </div>
                   );
                 })()}
               </div>
@@ -861,101 +1094,212 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                 );
               })()}
               <div className="flex-1 overflow-auto pb-4 -mt-1">
-                <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200">
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">规格</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">良品</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">不良品</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">工价</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">金额(元)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {reportDetailBatch.source === 'order'
-                        ? reportDetailBatch.rows.map(({ order, milestone, report }) => {
-                            const p = products.find(px => px.id === order.productId);
-                            const detailUnit = (p?.unitId && dictionaries?.units?.find(u => u.id === p.unitId)?.name) || '件';
-                            const variantSuffix = report.variantId && (() => {
-                              const v = p?.variants?.find((x: { id: string }) => x.id === report.variantId);
-                              return (v as { skuSuffix?: string })?.skuSuffix;
-                            })();
-                            const rate = report.rate ?? p?.nodeRates?.[milestone.templateId] ?? 0;
-                            const amount = report.quantity * rate;
+                {batchDetailMatrix ? (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">报工明细（按规格）</p>
+                    <div className="rounded-xl bg-slate-50/50 p-2 ring-1 ring-slate-100/80">
+                      {(() => {
+                        const { layout, goodByVariant, defectiveByVariant, variantToReportId } = batchDetailMatrix;
+                        const rows: QtyMatrixTableRow[] = layout.colorRows.map(row => {
+                          let rowSum = 0;
+                          const cells = row.variantAtSize.map((variant: ProductVariant | null, si: number) => {
+                            if (!variant) {
+                              return <span key={`${row.key}-e-${si}`} className="text-sm text-slate-300">—</span>;
+                            }
+                            if (!variantToReportId.has(variant.id)) {
+                              return <span key={variant.id} className="text-sm text-slate-300">—</span>;
+                            }
+                            const g = goodByVariant[variant.id] ?? 0;
+                            const d = defectiveByVariant[variant.id] ?? 0;
+                            rowSum += g;
                             return (
-                              <tr key={report.id} className="border-b border-slate-100">
-                                <td className="px-4 py-3 text-slate-800">{variantSuffix || '—'}</td>
-                                <td className="px-4 py-3 font-bold text-emerald-600 text-right">
-                                  {report.quantity} {detailUnit}
-                                </td>
-                                <td className="px-4 py-3 font-bold text-amber-600 text-right">
-                                  {(report.defectiveQuantity ?? 0) > 0 ? `${report.defectiveQuantity} ${detailUnit}` : '—'}
-                                </td>
-                                <td className="px-4 py-3 text-slate-600 text-right">
-                                  {rate > 0 ? `${rate.toFixed(2)} 元/${detailUnit}` : '—'}
-                                </td>
-                                <td className="px-4 py-3 font-bold text-indigo-600 text-right">
-                                  {amount > 0 ? amount.toFixed(2) : '—'}
-                                </td>
-                              </tr>
+                              <div key={variant.id} className="flex min-w-0 flex-col gap-1">
+                                <span className="text-sm font-bold text-emerald-600 tabular-nums">{g}</span>
+                                {d > 0 ? (
+                                  <span className="text-[10px] font-medium tabular-nums text-amber-700">不良 {d}</span>
+                                ) : null}
+                              </div>
                             );
-                          })
-                        : reportDetailBatch.rows.map(({ progress, report }) => {
-                            const p = products.find(px => px.id === progress.productId);
-                            const detailUnit = (p?.unitId && dictionaries?.units?.find(u => u.id === p.unitId)?.name) || '件';
-                            const variantSuffix = progress.variantId && (() => {
-                              const v = p?.variants?.find((x: { id: string }) => x.id === progress.variantId);
-                              return (v as { skuSuffix?: string })?.skuSuffix;
-                            })();
-                            const rate = report.rate ?? p?.nodeRates?.[progress.milestoneTemplateId] ?? 0;
-                            const amount = report.quantity * rate;
-                            return (
-                              <tr key={report.id} className="border-b border-slate-100">
-                                <td className="px-4 py-3 text-slate-800">{variantSuffix || '—'}</td>
-                                <td className="px-4 py-3 font-bold text-emerald-600 text-right">
-                                  {report.quantity} {detailUnit}
-                                </td>
-                                <td className="px-4 py-3 font-bold text-amber-600 text-right">
-                                  {(report.defectiveQuantity ?? 0) > 0 ? `${report.defectiveQuantity} ${detailUnit}` : '—'}
-                                </td>
-                                <td className="px-4 py-3 text-slate-600 text-right">
-                                  {rate > 0 ? `${rate.toFixed(2)} 元/${detailUnit}` : '—'}
-                                </td>
-                                <td className="px-4 py-3 font-bold text-indigo-600 text-right">
-                                  {amount > 0 ? amount.toFixed(2) : '—'}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                    </tbody>
-                    {(() => {
-                      const productId = reportDetailBatch.source === 'order' ? reportDetailBatch.first.order.productId : reportDetailBatch.productId;
-                      const p = products.find(px => px.id === productId);
-                      const cat = categoryMap.get(p?.categoryId);
-                      const showSpecFooter = productHasColorSizeMatrix(p, cat);
-                      const detailUnit = (p?.unitId && dictionaries?.units?.find(u => u.id === p.unitId)?.name) || '件';
-                      if (!showSpecFooter) return null;
-                      return (
-                        <tfoot>
-                          <tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold">
-                            <td className="px-4 py-3">合计</td>
-                            <td className="px-4 py-3 text-emerald-600 text-right">
-                              {reportDetailBatch.totalGood} {detailUnit}
-                            </td>
-                            <td className="px-4 py-3 text-amber-600 text-right">
-                              {reportDetailBatch.totalDefective > 0 ? `${reportDetailBatch.totalDefective} ${detailUnit}` : '—'}
-                            </td>
-                            <td className="px-4 py-3"></td>
-                            <td className="px-4 py-3 text-indigo-600 text-right">
-                              {reportDetailBatch.totalAmount.toFixed(2)}
-                            </td>
-                          </tr>
-                        </tfoot>
-                      );
-                    })()}
-                  </table>
-                </div>
+                          });
+                          return {
+                            key: row.key,
+                            colorCell: (
+                              <div className="flex items-center gap-2">
+                                {row.colorSwatch ? (
+                                  <span
+                                    className="h-4 w-4 shrink-0 rounded-full border border-slate-200"
+                                    style={{ backgroundColor: row.colorSwatch }}
+                                  />
+                                ) : null}
+                                <span>{row.colorLabel}</span>
+                              </div>
+                            ),
+                            cells,
+                            subtotalCell: rowSum,
+                          };
+                        });
+                        return (
+                          <QtyMatrixTable
+                            sizeHeaders={layout.sizeColumns.map(c => c.header)}
+                            rows={rows}
+                            dense
+                          />
+                        );
+                      })()}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-indigo-50/50 px-3 py-2 text-xs font-bold text-slate-700">
+                      <span className="tabular-nums">
+                        {(() => {
+                          const du =
+                            (batchDetailMatrix.product.unitId &&
+                              dictionaries.units.find(u => u.id === batchDetailMatrix.product.unitId)?.name) ||
+                            '件';
+                          const rate =
+                            reportDetailBatch.source === 'order'
+                              ? (() => {
+                                  const r0 = reportDetailBatch.rows[0] as OrderReportRow;
+                                  return (
+                                    r0.report.rate ??
+                                    batchDetailMatrix.product.nodeRates?.[r0.milestone.templateId] ??
+                                    0
+                                  );
+                                })()
+                              : (() => {
+                                  const r0 = reportDetailBatch.rows[0] as ProductReportRow;
+                                  return (
+                                    r0.report.rate ??
+                                    batchDetailMatrix.product.nodeRates?.[r0.progress.milestoneTemplateId] ??
+                                    0
+                                  );
+                                })();
+                          return rate > 0 ? `工价 ${rate.toFixed(2)} 元/${du}` : '工价 —';
+                        })()}
+                      </span>
+                      <span className="text-indigo-700 tabular-nums">
+                        合计 良品 {reportDetailBatch.totalGood} · 不良{' '}
+                        {reportDetailBatch.totalDefective > 0 ? reportDetailBatch.totalDefective : '—'} · 本批金额{' '}
+                        {reportDetailBatch.totalAmount.toFixed(2)} 元
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">报工明细</p>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-2 sm:p-3 space-y-2">
+                      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                          <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase">产品</th>
+                          <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-left">数量</th>
+                          <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">工价</th>
+                          <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">金额(元)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reportDetailBatch.source === 'order'
+                          ? reportDetailBatch.rows.map(({ order, milestone, report }) => {
+                              const p = products.find(px => px.id === order.productId);
+                              const detailUnit = (p?.unitId && dictionaries?.units?.find(u => u.id === p.unitId)?.name) || '件';
+                              const rate = report.rate ?? p?.nodeRates?.[milestone.templateId] ?? 0;
+                              const amount = report.quantity * rate;
+                              const def = report.defectiveQuantity ?? 0;
+                              return (
+                                <tr key={report.id} className="border-b border-slate-100">
+                                  <td className="px-3 py-2.5 sm:px-4 align-middle min-w-0 max-w-[11rem] sm:max-w-[14rem]">
+                                    <span className="text-sm sm:text-base font-bold text-slate-900 leading-tight block truncate" title={order.productName}>
+                                      {order.productName}
+                                    </span>
+                                    <span className="mt-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-500 truncate" title={order.orderNumber}>
+                                      {order.orderNumber}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2.5 sm:px-4 align-middle">
+                                    <div className="flex min-w-0 flex-col gap-0.5">
+                                      <span className="text-sm font-bold text-emerald-600 tabular-nums">
+                                        {report.quantity} {detailUnit}
+                                      </span>
+                                      {def > 0 ? (
+                                        <span className="text-[10px] font-medium tabular-nums text-amber-800">不良 {def} {detailUnit}</span>
+                                      ) : null}
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2.5 sm:px-4 align-middle text-slate-600 text-right text-xs">
+                                    {rate > 0 ? `${rate.toFixed(2)} 元/${detailUnit}` : '—'}
+                                  </td>
+                                  <td className="px-3 py-2.5 sm:px-4 align-middle text-sm font-bold text-indigo-600 text-right tabular-nums">
+                                    {amount > 0 ? amount.toFixed(2) : '—'}
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          : reportDetailBatch.rows.map(({ progress, report }) => {
+                              const p = products.find(px => px.id === progress.productId);
+                              const detailUnit = (p?.unitId && dictionaries?.units?.find(u => u.id === p.unitId)?.name) || '件';
+                              const rate = report.rate ?? p?.nodeRates?.[progress.milestoneTemplateId] ?? 0;
+                              const amount = report.quantity * rate;
+                              const def = report.defectiveQuantity ?? 0;
+                              return (
+                                <tr key={report.id} className="border-b border-slate-100">
+                                  <td className="px-3 py-2.5 sm:px-4 align-middle min-w-0 max-w-[11rem] sm:max-w-[14rem]">
+                                    <span className="text-sm sm:text-base font-bold text-slate-900 leading-tight block truncate" title={reportDetailBatch.productName}>
+                                      {reportDetailBatch.productName}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2.5 sm:px-4 align-middle">
+                                    <div className="flex min-w-0 flex-col gap-0.5">
+                                      <span className="text-sm font-bold text-emerald-600 tabular-nums">
+                                        {report.quantity} {detailUnit}
+                                      </span>
+                                      {def > 0 ? (
+                                        <span className="text-[10px] font-medium tabular-nums text-amber-800">不良 {def} {detailUnit}</span>
+                                      ) : null}
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2.5 sm:px-4 align-middle text-slate-600 text-right text-xs">
+                                    {rate > 0 ? `${rate.toFixed(2)} 元/${detailUnit}` : '—'}
+                                  </td>
+                                  <td className="px-3 py-2.5 sm:px-4 align-middle text-sm font-bold text-indigo-600 text-right tabular-nums">
+                                    {amount > 0 ? amount.toFixed(2) : '—'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                      </tbody>
+                    </table>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-indigo-50/50 px-3 py-2 text-xs font-bold text-slate-700">
+                        <span className="tabular-nums">
+                          {(() => {
+                            const productId =
+                              reportDetailBatch.source === 'order'
+                                ? reportDetailBatch.first.order.productId
+                                : reportDetailBatch.productId;
+                            const p = products.find(px => px.id === productId);
+                            const du =
+                              (p?.unitId && dictionaries.units.find(u => u.id === p.unitId)?.name) || '件';
+                            const rate =
+                              reportDetailBatch.source === 'order'
+                                ? (() => {
+                                    const r0 = reportDetailBatch.rows[0] as OrderReportRow;
+                                    return r0.report.rate ?? p?.nodeRates?.[r0.milestone.templateId] ?? 0;
+                                  })()
+                                : (() => {
+                                    const r0 = reportDetailBatch.rows[0] as ProductReportRow;
+                                    return r0.report.rate ?? p?.nodeRates?.[r0.progress.milestoneTemplateId] ?? 0;
+                                  })();
+                            return rate > 0 ? `工价 ${rate.toFixed(2)} 元/${du}` : '工价 —';
+                          })()}
+                        </span>
+                        <span className="text-indigo-700 tabular-nums">
+                          合计 良品 {reportDetailBatch.totalGood} · 不良{' '}
+                          {reportDetailBatch.totalDefective > 0 ? reportDetailBatch.totalDefective : '—'} · 本批金额{' '}
+                          {reportDetailBatch.totalAmount.toFixed(2)} 元
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}

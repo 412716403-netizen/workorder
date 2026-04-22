@@ -22,6 +22,8 @@ export type VariantQtyMatrixInputsProps = {
   /** 盘点等：各规格系统库存参考，显示在输入框上方 */
   systemQtyByVariantId?: Record<string, number | null | undefined>;
   compactSizeColumns?: boolean;
+  /** 与 {@link QtyMatrixTable} 的 balancedNumericLayout 一致：通栏、尺码列居中、行斑马纹 */
+  balancedNumericLayout?: boolean;
   inputClassName?: string;
 };
 
@@ -37,6 +39,7 @@ const VariantQtyMatrixInputs: React.FC<VariantQtyMatrixInputsProps> = ({
   getCellExtras,
   systemQtyByVariantId,
   compactSizeColumns,
+  balancedNumericLayout = false,
   inputClassName = defaultInputClass,
 }) => {
   const layout = useMemo(() => buildVariantQtyMatrixLayout(product, dictionaries), [product, dictionaries]);
@@ -45,26 +48,39 @@ const VariantQtyMatrixInputs: React.FC<VariantQtyMatrixInputsProps> = ({
   const rows = layout.colorRows.map(row => {
     let sum = 0;
     const cells = row.variantAtSize.map((v, ci) => {
-      if (!v) return <span key={`${row.key}-e-${ci}`} className="text-sm text-slate-300">—</span>;
+      if (!v) {
+        return (
+          <span key={`${row.key}-e-${ci}`} className="text-sm tabular-nums text-slate-300">
+            —
+          </span>
+        );
+      }
       const q = quantities[v.id] ?? 0;
       sum += q;
       const extras = getCellExtras?.(v);
       const sys = systemQtyByVariantId?.[v.id];
+      const cellColClass = balancedNumericLayout ? 'flex min-w-0 flex-col items-center gap-0.5' : 'flex min-w-0 flex-col gap-0.5';
+      const innerRowClass = balancedNumericLayout
+        ? 'flex flex-wrap items-center justify-center gap-x-2 gap-y-1'
+        : 'flex flex-wrap items-center gap-x-2 gap-y-1';
+      const roNumClass = balancedNumericLayout
+        ? 'text-base font-black text-slate-900 tabular-nums tracking-tight'
+        : 'text-sm font-bold text-slate-800 tabular-nums';
       if (readOnly) {
         return (
-          <div key={v.id} className="flex min-w-0 flex-col gap-0.5">
+          <div key={v.id} className={cellColClass}>
             {sys != null && <span className="text-[9px] text-slate-500">系统 {sys}</span>}
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="text-sm font-bold text-slate-800 tabular-nums">{q}</span>
+            <div className={innerRowClass}>
+              <span className={roNumClass}>{q}</span>
               {extras?.hint != null ? <VariantQtyMatrixHint>{extras.hint}</VariantQtyMatrixHint> : null}
             </div>
           </div>
         );
       }
       return (
-        <div key={v.id} className="flex min-w-0 flex-col gap-0.5">
+        <div key={v.id} className={balancedNumericLayout ? `${cellColClass} w-full` : 'flex min-w-0 flex-col gap-0.5'}>
           {sys != null && <span className="text-[9px] text-slate-500">系统 {sys}</span>}
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <div className={balancedNumericLayout ? `${innerRowClass} w-full` : 'flex flex-wrap items-center gap-x-2 gap-y-1'}>
             <input
               type="number"
               min={0}
@@ -78,7 +94,7 @@ const VariantQtyMatrixInputs: React.FC<VariantQtyMatrixInputsProps> = ({
                 const next = cap != null && Number.isFinite(cap) ? Math.min(raw, cap) : raw;
                 onVariantQtyChange?.(v.id, next);
               }}
-              className={`${inputClassName}${extras?.disabled ? ' opacity-50' : ''}`}
+              className={`${inputClassName}${balancedNumericLayout ? ' mx-auto text-center' : ''}${extras?.disabled ? ' opacity-50' : ''}`}
             />
             {extras?.hint != null ? <VariantQtyMatrixHint>{extras.hint}</VariantQtyMatrixHint> : null}
           </div>
@@ -88,11 +104,18 @@ const VariantQtyMatrixInputs: React.FC<VariantQtyMatrixInputsProps> = ({
     return {
       key: row.key,
       colorCell: (
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center gap-2 ${balancedNumericLayout ? 'py-0.5' : ''}`}>
           {row.colorSwatch ? (
-            <span className="h-4 w-4 shrink-0 rounded-full border border-slate-200" style={{ backgroundColor: row.colorSwatch }} />
+            <span
+              className={
+                balancedNumericLayout
+                  ? 'h-5 w-5 shrink-0 rounded-md border border-slate-200/80 shadow-inner'
+                  : 'h-4 w-4 shrink-0 rounded-full border border-slate-200'
+              }
+              style={{ backgroundColor: row.colorSwatch }}
+            />
           ) : null}
-          <span>{row.colorLabel}</span>
+          <span className={balancedNumericLayout ? 'text-[13px] font-black text-slate-800' : ''}>{row.colorLabel}</span>
         </div>
       ),
       cells,
@@ -105,6 +128,7 @@ const VariantQtyMatrixInputs: React.FC<VariantQtyMatrixInputsProps> = ({
       sizeHeaders={layout.sizeColumns.map(c => c.header)}
       rows={rows}
       compactSizeColumns={compactSizeColumns}
+      balancedNumericLayout={balancedNumericLayout}
     />
   );
 };

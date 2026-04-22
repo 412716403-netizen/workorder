@@ -159,6 +159,23 @@ function hasExplicitIsoTimeZone(s: string): boolean {
   return /[zZ]$/.test(s) || /[+\-]\d{2}:?\d{2}$/.test(s);
 }
 
+/** 该瞬间是否为「UTC 日历日的 0 点」（常见于仅日期被 `new Date('YYYY-MM-DD')` 或后端 normalize 成 UTC 午夜，东八区展示会误成 08:00:00）。 */
+function isUtcCalendarMidnightInstant(d: Date): boolean {
+  return (
+    d.getUTCHours() === 0 &&
+    d.getUTCMinutes() === 0 &&
+    d.getUTCSeconds() === 0 &&
+    d.getUTCMilliseconds() === 0
+  );
+}
+
+function formatUtcCalendarYmd(d: Date): string {
+  const y = d.getUTCFullYear();
+  const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${mo}-${day}`;
+}
+
 /**
  * 字符串是否「像」可解析的日期/时间（避免自由文本被 `new Date(文本)` 误解析，例如 `备注-01-01 00:00:00` 在 V8 中会解析成 2001-01-01）。
  */
@@ -265,4 +282,69 @@ export function planIdToLocalYmd(planId: string): string {
   const ts = parseInt(m[1], 36);
   if (Number.isNaN(ts)) return '';
   return toLocalDateYmd(new Date(ts));
+}
+
+/**
+ * 计划单列表/详情：创建时间
+ * - 纯 `YYYY-MM-DD` 原样；
+ * - 带 `Z`/`±offset` 且为 **UTC 当日 0 点** 的 ISO（多为仅日期入库）→ 只显示 UTC 日历日 `YYYY-MM-DD`，避免东八区误显示成 `… 08:00:00`；
+ * - 其它含时刻的值 → 本地 `YYYY-MM-DD HH:mm:ss`；
+ * - 无值时从 `plan-` id 推断日期。
+ */
+export function formatPlanOrderCreatedAtForList(
+  createdAt: string | undefined | null,
+  planId: string,
+): string {
+  const raw = (createdAt ?? '').trim();
+  const s = raw || planIdToLocalYmd(planId);
+  if (!s) return '';
+  if (YMD_ONLY.test(s)) return s;
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return toLocalDateYmd(s) || s.slice(0, 10);
+  if (hasExplicitIsoTimeZone(s) && isUtcCalendarMidnightInstant(d)) {
+    return formatUtcCalendarYmd(d);
+  }
+  return formatLocalDateTimeZh(d);
+}
+
+function orderIdToFlowPlacedDisplay(orderId: string): string {
+  const m = orderId.match(/^ord-([^-]+)-/);
+  if (!m) return '';
+  const ts = parseInt(m[1], 36);
+  if (Number.isNaN(ts)) return '';
+  return formatLocalDateTimeZh(new Date(ts));
+}
+
+/**
+ * 工单流水列表「下单/下达时间」列（与 {@link ProductionOrder.createdAt} 多为仅日期一致）
+ * - 纯 `YYYY-MM-DD` 原样，避免 `formatLocalDateTimeZh` 在东八区显示成 `… 08:00:00`；
+ * - 无时区 `YYYY-MM-DDTHH:mm` 字面展开；
+ * - 带 Z/偏移且为 UTC 当日 0 点的 ISO → 仅日历日；
+ * - 其它含时刻 → 本地 `YYYY-MM-DD HH:mm:ss`；
+ * - 无 createdAt 时从 `ord-` id 推断。
+ */
+export function formatOrderFlowPlacedDisplay(
+  createdAt: string | undefined | null,
+  orderId: string,
+): string {
+  const raw = (createdAt ?? '').trim();
+  if (raw) {
+    if (YMD_ONLY.test(raw)) return raw;
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return toLocalDateYmd(raw) || raw.slice(0, 10);
+    if (hasExplicitIsoTimeZone(raw) && isUtcCalendarMidnightInstant(d)) {
+      return formatUtcCalendarYmd(d);
+    }
+    const naive = NAIVE_DATETIME_LOCAL_PRINT.exec(raw);
+    if (naive && naive[0] === raw && !hasExplicitIsoTimeZone(raw)) {
+      const date = naive[1];
+      const hh = naive[2];
+      const mm = naive[3];
+      const ss = naive[4];
+      if (ss != null) return `${date} ${hh}:${mm}:${ss}`;
+      return `${date} ${hh}:${mm}`;
+    }
+    return formatLocalDateTimeZh(d);
+  }
+  return orderIdToFlowPlacedDisplay(orderId);
 }

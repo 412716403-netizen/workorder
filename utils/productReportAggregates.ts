@@ -1,4 +1,5 @@
 import type { ProductionOrder, ProductMilestoneProgress, ProcessSequenceMode } from '../types';
+import { reworkMergeBucketOrderId } from './reworkMergeBucketOrderId';
 
 export function sumBlockOrderQty(orders: ProductionOrder[]): number {
   return orders.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0);
@@ -139,7 +140,12 @@ export function orderMaxReportableAtTemplateProductAware(
   return Math.max(0, baseQty - defective + rework);
 }
 
-function pmpDefectiveTotalAtTemplate(pmp: ProductMilestoneProgress[], productId: string, templateId: string): number {
+/** 产品报工（PMP）在本工序记录的不良合计；关联产品模式下与工单里程碑不良分开统计 */
+export function pmpDefectiveTotalAtTemplate(
+  pmp: ProductMilestoneProgress[],
+  productId: string,
+  templateId: string,
+): number {
   return pmp
     .filter(p => p.productId === productId && p.milestoneTemplateId === templateId)
     .flatMap(p => p.reports || [])
@@ -155,9 +161,27 @@ export function productGroupMaxReportableSum(
   processSequenceMode: ProcessSequenceMode,
   getDefectiveRework: (orderId: string, tid: string) => { defective: number; rework: number },
   pmpByKey?: Map<string, number>,
+  /** 传入后按父单桶分摊返工完成量（与子工单 map 键对齐） */
+  orderForest?: Pick<ProductionOrder, 'id' | 'parentOrderId'>[],
 ): number {
+  const qtyByBucket = new Map<string, number>();
+  if (orderForest?.length) {
+    for (const o of blockOrders) {
+      const q = o.items.reduce((s, i) => s + i.quantity, 0);
+      const b = reworkMergeBucketOrderId(o.id, orderForest);
+      qtyByBucket.set(b, (qtyByBucket.get(b) ?? 0) + q);
+    }
+  }
   let sum = blockOrders.reduce((acc, o) => {
-    const { defective, rework } = getDefectiveRework(o.id, templateId);
+    const { defective } = getDefectiveRework(o.id, templateId);
+    let rework = getDefectiveRework(o.id, templateId).rework;
+    if (orderForest?.length) {
+      const b = reworkMergeBucketOrderId(o.id, orderForest);
+      const bucketRework = getDefectiveRework(b, templateId).rework;
+      const tot = qtyByBucket.get(b) ?? 0;
+      const qo = o.items.reduce((s, i) => s + i.quantity, 0);
+      rework = tot > 0 ? (bucketRework * qo) / tot : 0;
+    }
     return (
       acc +
       orderMaxReportableAtTemplateProductAware(o, templateId, {
@@ -185,7 +209,8 @@ export function variantMaxGoodProductMode(
   pmp: ProductMilestoneProgress[],
   processSequenceMode: ProcessSequenceMode,
   milestoneNodeIds: string[],
-  getDefectiveRework: (orderId: string, tid: string) => { defective: number; rework: number; reworkByVariant: Record<string, number> }
+  getDefectiveRework: (orderId: string, tid: string) => { defective: number; rework: number; reworkByVariant: Record<string, number> },
+  orderForest?: Pick<ProductionOrder, 'id' | 'parentOrderId'>[],
 ): number {
   const tid = templateId;
   const idx = milestoneNodeIds.indexOf(tid);
@@ -209,11 +234,18 @@ export function variantMaxGoodProductMode(
         .reduce((s, r) => s + (r.defectiveQuantity ?? 0), 0);
     });
   }
+  const vidKey = variantId || '';
   let reworkV = 0;
-  blockOrders.forEach(o => {
-    const dr = getDefectiveRework(o.id, tid);
-    reworkV += dr.reworkByVariant[variantId] ?? 0;
-  });
+  if (orderForest?.length) {
+    const buckets = new Set(blockOrders.map(o => reworkMergeBucketOrderId(o.id, orderForest)));
+    buckets.forEach(bid => {
+      reworkV += getDefectiveRework(bid, tid).reworkByVariant[vidKey] ?? 0;
+    });
+  } else {
+    blockOrders.forEach(o => {
+      reworkV += getDefectiveRework(o.id, tid).reworkByVariant[vidKey] ?? 0;
+    });
+  }
   const availableV = Math.max(0, baseV - defectiveV + reworkV);
   return Math.max(0, availableV - curDone);
 }

@@ -94,6 +94,7 @@ export const DEFAULT_PLAN_FORM_SETTINGS: PlanFormSettings = {
   standardFields: [
     { id: 'planNumber', label: '计划单号', showInList: true, showInCreate: false, showInDetail: true },
     { id: 'customer', label: '客户', showInList: true, showInCreate: true, showInDetail: true },
+    { id: 'createdAt', label: '创建时间', showInList: true, showInCreate: false, showInDetail: true },
   ],
   customFields: [],
   listPrint: { showPrintButton: true },
@@ -123,7 +124,7 @@ export function normalizePlanFormSettings(raw: PlanFormSettings | null | undefin
   const allowedLabel = s.labelPrint?.allowedTemplateIds?.filter(Boolean) ?? [];
   return {
     ...s,
-    standardFields: mergePlanStandardFields(s.standardFields).filter(f => f.id !== 'dueDate' && f.id !== 'createdAt'),
+    standardFields: mergePlanStandardFields(s.standardFields).filter(f => f.id !== 'dueDate'),
     customFields: normalizePlanFormFieldConfigArray(s.customFields),
     listPrint: {
       showPrintButton: s.listPrint?.showPrintButton !== false,

@@ -251,7 +251,7 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
                   {!hasVariants && (
                     <>
                       <div className="w-28 space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">销售数量（无颜色尺码）</label>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">数量</label>
                         <div className="flex items-center gap-1.5">
                           <input type="number" min={0} value={line.quantity || ''} onChange={e => onUpdateItem(line.id, { quantity: parseInt(e.target.value) || 0 })} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="0" />
                           <span className="text-[10px] font-bold text-slate-400 shrink-0">{line.productId ? getUnitName(line.productId) : '—'}</span>

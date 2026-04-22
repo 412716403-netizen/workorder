@@ -69,6 +69,7 @@ async function main() {
       standardFields: [
         { id: 'planNumber', label: '计划单号', showInList: true, showInCreate: false, showInDetail: true },
         { id: 'customer', label: '客户', showInList: true, showInCreate: true, showInDetail: true },
+        { id: 'createdAt', label: '创建时间', showInList: true, showInCreate: false, showInDetail: true },
         { id: 'startDate', label: '开始日期', showInList: false, showInCreate: true, showInDetail: true },
         { id: 'priority', label: '优先级', showInList: true, showInCreate: true, showInDetail: true },
       ],

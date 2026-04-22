@@ -240,6 +240,7 @@ function buildDefaultDispatchQuantities(
           seq,
           milestoneNodeIds,
           getDr,
+          orders,
         );
         const dispatched = netDispatchedForVariantProduct(variantId);
         return Math.max(0, maxGood - dispatched);
@@ -525,7 +526,17 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
                 if (aggregateProductVariantDispatch) {
                   return Math.max(0, row.availableQty - sumOtherVariantQtyProduct(variantId));
                 }
-                const maxGood = variantMaxGoodProductMode(variantId, row.nodeId, row.productId, blockOrders, productMilestoneProgresses || [], seq, milestoneNodeIds, getDr);
+                const maxGood = variantMaxGoodProductMode(
+                  variantId,
+                  row.nodeId,
+                  row.productId,
+                  blockOrders,
+                  productMilestoneProgresses || [],
+                  seq,
+                  milestoneNodeIds,
+                  getDr,
+                  orders,
+                );
                 const dispatched = netDispatchedForVariantProductRender(variantId);
                 return Math.max(0, maxGood - dispatched);
               };
@@ -570,17 +581,43 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
             }
 
             return (
-              <div key={baseKey} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-6 flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="flex items-center gap-3 flex-wrap">
-                  {productionLinkMode !== 'product' && row.orderNumber != null && <span className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">{row.orderNumber}</span>}
-                  {isProductBlock && <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">单规格/无尺码矩阵</span>}
-                  <span className="text-sm font-bold text-slate-800">{row.productName}</span>
-                  <span className="text-sm font-bold text-indigo-600">{row.milestoneName}</span>
+              <div
+                key={baseKey}
+                className="rounded-xl border border-slate-200 bg-slate-50/40 px-4 pb-4 pt-4 space-y-3 sm:space-y-0 sm:flex sm:flex-row sm:items-end sm:justify-between sm:gap-4"
+              >
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{row.productName}</span>
+                  {productionLinkMode !== 'product' && row.orderNumber != null ? (
+                    <span className="text-[10px] sm:text-[11px] font-medium text-slate-500">
+                      工单 <span className="font-bold text-slate-600 tabular-nums">{row.orderNumber}</span>
+                      <span className="mx-1.5 text-slate-300">·</span>
+                      <span className="font-bold text-indigo-600">{row.milestoneName}</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] sm:text-[11px] font-medium text-slate-500">
+                      <span className="font-bold text-indigo-600">{row.milestoneName}</span>
+                    </span>
+                  )}
                 </div>
-                <div className="flex flex-col gap-1 flex-1 max-w-xs">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">委外数量</label>
-                  <input type="number" min={0} max={row.availableQty} value={(dispatchFormQuantities[baseKey] ?? 0) === 0 ? '' : dispatchFormQuantities[baseKey]} onChange={e => { const raw = Math.max(0, Math.floor(Number(e.target.value) || 0)); setDispatchFormQuantities(prev => ({ ...prev, [baseKey]: Math.min(raw, row.availableQty) })); }} placeholder={`最多${row.availableQty}`} className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200 placeholder:text-[10px] placeholder:text-slate-400" />
-                  <span className="text-[10px] text-slate-500">{isProductBlock ? '与报工页本工序合计上限一致' : '下单 − 已报 − 已发出'}</span>
+                <div className="flex shrink-0 flex-col gap-0.5 sm:items-end">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-wide">委外数量</label>
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <input
+                      type="number"
+                      min={0}
+                      max={row.availableQty}
+                      value={(dispatchFormQuantities[baseKey] ?? 0) === 0 ? '' : dispatchFormQuantities[baseKey]}
+                      onChange={e => {
+                        const raw = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                        setDispatchFormQuantities(prev => ({ ...prev, [baseKey]: Math.min(raw, row.availableQty) }));
+                      }}
+                      placeholder="0"
+                      title={`最多 ${row.availableQty}`}
+                      className="h-8 w-[4.75rem] shrink-0 rounded-md border border-slate-200 bg-white px-2 text-left text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200 tabular-nums placeholder:text-[9px] placeholder:text-slate-400"
+                    />
+                    <span className="min-w-0 text-[10px] font-medium tabular-nums leading-none text-slate-400">最多 {row.availableQty}</span>
+                  </div>
+                  <span className="text-[10px] text-slate-500 sm:text-right">{isProductBlock ? '与报工页本工序合计上限一致' : '下单 − 已报 − 已发出'}</span>
                 </div>
               </div>
             );

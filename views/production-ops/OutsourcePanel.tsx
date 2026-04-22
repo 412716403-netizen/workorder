@@ -223,7 +223,8 @@ const OutsourcePanel: React.FC<PanelProps> = ({
                   productMilestoneProgresses || [],
                   (processSequenceMode ?? 'free') as ProcessSequenceMode,
                   getDr,
-                  pmpByKey
+                  pmpByKey,
+                  orders,
                 )
               : 0;
           // 关联产品 + 外协发出侧「已报」应同时覆盖 PMP 与工单里程碑写入（后者来自外协收回自动回写 / 关联工单直接报工），

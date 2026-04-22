@@ -436,7 +436,9 @@ const SectionRenderer: React.FC<SectionRendererProps> = ({
       );
     }
     case 'customSlot':
-      return <React.Fragment>{section.render(ctx)}</React.Fragment>;
+      return (
+        <React.Fragment>{section.render(ctx, { productionLinkMode })}</React.Fragment>
+      );
     default:
       return null;
   }

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef } from 'react';
-import { FileText, X, UserPlus, Scale } from 'lucide-react';
+import { FileText, X, UserPlus, Scale, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 import { ScanInputButton } from '../../components/scan/ScanInputButton';
 import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
@@ -11,7 +11,6 @@ import {
   GlobalNodeTemplate,
   AppDictionaries,
   ProductCategory,
-  ProductVariant,
   Worker,
   ProcessSequenceMode,
   Partner,
@@ -20,8 +19,16 @@ import {
   MaterialBreakdownRow,
 } from '../../types';
 import { calcUsageByWeight } from '../../utils/bomMaterialUsageByWeight';
-import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
+import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
+import {
+  sectionTitleClass,
+  psiOrderBillFormSectionStackClass,
+  psiOrderBillFormDetailSplitClass,
+  psiOrderBillFormSectionIconIndigoClass,
+  psiOrderBillFormSectionIconEmeraldClass,
+  psiOrderBillFormFieldControlClass,
+} from '../../styles/uiDensity';
 import WorkerSelector from '../../components/WorkerSelector';
 import EquipmentSelector from '../../components/EquipmentSelector';
 import { nextOutsourceDocNumber } from '../../utils/partnerDocNumber';
@@ -110,7 +117,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
                 }))
               }
               dictionaries={dictionaries}
-              controlClassName="h-[44px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+              controlClassName={psiOrderBillFormFieldControlClass}
             />
           </div>
         ))}
@@ -180,16 +187,20 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
   const reworkReportProduct = useMemo(() => products.find(p => p.id === order.productId) ?? null, [order, products]);
   const reworkReportCategory = useMemo(() => reworkReportProduct ? categories.find(c => c.id === reworkReportProduct.categoryId) : null, [reworkReportProduct, categories]);
   const reworkReportHasColorSize = productHasColorSizeMatrix(reworkReportProduct ?? undefined, reworkReportCategory ?? undefined);
-  const reworkReportGroupedVariants = useMemo((): Record<string, ProductVariant[]> => {
-    if (!reworkReportProduct?.variants?.length) return {};
-    const groups: Record<string, ProductVariant[]> = {};
-    reworkReportProduct.variants.forEach(v => {
-      const c = v.colorId || 'none';
-      if (!groups[c]) groups[c] = [];
-      groups[c].push(v);
-    });
-    return groups;
-  }, [reworkReportProduct?.variants]);
+  const reworkReportMatrixProduct = useMemo(
+    () =>
+      reworkReportProduct && reworkReportProduct.variants?.length
+        ? ({ ...reworkReportProduct, colorIds: undefined, sizeIds: undefined } as Product)
+        : null,
+    [reworkReportProduct],
+  );
+
+  /** 仅一条返工路径且无颜色尺码矩阵时，数量与扫码/单价/金额同一行展示 */
+  const reworkSingleSimpleQuantityPath = useMemo(() => {
+    if (reworkReportPaths.length !== 1) return null;
+    if (reworkReportHasColorSize && (reworkReportProduct?.variants?.length ?? 0) > 0) return null;
+    return reworkReportPaths[0] ?? null;
+  }, [reworkReportPaths, reworkReportHasColorSize, reworkReportProduct?.variants?.length]);
 
   /**
    * 返工报工称重：取决于当前工序（currentNodeId）是否开启 enableWeightOnReport。
@@ -595,99 +606,378 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
           <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100"><X className="w-5 h-5" /></button>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
-          <p className="text-sm text-slate-600">
-            {productionLinkMode === 'product' ? (
-              <>
-                <span className="font-bold text-slate-800">{order.productName || '—'}</span>
-                <span className="text-slate-400 text-xs ml-2">载体工单 {order.orderNumber}</span>
-              </>
-            ) : (
-              <>
-                <span className="font-bold text-slate-800">{order.orderNumber}</span>
-                <span className="mx-2">·</span>
-                <span>{order.productName || '—'}</span>
-              </>
-            )}
-            {isOutsourceRework && (
-              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200">
-                外协工厂: {outsourcePartner}
-              </span>
-            )}
-          </p>
-          {!isOutsourceRework && (
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">生产人员 <span className="text-rose-500">*</span></label>
-              <WorkerSelector
-                options={workers.filter((w: Worker) => w.status === 'ACTIVE').map((w: Worker) => ({ id: w.id, name: w.name, sub: w.groupName, assignedMilestoneIds: w.assignedMilestoneIds }))}
-                processNodes={globalNodes}
-                currentNodeId={reworkReportModal.nodeId}
-                value={reworkReportWorkerId}
-                onChange={(id: string) => setReworkReportWorkerId(id)}
-                placeholder="选择报工人员..."
-                variant="default"
-                icon={UserPlus}
-              />
-            </div>
-          )}
-          {!isOutsourceRework &&
-            equipmentFeaturesOn &&
-            globalNodes.find(n => n.id === reworkReportModal.nodeId)?.enableEquipmentOnReport && (
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">设备 <span className="text-rose-500">*</span></label>
-              <EquipmentSelector
-                options={equipment.map((e: { id: string; name: string; code?: string; assignedMilestoneIds?: string[] }) => ({ id: e.id, name: e.name, sub: e.code, assignedMilestoneIds: e.assignedMilestoneIds }))}
-                processNodes={globalNodes}
-                currentNodeId={reworkReportModal.nodeId}
-                value={reworkReportEquipmentId}
-                onChange={(id: string) => setReworkReportEquipmentId(id)}
-                placeholder="选择设备..."
-                variant="default"
-              />
-            </div>
-          )}
-          {reworkReportCustomBlock}
-          <div className="flex flex-wrap items-end gap-6 pt-2 border-t border-slate-100">
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">扫码累加</label>
-              <div className="h-10 flex items-center">
-                <ScanInputButton onScan={handleScanPayload} hint="扫码录入" />
-              </div>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">单价（元/件）</label>
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={reworkReportUnitPrice || ''}
-                onChange={e => setReworkReportUnitPrice(Number(e.target.value) || 0)}
-                placeholder="0"
-                className="h-10 w-28 box-border rounded-xl border border-slate-200 px-3 text-sm font-bold text-slate-800 text-center tabular-nums focus:ring-2 focus:ring-indigo-500 outline-none"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">金额（元）</label>
-              <div className="h-10 w-28 box-border rounded-xl border border-slate-100 bg-slate-50 px-3 text-sm font-bold text-slate-700 text-center flex items-center justify-center tabular-nums">
-                {(() => {
-                  const totalQty = reworkReportPaths.reduce((sum, p) => {
-                    if (reworkReportHasColorSize && reworkReportProduct?.variants?.length) {
-                      return sum + (reworkReportProduct.variants.reduce((vs, v) => vs + (reworkReportQuantities[`${p.pathKey}__${v.id}`] ?? 0), 0));
-                    }
-                    return sum + (reworkReportQuantities[p.pathKey] ?? 0);
-                  }, 0);
-                  return (totalQty * (reworkReportUnitPrice || 0)).toFixed(2);
-                })()}
-              </div>
-            </div>
-          </div>
-          {weightReportEnabled && (
-            <div className="space-y-3 rounded-2xl border border-amber-100 bg-amber-50/50 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <Scale className="h-4 w-4 text-amber-600" />
-                  <span className="text-xs font-black uppercase tracking-widest text-amber-700">本次交货总重量</span>
+          {reworkReportPaths.length === 0 ? (
+            <div className="space-y-4 py-2">
+              <div className={psiOrderBillFormSectionStackClass}>
+                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
+                  <div className={psiOrderBillFormSectionIconIndigoClass}><FileText className="w-4 h-4" /></div>
+                  <h3 className={sectionTitleClass}>1. 基础信息</h3>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="space-y-4 pt-2">
+                  {!isOutsourceRework && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">生产人员 <span className="text-rose-500">*</span></label>
+                      <WorkerSelector
+                        options={workers.filter((w: Worker) => w.status === 'ACTIVE').map((w: Worker) => ({ id: w.id, name: w.name, sub: w.groupName, assignedMilestoneIds: w.assignedMilestoneIds }))}
+                        processNodes={globalNodes}
+                        currentNodeId={reworkReportModal.nodeId}
+                        value={reworkReportWorkerId}
+                        onChange={(id: string) => setReworkReportWorkerId(id)}
+                        placeholder="选择报工人员..."
+                        variant="default"
+                        icon={UserPlus}
+                      />
+                    </div>
+                  )}
+                  {!isOutsourceRework &&
+                    equipmentFeaturesOn &&
+                    globalNodes.find(n => n.id === reworkReportModal.nodeId)?.enableEquipmentOnReport && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">设备 <span className="text-rose-500">*</span></label>
+                      <EquipmentSelector
+                        options={equipment.map((e: { id: string; name: string; code?: string; assignedMilestoneIds?: string[] }) => ({ id: e.id, name: e.name, sub: e.code, assignedMilestoneIds: e.assignedMilestoneIds }))}
+                        processNodes={globalNodes}
+                        currentNodeId={reworkReportModal.nodeId}
+                        value={reworkReportEquipmentId}
+                        onChange={(id: string) => setReworkReportEquipmentId(id)}
+                        placeholder="选择设备..."
+                        variant="default"
+                      />
+                    </div>
+                  )}
+                  {reworkReportCustomBlock}
+                </div>
+              </div>
+              <p className="text-sm text-slate-600">
+                {productionLinkMode === 'product' ? (
+                  <>
+                    <span className="font-bold text-slate-800">{order.productName || '—'}</span>
+                    <span className="text-slate-400 text-xs ml-2">工单 {order.orderNumber}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-bold text-slate-800">{order.orderNumber}</span>
+                    <span className="mx-2">·</span>
+                    <span>{order.productName || '—'}</span>
+                  </>
+                )}
+                {isOutsourceRework && (
+                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    外协工厂: {outsourcePartner}
+                  </span>
+                )}
+              </p>
+              <p className="text-slate-500">
+                {processSequenceMode === 'sequential'
+                  ? '该工序暂无待返工数量（顺序模式：请先完成上一道返工工序的报工）'
+                  : '该工序暂无待返工数量'}
+              </p>
+            </div>
+          ) : (
+            <div className={psiOrderBillFormSectionStackClass}>
+              <div className="space-y-4">
+                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
+                  <div className={psiOrderBillFormSectionIconIndigoClass}><FileText className="w-4 h-4" /></div>
+                  <h3 className={sectionTitleClass}>1. 基础信息</h3>
+                </div>
+                <div className="space-y-4">
+                  {!isOutsourceRework && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">生产人员 <span className="text-rose-500">*</span></label>
+                      <WorkerSelector
+                        options={workers.filter((w: Worker) => w.status === 'ACTIVE').map((w: Worker) => ({ id: w.id, name: w.name, sub: w.groupName, assignedMilestoneIds: w.assignedMilestoneIds }))}
+                        processNodes={globalNodes}
+                        currentNodeId={reworkReportModal.nodeId}
+                        value={reworkReportWorkerId}
+                        onChange={(id: string) => setReworkReportWorkerId(id)}
+                        placeholder="选择报工人员..."
+                        variant="default"
+                        icon={UserPlus}
+                      />
+                    </div>
+                  )}
+                  {!isOutsourceRework &&
+                    equipmentFeaturesOn &&
+                    globalNodes.find(n => n.id === reworkReportModal.nodeId)?.enableEquipmentOnReport && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">设备 <span className="text-rose-500">*</span></label>
+                      <EquipmentSelector
+                        options={equipment.map((e: { id: string; name: string; code?: string; assignedMilestoneIds?: string[] }) => ({ id: e.id, name: e.name, sub: e.code, assignedMilestoneIds: e.assignedMilestoneIds }))}
+                        processNodes={globalNodes}
+                        currentNodeId={reworkReportModal.nodeId}
+                        value={reworkReportEquipmentId}
+                        onChange={(id: string) => setReworkReportEquipmentId(id)}
+                        placeholder="选择设备..."
+                        variant="default"
+                      />
+                    </div>
+                  )}
+                  {reworkReportCustomBlock}
+                </div>
+              </div>
+              <div className={psiOrderBillFormDetailSplitClass}>
+                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
+                  <div className={psiOrderBillFormSectionIconEmeraldClass}><Layers className="w-4 h-4" /></div>
+                  <h3 className={sectionTitleClass}>2. 数量明细</h3>
+                </div>
+                {reworkReportHasColorSize && reworkReportProduct?.variants?.length ? (
+                  <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-400">按矩阵录入（有颜色尺码）</p>
+                ) : null}
+            <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50/40 px-4 pb-4 pt-4 space-y-4">
+              {(() => {
+                const noColorSizeMatrix = !(reworkReportHasColorSize && reworkReportProduct?.variants?.length);
+                return (
+              <div
+                className={`flex items-end gap-x-3 border-b border-slate-200/90 pb-3 sm:gap-x-4 ${
+                  noColorSizeMatrix ? 'flex-nowrap overflow-x-auto' : 'flex-wrap gap-y-3'
+                }`}
+              >
+                <div
+                  className={`flex min-w-0 flex-col gap-0.5 ${
+                    noColorSizeMatrix
+                      ? 'min-w-[8rem] max-w-[min(100%,20rem)] shrink'
+                      : 'w-full flex-1 sm:w-auto sm:max-w-[min(100%,24rem)]'
+                  }`}
+                >
+                  {noColorSizeMatrix ? (
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-wide whitespace-nowrap">产品</label>
+                  ) : null}
+                  {productionLinkMode === 'product' ? (
+                    <>
+                      <span className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{order.productName || '—'}</span>
+                      <span className="text-[10px] sm:text-[11px] font-medium text-slate-500">
+                        工单 <span className="font-bold text-slate-600 tabular-nums">{order.orderNumber}</span>
+                      </span>
+                    </>
+                  ) : (
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <span className="text-sm font-bold text-slate-900">{order.orderNumber}</span>
+                      <span className="text-sm text-slate-400">·</span>
+                      <span className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{order.productName || '—'}</span>
+                    </div>
+                  )}
+                  {isOutsourceRework && (
+                    <span className="mt-1 inline-flex w-fit items-center rounded border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-indigo-700">
+                      外协工厂: {outsourcePartner}
+                    </span>
+                  )}
+                </div>
+                {reworkSingleSimpleQuantityPath ? (
+                  <div className={`flex shrink-0 flex-col gap-0.5 ${noColorSizeMatrix ? '' : 'sm:pl-1'}`}>
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-wide whitespace-nowrap">数量</label>
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <input
+                        type="number"
+                        min={0}
+                        max={reworkSingleSimpleQuantityPath.totalPending}
+                        value={(reworkReportQuantities[reworkSingleSimpleQuantityPath.pathKey] ?? 0) === 0 ? '' : reworkReportQuantities[reworkSingleSimpleQuantityPath.pathKey]}
+                        onChange={e =>
+                          setReworkReportQuantities(prev => ({
+                            ...prev,
+                            [reworkSingleSimpleQuantityPath.pathKey]: Math.min(
+                              reworkSingleSimpleQuantityPath.totalPending,
+                              Math.max(0, Number(e.target.value) || 0),
+                            ),
+                          }))
+                        }
+                        placeholder="0"
+                        title={`最多 ${reworkSingleSimpleQuantityPath.totalPending}`}
+                        className="h-11 w-[6.5rem] shrink-0 box-border rounded-xl border border-slate-200 bg-white px-3 text-left text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 tabular-nums placeholder:text-[9px] placeholder:text-slate-400"
+                      />
+                      <span className="min-w-0 text-[10px] font-medium tabular-nums leading-none text-slate-400">
+                        最多 {reworkSingleSimpleQuantityPath.totalPending}
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
+                <div className="flex shrink-0 flex-col gap-0.5">
+                  <label className="text-[9px] font-black text-slate-400 uppercase whitespace-nowrap tracking-wide">单价（元/件）</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={reworkReportUnitPrice || ''}
+                    onChange={e => setReworkReportUnitPrice(Number(e.target.value) || 0)}
+                    placeholder="0"
+                    className="h-11 w-[6.5rem] box-border rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 text-right tabular-nums outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div className="flex flex-col gap-0.5 shrink-0">
+                  <label className="text-[9px] font-black text-slate-400 uppercase whitespace-nowrap tracking-wide">金额（元）</label>
+                  <div className="h-11 min-w-[5rem] max-w-[6.5rem] box-border rounded-xl border border-slate-100 bg-white px-2 text-sm font-bold text-slate-700 flex items-center justify-center tabular-nums">
+                    {(() => {
+                      const totalQty = reworkReportPaths.reduce((sum, p) => {
+                        if (reworkReportHasColorSize && reworkReportProduct?.variants?.length) {
+                          const undiffQ = reworkReportQuantities[`${p.pathKey}__`] ?? 0;
+                          const variantSum = reworkReportProduct.variants.reduce(
+                            (vs, v) => vs + (reworkReportQuantities[`${p.pathKey}__${v.id}`] ?? 0),
+                            0,
+                          );
+                          return sum + undiffQ + variantSum;
+                        }
+                        return sum + (reworkReportQuantities[p.pathKey] ?? 0);
+                      }, 0);
+                      return (totalQty * (reworkReportUnitPrice || 0)).toFixed(2);
+                    })()}
+                  </div>
+                </div>
+                <div className={`flex flex-col gap-0.5 shrink-0 ${noColorSizeMatrix ? 'pl-1' : 'sm:ml-auto sm:pl-1'}`}>
+                  <label className="text-[9px] font-black text-slate-400 uppercase whitespace-nowrap tracking-wide">扫码累加</label>
+                  <div className="h-8 flex items-center">
+                    <ScanInputButton showCameraButton={false} onScan={handleScanPayload} hint="扫码录入" />
+                  </div>
+                </div>
+              </div>
+                );
+              })()}
+              <div className="space-y-4">
+              {reworkReportPaths.map(({ pathKey, pathLabel, totalPending, pendingByVariant }) => {
+                if (reworkReportHasColorSize && reworkReportProduct?.variants?.length) {
+                  const pendingUndiff = pendingByVariant[''] ?? 0;
+                  const onlyUndiff =
+                    pendingUndiff > 0 &&
+                    Object.keys(pendingByVariant).every(k => k === '' || (pendingByVariant[k] ?? 0) <= 0);
+                  const undiffKey = `${pathKey}__`;
+                  const undiffEntered = reworkReportQuantities[undiffKey] ?? 0;
+                  const matrixInputClass =
+                    'h-11 w-[3.25rem] shrink-0 rounded-xl border border-slate-200 bg-white px-2 text-left text-sm font-bold text-indigo-600 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200 tabular-nums';
+                  if (!dictionaries) {
+                    return (
+                      <div key={pathKey} className="space-y-2 rounded-xl border border-amber-100 bg-amber-50/90 p-4">
+                        <p className="text-sm font-bold text-slate-800">返工路径：{pathLabel}</p>
+                        <p className="text-sm font-bold text-amber-900">缺少颜色尺码字典，请先在基础资料维护后再按规格录入。</p>
+                      </div>
+                    );
+                  }
+                  if (!reworkReportMatrixProduct) return null;
+                  return (
+                    <div key={pathKey} className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4 shadow-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">返工路径</p>
+                          <p className="text-sm font-bold text-slate-900">{pathLabel}</p>
+                        </div>
+                        <span className="shrink-0 text-[11px] font-bold text-slate-500 tabular-nums">待返工 {totalPending} 件</span>
+                      </div>
+                      {onlyUndiff ? (
+                        <p className="text-[11px] font-bold leading-snug text-slate-600">
+                          此路径返工未带规格：在各尺码中分配，合计不超过 <span className="tabular-nums text-indigo-600">{pendingUndiff}</span> 件。
+                        </p>
+                      ) : null}
+                      {!onlyUndiff && pendingUndiff > 0 ? (
+                        <div className="rounded-xl border border-amber-100 bg-amber-50/80 px-3 py-3 space-y-1.5">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-600">未分规格待返工（合计）</label>
+                          <div className="flex flex-wrap items-end gap-2">
+                            <input
+                              type="number"
+                              min={0}
+                              max={pendingUndiff}
+                              value={undiffEntered === 0 ? '' : undiffEntered}
+                              onChange={e => {
+                                const raw = Math.max(0, Number(e.target.value) || 0);
+                                setReworkReportQuantities(prev => ({ ...prev, [undiffKey]: Math.min(pendingUndiff, raw) }));
+                              }}
+                              className="h-11 max-w-[8rem] rounded-xl border border-amber-200/90 bg-white px-3 text-sm font-bold text-indigo-700 outline-none focus:ring-2 focus:ring-indigo-500 tabular-nums"
+                              placeholder="0"
+                            />
+                            <span className="pb-2 text-[10px] font-medium text-slate-500 tabular-nums">最多 {pendingUndiff}</span>
+                          </div>
+                        </div>
+                      ) : null}
+                      <div className="rounded-xl border border-slate-100 bg-white p-3">
+                        <VariantQtyMatrixInputs
+                          product={reworkReportMatrixProduct}
+                          dictionaries={dictionaries}
+                          quantities={Object.fromEntries(
+                            reworkReportProduct.variants.map(v => [v.id, reworkReportQuantities[`${pathKey}__${v.id}`] ?? 0]),
+                          )}
+                          onVariantQtyChange={(variantId, qty) => {
+                            const raw = Math.max(0, qty);
+                            if (!onlyUndiff) {
+                              const maxV = pendingByVariant[variantId] ?? 0;
+                              setReworkReportQuantities(prev => ({ ...prev, [`${pathKey}__${variantId}`]: Math.min(maxV, raw) }));
+                              return;
+                            }
+                            setReworkReportQuantities(prev => {
+                              const sumOthers = (reworkReportProduct?.variants ?? [])
+                                .filter(x => x.id !== variantId)
+                                .reduce((s, x) => s + (prev[`${pathKey}__${x.id}`] ?? 0), 0);
+                              const cap = Math.max(0, pendingUndiff - sumOthers);
+                              return { ...prev, [`${pathKey}__${variantId}`]: Math.min(cap, raw) };
+                            });
+                          }}
+                          getCellExtras={v => {
+                            if (!onlyUndiff) {
+                              const maxV = pendingByVariant[v.id] ?? 0;
+                              return {
+                                max: maxV,
+                                disabled: maxV <= 0,
+                                placeholder: maxV <= 0 ? '—' : '0',
+                                hint: maxV > 0 ? `最多${maxV}` : undefined,
+                              };
+                            }
+                            const sumOthers = (reworkReportProduct?.variants ?? [])
+                              .filter(x => x.id !== v.id)
+                              .reduce((s, x) => s + (reworkReportQuantities[`${pathKey}__${x.id}`] ?? 0), 0);
+                            const cap = Math.max(0, pendingUndiff - sumOthers);
+                            return { max: cap, hint: `最多${cap}`, placeholder: '0' };
+                          }}
+                          inputClassName={matrixInputClass}
+                        />
+                      </div>
+                    </div>
+                  );
+                }
+                const totalEntered = reworkReportQuantities[pathKey] ?? 0;
+                const hideInlineQty = reworkSingleSimpleQuantityPath?.pathKey === pathKey;
+                if (hideInlineQty) return null;
+                return (
+                  <div
+                    key={pathKey}
+                    className="flex flex-col gap-3 bg-white rounded-xl p-4 border border-slate-100 sm:flex-row sm:items-end sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">返工路径</p>
+                      <p className="text-sm font-bold text-slate-900">{pathLabel}</p>
+                    </div>
+                    <div className="flex flex-col gap-1 sm:items-end">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">数量</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={0}
+                          max={totalPending}
+                          value={totalEntered === 0 ? '' : totalEntered}
+                          onChange={e =>
+                            setReworkReportQuantities(prev => ({
+                              ...prev,
+                              [pathKey]: Math.min(totalPending, Math.max(0, Number(e.target.value) || 0)),
+                            }))
+                          }
+                          className="h-11 w-28 box-border rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-indigo-600 text-right tabular-nums outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400"
+                          placeholder={`最多${totalPending}`}
+                        />
+                        <span className="text-[10px] font-bold text-slate-400 shrink-0">件</span>
+                      </div>
+                      <span className="text-[10px] font-medium text-slate-400 tabular-nums">最多 {totalPending}</span>
+                    </div>
+                  </div>
+                );
+              })}
+              </div>
+              {weightReportEnabled && (
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 space-y-2">
+                  <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                    <div className="flex items-center gap-2">
+                      <Scale className="h-4 w-4 shrink-0 text-indigo-600" />
+                      <label className="text-[11px] font-bold text-indigo-700 uppercase tracking-widest">
+                        本次交货总重量 (kg)
+                      </label>
+                    </div>
+                    <span className="text-[10px] text-indigo-500 font-medium leading-snug sm:text-right">
+                      将按 BOM 自动分摊到各子物料
+                    </span>
+                  </div>
                   <input
                     type="number"
                     min={0}
@@ -698,158 +988,46 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
                       if (raw === '') setReworkReportTotalWeight('');
                       else setReworkReportTotalWeight(Math.max(0, Number(raw) || 0));
                     }}
-                    placeholder="0"
-                    className="h-10 w-32 box-border rounded-xl border border-amber-200 bg-white px-3 text-sm font-bold text-slate-800 text-right tabular-nums outline-none focus:ring-2 focus:ring-amber-300"
+                    className="w-full bg-white border border-indigo-200 rounded-lg py-2 px-3 text-sm font-bold text-indigo-700 text-right outline-none focus:ring-2 focus:ring-indigo-200"
                   />
-                  <span className="text-sm font-bold text-slate-600">kg</span>
-                </div>
-              </div>
-              {reworkReportBom == null ? (
-                <p className="text-[11px] font-bold text-amber-700">
-                  当前产品在该工序下暂无 BOM，无法按重量分摊物料消耗。报工仍可提交，但不会生成预估消耗数据。
-                </p>
-              ) : reworkReportWeightPreview.length === 0 ? (
-                <p className="text-[11px] font-bold text-slate-500">
-                  输入本次交货总重量后，将按 BOM 占比预估各物料的实际消耗。
-                </p>
-              ) : (
-                <div className="overflow-hidden rounded-xl border border-amber-100 bg-white">
-                  <table className="w-full text-xs">
-                    <thead className="bg-amber-50/60">
-                      <tr className="text-left text-[10px] font-black uppercase tracking-widest text-amber-700">
-                        <th className="px-3 py-2">物料</th>
-                        <th className="px-3 py-2 text-right">占比</th>
-                        <th className="px-3 py-2 text-right">预估消耗 (kg)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {reworkReportWeightPreview.map(row => (
-                        <tr key={row.materialProductId} className="border-t border-amber-50">
-                          <td className="px-3 py-2 font-bold text-slate-800">{row.materialName || '—'}</td>
-                          <td className="px-3 py-2 text-right font-bold text-slate-600 tabular-nums">
-                            {(row.ratio * 100).toFixed(2)}%
-                          </td>
-                          <td className="px-3 py-2 text-right font-black text-slate-900 tabular-nums">
-                            {row.actualWeight.toFixed(4)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  {reworkReportBom == null ? (
+                    <p className="text-[11px] font-bold text-indigo-800/90">
+                      当前产品在该工序下暂无 BOM，无法按重量分摊物料消耗。报工仍可提交，但不会生成预估消耗数据。
+                    </p>
+                  ) : reworkReportWeightPreview.length === 0 ? (
+                    <p className="text-[10px] text-indigo-600 font-medium">
+                      输入本次交货总重量后，将按 BOM 占比预估各物料的实际消耗。
+                    </p>
+                  ) : (
+                    <div className="overflow-hidden rounded-xl border border-indigo-100 bg-white">
+                      <table className="w-full text-xs">
+                        <thead className="bg-indigo-50/70">
+                          <tr className="text-left text-[10px] font-black uppercase tracking-widest text-indigo-700">
+                            <th className="px-3 py-2">物料</th>
+                            <th className="px-3 py-2 text-right">占比</th>
+                            <th className="px-3 py-2 text-right">预估消耗 (kg)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reworkReportWeightPreview.map(row => (
+                            <tr key={row.materialProductId} className="border-t border-slate-100">
+                              <td className="px-3 py-2 font-bold text-slate-800">{row.materialName || '—'}</td>
+                              <td className="px-3 py-2 text-right font-bold text-slate-600 tabular-nums">
+                                {(row.ratio * 100).toFixed(2)}%
+                              </td>
+                              <td className="px-3 py-2 text-right font-black text-indigo-700 tabular-nums">
+                                {row.actualWeight.toFixed(4)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-          {reworkReportPaths.length === 0 ? (
-            <p className="text-slate-500 py-4">
-              {processSequenceMode === 'sequential'
-                ? '该工序暂无待返工数量（顺序模式：请先完成上一道返工工序的报工）'
-                : '该工序暂无待返工数量'}
-            </p>
-          ) : (
-            <div className="space-y-4 pb-2">
-              {reworkReportPaths.map(({ pathKey, pathLabel, records: pathRecords, totalPending, pendingByVariant }) => {
-                if (reworkReportHasColorSize && reworkReportProduct?.variants?.length) {
-                  return (
-                    <div key={pathKey} className="space-y-3 bg-slate-50/50 rounded-2xl p-4 border border-slate-100">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold text-slate-800">返工路径：{pathLabel}</span>
-                        <span className="text-xs font-bold text-indigo-600">待返工合计 {totalPending} 件</span>
-                      </div>
-                      <div className="space-y-3 bg-white rounded-xl shadow-sm border border-slate-100 p-4">
-                        {sortedVariantColorEntries(reworkReportGroupedVariants, reworkReportProduct?.colorIds, reworkReportProduct?.sizeIds).map(([colorId, colorVariants]) => {
-                          const color = dictionaries?.colors?.find((c: { id: string; name: string; value?: string }) => c.id === colorId);
-                          return (
-                            <div
-                              key={colorId}
-                              className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4"
-                            >
-                              <div className="flex items-center gap-2.5 w-40 shrink-0 sm:pb-0.5">
-                                {color && (
-                                  <span
-                                    className="w-5 h-5 rounded-full border border-slate-200 shrink-0"
-                                    style={{ backgroundColor: (color as { value?: string }).value }}
-                                  />
-                                )}
-                                <span className="text-sm font-bold text-slate-800 leading-tight">{(color as { name?: string })?.name ?? colorId}</span>
-                              </div>
-                              <div className="flex flex-wrap items-end gap-x-4 gap-y-3 flex-1 min-w-0">
-                                {colorVariants.map(v => {
-                                  const size = dictionaries?.sizes?.find((s: { id: string; name: string }) => s.id === v.sizeId);
-                                  const pendingUndiff = pendingByVariant[''] ?? 0;
-                                  const onlyUndiff =
-                                    pendingUndiff > 0 &&
-                                    Object.keys(pendingByVariant).every(k => k === '' || (pendingByVariant[k] ?? 0) <= 0);
-                                  const maxV = onlyUndiff
-                                    ? pendingUndiff
-                                    : (pendingByVariant[v.id] ?? 0);
-                                  const qty = reworkReportQuantities[`${pathKey}__${v.id}`] ?? 0;
-                                  return (
-                                    <div key={v.id} className="flex flex-col gap-1 w-[4.75rem] flex-none">
-                                      <span className="text-[10px] font-bold text-slate-400 text-center leading-none min-h-[14px] flex items-end justify-center">
-                                        {size?.name ?? v.sizeId}
-                                      </span>
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        max={maxV}
-                                        value={qty === 0 ? '' : qty}
-                                        onChange={e => {
-                                          const raw = Math.max(0, Number(e.target.value) || 0);
-                                          if (!onlyUndiff) {
-                                            setReworkReportQuantities(prev => ({ ...prev, [`${pathKey}__${v.id}`]: Math.min(maxV, raw) }));
-                                            return;
-                                          }
-                                          setReworkReportQuantities(prev => {
-                                            const sumOthers = (reworkReportProduct?.variants ?? [])
-                                              .filter(x => x.id !== v.id)
-                                              .reduce((s, x) => s + (prev[`${pathKey}__${x.id}`] ?? 0), 0);
-                                            const cap = Math.max(0, pendingUndiff - sumOthers);
-                                            return { ...prev, [`${pathKey}__${v.id}`]: Math.min(cap, raw) };
-                                          });
-                                        }}
-                                        className="h-10 w-full box-border bg-white border border-slate-200 rounded-lg px-2 text-sm font-bold text-indigo-600 text-right tabular-nums outline-none focus:ring-2 focus:ring-indigo-200 placeholder:text-[10px] placeholder:text-slate-400 placeholder:text-right"
-                                        placeholder={`最多${maxV}`}
-                                      />
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                }
-                const totalEntered = reworkReportQuantities[pathKey] ?? 0;
-                return (
-                  <div
-                    key={pathKey}
-                    className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4 bg-slate-50/50 rounded-xl p-4 border border-slate-100"
-                  >
-                    <div className="min-w-0 space-y-0.5">
-                      <span className="text-sm font-bold text-slate-800 block">返工路径：{pathLabel}</span>
-                      <span className="text-xs font-bold text-slate-500">待返工 {totalPending} 件</span>
-                    </div>
-                    <div className="flex flex-col gap-1 shrink-0">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">数量</label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min={0}
-                          max={totalPending}
-                          value={totalEntered === 0 ? '' : totalEntered}
-                          onChange={e => setReworkReportQuantities(prev => ({ ...prev, [pathKey]: Math.min(totalPending, Math.max(0, Number(e.target.value) || 0)) }))}
-                          className="h-10 w-24 box-border bg-white border border-slate-200 rounded-lg px-2 text-sm font-bold text-indigo-600 text-right tabular-nums outline-none focus:ring-2 focus:ring-indigo-200 placeholder:text-slate-400"
-                          placeholder={`最多${totalPending}`}
-                        />
-                        <span className="text-sm font-medium text-slate-500 shrink-0">件</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+              </div>
             </div>
           )}
         </div>

@@ -25,9 +25,11 @@ import {
   pmpCompletedAtTemplate,
   combinedCompletedAtTemplate,
   productGroupMaxReportableSum,
+  pmpDefectiveTotalAtTemplate,
   variantMaxGoodProductMode,
 } from '../../utils/productReportAggregates';
 import { buildDefectiveReworkByOrderMilestone } from '../../utils/defectiveReworkByOrderMilestone';
+import { reworkMergeBucketOrderId } from '../../utils/reworkMergeBucketOrderId';
 import { toast } from 'sonner';
 import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
 import { toLocalCompactYmd } from '../../utils/localDateTime';
@@ -640,10 +642,20 @@ const ReportModal: React.FC<ReportModalProps> = ({
           0,
           pmpCompletedAtTemplate(productMilestoneProgresses, pid, modalMilestoneOrder[seqIdx - 1]) -
             ordersInModal.reduce((s, o) => s + getDefectiveRework(o.id, tid).defective, 0) +
-            ordersInModal.reduce((s, o) => s + getDefectiveRework(o.id, tid).rework, 0),
+            [...new Set(ordersInModal.map(o => reworkMergeBucketOrderId(o.id, orders)))].reduce(
+              (s, bid) => s + getDefectiveRework(bid, tid).rework,
+              0,
+            ),
         )
-      : productGroupMaxReportableSum(ordersInModal, tid, pid, productMilestoneProgresses, processSequenceMode, (oid, t) =>
-          getDefectiveRework(oid, t),
+      : productGroupMaxReportableSum(
+          ordersInModal,
+          tid,
+          pid,
+          productMilestoneProgresses,
+          processSequenceMode,
+          (oid, t) => getDefectiveRework(oid, t),
+          undefined,
+          orders,
         )
     : processSequenceMode === 'sequential'
       ? ordersInModal.reduce((s, o) => {
@@ -654,7 +666,15 @@ const ReportModal: React.FC<ReportModalProps> = ({
         }, 0)
       : ordersInModal.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0);
   const totalDefective = ordersInModal.reduce((s, o) => s + getDefectiveRework(o.id, tid).defective, 0);
-  const totalRework = ordersInModal.reduce((s, o) => s + getDefectiveRework(o.id, tid).rework, 0);
+  const pmpDefectiveAtNode = useProductPmp
+    ? pmpDefectiveTotalAtTemplate(productMilestoneProgresses, pid, tid)
+    : 0;
+  /** 关联产品模式下不良写在 PMP，工单里程碑常为 0；与可报量计算口径对齐，避免提示漏掉「报不良」件数 */
+  const defectiveQtyForHint = useProductPmp ? Math.max(pmpDefectiveAtNode, totalDefective) : totalDefective;
+  const totalRework = [...new Set(ordersInModal.map(o => reworkMergeBucketOrderId(o.id, orders)))].reduce(
+    (s, bid) => s + getDefectiveRework(bid, tid).rework,
+    0,
+  );
   // 关联产品：PMP + 工单里程碑（外协收回会写回里程碑）双路径求和，避免「已报」数显示偏小。
   const totalCompleted = useProductPmp
     ? combinedCompletedAtTemplate(ordersInModal, productMilestoneProgresses, pid, tid)
@@ -696,25 +716,41 @@ const ReportModal: React.FC<ReportModalProps> = ({
         </div>
         <form className="flex flex-col flex-1 min-h-0" autoComplete="off" onSubmit={e => e.preventDefault()}>
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3 sm:px-4 sm:py-4 space-y-3">
+          {isMatrixMode && (
           <div className="text-xs text-slate-500 font-medium">
             <span className="font-bold text-slate-700">{reportModal.order.productName}</span>
             {reportModal.productTotalQty != null ? (
               <>
                 <span className="mx-2">·</span>
                 {reportModal.productMaxReportableQty != null && reportModal.productMaxReportableQty !== reportModal.productTotalQty ? (
-                  <span>该工序可报 {reportModal.productMaxReportableQty} 件<span className="text-slate-400">（产品合计 {reportModal.productTotalQty}）</span></span>
+                  <span>可报 {reportModal.productMaxReportableQty}/{reportModal.productTotalQty} 件</span>
                 ) : (
-                  <span>产品合计 {reportModal.productTotalQty} 件</span>
+                  <span>合计 {reportModal.productTotalQty} 件</span>
                 )}
                 {reportModal.productCompletedQty != null && (() => {
                   const baseQty = reportModal.productMaxReportableQty ?? reportModal.productTotalQty ?? 0;
                   const remaining = Math.max(0, baseQty - (reportModal.productCompletedQty ?? 0) - (useProductPmp ? totalOutsourcedAtNode : 0));
                   return (
                     <span className="ml-2">
-                      该工序已完成 {reportModal.productCompletedQty} 件，剩余 {remaining} 件
-                      {useProductPmp && totalOutsourcedAtNode > 0 && (
-                        <span className="text-slate-400">（已扣外协未收回 {totalOutsourcedAtNode}）</span>
-                      )}
+                      已报 {reportModal.productCompletedQty} · 剩 {remaining} 件
+                      {useProductPmp && totalOutsourcedAtNode > 0 ? (
+                        <span className="text-slate-400"> · 外协 {totalOutsourcedAtNode}</span>
+                      ) : null}
+                      {defectiveQtyForHint > 0 ? (
+                        <span
+                          className="text-slate-400"
+                          title="本工序报不良等需走返工流程的件数（含关联产品报工 PMP）"
+                        >
+                          {' '}
+                          · 返工 {defectiveQtyForHint} 件
+                        </span>
+                      ) : null}
+                      {totalRework > 0 ? (
+                        <span className="text-slate-400" title="返工报工已回缴到本工序的完成件数">
+                          {' '}
+                          ·{defectiveQtyForHint > 0 ? ' 返工完成' : ' 返工'} {totalRework}
+                        </span>
+                      ) : null}
                     </span>
                   );
                 })()}
@@ -729,8 +765,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
               const p = products.find(px => px.id === reportModal.order.productId);
               const rate = p?.nodeRates?.[reportModal.milestone.templateId] ?? 0;
               if (rate <= 0) return null;
-              const totalQty = isMatrixMode ? (reportForm.variantQuantities ? Object.values(reportForm.variantQuantities).reduce((s, q) => s + q, 0) : 0) : reportForm.quantity;
-              const totalDef = isMatrixMode ? (reportForm.variantDefectiveQuantities ? Object.values(reportForm.variantDefectiveQuantities).reduce((s, q) => s + q, 0) : 0) : reportForm.defectiveQuantity;
+              const totalQty = reportForm.variantQuantities ? Object.values(reportForm.variantQuantities).reduce((s, q) => s + q, 0) : 0;
               return (
                 <div className="mt-2 flex items-center gap-4 text-indigo-600">
                   <span className="font-bold">本工序工价：{rate.toFixed(2)} 元/件</span>
@@ -739,6 +774,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
               );
             })()}
           </div>
+          )}
           {(() => {
             const tid = reportModal.milestone.templateId;
             const nodeDef = globalNodes.find(n => n.id === tid);
@@ -859,7 +895,13 @@ const ReportModal: React.FC<ReportModalProps> = ({
                   if (!product || !productHasColorSizeMatrix(product, category) || !dictionaries) return null;
                   const currentOrder = ordersInModal[0];
                   const currentMs = currentOrder?.milestones.find(m => m.templateId === tid);
-                  const { reworkByVariant } = currentOrder ? getDefectiveRework(currentOrder.id, tid) : { reworkByVariant: {} as Record<string, number> };
+                  const reworkByVariant: Record<string, number> = {};
+                  for (const bid of new Set(ordersInModal.map(o => reworkMergeBucketOrderId(o.id, orders)))) {
+                    const rw = getDefectiveRework(bid, tid).reworkByVariant;
+                    Object.entries(rw).forEach(([k, q]) => {
+                      reworkByVariant[k] = (reworkByVariant[k] ?? 0) + q;
+                    });
+                  }
                   const itemsSource = currentOrder?.items ?? reportModal.productItems ?? reportModal.order.items ?? [];
                   const milestoneNodeIds = product.milestoneNodeIds || [];
                   const variantRemainingBaseMap = new Map<string, number>();
@@ -875,6 +917,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
                           processSequenceMode,
                           milestoneNodeIds,
                           (oid, t) => getDefectiveRework(oid, t),
+                          orders,
                         ) - (outsourcedByVariantId[variant.id] ?? 0);
                       variantRemainingBaseMap.set(variant.id, Math.max(0, rawMax));
                       continue;
@@ -915,18 +958,18 @@ const ReportModal: React.FC<ReportModalProps> = ({
                             最多 {maxAllowed}
                           </span>
                         </div>
-                        <div className="flex min-w-0 items-center gap-1">
+                        <div className="flex min-w-0 items-center gap-1.5">
                           <input
                             type="number"
                             min={0}
                             tabIndex={-1}
                             value={(reportForm.variantDefectiveQuantities?.[variant.id] ?? 0) === 0 ? '' : (reportForm.variantDefectiveQuantities?.[variant.id] ?? 0)}
                             onChange={e => handleVariantDefectiveChange(variant.id, parseInt(e.target.value) || 0)}
-                            className="h-6 w-[2.75rem] shrink-0 rounded border border-amber-200/90 bg-amber-50/90 px-1 text-left text-xs font-bold text-amber-900 shadow-sm outline-none focus:ring-2 focus:ring-amber-200 placeholder:text-[8px] placeholder:text-amber-400/80"
+                            className="h-8 w-[3rem] shrink-0 rounded-md border border-amber-200/90 bg-amber-50/90 px-1.5 text-left text-sm font-bold text-amber-900 shadow-sm outline-none focus:ring-2 focus:ring-amber-200 placeholder:text-[9px] placeholder:text-amber-400/80"
                             placeholder="0"
                             title="不良品"
                           />
-                          <span className="min-w-0 text-[9px] font-medium tabular-nums leading-none text-amber-700/70">不良品</span>
+                          <span className="min-w-0 text-[10px] font-medium tabular-nums leading-none text-amber-800">不良品</span>
                         </div>
                       </div>
                     );
@@ -967,7 +1010,14 @@ const ReportModal: React.FC<ReportModalProps> = ({
               </div>
             </div>
           ) : (
-            <>
+            (() => {
+              const reportProduct = productMap.get(reportModal.order.productId);
+              const detailUnit =
+                (reportProduct?.unitId && dictionaries.units.find(u => u.id === reportProduct.unitId)?.name) || '件';
+              const nodeRate = reportProduct?.nodeRates?.[reportModal.milestone.templateId] ?? 0;
+              const estAmount = reportForm.quantity > 0 && nodeRate > 0 ? reportForm.quantity * nodeRate : 0;
+              return (
+            <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50/40 px-4 pb-4 pt-4 space-y-3">
           {((reportModal.productItems ?? reportModal.order.items).length > 1) && (
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-400 uppercase">报工规格项</label>
@@ -975,7 +1025,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
                     tabIndex={-1}
                 value={reportForm.variantId}
                 onChange={(e) => setReportForm({ ...reportForm, variantId: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none"
+                className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none"
               >
                 <option value="">请选择报工规格...</option>
                 {(reportModal.productItems ?? reportModal.order.items).map((item, idx) => {
@@ -994,37 +1044,119 @@ const ReportModal: React.FC<ReportModalProps> = ({
               </select>
             </div>
           )}
-          <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">本次完成数量（良品）</label>
-                  <ScanInputButton onScan={handleScanPayload} size="sm" hint="扫码录入" />
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-3 sm:gap-x-5">
+                <div className="flex min-w-0 w-full flex-1 flex-col gap-0.5 sm:w-auto sm:max-w-[min(100%,24rem)]">
+                  {productionLinkMode === 'product' ? (
+                    <>
+                      <span className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{reportModal.order.productName}</span>
+                      <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium leading-snug">
+                        {reportModal.productTotalQty != null ? (
+                          <>
+                            {reportModal.productMaxReportableQty != null && reportModal.productMaxReportableQty !== reportModal.productTotalQty ? (
+                              <span>可报 {reportModal.productMaxReportableQty}/{reportModal.productTotalQty} {detailUnit}</span>
+                            ) : (
+                              <span>合计 {reportModal.productTotalQty} {detailUnit}</span>
+                            )}
+                            {reportModal.productCompletedQty != null && (() => {
+                              const baseQty = reportModal.productMaxReportableQty ?? reportModal.productTotalQty ?? 0;
+                              const remaining = Math.max(0, baseQty - (reportModal.productCompletedQty ?? 0) - (useProductPmp ? totalOutsourcedAtNode : 0));
+                              return (
+                                <span className="block mt-0.5">
+                                  已报 {reportModal.productCompletedQty} · 剩 {remaining} {detailUnit}
+                                  {useProductPmp && totalOutsourcedAtNode > 0 ? (
+                                    <span className="text-slate-400"> · 外协 {totalOutsourcedAtNode}</span>
+                                  ) : null}
+                                  {defectiveQtyForHint > 0 ? (
+                                    <span
+                                      className="text-slate-400"
+                                      title="本工序报不良等需走返工流程的数量（含关联产品报工 PMP）"
+                                    >
+                                      {' '}
+                                      · 返工 {defectiveQtyForHint} {detailUnit}
+                                    </span>
+                                  ) : null}
+                                  {totalRework > 0 ? (
+                                    <span className="text-slate-400" title="返工报工已回缴到本工序的完成数量">
+                                      {' '}
+                                      ·{defectiveQtyForHint > 0 ? ' 返工完成' : ' 返工'} {totalRework}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              );
+                            })()}
+                          </>
+                        ) : (
+                          <span className="text-slate-500 text-[10px] sm:text-[11px]">工单 {reportModal.order.orderNumber}</span>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <span className="text-sm font-bold text-slate-900">{reportModal.order.orderNumber}</span>
+                      <span className="text-sm text-slate-400">·</span>
+                      <span className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{reportModal.order.productName}</span>
+                    </div>
+                  )}
                 </div>
-                <input
-                  type="number"
-                  min={0}
-                  value={reportForm.quantity === 0 ? '' : reportForm.quantity}
-                  onChange={(e) => {
-                    const raw = parseInt(e.target.value) || 0;
-                    const next = allowExceedMaxReportQty ? raw : Math.min(raw, effectiveRemainingForModal);
-                    setReportForm({ ...reportForm, quantity: next });
-                  }}
-                  placeholder={`最多${effectiveRemainingForModal}`}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200 placeholder:text-[10px] placeholder:text-slate-400"
-                />
-          </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">不良品数量</label>
-                <input
-                  type="number"
-                  min={0}
-                  tabIndex={-1}
-                  value={reportForm.defectiveQuantity === 0 ? '' : reportForm.defectiveQuantity}
-                  onChange={(e) => setReportForm({ ...reportForm, defectiveQuantity: parseInt(e.target.value) || 0 })}
-                  className="w-full bg-amber-50/80 border border-amber-200 rounded-lg px-2 py-1 text-xs font-bold text-amber-800 text-right outline-none focus:ring-2 focus:ring-amber-200 placeholder:text-[10px] placeholder:text-amber-400/80"
-                  placeholder="0"
-                />
+                <div className="flex flex-col shrink-0 sm:pl-1">
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <input
+                        type="number"
+                        min={0}
+                        value={reportForm.quantity === 0 ? '' : reportForm.quantity}
+                        onChange={e => {
+                          const raw = parseInt(e.target.value) || 0;
+                          const next = allowExceedMaxReportQty ? raw : Math.min(raw, effectiveRemainingForModal);
+                          setReportForm({ ...reportForm, quantity: next });
+                        }}
+                        placeholder="0"
+                        title={`最多 ${effectiveRemainingForModal}`}
+                        className="h-8 w-[4.75rem] shrink-0 box-border rounded-md border border-slate-200 bg-white px-2 text-left text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200 placeholder:text-[9px] placeholder:text-slate-400 tabular-nums"
+                      />
+                      <span className="min-w-0 text-[10px] font-medium tabular-nums leading-none text-slate-400">
+                        最多 {effectiveRemainingForModal}
+                      </span>
+                    </div>
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <input
+                        type="number"
+                        min={0}
+                        tabIndex={-1}
+                        value={reportForm.defectiveQuantity === 0 ? '' : reportForm.defectiveQuantity}
+                        onChange={e => setReportForm({ ...reportForm, defectiveQuantity: parseInt(e.target.value) || 0 })}
+                        className="h-8 w-[4.75rem] shrink-0 box-border rounded-md border border-amber-200/90 bg-amber-50/90 px-2 text-left text-sm font-bold text-amber-900 shadow-sm outline-none focus:ring-2 focus:ring-amber-200 placeholder:text-[9px] placeholder:text-amber-400/80 tabular-nums"
+                        placeholder="0"
+                        title="不良品"
+                      />
+                      <span className="min-w-0 text-[10px] font-medium tabular-nums leading-none text-amber-800">不良品</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-end gap-2 sm:gap-3">
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[9px] font-black text-slate-400 uppercase whitespace-nowrap tracking-wide">工价</label>
+                  <div className="h-8 w-[5.25rem] box-border rounded-lg border border-slate-100 bg-white px-1.5 text-xs font-bold text-slate-700 flex items-center justify-center tabular-nums">
+                    {nodeRate > 0 ? `${nodeRate.toFixed(2)} 元/${detailUnit}` : '—'}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[9px] font-black text-slate-400 uppercase whitespace-nowrap tracking-wide">预计金额</label>
+                  <div className="h-8 min-w-[4.75rem] max-w-[5.5rem] box-border rounded-lg border border-slate-100 bg-white px-1 text-xs font-bold text-slate-700 flex items-center justify-center tabular-nums">
+                    {reportForm.quantity > 0 && nodeRate > 0 ? estAmount.toFixed(2) : '—'}
+                  </div>
+                </div>
+                </div>
+                <div className="flex flex-col gap-0.5 shrink-0 sm:pl-1">
+                  <label className="text-[9px] font-black text-slate-400 uppercase whitespace-nowrap tracking-wide">扫码累加</label>
+                  <div className="h-8 flex items-center">
+                    <ScanInputButton showCameraButton={false} onScan={handleScanPayload} hint="扫码录入" />
+                  </div>
+                </div>
               </div>
-            </>
+            </div>
+              );
+            })()
           )}
           {weightReportEnabled && (
             <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 space-y-2">
@@ -1042,7 +1174,6 @@ const ReportModal: React.FC<ReportModalProps> = ({
                   setReportForm(prev => ({ ...prev, weight: Number.isFinite(n) && n > 0 ? n : 0 }));
                 }}
                 className="w-full bg-white border border-indigo-200 rounded-lg py-2 px-3 text-sm font-bold text-indigo-700 text-right outline-none focus:ring-2 focus:ring-indigo-200"
-                placeholder="例如 12.5"
               />
               {weightPreviewRows.length > 0 ? (
                 <div className="rounded-xl bg-white border border-indigo-100 overflow-hidden">

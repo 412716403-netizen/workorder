@@ -57,7 +57,7 @@ import { buildVirtualBatchPrintRow } from '../../utils/printVirtualBatch';
 import { formatBatchSerialLabel, formatItemCodeSerialLabel } from '../../utils/serialLabels';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
 import { SearchableMultiSelectWithProcessTabs } from '../../components/SearchableMultiSelect';
-import { localTodayYmd, planIdToLocalYmd, toLocalDateYmd } from '../../utils/localDateTime';
+import { formatPlanOrderCreatedAtForList, localTodayYmd, planIdToLocalYmd, toLocalDateYmd } from '../../utils/localDateTime';
 import { nextPsiDocNumber } from '../../utils/partnerDocNumber';
 import { getLastPurchaseUnitPrice } from '../../utils/psiPartnerProductLastPrice';
 import { PlanPrintTemplateManageDialog } from '../../components/plan-print/PlanPrintTemplateManageDialog';
@@ -1154,6 +1154,26 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                   <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">1. 计划基础信息</h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-white p-8 rounded-[32px] border border-slate-200 shadow-sm">
+                  {planFormSettings.standardFields.find(f => f.id === 'planNumber')?.showInDetail !== false && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">
+                        单据号
+                      </label>
+                      <div className="w-full bg-slate-50 rounded-2xl py-3 px-4 font-bold text-slate-900 border border-slate-100">
+                        {viewPlan.planNumber}
+                      </div>
+                    </div>
+                  )}
+                  {planFormSettings.standardFields.find(f => f.id === 'createdAt')?.showInDetail !== false && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">
+                        {planFormSettings.standardFields.find(f => f.id === 'createdAt')?.label ?? '创建时间'}
+                      </label>
+                      <div className="w-full bg-slate-50 rounded-2xl py-3 px-4 font-bold text-slate-800 border border-slate-100">
+                        {formatPlanOrderCreatedAtForList(viewPlan.createdAt, viewPlan.id) || '—'}
+                      </div>
+                    </div>
+                  )}
                   {planFormSettings.standardFields.find(f => f.id === 'customer')?.showInDetail !== false && productionLinkMode !== 'product' && (
                     <div className="md:col-span-2 space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">计划客户（合作单位）</label>
