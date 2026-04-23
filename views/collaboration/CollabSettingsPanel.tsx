@@ -137,7 +137,7 @@ const CollabSettingsPanel: React.FC<CollabSettingsPanelProps> = ({
           <Link2 className={`${embeddedInModal ? 'w-6 h-6' : 'w-5 h-5'} text-indigo-600 shrink-0 mt-0.5`} />
           <div className="min-w-0">
             <h3 className={`font-black text-slate-900 ${embeddedInModal ? 'text-base sm:text-lg' : 'text-lg'}`}>绑定合作单位</h3>
-            <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">将「基础信息」中的合作单位绑定到协作企业，外协发出与回传流水会按合作单位展示</p>
+            <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">将「基础信息」中的合作单位绑定到协作企业，外协发出与协作流水会按合作单位展示</p>
           </div>
         </div>
 

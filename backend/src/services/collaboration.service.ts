@@ -562,14 +562,35 @@ export async function syncDispatch(tenantId: string, body: { recordIds: string[]
 }
 
 export async function listTransfers(tenantId: string, opts: { role?: string; status?: string }) {
+  /**
+   * 链式场景下，子 transfer 的 senderTenantId 为 origin（甲方），receiverTenantId 为下一站（丙方）；
+   * 「上一站接收方（乙方/转发方）」在本表两字段都不是 tenantId，否则单靠 sender/receiver 过滤会丢失子 transfer，
+   * 导致乙方与甲方对话窗看不到「转发」气泡。这里额外把「乙方作为某条 chain parent 的接收方」的子单并入。
+   */
+  const forwarderParentIds = opts.role === 'sender'
+    ? []
+    : (await basePrisma.interTenantSubcontractTransfer.findMany({
+      where: { receiverTenantId: tenantId, outsourceRouteSnapshot: { not: Prisma.DbNull } },
+      select: { id: true },
+    })).map(x => x.id);
   const where: any = {};
   if (opts.role === 'sender') where.senderTenantId = tenantId;
-  else if (opts.role === 'receiver') where.receiverTenantId = tenantId;
-  else where.OR = [{ senderTenantId: tenantId }, { receiverTenantId: tenantId }];
+  else if (opts.role === 'receiver') {
+    if (forwarderParentIds.length) where.OR = [{ receiverTenantId: tenantId }, { parentTransferId: { in: forwarderParentIds } }];
+    else where.receiverTenantId = tenantId;
+  }
+  else {
+    const or: any[] = [{ senderTenantId: tenantId }, { receiverTenantId: tenantId }];
+    if (forwarderParentIds.length) or.push({ parentTransferId: { in: forwarderParentIds } });
+    where.OR = or;
+  }
   if (opts.status) where.status = opts.status;
   const transfers = await basePrisma.interTenantSubcontractTransfer.findMany({ where, include: { dispatches: { orderBy: { createdAt: 'asc' } }, returns: { orderBy: { createdAt: 'asc' } } }, orderBy: { createdAt: 'desc' } });
   const peerIds = new Set<string>();
-  for (const t of transfers) peerIds.add(t.senderTenantId === tenantId ? t.receiverTenantId : t.senderTenantId);
+  for (const t of transfers) {
+    if (t.senderTenantId !== tenantId) peerIds.add(t.senderTenantId);
+    if (t.receiverTenantId !== tenantId) peerIds.add(t.receiverTenantId);
+  }
   const tenants = await basePrisma.tenant.findMany({ where: { id: { in: [...peerIds] } }, select: { id: true, name: true } });
   const nameMap = Object.fromEntries(tenants.map(t => [t.id, t.name]));
   const enriched = transfers.map(t => ({ ...t, senderTenantName: t.senderTenantId === tenantId ? '本企业' : (nameMap[t.senderTenantId] ?? ''), receiverTenantName: t.receiverTenantId === tenantId ? '本企业' : (nameMap[t.receiverTenantId] ?? '') }));

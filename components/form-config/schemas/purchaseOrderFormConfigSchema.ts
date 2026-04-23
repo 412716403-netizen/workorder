@@ -10,6 +10,7 @@ export const purchaseOrderFormConfigSchema: FormConfigSchema<PurchaseOrderFormSe
   settingsKey: 'purchaseOrderFormSettings',
   subtitle: {
     fields: '自定义单据内容将用于列表、登记与详情及打印；标准字段不在此配置。',
+    listDisplay: '控制进销存「采购订单」列表默认展示范围。',
     print: '打印模版请在下方「增加模版」中创建或管理（列表与登记/详情共用）。',
   },
   defaultValue: DEFAULT_PURCHASE_ORDER_FORM_SETTINGS,
@@ -25,6 +26,20 @@ export const purchaseOrderFormConfigSchema: FormConfigSchema<PurchaseOrderFormSe
           title: '自定义单据内容',
           path: 'customFields',
           columns: ['label', 'type', 'options', 'showInList', 'showInAdd', 'showInDetail', 'remove'],
+        },
+      ],
+    },
+    {
+      id: 'listDisplay',
+      label: '列表显示',
+      sections: [
+        {
+          kind: 'toggle',
+          id: 'onlyShowUnsettled',
+          label: '只显示未交清',
+          description: '勾选后列表仅保留尚有未入库数量的采购订单；与列表中的入库进度一致。',
+          path: 'listDisplay.onlyShowUnsettled',
+          defaultChecked: false,
         },
       ],
     },

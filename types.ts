@@ -431,6 +431,12 @@ export interface PlanFormSettings {
   labelPrint?: PlanLabelPrintSettings;
 }
 
+/** 进销存采购订单列表展示与筛选 */
+export interface PurchaseOrderListDisplaySettings {
+  /** 为 true 时列表仅显示尚有未入库完成行的订单（未交清） */
+  onlyShowUnsettled?: boolean;
+}
+
 /**
  * 采购订单表单配置：标准/自定义字段用于列表与表单展示；列表「打印」模版白名单（详情页无打印入口；无计划单「标签打印」）。
  *
@@ -442,6 +448,14 @@ export interface PurchaseOrderFormSettings {
   customFields: PlanFormFieldConfig[];
   /** 进销存采购订单列表「打印」入口与白名单 */
   listPrint?: PlanListPrintSettings;
+  /** 列表筛选等 */
+  listDisplay?: PurchaseOrderListDisplaySettings;
+}
+
+/** 进销存销售订单列表展示与筛选 */
+export interface SalesOrderListDisplaySettings {
+  /** 为 true 时列表仅显示尚有未发齐行的订单（行组订货数量大于已发数量） */
+  onlyShowNotFullyShipped?: boolean;
 }
 
 /**
@@ -453,6 +467,8 @@ export interface SalesOrderFormSettings {
   customFields: PlanFormFieldConfig[];
   /** 进销存销售订单列表「打印」及登记/详情页「打印」入口与白名单 */
   listPrint?: PlanListPrintSettings;
+  /** 列表筛选等 */
+  listDisplay?: SalesOrderListDisplaySettings;
 }
 
 /**

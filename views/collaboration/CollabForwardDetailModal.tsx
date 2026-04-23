@@ -88,7 +88,7 @@ const CollabForwardDetailModal: React.FC<CollabForwardDetailModalProps> = ({ ope
     () => rows.map(r => {
       const fp = (r.transfer.dispatches || [])[0]?.payload;
       const ord = resolvePreferredCollabMatrixOrder({ payload: fp });
-      return collabPayloadItemsToQtyMatrixProps(r.items, { showPricing: false, ...ord });
+      return collabPayloadItemsToQtyMatrixProps(r.items, { ...ord });
     }),
     [rows],
   );

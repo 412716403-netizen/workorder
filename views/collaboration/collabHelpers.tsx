@@ -540,7 +540,7 @@ export function buildReturnDocNoMetaMap(transfers: any[]): Map<string, ReturnDoc
   return map;
 }
 
-/** 回传流水列表「状态」列文案 */
+/** 协作流水列表中「回传」类行的「状态」列文案 */
 export function returnFlowDocStatusLabel(meta: ReturnDocMeta | undefined): string {
   if (!meta) return '—';
   if (meta.amendmentStatus === 'PENDING_A_CONFIRM') return '待甲方确认';
@@ -548,4 +548,19 @@ export function returnFlowDocStatusLabel(meta: ReturnDocMeta | undefined): strin
   if (meta.status === 'A_RECEIVED') return '已收回';
   if (meta.status === 'WITHDRAWN') return '已撤回';
   return meta.status || '—';
+}
+
+/** 协作流水列表中「派发」类行的「状态」列文案 */
+export function dispatchFlowDocStatusLabel(status: string | null | undefined): string {
+  if (!status) return '—';
+  if (status === 'PENDING') return '待接受';
+  if (status === 'FORWARDED') return '已转发';
+  if (status === 'WITHDRAWN') return '已撤回';
+  if (status === 'ACCEPTED') return '已接受';
+  return status;
+}
+
+/** 协作流水列表中「转发」类行的「状态」列文案（基于 originConfirmedAt） */
+export function forwardFlowDocStatusLabel(originConfirmedAt: string | Date | null | undefined): string {
+  return originConfirmedAt ? '已确认' : '待甲方确认';
 }

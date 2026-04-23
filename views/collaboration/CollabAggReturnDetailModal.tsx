@@ -6,7 +6,12 @@ import * as api from '../../services/api';
 import type { AppDictionaries, Product } from '../../types';
 import { collabFirstDispatchPayload, returnStatusLabel, resolvePreferredCollabMatrixOrder } from './collabHelpers';
 import QtyMatrixTable from '../../components/variant-matrix/QtyMatrixTable';
-import { collabPayloadItemsToQtyMatrixProps } from './collabDocDisplay';
+import {
+  collabPayloadItemsToQtyMatrixProps,
+  CollabDocQtyPriceFooter,
+  firstFiniteCollabUnitPrice,
+  type CollabPayloadItem,
+} from './collabDocDisplay';
 
 export interface AggReturnItem {
   doc: any;
@@ -167,7 +172,9 @@ const CollabAggReturnDetailModal: React.FC<CollabAggReturnDetailModalProps> = ({
                 product: receiverProduct,
                 dictionaries,
               });
-              const specMatrix = collabPayloadItemsToQtyMatrixProps(rows, { showPricing: true, ...ord });
+              const specMatrix = collabPayloadItemsToQtyMatrixProps(rows, { ...ord });
+              const subUnit = firstFiniteCollabUnitPrice(rows as CollabPayloadItem[]);
+              const subLineAmt = subUnit != null ? sub * subUnit : null;
               return (
                 <div key={doc.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2.5">
@@ -187,6 +194,7 @@ const CollabAggReturnDetailModal: React.FC<CollabAggReturnDetailModalProps> = ({
                   ) : (
                     <div className="p-3">
                       <QtyMatrixTable sizeHeaders={specMatrix.sizeHeaders} rows={specMatrix.rows} />
+                      <CollabDocQtyPriceFooter lineQty={sub} resolvedUnitPrice={subUnit} lineAmount={subLineAmt} />
                     </div>
                   )}
                   {doc?.payload?.note ? (

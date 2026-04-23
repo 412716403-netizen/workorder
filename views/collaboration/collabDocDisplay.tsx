@@ -15,10 +15,63 @@ export function collabSpecLabel(v: string | null) {
   return v;
 }
 
-/** 协作 payload 行（颜色名/尺码名）→ 与全站一致的只读 QtyMatrixTable 行列数据 */
+/** 协作 payload items 中首个有效单价（元/件），用于回传单等整单汇总行 */
+export function firstFiniteCollabUnitPrice(items: CollabPayloadItem[] | undefined | null): number | null {
+  if (!items?.length) return null;
+  for (const it of items) {
+    const n = Number(it?.unitPrice);
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
+  return null;
+}
+
+/** 回传单 / 协作单据详情：矩阵下方「数量 | 单价 | 本行金额」只读汇总（与 CollabPeerQtyMatrixBlock 视觉对齐） */
+export function CollabDocQtyPriceFooter({
+  lineQty,
+  resolvedUnitPrice,
+  lineAmount,
+}: {
+  lineQty: number;
+  resolvedUnitPrice: number | null;
+  lineAmount: number | null;
+}) {
+  return (
+    <div className="mt-4 flex flex-wrap items-end gap-x-6 gap-y-3 border-t border-slate-100 pt-4">
+      <div className="flex min-w-[5rem] flex-col gap-1">
+        <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">数量</span>
+        <span className="inline-flex h-9 min-w-[5.5rem] items-center rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-black tabular-nums text-indigo-700 shadow-sm">
+          {lineQty}
+          <span className="ml-1 text-xs font-bold text-indigo-600/90">件</span>
+        </span>
+      </div>
+      <div className="hidden h-9 w-px shrink-0 bg-slate-200 sm:block" aria-hidden />
+      <div className="flex min-w-[5.5rem] flex-col gap-1">
+        <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">单价（元/件）</span>
+        <div className="inline-flex h-9 min-w-[6.5rem] items-center rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-bold text-slate-900 shadow-sm tabular-nums">
+          {resolvedUnitPrice != null ? resolvedUnitPrice.toFixed(2) : '—'}
+        </div>
+      </div>
+      <div className="hidden h-9 w-px shrink-0 bg-slate-200 sm:block" aria-hidden />
+      <div className="flex min-w-[5.5rem] flex-col gap-1">
+        <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">本行金额（元）</span>
+        <span
+          className={`inline-flex h-9 min-w-[6.5rem] items-center rounded-lg border px-2.5 text-sm font-black tabular-nums shadow-sm ${
+            lineAmount != null
+              ? 'border-indigo-200/90 bg-indigo-50/90 text-indigo-800'
+              : 'border-slate-200 bg-white text-slate-400'
+          }`}
+        >
+          {lineAmount != null ? lineAmount.toFixed(2) : '—'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** 协作 payload 行（颜色名/尺码名）→ 与全站一致的只读 QtyMatrixTable 行列数据（单价/金额不在格内展示，由单据详情底部汇总行展示） */
 export function collabPayloadItemsToQtyMatrixProps(
   items: CollabPayloadItem[],
-  options?: { showPricing?: boolean } & BuildCollabQtyMatrixOpts,
+  options?: BuildCollabQtyMatrixOpts,
 ): { sizeHeaders: string[]; rows: QtyMatrixTableRow[] } {
   if (!Array.isArray(items) || items.length === 0) {
     return { sizeHeaders: [], rows: [] };
@@ -47,34 +100,9 @@ export function collabPayloadItemsToQtyMatrixProps(
       const q = matches.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0);
       rowSum += q;
 
-      let up: number | null = null;
-      for (const m of matches) {
-        const n = Number(m.unitPrice);
-        if (Number.isFinite(n)) {
-          up = n;
-          break;
-        }
-      }
-      let amtSum = 0;
-      let hasAmt = false;
-      for (const m of matches) {
-        const n = Number(m.amount);
-        if (Number.isFinite(n)) {
-          amtSum += n;
-          hasAmt = true;
-        }
-      }
-      const priceBits: string[] = [];
-      if (up != null && Number.isFinite(up)) priceBits.push(`单价 ${up}`);
-      if (hasAmt) priceBits.push(`金额 ${amtSum}`);
-      const showP = options?.showPricing === true && priceBits.length > 0;
-
       return (
         <div key={`c-${ci}-${si}`} className="flex min-w-0 flex-col gap-0.5">
           <span className="text-sm font-bold text-slate-800 tabular-nums">{q}</span>
-          {showP ? (
-            <span className="text-[10px] text-slate-400 tabular-nums leading-snug">{priceBits.join(' · ')}</span>
-          ) : null}
         </div>
       );
     });

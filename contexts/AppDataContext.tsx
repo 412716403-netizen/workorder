@@ -296,10 +296,15 @@ export function normalizePurchaseOrderFormSettings(raw: PurchaseOrderFormSetting
     showPrintButton: listNorm.showPrintButton !== false,
     allowedTemplateIds: mergedIds.length > 0 ? mergedIds : undefined,
   };
+  const listDisplay: PurchaseOrderFormSettings['listDisplay'] = s.listDisplay?.onlyShowUnsettled
+    ? { onlyShowUnsettled: true }
+    : undefined;
+
   return {
     standardFields: mergePurchaseOrderStandardFields(s.standardFields),
     customFields: normalizePlanFormFieldConfigArray(s.customFields),
     listPrint,
+    listDisplay,
   };
 }
 
@@ -345,10 +350,15 @@ export function normalizeSalesOrderFormSettings(raw: SalesOrderFormSettings | nu
     showPrintButton: listNorm.showPrintButton !== false,
     allowedTemplateIds: mergedIds.length > 0 ? mergedIds : undefined,
   };
+  const soListDisplay: SalesOrderFormSettings['listDisplay'] = s.listDisplay?.onlyShowNotFullyShipped
+    ? { onlyShowNotFullyShipped: true }
+    : undefined;
+
   return {
     standardFields: mergeSalesOrderStandardFields(s.standardFields),
     customFields: normalizePlanFormFieldConfigArray(s.customFields),
     listPrint,
+    listDisplay: soListDisplay,
   };
 }
 

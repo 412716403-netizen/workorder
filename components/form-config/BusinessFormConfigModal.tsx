@@ -44,8 +44,8 @@ function resolveSubtitle(
 ): string | undefined {
   if (!subtitle) return undefined;
   if (typeof subtitle === 'string') return subtitle;
-  if (tabId && (tabId === 'fields' || tabId === 'print')) {
-    const key = tabId as 'fields' | 'print';
+  if (tabId && (tabId === 'fields' || tabId === 'print' || tabId === 'listDisplay')) {
+    const key = tabId as 'fields' | 'print' | 'listDisplay';
     return subtitle[key];
   }
   return subtitle.fields ?? subtitle.print;

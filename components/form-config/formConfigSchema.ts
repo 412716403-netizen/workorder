@@ -137,8 +137,8 @@ export interface FormConfigTab {
 
 export interface FormConfigSchema<TSettings> {
   title: string;
-  /** 字段/打印两种 tab 下的默认副标题（若 tab 没单独写 subtitle） */
-  subtitle?: string | { fields?: string; print?: string };
+  /** 字段/打印/列表显示等 tab 下的默认副标题（若 tab 没单独写 subtitle） */
+  subtitle?: string | { fields?: string; print?: string; listDisplay?: string };
   /** 对应 SystemSetting.key / AppDataContext 中使用的 key，如 'planFormSettings' */
   settingsKey: string;
   defaultValue: TSettings;

@@ -11,7 +11,12 @@ import {
   dispatchStatusLabel, normalizeAcceptSpecList, returnStatusLabel, resolvePreferredCollabMatrixOrder,
 } from './collabHelpers';
 import QtyMatrixTable from '../../components/variant-matrix/QtyMatrixTable';
-import { collabPayloadItemsToQtyMatrixProps, type CollabPayloadItem } from './collabDocDisplay';
+import {
+  collabPayloadItemsToQtyMatrixProps,
+  CollabDocQtyPriceFooter,
+  firstFiniteCollabUnitPrice,
+  type CollabPayloadItem,
+} from './collabDocDisplay';
 
 type DocKind = 'dispatch' | 'return';
 
@@ -284,13 +289,14 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
     [products, transfer?.receiverProductId],
   );
   const specMatrix = useMemo(() => {
+    const rowItems = (doc?.payload?.items ?? []) as CollabPayloadItem[];
     const ord = resolvePreferredCollabMatrixOrder({
       payload: doc?.payload,
       product: receiverProduct ?? null,
       dictionaries,
     });
-    return collabPayloadItemsToQtyMatrixProps(items, { showPricing: docKind === 'return', ...ord });
-  }, [items, docKind, doc?.payload, receiverProduct, dictionaries]);
+    return collabPayloadItemsToQtyMatrixProps(rowItems, { ...ord });
+  }, [doc?.payload, receiverProduct, dictionaries]);
   const amendmentMatrix = useMemo(() => {
     const ord = resolvePreferredCollabMatrixOrder({
       payload: doc?.amendmentPayload,
@@ -298,10 +304,29 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
       dictionaries,
     });
     return collabPayloadItemsToQtyMatrixProps((doc?.amendmentPayload?.items ?? []) as CollabPayloadItem[], {
-      showPricing: docKind === 'return',
       ...ord,
     });
-  }, [doc?.amendmentPayload, docKind, receiverProduct, dictionaries]);
+  }, [doc?.amendmentPayload, receiverProduct, dictionaries]);
+
+  const returnSpecQtyPrice = useMemo(() => {
+    if (docKind !== 'return' || specMatrix.rows.length === 0) return null;
+    const payloadItems = (doc?.payload?.items ?? []) as CollabPayloadItem[];
+    const tq = sumItemsQty(payloadItems as any[]);
+    const up = firstFiniteCollabUnitPrice(payloadItems);
+    const amt = up != null ? tq * up : null;
+    return { lineQty: tq, up, amt };
+  }, [docKind, specMatrix.rows.length, doc?.payload?.items]);
+
+  const returnAmendQtyPrice = useMemo(() => {
+    if (docKind !== 'return' || doc?.amendmentStatus !== 'PENDING_A_CONFIRM' || amendmentMatrix.rows.length === 0) {
+      return null;
+    }
+    const aitems = (doc?.amendmentPayload?.items ?? []) as CollabPayloadItem[];
+    const aq = sumItemsQty(aitems as any[]);
+    const up = firstFiniteCollabUnitPrice(aitems);
+    const amt = up != null ? aq * up : null;
+    return { lineQty: aq, up, amt };
+  }, [docKind, doc?.amendmentStatus, doc?.amendmentPayload, amendmentMatrix.rows.length]);
 
   useEffect(() => {
     if (!open || docKind !== 'dispatch' || !transfer?.id || !doc?.id) {
@@ -567,7 +592,16 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
                   暂无明细
                 </div>
               ) : (
-                <QtyMatrixTable sizeHeaders={specMatrix.sizeHeaders} rows={specMatrix.rows} />
+                <div>
+                  <QtyMatrixTable sizeHeaders={specMatrix.sizeHeaders} rows={specMatrix.rows} />
+                  {returnSpecQtyPrice ? (
+                    <CollabDocQtyPriceFooter
+                      lineQty={returnSpecQtyPrice.lineQty}
+                      resolvedUnitPrice={returnSpecQtyPrice.up}
+                      lineAmount={returnSpecQtyPrice.amt}
+                    />
+                  ) : null}
+                </div>
               )}
             </div>
 
@@ -749,7 +783,16 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
                   {amendmentMatrix.rows.length === 0 ? (
                     <p className="text-xs text-amber-800">（无结构化明细）</p>
                   ) : (
-                    <QtyMatrixTable sizeHeaders={amendmentMatrix.sizeHeaders} rows={amendmentMatrix.rows} />
+                    <div>
+                      <QtyMatrixTable sizeHeaders={amendmentMatrix.sizeHeaders} rows={amendmentMatrix.rows} />
+                      {returnAmendQtyPrice ? (
+                        <CollabDocQtyPriceFooter
+                          lineQty={returnAmendQtyPrice.lineQty}
+                          resolvedUnitPrice={returnAmendQtyPrice.up}
+                          lineAmount={returnAmendQtyPrice.amt}
+                        />
+                      ) : null}
+                    </div>
                   )}
                 </div>
                 {isSender && (

@@ -13,7 +13,6 @@ import type {
   Product, Partner, PartnerCategory, ProductionOpRecord, Warehouse, ProductionOrder, AppDictionaries, GlobalNodeTemplate,
 } from '../types';
 import {
-  buildReturnDocNoMetaMap,
   computeCollaborationForwardableRows,
   computeCollaborationReturnableRows,
   dispatchStatusLabel,
@@ -334,17 +333,20 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({
         }
       }
 
-      // 3) forward 气泡：当此窗口允许 forward，且 t 是原始方为我方的链式子 transfer 时，
-      //    在「上一站（peerTenantId）」对话窗展示 peer 已转发下一站的聚合气泡，等甲方确认转发。
+      // 3) forward 气泡：链式子 transfer 的 senderTenantId 在库内为 origin（甲方），乙方需在与上游对话窗也能看到。
+      //    · 甲方视角：peer = 上一站接收方（乙方），parentReceiver === peer。
+      //    · 乙方视角：peer = 上游（甲方），本人是 parent 的接收方且 parent 的发送方 === peer。
       if (
         e.kinds.has('forward')
         && t.outsourceRouteSnapshot && (t.chainStep ?? 0) > 0
         && t.parentTransferId
-        && (t.originTenantId ?? t.senderTenantId) === myTenantId
       ) {
         const parent = transfers.find(x => x.id === t.parentTransferId);
         const parentReceiver = parent?.receiverTenantId ?? null;
-        if (parentReceiver === peerTenantId) {
+        const parentSender = parent?.senderTenantId ?? null;
+        const isOriginSide = (t.originTenantId ?? t.senderTenantId) === myTenantId && parentReceiver === peerTenantId;
+        const isForwarderSide = parentReceiver === myTenantId && parentSender === peerTenantId;
+        if (isOriginSide || isForwarderSide) {
           const firstDispatch = (t.dispatches || [])[0];
           const sharedDocNo = (firstDispatch?.payload as any)?.stockOutDocNo ?? '';
           const chainKey = sharedDocNo ? `fwd:${sharedDocNo}:${t.parentTransferId}` : `fwd:${t.id}`;
@@ -496,8 +498,6 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({
     return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
   }, [selectedTimelineDataKey]);
 
-  const returnDocMetaByDocNo = useMemo(() => buildReturnDocNoMetaMap(transfers), [transfers]);
-
   if (viewMode === 'maps') {
     return (
       <CollabProductMapsPanel
@@ -515,7 +515,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({
           <div className="relative w-full max-w-6xl max-h-[92vh] flex flex-col rounded-2xl shadow-2xl border border-slate-200 bg-slate-50 overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-200 bg-white shrink-0">
               <h2 className="text-lg font-black text-slate-900 flex items-center gap-2 min-w-0">
-                <Truck className="w-5 h-5 text-emerald-600 shrink-0" /> 回传流水
+                <Truck className="w-5 h-5 text-emerald-600 shrink-0" /> 协作流水
               </h2>
               <button type="button" onClick={() => setReturnFlowModalOpen(false)} className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors shrink-0" aria-label="关闭">
                 <X className="w-5 h-5" />
@@ -525,7 +525,8 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({
               <CollabReturnFlowPanel
                 embeddedInModal
                 onBack={() => setReturnFlowModalOpen(false)}
-                returnDocMetaByDocNo={returnDocMetaByDocNo}
+                transfers={transfers}
+                myTenantId={myTenantId}
                 prodRecords={prodRecords}
                 products={products}
                 warehouses={warehouses}
@@ -702,7 +703,7 @@ const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({
             <Link2 className="w-4 h-4 shrink-0" /> 对照表
           </button>
           <button type="button" onClick={() => setReturnFlowModalOpen(true)} className={outlineToolbarButtonClass}>
-            <Truck className="w-4 h-4 shrink-0" /> 回传流水
+            <Truck className="w-4 h-4 shrink-0" /> 协作流水
           </button>
         </div>
       </div>
@@ -955,7 +956,6 @@ const AggReturnBubble: React.FC<{ item: TimelineItem; myTenantId: string | null;
 };
 
 const ForwardBubble: React.FC<{ item: TimelineItem; myTenantId: string | null; onOpen: () => void }> = ({ item, myTenantId, onOpen }) => {
-  void myTenantId;
   const siblings = item.forwardSiblings ?? [item.forwardTransfer].filter(Boolean);
   const first = siblings[0] || item.forwardTransfer;
   const route = Array.isArray(first.outsourceRouteSnapshot) ? first.outsourceRouteSnapshot : [];
@@ -967,8 +967,11 @@ const ForwardBubble: React.FC<{ item: TimelineItem; myTenantId: string | null; o
   }, 0);
   const confirmed = siblings.every((t: any) => !!t.originConfirmedAt);
   const sharedDocNo = ((siblings[0]?.dispatches || [])[0]?.payload as any)?.stockOutDocNo ?? '';
+  // 转发方（乙方）视角右侧显示；origin（甲方）视角左侧显示
+  const isOriginSide = (first.originTenantId ?? first.senderTenantId) === myTenantId;
+  const side: 'left' | 'right' = isOriginSide ? 'left' : 'right';
   return (
-    <BubbleShell side="left" accent="orange" title={`转发到下一站 · ${siblings.length > 1 ? `${siblings.length} 个产品` : '单产品'}`} onClick={onOpen}>
+    <BubbleShell side={side} accent="orange" title={`转发到下一站 · ${siblings.length > 1 ? `${siblings.length} 个产品` : '单产品'}`} onClick={onOpen}>
       <div className="flex items-center gap-2 min-w-0">
         <Forward className="w-4 h-4 text-orange-600 shrink-0" />
         <span className="text-sm font-black text-slate-900 truncate">

@@ -5,6 +5,7 @@ import type { ProductionOpRecord, Product, Warehouse, AppDictionaries } from '..
 import { useConfirm } from '../../contexts/ConfirmContext';
 import * as api from '../../services/api';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
+import { CollabDocQtyPriceFooter, firstFiniteCollabUnitPrice } from './collabDocDisplay';
 
 type ProductVariant = { id: string; colorId: string; sizeId: string; [k: string]: any };
 
@@ -144,6 +145,7 @@ const CollabReturnFlowDocDetailModal: React.FC<CollabReturnFlowDocDetailModalPro
     colorName?: string;
     sizeName?: string;
     quantity: number;
+    unitPrice?: number;
   }>;
 
   let displayVariantQty = variantQty;
@@ -156,6 +158,34 @@ const CollabReturnFlowDocDetailModal: React.FC<CollabReturnFlowDocDetailModalPro
       displayTotalQty = amendItems.reduce((s, it) => s + (Number(it.quantity) || 0), 0);
     }
   }
+
+  let resolvedDetailUnitPrice: number | null = null;
+  if (pendingAConfirm && amendItems.length > 0) {
+    resolvedDetailUnitPrice = firstFiniteCollabUnitPrice(amendItems);
+  }
+  if (resolvedDetailUnitPrice == null) {
+    resolvedDetailUnitPrice = firstFiniteCollabUnitPrice((linkedReturn?.payload?.items ?? []) as Array<{ unitPrice?: unknown }>);
+  }
+  if (resolvedDetailUnitPrice == null) {
+    for (const r of docRecords) {
+      const n = Number((r as { unitPrice?: unknown }).unitPrice);
+      if (Number.isFinite(n) && n >= 0) {
+        resolvedDetailUnitPrice = n;
+        break;
+      }
+    }
+  }
+
+  const detailLineQty = showVariantGrid
+    ? editMode
+      ? variantsForDetail.reduce((s, v) => s + (Number(editQuantities[v.id]) || 0), 0)
+      : variantsForDetail.reduce((s, v) => s + (displayVariantQty[v.id] ?? 0), 0)
+    : editMode
+      ? Number(editQuantities['__total']) || 0
+      : displayTotalQty;
+
+  const detailLineAmount =
+    resolvedDetailUnitPrice != null ? detailLineQty * resolvedDetailUnitPrice : null;
 
   const enterEditMode = () => {
     if (pendingAConfirm) return;
@@ -369,33 +399,47 @@ const CollabReturnFlowDocDetailModal: React.FC<CollabReturnFlowDocDetailModalPro
           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">明细</h4>
 
           {showVariantGrid && product ? (
-            <VariantQtyMatrixInputs
-              product={{ ...product, variants: variantsForDetail, colorIds: undefined, sizeIds: undefined } as Product}
-              dictionaries={dictionaries}
-              quantities={editMode ? editQuantities : displayVariantQty}
-              readOnly={!editMode}
-              onVariantQtyChange={(variantId, qty) => setEditQuantities(prev => ({ ...prev, [variantId]: qty }))}
-            />
+            <>
+              <VariantQtyMatrixInputs
+                product={{ ...product, variants: variantsForDetail, colorIds: undefined, sizeIds: undefined } as Product}
+                dictionaries={dictionaries}
+                quantities={editMode ? editQuantities : displayVariantQty}
+                readOnly={!editMode}
+                onVariantQtyChange={(variantId, qty) => setEditQuantities(prev => ({ ...prev, [variantId]: qty }))}
+              />
+              <CollabDocQtyPriceFooter
+                lineQty={detailLineQty}
+                resolvedUnitPrice={resolvedDetailUnitPrice}
+                lineAmount={detailLineAmount}
+              />
+            </>
           ) : (
-            <div className="bg-slate-50/50 rounded-2xl border border-slate-200 p-6">
-              <div className="flex items-center gap-4">
-                <span className="text-sm font-bold text-slate-800">{product?.name ?? '—'}</span>
-                <div className="flex items-center gap-3 flex-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">回传数量</label>
-                  {editMode ? (
-                    <input
-                      type="number"
-                      min={0}
-                      value={editQuantities['__total'] ?? ''}
-                      onChange={e => setEditQuantities({ '__total': Number(e.target.value) || 0 })}
-                      className="w-32 rounded-xl border border-slate-200 py-2 px-3 text-sm font-bold text-indigo-600 text-center focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                    />
-                  ) : (
-                    <div className="flex items-center justify-center bg-white border border-slate-200 rounded-xl w-32 py-2 px-3 text-sm font-bold text-indigo-600 min-h-[40px]">{displayTotalQty}</div>
-                  )}
+            <>
+              <div className="bg-slate-50/50 rounded-2xl border border-slate-200 p-6">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm font-bold text-slate-800">{product?.name ?? '—'}</span>
+                  <div className="flex items-center gap-3 flex-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">回传数量</label>
+                    {editMode ? (
+                      <input
+                        type="number"
+                        min={0}
+                        value={editQuantities['__total'] ?? ''}
+                        onChange={e => setEditQuantities({ '__total': Number(e.target.value) || 0 })}
+                        className="w-32 rounded-xl border border-slate-200 py-2 px-3 text-sm font-bold text-indigo-600 text-center focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center bg-white border border-slate-200 rounded-xl w-32 py-2 px-3 text-sm font-bold text-indigo-600 min-h-[40px]">{displayTotalQty}</div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+              <CollabDocQtyPriceFooter
+                lineQty={detailLineQty}
+                resolvedUnitPrice={resolvedDetailUnitPrice}
+                lineAmount={detailLineAmount}
+              />
+            </>
           )}
         </div>
       </div>

@@ -86,6 +86,10 @@ import {
   DEFAULT_PURCHASE_BILL_FORM_SETTINGS,
   DEFAULT_SALES_BILL_FORM_SETTINGS,
 } from '../contexts/AppDataContext';
+import {
+  purchaseOrderDocHasUnsettled,
+  salesOrderDocHasNotFullyShippedLine,
+} from '../utils/psiOrderListDisplayFilter';
 import { useAuth } from '../contexts/AuthContext';
 import {
   readWarehousePreference,
@@ -173,6 +177,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
       standardFields: purchaseOrderFormSettings?.standardFields ?? [],
       customFields: purchaseOrderFormSettings?.customFields ?? [],
       listPrint: purchaseOrderFormSettings?.listPrint ?? { showPrintButton: true },
+      listDisplay: purchaseOrderFormSettings?.listDisplay,
     }),
     [purchaseOrderFormSettings],
   );
@@ -189,6 +194,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
       standardFields: salesOrderFormSettings?.standardFields ?? [],
       customFields: salesOrderFormSettings?.customFields ?? [],
       listPrint: salesOrderFormSettings?.listPrint ?? { showPrintButton: true },
+      listDisplay: salesOrderFormSettings?.listDisplay,
     }),
     [salesOrderFormSettings],
   );
@@ -499,15 +505,41 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
   const [psiPage, setPsiPage] = useState(1);
   const [psiListSearch, setPsiListSearch] = useState('');
   const debouncedPsiListSearch = useDebouncedValue(psiListSearch, 300);
-  useEffect(() => { setPsiPage(1); }, [type]);
-  useEffect(() => { setPsiPage(1); }, [debouncedPsiListSearch]);
+  useEffect(() => {
+    setPsiPage(1);
+  }, [
+    type,
+    debouncedPsiListSearch,
+    safePurchaseOrderFormSettings.listDisplay?.onlyShowUnsettled,
+    safeSalesOrderFormSettings.listDisplay?.onlyShowNotFullyShipped,
+  ]);
+
+  const afterListDisplayFilter = useMemo(() => {
+    if (type === 'PURCHASE_ORDER' && safePurchaseOrderFormSettings.listDisplay?.onlyShowUnsettled) {
+      return sortedGroupedEntries.filter(([docNum, docItems]) =>
+        purchaseOrderDocHasUnsettled(docNum, docItems as { id: string; quantity?: number | null }[], receivedByOrderLine),
+      );
+    }
+    if (type === 'SALES_ORDER' && safeSalesOrderFormSettings.listDisplay?.onlyShowNotFullyShipped) {
+      return sortedGroupedEntries.filter(([, docItems]) =>
+        salesOrderDocHasNotFullyShippedLine(docItems as { id: string; lineGroupId?: string; quantity?: number | null; shippedQuantity?: number | null }[]),
+      );
+    }
+    return sortedGroupedEntries;
+  }, [
+    sortedGroupedEntries,
+    type,
+    safePurchaseOrderFormSettings.listDisplay?.onlyShowUnsettled,
+    safeSalesOrderFormSettings.listDisplay?.onlyShowNotFullyShipped,
+    receivedByOrderLine,
+  ]);
 
   const filteredGroupedEntries = useMemo(() => {
     const docTypes = ['PURCHASE_ORDER', 'PURCHASE_BILL', 'SALES_ORDER', 'SALES_BILL'];
-    if (!docTypes.includes(type)) return sortedGroupedEntries;
+    if (!docTypes.includes(type)) return afterListDisplayFilter;
     const q = debouncedPsiListSearch.trim().toLowerCase();
-    if (!q) return sortedGroupedEntries;
-    return sortedGroupedEntries.filter(([docNum, docItems]) => {
+    if (!q) return afterListDisplayFilter;
+    return afterListDisplayFilter.filter(([docNum, docItems]) => {
       const parts: string[] = [docNum, formatPsiDocNumForList(docNum)];
       const main = docItems[0] as Record<string, unknown> | undefined;
       if (main) {
@@ -533,7 +565,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
       }
       return parts.filter(Boolean).join('\0').toLowerCase().includes(q);
     });
-  }, [sortedGroupedEntries, type, debouncedPsiListSearch, productMapPSI]);
+  }, [afterListDisplayFilter, type, debouncedPsiListSearch, productMapPSI]);
 
   const psiTotalPages = Math.max(1, Math.ceil(filteredGroupedEntries.length / PSI_PAGE_SIZE));
   const pagedGroupedEntries = useMemo(
@@ -764,7 +796,18 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               <FileText className="w-12 h-12 text-slate-100 mx-auto mb-3" />
               <p className="text-slate-400 font-medium italic">暂无{current.label}流水记录</p>
             </div>
-          ) : pagedGroupedEntries.length === 0 && filteredGroupedEntries.length === 0 && sortedGroupedEntries.length > 0 ? (
+          ) : pagedGroupedEntries.length === 0 && afterListDisplayFilter.length === 0 && sortedGroupedEntries.length > 0 ? (
+            <div className={psiOrderBillListEmptyClass}>
+              <FileText className="w-12 h-12 text-slate-100 mx-auto mb-3" />
+              <p className="text-slate-400 font-medium italic">
+                {type === 'PURCHASE_ORDER' && safePurchaseOrderFormSettings.listDisplay?.onlyShowUnsettled
+                  ? '已开启「只显示未交清」，当前没有符合条件的采购订单。可在表单配置中关闭该选项以查看全部。'
+                  : type === 'SALES_ORDER' && safeSalesOrderFormSettings.listDisplay?.onlyShowNotFullyShipped
+                    ? '已开启「只显示未发齐」，当前没有符合条件的销售订单。可在表单配置中关闭该选项以查看全部。'
+                    : '无匹配项，请调整搜索关键词'}
+              </p>
+            </div>
+          ) : pagedGroupedEntries.length === 0 && filteredGroupedEntries.length === 0 && afterListDisplayFilter.length > 0 && sortedGroupedEntries.length > 0 ? (
             <div className={psiOrderBillListEmptyClass}>
               <FileText className="w-12 h-12 text-slate-100 mx-auto mb-3" />
               <p className="text-slate-400 font-medium italic">无匹配项，请调整搜索关键词</p>
