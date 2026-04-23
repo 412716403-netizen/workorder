@@ -1,14 +1,44 @@
-import type { PrintBodyElement, PrintTemplate } from '../types';
+import type { PrintBodyElement, PrintDynamicListElementConfig, PrintTemplate } from '../types';
 import { PRINT_PAPER_A4_HALF_MM, newElementId } from './printTemplateDefaults';
 
-/** 内置销售单打印模版 id（二等分纸 + 矩阵表）；与 v1 并存时优先使用本版 */
+/** 内置销售单打印模版 id（二等分纸 + 动态列表含颜色尺码矩阵列）；与 v1 并存时优先使用本版 */
 export const BUILTIN_SALES_BILL_PRINT_TEMPLATE_ID = 'builtin-sales-bill-v2';
 
 function nowIso() {
   return new Date().toISOString();
 }
 
-/** 销售单：A4 二等分纸 + 颜色×尺码矩阵表 + 结余区 */
+const builtinSalesBillDynamicListConfig = (): PrintDynamicListElementConfig => ({
+  dataColumnCount: 7,
+  showHeader: true,
+  showSerial: true,
+  serialHeaderLabel: '序号',
+  borderStyle: 'solid',
+  borderColor: '#000000',
+  headerBackgroundColor: '#FFFFFF',
+  headerFontSizePt: 6.5,
+  fontSizePt: 6.5,
+  columns: [
+    { id: 'sb2-col-sku', headerLabel: '货号', contentTemplate: '{{行.sku}}', textAlign: 'center', color: '#000000' },
+    { id: 'sb2-col-name', headerLabel: '名称', contentTemplate: '{{行.productName}}', textAlign: 'center', color: '#000000' },
+    {
+      id: 'sb2-col-matrix',
+      headerLabel: '颜色',
+      contentTemplate: '',
+      textAlign: 'center',
+      color: '#000000',
+      cellKind: 'colorSizeMatrix',
+      matrixColorHeader: '颜色',
+      matrixSizeGroupTitle: '尺码数量',
+    },
+    { id: 'sb2-col-qty', headerLabel: '数量', contentTemplate: '{{行.qty}}', textAlign: 'center', color: '#000000' },
+    { id: 'sb2-col-price', headerLabel: '单价', contentTemplate: '{{行.unitPrice}}', textAlign: 'center', color: '#000000' },
+    { id: 'sb2-col-amt', headerLabel: '金额', contentTemplate: '{{行.amount}}', textAlign: 'center', color: '#000000' },
+    { id: 'sb2-col-rmk', headerLabel: '备注', contentTemplate: '{{行.remark}}', textAlign: 'center', color: '#000000' },
+  ],
+});
+
+/** 销售单：A4 二等分纸 + 明细动态列表（含颜色×尺码矩阵列）+ 结余区 */
 export function createBuiltinSalesBillPrintTemplate(): PrintTemplate {
   const t = nowIso();
   const mk = (partial: Omit<PrintBodyElement, 'id'> & { id?: string }): PrintBodyElement =>
@@ -71,16 +101,14 @@ export function createBuiltinSalesBillPrintTemplate(): PrintTemplate {
       },
     }),
     mk({
-      id: 'sb2-matrix',
-      type: 'salesBillMatrix',
+      id: 'sb2-table',
+      type: 'dynamicList',
       x: 3,
       y: 16,
       width: 200,
       height: 82,
       zIndex: 10,
-      config: {
-        fontSizePt: 6.5,
-      },
+      config: builtinSalesBillDynamicListConfig(),
     }),
     mk({
       id: 'sb2-sum',

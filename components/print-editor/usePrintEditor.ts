@@ -79,10 +79,6 @@ function defaultConfigForType(type: PrintBodyElementType): PrintElementConfig {
           { id: newElementId(), headerLabel: '列3', contentTemplate: '', textAlign: 'left', color: '#000000' },
         ],
       };
-    case 'salesBillMatrix':
-      return {
-        fontSizePt: 7,
-      };
     default:
       return { content: '', fontSizePt: 10, fontWeight: 'normal', textAlign: 'left', color: '#111' };
   }
@@ -104,8 +100,6 @@ function defaultSizeForType(type: PrintBodyElementType, paperW: number, _paperH:
       return { w: Math.min(60, paperW - 8), h: 20 };
     case 'dynamicList':
       return { w: Math.min(162, paperW - 8), h: 13 };
-    case 'salesBillMatrix':
-      return { w: Math.min(200, paperW - 6), h: Math.min(90, _paperH * 0.55) };
     default:
       return { w: 20, h: 10 };
   }

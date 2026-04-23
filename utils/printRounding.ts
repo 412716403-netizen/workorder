@@ -7,7 +7,6 @@ import type {
   PrintImageElementConfig,
   PrintLineElementConfig,
   PrintRectElementConfig,
-  PrintSalesBillMatrixElementConfig,
   PrintTableElementConfig,
   PrintTemplate,
   PrintTextElementConfig,
@@ -116,12 +115,6 @@ export function roundPrintElementConfigForType(type: PrintBodyElementType, confi
     }
     case 'dynamicList':
       return roundDynamicListConfig(config as PrintDynamicListElementConfig);
-    case 'salesBillMatrix': {
-      const c = config as PrintSalesBillMatrixElementConfig;
-      return {
-        fontSizePt: roundPrintDecimal1(Math.min(14, Math.max(5, c.fontSizePt ?? 7))),
-      };
-    }
     case 'qrcode':
       return config;
     default:
@@ -190,16 +183,18 @@ export function normalizePrintTemplateNumeric1(t: PrintTemplate): PrintTemplate 
       : m,
     header: t.header ? roundHeaderFooterConfig(t.header) : t.header,
     footer: t.footer ? roundHeaderFooterConfig(t.footer) : t.footer,
-    elements: t.elements.map(e => {
-      if (e.type === 'line') return normalizeLineBodyElement(e);
-      return {
-        ...e,
-        x: roundPrintDecimal1(Math.max(0, e.x)),
-        y: roundPrintDecimal1(Math.max(0, e.y)),
-        width: roundPrintDecimal1(Math.max(0.1, e.width)),
-        height: roundPrintDecimal1(Math.max(0.1, e.height)),
-        config: roundPrintElementConfigForType(e.type, e.config),
-      };
-    }),
+    elements: t.elements
+      .filter(e => (e.type as string) !== 'salesBillMatrix')
+      .map(e => {
+        if (e.type === 'line') return normalizeLineBodyElement(e);
+        return {
+          ...e,
+          x: roundPrintDecimal1(Math.max(0, e.x)),
+          y: roundPrintDecimal1(Math.max(0, e.y)),
+          width: roundPrintDecimal1(Math.max(0.1, e.width)),
+          height: roundPrintDecimal1(Math.max(0.1, e.height)),
+          config: roundPrintElementConfigForType(e.type, e.config),
+        };
+      }),
   };
 }

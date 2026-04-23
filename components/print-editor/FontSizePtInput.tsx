@@ -7,7 +7,7 @@ type FontSizePtInputProps = {
   min: number;
   max: number;
   onCommit: (n: number) => void;
-  /** 失焦时四舍五入到 0.5pt（销售单矩阵等） */
+  /** 失焦时四舍五入到 0.5pt（如打印矩阵列等） */
   roundToHalf?: boolean;
   className?: string;
   title?: string;

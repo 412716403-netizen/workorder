@@ -227,9 +227,9 @@ export function buildSalesBillPrintRenderContext(opts: {
   editingDocNumber: string | null;
 }): PrintRenderContext {
   const { form, lines, productMap, warehouseMap, dictionaries, psiRecords, financeRecords, prodRecords, editingDocNumber } = opts;
-  const salesBillMatrix = buildSalesBillMatrixGroups(lines, productMap, dictionaries);
-  const docTotalQty = salesBillMatrix.reduce((s, g) => s + g.totalQty, 0);
-  const docTotalAmount = salesBillMatrix.reduce((s, g) => s + g.totalAmount, 0);
+  const groupsForTotals = buildSalesBillMatrixGroups(lines, productMap, dictionaries);
+  const docTotalQty = groupsForTotals.reduce((s, g) => s + g.totalQty, 0);
+  const docTotalAmount = groupsForTotals.reduce((s, g) => s + g.totalAmount, 0);
 
   const docNumber = (form.docNumber || '').trim() || (editingDocNumber ?? '') || '—';
   const docKey = `SALES_BILL|${(editingDocNumber || form.docNumber || '').trim() || `__draft_${Date.now()}__`}`;
@@ -286,7 +286,6 @@ export function buildSalesBillPrintRenderContext(opts: {
 
   return {
     salesBill,
-    salesBillMatrix,
     printListRows: buildSalesBillPrintListRowsByProductLine(lines, productMap, dictionaries),
     product,
     page: { current: 1, total: 1 },

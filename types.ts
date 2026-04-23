@@ -615,8 +615,7 @@ export type PrintBodyElementType =
   | 'rect'
   | 'image'
   | 'dynamicTable'
-  | 'dynamicList'
-  | 'salesBillMatrix';
+  | 'dynamicList';
 
 /** 打印图片：本地上传存 data URL；地址/字段可含 {{}} 占位符 */
 export type PrintImageSourceType = 'upload' | 'url' | 'field';
@@ -725,19 +724,6 @@ export interface PrintDynamicListColumn {
   headerFontWeight?: 'normal' | 'bold';
 }
 
-/** 销售单矩阵表：颜色 × 多尺码列 + 左侧 rowspan（由打印上下文 salesBillMatrix 驱动） */
-export interface PrintSalesBillMatrixElementConfig {
-  fontSizePt: number;
-  /** @deprecated 已固定为 #000000，属性面板已移除 */
-  borderColor?: string;
-  /** @deprecated 已固定为无底色（白），属性面板已移除 */
-  headerBackgroundColor?: string;
-  /** @deprecated 分页固定按组件高度估算，属性面板已移除 */
-  estimatedMmPerProductGroup?: number;
-  /** @deprecated 不再支持每页固定块数 */
-  groupsPerPage?: number;
-}
-
 export interface PrintDynamicListElementConfig {
   /** 数据列数（不含序号列）；与 columns 长度保持一致 */
   dataColumnCount: number;
@@ -767,8 +753,7 @@ export type PrintElementConfig =
   | PrintRectElementConfig
   | PrintImageElementConfig
   | PrintTableElementConfig
-  | PrintDynamicListElementConfig
-  | PrintSalesBillMatrixElementConfig;
+  | PrintDynamicListElementConfig;
 
 export interface PrintBodyElement {
   id: string;
@@ -929,8 +914,6 @@ export interface PrintRenderContext {
   virtualBatch?: VirtualBatchPrintRow;
   /** 销售单打印：占位符 {{销售单.xxx}} */
   salesBill?: SalesBillPrintDoc;
-  /** 销售单矩阵明细（与组件 salesBillMatrix 配套） */
-  salesBillMatrix?: SalesBillMatrixGroup[];
   /** 报工批次详情打印：占位符 {{报工.xxx}} */
   reportBatchPrint?: Record<string, string | number | undefined>;
   /** 采购订单打印：占位符 {{采购订单.xxx}} */

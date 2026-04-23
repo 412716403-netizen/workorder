@@ -1,5 +1,6 @@
 import type {
   MaterialFlowPrintContext,
+  PrintListRow,
   PrintRenderContext,
   PrintTemplate,
   PurchaseOrderPrintContext,
@@ -10,10 +11,11 @@ import type {
   SalesBillPrintDoc,
   VirtualBatchPrintRow,
 } from '../types';
+import { COLOR_SIZE_MATRIX_JSON_KEY, matrixGroupToColorSizePayload, serializeColorSizeMatrixPayload } from './colorSizeMatrixPrint';
 import { formatBatchSerialLabel } from './serialLabels';
 import { amountToChineseRmbUppercase } from './numberToChineseRmb';
 
-/** 与可视化编辑器一致的示例销售单表头，供含 salesBillMatrix 的模版预览 */
+/** 与可视化编辑器一致的示例销售单表头，供销售单类模版预览 */
 export const SAMPLE_SALES_BILL_PRINT_DOC: SalesBillPrintDoc = {
   title: '销售单',
   docNumber: 'XS-0001',
@@ -42,7 +44,6 @@ function mergeDocCustom<T extends { custom?: Record<string, unknown> }>(doc: T, 
   return { ...doc, custom: { ...(doc.custom ?? {}), ...extra } } as T;
 }
 
-/** 与可视化编辑器一致的示例矩阵行，供 salesBillMatrix 分页与渲染 */
 /** 画布/管理端预览用：与 {{批次.xxx}} 占位符键一致，见 utils/printVirtualBatch.ts */
 export function buildSampleVirtualBatchPrintRow(ctx: PrintRenderContext): VirtualBatchPrintRow {
   const planNumber = ctx.plan?.planNumber ?? 'PLN-示例';
@@ -113,10 +114,19 @@ export const SAMPLE_SALES_BILL_MATRIX_GROUPS: SalesBillMatrixGroup[] = [
   },
 ];
 
-/**
- * 若模版含销售单矩阵组件，为预览注入示例 salesBill / salesBillMatrix，
- * 使管理模版弹窗等与「可视化编辑」画布一致。
- */
+function sampleSalesBillPrintListRowsWithMatrix(): PrintListRow[] {
+  return SAMPLE_SALES_BILL_MATRIX_GROUPS.map(g => ({
+    lineNo: g.lineNo,
+    sku: g.sku,
+    productName: g.productName,
+    qty: g.totalQty,
+    unitPrice: String(g.unitPrice),
+    amount: String(g.totalAmount),
+    remark: g.remark ?? '',
+    [COLOR_SIZE_MATRIX_JSON_KEY]: serializeColorSizeMatrixPayload(matrixGroupToColorSizePayload(g)),
+  }));
+}
+
 const SAMPLE_MATERIAL_ISSUE_PRINT: MaterialFlowPrintContext = {
   docNo: 'LL20260417-0001',
   warehouseName: '原料仓',
@@ -387,30 +397,7 @@ export function augmentPrintPreviewContext(
     next = {
       ...next,
       salesBill: mergeDocCustom(SAMPLE_SALES_BILL_PRINT_DOC, psiCustomSamples?.salesBill),
-      printListRows: [
-        {
-          lineNo: 1,
-          sku: 'SKU-SB-001',
-          productName: '示例销售品 A',
-          colorName: '黑色',
-          sizeName: 'M',
-          qty: 30,
-          unitPrice: '90.00',
-          amount: '2700.00',
-          remark: '',
-        },
-        {
-          lineNo: 2,
-          sku: 'SKU-SB-002',
-          productName: '示例销售品 B',
-          colorName: '',
-          sizeName: '',
-          qty: 20,
-          unitPrice: '50.00',
-          amount: '1000.00',
-          remark: '',
-        },
-      ],
+      printListRows: sampleSalesBillPrintListRowsWithMatrix(),
     };
   }
   if (dt === 'outsource' && !next.outsourceDispatchPrint && !next.outsourceReceivePrint) {
@@ -443,13 +430,6 @@ export function augmentPrintPreviewContext(
           quantity: 50,
         },
       ],
-    };
-  }
-  if (template?.elements?.some(e => e.type === 'salesBillMatrix')) {
-    next = {
-      ...next,
-      salesBill: mergeDocCustom(SAMPLE_SALES_BILL_PRINT_DOC, psiCustomSamples?.salesBill),
-      salesBillMatrix: SAMPLE_SALES_BILL_MATRIX_GROUPS,
     };
   }
   if (previewShouldInjectSampleVirtualBatch(template) && next.virtualBatch == null) {

@@ -8,15 +8,11 @@ import type {
   PrintLineElementConfig,
   PrintListRow,
   PrintRenderContext,
-  PrintSalesBillMatrixElementConfig,
   PrintTemplate,
 } from '../../types';
 import {
   computeListPaginationSummary,
   getListRowsForPrintPage,
-  computeMatrixPaginationSummary,
-  getMatrixGroupsForPrintPage,
-  type MatrixPageChunk,
 } from '../../utils/printListPagination';
 import {
   resolvePrintPlaceholders,
@@ -97,18 +93,6 @@ function dynamicListGridTemplateColumns(
 const EDITOR_MARGIN_STRIPES =
   'linear-gradient(45deg, #f0f0f0 25%, transparent 25%, transparent 50%, #f0f0f0 50%, #f0f0f0 75%, transparent 75%, transparent)';
 
-function fmtMatrixCellQty(n: number): string {
-  if (!Number.isFinite(n) || n === 0) return '';
-  if (Number.isInteger(n)) return String(n);
-  return String(n);
-}
-
-function fmtMatrixMoney(n: number): string {
-  if (!Number.isFinite(n)) return '0';
-  const s = n.toFixed(2);
-  return s.endsWith('.00') ? String(Math.round(n)) : s;
-}
-
 function HeaderFooterBand({
   config,
   ctx,
@@ -173,7 +157,6 @@ function BodyElementView({
   ctx,
   editorMode,
   listPageChunk,
-  matrixPageChunk,
   topPushMm = 0,
   heightGrowMm = 0,
 }: {
@@ -186,11 +169,9 @@ function BodyElementView({
   };
   /** 动态列表多页打印时当前页的明细切片；无则单行预览 */
   listPageChunk?: { rows: PrintListRow[]; serialStart: number };
-  /** 销售单矩阵多页时当前页的分页切片 */
-  matrixPageChunk?: MatrixPageChunk;
-  /** 因上方列表/矩阵增高，本元素整体下移 (mm) */
+  /** 因上方列表增高，本元素整体下移 (mm) */
   topPushMm?: number;
-  /** 本元素为列表/矩阵时，在模板高度基础上增加 (mm) 以容纳内容 */
+  /** 本元素为列表时，在模板高度基础上增加 (mm) 以容纳内容 */
   heightGrowMm?: number;
 }) {
   const baseH = Math.max(el.height, 0.5) + (heightGrowMm > 0 ? heightGrowMm : 0);
@@ -649,210 +630,6 @@ function BodyElementView({
         </div>
       );
     }
-    case 'salesBillMatrix': {
-      const cfg = el.config as PrintSalesBillMatrixElementConfig;
-      const border = '#000000';
-      const pt = cfg.fontSizePt ?? 7;
-      const cell: React.CSSProperties = {
-        border: `0.25mm solid ${border}`,
-        textAlign: 'center',
-        verticalAlign: 'middle',
-        padding: '0.2mm 0.35mm',
-        lineHeight: 1.08,
-        wordBreak: 'break-all',
-      };
-      const chunk = matrixPageChunk;
-      const editorGroups = editorMode ? (ctx.salesBillMatrix ?? []) : undefined;
-      const entries = editorGroups
-        ? editorGroups.map((g, i) => ({ group: g, globalIndex: i, colorRowStart: 0, colorRowEnd: g.colorRows.length, isGroupStart: true }))
-        : (chunk?.entries ?? []);
-      const showThead = editorMode ? true : (chunk?.showThead ?? true);
-      const allGroups = entries.map(e => e.group);
-
-      return (
-        <div
-          role="presentation"
-          style={{
-            ...style,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: editorMode ? 'auto' : heightGrowMm > 0 ? 'visible' : 'hidden',
-            boxSizing: 'border-box',
-          }}
-          className={`cursor-move ${editorMode?.selectedId === el.id ? 'ring-2 ring-emerald-500 ring-offset-1' : ''}`}
-          onClick={e => {
-            e.stopPropagation();
-            editorMode?.onSelectElement(el.id);
-          }}
-          onPointerDown={e => editorMode?.onElementPointerDown?.(el, e)}
-        >
-          {entries.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-[7pt] font-bold text-slate-400">
-              销售单矩阵（无 salesBillMatrix 数据）
-            </div>
-          ) : (
-            <div
-              className={`flex min-h-0 flex-1 flex-col ${editorMode ? 'overflow-auto' : heightGrowMm > 0 ? 'overflow-visible' : 'overflow-hidden'}`}
-            >
-              {(() => {
-                const maxK = Math.max(1, ...allGroups.map(g => Math.max(1, g.sizes.length)));
-                const firstG = allGroups[0];
-                const sizeHeaderLabels = Array.from({ length: maxK }, (_, i) => firstG.sizes[i] ?? '');
-                const groupSepBorder = `0.32mm solid ${border}`;
-                const colCount = 4 + maxK + 4;
-                const colWidths = ['6%', '10%', '14%', '9%',
-                  ...Array.from({ length: maxK }, () => `${Math.floor(30 / maxK)}%`),
-                  '7%', '8%', '9%', '7%'];
-
-                const bodyRows = entries.flatMap((entry) => {
-                  const g = entry.group;
-                  const K = Math.max(1, g.sizes.length);
-                  const visibleCRs = g.colorRows.slice(entry.colorRowStart, entry.colorRowEnd);
-                  const N = visibleCRs.length;
-                  if (N === 0) return [];
-                  const rows: React.ReactNode[] = [];
-
-                  const needsSep = entry.isGroupStart && entry.globalIndex > 0;
-                  const needsLeadRow = entry.isGroupStart && entry.globalIndex > 0;
-
-                  if (needsSep) {
-                    rows.push(
-                      <tr key={`sep-${g.lineNo}-${entry.colorRowStart}`} aria-hidden>
-                        <td
-                          colSpan={colCount}
-                          style={{
-                            ...cell, padding: 0, height: '1px', lineHeight: 0, fontSize: 0,
-                            borderTop: groupSepBorder,
-                            borderBottom: `0.25mm solid ${border}`,
-                            borderLeft: `0.25mm solid ${border}`,
-                            borderRight: `0.25mm solid ${border}`,
-                          }}
-                        />
-                      </tr>,
-                    );
-                  }
-
-                  if (needsLeadRow) {
-                    const spanMain = N + 1;
-                    const sizeHdrCells =
-                      K === 1 && maxK > 1 ? (
-                        <>
-                          <td style={{ ...cell, fontWeight: 700 }}>
-                            {g.sizes[0] != null && String(g.sizes[0]).trim() !== '' ? String(g.sizes[0]) : '均码'}
-                          </td>
-                          {Array.from({ length: maxK - 1 }, (_, j) => (
-                            <td key={`szpad-${j}`} style={{ ...cell, fontWeight: 700 }}>&nbsp;</td>
-                          ))}
-                        </>
-                      ) : (
-                        Array.from({ length: maxK }, (_, i) => (
-                          <td key={i} style={{ ...cell, fontWeight: 700 }}>
-                            {i < K && g.sizes[i] != null && String(g.sizes[i]).trim() !== ''
-                              ? String(g.sizes[i]) : '\u00a0'}
-                          </td>
-                        ))
-                      );
-                    rows.push(
-                      <tr key={`${g.lineNo}-lead-${entry.colorRowStart}`}>
-                        <td rowSpan={spanMain} style={{ ...cell, fontWeight: 600 }}>{g.lineNo}</td>
-                        <td rowSpan={spanMain} style={cell}>{g.sku}</td>
-                        <td rowSpan={spanMain} style={cell}>{g.productName}</td>
-                        <td style={cell}>&nbsp;</td>
-                        {sizeHdrCells}
-                        <td rowSpan={spanMain} style={{ ...cell, fontWeight: 600 }}>{g.totalQty}</td>
-                        <td rowSpan={spanMain} style={cell}>{fmtMatrixMoney(g.unitPrice)}</td>
-                        <td rowSpan={spanMain} style={{ ...cell, fontWeight: 600 }}>{fmtMatrixMoney(g.totalAmount)}</td>
-                        <td rowSpan={spanMain} style={cell}>{g.remark || '\u00a0'}</td>
-                      </tr>,
-                    );
-                    visibleCRs.forEach((cr, ri) => {
-                      rows.push(
-                        <tr key={`${g.lineNo}-c-${entry.colorRowStart + ri}`}>
-                          <td style={cell}>{cr.colorName || '\u00a0'}</td>
-                          {Array.from({ length: maxK }, (_, qi) => (
-                            <td key={qi} style={cell}>
-                              {qi < K ? fmtMatrixCellQty(cr.quantities[qi] ?? 0) : '\u00a0'}
-                            </td>
-                          ))}
-                        </tr>,
-                      );
-                    });
-                  } else {
-                    visibleCRs.forEach((cr, ri) => {
-                      rows.push(
-                        <tr key={`${g.lineNo}-${entry.colorRowStart + ri}`}>
-                          {ri === 0 ? (
-                            <>
-                              <td rowSpan={N} style={{ ...cell, fontWeight: 600 }}>{g.lineNo}</td>
-                              <td rowSpan={N} style={cell}>{g.sku}</td>
-                              <td rowSpan={N} style={cell}>{g.productName}</td>
-                            </>
-                          ) : null}
-                          <td style={cell}>{cr.colorName || '\u00a0'}</td>
-                          {Array.from({ length: maxK }, (_, qi) => (
-                            <td key={qi} style={cell}>
-                              {qi < K ? fmtMatrixCellQty(cr.quantities[qi] ?? 0) : '\u00a0'}
-                            </td>
-                          ))}
-                          {ri === 0 ? (
-                            <>
-                              <td rowSpan={N} style={{ ...cell, fontWeight: 600 }}>{g.totalQty}</td>
-                              <td rowSpan={N} style={cell}>{fmtMatrixMoney(g.unitPrice)}</td>
-                              <td rowSpan={N} style={{ ...cell, fontWeight: 600 }}>{fmtMatrixMoney(g.totalAmount)}</td>
-                              <td rowSpan={N} style={cell}>{g.remark || '\u00a0'}</td>
-                            </>
-                          ) : null}
-                        </tr>,
-                      );
-                    });
-                  }
-                  return rows;
-                });
-
-                return (
-                  <table
-                    className="w-full shrink-0"
-                    style={{
-                      borderCollapse: 'collapse',
-                      fontSize: `${pt}pt`,
-                      color: '#000000',
-                      tableLayout: 'fixed',
-                      border: `0.35mm solid ${border}`,
-                    }}
-                  >
-                    {showThead ? (
-                      <thead>
-                        <tr>
-                          <th rowSpan={2} style={{ ...cell, width: '6%', fontWeight: 700 }}>序号</th>
-                          <th rowSpan={2} style={{ ...cell, width: '10%', fontWeight: 700 }}>货号</th>
-                          <th rowSpan={2} style={{ ...cell, width: '14%', fontWeight: 700 }}>名称</th>
-                          <th rowSpan={2} style={{ ...cell, width: '9%', fontWeight: 700 }}>颜色</th>
-                          <th colSpan={maxK} style={{ ...cell, fontWeight: 700 }}>尺码数量</th>
-                          <th rowSpan={2} style={{ ...cell, width: '7%', fontWeight: 700 }}>数量</th>
-                          <th rowSpan={2} style={{ ...cell, width: '8%', fontWeight: 700 }}>单价</th>
-                          <th rowSpan={2} style={{ ...cell, width: '9%', fontWeight: 700 }}>金额</th>
-                          <th rowSpan={2} style={{ ...cell, width: '7%', fontWeight: 700 }}>备注</th>
-                        </tr>
-                        <tr>
-                          {sizeHeaderLabels.map((sz, si) => (
-                            <th key={si} style={{ ...cell, fontWeight: 700 }}>{sz || '\u00a0'}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                    ) : (
-                      <colgroup>
-                        {colWidths.map((w, ci) => <col key={ci} style={{ width: w }} />)}
-                      </colgroup>
-                    )}
-                    <tbody>{bodyRows}</tbody>
-                  </table>
-                );
-              })()}
-            </div>
-          )}
-        </div>
-      );
-    }
     default:
       return null;
   }
@@ -878,7 +655,7 @@ export interface PrintPaperProps {
 /** 按纸张 mm 尺寸渲染模板（预览与打印共用） */
 export function PrintPaper({ template, ctx, children, bodyClassName, editorMode }: PrintPaperProps) {
   const layout = getPrintLayoutMetrics(template);
-  const { bodyH, innerH } = layout;
+  const { bodyH } = layout;
   const sorted = [...template.elements].sort((a, b) => a.zIndex - b.zIndex);
   const m = getPaperMarginsMm(template);
   const paperBg = template.paperBackgroundColor?.trim() ? template.paperBackgroundColor : '#ffffff';
@@ -906,14 +683,12 @@ export function PrintPaper({ template, ctx, children, bodyClassName, editorMode 
     baseOuterStyle.backgroundColor = paperBg;
   }
 
-  const matrixEl = sorted.find(e => e.type === 'salesBillMatrix');
   const listEl = sorted.find(e => e.type === 'dynamicList');
-  const pagedAnchorY = matrixEl?.y ?? listEl?.y ?? 0;
+  const pagedAnchorY = listEl?.y ?? 0;
 
   const pages = Array.from({ length: totalPages }, (_, i) => i + 1);
   const { listRow: _omitListRow, ...ctxBase } = ctx;
   const listPag = computeListPaginationSummary(template, ctx, !!editorMode, bodyH);
-  const matrixPag = computeMatrixPaginationSummary(template, ctx, !!editorMode, bodyH, innerH);
 
   return (
     <div
@@ -930,26 +705,18 @@ export function PrintPaper({ template, ctx, children, bodyClassName, editorMode 
           !isLabelPerRow && !isLabelPerVirtualBatch && listPag && ctx.printListRows?.length && !editorMode
             ? getListRowsForPrintPage(listPag, ctx.printListRows, pageIndex)
             : undefined;
-        const matrixChunk: MatrixPageChunk | undefined =
-          !isLabelPerRow && !isLabelPerVirtualBatch && matrixPag && ctx.salesBillMatrix?.length && !editorMode
-            ? getMatrixGroupsForPrintPage(matrixPag, ctx.salesBillMatrix, pageIndex)
-            : undefined;
         const isLastPage = pageIndex === totalPages;
         const isFirstPage = pageIndex === 1;
         const hasPagedContent =
-          (ctx.printListRows?.length && sorted.some(e => e.type === 'dynamicList')) ||
-          (ctx.salesBillMatrix?.length && sorted.some(e => e.type === 'salesBillMatrix'));
-
-        const skipHeaderFooter = !editorMode && (matrixChunk?.startFromTop ?? false);
-        const pageBodyH = skipHeaderFooter ? innerH : bodyH;
+          !!(ctx.printListRows?.length && sorted.some(e => e.type === 'dynamicList'));
 
         const elementsForPage = editorMode
           ? sorted
           : isLabelPerRow || isLabelPerVirtualBatch
             ? sorted
             : sorted.filter(el => {
-                if (el.repeatPerPage) return !skipHeaderFooter;
-                if (el.type === 'dynamicList' || el.type === 'salesBillMatrix') return true;
+                if (el.repeatPerPage) return true;
+                if (el.type === 'dynamicList') return true;
                 if (!hasPagedContent) return true;
                 if (el.y <= pagedAnchorY) return isFirstPage;
                 return isLastPage;
@@ -958,11 +725,9 @@ export function PrintPaper({ template, ctx, children, bodyClassName, editorMode 
         const verticalPushMmById =
           editorMode || isLabelPerRow || isLabelPerVirtualBatch
             ? new Map<string, number>()
-            : computeBodyVerticalPushByElementId(
-                elementsForPage, pageCtx, listChunk, matrixChunk,
-              );
+            : computeBodyVerticalPushByElementId(elementsForPage, pageCtx, listChunk);
 
-        const globalYShift = skipHeaderFooter ? -(matrixEl?.y ?? 0) : 0;
+        const globalYShift = 0;
 
         const outerStyle: React.CSSProperties = {
           ...baseOuterStyle,
@@ -988,7 +753,7 @@ export function PrintPaper({ template, ctx, children, bodyClassName, editorMode 
             data-label-page={!editorMode && (isLabelPerRow || isLabelPerVirtualBatch || totalPages > 1) ? pageIndex : undefined}
           >
             <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-white">
-              {!skipHeaderFooter && template.header && (
+              {template.header && (
                 <div
                   className={editorMode ? 'cursor-pointer ring-0 hover:ring-2 hover:ring-indigo-300' : ''}
                   onClick={
@@ -1006,28 +771,28 @@ export function PrintPaper({ template, ctx, children, bodyClassName, editorMode 
               )}
               <div
                 className={`relative w-full shrink-0 bg-white ${editorMode ? 'overflow-visible' : 'overflow-hidden'} ${bodyClassName ?? ''}`}
-                style={{ height: `${pageBodyH}mm` }}
+                style={{ height: `${bodyH}mm` }}
                 onClick={editorMode ? () => editorMode.onBodyClick?.() : undefined}
               >
                 {elementsForPage.map(el => (
-                  <BodyElementView
-                    key={`${el.id}-p${pageIndex}`}
-                    el={el}
-                    ctx={pageCtx}
-                    editorMode={editorMode}
-                    listPageChunk={el.type === 'dynamicList' ? listChunk : undefined}
-                    matrixPageChunk={el.type === 'salesBillMatrix' ? matrixChunk : undefined}
-                    topPushMm={globalYShift + (verticalPushMmById.get(el.id) ?? 0)}
-                    heightGrowMm={
-                      editorMode || isLabelPerRow || isLabelPerVirtualBatch
-                        ? 0
-                        : elementHeightGrowMm(el, pageCtx, listChunk, matrixChunk)
-                    }
-                  />
+                  <React.Fragment key={`${el.id}-p${pageIndex}`}>
+                    <BodyElementView
+                      el={el}
+                      ctx={pageCtx}
+                      editorMode={editorMode}
+                      listPageChunk={el.type === 'dynamicList' ? listChunk : undefined}
+                      topPushMm={globalYShift + (verticalPushMmById.get(el.id) ?? 0)}
+                      heightGrowMm={
+                        editorMode || isLabelPerRow || isLabelPerVirtualBatch
+                          ? 0
+                          : elementHeightGrowMm(el, pageCtx, listChunk)
+                      }
+                    />
+                  </React.Fragment>
                 ))}
                 {editorMode && pageIndex === 1 ? children : null}
               </div>
-              {!skipHeaderFooter && template.footer && (
+              {template.footer && (
                 <div
                   className={editorMode ? 'cursor-pointer ring-0 hover:ring-2 hover:ring-indigo-300' : ''}
                   onClick={

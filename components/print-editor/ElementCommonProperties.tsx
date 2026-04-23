@@ -101,7 +101,7 @@ function ElementCommonPropertiesInner({
         </label>
         <p className="mt-1 pl-6 text-[10px] leading-relaxed text-slate-500">
           多页时：勾选「每页重复」的组件每一页都绘制（如标题、客户信息）。<br />
-          未勾选的普通组件仅在<strong>列表/矩阵结束的最后一页</strong>显示（如合计、结余），并自动紧跟在列表下方。
+          未勾选的普通组件仅在<strong>动态列表结束的最后一页</strong>显示（如合计、结余），并自动紧跟在列表下方。
         </p>
       </div>
     </div>
