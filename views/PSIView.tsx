@@ -73,7 +73,6 @@ const PSIView: React.FC<PSIViewProps> = ({ products, records, prodRecords = [], 
     setScrollSegment?.(activeTab);
   }, [activeTab, setScrollSegment]);
 
-  const [hideTabs, setHideTabs] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const tabsWrapRef = useRef<HTMLDivElement>(null);
   const [isStuck, setIsStuck] = useState(false);
@@ -139,47 +138,44 @@ const PSIView: React.FC<PSIViewProps> = ({ products, records, prodRecords = [], 
 
   return (
     <div className="space-y-0">
-      {!hideTabs && (
-        <>
-          <div>
-            <div ref={sentinelRef} className="h-px w-full" aria-hidden="true" />
-            <div
-              ref={tabsWrapRef}
-              className={`${subModuleTabBarBackdropClass} ${
-                isStuck
-                  ? `fixed top-0 px-12 ${subModuleTabBarStickyPadClass}`
-                  : subModuleTabBarInsetClass
-              }`}
-              style={isStuck && barStyle ? { left: barStyle.left, width: barStyle.width } : undefined}
-            >
-              <div className={subModuleTabPillClass}>
-                <div className="flex gap-1 min-w-max">
-                  {tabs.map(tab => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setActiveTab(tab.id as PSITab)}
-                      className={subModuleTabButtonClass(activeTab === tab.id)}
-                    >
-                      <tab.icon
-                        className={`w-4 h-4 shrink-0 ${activeTab === tab.id ? 'text-indigo-600' : 'text-slate-300'}`}
-                      />
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
+      <>
+        <div>
+          <div ref={sentinelRef} className="h-px w-full" aria-hidden="true" />
+          <div
+            ref={tabsWrapRef}
+            className={`${subModuleTabBarBackdropClass} ${
+              isStuck
+                ? `fixed top-0 px-12 ${subModuleTabBarStickyPadClass}`
+                : subModuleTabBarInsetClass
+            }`}
+            style={isStuck && barStyle ? { left: barStyle.left, width: barStyle.width } : undefined}
+          >
+            <div className={subModuleTabPillClass}>
+              <div className="flex gap-1 min-w-max">
+                {tabs.map(tab => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id as PSITab)}
+                    className={subModuleTabButtonClass(activeTab === tab.id)}
+                  >
+                    <tab.icon
+                      className={`w-4 h-4 shrink-0 ${activeTab === tab.id ? 'text-indigo-600' : 'text-slate-300'}`}
+                    />
+                    {tab.label}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
-          {isStuck && placeholderHeight > 0 && (
-            <div style={{ height: placeholderHeight }} aria-hidden="true" />
-          )}
-        </>
-      )}
-      <div className={hideTabs ? 'min-h-[600px]' : `min-h-[600px] ${subModuleMainContentTopClass}`}>
+        </div>
+        {isStuck && placeholderHeight > 0 && (
+          <div style={{ height: placeholderHeight }} aria-hidden="true" />
+        )}
+      </>
+      <div className={`min-h-[600px] ${subModuleMainContentTopClass}`}>
         <Suspense fallback={<PsiPanelFallback />}>
         <PSIOpsView 
-          onDetailViewChange={setHideTabs}
           type={activeTab}
           products={products}
           warehouses={warehouses}
