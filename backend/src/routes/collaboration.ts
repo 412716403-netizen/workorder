@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../controllers/collaboration.controller.js';
 import { validate } from '../middleware/validate.js';
+import { requireSubPermission } from '../middleware/tenant.js';
 
 const router = Router();
 
@@ -45,6 +46,11 @@ const forwardTransferSchema = z.object({
 // 租户互信
 router.post('/collaborations', validate(createCollabSchema), ctrl.createCollaboration);
 router.get('/collaborations', ctrl.listCollaborations);
+router.delete(
+  '/collaborations/:id',
+  requireSubPermission('collaboration:collaborations:delete'),
+  ctrl.revokeCollaboration,
+);
 
 // 外协路线
 router.get('/outsource-routes', ctrl.listOutsourceRoutes);

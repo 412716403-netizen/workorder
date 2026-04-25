@@ -11,6 +11,10 @@ export const listCollaborations = asyncHandler(async (req, res) => {
   res.json(await collabService.listCollaborations(req.tenantId!));
 });
 
+export const revokeCollaboration = asyncHandler(async (req, res) => {
+  res.json(await collabService.revokeCollaboration(req.tenantId!, str(req.params.id)));
+});
+
 export const listOutsourceRoutes = asyncHandler(async (req, res) => {
   res.json(await collabService.listOutsourceRoutes(req.tenantId!));
 });

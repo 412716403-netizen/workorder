@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { ArrowLeft, UserPlus, Building2, Link2 } from 'lucide-react';
+import { ArrowLeft, UserPlus, Building2, Link2, Unlink } from 'lucide-react';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
 import type { Partner, PartnerCategory } from '../../types';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 interface CollabSettingsPanelProps {
   onBack: () => void;
@@ -19,11 +20,13 @@ interface CollabSettingsPanelProps {
 const CollabSettingsPanel: React.FC<CollabSettingsPanelProps> = ({
   onBack, embeddedInModal = false, activeCollabs, partners, partnerCategories, onRefreshPartners, onRefreshCollabs,
 }) => {
+  const confirm = useConfirm();
   const [inviteCode, setInviteCode] = useState('');
   const [inviting, setInviting] = useState(false);
   const [bindPartnerId, setBindPartnerId] = useState('');
   const [bindCollabTenantId, setBindCollabTenantId] = useState('');
   const [binding, setBinding] = useState(false);
+  const [revokingCollabId, setRevokingCollabId] = useState<string | null>(null);
 
   const boundPartners = useMemo(() => partners.filter(p => p.collaborationTenantId), [partners]);
   const unboundPartners = useMemo(() => partners.filter(p => !p.collaborationTenantId), [partners]);
@@ -67,6 +70,29 @@ const CollabSettingsPanel: React.FC<CollabSettingsPanelProps> = ({
       await onRefreshPartners();
     } catch (err: any) {
       toast.error(err.message || '解除绑定失败');
+    }
+  };
+
+  const handleRevokeCollaboration = async (c: { id: string; otherTenantName?: string }) => {
+    const name = c.otherTenantName?.trim() || '该企业';
+    const ok = await confirm({
+      title: '解除企业协作',
+      message: `确定与「${name}」解除企业协作？\n\n单方操作即可生效：双方互信关系将终止，且双方租户下已绑定到对方的合作单位关联会被一并清除。历史外协单据仍保留。`,
+      confirmText: '解除协作',
+      cancelText: '取消',
+      danger: true,
+    });
+    if (!ok) return;
+    setRevokingCollabId(c.id);
+    try {
+      await api.collaboration.revokeCollaboration(c.id);
+      toast.success('已解除协作，双方均已生效');
+      await onRefreshCollabs();
+      await onRefreshPartners();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : '解除协作失败');
+    } finally {
+      setRevokingCollabId(null);
     }
   };
 
@@ -120,10 +146,20 @@ const CollabSettingsPanel: React.FC<CollabSettingsPanelProps> = ({
             <p className="text-[10px] font-black text-slate-400 uppercase mb-2">已建立协作 ({activeCollabs.length})</p>
             <div className="space-y-2">
               {activeCollabs.map(c => (
-                <div key={c.id} className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3">
+                <div key={c.id} className="flex flex-wrap items-center gap-2 sm:gap-3 bg-slate-50 rounded-xl px-4 py-3">
                   <Building2 className="w-4 h-4 text-indigo-600 shrink-0" />
                   <span className="text-sm font-bold text-slate-800 flex-1 min-w-0 truncate">{c.otherTenantName}</span>
                   <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded shrink-0">已生效</span>
+                  <button
+                    type="button"
+                    disabled={revokingCollabId === c.id}
+                    onClick={() => void handleRevokeCollaboration(c)}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 hover:text-rose-800 disabled:opacity-50 shrink-0 ml-auto sm:ml-0"
+                    title="单方解除，双方同时失效"
+                  >
+                    <Unlink className="w-3.5 h-3.5" />
+                    {revokingCollabId === c.id ? '解除中…' : '解除协作'}
+                  </button>
                 </div>
               ))}
             </div>

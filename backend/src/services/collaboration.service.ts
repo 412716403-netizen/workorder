@@ -470,7 +470,13 @@ export async function createCollaboration(tenantId: string, userId: string | und
 }
 
 export async function listCollaborations(tenantId: string) {
-  const rows = await basePrisma.tenantCollaboration.findMany({ where: { OR: [{ tenantAId: tenantId }, { tenantBId: tenantId }] }, orderBy: { createdAt: 'desc' } });
+  const rows = await basePrisma.tenantCollaboration.findMany({
+    where: {
+      status: 'ACTIVE',
+      OR: [{ tenantAId: tenantId }, { tenantBId: tenantId }],
+    },
+    orderBy: { createdAt: 'desc' },
+  });
   const tenantIds = new Set<string>();
   for (const r of rows) { tenantIds.add(r.tenantAId); tenantIds.add(r.tenantBId); }
   tenantIds.delete(tenantId);
@@ -480,6 +486,41 @@ export async function listCollaborations(tenantId: string) {
     const otherId = r.tenantAId === tenantId ? r.tenantBId : r.tenantAId;
     return { ...r, otherTenantId: otherId, otherTenantName: tenantMap[otherId] ?? '未知' };
   });
+}
+
+/**
+ * 单方解除企业协作：将互信标记为 REVOKED，并清空双方租户下指向对方的合作单位 collaborationTenantId。
+ * 对端租户列表与绑定状态同步失效（双方一致）。
+ */
+export async function revokeCollaboration(tenantId: string, collaborationId: string) {
+  const row = await basePrisma.tenantCollaboration.findUnique({ where: { id: collaborationId } });
+  if (!row) throw new AppError(404, '协作记录不存在');
+  if (row.tenantAId !== tenantId && row.tenantBId !== tenantId) {
+    throw new AppError(403, '无权操作此协作关系');
+  }
+  if (row.status !== 'ACTIVE') {
+    return { success: true as const, alreadyRevoked: true as const };
+  }
+
+  const a = row.tenantAId;
+  const b = row.tenantBId;
+
+  await basePrisma.$transaction([
+    basePrisma.tenantCollaboration.update({
+      where: { id: collaborationId },
+      data: { status: 'REVOKED' },
+    }),
+    basePrisma.partner.updateMany({
+      where: { tenantId: a, collaborationTenantId: b },
+      data: { collaborationTenantId: null },
+    }),
+    basePrisma.partner.updateMany({
+      where: { tenantId: b, collaborationTenantId: a },
+      data: { collaborationTenantId: null },
+    }),
+  ]);
+
+  return { success: true as const };
 }
 
 export async function listOutsourceRoutes(tenantId: string) {

@@ -592,6 +592,11 @@ export const collaboration = {
     request<any>('/collaboration/collaborations', { method: 'POST', body: JSON.stringify(data) }),
   listCollaborations: () =>
     request<any[]>('/collaboration/collaborations'),
+  /** 单方解除企业协作（后端对双方租户同时清理绑定） */
+  revokeCollaboration: (collaborationId: string) =>
+    request<{ success: boolean; alreadyRevoked?: boolean }>(`/collaboration/collaborations/${collaborationId}`, {
+      method: 'DELETE',
+    }),
 
   syncDispatch: (data: { recordIds: string[]; collaborationTenantId: string; outsourceRouteId?: string }) =>
     request<{ dispatches: { transferId: string; dispatchId: string; productName: string }[] }>(
