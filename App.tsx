@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useRef, useLayoutEffect, useState } from 'react';
+import React, { Suspense, useRef, useLayoutEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Link, Navigate, useParams, useLocation } from 'react-router-dom';
 import {
   ClipboardList, Settings as SettingsIcon,
@@ -22,7 +22,7 @@ const PrintTemplateEditorView = lazyWithReloadOnChunkError(() => import('./views
 const TraceView = lazyWithReloadOnChunkError(() => import('./views/TraceView'));
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { AppDataProvider, useDataLoading, useMasterData, useConfigData, useOrdersData, usePsiData, useFinanceData, useAppActions } from './contexts/AppDataContext';
+import { AppDataProvider, useDataLoading } from './contexts/AppDataContext';
 import { useCollabPendingIndicator } from './hooks/useCollabPendingIndicator';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ConfirmProvider } from './contexts/ConfirmContext';
@@ -304,169 +304,27 @@ function DefaultHomeRedirect() {
 }
 
 function ProductionRoute() {
-  const m = useMasterData();
-  const c = useConfigData();
-  const o = useOrdersData();
-  const { psiRecords } = usePsiData();
-  const a = useAppActions();
-  const { tenantCtx } = useAuth();
-  useEffect(() => { a.ensureDeferredLoaded(); }, [a.ensureDeferredLoaded]);
-  return (
-    <ProductionManagementView
-      productionLinkMode={c.productionLinkMode} processSequenceMode={c.processSequenceMode}
-      allowExceedMaxReportQty={c.allowExceedMaxReportQty}
-      plans={o.plans} orders={o.orders} products={m.products} categories={m.categories}
-      dictionaries={m.dictionaries} workers={m.workers} equipment={m.equipment}
-      prodRecords={o.prodRecords} psiRecords={psiRecords} warehouses={m.warehouses}
-      globalNodes={m.globalNodes} boms={m.boms} partners={m.partners}
-      partnerCategories={m.partnerCategories}
-      planFormSettings={c.planFormSettings} onUpdatePlanFormSettings={a.onUpdatePlanFormSettings}
-      printTemplates={c.printTemplates} onUpdatePrintTemplates={a.onUpdatePrintTemplates}
-      onRefreshPrintTemplates={a.refreshPrintTemplates}
-      orderFormSettings={c.orderFormSettings} onUpdateOrderFormSettings={a.onUpdateOrderFormSettings}
-      materialPanelSettings={c.materialPanelSettings} onUpdateMaterialPanelSettings={a.onUpdateMaterialPanelSettings}
-      materialFormSettings={c.materialFormSettings} onUpdateMaterialFormSettings={a.onUpdateMaterialFormSettings}
-      outsourceFormSettings={c.outsourceFormSettings} onUpdateOutsourceFormSettings={a.onUpdateOutsourceFormSettings}
-      reworkFormSettings={c.reworkFormSettings} onUpdateReworkFormSettings={a.onUpdateReworkFormSettings}
-      onCreatePlan={a.onCreatePlan} onUpdateProduct={a.onUpdateProduct}
-      onUpdatePlan={a.onUpdatePlan} onSplitPlan={a.onSplitPlan}
-      onDeletePlan={a.onDeletePlan} onConvertToOrder={a.onConvertToOrder}
-      onAddRecord={a.onAddProdRecord} onAddRecordBatch={a.onAddProdRecordBatch}
-      onUpdateRecord={a.onUpdateProdRecord} onDeleteRecord={a.onDeleteProdRecord}
-      onAddPSIRecord={a.onAddPSIRecord} onAddPSIRecordBatch={a.onAddPSIRecordBatch}
-      onCreateSubPlan={a.onCreateSubPlan} onCreateSubPlans={a.onCreateSubPlans}
-      onReportSubmit={a.onReportSubmit} onReportSubmitProduct={a.onReportSubmitProduct}
-      onUpdateReport={a.onUpdateReport} onDeleteReport={a.onDeleteReport}
-      productMilestoneProgresses={o.productMilestoneProgresses}
-      onUpdateReportProduct={a.onUpdateReportProduct} onDeleteReportProduct={a.onDeleteReportProduct}
-      onUpdateOrder={a.onUpdateOrder} onDeleteOrder={a.onDeleteOrder}
-      userPermissions={tenantCtx?.permissions} tenantRole={tenantCtx?.tenantRole}
-    />
-  );
+  return <ProductionManagementView />;
 }
 
 function PsiRoute() {
-  const m = useMasterData();
-  const c = useConfigData();
-  const o = useOrdersData();
-  const { psiRecords } = usePsiData();
-  const a = useAppActions();
-  const { tenantCtx } = useAuth();
-  useEffect(() => { a.ensureDeferredLoaded(); }, [a.ensureDeferredLoaded]);
-  return (
-    <PSIView
-      products={m.products} records={psiRecords} prodRecords={o.prodRecords}
-      orders={o.orders} warehouses={m.warehouses} categories={m.categories}
-      partners={m.partners} partnerCategories={m.partnerCategories} dictionaries={m.dictionaries}
-      purchaseOrderFormSettings={c.purchaseOrderFormSettings}
-      onUpdatePurchaseOrderFormSettings={a.onUpdatePurchaseOrderFormSettings}
-      salesOrderFormSettings={c.salesOrderFormSettings}
-      onUpdateSalesOrderFormSettings={a.onUpdateSalesOrderFormSettings}
-      purchaseBillFormSettings={c.purchaseBillFormSettings}
-      onUpdatePurchaseBillFormSettings={a.onUpdatePurchaseBillFormSettings}
-      salesBillFormSettings={c.salesBillFormSettings}
-      onUpdateSalesBillFormSettings={a.onUpdateSalesBillFormSettings}
-      onAddRecord={a.onAddPSIRecord} onAddRecordBatch={a.onAddPSIRecordBatch}
-      onReplaceRecords={a.onReplacePSIRecords} onDeleteRecords={a.onDeletePSIRecords}
-      userPermissions={tenantCtx?.permissions} tenantRole={tenantCtx?.tenantRole || ''}
-    />
-  );
+  return <PSIView />;
 }
 
 function FinanceRoute() {
-  const m = useMasterData();
-  const o = useOrdersData();
-  const c = useConfigData();
-  const { psiRecords } = usePsiData();
-  const f = useFinanceData();
-  const a = useAppActions();
-  const { tenantCtx } = useAuth();
-  useEffect(() => { a.ensureDeferredLoaded(); }, [a.ensureDeferredLoaded]);
-  return (
-    <FinanceView
-      orders={o.orders} records={f.financeRecords} psiRecords={psiRecords}
-      prodRecords={o.prodRecords}
-      productMilestoneProgresses={o.productMilestoneProgresses}
-      onAddRecord={a.onAddFinanceRecord} onUpdateRecord={a.onUpdateFinanceRecord}
-      onDeleteRecord={a.onDeleteFinanceRecord}
-      financeCategories={f.financeCategories} financeAccountTypes={f.financeAccountTypes}
-      partners={m.partners} workers={m.workers} products={m.products}
-      partnerCategories={m.partnerCategories} categories={m.categories}
-      globalNodes={m.globalNodes} dictionaries={m.dictionaries}
-      userPermissions={tenantCtx?.permissions} tenantRole={tenantCtx?.tenantRole}
-      plans={o.plans}
-      receiptFormSettings={c.receiptFormSettings}
-      paymentFormSettings={c.paymentFormSettings}
-      onUpdateReceiptFormSettings={a.onUpdateReceiptFormSettings}
-      onUpdatePaymentFormSettings={a.onUpdatePaymentFormSettings}
-      printTemplates={c.printTemplates}
-      onUpdatePrintTemplates={a.onUpdatePrintTemplates}
-      onRefreshPrintTemplates={a.refreshPrintTemplates}
-    />
-  );
+  return <FinanceView />;
 }
 
 function CollaborationRoute() {
-  const m = useMasterData();
-  const o = useOrdersData();
-  const a = useAppActions();
-  const { tenantCtx } = useAuth();
-  useEffect(() => { a.ensureDeferredLoaded(); }, [a.ensureDeferredLoaded]);
-  return (
-    <CollaborationInboxView
-      products={m.products} partners={m.partners} partnerCategories={m.partnerCategories}
-      orders={o.orders} prodRecords={o.prodRecords} warehouses={m.warehouses}
-      dictionaries={m.dictionaries} nodeTemplates={m.globalNodes}
-      onRefreshPartners={a.refreshPartners} onRefreshProducts={a.refreshProducts}
-      onRefreshOrders={a.refreshOrders} onRefreshProdRecords={a.refreshProdRecords}
-      onRefreshPMP={a.refreshPMP}
-      tenantRole={tenantCtx?.tenantRole} userPermissions={tenantCtx?.permissions}
-    />
-  );
+  return <CollaborationInboxView />;
 }
 
 function BasicInfoRoute() {
-  const m = useMasterData();
-  const a = useAppActions();
-  const { tenantCtx, currentUser } = useAuth();
-  const userId = String(currentUser?.id ?? '');
-  return (
-    <BasicInfoView
-      products={m.products} globalNodes={m.globalNodes} categories={m.categories}
-      partnerCategories={m.partnerCategories} boms={m.boms} equipment={m.equipment}
-      dictionaries={m.dictionaries} partners={m.partners}
-      onUpdateProduct={a.onUpdateProduct} onDeleteProduct={a.onDeleteProduct}
-      onUpdateBOM={a.onUpdateBOM}
-      onRefreshDictionaries={a.refreshDictionaries} onRefreshWorkers={a.refreshWorkers}
-      onRefreshEquipment={a.refreshEquipment} onRefreshPartners={a.refreshPartners}
-      onRefreshPartnerCategories={a.refreshPartnerCategories} onRefreshProducts={a.refreshProducts}
-      tenantId={tenantCtx!.tenantId} tenantRole={tenantCtx!.tenantRole}
-      currentUserId={userId} userPermissions={tenantCtx!.permissions}
-    />
-  );
+  return <BasicInfoView />;
 }
 
 function SettingsRoute() {
-  const m = useMasterData();
-  const c = useConfigData();
-  const f = useFinanceData();
-  const a = useAppActions();
-  const { tenantCtx } = useAuth();
-  return (
-    <SettingsView
-      categories={m.categories} partnerCategories={m.partnerCategories}
-      globalNodes={m.globalNodes} warehouses={m.warehouses}
-      productionLinkMode={c.productionLinkMode} onUpdateProductionLinkMode={a.onUpdateProductionLinkMode}
-      processSequenceMode={c.processSequenceMode} onUpdateProcessSequenceMode={a.onUpdateProcessSequenceMode}
-      allowExceedMaxReportQty={c.allowExceedMaxReportQty}
-      onUpdateAllowExceedMaxReportQty={a.onUpdateAllowExceedMaxReportQty}
-      onRefreshCategories={a.refreshCategories} onRefreshPartnerCategories={a.refreshPartnerCategories}
-      onRefreshGlobalNodes={a.refreshGlobalNodes} onRefreshWarehouses={a.refreshWarehouses}
-      financeCategories={f.financeCategories} onRefreshFinanceCategories={a.refreshFinanceCategories}
-      financeAccountTypes={f.financeAccountTypes} onRefreshFinanceAccountTypes={a.refreshFinanceAccountTypes}
-      userPermissions={tenantCtx?.permissions} tenantRole={tenantCtx?.tenantRole}
-    />
-  );
+  return <SettingsView />;
 }
 
 function AppRoutes() {

@@ -11,14 +11,24 @@ import type {
 import { formatLocalDateTimeZh, parseProductionOpTimestampMs } from './localDateTime';
 import { OUTSOURCE_DISPATCH_CUSTOM_DATA_KEY, OUTSOURCE_RECEIVE_CUSTOM_DATA_KEY } from './productionOpCollab/outsource';
 
-function variantLabelForRecord(r: ProductionOpRecord, products: Product[], dictionaries?: AppDictionaries): string {
-  if (!r.variantId) return '—';
-  const p = products.find(x => x.id === r.productId);
-  const v = p?.variants?.find(x => x.id === r.variantId);
-  if (!v) return r.variantId;
+/** 外协/打印/列表共用：按产品 + 规格 id 解析颜色尺码标签 */
+export function formatOutsourceVariantLabel(
+  productId: string | undefined,
+  variantId: string | undefined | null,
+  products: Product[],
+  dictionaries?: AppDictionaries,
+): string {
+  if (!variantId) return '—';
+  const p = products.find(x => x.id === productId);
+  const v = p?.variants?.find(x => x.id === variantId);
+  if (!v) return variantId;
   const color = dictionaries?.colors?.find(c => c.id === v.colorId)?.name ?? v.colorId;
   const size = dictionaries?.sizes?.find(s => s.id === v.sizeId)?.name ?? v.sizeId;
   return `${color} / ${size}`;
+}
+
+function variantLabelForRecord(r: ProductionOpRecord, products: Product[], dictionaries?: AppDictionaries): string {
+  return formatOutsourceVariantLabel(r.productId, r.variantId, products, dictionaries);
 }
 
 /**

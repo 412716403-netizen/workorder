@@ -114,7 +114,17 @@ function productField(product: Product, key: string): unknown {
     case 'sku': return product.sku;
     case 'description': return product.description ?? '';
     case 'imageUrl': return product.imageUrl ?? '';
-    default: return undefined;
+    default:
+      if (key.startsWith('custom.')) {
+        const id = key.slice('custom.'.length);
+        if (!id) return '';
+        const v = product.categoryCustomData?.[id];
+        if (typeof v === 'string' && v.startsWith('data:image/')) return v;
+        if (typeof v === 'string' && v.startsWith('data:')) return '[附件]';
+        if (v == null || v === '') return '';
+        return formatCustomFieldDatetimeForPrint(v);
+      }
+      return undefined;
   }
 }
 

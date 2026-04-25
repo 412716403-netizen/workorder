@@ -1,4 +1,4 @@
-import type { Partner } from '../types';
+import type { Partner, PsiRecordType } from '../types';
 
 function trimStr(s: string): string {
   return s.trim();
@@ -68,7 +68,9 @@ function maxPsiSeqForSegment(
 }
 
 export type PsiDocPrefix = 'PO' | 'PB' | 'SO' | 'XS';
-export type PsiRecordType = 'PURCHASE_ORDER' | 'PURCHASE_BILL' | 'SALES_ORDER' | 'SALES_BILL';
+
+/** 与 `types.PsiRecordType` 同源，便于仅从本工具模块导入的调用方 */
+export type { PsiRecordType } from '../types';
 
 /**
  * 进销存单号：{2字母}-{合作单位4位}-{流水3位}

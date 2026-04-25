@@ -1,14 +1,28 @@
+import { Prisma } from '@prisma/client';
 import type { TenantPrismaClient } from '../lib/prisma.js';
 import { prisma as basePrisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
-import { genId } from '../utils/genId.js';
+import { genUuidV7 } from '../utils/genId.js';
 import {
   collectPlanTreeFromNode,
   generateScanToken,
+  parseScanTokenTenantHexPrefix,
+  resolveTenantIdFromScanTokenPrefix,
   resolveCallerContext,
   resolveVariantLabel,
   verifyCollaborationAccess,
 } from './planTreeQuota.service.js';
+
+const INSERT_CHUNK = 2000;
+
+/** 删计划单前调用：无外键级联时由应用层清理码表 */
+export async function deleteItemCodesAndVirtualBatchesForPlan(
+  db: TenantPrismaClient,
+  planOrderId: string,
+): Promise<void> {
+  await db.itemCode.deleteMany({ where: { planOrderId } });
+  await db.planVirtualBatch.deleteMany({ where: { planOrderId } });
+}
 
 // ── public API ───────────────────────────────────────────────
 
@@ -35,16 +49,50 @@ export async function listItemCodes(
       orderBy: { serialNo: 'asc' },
       skip: (opts.page - 1) * opts.pageSize,
       take: opts.pageSize,
-      include: { batch: { select: { id: true, sequenceNo: true } } },
     }),
     db.itemCode.count({ where }),
   ]);
 
-  return { items, total, page: opts.page, pageSize: opts.pageSize };
+  const batchIds = [...new Set(items.map((i) => i.batchId).filter(Boolean))] as string[];
+  let batchMap = new Map<string, { id: string; sequenceNo: number }>();
+  if (batchIds.length > 0) {
+    const batches = await db.planVirtualBatch.findMany({
+      where: { id: { in: batchIds } },
+      select: { id: true, sequenceNo: true },
+    });
+    batchMap = new Map(batches.map((b) => [b.id, b]));
+  }
+
+  const itemsOut = items.map((row) => ({
+    ...row,
+    batch: row.batchId ? batchMap.get(row.batchId) ?? null : null,
+  }));
+
+  return { items: itemsOut, total, page: opts.page, pageSize: opts.pageSize };
+}
+
+async function findItemCodeByScanToken(scanToken: string) {
+  const prefix = parseScanTokenTenantHexPrefix(scanToken);
+  if (!prefix) return null;
+  const ownerTenantId = await resolveTenantIdFromScanTokenPrefix(prefix);
+  if (!ownerTenantId) return null;
+  return basePrisma.itemCode.findFirst({
+    where: { tenantId: ownerTenantId, scanToken },
+  });
+}
+
+async function findVirtualBatchByScanToken(scanToken: string) {
+  const prefix = parseScanTokenTenantHexPrefix(scanToken);
+  if (!prefix) return null;
+  const ownerTenantId = await resolveTenantIdFromScanTokenPrefix(prefix);
+  if (!ownerTenantId) return null;
+  return basePrisma.planVirtualBatch.findFirst({
+    where: { tenantId: ownerTenantId, scanToken },
+  });
 }
 
 export async function scanItemCode(callerTenantId: string, token: string) {
-  const code = await basePrisma.itemCode.findUnique({ where: { scanToken: token } });
+  const code = await findItemCodeByScanToken(token);
   if (!code) throw new AppError(404, '单品码不存在');
 
   const ownerTenantId = code.tenantId;
@@ -85,8 +133,8 @@ export async function scanItemCode(callerTenantId: string, token: string) {
   let batchSequenceNo: number | null = null;
   let batchSerialLabel: string | null = null;
   if (code.batchId) {
-    const vb = await basePrisma.planVirtualBatch.findUnique({
-      where: { id: code.batchId },
+    const vb = await basePrisma.planVirtualBatch.findFirst({
+      where: { tenantId: ownerTenantId, id: code.batchId! },
       select: { sequenceNo: true, planOrderId: true },
     });
     if (vb) {
@@ -159,70 +207,79 @@ export async function generateItemCodes(
     });
   }
 
-  const existingCounts = await basePrisma.$queryRawUnsafe<
-    Array<{ variant_id: string | null; cnt: bigint }>
-  >(
-    `SELECT variant_id, COUNT(*)::bigint AS cnt FROM item_codes
-     WHERE tenant_id = $1::uuid AND plan_order_id = $2 AND status = 'ACTIVE' AND batch_id IS NULL
-     GROUP BY variant_id`,
-    tenantId,
-    planOrderId,
-  );
-  const countMap = new Map<string, number>();
-  for (const row of existingCounts) {
-    countMap.set(row.variant_id ?? '__null__', Number(row.cnt));
-  }
+  return db.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(
+      `SELECT 1 FROM plan_orders WHERE id = $1 AND tenant_id = $2::uuid FOR UPDATE`,
+      planOrderId,
+      tenantId,
+    );
 
-  const maxSerialResult = await basePrisma.$queryRawUnsafe<
-    Array<{ max_sn: number | null }>
-  >(
-    `SELECT MAX(serial_no) AS max_sn FROM item_codes
-     WHERE tenant_id = $1::uuid AND plan_order_id = $2`,
-    tenantId,
-    planOrderId,
-  );
-  let nextSerial = (maxSerialResult[0]?.max_sn ?? 0) + 1;
-
-  const toInsert: Array<{
-    id: string;
-    tenantId: string;
-    planOrderId: string;
-    productId: string;
-    variantId: string | null;
-    serialNo: number;
-    scanToken: string;
-    status: string;
-  }> = [];
-
-  const byVariant: Array<{ variantId: string | null; count: number }> = [];
-
-  for (const spec of itemSpecs) {
-    const key = spec.variantId ?? '__null__';
-    const existing = countMap.get(key) ?? 0;
-    const needed = Math.max(0, spec.quantity - existing);
-    byVariant.push({ variantId: spec.variantId, count: needed });
-
-    for (let i = 0; i < needed; i++) {
-      toInsert.push({
-        id: genId('ic'),
-        tenantId,
-        planOrderId,
-        productId: plan.productId,
-        variantId: spec.variantId,
-        serialNo: nextSerial++,
-        scanToken: generateScanToken(),
-        status: 'ACTIVE',
-      });
+    const existingCounts = await tx.$queryRawUnsafe<
+      Array<{ variant_id: string | null; cnt: bigint }>
+    >(
+      `SELECT variant_id, COUNT(*)::bigint AS cnt FROM item_codes
+       WHERE tenant_id = $1::uuid AND plan_order_id = $2 AND status = 'ACTIVE' AND batch_id IS NULL
+       GROUP BY variant_id`,
+      tenantId,
+      planOrderId,
+    );
+    const countMap = new Map<string, number>();
+    for (const row of existingCounts) {
+      countMap.set(row.variant_id ?? '__null__', Number(row.cnt));
     }
-  }
 
-  if (toInsert.length > 0) {
-    await basePrisma.itemCode.createMany({ data: toInsert });
-  }
+    const maxSerialResult = await tx.$queryRawUnsafe<Array<{ max_sn: number | null }>>(
+      `SELECT MAX(serial_no) AS max_sn FROM item_codes
+       WHERE tenant_id = $1::uuid AND plan_order_id = $2`,
+      tenantId,
+      planOrderId,
+    );
+    let nextSerial = (maxSerialResult[0]?.max_sn ?? 0) + 1;
 
-  const totalForPlan = await db.itemCode.count({ where: { planOrderId } });
+    const toInsert: Array<{
+      id: string;
+      tenantId: string;
+      planOrderId: string;
+      productId: string;
+      variantId: string | null;
+      serialNo: number;
+      scanToken: string;
+      status: string;
+    }> = [];
 
-  return { generated: toInsert.length, totalForPlan, byVariant };
+    const byVariant: Array<{ variantId: string | null; count: number }> = [];
+
+    for (const spec of itemSpecs) {
+      const key = spec.variantId ?? '__null__';
+      const existing = countMap.get(key) ?? 0;
+      const needed = Math.max(0, spec.quantity - existing);
+      byVariant.push({ variantId: spec.variantId, count: needed });
+
+      for (let i = 0; i < needed; i++) {
+        toInsert.push({
+          id: genUuidV7(),
+          tenantId,
+          planOrderId,
+          productId: plan.productId,
+          variantId: spec.variantId,
+          serialNo: nextSerial++,
+          scanToken: generateScanToken(tenantId),
+          status: 'ACTIVE',
+        });
+      }
+    }
+
+    for (let i = 0; i < toInsert.length; i += INSERT_CHUNK) {
+      const chunk = toInsert.slice(i, i + INSERT_CHUNK);
+      if (chunk.length > 0) {
+        await tx.itemCode.createMany({ data: chunk });
+      }
+    }
+
+    const totalForPlan = await tx.itemCode.count({ where: { planOrderId } });
+
+    return { generated: toInsert.length, totalForPlan, byVariant };
+  });
 }
 
 // ── 追溯时间轴（按产品 + 规格 + 计划树聚合）────────────────────
@@ -261,12 +318,159 @@ function mapOpTypeToKind(type: string): TraceEventKind {
   return 'OTHER';
 }
 
-async function buildTraceByPlanTree(params: {
+type TraceSqlRow = {
+  ev_kind: string;
+  sub_kind: string;
+  ev_id: string;
+  tenant_id: string;
+  ts: Date;
+  qty: unknown;
+  order_id: string | null;
+  order_number: string | null;
+  node_name: string | null;
+  operator: string | null;
+  notes: string | null;
+  partner: string | null;
+  warehouse_id: string | null;
+};
+
+function mapSqlRowToTraceEvent(
+  r: TraceSqlRow,
+  tenantMap: Map<string, string | null>,
+): TraceEventRow {
+  const kind =
+    r.ev_kind === 'REPORT'
+      ? 'REPORT'
+      : mapOpTypeToKind(r.sub_kind);
+  return {
+    kind,
+    subKind: r.sub_kind,
+    id: r.ev_id,
+    tenantId: r.tenant_id,
+    tenantName: tenantMap.get(r.tenant_id) ?? null,
+    timestamp: r.ts instanceof Date ? r.ts.toISOString() : String(r.ts),
+    quantity: Number(r.qty),
+    orderId: r.order_id,
+    orderNumber: r.order_number,
+    nodeName: r.node_name,
+    operator: r.operator,
+    notes: r.notes,
+    partner: r.partner,
+    warehouseId: r.warehouse_id,
+  };
+}
+
+async function traceEventRowsPaged(params: {
+  planIds: string[];
+  tenantIds: string[];
+  productId: string;
+  variantId: string | null;
+  orderIds: string[];
+  page: number;
+  pageSize: number;
+}): Promise<{ rows: TraceEventRow[]; total: number }> {
+  const { planIds, tenantIds, productId, variantId, orderIds, page, pageSize } = params;
+  if (planIds.length === 0 || tenantIds.length === 0) {
+    return { rows: [], total: 0 };
+  }
+
+  const offset = Math.max(0, (page - 1) * pageSize);
+  const planList = Prisma.join(planIds);
+  const tenantList = Prisma.join(tenantIds);
+  const variantIsNull = variantId === null;
+  const orderIdsEmpty = orderIds.length === 0;
+  const variantCond = variantIsNull
+    ? Prisma.sql`mr.variant_id IS NULL`
+    : Prisma.sql`mr.variant_id = ${variantId}`;
+
+  const opVariantCond = variantIsNull
+    ? Prisma.sql`por.variant_id IS NULL`
+    : Prisma.sql`por.variant_id = ${variantId}`;
+
+  const opOrderCond = orderIdsEmpty
+    ? Prisma.sql`TRUE`
+    : Prisma.sql`(por.order_id IS NULL OR por.order_id IN (${Prisma.join(orderIds)}))`;
+
+  const unionInner = Prisma.sql`
+    (
+      SELECT
+        'REPORT'::text AS ev_kind,
+        'MILESTONE_REPORT'::text AS sub_kind,
+        mr.id::text AS ev_id,
+        po.tenant_id::text AS tenant_id,
+        mr.timestamp AS ts,
+        mr.quantity AS qty,
+        po.id::text AS order_id,
+        po.order_number AS order_number,
+        m.name AS node_name,
+        mr.operator AS operator,
+        mr.notes AS notes,
+        NULL::text AS partner,
+        NULL::text AS warehouse_id
+      FROM milestone_reports mr
+      INNER JOIN milestones m ON m.id = mr.milestone_id
+      INNER JOIN production_orders po ON po.id = m.production_order_id
+      WHERE po.plan_order_id IN (${planList})
+        AND (${variantCond})
+    )
+    UNION ALL
+    (
+      SELECT
+        'OP'::text AS ev_kind,
+        por.type AS sub_kind,
+        por.id::text AS ev_id,
+        por.tenant_id::text AS tenant_id,
+        por.timestamp AS ts,
+        por.quantity AS qty,
+        por.order_id::text AS order_id,
+        po.order_number AS order_number,
+        NULL::text AS node_name,
+        por.operator AS operator,
+        COALESCE(por.reason, por.doc_no) AS notes,
+        por.partner AS partner,
+        por.warehouse_id::text AS warehouse_id
+      FROM production_op_records por
+      LEFT JOIN production_orders po ON po.id = por.order_id
+      WHERE por.tenant_id IN (${tenantList})
+        AND por.product_id = ${productId}
+        AND (${opVariantCond})
+        AND (${opOrderCond})
+    )
+  `;
+
+  const countRows = await basePrisma.$queryRaw<Array<{ c: bigint }>>(Prisma.sql`
+    SELECT COUNT(*)::bigint AS c FROM (${unionInner}) u
+  `);
+  const total = Number(countRows[0]?.c ?? 0n);
+
+  const pageRows = await basePrisma.$queryRaw<TraceSqlRow[]>(Prisma.sql`
+    SELECT * FROM (${unionInner}) u
+    ORDER BY u.ts ASC, u.ev_id ASC
+    LIMIT ${pageSize} OFFSET ${offset}
+  `);
+
+  const tenantRows = await basePrisma.tenant.findMany({
+    where: { id: { in: tenantIds } },
+    select: { id: true, name: true },
+  });
+  const tenantMap = new Map(tenantRows.map((t) => [t.id, t.name]));
+
+  const rows = pageRows.map((r) => mapSqlRowToTraceEvent(r, tenantMap));
+  return { rows, total };
+}
+
+async function buildTracePayloadPaged(params: {
   rootPlanOrderId: string;
   productId: string;
   variantId: string | null;
+  page: number;
+  pageSize: number;
 }): Promise<{
   events: TraceEventRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
   tenants: Array<{ id: string; name: string | null }>;
   planTree: Array<{ id: string; tenantId: string; planNumber: string; parentPlanId: string | null }>;
 }> {
@@ -274,154 +478,99 @@ async function buildTraceByPlanTree(params: {
   const planIds = tree.map((n) => n.id);
   const tenantIds = Array.from(new Set(tree.map((n) => n.tenantId)));
 
-  const [tenants, orders] = await Promise.all([
-    basePrisma.tenant.findMany({
-      where: { id: { in: tenantIds } },
-      select: { id: true, name: true },
-    }),
-    basePrisma.productionOrder.findMany({
-      where: { planOrderId: { in: planIds } },
-      select: { id: true, orderNumber: true, tenantId: true, productId: true },
-    }),
-  ]);
-  const tenantMap = new Map(tenants.map((t) => [t.id, t.name]));
-  const orderIds = orders.map((o) => o.id);
-  const orderMap = new Map(orders.map((o) => [o.id, o]));
-
-  const milestones =
-    orderIds.length > 0
-      ? await basePrisma.milestone.findMany({
-          where: { productionOrderId: { in: orderIds } },
-          select: { id: true, name: true, productionOrderId: true },
-        })
-      : [];
-  const milestoneMap = new Map(milestones.map((m) => [m.id, m]));
-  const milestoneIds = milestones.map((m) => m.id);
-
-  const reportWhere: { milestoneId: { in: string[] }; variantId?: string | null } = {
-    milestoneId: { in: milestoneIds },
-  };
-  if (params.variantId != null) reportWhere.variantId = params.variantId;
-  else reportWhere.variantId = null;
-
-  const reports =
-    milestoneIds.length > 0
-      ? await basePrisma.milestoneReport.findMany({
-          where: reportWhere,
-          select: {
-            id: true,
-            milestoneId: true,
-            timestamp: true,
-            operator: true,
-            quantity: true,
-            variantId: true,
-            notes: true,
-          },
-        })
-      : [];
-
-  const opRecords = await basePrisma.productionOpRecord.findMany({
-    where: {
-      tenantId: { in: tenantIds },
-      productId: params.productId,
-      variantId: params.variantId ?? null,
-      ...(orderIds.length > 0
-        ? { OR: [{ orderId: { in: orderIds } }, { orderId: null }] }
-        : {}),
-    },
-    select: {
-      id: true,
-      tenantId: true,
-      type: true,
-      orderId: true,
-      quantity: true,
-      reason: true,
-      partner: true,
-      operator: true,
-      timestamp: true,
-      nodeId: true,
-      warehouseId: true,
-      docNo: true,
-    },
+  const tenants = await basePrisma.tenant.findMany({
+    where: { id: { in: tenantIds } },
+    select: { id: true, name: true },
   });
 
-  const events: TraceEventRow[] = [];
+  const planTree = tree.map((n) => ({
+    id: n.id,
+    tenantId: n.tenantId,
+    planNumber: n.planNumber,
+    parentPlanId: n.parentPlanId,
+  }));
 
-  for (const r of reports) {
-    const ms = milestoneMap.get(r.milestoneId);
-    const order = ms ? orderMap.get(ms.productionOrderId) : undefined;
-    const tid = order?.tenantId ?? '';
-    events.push({
-      kind: 'REPORT',
-      subKind: 'MILESTONE_REPORT',
-      id: r.id,
-      tenantId: tid,
-      tenantName: tenantMap.get(tid) ?? null,
-      timestamp: r.timestamp.toISOString(),
-      quantity: Number(r.quantity),
-      orderId: order?.id ?? null,
-      orderNumber: order?.orderNumber ?? null,
-      nodeName: ms?.name ?? null,
-      operator: r.operator ?? null,
-      notes: r.notes ?? null,
-    });
+  if (planIds.length === 0) {
+    return {
+      events: [],
+      total: 0,
+      page: params.page,
+      pageSize: params.pageSize,
+      hasMore: false,
+      tenants: tenants.map((t) => ({ id: t.id, name: t.name })),
+      planTree,
+    };
   }
 
-  for (const op of opRecords) {
-    const order = op.orderId ? orderMap.get(op.orderId) : undefined;
-    events.push({
-      kind: mapOpTypeToKind(op.type),
-      subKind: op.type,
-      id: op.id,
-      tenantId: op.tenantId,
-      tenantName: tenantMap.get(op.tenantId) ?? null,
-      timestamp: op.timestamp.toISOString(),
-      quantity: Number(op.quantity),
-      orderId: op.orderId ?? null,
-      orderNumber: order?.orderNumber ?? null,
-      operator: op.operator ?? null,
-      partner: op.partner ?? null,
-      warehouseId: op.warehouseId ?? null,
-      notes: op.reason ?? op.docNo ?? null,
-    });
-  }
+  const orders = await basePrisma.productionOrder.findMany({
+    where: { planOrderId: { in: planIds } },
+    select: { id: true },
+  });
+  const orderIds = orders.map((o) => o.id);
 
-  events.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  const { rows, total } = await traceEventRowsPaged({
+    planIds,
+    tenantIds,
+    productId: params.productId,
+    variantId: params.variantId,
+    orderIds,
+    page: params.page,
+    pageSize: params.pageSize,
+  });
+
+  const hasMore = params.page * params.pageSize < total;
 
   return {
-    events,
+    events: rows,
+    total,
+    page: params.page,
+    pageSize: params.pageSize,
+    hasMore,
     tenants: tenants.map((t) => ({ id: t.id, name: t.name })),
-    planTree: tree.map((n) => ({
-      id: n.id,
-      tenantId: n.tenantId,
-      planNumber: n.planNumber,
-      parentPlanId: n.parentPlanId,
-    })),
+    planTree,
   };
 }
 
-export async function traceItemCode(callerTenantId: string, token: string) {
-  const code = await basePrisma.itemCode.findUnique({ where: { scanToken: token } });
+export async function traceItemCode(
+  callerTenantId: string,
+  token: string,
+  page = 1,
+  pageSize = 50,
+) {
+  const code = await findItemCodeByScanToken(token);
   if (!code) throw new AppError(404, '单品码不存在');
   if (!(await verifyCollaborationAccess(callerTenantId, code.tenantId))) {
     throw new AppError(403, '无权追溯该单品码');
   }
-  return buildTraceByPlanTree({
+  const p = Math.max(1, page);
+  const ps = Math.min(200, Math.max(1, pageSize));
+  return buildTracePayloadPaged({
     rootPlanOrderId: code.planOrderId,
     productId: code.productId,
     variantId: code.variantId ?? null,
+    page: p,
+    pageSize: ps,
   });
 }
 
-export async function traceVirtualBatch(callerTenantId: string, token: string) {
-  const batch = await basePrisma.planVirtualBatch.findUnique({ where: { scanToken: token } });
+export async function traceVirtualBatch(
+  callerTenantId: string,
+  token: string,
+  page = 1,
+  pageSize = 50,
+) {
+  const batch = await findVirtualBatchByScanToken(token);
   if (!batch) throw new AppError(404, '批次码不存在');
   if (!(await verifyCollaborationAccess(callerTenantId, batch.tenantId))) {
     throw new AppError(403, '无权追溯该批次码');
   }
-  return buildTraceByPlanTree({
+  const p = Math.max(1, page);
+  const ps = Math.min(200, Math.max(1, pageSize));
+  return buildTracePayloadPaged({
     rootPlanOrderId: batch.planOrderId,
     productId: batch.productId,
     variantId: batch.variantId ?? null,
+    page: p,
+    pageSize: ps,
   });
 }

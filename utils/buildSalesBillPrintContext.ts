@@ -5,6 +5,8 @@ import type {
   PrintRenderContext,
   Product,
   ProductVariant,
+  ProductionOpRecord,
+  PsiRecord,
   SalesBillMatrixColorRow,
   SalesBillMatrixGroup,
   SalesBillPrintDoc,
@@ -19,6 +21,7 @@ import { localCalendarYmdStartToIso } from './localDateTime';
 import { sortedVariantColorEntries } from './sortVariantsByProduct';
 import { computePartnerReceivableBeforeDoc } from './partnerReceivableLedger';
 import { flowRecordsEarliestMs } from './flowDocSort';
+import { groupPsiDocLines } from './psiPrintShared';
 
 export type SalesBillLineInput = {
   id: string;
@@ -221,9 +224,9 @@ export function buildSalesBillPrintRenderContext(opts: {
   productMap: Map<string, Product>;
   warehouseMap: Map<string, Warehouse>;
   dictionaries: AppDictionaries;
-  psiRecords: any[];
+  psiRecords: PsiRecord[];
   financeRecords: FinanceRecord[];
-  prodRecords: any[];
+  prodRecords: ProductionOpRecord[];
   editingDocNumber: string | null;
 }): PrintRenderContext {
   const { form, lines, productMap, warehouseMap, dictionaries, psiRecords, financeRecords, prodRecords, editingDocNumber } = opts;
@@ -236,7 +239,7 @@ export function buildSalesBillPrintRenderContext(opts: {
 
   let anchorTimeMs = Date.now();
   if (editingDocNumber) {
-    const docLines = (psiRecords || []).filter((r: any) => r.type === 'SALES_BILL' && r.docNumber === editingDocNumber);
+    const docLines = (psiRecords || []).filter((r) => r.type === 'SALES_BILL' && r.docNumber === editingDocNumber);
     const ms = flowRecordsEarliestMs(docLines);
     if (ms > 0) anchorTimeMs = ms;
   } else {
@@ -293,42 +296,25 @@ export function buildSalesBillPrintRenderContext(opts: {
 }
 
 /** 从同一销售单下的 PSI 行记录聚合为打印行输入 */
-export function buildSalesBillLinesFromPsiRecords(docItems: any[]): SalesBillLineInput[] {
-  const lineMap: Record<string, any[]> = {};
-  docItems.forEach((r: any) => {
-    const lg = r.lineGroupId ?? r.id;
-    if (!lineMap[lg]) lineMap[lg] = [];
-    lineMap[lg].push(r);
-  });
-  return Object.entries(lineMap).map(([lgId, recs]) => {
-    const first = recs[0];
-    const hasVar = recs.some((r: any) => r.variantId);
-    const vq: Record<string, number> = {};
-    if (hasVar) {
-      recs.forEach((r: any) => {
-        if (r.variantId) vq[r.variantId] = (vq[r.variantId] ?? 0) + (Number(r.quantity) || 0);
-      });
-    }
-    const lineQtyNoVar = recs.reduce((s, r: any) => s + (Number(r.quantity) || 0), 0);
-    return {
-      id: lgId,
-      productId: first.productId,
-      quantity: hasVar ? undefined : lineQtyNoVar,
-      salesPrice: Number(first.salesPrice) || 0,
-      variantQuantities: hasVar ? vq : undefined,
-    };
-  });
+export function buildSalesBillLinesFromPsiRecords(docItems: PsiRecord[]): SalesBillLineInput[] {
+  return groupPsiDocLines<SalesBillLineInput>(docItems, (lgId, first, _recs, hasVar, vq, lineQtyNoVar) => ({
+    id: lgId,
+    productId: first.productId,
+    quantity: hasVar ? undefined : lineQtyNoVar,
+    salesPrice: Number(first.salesPrice) || 0,
+    variantQuantities: hasVar ? vq : undefined,
+  }));
 }
 
 export function buildSalesBillPrintContextFromPsiDoc(params: {
   docNumber: string;
-  docItems: any[];
+  docItems: PsiRecord[];
   productMap: Map<string, Product>;
   warehouseMap: Map<string, Warehouse>;
   dictionaries: AppDictionaries;
-  psiRecords: any[];
+  psiRecords: PsiRecord[];
   financeRecords: FinanceRecord[];
-  prodRecords: any[];
+  prodRecords: ProductionOpRecord[];
 }): PrintRenderContext {
   const { docNumber, docItems, productMap, warehouseMap, dictionaries, psiRecords, financeRecords, prodRecords } = params;
   const main = docItems[0] ?? {};

@@ -38,13 +38,7 @@ import { PlanFormCustomFieldInput, PlanFormCustomFieldReadonly } from '../../com
 import { ScanInputButton } from '../../components/scan/ScanInputButton';
 import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
 import type { ScanPayload } from '../../utils/scanPayload';
-
-function fmtDT(ts: string | Date | undefined | null): string {
-  if (!ts) return '—';
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return String(ts);
-  return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-}
+import { fmtDT } from '../../utils/formatTime';
 
 /** 将入库登记自定义字段写入 production_op_records.collabData.stockInCustomData */
 function stockInCollabFromCustomData(customData: Record<string, unknown> | undefined): { collabData?: Record<string, unknown> } {

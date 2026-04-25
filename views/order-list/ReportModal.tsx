@@ -446,20 +446,34 @@ const ReportModal: React.FC<ReportModalProps> = ({
 
     let prevQty = 0;
     let curQty = 0;
+    const vid = variantId || '';
     allOrders.forEach(o => {
+      const variantItemQty = o.items.filter(i => (i.variantId ?? '') === vid).reduce((s, i) => s + i.quantity, 0);
+      const orderTotalQty = o.items.reduce((s, i) => s + i.quantity, 0);
+
       if (prevTemplateId) {
         const prevMs = o.milestones.find(m => m.templateId === prevTemplateId);
         if (prevMs) {
-          (prevMs.reports || []).forEach(r => {
-            if ((r.variantId || '') === variantId) prevQty += r.quantity;
-          });
+          const hasVariantReports = (prevMs.reports || []).some(r => r.variantId && r.variantId !== '');
+          if (hasVariantReports) {
+            (prevMs.reports || []).forEach(r => {
+              if ((r.variantId || '') === vid) prevQty += r.quantity;
+            });
+          } else if ((prevMs.completedQuantity ?? 0) > 0 && orderTotalQty > 0) {
+            prevQty += Math.round(((prevMs.completedQuantity ?? 0) * variantItemQty) / orderTotalQty);
+          }
         }
       }
       const curMs = o.milestones.find(m => m.templateId === milestoneTemplateId);
       if (curMs) {
-        (curMs.reports || []).forEach(r => {
-          if ((r.variantId || '') === variantId) curQty += r.quantity;
-        });
+        const hasVariantReports = (curMs.reports || []).some(r => r.variantId && r.variantId !== '');
+        if (hasVariantReports) {
+          (curMs.reports || []).forEach(r => {
+            if ((r.variantId || '') === vid) curQty += r.quantity;
+          });
+        } else if ((curMs.completedQuantity ?? 0) > 0 && orderTotalQty > 0) {
+          curQty += Math.round(((curMs.completedQuantity ?? 0) * variantItemQty) / orderTotalQty);
+        }
       }
     });
     return prevQty - curQty;
@@ -637,26 +651,16 @@ const ReportModal: React.FC<ReportModalProps> = ({
   const modalMilestoneOrder = productForModal?.milestoneNodeIds ?? [];
   const seqIdx = modalMilestoneOrder.indexOf(tid);
   const totalBase = useProductPmp
-    ? processSequenceMode === 'sequential' && seqIdx > 0
-      ? Math.max(
-          0,
-          pmpCompletedAtTemplate(productMilestoneProgresses, pid, modalMilestoneOrder[seqIdx - 1]) -
-            ordersInModal.reduce((s, o) => s + getDefectiveRework(o.id, tid).defective, 0) +
-            [...new Set(ordersInModal.map(o => reworkMergeBucketOrderId(o.id, orders)))].reduce(
-              (s, bid) => s + getDefectiveRework(bid, tid).rework,
-              0,
-            ),
-        )
-      : productGroupMaxReportableSum(
-          ordersInModal,
-          tid,
-          pid,
-          productMilestoneProgresses,
-          processSequenceMode,
-          (oid, t) => getDefectiveRework(oid, t),
-          undefined,
-          orders,
-        )
+    ? productGroupMaxReportableSum(
+        ordersInModal,
+        tid,
+        pid,
+        productMilestoneProgresses,
+        processSequenceMode,
+        (oid, t) => getDefectiveRework(oid, t),
+        undefined,
+        orders,
+      )
     : processSequenceMode === 'sequential'
       ? ordersInModal.reduce((s, o) => {
           const idx = o.milestones.findIndex(m => m.templateId === tid);
@@ -706,6 +710,37 @@ const ReportModal: React.FC<ReportModalProps> = ({
     ? Math.max(0, totalBase - totalCompleted - totalOutsourcedAtNode)
     : Math.max(0, totalBase - totalDefective + totalRework - totalCompleted - totalOutsourcedAtNode);
 
+  /** 顶栏「可报 A/B」：有产品聚合用入参，否则从弹窗内多单/单工单推导，关联工单与关联产品同一套文案 */
+  const hintTotalQty =
+    reportModal.productTotalQty ??
+    ordersInModal.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0);
+  const hintMaxReportableRaw =
+    reportModal.productMaxReportableQty ??
+    (useProductPmp
+      ? productGroupMaxReportableSum(
+          ordersInModal,
+          tid,
+          pid,
+          productMilestoneProgresses,
+          processSequenceMode,
+          (oid, t) => getDefectiveRework(oid, t),
+          undefined,
+          orders,
+        )
+      : ordersInModal.reduce((s, o) => {
+          const idx = o.milestones.findIndex(m => m.templateId === tid);
+          let base = o.items.reduce((a, i) => a + i.quantity, 0);
+          if (processSequenceMode === 'sequential' && idx > 0) {
+            base = o.milestones[idx - 1]?.completedQuantity ?? 0;
+          }
+          const { defective, rework } = getDefectiveRework(o.id, tid);
+          return s + Math.max(0, base - defective + rework);
+        }, 0));
+  const hintMaxReportable = Math.max(0, Math.round(Number(hintMaxReportableRaw) || 0));
+  const hintCompletedDisplay = reportModal.productCompletedQty ?? totalCompleted;
+  /** 与 effectiveRemainingForModal 一致：本工序外协「已发未收回」均应从可报剩余中扣除，并单独展示件数 */
+  const hintRemaining = Math.max(0, hintMaxReportable - hintCompletedDisplay - totalOutsourcedAtNode);
+
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
@@ -719,41 +754,38 @@ const ReportModal: React.FC<ReportModalProps> = ({
           {isMatrixMode && (
           <div className="text-xs text-slate-500 font-medium">
             <span className="font-bold text-slate-700">{reportModal.order.productName}</span>
-            {reportModal.productTotalQty != null ? (
+            {hintTotalQty > 0 ? (
               <>
                 <span className="mx-2">·</span>
-                {reportModal.productMaxReportableQty != null && reportModal.productMaxReportableQty !== reportModal.productTotalQty ? (
-                  <span>可报 {reportModal.productMaxReportableQty}/{reportModal.productTotalQty} 件</span>
-                ) : (
-                  <span>合计 {reportModal.productTotalQty} 件</span>
-                )}
-                {reportModal.productCompletedQty != null && (() => {
-                  const baseQty = reportModal.productMaxReportableQty ?? reportModal.productTotalQty ?? 0;
-                  const remaining = Math.max(0, baseQty - (reportModal.productCompletedQty ?? 0) - (useProductPmp ? totalOutsourcedAtNode : 0));
-                  return (
-                    <span className="ml-2">
-                      已报 {reportModal.productCompletedQty} · 剩 {remaining} 件
-                      {useProductPmp && totalOutsourcedAtNode > 0 ? (
-                        <span className="text-slate-400"> · 外协 {totalOutsourcedAtNode}</span>
-                      ) : null}
-                      {defectiveQtyForHint > 0 ? (
-                        <span
-                          className="text-slate-400"
-                          title="本工序报不良等需走返工流程的件数（含关联产品报工 PMP）"
-                        >
-                          {' '}
-                          · 返工 {defectiveQtyForHint} 件
-                        </span>
-                      ) : null}
-                      {totalRework > 0 ? (
-                        <span className="text-slate-400" title="返工报工已回缴到本工序的完成件数">
-                          {' '}
-                          ·{defectiveQtyForHint > 0 ? ' 返工完成' : ' 返工'} {totalRework}
-                        </span>
-                      ) : null}
+                <span className="ml-2">
+                  {hintMaxReportable !== hintTotalQty ? (
+                    <>可报 {hintMaxReportable}/{hintTotalQty} 件 · </>
+                  ) : (
+                    <>合计 {hintTotalQty} 件 · </>
+                  )}
+                  已报 {hintCompletedDisplay} · 剩 {hintRemaining} 件
+                  {totalOutsourcedAtNode > 0 ? (
+                    <span className="text-slate-400" title="本工序已发外协、尚未收回的在制数量（外协剩余）">
+                      {' '}
+                      · 外协剩余 {totalOutsourcedAtNode} 件
                     </span>
-                  );
-                })()}
+                  ) : null}
+                  {defectiveQtyForHint > 0 ? (
+                    <span
+                      className="text-slate-400"
+                      title="本工序报不良等需走返工流程的件数（含关联产品报工 PMP）"
+                    >
+                      {' '}
+                      · 返工 {defectiveQtyForHint} 件
+                    </span>
+                  ) : null}
+                  {totalRework > 0 ? (
+                    <span className="text-slate-400" title="返工报工已回缴到本工序的完成件数">
+                      {' '}
+                      ·{defectiveQtyForHint > 0 ? ' 返工完成' : ' 返工'} {totalRework}
+                    </span>
+                  ) : null}
+                </span>
               </>
             ) : (
               <>
@@ -1050,51 +1082,78 @@ const ReportModal: React.FC<ReportModalProps> = ({
                     <>
                       <span className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{reportModal.order.productName}</span>
                       <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium leading-snug">
-                        {reportModal.productTotalQty != null ? (
-                          <>
-                            {reportModal.productMaxReportableQty != null && reportModal.productMaxReportableQty !== reportModal.productTotalQty ? (
-                              <span>可报 {reportModal.productMaxReportableQty}/{reportModal.productTotalQty} {detailUnit}</span>
+                        {hintTotalQty > 0 ? (
+                          <span className="block mt-0.5">
+                            {hintMaxReportable !== hintTotalQty ? (
+                              <>可报 {hintMaxReportable}/{hintTotalQty} {detailUnit} · </>
                             ) : (
-                              <span>合计 {reportModal.productTotalQty} {detailUnit}</span>
+                              <>合计 {hintTotalQty} {detailUnit} · </>
                             )}
-                            {reportModal.productCompletedQty != null && (() => {
-                              const baseQty = reportModal.productMaxReportableQty ?? reportModal.productTotalQty ?? 0;
-                              const remaining = Math.max(0, baseQty - (reportModal.productCompletedQty ?? 0) - (useProductPmp ? totalOutsourcedAtNode : 0));
-                              return (
-                                <span className="block mt-0.5">
-                                  已报 {reportModal.productCompletedQty} · 剩 {remaining} {detailUnit}
-                                  {useProductPmp && totalOutsourcedAtNode > 0 ? (
-                                    <span className="text-slate-400"> · 外协 {totalOutsourcedAtNode}</span>
-                                  ) : null}
-                                  {defectiveQtyForHint > 0 ? (
-                                    <span
-                                      className="text-slate-400"
-                                      title="本工序报不良等需走返工流程的数量（含关联产品报工 PMP）"
-                                    >
-                                      {' '}
-                                      · 返工 {defectiveQtyForHint} {detailUnit}
-                                    </span>
-                                  ) : null}
-                                  {totalRework > 0 ? (
-                                    <span className="text-slate-400" title="返工报工已回缴到本工序的完成数量">
-                                      {' '}
-                                      ·{defectiveQtyForHint > 0 ? ' 返工完成' : ' 返工'} {totalRework}
-                                    </span>
-                                  ) : null}
-                                </span>
-                              );
-                            })()}
-                          </>
+                            已报 {hintCompletedDisplay} · 剩 {hintRemaining} {detailUnit}
+                            {totalOutsourcedAtNode > 0 ? (
+                              <span className="text-slate-400" title="本工序已发外协、尚未收回的在制数量（外协剩余）">
+                                {' '}
+                                · 外协剩余 {totalOutsourcedAtNode} {detailUnit}
+                              </span>
+                            ) : null}
+                            {defectiveQtyForHint > 0 ? (
+                              <span
+                                className="text-slate-400"
+                                title="本工序报不良等需走返工流程的数量（含关联产品报工 PMP）"
+                              >
+                                {' '}
+                                · 返工 {defectiveQtyForHint} {detailUnit}
+                              </span>
+                            ) : null}
+                            {totalRework > 0 ? (
+                              <span className="text-slate-400" title="返工报工已回缴到本工序的完成数量">
+                                {' '}
+                                ·{defectiveQtyForHint > 0 ? ' 返工完成' : ' 返工'} {totalRework}
+                              </span>
+                            ) : null}
+                          </span>
                         ) : (
                           <span className="text-slate-500 text-[10px] sm:text-[11px]">工单 {reportModal.order.orderNumber}</span>
                         )}
                       </div>
                     </>
                   ) : (
-                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                      <span className="text-sm font-bold text-slate-900">{reportModal.order.orderNumber}</span>
-                      <span className="text-sm text-slate-400">·</span>
-                      <span className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{reportModal.order.productName}</span>
+                    <div className="flex min-w-0 w-full flex-1 flex-col gap-0.5">
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <span className="text-sm font-bold text-slate-900">{reportModal.order.orderNumber}</span>
+                        <span className="text-sm text-slate-400">·</span>
+                        <span className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{reportModal.order.productName}</span>
+                      </div>
+                      {hintTotalQty > 0 ? (
+                        <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium leading-snug">
+                          <span className="block mt-0.5">
+                            {hintMaxReportable !== hintTotalQty ? (
+                              <>可报 {hintMaxReportable}/{hintTotalQty} {detailUnit} · </>
+                            ) : (
+                              <>合计 {hintTotalQty} {detailUnit} · </>
+                            )}
+                            已报 {hintCompletedDisplay} · 剩 {hintRemaining} {detailUnit}
+                            {totalOutsourcedAtNode > 0 ? (
+                              <span className="text-slate-400" title="本工序已发外协、尚未收回的在制数量（外协剩余）">
+                                {' '}
+                                · 外协剩余 {totalOutsourcedAtNode} {detailUnit}
+                              </span>
+                            ) : null}
+                            {defectiveQtyForHint > 0 ? (
+                              <span className="text-slate-400" title="本工序报不良等需走返工流程的件数">
+                                {' '}
+                                · 返工 {defectiveQtyForHint} {detailUnit}
+                              </span>
+                            ) : null}
+                            {totalRework > 0 ? (
+                              <span className="text-slate-400" title="返工报工已回缴到本工序的完成件数">
+                                {' '}
+                                ·{defectiveQtyForHint > 0 ? ' 返工完成' : ' 返工'} {totalRework}
+                              </span>
+                            ) : null}
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
                   )}
                 </div>

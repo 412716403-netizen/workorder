@@ -93,6 +93,21 @@ function dynamicListGridTemplateColumns(
 const EDITOR_MARGIN_STRIPES =
   'linear-gradient(45deg, #f0f0f0 25%, transparent 25%, transparent 50%, #f0f0f0 50%, #f0f0f0 75%, transparent 75%, transparent)';
 
+/** 解析结果为单张 data URL 图片时输出 img，便于打印与预览（如 {{产品.custom.xxx}} 上传图） */
+function renderPrintResolvedContent(display: string): React.ReactNode {
+  const t = display.trim();
+  if (t.startsWith('data:image/')) {
+    return (
+      <img
+        src={t}
+        alt=""
+        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block', margin: '0 auto' }}
+      />
+    );
+  }
+  return display || '\u00a0';
+}
+
 function HeaderFooterBand({
   config,
   ctx,
@@ -231,7 +246,7 @@ function BodyElementView({
             height: '100%',
           }}
         >
-          {display}
+          {renderPrintResolvedContent(display)}
         </div>,
       );
     }
@@ -380,7 +395,7 @@ function BodyElementView({
                 fontWeight: fw,
               }}
             >
-              {text}
+              {renderPrintResolvedContent(text)}
             </div>,
           );
         }
@@ -597,10 +612,10 @@ function BodyElementView({
                   fontSize: `${bpt}pt`,
                   fontWeight: bw,
                 }}
-                title={text}
+                title={text.length > 120 ? `${text.slice(0, 120)}…` : text}
               >
                 <span className="min-w-0 w-full break-words" style={{ textAlign: col.textAlign ?? 'left' }}>
-                  {text || '\u00a0'}
+                  {renderPrintResolvedContent(text)}
                 </span>
               </div>
             );

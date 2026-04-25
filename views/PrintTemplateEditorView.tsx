@@ -54,7 +54,7 @@ function CanvasDropZone({
 export default function PrintTemplateEditorView() {
   const { id: routeId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { products } = useMasterData();
+  const { products, categories } = useMasterData();
   const {
     printTemplates,
     planFormSettings,
@@ -135,10 +135,32 @@ export default function PrintTemplateEditorView() {
     ],
   );
 
+  const productCategoryCustomPreviewSamples = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const cat of categories) {
+      for (const f of cat.customFields ?? []) {
+        if (!f?.id || m.has(f.id)) continue;
+        const base = (f.label || '').trim() || f.id;
+        m.set(f.id, `「${cat.name}·${base}」预览`);
+      }
+    }
+    return Object.fromEntries(m);
+  }, [categories]);
+
   const previewCtx: PrintRenderContext = useMemo(() => {
     const plan = plans[0];
     const order = orders[0];
-    const product = products.find(p => p.id === (plan?.productId || order?.productId)) ?? products[0];
+    const rawProduct = products.find(p => p.id === (plan?.productId || order?.productId)) ?? products[0];
+    const product =
+      rawProduct && Object.keys(productCategoryCustomPreviewSamples).length > 0
+        ? {
+            ...rawProduct,
+            categoryCustomData: {
+              ...(rawProduct.categoryCustomData ?? {}),
+              ...productCategoryCustomPreviewSamples,
+            },
+          }
+        : rawProduct;
     const base: PrintRenderContext = {
       plan,
       order,
@@ -147,7 +169,7 @@ export default function PrintTemplateEditorView() {
       completedQuantity: 12,
     };
     return augmentPrintPreviewContext(base, template, psiCustomSamples);
-  }, [plans, orders, products, template, psiCustomSamples]);
+  }, [plans, orders, products, template, psiCustomSamples, productCategoryCustomPreviewSamples]);
 
   const fieldOptionsAll = useMemo(
     () =>
@@ -167,6 +189,7 @@ export default function PrintTemplateEditorView() {
         purchaseBillCustomFields: purchaseBillFormSettings.customFields,
         salesBillCustomFields: salesBillFormSettings.customFields,
         financeCategories,
+        productCategories: categories,
       }),
     [
       planFormSettings.customFields,
@@ -184,6 +207,7 @@ export default function PrintTemplateEditorView() {
       purchaseBillFormSettings.customFields,
       salesBillFormSettings.customFields,
       financeCategories,
+      categories,
     ],
   );
   const fieldOptions = useMemo(

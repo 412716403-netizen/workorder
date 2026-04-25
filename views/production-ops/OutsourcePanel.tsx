@@ -61,6 +61,7 @@ import OutsourceDispatchQuantityModal from './OutsourceDispatchQuantityModal';
 import OutsourceReceiveListModal from './OutsourceReceiveListModal';
 import OutsourceReceiveQuantityModal from './OutsourceReceiveQuantityModal';
 import OutsourceFlowListModal, { type OutsourceFlowOpenSeed } from './OutsourceFlowListModal';
+import OutsourcePartnerFlowDetailModal from './OutsourcePartnerFlowDetailModal';
 import OutsourceFlowDocumentDetailModal from './OutsourceFlowDocumentDetailModal';
 import OutsourceCollabSyncModal from './OutsourceCollabSyncModal';
 import { useAuth } from '../../contexts/AuthContext';
@@ -72,6 +73,7 @@ import {
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import { outsourceCustomCollabPart } from '../../utils/productionOpCollab/outsource';
 import OutsourceFormConfigModal from './OutsourceFormConfigModal';
+import type { PartnerFlowDetailSeed } from '../../utils/outsourcePartnerFlowDetail';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 
@@ -134,6 +136,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
   const [flowDetailKey, setFlowDetailKey] = useState<string | null>(null);
   const [flowOpenSeed, setFlowOpenSeed] = useState<OutsourceFlowOpenSeed>(null);
   const [flowOpenNonce, setFlowOpenNonce] = useState(0);
+  const [partnerQtyDetailSeed, setPartnerQtyDetailSeed] = useState<PartnerFlowDetailSeed | null>(null);
   const [matDispatchOrderId, setMatDispatchOrderId] = useState<string | null>(null);
   const [matDispatchProductId, setMatDispatchProductId] = useState<string | null>(null);
   const [matDispatchPartnerOptions, setMatDispatchPartnerOptions] = useState<string[]>([]);
@@ -1001,6 +1004,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
               onClick={() => {
                 setFlowOpenSeed(null);
                 setFlowOpenNonce(n => n + 1);
+                setPartnerQtyDetailSeed(null);
                 setOutsourceModal('flow');
               }}
               className={outlineToolbarButtonClass}
@@ -1099,6 +1103,20 @@ const OutsourcePanel: React.FC<PanelProps> = ({
                           <button
                             type="button"
                             onClick={() => {
+                              const seed: PartnerFlowDetailSeed = {
+                                productionLinkMode,
+                                orderId: productionLinkMode === 'product' ? undefined : orderId,
+                                productId,
+                                productName,
+                                orderNumber: productionLinkMode === 'product' ? undefined : orderNumber,
+                                nodeId,
+                                nodeName,
+                                partner,
+                              };
+                              if (outsourceFormSettings.showPartnerFlowDetailOnList) {
+                                setPartnerQtyDetailSeed(seed);
+                                return;
+                              }
                               setFlowOpenSeed({
                                 orderKeyword: productionLinkMode === 'product' ? '' : (orderNumber ?? ''),
                                 productKeyword: productName,
@@ -1106,10 +1124,15 @@ const OutsourcePanel: React.FC<PanelProps> = ({
                                 partnerKeyword: partner,
                               });
                               setFlowOpenNonce(n => n + 1);
+                              setPartnerQtyDetailSeed(null);
                               setOutsourceModal('flow');
                             }}
                             className="p-0.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
-                            title="查看该产品、工序、加工厂的外协流水"
+                            title={
+                              outsourceFormSettings.showPartnerFlowDetailOnList
+                                ? '加工厂往来数量明细'
+                                : '查看外协流水'
+                            }
                           >
                             <FileText className="w-3.5 h-3.5" />
                           </button>
@@ -1370,9 +1393,21 @@ const OutsourcePanel: React.FC<PanelProps> = ({
             setOutsourceModal(null);
             setFlowDetailKey(null);
             setFlowOpenSeed(null);
+            setPartnerQtyDetailSeed(null);
           }}
         />
       )}
+
+      <OutsourcePartnerFlowDetailModal
+        open={partnerQtyDetailSeed != null}
+        seed={partnerQtyDetailSeed}
+        onClose={() => setPartnerQtyDetailSeed(null)}
+        records={records}
+        products={products}
+        orders={orders}
+        categories={categories}
+        dictionaries={dictionaries}
+      />
 
       {outsourceModal === 'flow' && flowDetailKey && (
         <OutsourceFlowDocumentDetailModal

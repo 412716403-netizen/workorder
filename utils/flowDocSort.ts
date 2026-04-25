@@ -49,7 +49,9 @@ export function flowRecordsEarliestMs(
 }
 
 /** 进销存四类单据列表卡片：统一用组内最早可解析时间做展示，避免取首行 timestamp 为不可解析的本地化字符串 */
-export function formatPsiDocListTime(docLines: any[]): string {
+export function formatPsiDocListTime(
+  docLines: readonly { timestamp?: string | null; createdAt?: string | Date | null; _savedAtMs?: number | null }[],
+): string {
   const ms = flowRecordsEarliestMs(docLines);
   if (ms > 0) return formatLocalDateTimeZh(new Date(ms));
   const t0 = docLines[0]?.timestamp;

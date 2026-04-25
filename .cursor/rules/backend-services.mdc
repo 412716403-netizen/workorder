@@ -1,0 +1,31 @@
+---
+description: 后端 service 层约定：纯业务逻辑，租户作用域 Prisma
+globs:
+  - backend/src/services/**/*.ts
+---
+
+# 后端 services/ 约定
+
+service 文件承载**业务规则与数据访问**，保持**不依赖 Express / req / res**，便于单测与复用。
+
+## 必做
+
+- 函数签名优先接受 `db: TenantPrismaClient`（由 controller 传入），而不是自己去拿全局 prisma。
+- 需要 `tenantId` 时显式作为参数，不要从其他隐式上下文里取。
+- 多步写入、跨表改动走 **事务**：`db.$transaction(async (tx) => { ... })`。
+- 业务错误用 `throw new AppError(message, status)`（`backend/src/middleware/errorHandler.ts`）。
+- 复用的业务子步骤抽成同文件内的私有函数，避免 controller 调用时又拆一遍。
+- 单号/ID 生成走 `utils/docNumber.ts` / `utils/genId.ts`。
+- 参数规范化走 `utils/request.ts` 的 `sanitize*` / `normalizeDates`。
+
+## 禁止
+
+- 引用 `req` / `res` / `next`。
+- 在 service 内写 HTTP 状态码字面量（`AppError(msg, 400)` 可以；`res.status(400)` 不行）。
+- 把前端业务规则字面量（例如单据前缀）硬编码在这里，应该走 `shared/types.ts` 的常量。
+- 在没有事务的情况下做多表写入（会留下不一致数据）。
+
+## 参考
+
+- `backend/src/services/plans.service.ts` —— 拆分、转单、子计划、深度控制的完整范例。
+- `backend/src/services/finance.service.ts` —— 使用共享常量 `FINANCE_DOC_NO_PREFIX`。

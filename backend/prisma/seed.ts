@@ -126,6 +126,7 @@ async function main() {
     outsourceFormSettings: {
       outsourceDispatchCustomFields: [],
       outsourceReceiveCustomFields: [],
+      showPartnerFlowDetailOnList: false,
     },
     reworkFormSettings: {
       defectTreatmentCustomFields: [],

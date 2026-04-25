@@ -30,6 +30,8 @@ export const scan = asyncHandler(async (req, res) => {
 });
 
 export const trace = asyncHandler(async (req, res) => {
-  const result = await itemCodeService.traceItemCode(req.tenantId!, str(req.params.token));
+  const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10));
+  const pageSize = Math.min(200, Math.max(1, parseInt(String(req.query.pageSize ?? '50'), 10)));
+  const result = await itemCodeService.traceItemCode(req.tenantId!, str(req.params.token), page, pageSize);
   res.json(result);
 });

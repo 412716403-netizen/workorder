@@ -6,7 +6,7 @@ import {
   CreditCard, 
   Warehouse
 } from 'lucide-react';
-import { Product, Warehouse as WarehouseType, ProductCategory, Partner, PartnerCategory, AppDictionaries, PurchaseOrderFormSettings, SalesOrderFormSettings, PurchaseBillFormSettings, SalesBillFormSettings } from '../types';
+import { Product, Warehouse as WarehouseType, ProductCategory, Partner, PartnerCategory, AppDictionaries } from '../types';
 const PSIOpsView = lazy(() => import('./PSIOpsView'));
 
 const PsiPanelFallback = () => (
@@ -24,36 +24,8 @@ import {
 } from '../styles/uiDensity';
 import { useModulePermission, usePermFilteredTabs } from '../hooks/useModulePermission';
 import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
-
-interface PSIViewProps {
-  products: Product[];
-  records: any[];
-  /** 生产操作记录（用于入仓流水合并生产入库 STOCK_IN） */
-  prodRecords?: any[];
-  /** 工单列表（生产入库行显示工单号用） */
-  orders?: { id: string; orderNumber?: string }[];
-  warehouses: WarehouseType[];
-  categories: ProductCategory[];
-  partners: Partner[];
-  partnerCategories: PartnerCategory[];
-  dictionaries: AppDictionaries;
-  purchaseOrderFormSettings?: PurchaseOrderFormSettings;
-  onUpdatePurchaseOrderFormSettings?: (settings: PurchaseOrderFormSettings) => void;
-  salesOrderFormSettings?: SalesOrderFormSettings;
-  onUpdateSalesOrderFormSettings?: (settings: SalesOrderFormSettings) => void;
-  purchaseBillFormSettings?: PurchaseBillFormSettings;
-  onUpdatePurchaseBillFormSettings?: (settings: PurchaseBillFormSettings) => void;
-  salesBillFormSettings?: SalesBillFormSettings;
-  onUpdateSalesBillFormSettings?: (settings: SalesBillFormSettings) => void;
-  onAddRecord: (record: any) => void;
-  onAddRecordBatch?: (records: any[]) => Promise<void>;
-  /** 替换某一类单据、某个单号下的所有记录（用于编辑采购订单等场景） */
-  onReplaceRecords?: (type: string, docNumber: string, newRecords: any[]) => void;
-  /** 删除某一类单据、某个单号下的所有记录 */
-  onDeleteRecords?: (type: string, docNumber: string) => void;
-  userPermissions?: string[];
-  tenantRole?: string;
-}
+import { useAuth } from '../contexts/AuthContext';
+import { useMasterData, useConfigData, useOrdersData, usePsiData, useAppActions } from '../contexts/AppDataContext';
 
 // 简化业务类型，将仓库相关合并为 WAREHOUSE_MGMT
 type PSITab = 'PURCHASE_ORDER' | 'PURCHASE_BILL' | 'SALES_ORDER' | 'SALES_BILL' | 'WAREHOUSE_MGMT';
@@ -66,7 +38,38 @@ const TAB_PERM_GROUPS: Record<string, string[]> = {
   WAREHOUSE_MGMT: ['warehouse_list', 'warehouse_stocktake', 'warehouse_transfer', 'warehouse_flow'],
 };
 
-const PSIView: React.FC<PSIViewProps> = ({ products, records, prodRecords = [], orders = [], warehouses, categories, partners, partnerCategories, dictionaries, purchaseOrderFormSettings, onUpdatePurchaseOrderFormSettings, salesOrderFormSettings, onUpdateSalesOrderFormSettings, purchaseBillFormSettings, onUpdatePurchaseBillFormSettings, salesBillFormSettings, onUpdateSalesBillFormSettings, onAddRecord, onAddRecordBatch, onReplaceRecords, onDeleteRecords, userPermissions, tenantRole }) => {
+const PSIView: React.FC = () => {
+  const m = useMasterData();
+  const c = useConfigData();
+  const o = useOrdersData();
+  const { psiRecords: records } = usePsiData();
+  const a = useAppActions();
+  const { tenantCtx } = useAuth();
+
+  useEffect(() => { void a.ensureDeferredLoaded(); }, [a.ensureDeferredLoaded]);
+
+  const products = m.products;
+  const warehouses = m.warehouses;
+  const categories = m.categories;
+  const partners = m.partners;
+  const partnerCategories = m.partnerCategories;
+  const dictionaries = m.dictionaries;
+  const purchaseOrderFormSettings = c.purchaseOrderFormSettings;
+  const onUpdatePurchaseOrderFormSettings = a.onUpdatePurchaseOrderFormSettings;
+  const salesOrderFormSettings = c.salesOrderFormSettings;
+  const onUpdateSalesOrderFormSettings = a.onUpdateSalesOrderFormSettings;
+  const purchaseBillFormSettings = c.purchaseBillFormSettings;
+  const onUpdatePurchaseBillFormSettings = a.onUpdatePurchaseBillFormSettings;
+  const salesBillFormSettings = c.salesBillFormSettings;
+  const onUpdateSalesBillFormSettings = a.onUpdateSalesBillFormSettings;
+  const onAddRecord = a.onAddPSIRecord;
+  const onAddRecordBatch = a.onAddPSIRecordBatch;
+  const onReplaceRecords = a.onReplacePSIRecords;
+  const onDeleteRecords = a.onDeletePSIRecords;
+  const prodRecords = o.prodRecords;
+  const orders = o.orders;
+  const userPermissions = tenantCtx?.permissions;
+  const tenantRole = tenantCtx?.tenantRole || '';
   const [activeTab, setActiveTab] = useState<PSITab>('PURCHASE_ORDER');
   const setScrollSegment = useSetMainScrollSegment();
   useLayoutEffect(() => {

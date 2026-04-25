@@ -123,7 +123,7 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
     return list;
   }, [outsourceFlowSummaryRows, flowFilterDateFrom, flowFilterDateTo, flowFilterType, flowFilterPartner, flowFilterDocNo, flowFilterOrder, flowFilterProduct, flowFilterMilestone, productionLinkMode]);
 
-  const { outsourceFlowTotalDispatch, outsourceFlowTotalReceive } = useMemo(() => {
+  const { outsourceFlowTotalDispatch, outsourceFlowTotalReceive, outsourceFlowRemaining } = useMemo(() => {
     let dispatch = 0;
     let receive = 0;
     filteredOutsourceFlowRows.forEach(row => {
@@ -132,7 +132,8 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
         else if (r.status === '已收回') receive += r.quantity;
       });
     });
-    return { outsourceFlowTotalDispatch: dispatch, outsourceFlowTotalReceive: receive };
+    const outsourceFlowRemaining = Math.max(0, dispatch - receive);
+    return { outsourceFlowTotalDispatch: dispatch, outsourceFlowTotalReceive: receive, outsourceFlowRemaining };
   }, [filteredOutsourceFlowRows]);
 
   return (
@@ -140,8 +141,10 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
       <div className="relative bg-white w-full max-w-6xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-          <h3 className="font-bold text-slate-800 flex items-center gap-2"><ScrollText className="w-5 h-5 text-indigo-600" /> 外协流水</h3>
-          <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
+          <h3 className="font-bold text-slate-800 flex items-center gap-2">
+            <ScrollText className="w-5 h-5 text-indigo-600 shrink-0" /> 外协流水
+          </h3>
+          <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50 shrink-0"><X className="w-5 h-5" /></button>
         </div>
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
           <div className="flex items-center gap-2 mb-3">
@@ -254,7 +257,7 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
                       <span className="text-slate-300 mx-2">|</span>
                       <span className="text-xs text-amber-600">收回 {outsourceFlowTotalReceive} 件</span>
                       <span className="text-slate-300 mx-2">|</span>
-                      <span className="text-xs text-slate-700">结余 {Math.round((outsourceFlowTotalDispatch - outsourceFlowTotalReceive) * 100) / 100} 件</span>
+                      <span className="text-xs text-slate-700">剩余 {outsourceFlowRemaining} 件</span>
                     </td>
                   </tr>
                 </tbody>

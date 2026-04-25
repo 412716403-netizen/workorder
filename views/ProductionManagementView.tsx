@@ -32,76 +32,77 @@ import {
 } from '../styles/uiDensity';
 import { useModulePermission, usePermFilteredTabs } from '../hooks/useModulePermission';
 import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
-
-interface ProductionManagementViewProps {
-  productionLinkMode?: ProductionLinkMode;
-  processSequenceMode?: ProcessSequenceMode;
-  allowExceedMaxReportQty?: boolean;
-  plans: PlanOrder[];
-  orders: ProductionOrder[];
-  products: Product[];
-  categories: ProductCategory[];
-  dictionaries: AppDictionaries;
-  workers: Worker[];
-  equipment: Equipment[];
-  prodRecords: ProductionOpRecord[];
-  psiRecords?: any[];
-  warehouses?: Warehouse[];
-  globalNodes: GlobalNodeTemplate[];
-  boms: BOM[];
-  partners: Partner[];
-  partnerCategories: PartnerCategory[];
-  planFormSettings: PlanFormSettings;
-  onUpdatePlanFormSettings: (settings: PlanFormSettings) => void;
-  printTemplates: PrintTemplate[];
-  onUpdatePrintTemplates: (list: PrintTemplate[]) => void | Promise<void>;
-  onRefreshPrintTemplates?: () => void | Promise<void>;
-  orderFormSettings: OrderFormSettings;
-  onUpdateOrderFormSettings: (settings: OrderFormSettings) => void;
-  materialPanelSettings?: MaterialPanelSettings;
-  onUpdateMaterialPanelSettings?: (settings: MaterialPanelSettings) => void;
-  materialFormSettings: MaterialFormSettings;
-  onUpdateMaterialFormSettings: (settings: MaterialFormSettings) => void;
-  outsourceFormSettings: OutsourceFormSettings;
-  onUpdateOutsourceFormSettings: (settings: OutsourceFormSettings) => void | Promise<void>;
-  reworkFormSettings: ReworkFormSettings;
-  onUpdateReworkFormSettings: (settings: ReworkFormSettings) => void | Promise<void>;
-  onCreatePlan: (plan: PlanOrder) => void | Promise<void>;
-  onUpdateProduct: (product: Product) => Promise<Product | null>;
-  onUpdatePlan?: (planId: string, updates: Partial<PlanOrder>) => void;
-  onSplitPlan: (planId: string, newPlans: PlanOrder[]) => void;
-  onConvertToOrder: (planId: string) => void;
-  onDeletePlan?: (planId: string) => void;
-  onAddRecord: (record: ProductionOpRecord) => void;
-  onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
-  onUpdateRecord?: (record: ProductionOpRecord) => void;
-  onDeleteRecord?: (recordId: string) => void;
-  onAddPSIRecord?: (record: any) => void;
-  onAddPSIRecordBatch?: (records: any[]) => Promise<void>;
-  onReportSubmit?: (orderId: string, milestoneId: string, quantity: number, customData: any, variantId?: string) => void;
-  onCreateSubPlan?: (params: { productId: string; quantity: number; planId: string; bomNodeId: string }) => void;
-  onCreateSubPlans?: (params: { planId: string; items: Array<{ productId: string; quantity: number; bomNodeId: string; parentProductId?: string; parentNodeId?: string }> }) => void;
-  onUpdateOrder?: (orderId: string, updates: Partial<ProductionOrder>) => void;
-  onDeleteOrder?: (orderId: string) => void;
-  onUpdateReport?: (params: { orderId: string; milestoneId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; customData?: Record<string, any> }) => void;
-  onDeleteReport?: (params: { orderId: string; milestoneId: string; reportId: string }) => void;
-  productMilestoneProgresses?: ProductMilestoneProgress[];
-  onReportSubmitProduct?: (productId: string, milestoneTemplateId: string, quantity: number, customData: any, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string) => void;
-  onUpdateReportProduct?: (params: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; customData?: Record<string, any> }) => void;
-  onDeleteReportProduct?: (params: { progressId: string; reportId: string }) => void;
-  userPermissions?: string[];
-  tenantRole?: string;
-}
+import { useAuth } from '../contexts/AuthContext';
+import { useMasterData, useConfigData, useOrdersData, usePsiData, useAppActions } from '../contexts/AppDataContext';
 
 type MainTab = 'plans' | 'orders' | ProdOpType;
 
-const ProductionManagementView: React.FC<ProductionManagementViewProps> = ({
-  productionLinkMode = 'order', processSequenceMode = 'free', allowExceedMaxReportQty = true, plans, orders, products, categories, dictionaries, workers, equipment, prodRecords, psiRecords = [], warehouses = [], globalNodes, boms,   partners, partnerCategories,
-  planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orderFormSettings, onUpdateOrderFormSettings, materialPanelSettings, onUpdateMaterialPanelSettings, materialFormSettings, onUpdateMaterialFormSettings, outsourceFormSettings, onUpdateOutsourceFormSettings, reworkFormSettings, onUpdateReworkFormSettings,
-  onCreatePlan, onUpdateProduct, onUpdatePlan, onSplitPlan, onConvertToOrder, onDeletePlan, onAddRecord, onAddRecordBatch, onUpdateRecord, onDeleteRecord, onAddPSIRecord, onAddPSIRecordBatch, onReportSubmit, onCreateSubPlan, onCreateSubPlans, onUpdateOrder, onDeleteOrder, onUpdateReport, onDeleteReport,
-  productMilestoneProgresses = [], onReportSubmitProduct, onUpdateReportProduct, onDeleteReportProduct,
-  userPermissions, tenantRole
-}) => {
+const ProductionManagementView: React.FC = () => {
+  const m = useMasterData();
+  const c = useConfigData();
+  const o = useOrdersData();
+  const { psiRecords } = usePsiData();
+  const a = useAppActions();
+  const { tenantCtx } = useAuth();
+
+  useEffect(() => { void a.ensureDeferredLoaded(); }, [a.ensureDeferredLoaded]);
+
+  const productionLinkMode = c.productionLinkMode;
+  const processSequenceMode = c.processSequenceMode;
+  const allowExceedMaxReportQty = c.allowExceedMaxReportQty;
+  const plans = o.plans;
+  const orders = o.orders;
+  const products = m.products;
+  const categories = m.categories;
+  const dictionaries = m.dictionaries;
+  const workers = m.workers;
+  const equipment = m.equipment;
+  const prodRecords = o.prodRecords;
+  const warehouses = m.warehouses;
+  const globalNodes = m.globalNodes;
+  const boms = m.boms;
+  const partners = m.partners;
+  const partnerCategories = m.partnerCategories;
+  const planFormSettings = c.planFormSettings;
+  const onUpdatePlanFormSettings = a.onUpdatePlanFormSettings;
+  const printTemplates = c.printTemplates;
+  const onUpdatePrintTemplates = a.onUpdatePrintTemplates;
+  const onRefreshPrintTemplates = a.refreshPrintTemplates;
+  const orderFormSettings = c.orderFormSettings;
+  const onUpdateOrderFormSettings = a.onUpdateOrderFormSettings;
+  const materialPanelSettings = c.materialPanelSettings;
+  const onUpdateMaterialPanelSettings = a.onUpdateMaterialPanelSettings;
+  const materialFormSettings = c.materialFormSettings;
+  const onUpdateMaterialFormSettings = a.onUpdateMaterialFormSettings;
+  const outsourceFormSettings = c.outsourceFormSettings;
+  const onUpdateOutsourceFormSettings = a.onUpdateOutsourceFormSettings;
+  const reworkFormSettings = c.reworkFormSettings;
+  const onUpdateReworkFormSettings = a.onUpdateReworkFormSettings;
+  const onCreatePlan = a.onCreatePlan;
+  const onUpdateProduct = a.onUpdateProduct;
+  const onUpdatePlan = a.onUpdatePlan;
+  const onSplitPlan = a.onSplitPlan;
+  const onConvertToOrder = a.onConvertToOrder;
+  const onDeletePlan = a.onDeletePlan;
+  const onAddRecord = a.onAddProdRecord;
+  const onAddRecordBatch = a.onAddProdRecordBatch;
+  const onUpdateRecord = a.onUpdateProdRecord;
+  const onDeleteRecord = a.onDeleteProdRecord;
+  const onAddPSIRecord = a.onAddPSIRecord;
+  const onAddPSIRecordBatch = a.onAddPSIRecordBatch;
+  const onReportSubmit = a.onReportSubmit;
+  const onCreateSubPlan = a.onCreateSubPlan;
+  const onCreateSubPlans = a.onCreateSubPlans;
+  const onUpdateOrder = a.onUpdateOrder;
+  const onDeleteOrder = a.onDeleteOrder;
+  const onUpdateReport = a.onUpdateReport;
+  const onDeleteReport = a.onDeleteReport;
+  const productMilestoneProgresses = o.productMilestoneProgresses;
+  const onReportSubmitProduct = a.onReportSubmitProduct;
+  const onUpdateReportProduct = a.onUpdateReportProduct;
+  const onDeleteReportProduct = a.onDeleteReportProduct;
+  const userPermissions = tenantCtx?.permissions;
+  const tenantRole = tenantCtx?.tenantRole;
   const location = useLocation();
   const navigate = useNavigate();
 

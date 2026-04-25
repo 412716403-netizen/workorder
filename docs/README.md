@@ -21,6 +21,7 @@
 | [07-auth-tenant-session.md](./07-auth-tenant-session.md) | **认证/租户/会话说明**：解释 localStorage、Cookie、内存 token 与租户上下文的边界 |
 | [08-printing-and-label-flow.md](./08-printing-and-label-flow.md) | **打印与标签链路**：模板、预览、占位符、单品码、虚拟批次、标签输出链路 |
 | [09-deploy-servers.md](./09-deploy-servers.md) | **服务器部署说明**：测试机路径与发版步骤、正式机占位（与代码迁移清单不同） |
+| [10-item-codes-scale-deploy-checklist.md](./10-item-codes-scale-deploy-checklist.md) | **单品码/批次码大表改造部署检查清单**：含分区迁移时的何时用、迁移与冒烟步骤（可丢库环境） |
 
 ## 当前项目状态
 
@@ -38,7 +39,8 @@
 5. 认证、租户或会话恢复策略变更时，更新 `07-auth-tenant-session.md`
 6. 打印、标签、码管理链路变更时，更新 `08-printing-and-label-flow.md`
 7. 测试/正式服务器路径、发版命令或域名变更时，更新 `09-deploy-servers.md`
-8. 代码中可在关键计算处加注释，引用文档章节，如：`// 见 docs/01-business-rules.md#库存计算`
+8. 单品码/批次码大表分区、相关迁移或本清单冒烟步骤变化时，更新 `10-item-codes-scale-deploy-checklist.md`
+9. 代码中可在关键计算处加注释，引用文档章节，如：`// 见 docs/01-business-rules.md#库存计算`
 
 ## 维护原则
 

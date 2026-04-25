@@ -1,5 +1,7 @@
-import type { AppDictionaries, PrintListRow, PrintRenderContext, Product, PurchaseOrderPrintContext } from '../types';
+import type { AppDictionaries, PrintListRow, PrintRenderContext, Product, PurchaseOrderPrintContext, PsiRecord } from '../types';
 import { buildSalesBillPrintListRows, type SalesBillLineInput } from './buildSalesBillPrintContext';
+import { sumPsiLineQty, sumPsiLineAmount, groupPsiDocLines } from './psiPrintShared';
+
 export type PurchaseOrderLineInput = {
   id: string;
   productId: string;
@@ -24,39 +26,6 @@ export function buildPurchaseOrderPrintListRows(
   return buildSalesBillPrintListRows(asSales, productMap, dictionaries);
 }
 
-function sumLineAmount(lines: PurchaseOrderLineInput[], productMap: Map<string, Product>): number {
-  let total = 0;
-  for (const line of lines) {
-    const price = Number(line.purchasePrice) || 0;
-    const prod = productMap.get(line.productId);
-    const hasVar = prod?.variants?.length && line.variantQuantities && Object.keys(line.variantQuantities).length > 0;
-    if (hasVar) {
-      for (const [, q] of Object.entries(line.variantQuantities ?? {})) {
-        total += (Number(q) || 0) * price;
-      }
-    } else {
-      total += (Number(line.quantity) || 0) * price;
-    }
-  }
-  return total;
-}
-
-function sumLineQty(lines: PurchaseOrderLineInput[], productMap: Map<string, Product>): number {
-  let total = 0;
-  for (const line of lines) {
-    const prod = productMap.get(line.productId);
-    const hasVar = prod?.variants?.length && line.variantQuantities && Object.keys(line.variantQuantities).length > 0;
-    if (hasVar) {
-      for (const q of Object.values(line.variantQuantities ?? {})) {
-        total += Number(q) || 0;
-      }
-    } else {
-      total += Number(line.quantity) || 0;
-    }
-  }
-  return total;
-}
-
 /**
  * 组装采购订单打印上下文：表头 `purchaseOrderPrint` + 明细 `printListRows`（列表与登记/详情共用）。
  * `product` 取首行有货号的商品，便于表头 `{{产品.xxx}}`。
@@ -78,8 +47,8 @@ export function buildPurchaseOrderPrintRenderContext(params: {
     docNumber,
     partner,
     operator: operator ?? '',
-    docTotalQty: sumLineQty(lines, productMap),
-    docTotalAmount: sumLineAmount(lines, productMap),
+    docTotalQty: sumPsiLineQty(lines, productMap),
+    docTotalAmount: sumPsiLineAmount(lines, productMap, l => Number(l.purchasePrice) || 0),
     custom: customData && Object.keys(customData).length > 0 ? { ...customData } : undefined,
   };
   return {
@@ -90,37 +59,20 @@ export function buildPurchaseOrderPrintRenderContext(params: {
 }
 
 /** 从同一采购订单下的 PSI 行记录聚合为打印行输入（与 OrderBillFormPage 行分组一致） */
-export function buildPurchaseOrderLinesFromPsiRecords(docItems: any[]): PurchaseOrderLineInput[] {
-  const lineMap: Record<string, any[]> = {};
-  docItems.forEach((r: any) => {
-    const lg = r.lineGroupId ?? r.id;
-    if (!lineMap[lg]) lineMap[lg] = [];
-    lineMap[lg].push(r);
-  });
-  return Object.entries(lineMap).map(([lgId, recs]) => {
-    const first = recs[0];
-    const hasVar = recs.some((r: any) => r.variantId);
-    const vq: Record<string, number> = {};
-    if (hasVar) {
-      recs.forEach((r: any) => {
-        if (r.variantId) vq[r.variantId] = (vq[r.variantId] ?? 0) + (Number(r.quantity) || 0);
-      });
-    }
-    const lineQtyNoVar = recs.reduce((s, r: any) => s + (Number(r.quantity) || 0), 0);
-    return {
-      id: lgId,
-      productId: first.productId,
-      quantity: hasVar ? undefined : lineQtyNoVar,
-      purchasePrice: first.purchasePrice ?? 0,
-      variantQuantities: hasVar ? vq : undefined,
-    };
-  });
+export function buildPurchaseOrderLinesFromPsiRecords(docItems: PsiRecord[]): PurchaseOrderLineInput[] {
+  return groupPsiDocLines<PurchaseOrderLineInput>(docItems, (lgId, first, _recs, hasVar, vq, lineQtyNoVar) => ({
+    id: lgId,
+    productId: first.productId,
+    quantity: hasVar ? undefined : lineQtyNoVar,
+    purchasePrice: Number(first.purchasePrice) || 0,
+    variantQuantities: hasVar ? vq : undefined,
+  }));
 }
 
 /** 列表打印：由单号与行记录直接组装 `PrintRenderContext` */
 export function buildPurchaseOrderPrintContextFromPsiDoc(params: {
   docNumber: string;
-  docItems: any[];
+  docItems: PsiRecord[];
   productMap: Map<string, Product>;
   dictionaries: AppDictionaries;
 }): PrintRenderContext {

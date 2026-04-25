@@ -3,6 +3,7 @@ import type {
   PlanFormFieldConfig,
   PrintDynamicListDataSource,
   PrintTemplateDocumentType,
+  ProductCategory,
 } from '../../types';
 
 function financeKindCustomPrintOptions(
@@ -24,6 +25,25 @@ function financeKindCustomPrintOptions(
     value: `${group}.custom.${f.id}`,
     label: f.label,
   }));
+}
+
+/** 合并各产品分类上的自定义字段（按 id 去重）；占位符 {{产品.custom.<id>}} 对应 Product.categoryCustomData */
+function productCategoryCustomPrintOptions(categories: ProductCategory[] | undefined): PrintFieldOption[] {
+  if (!categories?.length) return [];
+  const byId = new Map<string, PrintFieldOption>();
+  for (const cat of categories) {
+    for (const f of cat.customFields ?? []) {
+      if (!f?.id || byId.has(f.id)) continue;
+      const base = (f.label || '').trim() || f.id;
+      const typeHint = f.type === 'file' ? '（文件/图片）' : '';
+      byId.set(f.id, {
+        group: '产品',
+        value: `产品.custom.${f.id}`,
+        label: `「${cat.name}」${base}${typeHint}`,
+      });
+    }
+  }
+  return [...byId.values()];
 }
 
 export interface PrintFieldOption {
@@ -68,6 +88,8 @@ export function buildPrintFieldOptions(opts: {
   salesBillCustomFields?: PlanFormFieldConfig[];
   /** 收付款类型设置中的分类自定义字段；{{收款单.custom.<id>}} / {{付款单.custom.<id>}} */
   financeCategories?: FinanceCategory[];
+  /** 产品分类上的自定义字段；{{产品.custom.<id>}} 与 Product.categoryCustomData 对齐 */
+  productCategories?: ProductCategory[];
 }): PrintFieldOption[] {
   const planCustomFields = opts.planCustomFields ?? [];
   const stockInCustomFields = opts.stockInCustomFields ?? [];
@@ -84,6 +106,7 @@ export function buildPrintFieldOptions(opts: {
   const purchaseBillCustomFields = opts.purchaseBillCustomFields ?? [];
   const salesBillCustomFields = opts.salesBillCustomFields ?? [];
   const financeCategories = opts.financeCategories ?? [];
+  const productCategories = opts.productCategories ?? [];
   const system: PrintFieldOption[] = [
     { group: '系统', value: '系统.systemTime', label: '当前时间' },
     { group: '系统', value: '系统.pageCurrent', label: '当前页码' },
@@ -117,12 +140,14 @@ export function buildPrintFieldOptions(opts: {
     { group: '工单', value: '工单.sku', label: 'SKU' },
     { group: '工单', value: '工单.createdAt', label: '创建日期' },
   ];
-  const product: PrintFieldOption[] = [
+  const productStatic: PrintFieldOption[] = [
     { group: '产品', value: '产品.name', label: '产品名称' },
     { group: '产品', value: '产品.sku', label: 'SKU' },
     { group: '产品', value: '产品.imageUrl', label: '产品主图' },
     { group: '产品', value: '产品.description', label: '描述' },
   ];
+  const productCategoryCustom = productCategoryCustomPrintOptions(productCategories);
+  const product: PrintFieldOption[] = [...productStatic, ...productCategoryCustom];
   const proc: PrintFieldOption[] = [
     { group: '工序', value: '工序.name', label: '工序名称' },
     { group: '工序', value: '工序.completedQuantity', label: '完成数量' },

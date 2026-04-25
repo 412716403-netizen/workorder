@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import type { TenantPrismaClient } from '../lib/prisma.js';
 import { prisma as basePrisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -15,8 +16,34 @@ export function variantKey(v: string | null | undefined): string {
   return v ?? '';
 }
 
-export function generateScanToken(): string {
-  return crypto.randomBytes(18).toString('base64url');
+/** 扫码 token：前 8 位为租户 UUID（去连字符）前缀，便于分区裁剪；后缀随机。 */
+export function generateScanToken(tenantId: string): string {
+  const compact = tenantId.replace(/-/g, '').toLowerCase();
+  const prefix = compact.slice(0, 8);
+  const rand = crypto.randomBytes(12).toString('base64url');
+  return `${prefix}.${rand}`;
+}
+
+/** 从 token 解析出 8 位十六进制租户前缀；格式不符返回 null。 */
+export function parseScanTokenTenantHexPrefix(token: string): string | null {
+  const i = token.indexOf('.');
+  if (i <= 0) return null;
+  const prefix = token.slice(0, i).toLowerCase();
+  if (!/^[0-9a-f]{8}$/.test(prefix)) return null;
+  return prefix;
+}
+
+/** 将扫码前缀解析为唯一租户 id；存在歧义或不存在时返回 null。 */
+export async function resolveTenantIdFromScanTokenPrefix(prefix8: string): Promise<string | null> {
+  const rows = await basePrisma.$queryRaw<Array<{ id: string }>>(
+    Prisma.sql`
+      SELECT id::text AS id FROM tenants
+      WHERE lower(substring(regexp_replace(id::text, '-', '', 'g'), 1, 8)) = ${prefix8}
+      LIMIT 2
+    `,
+  );
+  if (rows.length !== 1) return null;
+  return rows[0]!.id;
 }
 
 /** BFS: current plan + all descendant plan ids */

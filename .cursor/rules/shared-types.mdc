@@ -1,0 +1,38 @@
+---
+description: 前后端共享类型（shared/）的增改约定
+globs:
+  - shared/**/*.ts
+  - types.ts
+  - backend/src/types/index.ts
+---
+
+# 共享类型约定
+
+`shared/types.ts` 是**前后端共用**领域枚举 / 常量 / 契约的单一事实源。
+
+## 什么该放进来
+
+- **枚举**：如 `MilestoneStatus`、`OrderStatus`、`PlanStatus`。
+- **联合字面量类型**：如 `ProcessPricingMode`、`FinanceOpType`、`ProdOpType`。
+- **前后端都要读写的常量映射**：如 `FINANCE_DOC_NO_PREFIX`。
+- 少量**跨层 DTO 形状**（确认两端都需要的轻量接口）。
+
+## 什么不该放
+
+- 只有前端用的 UI 状态类型（留在 `types.ts`）。
+- 只有后端用的 Prisma 扩展类型（留在 `backend/src/types/index.ts`）。
+- 实现逻辑（这里只放类型与常量，不放函数实现，hasSubPermission 之类的权限工具函数除外，且要同时被两端可用）。
+
+## 新增/修改流程
+
+1. 在 `shared/types.ts` 增 / 改。
+2. 前端：确认根 `types.ts` 已 `export { ... } from './shared/types'`，或补上。
+3. 后端：确认 `backend/src/types/index.ts` 已从 `../../../shared/types.js` re-export，或补上。
+4. 搜索旧的重复定义 / 硬编码字面量，替换掉。
+5. 若涉及前后端契约，顺手更 `docs/02-data-structures.md` 或 `docs/04-migration-checklist.md`。
+
+## 禁止
+
+- 在 `types.ts` 或 `backend/src/types/index.ts` 再重复声明一份相同枚举。
+- 用散落的字面量替代枚举（例如 `'PLANNING' | 'PRODUCING' | ...`）。
+- 给共享类型加 React / Express / Prisma 依赖（保持**零框架依赖**，只用 TS 基础类型）。

@@ -12,9 +12,6 @@ import {
   Printer,
   Search,
   Sliders,
-  Pencil,
-  Trash2,
-  X,
 } from 'lucide-react';
 import {
   Product,
@@ -48,17 +45,12 @@ import {
 } from '../styles/uiDensity';
 import WarehousePanel from './psi-ops/WarehousePanel';
 import OrderBillFormPage from './psi-ops/OrderBillFormPage';
-import PurchaseOrderDetailSummary from './psi-ops/PurchaseOrderDetailSummary';
-import PurchaseBillDetailSummary from './psi-ops/PurchaseBillDetailSummary';
-import SalesOrderDetailSummary from './psi-ops/SalesOrderDetailSummary';
-import SalesBillDetailSummary from './psi-ops/SalesBillDetailSummary';
+import PsiDocDetailSummary from './psi-ops/PsiDocDetailSummary';
+import PsiOrderBillDocModal from './psi-ops/PsiOrderBillDocModal';
 import PendingShipmentListModal, { PendingShipmentGroup } from './psi-ops/PendingShipmentListModal';
 import PendingShipDetailModal from './psi-ops/PendingShipDetailModal';
 import AllocationModal from './psi-ops/AllocationModal';
-import PurchaseOrderFormConfigModal from './psi-ops/PurchaseOrderFormConfigModal';
-import SalesOrderFormConfigModal from './psi-ops/SalesOrderFormConfigModal';
-import PurchaseBillFormConfigModal from './psi-ops/PurchaseBillFormConfigModal';
-import SalesBillFormConfigModal from './psi-ops/SalesBillFormConfigModal';
+import PsiFormConfigModal from './psi-ops/PsiFormConfigModal';
 import {
   PsiListPrintController,
   type PsiListPrintControllerHandle,
@@ -78,6 +70,8 @@ import { nextSalesBillDocNumber } from '../utils/partnerDocNumber';
 import { effectiveAllocatedQuantity } from '../utils/psiAllocationDisplay';
 import { effectivePlanFormFieldType } from '../utils/planFormCustomField';
 import { toLocalDateYmd, formatCustomFieldDatetimeForPrint } from '../utils/localDateTime';
+import { hasModulePerm } from '../utils/hasModulePerm';
+import { usePsiStockIndex } from '../hooks/usePsiStockIndex';
 
 import {
   formatPsiDocNumForList,
@@ -105,7 +99,6 @@ import {
   WAREHOUSE_DOC_KIND,
 } from '../utils/warehouseDocPreference';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import { useConfirm } from '../contexts/ConfirmContext';
 
 interface PSIOpsViewProps {
   type: string;
@@ -164,15 +157,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
 }) => {
   const { tenantCtx, userId } = useAuth();
   const _isOwner = tenantRole === 'owner';
-  const hasPsiPerm = (perm: string): boolean => {
-    if (_isOwner) return true;
-    if (!userPermissions || userPermissions.length === 0) return true;
-    if (userPermissions.includes('psi') && !userPermissions.some(p => p.startsWith('psi:'))) return true;
-    if (userPermissions.includes(perm)) return true;
-    if (userPermissions.some(p => p.startsWith(`${perm}:`))) return true;
-    return false;
-  };
-  const confirm = useConfirm();
+  const hasPsiPerm = (perm: string) => hasModulePerm(tenantRole, userPermissions, 'psi', perm);
   const ordersList = orders ?? [];
   const recordsList = records ?? [];
   const { printTemplates } = useConfigData();
@@ -296,123 +281,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
   /** 与 flowDocSort.recordDocLineTimeMs 一致，用于库存流水等排序 */
   const parseRecordTime = useCallback((r: any): number => recordDocLineTimeMs(r), []);
 
-  // ── 库存预聚合索引：一次遍历 recordsList + prodRecords，后续 O(1) 查询 ──
-  type WhBucket = { psiIn: number; psiOut: number; transferIn: number; transferOut: number; prodIn: number; prodOut: number; stocktakeAdj: number; stocktakeByDoc: Map<string, number> };
-  type TimedQty = { time: number; qty: number };
-  type VarBucket = { psiIn: number; psiOut: number; transferIn: number; transferOut: number; prodIn: number; prodOut: number; stocktakeRecords: { time: number; qty: number; sysQty: number; id: string }[]; psiInRecords: TimedQty[]; psiOutRecords: TimedQty[]; prodInRecords: TimedQty[]; prodOutRecords: TimedQty[] };
-
-  const stockIndex = useMemo(() => {
-    const whMap = new Map<string, WhBucket>();
-    const varMap = new Map<string, VarBucket>();
-
-    const getWh = (pId: string, whId: string): WhBucket => {
-      const k = `${pId}::${whId}`;
-      let b = whMap.get(k);
-      if (!b) { b = { psiIn: 0, psiOut: 0, transferIn: 0, transferOut: 0, prodIn: 0, prodOut: 0, stocktakeAdj: 0, stocktakeByDoc: new Map() }; whMap.set(k, b); }
-      return b;
-    };
-    const getVar = (pId: string, whId: string, vId: string): VarBucket => {
-      const k = `${pId}::${whId}::${vId}`;
-      let b = varMap.get(k);
-      if (!b) { b = { psiIn: 0, psiOut: 0, transferIn: 0, transferOut: 0, prodIn: 0, prodOut: 0, stocktakeRecords: [], psiInRecords: [], psiOutRecords: [], prodInRecords: [], prodOutRecords: [] }; varMap.set(k, b); }
-      return b;
-    };
-    const pTime = (r: any): number => recordDocLineTimeMs(r);
-
-    for (const r of recordsList) {
-      const pId = r.productId;
-      if (!pId) continue;
-      const wh = r.warehouseId || '';
-      const vId = (r as any).variantId || '';
-      const qty = Number(r.quantity) || 0;
-      const time = pTime(r);
-
-      if (r.type === 'PURCHASE_BILL') {
-        if (wh) { const wb = getWh(pId, wh); wb.psiIn += qty; if (vId) { const vb = getVar(pId, wh, vId); vb.psiIn += qty; vb.psiInRecords.push({ time, qty }); } }
-      } else if (r.type === 'SALES_BILL') {
-        if (wh) { const wb = getWh(pId, wh); wb.psiOut += qty; if (vId) { const vb = getVar(pId, wh, vId); vb.psiOut += qty; vb.psiOutRecords.push({ time, qty }); } }
-      } else if (r.type === 'TRANSFER') {
-        const toWh = (r as any).toWarehouseId as string | undefined;
-        const fromWh = (r as any).fromWarehouseId as string | undefined;
-        if (toWh) { const wb = getWh(pId, toWh); wb.transferIn += qty; if (vId) { const vb = getVar(pId, toWh, vId); vb.transferIn += qty; vb.psiInRecords.push({ time, qty }); } }
-        if (fromWh) { const wb = getWh(pId, fromWh); wb.transferOut += qty; if (vId) { const vb = getVar(pId, fromWh, vId); vb.transferOut += qty; vb.psiOutRecords.push({ time, qty }); } }
-      } else if (r.type === 'STOCKTAKE') {
-        if (wh) {
-          const wb = getWh(pId, wh);
-          const diff = Number(r.diffQuantity) || 0;
-          wb.stocktakeAdj += diff;
-          const doc = r.docNumber || '';
-          wb.stocktakeByDoc.set(doc, (wb.stocktakeByDoc.get(doc) || 0) + diff);
-          if (vId && typeof (r as any).systemQuantity === 'number') {
-            getVar(pId, wh, vId).stocktakeRecords.push({ time, qty, sysQty: (r as any).systemQuantity, id: r.id });
-          }
-        }
-      }
-    }
-
-    for (const r of (prodRecords || []) as any[]) {
-      const pId = r.productId;
-      if (!pId) continue;
-      const wh = r.warehouseId || '';
-      const vId = r.variantId || '';
-      const qty = Number(r.quantity) || 0;
-      const time = pTime(r);
-
-      if (r.type === 'STOCK_IN' || r.type === 'STOCK_RETURN') {
-        if (wh) { getWh(pId, wh).prodIn += qty; const vb = getVar(pId, wh, vId); vb.prodIn += qty; vb.prodInRecords.push({ time, qty }); }
-      } else if (r.type === 'STOCK_OUT') {
-        if (wh) { getWh(pId, wh).prodOut += qty; const vb = getVar(pId, wh, vId); vb.prodOut += qty; vb.prodOutRecords.push({ time, qty }); }
-      }
-    }
-
-    return { whMap, varMap };
-  }, [recordsList, prodRecords]);
-
-  // ── 库存查询函数（O(1) 查表） ──
-  const getStock = useCallback((pId: string, whId?: string, excludeDocNumber?: string) => {
-    if (!whId) return 0;
-    const b = stockIndex.whMap.get(`${pId}::${whId}`);
-    if (!b) return 0;
-    const ins = b.psiIn + b.transferIn + b.prodIn;
-    const outs = b.psiOut + b.transferOut + b.prodOut;
-    const adj = b.stocktakeAdj - (excludeDocNumber ? (b.stocktakeByDoc.get(excludeDocNumber) || 0) : 0);
-    return ins - outs + adj;
-  }, [stockIndex]);
-
-  const getStockVariant = useCallback((pId: string, whId: string | undefined, variantId: string) => {
-    if (!whId) return 0;
-    const vb = stockIndex.varMap.get(`${pId}::${whId}::${variantId}`);
-    if (!vb) return 0;
-    return (vb.psiIn + vb.transferIn + vb.prodIn) - (vb.psiOut + vb.transferOut + vb.prodOut);
-  }, [stockIndex]);
-
-  const getNullVariantProdStock = useCallback((pId: string, whId?: string) => {
-    if (!whId) return 0;
-    const vb = stockIndex.varMap.get(`${pId}::${whId}::`);
-    if (!vb) return 0;
-    return Math.max(0, vb.prodIn - vb.prodOut);
-  }, [stockIndex]);
-
-  const getStocktakeAdjust = useCallback((pId: string, whId: string) => {
-    const b = stockIndex.whMap.get(`${pId}::${whId}`);
-    return b ? b.stocktakeAdj : 0;
-  }, [stockIndex]);
-
-  const getVariantDisplayQty = useCallback((pId: string, whId: string, variantId: string) => {
-    const vb = stockIndex.varMap.get(`${pId}::${whId}::${variantId}`);
-    if (!vb || vb.stocktakeRecords.length === 0) return getStockVariant(pId, whId, variantId);
-    const latest = vb.stocktakeRecords.reduce((best, r) => r.time > best.time ? r : best);
-    const latestTime = latest.time;
-    const insAfter =
-      vb.psiInRecords.filter(r => r.time >= latestTime).reduce((s, r) => s + r.qty, 0) +
-      vb.prodInRecords.filter(r => r.time >= latestTime).reduce((s, r) => s + r.qty, 0);
-    const outsAfter =
-      vb.psiOutRecords.filter(r => r.time >= latestTime).reduce((s, r) => s + r.qty, 0) +
-      vb.prodOutRecords.filter(r => r.time >= latestTime).reduce((s, r) => s + r.qty, 0);
-    const adjustAfter = vb.stocktakeRecords.filter(r => r.id !== latest.id && r.time >= latestTime)
-      .reduce((s, r) => s + (r.qty - r.sysQty), 0);
-    return latest.qty + insAfter - outsAfter + adjustAfter;
-  }, [stockIndex, getStockVariant]);
+  const { getStock, getStockVariant, getNullVariantProdStock, getStocktakeAdjust, getVariantDisplayQty } = usePsiStockIndex(recordsList, prodRecords);
   const generateSBDocNumberForPartner = (partnerId: string, partnerName: string): string =>
     nextSalesBillDocNumber(partners, recordsList, partnerId, partnerName);
   const allPOByGroups = useMemo(() => {
@@ -760,574 +629,294 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
       )}
 
       {type === 'PURCHASE_ORDER' && showModal === 'PURCHASE_ORDER' && purchaseOrderModalPhase && (
-        <div className="fixed inset-0 z-[62] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={closeOrderBillModal} aria-hidden />
-          <div
-            className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0 gap-3">
-              <div className="min-w-0">
-                {purchaseOrderModalPhase === 'detail' && editingPODocNumber ? (
-                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 flex-wrap">
-                    <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shrink-0">
-                      {formatPsiDocNumForList(editingPODocNumber)}
-                    </span>
-                    采购订单详情
-                  </h3>
-                ) : (
-                  <h3 className="text-lg font-black text-slate-900">
-                    {editingPODocNumber ? '编辑采购订单' : '新建采购订单'}
-                  </h3>
-                )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {purchaseOrderModalPhase === 'detail' && editingPODocNumber ? (
-                  <>
-                    {showPoListPrintButton && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void refreshPrintTemplates();
-                          poListPrintControllerRef.current?.openPicker(editingPODocNumber);
-                        }}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      >
-                        <Printer className="w-4 h-4" /> 打印
-                      </button>
-                    )}
-                    {(hasPsiPerm('psi:purchase_order:edit') || hasPsiPerm('psi:purchase_order:view')) && (
-                      <button
-                        type="button"
-                        onClick={() => setPurchaseOrderModalPhase('edit')}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      >
-                        <Pencil className="w-4 h-4" /> 编辑
-                      </button>
-                    )}
-                    {onDeleteRecords && hasPsiPerm('psi:purchase_order:delete') && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void confirm({ message: '确定要删除该采购订单吗？', danger: true }).then(ok => {
-                            if (!ok || !editingPODocNumber) return;
-                            onDeleteRecords('PURCHASE_ORDER', editingPODocNumber);
-                            closeOrderBillModal();
-                          });
-                        }}
-                        className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold"
-                      >
-                        <Trash2 className="w-4 h-4" /> 删除
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={closeOrderBillModal}
-                      className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    {editingPODocNumber && (
-                      <button
-                        type="button"
-                        onClick={() => setPurchaseOrderModalPhase('detail')}
-                        className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700"
-                      >
-                        取消编辑
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={closeOrderBillModal}
-                      className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="flex-1 overflow-auto p-4 sm:p-6 min-h-0 bg-slate-50/30">
-              {purchaseOrderModalPhase === 'detail' && editingPODocNumber ? (
-                <PurchaseOrderDetailSummary
-                  docNumber={editingPODocNumber}
-                  recordsList={recordsList}
-                  productMapPSI={productMapPSI}
-                  dictionaries={dictionaries}
-                  getUnitName={getUnitName}
-                  formatQtyDisplay={formatQtyDisplay}
-                  receivedByOrderLine={receivedByOrderLine}
-                />
-              ) : (
-                <OrderBillFormPage
-                  key={`PURCHASE_ORDER-${editingPODocNumber ?? 'new'}`}
-                  formType="PURCHASE_ORDER"
-                  products={products}
-                  warehouses={warehouses}
-                  categories={categories}
-                  partners={partners}
-                  partnerCategories={partnerCategories}
-                  dictionaries={dictionaries}
-                  records={recordsList}
-                  getStock={getStock}
-                  getVariantDisplayQty={getVariantDisplayQty}
-                  getNullVariantProdStock={getNullVariantProdStock}
-                  productMapPSI={productMapPSI}
-                  warehouseMapPSI={warehouseMapPSI}
-                  categoryMapPSI={categoryMapPSI}
-                  getUnitName={getUnitName}
-                  formatQtyDisplay={formatQtyDisplay}
-                  onBack={closeOrderBillModal}
-                  onSave={onAddRecord}
-                  onSaveBatch={onAddRecordBatch}
-                  onReplaceRecords={onReplaceRecords}
-                  onDeleteRecords={onDeleteRecords}
-                  editingDocNumber={editingPODocNumber}
-                  purchaseOrderFormSettings={safePurchaseOrderFormSettings}
-                  salesOrderFormSettings={safeSalesOrderFormSettings}
-                  purchaseBillFormSettings={safePurchaseBillFormSettings}
-                  salesBillFormSettings={safeSalesBillFormSettings}
-                  userPermissions={userPermissions}
-                  tenantRole={tenantRole}
-                  partnerLabel={current.partnerLabel || '供应商'}
-                  prodRecords={prodRecords}
-                  orderBillPrintTemplates={printTemplates}
-                />
-              )}
-            </div>
-          </div>
-        </div>
+        <PsiOrderBillDocModal
+          open
+          phase={purchaseOrderModalPhase}
+          editingDocNumber={editingPODocNumber}
+          maxWidthClass="max-w-4xl"
+          detailTitle="采购订单详情"
+          editTitle="编辑采购订单"
+          newTitle="新建采购订单"
+          showPrint={showPoListPrintButton}
+          onPrint={() => {
+            void refreshPrintTemplates();
+            poListPrintControllerRef.current?.openPicker(editingPODocNumber);
+          }}
+          permSubmodule="purchase_order"
+          deleteConfirmMessage="确定要删除该采购订单吗？"
+          recordType="PURCHASE_ORDER"
+          onDeleteRecords={onDeleteRecords}
+          onClose={closeOrderBillModal}
+          onEnterEdit={() => setPurchaseOrderModalPhase('edit')}
+          onCancelEdit={() => setPurchaseOrderModalPhase('detail')}
+          hasPsiPerm={hasPsiPerm}
+          detailContent={
+            <PsiDocDetailSummary
+              docType="PURCHASE_ORDER"
+              docNumber={editingPODocNumber!}
+              recordsList={recordsList}
+              productMapPSI={productMapPSI}
+              dictionaries={dictionaries}
+              getUnitName={getUnitName}
+              formatQtyDisplay={formatQtyDisplay}
+              receivedByOrderLine={receivedByOrderLine}
+            />
+          }
+          formContent={
+            <OrderBillFormPage
+              key={`PURCHASE_ORDER-${editingPODocNumber ?? 'new'}`}
+              formType="PURCHASE_ORDER"
+              products={products}
+              warehouses={warehouses}
+              categories={categories}
+              partners={partners}
+              partnerCategories={partnerCategories}
+              dictionaries={dictionaries}
+              records={recordsList}
+              getStock={getStock}
+              getVariantDisplayQty={getVariantDisplayQty}
+              getNullVariantProdStock={getNullVariantProdStock}
+              productMapPSI={productMapPSI}
+              warehouseMapPSI={warehouseMapPSI}
+              categoryMapPSI={categoryMapPSI}
+              getUnitName={getUnitName}
+              formatQtyDisplay={formatQtyDisplay}
+              onBack={closeOrderBillModal}
+              onSave={onAddRecord}
+              onSaveBatch={onAddRecordBatch}
+              onReplaceRecords={onReplaceRecords}
+              onDeleteRecords={onDeleteRecords}
+              editingDocNumber={editingPODocNumber}
+              purchaseOrderFormSettings={safePurchaseOrderFormSettings}
+              salesOrderFormSettings={safeSalesOrderFormSettings}
+              purchaseBillFormSettings={safePurchaseBillFormSettings}
+              salesBillFormSettings={safeSalesBillFormSettings}
+              userPermissions={userPermissions}
+              tenantRole={tenantRole}
+              partnerLabel={current.partnerLabel || '供应商'}
+              prodRecords={prodRecords}
+              orderBillPrintTemplates={printTemplates}
+            />
+          }
+        />
       )}
 
       {type === 'PURCHASE_BILL' && showModal === 'PURCHASE_BILL' && purchaseBillModalPhase && (
-        <div className="fixed inset-0 z-[62] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={closeOrderBillModal} aria-hidden />
-          <div
-            className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0 gap-3">
-              <div className="min-w-0">
-                {purchaseBillModalPhase === 'detail' && editingPBDocNumber ? (
-                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 flex-wrap">
-                    <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shrink-0">
-                      {formatPsiDocNumForList(editingPBDocNumber)}
-                    </span>
-                    采购单详情
-                  </h3>
-                ) : (
-                  <h3 className="text-lg font-black text-slate-900">
-                    {editingPBDocNumber ? '编辑采购单' : '新建采购单'}
-                  </h3>
-                )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {purchaseBillModalPhase === 'detail' && editingPBDocNumber ? (
-                  <>
-                    {showPbListPrintButton && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void refreshPrintTemplates();
-                          pbListPrintControllerRef.current?.openPicker(editingPBDocNumber);
-                        }}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      >
-                        <Printer className="w-4 h-4" /> 打印
-                      </button>
-                    )}
-                    {(hasPsiPerm('psi:purchase_bill:edit') || hasPsiPerm('psi:purchase_bill:view')) && (
-                      <button
-                        type="button"
-                        onClick={() => setPurchaseBillModalPhase('edit')}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      >
-                        <Pencil className="w-4 h-4" /> 编辑
-                      </button>
-                    )}
-                    {onDeleteRecords && hasPsiPerm('psi:purchase_bill:delete') && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void confirm({ message: '确定要删除该采购单吗？', danger: true }).then(ok => {
-                            if (!ok || !editingPBDocNumber) return;
-                            onDeleteRecords('PURCHASE_BILL', editingPBDocNumber);
-                            closeOrderBillModal();
-                          });
-                        }}
-                        className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold"
-                      >
-                        <Trash2 className="w-4 h-4" /> 删除
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={closeOrderBillModal}
-                      className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    {editingPBDocNumber && (
-                      <button
-                        type="button"
-                        onClick={() => setPurchaseBillModalPhase('detail')}
-                        className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700"
-                      >
-                        取消编辑
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={closeOrderBillModal}
-                      className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="flex-1 overflow-auto p-4 sm:p-6 min-h-0 bg-slate-50/30">
-              {purchaseBillModalPhase === 'detail' && editingPBDocNumber ? (
-                <PurchaseBillDetailSummary
-                  docNumber={editingPBDocNumber}
-                  recordsList={recordsList}
-                  productMapPSI={productMapPSI}
-                  warehouseMapPSI={warehouseMapPSI}
-                  dictionaries={dictionaries}
-                  getUnitName={getUnitName}
-                  formatQtyDisplay={formatQtyDisplay}
-                />
-              ) : (
-                <OrderBillFormPage
-                  key={`PURCHASE_BILL-${editingPBDocNumber ?? 'new'}`}
-                  formType="PURCHASE_BILL"
-                  products={products}
-                  warehouses={warehouses}
-                  categories={categories}
-                  partners={partners}
-                  partnerCategories={partnerCategories}
-                  dictionaries={dictionaries}
-                  records={recordsList}
-                  getStock={getStock}
-                  getVariantDisplayQty={getVariantDisplayQty}
-                  getNullVariantProdStock={getNullVariantProdStock}
-                  productMapPSI={productMapPSI}
-                  warehouseMapPSI={warehouseMapPSI}
-                  categoryMapPSI={categoryMapPSI}
-                  getUnitName={getUnitName}
-                  formatQtyDisplay={formatQtyDisplay}
-                  onBack={closeOrderBillModal}
-                  onSave={onAddRecord}
-                  onSaveBatch={onAddRecordBatch}
-                  onReplaceRecords={onReplaceRecords}
-                  onDeleteRecords={onDeleteRecords}
-                  editingDocNumber={editingPBDocNumber}
-                  purchaseOrderFormSettings={safePurchaseOrderFormSettings}
-                  salesOrderFormSettings={safeSalesOrderFormSettings}
-                  purchaseBillFormSettings={safePurchaseBillFormSettings}
-                  salesBillFormSettings={safeSalesBillFormSettings}
-                  userPermissions={userPermissions}
-                  tenantRole={tenantRole}
-                  partnerLabel={current.partnerLabel || '供应商'}
-                  prodRecords={prodRecords}
-                  orderBillPrintTemplates={printTemplates}
-                />
-              )}
-            </div>
-          </div>
-        </div>
+        <PsiOrderBillDocModal
+          open
+          phase={purchaseBillModalPhase}
+          editingDocNumber={editingPBDocNumber}
+          maxWidthClass="max-w-4xl"
+          detailTitle="采购单详情"
+          editTitle="编辑采购单"
+          newTitle="新建采购单"
+          showPrint={showPbListPrintButton}
+          onPrint={() => {
+            void refreshPrintTemplates();
+            pbListPrintControllerRef.current?.openPicker(editingPBDocNumber);
+          }}
+          permSubmodule="purchase_bill"
+          deleteConfirmMessage="确定要删除该采购单吗？"
+          recordType="PURCHASE_BILL"
+          onDeleteRecords={onDeleteRecords}
+          onClose={closeOrderBillModal}
+          onEnterEdit={() => setPurchaseBillModalPhase('edit')}
+          onCancelEdit={() => setPurchaseBillModalPhase('detail')}
+          hasPsiPerm={hasPsiPerm}
+          detailContent={
+            <PsiDocDetailSummary
+              docType="PURCHASE_BILL"
+              docNumber={editingPBDocNumber!}
+              recordsList={recordsList}
+              productMapPSI={productMapPSI}
+              warehouseMapPSI={warehouseMapPSI}
+              dictionaries={dictionaries}
+              getUnitName={getUnitName}
+              formatQtyDisplay={formatQtyDisplay}
+            />
+          }
+          formContent={
+            <OrderBillFormPage
+              key={`PURCHASE_BILL-${editingPBDocNumber ?? 'new'}`}
+              formType="PURCHASE_BILL"
+              products={products}
+              warehouses={warehouses}
+              categories={categories}
+              partners={partners}
+              partnerCategories={partnerCategories}
+              dictionaries={dictionaries}
+              records={recordsList}
+              getStock={getStock}
+              getVariantDisplayQty={getVariantDisplayQty}
+              getNullVariantProdStock={getNullVariantProdStock}
+              productMapPSI={productMapPSI}
+              warehouseMapPSI={warehouseMapPSI}
+              categoryMapPSI={categoryMapPSI}
+              getUnitName={getUnitName}
+              formatQtyDisplay={formatQtyDisplay}
+              onBack={closeOrderBillModal}
+              onSave={onAddRecord}
+              onSaveBatch={onAddRecordBatch}
+              onReplaceRecords={onReplaceRecords}
+              onDeleteRecords={onDeleteRecords}
+              editingDocNumber={editingPBDocNumber}
+              purchaseOrderFormSettings={safePurchaseOrderFormSettings}
+              salesOrderFormSettings={safeSalesOrderFormSettings}
+              purchaseBillFormSettings={safePurchaseBillFormSettings}
+              salesBillFormSettings={safeSalesBillFormSettings}
+              userPermissions={userPermissions}
+              tenantRole={tenantRole}
+              partnerLabel={current.partnerLabel || '供应商'}
+              prodRecords={prodRecords}
+              orderBillPrintTemplates={printTemplates}
+            />
+          }
+        />
       )}
 
       {type === 'SALES_ORDER' && showModal === 'SALES_ORDER' && salesOrderModalPhase && (
-        <div className="fixed inset-0 z-[62] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={closeOrderBillModal} aria-hidden />
-          <div
-            className="relative bg-white w-full max-w-5xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0 gap-3">
-              <div className="min-w-0">
-                {salesOrderModalPhase === 'detail' && editingSODocNumber ? (
-                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 flex-wrap">
-                    <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shrink-0">
-                      {formatPsiDocNumForList(editingSODocNumber)}
-                    </span>
-                    销售订单详情
-                  </h3>
-                ) : (
-                  <h3 className="text-lg font-black text-slate-900">
-                    {editingSODocNumber ? '编辑销售订单' : '新建销售订单'}
-                  </h3>
-                )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {salesOrderModalPhase === 'detail' && editingSODocNumber ? (
-                  <>
-                    {showSoListPrintButton && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void refreshPrintTemplates();
-                          soListPrintControllerRef.current?.openPicker(editingSODocNumber);
-                        }}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      >
-                        <Printer className="w-4 h-4" /> 打印
-                      </button>
-                    )}
-                    {(hasPsiPerm('psi:sales_order:edit') || hasPsiPerm('psi:sales_order:view')) && (
-                      <button
-                        type="button"
-                        onClick={() => setSalesOrderModalPhase('edit')}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      >
-                        <Pencil className="w-4 h-4" /> 编辑
-                      </button>
-                    )}
-                    {onDeleteRecords && hasPsiPerm('psi:sales_order:delete') && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void confirm({ message: '确定要删除该销售订单吗？', danger: true }).then(ok => {
-                            if (!ok || !editingSODocNumber) return;
-                            onDeleteRecords('SALES_ORDER', editingSODocNumber);
-                            closeOrderBillModal();
-                          });
-                        }}
-                        className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold"
-                      >
-                        <Trash2 className="w-4 h-4" /> 删除
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={closeOrderBillModal}
-                      className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    {editingSODocNumber && (
-                      <button
-                        type="button"
-                        onClick={() => setSalesOrderModalPhase('detail')}
-                        className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700"
-                      >
-                        取消编辑
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={closeOrderBillModal}
-                      className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="flex-1 overflow-auto p-4 sm:p-6 min-h-0 bg-slate-50/30">
-              {salesOrderModalPhase === 'detail' && editingSODocNumber ? (
-                <SalesOrderDetailSummary
-                  docNumber={editingSODocNumber}
-                  recordsList={recordsList}
-                  productMapPSI={productMapPSI}
-                  dictionaries={dictionaries}
-                  getUnitName={getUnitName}
-                  formatQtyDisplay={formatQtyDisplay}
-                />
-              ) : (
-                <OrderBillFormPage
-                  key={`SALES_ORDER-${editingSODocNumber ?? 'new'}`}
-                  formType="SALES_ORDER"
-                  products={products}
-                  warehouses={warehouses}
-                  categories={categories}
-                  partners={partners}
-                  partnerCategories={partnerCategories}
-                  dictionaries={dictionaries}
-                  records={recordsList}
-                  getStock={getStock}
-                  getVariantDisplayQty={getVariantDisplayQty}
-                  getNullVariantProdStock={getNullVariantProdStock}
-                  productMapPSI={productMapPSI}
-                  warehouseMapPSI={warehouseMapPSI}
-                  categoryMapPSI={categoryMapPSI}
-                  getUnitName={getUnitName}
-                  formatQtyDisplay={formatQtyDisplay}
-                  onBack={closeOrderBillModal}
-                  onSave={onAddRecord}
-                  onSaveBatch={onAddRecordBatch}
-                  onReplaceRecords={onReplaceRecords}
-                  onDeleteRecords={onDeleteRecords}
-                  editingDocNumber={editingSODocNumber}
-                  purchaseOrderFormSettings={safePurchaseOrderFormSettings}
-                  salesOrderFormSettings={safeSalesOrderFormSettings}
-                  purchaseBillFormSettings={safePurchaseBillFormSettings}
-                  salesBillFormSettings={safeSalesBillFormSettings}
-                  userPermissions={userPermissions}
-                  tenantRole={tenantRole}
-                  partnerLabel={current.partnerLabel || '客户'}
-                  prodRecords={prodRecords}
-                  orderBillPrintTemplates={printTemplates}
-                />
-              )}
-            </div>
-          </div>
-        </div>
+        <PsiOrderBillDocModal
+          open
+          phase={salesOrderModalPhase}
+          editingDocNumber={editingSODocNumber}
+          maxWidthClass="max-w-5xl"
+          detailTitle="销售订单详情"
+          editTitle="编辑销售订单"
+          newTitle="新建销售订单"
+          showPrint={showSoListPrintButton}
+          onPrint={() => {
+            void refreshPrintTemplates();
+            soListPrintControllerRef.current?.openPicker(editingSODocNumber);
+          }}
+          permSubmodule="sales_order"
+          deleteConfirmMessage="确定要删除该销售订单吗？"
+          recordType="SALES_ORDER"
+          onDeleteRecords={onDeleteRecords}
+          onClose={closeOrderBillModal}
+          onEnterEdit={() => setSalesOrderModalPhase('edit')}
+          onCancelEdit={() => setSalesOrderModalPhase('detail')}
+          hasPsiPerm={hasPsiPerm}
+          detailContent={
+            <PsiDocDetailSummary
+              docType="SALES_ORDER"
+              docNumber={editingSODocNumber!}
+              recordsList={recordsList}
+              productMapPSI={productMapPSI}
+              dictionaries={dictionaries}
+              getUnitName={getUnitName}
+              formatQtyDisplay={formatQtyDisplay}
+            />
+          }
+          formContent={
+            <OrderBillFormPage
+              key={`SALES_ORDER-${editingSODocNumber ?? 'new'}`}
+              formType="SALES_ORDER"
+              products={products}
+              warehouses={warehouses}
+              categories={categories}
+              partners={partners}
+              partnerCategories={partnerCategories}
+              dictionaries={dictionaries}
+              records={recordsList}
+              getStock={getStock}
+              getVariantDisplayQty={getVariantDisplayQty}
+              getNullVariantProdStock={getNullVariantProdStock}
+              productMapPSI={productMapPSI}
+              warehouseMapPSI={warehouseMapPSI}
+              categoryMapPSI={categoryMapPSI}
+              getUnitName={getUnitName}
+              formatQtyDisplay={formatQtyDisplay}
+              onBack={closeOrderBillModal}
+              onSave={onAddRecord}
+              onSaveBatch={onAddRecordBatch}
+              onReplaceRecords={onReplaceRecords}
+              onDeleteRecords={onDeleteRecords}
+              editingDocNumber={editingSODocNumber}
+              purchaseOrderFormSettings={safePurchaseOrderFormSettings}
+              salesOrderFormSettings={safeSalesOrderFormSettings}
+              purchaseBillFormSettings={safePurchaseBillFormSettings}
+              salesBillFormSettings={safeSalesBillFormSettings}
+              userPermissions={userPermissions}
+              tenantRole={tenantRole}
+              partnerLabel={current.partnerLabel || '客户'}
+              prodRecords={prodRecords}
+              orderBillPrintTemplates={printTemplates}
+            />
+          }
+        />
       )}
 
       {type === 'SALES_BILL' && showModal === 'SALES_BILL' && salesBillModalPhase && (
-        <div className="fixed inset-0 z-[62] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={closeOrderBillModal} aria-hidden />
-          <div
-            className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0 gap-3">
-              <div className="min-w-0">
-                {salesBillModalPhase === 'detail' && editingSBDocNumber ? (
-                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 flex-wrap">
-                    <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shrink-0">
-                      {formatPsiDocNumForList(editingSBDocNumber)}
-                    </span>
-                    销售单详情
-                  </h3>
-                ) : (
-                  <h3 className="text-lg font-black text-slate-900">
-                    {editingSBDocNumber ? '编辑销售单' : '新建销售单'}
-                  </h3>
-                )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {salesBillModalPhase === 'detail' && editingSBDocNumber ? (
-                  <>
-                    {showSbListPrintButton && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void refreshPrintTemplates();
-                          sbListPrintControllerRef.current?.openPicker(editingSBDocNumber);
-                        }}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      >
-                        <Printer className="w-4 h-4" /> 打印
-                      </button>
-                    )}
-                    {(hasPsiPerm('psi:sales_bill:edit') || hasPsiPerm('psi:sales_bill:view')) && (
-                      <button
-                        type="button"
-                        onClick={() => setSalesBillModalPhase('edit')}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      >
-                        <Pencil className="w-4 h-4" /> 编辑
-                      </button>
-                    )}
-                    {onDeleteRecords && hasPsiPerm('psi:sales_bill:delete') && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void confirm({ message: '确定要删除该销售单吗？', danger: true }).then(ok => {
-                            if (!ok || !editingSBDocNumber) return;
-                            onDeleteRecords('SALES_BILL', editingSBDocNumber);
-                            closeOrderBillModal();
-                          });
-                        }}
-                        className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold"
-                      >
-                        <Trash2 className="w-4 h-4" /> 删除
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={closeOrderBillModal}
-                      className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    {editingSBDocNumber && (
-                      <button
-                        type="button"
-                        onClick={() => setSalesBillModalPhase('detail')}
-                        className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700"
-                      >
-                        取消编辑
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={closeOrderBillModal}
-                      className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="flex-1 overflow-auto p-4 sm:p-6 min-h-0 bg-slate-50/30">
-              {salesBillModalPhase === 'detail' && editingSBDocNumber ? (
-                <SalesBillDetailSummary
-                  docNumber={editingSBDocNumber}
-                  recordsList={recordsList}
-                  productMapPSI={productMapPSI}
-                  warehouseMapPSI={warehouseMapPSI}
-                  dictionaries={dictionaries}
-                  getUnitName={getUnitName}
-                  formatQtyDisplay={formatQtyDisplay}
-                />
-              ) : (
-                <OrderBillFormPage
-                  key={`SALES_BILL-${editingSBDocNumber ?? 'new'}`}
-                  formType="SALES_BILL"
-                  products={products}
-                  warehouses={warehouses}
-                  categories={categories}
-                  partners={partners}
-                  partnerCategories={partnerCategories}
-                  dictionaries={dictionaries}
-                  records={recordsList}
-                  getStock={getStock}
-                  getVariantDisplayQty={getVariantDisplayQty}
-                  getNullVariantProdStock={getNullVariantProdStock}
-                  productMapPSI={productMapPSI}
-                  warehouseMapPSI={warehouseMapPSI}
-                  categoryMapPSI={categoryMapPSI}
-                  getUnitName={getUnitName}
-                  formatQtyDisplay={formatQtyDisplay}
-                  onBack={closeOrderBillModal}
-                  onSave={onAddRecord}
-                  onSaveBatch={onAddRecordBatch}
-                  onReplaceRecords={onReplaceRecords}
-                  onDeleteRecords={onDeleteRecords}
-                  editingDocNumber={editingSBDocNumber}
-                  purchaseOrderFormSettings={safePurchaseOrderFormSettings}
-                  salesOrderFormSettings={safeSalesOrderFormSettings}
-                  purchaseBillFormSettings={safePurchaseBillFormSettings}
-                  salesBillFormSettings={safeSalesBillFormSettings}
-                  userPermissions={userPermissions}
-                  tenantRole={tenantRole}
-                  partnerLabel={current.partnerLabel || '客户'}
-                  prodRecords={prodRecords}
-                  orderBillPrintTemplates={printTemplates}
-                />
-              )}
-            </div>
-          </div>
-        </div>
+        <PsiOrderBillDocModal
+          open
+          phase={salesBillModalPhase}
+          editingDocNumber={editingSBDocNumber}
+          maxWidthClass="max-w-4xl"
+          detailTitle="销售单详情"
+          editTitle="编辑销售单"
+          newTitle="新建销售单"
+          showPrint={showSbListPrintButton}
+          onPrint={() => {
+            void refreshPrintTemplates();
+            sbListPrintControllerRef.current?.openPicker(editingSBDocNumber);
+          }}
+          permSubmodule="sales_bill"
+          deleteConfirmMessage="确定要删除该销售单吗？"
+          recordType="SALES_BILL"
+          onDeleteRecords={onDeleteRecords}
+          onClose={closeOrderBillModal}
+          onEnterEdit={() => setSalesBillModalPhase('edit')}
+          onCancelEdit={() => setSalesBillModalPhase('detail')}
+          hasPsiPerm={hasPsiPerm}
+          detailContent={
+            <PsiDocDetailSummary
+              docType="SALES_BILL"
+              docNumber={editingSBDocNumber!}
+              recordsList={recordsList}
+              productMapPSI={productMapPSI}
+              warehouseMapPSI={warehouseMapPSI}
+              dictionaries={dictionaries}
+              getUnitName={getUnitName}
+              formatQtyDisplay={formatQtyDisplay}
+            />
+          }
+          formContent={
+            <OrderBillFormPage
+              key={`SALES_BILL-${editingSBDocNumber ?? 'new'}`}
+              formType="SALES_BILL"
+              products={products}
+              warehouses={warehouses}
+              categories={categories}
+              partners={partners}
+              partnerCategories={partnerCategories}
+              dictionaries={dictionaries}
+              records={recordsList}
+              getStock={getStock}
+              getVariantDisplayQty={getVariantDisplayQty}
+              getNullVariantProdStock={getNullVariantProdStock}
+              productMapPSI={productMapPSI}
+              warehouseMapPSI={warehouseMapPSI}
+              categoryMapPSI={categoryMapPSI}
+              getUnitName={getUnitName}
+              formatQtyDisplay={formatQtyDisplay}
+              onBack={closeOrderBillModal}
+              onSave={onAddRecord}
+              onSaveBatch={onAddRecordBatch}
+              onReplaceRecords={onReplaceRecords}
+              onDeleteRecords={onDeleteRecords}
+              editingDocNumber={editingSBDocNumber}
+              purchaseOrderFormSettings={safePurchaseOrderFormSettings}
+              salesOrderFormSettings={safeSalesOrderFormSettings}
+              purchaseBillFormSettings={safePurchaseBillFormSettings}
+              salesBillFormSettings={safeSalesBillFormSettings}
+              userPermissions={userPermissions}
+              tenantRole={tenantRole}
+              partnerLabel={current.partnerLabel || '客户'}
+              prodRecords={prodRecords}
+              orderBillPrintTemplates={printTemplates}
+            />
+          }
+        />
       )}
 
       {type === 'WAREHOUSE_MGMT' ? (
@@ -1989,7 +1578,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
       )}
 
       {showPOFormConfigModal && onUpdatePurchaseOrderFormSettings && (
-        <PurchaseOrderFormConfigModal
+        <PsiFormConfigModal
+          docType="PURCHASE_ORDER"
           open={showPOFormConfigModal}
           onClose={() => setShowPOFormConfigModal(false)}
           defaultTabWhenOpen={poFormConfigEntryTab}
@@ -2114,7 +1704,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
       )}
 
       {showSOFormConfigModal && onUpdateSalesOrderFormSettings && (
-        <SalesOrderFormConfigModal
+        <PsiFormConfigModal
+          docType="SALES_ORDER"
           open={showSOFormConfigModal}
           onClose={() => setShowSOFormConfigModal(false)}
           defaultTabWhenOpen={soFormConfigEntryTab}
@@ -2130,7 +1721,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
       )}
 
       {showPBFormConfigModal && onUpdatePurchaseBillFormSettings && (
-        <PurchaseBillFormConfigModal
+        <PsiFormConfigModal
+          docType="PURCHASE_BILL"
           open={showPBFormConfigModal}
           onClose={() => setShowPBFormConfigModal(false)}
           defaultTabWhenOpen={pbFormConfigEntryTab}
@@ -2146,7 +1738,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
       )}
 
       {showSBFormConfigModal && onUpdateSalesBillFormSettings && (
-        <SalesBillFormConfigModal
+        <PsiFormConfigModal
+          docType="SALES_BILL"
           open={showSBFormConfigModal}
           onClose={() => setShowSBFormConfigModal(false)}
           defaultTabWhenOpen={sbFormConfigEntryTab}

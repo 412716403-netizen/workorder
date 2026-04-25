@@ -1,4 +1,4 @@
-import React, { useState, useLayoutEffect } from 'react';
+import React, { useState, useLayoutEffect, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { 
   Tag, 
@@ -19,6 +19,8 @@ import {
   subModuleTabPillClass,
 } from '../styles/uiDensity';
 import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useMasterData, useConfigData, useFinanceData, useAppActions } from '../contexts/AppDataContext';
 import CategoriesTab from './settings/CategoriesTab';
 import PartnerCategoriesTab from './settings/PartnerCategoriesTab';
 import NodesTab from './settings/NodesTab';
@@ -26,29 +28,6 @@ import WarehousesTab from './settings/WarehousesTab';
 import FinanceCategoriesTab from './settings/FinanceCategoriesTab';
 import ProductionConfigTab from './settings/ProductionConfigTab';
 import AccountTypesModal from './settings/AccountTypesModal';
-
-interface SettingsViewProps {
-  categories: ProductCategory[];
-  partnerCategories: PartnerCategory[];
-  globalNodes: GlobalNodeTemplate[];
-  warehouses: Warehouse[];
-  productionLinkMode?: ProductionLinkMode;
-  onUpdateProductionLinkMode?: (mode: ProductionLinkMode) => void;
-  processSequenceMode?: ProcessSequenceMode;
-  onUpdateProcessSequenceMode?: (mode: ProcessSequenceMode) => void;
-  allowExceedMaxReportQty?: boolean;
-  onUpdateAllowExceedMaxReportQty?: (value: boolean) => void;
-  onRefreshCategories: () => Promise<void>;
-  onRefreshPartnerCategories: () => Promise<void>;
-  onRefreshGlobalNodes: () => Promise<void>;
-  onRefreshWarehouses: () => Promise<void>;
-  financeCategories: FinanceCategory[];
-  onRefreshFinanceCategories: () => Promise<void>;
-  financeAccountTypes: FinanceAccountType[];
-  onRefreshFinanceAccountTypes: () => Promise<void>;
-  userPermissions?: string[];
-  tenantRole?: string;
-}
 
 type SettingsTab = 'categories' | 'partner_categories' | 'nodes' | 'warehouses' | 'finance_categories' | 'production';
 
@@ -71,28 +50,35 @@ const TAB_PERM_MAP: Record<string, string> = {
   production: 'settings:config',
 };
 
-const SettingsView: React.FC<SettingsViewProps> = ({ 
-  categories, 
-  partnerCategories,
-  globalNodes, 
-  warehouses,
-  financeCategories,
-  onRefreshFinanceCategories,
-  financeAccountTypes,
-  onRefreshFinanceAccountTypes,
-  productionLinkMode = 'order',
-  onUpdateProductionLinkMode,
-  processSequenceMode = 'free',
-  onUpdateProcessSequenceMode,
-  allowExceedMaxReportQty = true,
-  onUpdateAllowExceedMaxReportQty,
-  onRefreshCategories, 
-  onRefreshPartnerCategories,
-  onRefreshGlobalNodes,
-  onRefreshWarehouses,
-  userPermissions,
-  tenantRole,
-}) => {
+const SettingsView: React.FC = () => {
+  const m = useMasterData();
+  const c = useConfigData();
+  const f = useFinanceData();
+  const a = useAppActions();
+  const { tenantCtx } = useAuth();
+
+  useEffect(() => { void a.ensureDeferredLoaded(); }, [a.ensureDeferredLoaded]);
+
+  const categories = m.categories;
+  const partnerCategories = m.partnerCategories;
+  const globalNodes = m.globalNodes;
+  const warehouses = m.warehouses;
+  const financeCategories = f.financeCategories;
+  const onRefreshFinanceCategories = a.refreshFinanceCategories;
+  const financeAccountTypes = f.financeAccountTypes;
+  const onRefreshFinanceAccountTypes = a.refreshFinanceAccountTypes;
+  const productionLinkMode = c.productionLinkMode;
+  const onUpdateProductionLinkMode = a.onUpdateProductionLinkMode;
+  const processSequenceMode = c.processSequenceMode;
+  const onUpdateProcessSequenceMode = a.onUpdateProcessSequenceMode;
+  const allowExceedMaxReportQty = c.allowExceedMaxReportQty;
+  const onUpdateAllowExceedMaxReportQty = a.onUpdateAllowExceedMaxReportQty;
+  const onRefreshCategories = a.refreshCategories;
+  const onRefreshPartnerCategories = a.refreshPartnerCategories;
+  const onRefreshGlobalNodes = a.refreshGlobalNodes;
+  const onRefreshWarehouses = a.refreshWarehouses;
+  const userPermissions = tenantCtx?.permissions;
+  const tenantRole = tenantCtx?.tenantRole;
   const isOwner = tenantRole === 'owner';
   const hasPerm = (perm: string): boolean => {
     if (isOwner) return true;

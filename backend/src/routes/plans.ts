@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../controllers/plans.controller.js';
 import { validate } from '../middleware/validate.js';
+import { requireSubPermission } from '../middleware/tenant.js';
 
 const router = Router();
 
@@ -35,14 +36,14 @@ const createSubPlansSchema = z.object({
   }).passthrough()).min(1, '至少需要一条子计划'),
 });
 
-router.get('/', ctrl.listPlans);
-router.get('/:id', ctrl.getPlan);
-router.post('/', validate(createPlanSchema), ctrl.createPlan);
-router.put('/:id', validate(updatePlanSchema), ctrl.updatePlan);
-router.delete('/:id', ctrl.deletePlan);
+router.get('/', requireSubPermission('production:plans:view'), ctrl.listPlans);
+router.get('/:id', requireSubPermission('production:plans:view'), ctrl.getPlan);
+router.post('/', requireSubPermission('production:plans:create'), validate(createPlanSchema), ctrl.createPlan);
+router.put('/:id', requireSubPermission('production:plans:edit'), validate(updatePlanSchema), ctrl.updatePlan);
+router.delete('/:id', requireSubPermission('production:plans:delete'), ctrl.deletePlan);
 
-router.post('/:id/split', validate(splitPlanSchema), ctrl.splitPlan);
-router.post('/:id/convert', ctrl.convertToOrder);
-router.post('/:id/sub-plans', validate(createSubPlansSchema), ctrl.createSubPlans);
+router.post('/:id/split', requireSubPermission('production:plans:edit'), validate(splitPlanSchema), ctrl.splitPlan);
+router.post('/:id/convert', requireSubPermission('production:plans:edit'), ctrl.convertToOrder);
+router.post('/:id/sub-plans', requireSubPermission('production:plans:edit'), validate(createSubPlansSchema), ctrl.createSubPlans);
 
 export default router;

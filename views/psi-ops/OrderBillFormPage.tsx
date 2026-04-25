@@ -34,6 +34,7 @@ import {
   buildPsiLastPriceIndex,
   lookupLastPrice,
 } from '../../utils/psiPartnerProductLastPrice';
+import { hasModulePerm } from '../../utils/hasModulePerm';
 
 type FormType = 'PURCHASE_ORDER' | 'PURCHASE_BILL' | 'SALES_ORDER' | 'SALES_BILL';
 
@@ -160,14 +161,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   const docOperator = currentOperatorDisplayName(currentUser);
   const recordsList = records ?? [];
   const _isOwner = tenantRole === 'owner';
-  const hasPsiPerm = (perm: string): boolean => {
-    if (_isOwner) return true;
-    if (!userPermissions || userPermissions.length === 0) return true;
-    if (userPermissions.includes('psi') && !userPermissions.some(p => p.startsWith('psi:'))) return true;
-    if (userPermissions.includes(perm)) return true;
-    if (userPermissions.some(p => p.startsWith(`${perm}:`))) return true;
-    return false;
-  };
+  const hasPsiPerm = (perm: string) => hasModulePerm(tenantRole, userPermissions, 'psi', perm);
   const safePurchaseBillFormSettings = useMemo(
     () => ({
       standardFields: purchaseBillFormSettings?.standardFields ?? [],

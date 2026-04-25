@@ -26,13 +26,7 @@ import QtyMatrixTable, { type QtyMatrixTableRow } from '../../components/variant
 import { getEffectiveReportTemplate, getReportCustomDataDisplayEntries, mergeCustomDataForTemplate } from '../../utils/effectiveReportTemplate';
 import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
-
-function fmtDT(ts: string | Date | undefined | null): string {
-  if (!ts) return '—';
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return String(ts);
-  return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-}
+import { fmtDT } from '../../utils/formatTime';
 
 type OrderReportRow = {
   order: ProductionOrder;
@@ -48,6 +42,33 @@ type ProductReportRow = { progress: ProductMilestoneProgress; report: OrderRepor
 export type ReportDetailBatch =
   | { source: 'order'; key: string; rows: OrderReportRow[]; first: OrderReportRow; totalGood: number; totalDefective: number; totalAmount: number; reportNo?: string }
   | { source: 'product'; key: string; progressId: string; productId: string; productName: string; milestoneName: string; milestoneTemplateId: string; rows: ProductReportRow[]; first: ProductReportRow; totalGood: number; totalDefective: number; totalAmount: number; reportNo?: string };
+
+/** 单工单在某工序的「当前还可报」上限（与工单列表口径一致）。批次含多工单时需按行汇总，勿只用 first 工单。 */
+function orderEffectiveRemainingAtTemplate(
+  order: ProductionOrder,
+  templateId: string,
+  processSequenceMode: ProcessSequenceMode,
+  getDefectiveRework: (orderId: string, tid: string) => { defective: number; rework: number },
+  prodRecords: ProductionOpRecord[],
+): number {
+  const orderTotal = order.items.reduce((s, i) => s + i.quantity, 0);
+  const ms = order.milestones.find(m => m.templateId === templateId);
+  if (!ms) return 0;
+  const totalBase =
+    processSequenceMode === 'sequential'
+      ? (() => {
+          const idx = order.milestones.findIndex(m => m.templateId === templateId);
+          if (idx <= 0) return orderTotal;
+          const prev = order.milestones[idx - 1];
+          return prev?.completedQuantity ?? 0;
+        })()
+      : orderTotal;
+  const { defective: drDef, rework: drRework } = getDefectiveRework(order.id, templateId);
+  const outsourcedPending = prodRecords
+    .filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && r.orderId === order.id && r.nodeId === templateId)
+    .reduce((s, r) => s + (r.quantity ?? 0), 0);
+  return Math.max(0, totalBase - drDef + drRework - (ms.completedQuantity ?? 0) - outsourcedPending);
+}
 
 type ReportUpdateParams = {
   orderId: string;
@@ -161,6 +182,16 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
   );
   const getDefectiveRework = (orderId: string, templateId: string) =>
     defectiveAndReworkByOrderMilestone.get(`${orderId}|${templateId}`) ?? { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> };
+
+  /** 列表里可能筛掉部分工单；批次行里内嵌的 order 仍应用来计算可报上限 */
+  const resolveOrderById = useCallback(
+    (orderId: string): ProductionOrder | undefined =>
+      orders.find(o => o.id === orderId) ??
+      (reportDetailBatch.source === 'order'
+        ? (reportDetailBatch.rows as OrderReportRow[]).find(r => r.order.id === orderId)?.order
+        : undefined),
+    [orders, reportDetailBatch],
+  );
 
   const variantLabelForPrint = useCallback(
     (productId: string, variantId?: string) => {
@@ -512,18 +543,52 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
             const order = reportDetailBatch.source === 'order' ? orders.find(o => o.id === editingReport.orderId) : null;
             const milestone = order?.milestones.find(m => m.templateId === editingReport.templateId);
             const tid = editingReport.templateId;
-            const orderTotal = order ? order.items.reduce((s, i) => s + i.quantity, 0) : 0;
-            const totalBase = order && milestone && processSequenceMode === 'sequential'
-              ? (() => { const idx = order.milestones.findIndex(m => m.templateId === tid); if (idx <= 0) return orderTotal; const prev = order.milestones[idx - 1]; return prev?.completedQuantity ?? 0; })()
-              : (orderTotal || 0);
-            const { defective: totalDefective, rework: totalRework } = order ? getDefectiveRework(order.id, tid) : { defective: 0, rework: 0 };
-            const totalCompleted = milestone?.completedQuantity ?? 0;
-            const outsourcedPendingEdit = order ? prodRecords.filter(
-              r => r.type === 'OUTSOURCE' && r.status === '加工中' && r.orderId === order.id && r.nodeId === tid
-            ).reduce((s, r) => s + (r.quantity ?? 0), 0) : 0;
-            const effectiveRemainingSaved = Math.max(0, totalBase - totalDefective + totalRework - totalCompleted - outsourcedPendingEdit);
+            const effectiveRemainingSaved =
+              reportDetailBatch.source === 'order'
+                ? [...new Set(reportDetailBatch.rows.map(r => r.order.id))].reduce((sum, oid) => {
+                    const o = resolveOrderById(oid);
+                    if (!o) return sum;
+                    return sum + orderEffectiveRemainingAtTemplate(o, tid, processSequenceMode, getDefectiveRework, prodRecords);
+                  }, 0)
+                : Math.max(
+                    0,
+                    (() => {
+                      const orderTotal = order ? order.items.reduce((s, i) => s + i.quantity, 0) : 0;
+                      const totalBase =
+                        order && milestone && processSequenceMode === 'sequential'
+                          ? (() => {
+                              const idx = order.milestones.findIndex(m => m.templateId === tid);
+                              if (idx <= 0) return orderTotal;
+                              const prev = order.milestones[idx - 1];
+                              return prev?.completedQuantity ?? 0;
+                            })()
+                          : orderTotal || 0;
+                      const { defective: totalDefective, rework: totalRework } = order
+                        ? getDefectiveRework(order.id, tid)
+                        : { defective: 0, rework: 0 };
+                      const totalCompleted = milestone?.completedQuantity ?? 0;
+                      const outsourcedPendingEdit = order
+                        ? prodRecords
+                            .filter(
+                              r =>
+                                r.type === 'OUTSOURCE' &&
+                                r.status === '加工中' &&
+                                r.orderId === order.id &&
+                                r.nodeId === tid,
+                            )
+                            .reduce((s, r) => s + (r.quantity ?? 0), 0)
+                        : 0;
+                      return totalBase - totalDefective + totalRework - totalCompleted - outsourcedPendingEdit;
+                    })(),
+                  );
             const batchDefectiveSum = editingReport.form.rowEdits.reduce((s, r) => s + r.defectiveQuantity, 0);
-            const maxBatchGood = effectiveRemainingSaved + reportDetailBatch.totalGood + reportDetailBatch.totalDefective - batchDefectiveSum;
+            const rowGoodSum = editingReport.form.rowEdits.reduce((s, r) => s + r.quantity, 0);
+            const maxBatchGoodBase =
+              effectiveRemainingSaved + reportDetailBatch.totalGood + reportDetailBatch.totalDefective - batchDefectiveSum;
+            const maxBatchGood =
+              reportDetailBatch.source === 'order'
+                ? Math.max(0, maxBatchGoodBase, reportDetailBatch.totalGood, rowGoodSum)
+                : Math.max(0, maxBatchGoodBase);
             return (
             <>
               {reportDetailBatch.source === 'order' && order && (
@@ -707,11 +772,16 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                                         return { ...prev, form: { ...prev.form, rowEdits: nextEdits } };
                                       }
                                       const newDefSum = nextEdits.reduce((s, r) => s + r.defectiveQuantity, 0);
-                                      const newMaxBatchGood =
+                                      const newGoodSum = nextEdits.reduce((s, r) => s + r.quantity, 0);
+                                      const newMaxBase =
                                         effectiveRemainingSaved +
                                         reportDetailBatch.totalGood +
                                         reportDetailBatch.totalDefective -
                                         newDefSum;
+                                      const newMaxBatchGood =
+                                        reportDetailBatch.source === 'order'
+                                          ? Math.max(0, newMaxBase, reportDetailBatch.totalGood, newGoodSum)
+                                          : Math.max(0, newMaxBase);
                                       const totalQty = nextEdits.reduce((s, r) => s + r.quantity, 0);
                                       if (totalQty > newMaxBatchGood && newMaxBatchGood >= 0) {
                                         const scale = totalQty > 0 ? newMaxBatchGood / totalQty : 0;
@@ -1023,29 +1093,28 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                   const milestoneName = reportDetailBatch.source === 'order'
                     ? reportDetailBatch.first.milestone.name
                     : reportDetailBatch.milestoneName;
-                  const order = reportDetailBatch.source === 'order' ? reportDetailBatch.first.order : null;
                   const tid = reportDetailBatch.source === 'order' ? reportDetailBatch.first.milestone.templateId : reportDetailBatch.milestoneTemplateId;
-                  const orderTotal = order ? order.items.reduce((s, i) => s + i.quantity, 0) : 0;
-                  const ms = order?.milestones.find(m => m.templateId === tid);
-                  const totalBase = order && ms && processSequenceMode === 'sequential'
-                    ? (() => { const idx = order.milestones.findIndex(m => m.templateId === tid); if (idx <= 0) return orderTotal; const prev = order.milestones[idx - 1]; return prev?.completedQuantity ?? 0; })()
-                    : (orderTotal || 0);
-                  const { defective: drDef, rework: drRework } = order ? getDefectiveRework(order.id, tid) : { defective: 0, rework: 0 };
-                  const outsourcedPendingView = order ? prodRecords.filter(
-                    r => r.type === 'OUTSOURCE' && r.status === '加工中' && r.orderId === order.id && r.nodeId === tid
-                  ).reduce((s, r) => s + (r.quantity ?? 0), 0) : 0;
-                  const effectiveRemainingView = order && ms ? Math.max(0, totalBase - drDef + drRework - (ms.completedQuantity ?? 0) - outsourcedPendingView) : null;
+                  const effectiveRemainingView =
+                    reportDetailBatch.source === 'order'
+                      ? [...new Set(reportDetailBatch.rows.map(r => r.order.id))].reduce((sum, oid) => {
+                          const o = resolveOrderById(oid);
+                          if (!o) return sum;
+                          return sum + orderEffectiveRemainingAtTemplate(o, tid, processSequenceMode, getDefectiveRework, prodRecords);
+                        }, 0)
+                      : null;
                   return (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
                       <div>
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">工序</p>
                         <p className="text-xs sm:text-sm font-bold text-slate-800">{milestoneName || '—'}</p>
                       </div>
-                      {effectiveRemainingView != null && (
+                      {reportDetailBatch.source === 'order' && (
                         <div>
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">本工序可报最多</p>
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">
+                            本工序还可报（批次涉及工单合计）
+                          </p>
                           <p className="text-xs sm:text-sm font-bold text-indigo-600 tabular-nums">
-                            {effectiveRemainingView} {unitName}
+                            {effectiveRemainingView ?? 0} {unitName}
                             <span className="block text-[10px] font-normal text-slate-400 mt-0.5">已扣不良、返工、外协在制</span>
                           </p>
                         </div>

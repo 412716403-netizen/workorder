@@ -1,23 +1,15 @@
-export enum MilestoneStatus {
-  PENDING = 'PENDING',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  DELAYED = 'DELAYED'
-}
-
-export enum OrderStatus {
-  PLANNING = 'PLANNING',
-  PRODUCING = 'PRODUCING',
-  QC = 'QC',
-  SHIPPED = 'SHIPPED',
-  ON_HOLD = 'ON_HOLD'
-}
-
-export enum PlanStatus {
-  DRAFT = 'DRAFT',
-  APPROVED = 'APPROVED',
-  CONVERTED = 'CONVERTED'
-}
+export {
+  MilestoneStatus,
+  OrderStatus,
+  PlanStatus,
+  FINANCE_DOC_NO_PREFIX,
+  type ProcessPricingMode,
+  type ProductionLinkMode,
+  type ProcessSequenceMode,
+  type FinanceCategoryKind,
+  type ProdOpType,
+  type FinanceOpType,
+} from './shared/types';
 
 /** 单品码（一物一码）：计划内每件唯一扫码标识 */
 export interface ItemCode {
@@ -133,6 +125,11 @@ export interface TraceResult {
   events: TraceEvent[];
   tenants: Array<{ id: string; name: string | null }>;
   planTree: Array<{ id: string; tenantId: string; planNumber: string; parentPlanId: string | null }>;
+  /** 服务端分页追溯时返回 */
+  total?: number;
+  page?: number;
+  pageSize?: number;
+  hasMore?: boolean;
 }
 
 export type FieldType = 'text' | 'number' | 'select' | 'boolean' | 'date' | 'file';
@@ -166,15 +163,6 @@ export interface AppDictionaries {
   sizes: DictionaryItem[];
   units: DictionaryItem[];
 }
-
-/** 工序计价方式：计件（元/件）或计时（元/时） */
-export type ProcessPricingMode = 'per_piece' | 'per_hour';
-
-/** 生产关联模式：关联工单（order）或关联产品（product） */
-export type ProductionLinkMode = 'order' | 'product';
-
-/** 工序顺序模式：不限制顺序（free）或按顺序生产（sequential） */
-export type ProcessSequenceMode = 'free' | 'sequential';
 
 export interface GlobalNodeTemplate {
   id: string;
@@ -224,9 +212,6 @@ export interface PartnerCategory {
   description?: string;
   customFields: ReportFieldDefinition[];
 }
-
-/** 收付款单据分类：收款单/付款单下的类型（如预收款、材料款等），用于控制登记时显示的关联项与自定义字段 */
-export type FinanceCategoryKind = 'RECEIPT' | 'PAYMENT';
 
 export interface FinanceCategory {
   id: string;
@@ -349,6 +334,38 @@ export interface Partner {
   contact: string;
   customData?: Record<string, any>;
   collaborationTenantId?: string;
+}
+
+/** 进销存 PSI 单据类型（与 `partnerDocNumber`、后端一致） */
+export type PsiRecordType = 'PURCHASE_ORDER' | 'PURCHASE_BILL' | 'SALES_ORDER' | 'SALES_BILL';
+
+/** 进销存 PSI 记录（列表/详情常用字段；其余 JSON 字段按需扩展） */
+export interface PsiRecord {
+  id: string;
+  type: PsiRecordType;
+  docNumber?: string;
+  docNo?: string;
+  partner?: string | null;
+  partnerId?: string | null;
+  productId: string;
+  productName?: string | null;
+  productSku?: string | null;
+  variantId?: string | null;
+  lineGroupId?: string | null;
+  quantity?: number | string | null;
+  purchasePrice?: number | string | null;
+  salesPrice?: number | string | null;
+  operator?: string | null;
+  warehouseId?: string | null;
+  allocatedQuantity?: number | string | null;
+  shippedQuantity?: number | string | null;
+  timestamp?: string | null;
+  createdAt?: string | Date | null;
+  _savedAtMs?: number | null;
+  customData?: Record<string, unknown> | null;
+  note?: string | null;
+  /** 采购/销售单行金额等（列表 API 可能带） */
+  amount?: number | string | null;
 }
 
 export interface PlanItem {
@@ -577,11 +594,16 @@ export interface OutsourceFormSettings {
   outsourceDispatchCustomFields?: PlanFormFieldConfig[];
   outsourceReceiveCustomFields?: PlanFormFieldConfig[];
   outsourceCenterPrint?: OutsourceCenterPrintSettings;
+  /**
+   * 为 true 时，外协列表加工厂旁的文档图标打开「加工厂往来数量明细」弹窗；为 false 或未设置时打开外协流水并带筛选。
+   */
+  showPartnerFlowDetailOnList?: boolean;
 }
 
 export const DEFAULT_OUTSOURCE_FORM_SETTINGS: OutsourceFormSettings = {
   outsourceDispatchCustomFields: [],
   outsourceReceiveCustomFields: [],
+  showPartnerFlowDetailOnList: false,
 };
 
 /** 返工管理：处理不良流水详情 / 返工报工流水详情打印入口与白名单 */
@@ -1134,8 +1156,6 @@ export interface ProductionOrder {
   updatedAt?: string;
 }
 
-export type ProdOpType = 'STOCK_IN' | 'STOCK_OUT' | 'STOCK_RETURN' | 'OUTSOURCE' | 'REWORK' | 'REWORK_REPORT' | 'SCRAP';
-
 export interface ProductionOpRecord {
   id: string;
   type: ProdOpType;
@@ -1209,16 +1229,6 @@ export interface MaterialBreakdownRow {
   /** 理论件数消耗（= 报工件数 × BOMItem.quantity），可选，用于报表层计算损耗差 */
   theoreticalQty?: number;
 }
-
-export type FinanceOpType = 'RECEIPT' | 'PAYMENT' | 'RECONCILIATION' | 'SETTLEMENT';
-
-/** 收付款单据编号前缀：收款单 SKD、付款单 FKD、财务对账 DZD、工资单 GZD，规则同报工单 BG+日期+序号 */
-export const FINANCE_DOC_NO_PREFIX: Record<FinanceOpType, string> = {
-  RECEIPT: 'SKD',
-  PAYMENT: 'FKD',
-  RECONCILIATION: 'DZD',
-  SETTLEMENT: 'GZD',
-};
 
 export interface OutsourceRouteStep {
   stepOrder: number;

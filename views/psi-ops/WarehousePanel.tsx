@@ -33,6 +33,7 @@ import StocktakeOrderModal from './StocktakeOrderModal';
 import WarehouseFlowModal from './WarehouseFlowModal';
 import ProductFlowDetailModal from './ProductFlowDetailModal';
 import WarehouseFlowDocumentDetailModal from './WarehouseFlowDocumentDetailModal';
+import { hasModulePerm } from '../../utils/hasModulePerm';
 
 interface WarehouseProps {
   products: Product[];
@@ -89,14 +90,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   const recordsList = records ?? [];
   const ordersList = orders ?? [];
 
-  const hasPsiPerm = (perm: string): boolean => {
-    if (tenantRole === 'owner') return true;
-    if (!userPermissions || userPermissions.length === 0) return true;
-    if (userPermissions.includes('psi') && !userPermissions.some(p => p.startsWith('psi:'))) return true;
-    if (userPermissions.includes(perm)) return true;
-    if (userPermissions.some(p => p.startsWith(`${perm}:`))) return true;
-    return false;
-  };
+  const hasPsiPerm = (perm: string) => hasModulePerm(tenantRole, userPermissions, 'psi', perm);
 
   // ── 仓库管理子视图状态 ──
   const [inventoryViewMode, setInventoryViewMode] = useState<'warehouse' | 'product'>('warehouse');

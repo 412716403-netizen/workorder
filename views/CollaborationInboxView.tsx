@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
+import { useMasterData, useOrdersData, useAppActions } from '../contexts/AppDataContext';
 import * as api from '../services/api';
 import { resolveCollabOutboundWarehouseId, WAREHOUSE_DOC_KIND } from '../utils/warehouseDocPreference';
 import {
@@ -31,24 +32,6 @@ import CollabPeerConfirmForwardModal from './collaboration/CollabPeerConfirmForw
 import CollabDocDetailModal from './collaboration/CollabDocDetailModal';
 import CollabForwardDetailModal from './collaboration/CollabForwardDetailModal';
 import CollabAggReturnDetailModal, { type AggReturnItem } from './collaboration/CollabAggReturnDetailModal';
-
-interface CollaborationInboxViewProps {
-  products: Product[];
-  partners: Partner[];
-  partnerCategories: PartnerCategory[];
-  orders: ProductionOrder[];
-  prodRecords: ProductionOpRecord[];
-  warehouses: Warehouse[];
-  dictionaries: AppDictionaries;
-  nodeTemplates?: GlobalNodeTemplate[];
-  onRefreshPartners: () => Promise<void>;
-  onRefreshProducts?: () => Promise<void>;
-  onRefreshOrders?: () => Promise<void>;
-  onRefreshProdRecords?: () => Promise<void>;
-  onRefreshPMP?: () => Promise<void>;
-  tenantRole?: string;
-  userPermissions?: string[];
-}
 
 /** 时间轴气泡类型：派发 / 单张回传 / 同 returnGroupId 聚合回传 / 转发 */
 type DocKind = 'dispatch' | 'return' | 'agg-return' | 'forward';
@@ -126,11 +109,26 @@ type PeerSummary = {
 
 type ViewMode = 'inbox' | 'maps';
 
-const CollaborationInboxView: React.FC<CollaborationInboxViewProps> = ({
-  products, partners, partnerCategories, orders, prodRecords, warehouses, dictionaries, nodeTemplates,
-  onRefreshPartners, onRefreshProducts, onRefreshOrders, onRefreshProdRecords, onRefreshPMP,
-}) => {
-  void orders;
+const CollaborationInboxView: React.FC = () => {
+  const m = useMasterData();
+  const o = useOrdersData();
+  const a = useAppActions();
+  useEffect(() => { void a.ensureDeferredLoaded(); }, [a.ensureDeferredLoaded]);
+
+  const products = m.products;
+  const partners = m.partners;
+  const partnerCategories = m.partnerCategories;
+  const orders = o.orders;
+  const prodRecords = o.prodRecords;
+  const warehouses = m.warehouses;
+  const dictionaries = m.dictionaries;
+  const nodeTemplates = m.globalNodes;
+  const onRefreshPartners = a.refreshPartners;
+  const onRefreshProducts = a.refreshProducts;
+  const onRefreshOrders = a.refreshOrders;
+  const onRefreshProdRecords = a.refreshProdRecords;
+  const onRefreshPMP = a.refreshPMP;
+
   const { tenantCtx, userId } = useAuth();
   const [viewMode, setViewMode] = useState<ViewMode>('inbox');
   const [transfers, setTransfers] = useState<any[]>([]);

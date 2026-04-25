@@ -28,8 +28,24 @@ class TenantAccessError extends Error {
 }
 
 async function verifyOwnership(model: string, where: any, tenantId: string) {
-  if (!where?.id) return;
   const delegate = (prisma as any)[delegateKey(model)];
+
+  /** 分区表复合主键 (tenant_id, id)：delete/update 的 where 可能为 tenantId_id 复合 */
+  if (model === 'ItemCode' || model === 'PlanVirtualBatch') {
+    const compound = where?.tenantId_id as { tenantId?: string; id?: string } | undefined;
+    const id = compound?.id ?? where?.id;
+    if (!id) return;
+    const tid = compound?.tenantId ?? where?.tenantId ?? tenantId;
+    if (compound?.tenantId && compound.tenantId !== tenantId) throw new TenantAccessError();
+    const exists = await delegate.findFirst({
+      where: { tenantId_id: { tenantId: tid, id } },
+      select: { id: true },
+    });
+    if (!exists) throw new TenantAccessError();
+    return;
+  }
+
+  if (!where?.id) return;
   const exists = await delegate.findFirst({
     where: { id: where.id, tenantId },
     select: { id: true },

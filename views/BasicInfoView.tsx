@@ -48,30 +48,8 @@ import {
 } from '../styles/uiDensity';
 import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
 import { useEquipmentFeaturesEffective } from '../hooks/useEquipmentFeaturesEffective';
-
-interface BasicInfoViewProps {
-  products: Product[];
-  globalNodes: GlobalNodeTemplate[];
-  categories: ProductCategory[];
-  partnerCategories: PartnerCategory[];
-  boms: BOM[];
-  equipment: Equipment[];
-  dictionaries: AppDictionaries;
-  partners: Partner[];
-  onUpdateProduct: (product: Product) => Promise<Product | null>;
-  onDeleteProduct: (id: string) => Promise<boolean>;
-  onUpdateBOM: (bom: BOM) => Promise<boolean>;
-  onRefreshDictionaries: () => Promise<void>;
-  onRefreshWorkers: () => Promise<void>;
-  onRefreshEquipment: () => Promise<void>;
-  onRefreshPartners: () => Promise<void>;
-  onRefreshPartnerCategories: () => Promise<void>;
-  onRefreshProducts?: () => Promise<void>;
-  tenantId: string;
-  tenantRole: string;
-  currentUserId: string;
-  userPermissions?: string[];
-}
+import { useAuth } from '../contexts/AuthContext';
+import { useMasterData, useAppActions } from '../contexts/AppDataContext';
 
 const TAB_PERM_MAP: Record<string, string> = {
   PRODUCTS: 'basic:products',
@@ -83,11 +61,32 @@ const TAB_PERM_MAP: Record<string, string> = {
 
 type BasicTab = 'PRODUCTS' | 'PARTNERS' | 'MEMBERS' | 'EQUIPMENT' | 'DICTIONARIES';
 
-const BasicInfoView: React.FC<BasicInfoViewProps> = ({
-  products, globalNodes, categories, partnerCategories, boms, equipment, dictionaries, partners,
-  onUpdateProduct, onDeleteProduct, onUpdateBOM, onRefreshDictionaries, onRefreshWorkers, onRefreshEquipment, onRefreshPartners,
-  onRefreshProducts, tenantId, tenantRole, currentUserId, userPermissions
-}) => {
+const BasicInfoView: React.FC = () => {
+  const m = useMasterData();
+  const a = useAppActions();
+  const { tenantCtx, currentUser } = useAuth();
+
+  const products = m.products;
+  const globalNodes = m.globalNodes;
+  const categories = m.categories;
+  const partnerCategories = m.partnerCategories;
+  const boms = m.boms;
+  const equipment = m.equipment;
+  const dictionaries = m.dictionaries;
+  const partners = m.partners;
+  const onUpdateProduct = a.onUpdateProduct;
+  const onDeleteProduct = a.onDeleteProduct;
+  const onUpdateBOM = a.onUpdateBOM;
+  const onRefreshDictionaries = a.refreshDictionaries;
+  const onRefreshWorkers = a.refreshWorkers;
+  const onRefreshEquipment = a.refreshEquipment;
+  const onRefreshPartners = a.refreshPartners;
+  const onRefreshPartnerCategories = a.refreshPartnerCategories;
+  const onRefreshProducts = a.refreshProducts;
+  const tenantId = tenantCtx!.tenantId;
+  const tenantRole = tenantCtx!.tenantRole;
+  const currentUserId = String(currentUser?.id ?? '');
+  const userPermissions = tenantCtx!.permissions;
   const isOwner = tenantRole === 'owner';
   const hasPerm = (perm: string): boolean => {
     if (isOwner) return true;

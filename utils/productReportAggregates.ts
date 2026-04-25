@@ -200,7 +200,42 @@ export function productGroupMaxReportableSum(
   return Math.max(0, Math.round(sum - Math.max(0, pmpDef - mileDef)));
 }
 
-/** 颜色尺码：本规格在本工序「还可报良品」上限 = 可报最多(规格) - 本工序该规格已报良品 + 返工（规格）；顺序模式下可报基数 = 上一道该规格在产品报工中的完成量 */
+/**
+ * PMP + 里程碑双通道：某规格在某工序的合并完成量。
+ * 与 {@link combinedCompletedByVariantAtTemplate} 逻辑一致，但只算单个 variantId，避免全量遍历。
+ */
+function combinedCompletedAtTemplateVariant(
+  blockOrders: ProductionOrder[],
+  pmp: ProductMilestoneProgress[],
+  productId: string,
+  templateId: string,
+  variantId: string,
+): number {
+  const vid = variantId || '';
+  const pmpVal = pmpCompletedAtTemplateVariant(pmp, productId, templateId, variantId);
+  let mileVal = 0;
+  for (const o of blockOrders) {
+    const m = o.milestones.find(x => x.templateId === templateId);
+    if (!m) continue;
+    const reps = m.reports;
+    if (reps && reps.length > 0) {
+      mileVal += reps
+        .filter(r => ((r as any).variantId ?? '') === vid)
+        .reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+    } else {
+      const total = m.completedQuantity ?? 0;
+      if (total <= 0) continue;
+      const totalQty = o.items.reduce((s, i) => s + i.quantity, 0);
+      if (totalQty <= 0) { if (vid === '') mileVal += total; continue; }
+      const matched = o.items.filter(i => (i.variantId ?? '') === vid);
+      const matchedQty = matched.reduce((s, i) => s + i.quantity, 0);
+      mileVal += Math.round((total * matchedQty) / totalQty);
+    }
+  }
+  return pmpVal + mileVal;
+}
+
+/** 颜色尺码：本规格在本工序「还可报良品」上限 = 可报最多(规格) - 本工序该规格已报良品 + 返工（规格）；顺序模式下可报基数 = 上一道该规格的合并完成量（PMP + 里程碑） */
 export function variantMaxGoodProductMode(
   variantId: string,
   templateId: string,
@@ -215,11 +250,11 @@ export function variantMaxGoodProductMode(
   const tid = templateId;
   const idx = milestoneNodeIds.indexOf(tid);
   const Qv = sumVariantQtyInOrders(blockOrders, variantId);
-  const curDone = pmpCompletedAtTemplateVariant(pmp, productId, tid, variantId);
+  const curDone = combinedCompletedAtTemplateVariant(blockOrders, pmp, productId, tid, variantId);
   let baseV = Qv;
   if (processSequenceMode === 'sequential' && idx > 0) {
     const prevTid = milestoneNodeIds[idx - 1];
-    baseV = pmpCompletedAtTemplateVariant(pmp, productId, prevTid, variantId);
+    baseV = combinedCompletedAtTemplateVariant(blockOrders, pmp, productId, prevTid, variantId);
   }
   const defectiveFromPmp = pmp
     .filter(p => p.productId === productId && p.milestoneTemplateId === tid && (p.variantId ?? '') === variantId)

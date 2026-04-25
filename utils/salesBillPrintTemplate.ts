@@ -1,7 +1,7 @@
 import type { PrintBodyElement, PrintDynamicListElementConfig, PrintTemplate } from '../types';
 import { PRINT_PAPER_A4_HALF_MM, newElementId } from './printTemplateDefaults';
 
-/** 内置销售单打印模版 id（二等分纸 + 动态列表含颜色尺码矩阵列）；与 v1 并存时优先使用本版 */
+/** 内置销售单打印模版 id（供需要时程序化创建，新租户不再自动注入） */
 export const BUILTIN_SALES_BILL_PRINT_TEMPLATE_ID = 'builtin-sales-bill-v2';
 
 function nowIso() {
@@ -193,7 +193,3 @@ export function createBuiltinSalesBillPrintTemplate(): PrintTemplate {
   };
 }
 
-export function ensureBuiltinSalesBillPrintTemplate(list: PrintTemplate[]): PrintTemplate[] {
-  if (list.some(t => t.id === BUILTIN_SALES_BILL_PRINT_TEMPLATE_ID)) return list;
-  return [...list, createBuiltinSalesBillPrintTemplate()];
-}

@@ -1,0 +1,41 @@
+---
+description: 前端 views 约定：单一职责、拆分阈值、数据/副作用走 hook
+globs:
+  - views/**/*.tsx
+  - views/**/*.ts
+---
+
+# 前端 views/ 约定
+
+视图文件承载 **UI 编排与交互**；业务规则、数据拉取、持久化**不该**在此写死。
+
+## 必做
+
+- 数据读写走 `services/api.ts` 或 `contexts/AppDataContext.tsx`；**不要**在 View 里手写 `fetch`。
+- 派生数据、对账、复杂计算下沉到 `hooks/useXxx.ts`（参考 `hooks/useFinanceReconciliation.ts`、`hooks/usePsiStockIndex.ts`）。
+- 打印 / 导出的上下文用 `utils/build*PrintContext.ts` 生成，**保持为纯函数**。
+- 权限判断用 `utils/hasSubPermission.ts` / `utils/hasModulePerm.ts` / `hooks/useModulePermission.ts`，不要自己解析 `permissions` 数组。
+- 枚举 / 常量从根 `types.ts`（内部再从 `shared/types.ts` re-export）引入。
+- 大弹窗、复杂区块抽到 `views/<模块>/XxxModal.tsx` 或 `views/<模块>/XxxSection.tsx` 子组件。
+
+## 拆分阈值（经验值，非硬性）
+
+- 单文件超过约 **500 行**，或顶层组件 state 超过约 **10 个**，或 JSX 嵌套超过 **4 层**时，拆分：
+  - 数据层 → `hooks/useXxx.ts`
+  - 交互块 → 子组件
+  - 纯函数 → `utils/xxx.ts`（并补 `utils/xxx.test.ts`）
+- 子组件位置：
+  - 仅该 View 使用 → `views/<模块>/`（例 `views/finance/FinanceDetailModal.tsx`）
+  - 多视图复用 → `components/**`
+
+## 禁止
+
+- 在 View 里硬编码业务规则字面量（状态字符串、单据前缀、阈值）。
+- 在 View 内直接访问 `localStorage` 写入业务数据（读取历史遗留数据可，但写入应走后端 API；迁移期遵循 `docs/06` 的"数据归属"表）。
+- 在 View 内直接操作 Prisma / HTTP：一律通过 `services/api.ts`。
+- 在同一文件里混合**列表 + 复杂弹窗 + 打印叠加**三种以上大块职责。
+
+## 参考
+
+- 拆分示例：`views/plan-order-list/PlanDetailPanel.tsx`（+ `PlanTraceSection.tsx` / `PlanPrintOverlays.tsx`）。
+- Hook 抽取示例：`hooks/useFinanceReconciliation.ts`。

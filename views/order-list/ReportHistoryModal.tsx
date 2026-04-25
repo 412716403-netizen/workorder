@@ -11,13 +11,7 @@ import {
 } from '../../types';
 import { toLocalDateYmd } from '../../utils/localDateTime';
 import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
-
-function fmtDT(ts: string | Date | undefined | null): string {
-  if (!ts) return '—';
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return String(ts);
-  return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-}
+import { fmtDT } from '../../utils/formatTime';
 
 interface ReportHistoryModalProps {
   open: boolean;

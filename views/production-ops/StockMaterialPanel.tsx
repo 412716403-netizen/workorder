@@ -30,6 +30,38 @@ import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpC
 
 type MatRow = { productId: string; issue: number; returnQty: number; theoryCost: number };
 
+/** 领料、退料、报工理论耗材（与表格同精度）均为 0 时视为无展示价值的占位行 */
+function filterMaterialRowsWithActivity(materials: MatRow[]): MatRow[] {
+  return materials.filter(m => {
+    if (m.issue !== 0 || m.returnQty !== 0) return true;
+    const th = Math.round(Number(m.theoryCost) * 100) / 100;
+    return th !== 0;
+  });
+}
+
+/** 与表格「按关键词筛物料行」逻辑一致（供列表过滤与 useCallback 共用） */
+function displayMaterialsForKeyword(
+  materials: MatRow[],
+  materialKw: string,
+  productsById: Map<string, Product>,
+): MatRow[] {
+  const kw = materialKw.trim().toLowerCase();
+  if (!kw) return materials;
+  const hit = materials.filter(m => {
+    const p = productsById.get(m.productId);
+    return (p?.name ?? '').toLowerCase().includes(kw) || (p?.sku ?? '').toLowerCase().includes(kw);
+  });
+  return hit.length > 0 ? hit : materials;
+}
+
+function visibleMaterialRowsForList(
+  materials: MatRow[],
+  materialKw: string,
+  productsById: Map<string, Product>,
+): MatRow[] {
+  return filterMaterialRowsWithActivity(displayMaterialsForKeyword(materials, materialKw, productsById));
+}
+
 /** Resolve BOM items for a specific product + nodeId (+ optional variantId).
  *  Shared between partnerMaterialGroups and potentially other BOM-aware logic. */
 function resolveBomItems(
@@ -753,54 +785,59 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         const bMax = Math.max(0, ...(idx.ordersByProductId.get(b[0]) ?? []).map(orderCreatedMs));
         return bMax - aMax;
       });
-    if (!materialKw) return sortByNewest(Array.from(productMaterialStatsByProduct.entries()));
-    const filtered = Array.from(productMaterialStatsByProduct.entries()).filter(([fpId, materials]) => {
-      if (materials.some(m => {
-        const p = idx.productsById.get(m.productId);
-        return (p?.name ?? '').toLowerCase().includes(materialKw) || (p?.sku ?? '').toLowerCase().includes(materialKw);
-      })) return true;
-      const fp = idx.productsById.get(fpId);
-      if ((fp?.name ?? '').toLowerCase().includes(materialKw) || (fp?.sku ?? '').toLowerCase().includes(materialKw)) return true;
-      const scopeOrders = idx.ordersByProductId.get(fpId) ?? [];
-      return scopeOrders.some(o =>
-        (o.orderNumber ?? '').toLowerCase().includes(materialKw) ||
-        (o.customer ?? '').toLowerCase().includes(materialKw) ||
-        (o.productName ?? '').toLowerCase().includes(materialKw)
-      );
-    }) as [string, MatRow[]][];
-    return sortByNewest(filtered);
+    const allEntries = Array.from(productMaterialStatsByProduct.entries()) as [string, MatRow[]][];
+    const base = !materialKw
+      ? allEntries
+      : allEntries.filter(([fpId, materials]) => {
+          if (materials.some(m => {
+            const p = idx.productsById.get(m.productId);
+            return (p?.name ?? '').toLowerCase().includes(materialKw) || (p?.sku ?? '').toLowerCase().includes(materialKw);
+          })) return true;
+          const fp = idx.productsById.get(fpId);
+          if ((fp?.name ?? '').toLowerCase().includes(materialKw) || (fp?.sku ?? '').toLowerCase().includes(materialKw)) return true;
+          const scopeOrders = idx.ordersByProductId.get(fpId) ?? [];
+          return scopeOrders.some(o =>
+            (o.orderNumber ?? '').toLowerCase().includes(materialKw) ||
+            (o.customer ?? '').toLowerCase().includes(materialKw) ||
+            (o.productName ?? '').toLowerCase().includes(materialKw)
+          );
+        });
+    const withRows = base.filter(([, materials]) => visibleMaterialRowsForList(materials, materialKw, idx.productsById).length > 0);
+    return sortByNewest(withRows);
   }, [productMaterialStatsByProduct, materialKw, idx]);
 
   const parentOrdersForDisplay = useMemo(() => {
     const sortByNewest = (list: typeof parentOrders) =>
       [...list].sort((a, b) => orderCreatedMs(b) - orderCreatedMs(a));
-    if (!materialKw) return sortByNewest(parentOrders);
-    return sortByNewest(parentOrders.filter(parent => {
-      const materials = parentMaterialStats.get(parent.id) ?? [];
-      if (materials.some(m => {
-        const p = idx.productsById.get(m.productId);
-        return (p?.name ?? '').toLowerCase().includes(materialKw) || (p?.sku ?? '').toLowerCase().includes(materialKw);
-      })) return true;
-      const prod = idx.productsById.get(parent.productId);
-      return (
-        (parent.orderNumber ?? '').toLowerCase().includes(materialKw) ||
-        (parent.customer ?? '').toLowerCase().includes(materialKw) ||
-        (parent.productName ?? '').toLowerCase().includes(materialKw) ||
-        (prod?.name ?? '').toLowerCase().includes(materialKw) ||
-        (prod?.sku ?? '').toLowerCase().includes(materialKw)
-      );
-    }));
+    const nameMatched = !materialKw
+      ? parentOrders
+      : parentOrders.filter(parent => {
+          const materials = parentMaterialStats.get(parent.id) ?? [];
+          if (materials.some(m => {
+            const p = idx.productsById.get(m.productId);
+            return (p?.name ?? '').toLowerCase().includes(materialKw) || (p?.sku ?? '').toLowerCase().includes(materialKw);
+          })) return true;
+          const prod = idx.productsById.get(parent.productId);
+          return (
+            (parent.orderNumber ?? '').toLowerCase().includes(materialKw) ||
+            (parent.customer ?? '').toLowerCase().includes(materialKw) ||
+            (parent.productName ?? '').toLowerCase().includes(materialKw) ||
+            (prod?.name ?? '').toLowerCase().includes(materialKw) ||
+            (prod?.sku ?? '').toLowerCase().includes(materialKw)
+          );
+        });
+    return sortByNewest(
+      nameMatched.filter(parent =>
+        visibleMaterialRowsForList(parentMaterialStats.get(parent.id) ?? [], materialKw, idx.productsById).length > 0,
+      ),
+    );
   }, [parentOrders, parentMaterialStats, materialKw, idx]);
 
   /** 有搜索词时表格内只显示名称/SKU 含关键词的物料行；若当前卡片因工单/产品名等命中、但物料名都不含关键词，则仍显示全部行 */
-  const displayMaterialsForSearch = useCallback((materials: MatRow[]): MatRow[] => {
-    if (!materialKw) return materials;
-    const hit = materials.filter(m => {
-      const p = idx.productsById.get(m.productId);
-      return (p?.name ?? '').toLowerCase().includes(materialKw) || (p?.sku ?? '').toLowerCase().includes(materialKw);
-    });
-    return hit.length > 0 ? hit : materials;
-  }, [materialKw, idx.productsById]);
+  const displayMaterialsForSearch = useCallback(
+    (materials: MatRow[]): MatRow[] => displayMaterialsForKeyword(materials, materialKw, idx.productsById),
+    [materialKw, idx.productsById],
+  );
 
   /** 领料/退料单据号：领料 LLyyyyMMdd-0001，退料 TLyyyyMMdd-0001，当日同类型顺序递增 */
   const getNextStockDocNo = (type: 'STOCK_OUT' | 'STOCK_RETURN') => {
@@ -1004,21 +1041,31 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
               return (<>
                 {pagedPartners.map(({ partnerKey, partnerLabel, data }) => {
                   const entries = Array.from(data.entries());
+                  const visibleEntryCount = entries.filter(([, materials]) => {
+                    const searched = displayMaterialsForSearch(materials);
+                    const rows =
+                      partnerKey === '__internal__' ? filterMaterialRowsWithActivity(searched) : searched;
+                    return rows.length > 0;
+                  }).length;
+                  if (visibleEntryCount === 0) return null;
                   return (
                     <div key={partnerKey} className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
                       <div className={`px-6 py-3 border-b border-slate-100 flex items-center gap-3 ${partnerKey === '__internal__' ? 'bg-slate-50' : 'bg-gradient-to-r from-indigo-50/80 to-white'}`}>
                         <Building2 className={`w-5 h-5 ${partnerKey === '__internal__' ? 'text-slate-400' : 'text-indigo-500'}`} />
                         <span className="text-sm font-black text-slate-700">{partnerLabel}</span>
-                        <span className="text-[10px] text-slate-400 font-medium">({entries.length} 项)</span>
+                        <span className="text-[10px] text-slate-400 font-medium">({visibleEntryCount} 项)</span>
                       </div>
                       <div className="p-4 space-y-3">
-                        {entries.map(([scopeKey, materials]) => {
+                        {entries.flatMap(([scopeKey, materials]) => {
+                          const searched = displayMaterialsForSearch(materials);
+                          const displayMaterials =
+                            partnerKey === '__internal__' ? filterMaterialRowsWithActivity(searched) : searched;
+                          if (displayMaterials.length === 0) return [];
                           if (productionLinkMode === 'product') {
                             const fp = idx.productsById.get(scopeKey);
                             const selecting = stockSelectSourceProductId === scopeKey && stockSelectPartner === partnerKey && !!stockSelectMode;
-                            const displayMaterials = displayMaterialsForSearch(materials);
-                            return (
-                              <div key={scopeKey} className="rounded-2xl border border-slate-100 overflow-hidden">
+                            return [
+                              <div key={`${partnerKey}-${scopeKey}`} className="rounded-2xl border border-slate-100 overflow-hidden">
                                 <div className="px-5 py-3 border-b border-slate-50 flex flex-wrap items-center justify-between gap-3 bg-white">
                                   <div className="flex items-center gap-3 min-w-0">
                                     <Package className="w-4 h-4 text-indigo-400 shrink-0" />
@@ -1044,16 +1091,15 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                   </div>
                                 </div>
                                 <MaterialStatsTable materials={displayMaterials} selecting={selecting} compact selectedIds={stockSelectedIds} onSelectAll={setStockSelectedIds} onToggleSelect={toggleSelect} productsById={idx.productsById} />
-                              </div>
-                            );
-                          } else {
-                            const order = idx.ordersById.get(scopeKey);
-                            if (!order) return null;
-                            const product = idx.productsById.get(order.productId);
-                            const selecting = stockSelectOrderId === scopeKey && stockSelectPartner === partnerKey && !!stockSelectMode;
-                            const displayMaterials = displayMaterialsForSearch(materials);
-                            return (
-                              <div key={scopeKey} className="rounded-2xl border border-slate-100 overflow-hidden">
+                              </div>,
+                            ];
+                          }
+                          const order = idx.ordersById.get(scopeKey);
+                          if (!order) return [];
+                          const product = idx.productsById.get(order.productId);
+                          const selecting = stockSelectOrderId === scopeKey && stockSelectPartner === partnerKey && !!stockSelectMode;
+                          return [
+                            <div key={`${partnerKey}-${scopeKey}`} className="rounded-2xl border border-slate-100 overflow-hidden">
                                 <div className="px-5 py-3 border-b border-slate-50 flex flex-wrap items-center justify-between gap-3 bg-white">
                                   <div className="flex items-center gap-3 min-w-0">
                                     <Layers className="w-4 h-4 text-slate-400 shrink-0" />
@@ -1082,9 +1128,8 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                   </div>
                                 </div>
                                 <MaterialStatsTable materials={displayMaterials} selecting={selecting} compact selectedIds={stockSelectedIds} onSelectAll={setStockSelectedIds} onToggleSelect={toggleSelect} productsById={idx.productsById} />
-                              </div>
-                            );
-                          }
+                              </div>,
+                          ];
                         })}
                       </div>
                     </div>
@@ -1103,9 +1148,16 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
             (() => {
               const pEntries = productEntriesForDisplay ?? [];
               if (pEntries.length === 0) {
+                const hadAnyProductScope = (productMaterialStatsByProduct?.size ?? 0) > 0;
                 return (
                   <div className="bg-white rounded-[32px] border border-slate-200 p-12 text-center">
-                    <p className="text-slate-400 text-sm">{materialKw ? '无匹配项，请调整搜索条件' : '暂无工单，请先在「生产计划」下达工单'}</p>
+                    <p className="text-slate-400 text-sm">
+                      {materialKw
+                        ? '无匹配项，请调整搜索条件'
+                        : hadAnyProductScope
+                          ? '无可展示物料（领料、退料、报工耗材均为 0 的关联产品已隐藏）'
+                          : '暂无工单，请先在「生产计划」下达工单'}
+                    </p>
                   </div>
                 );
               }
@@ -1116,7 +1168,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                 const fp = idx.productsById.get(fpId);
                 const orderCnt = (idx.ordersByProductId.get(fpId) ?? []).length;
                 const selecting = stockSelectSourceProductId === fpId && stockSelectMode;
-                const displayMaterials = displayMaterialsForSearch(materials);
+                const displayMaterials = visibleMaterialRowsForList(materials, materialKw, idx.productsById);
                 return (
                   <div key={`fp-${fpId}`} className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
                     <div className="px-6 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
@@ -1199,7 +1251,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                   ? '暂无工单，请先在「生产计划」下达工单'
                   : materialKw
                     ? '无匹配项，请调整搜索条件'
-                    : '暂无工单，请先在「生产计划」下达工单'}
+                    : '无可展示物料（领料、退料、报工耗材均为 0 的工单已隐藏）'}
               </p>
             </div>
           ) : (
@@ -1210,7 +1262,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
             {pagedParentOrders.map(order => {
               const product = idx.productsById.get(order.productId);
               const materials = parentMaterialStats.get(order.id) ?? [];
-              const displayMaterials = displayMaterialsForSearch(materials);
+              const displayMaterials = visibleMaterialRowsForList(materials, materialKw, idx.productsById);
               const familyIds = getOrderFamilyIds(orders, order.id, idx.childrenByParentId);
               const childCount = familyIds.length - 1;
               return (

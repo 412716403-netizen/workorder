@@ -1,13 +1,7 @@
 
 import React from 'react';
 import { ProductionOrder, Product, GlobalNodeTemplate, ProductionOpRecord, AppDictionaries } from '../../types';
-
-function fmtDT(ts: string | Date | undefined | null): string {
-  if (!ts) return '—';
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return String(ts);
-  return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-}
+import { fmtDT } from '../../utils/formatTime';
 
 interface ReworkDetailModalProps {
   orderId: string;

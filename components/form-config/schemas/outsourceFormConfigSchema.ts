@@ -9,6 +9,7 @@ export const outsourceFormConfigSchema: FormConfigSchema<OutsourceFormSettings> 
   subtitle: {
     fields: '外协发出与收回的自定义单据字段；打印模版请在「打印模版」页签管理。',
     print: '外协流水详情弹窗的「打印」入口与可选模版范围。',
+    listDisplay: '控制外协列表文档图标：开启后打开加工厂往来数量明细；关闭则打开外协流水。',
   },
   defaultValue: DEFAULT_OUTSOURCE_FORM_SETTINGS,
   normalize: v => normalizeOutsourceFormSettings(v as OutsourceFormSettings | null | undefined),
@@ -68,6 +69,21 @@ export const outsourceFormConfigSchema: FormConfigSchema<OutsourceFormSettings> 
             key: 'showPrintButton',
             defaultChecked: true,
           },
+        },
+      ],
+    },
+    {
+      id: 'list',
+      label: '列表显示',
+      sections: [
+        {
+          kind: 'toggle',
+          id: 'showPartnerFlowDetailOnList',
+          label: '加工厂往来显示明细',
+          description:
+            '开启后，主列表加工厂旁的文档图标打开「加工厂往来数量明细」弹窗（按日期、类型、数量及规格分列；可按开始/结束时间与单据类型筛选；表尾为外协发出、外协收回及剩余的数量与规格合计）。关闭时与原先一致：打开外协流水并带上该产品/工单、工序、加工厂的筛选。',
+          path: 'showPartnerFlowDetailOnList',
+          defaultChecked: false,
         },
       ],
     },

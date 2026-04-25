@@ -16,7 +16,9 @@ import { toast } from 'sonner';
 import ScanPanel from '../components/scan/ScanPanel';
 import type { ScanPayload } from '../utils/scanPayload';
 import { itemCodesApi, planVirtualBatchesApi } from '../services/api';
-import type { ScanResult, TraceResult, TraceEvent } from '../types';
+import type { ScanResult, TraceResult } from '../types';
+
+const TRACE_PAGE_SIZE = 50;
 
 /**
  * 产品追溯查询页：扫码后展示码信息、业务上下文和跨租户时间轴。
@@ -26,6 +28,10 @@ export default function TraceView() {
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [trace, setTrace] = useState<TraceResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [traceToken, setTraceToken] = useState<string | null>(null);
+  const [traceKind, setTraceKind] = useState<'ITEM' | 'BATCH' | null>(null);
+  const [tracePage, setTracePage] = useState(1);
+  const [traceLoadingMore, setTraceLoadingMore] = useState(false);
 
   const onScan = useCallback(async (payload: ScanPayload) => {
     if (payload.kind === 'UNKNOWN' || !payload.token) {
@@ -36,18 +42,21 @@ export default function TraceView() {
     setError(null);
     setScan(null);
     setTrace(null);
+    setTraceToken(payload.token);
+    setTraceKind(payload.kind === 'ITEM' ? 'ITEM' : 'BATCH');
+    setTracePage(1);
     try {
       if (payload.kind === 'ITEM') {
         const [s, t] = await Promise.all([
           itemCodesApi.scan(payload.token),
-          itemCodesApi.trace(payload.token).catch(() => null),
+          itemCodesApi.trace(payload.token, { page: 1, pageSize: TRACE_PAGE_SIZE }).catch(() => null),
         ]);
         setScan(s);
         if (t) setTrace(t);
       } else {
         const [s, t] = await Promise.all([
           planVirtualBatchesApi.scan(payload.token),
-          planVirtualBatchesApi.trace(payload.token).catch(() => null),
+          planVirtualBatchesApi.trace(payload.token, { page: 1, pageSize: TRACE_PAGE_SIZE }).catch(() => null),
         ]);
         setScan(s);
         if (t) setTrace(t);
@@ -60,6 +69,35 @@ export default function TraceView() {
       setLoading(false);
     }
   }, []);
+
+  const loadMoreTrace = useCallback(async () => {
+    if (!traceToken || !traceKind || !trace?.hasMore || traceLoadingMore) return;
+    setTraceLoadingMore(true);
+    try {
+      const nextPage = tracePage + 1;
+      const t =
+        traceKind === 'ITEM'
+          ? await itemCodesApi.trace(traceToken, { page: nextPage, pageSize: TRACE_PAGE_SIZE })
+          : await planVirtualBatchesApi.trace(traceToken, { page: nextPage, pageSize: TRACE_PAGE_SIZE });
+      setTrace(prev =>
+        prev
+          ? {
+              ...prev,
+              events: [...prev.events, ...t.events],
+              total: t.total,
+              page: t.page,
+              pageSize: t.pageSize,
+              hasMore: t.hasMore,
+            }
+          : t,
+      );
+      setTracePage(nextPage);
+    } catch (e) {
+      toast.error((e as Error)?.message || '加载更多失败');
+    } finally {
+      setTraceLoadingMore(false);
+    }
+  }, [traceToken, traceKind, trace?.hasMore, traceLoadingMore, tracePage]);
 
   return (
     <div className="max-w-5xl mx-auto space-y-5 py-4">
@@ -90,7 +128,7 @@ export default function TraceView() {
       {scan && !loading && (
         <>
           <ScanSummaryCard scan={scan} />
-          <TimelineCard trace={trace} />
+          <TimelineCard trace={trace} onLoadMore={loadMoreTrace} loadingMore={traceLoadingMore} />
         </>
       )}
     </div>
@@ -196,7 +234,15 @@ function relationLabel(r: 'OWNER' | 'DOWNSTREAM' | 'UPSTREAM' | 'PEER'): string 
   }
 }
 
-function TimelineCard({ trace }: { trace: TraceResult | null }) {
+function TimelineCard({
+  trace,
+  onLoadMore,
+  loadingMore,
+}: {
+  trace: TraceResult | null;
+  onLoadMore: () => void;
+  loadingMore: boolean;
+}) {
   if (!trace || trace.events.length === 0) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -211,7 +257,8 @@ function TimelineCard({ trace }: { trace: TraceResult | null }) {
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-black text-slate-900">生产链路时间轴</h3>
         <span className="text-[10px] text-slate-400">
-          共 {trace.events.length} 条事件 · {trace.tenants.length} 家企业
+          已加载 {trace.events.length}
+          {trace.total != null ? ` / 共 ${trace.total}` : ''} 条事件 · {trace.tenants.length} 家企业
         </span>
       </div>
       <div className="relative pl-5">
@@ -222,6 +269,22 @@ function TimelineCard({ trace }: { trace: TraceResult | null }) {
           ))}
         </ul>
       </div>
+      {trace.hasMore && (
+        <div className="mt-4 flex justify-center">
+          <button
+            type="button"
+            disabled={loadingMore}
+            onClick={() => void onLoadMore()}
+            className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+          >
+            {loadingMore
+              ? '加载中…'
+              : trace.total != null
+                ? `加载更多（约 ${Math.max(0, trace.total - trace.events.length)} 条未显示）`
+                : '加载更多'}
+          </button>
+        </div>
+      )}
       <p className="mt-4 text-[10px] text-slate-400">
         注：当前版本按"产品 + 规格 + 计划树"聚合事件，精度为同规格汇总，不分单件码。
       </p>

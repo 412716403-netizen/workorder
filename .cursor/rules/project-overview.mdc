@@ -1,0 +1,60 @@
+---
+description: SmartTrack Pro 全局协作约定（项目定位、分层、权限、共享类型、迁移阶段）
+alwaysApply: true
+---
+
+# SmartTrack Pro 全局约定
+
+本仓库为制造业 ERP / 生产进度节点报工系统。前端 React + Vite + TS，后端 Express + TS + Prisma + PostgreSQL。
+当前处于**前端 localStorage/本地状态 → 后端 API + 数据库**渐进迁移阶段。
+
+完整背景见根目录 `AGENTS.md`。以下为写代码时必须遵守的硬约束。
+
+## 分层（不可跨）
+
+- 前端 View 只负责编排与交互；业务规则沉到 `hooks/` 或后端 service。
+- 后端严格 `routes → controllers → services`：
+  - `routes/*.ts`：注册路由、Zod 校验、权限中间件；**不写业务分支**。
+  - `controllers/*.controller.ts`：HTTP 映射（读 req、调 service、res.json）；用 `asyncHandler` 包装。
+  - `services/*.service.ts`：业务步骤、事务、Prisma 调用；**不依赖 req/res**。
+
+## 权限与租户（新接口必做）
+
+- 新路由**必须**挂 `requireSubPermission('<module>:<resource>:<action>')`（`backend/src/middleware/tenant.ts`）。
+  - `action` ∈ `view | create | edit | delete` 等；`create/edit/delete` 会被隐式要求 `view`。
+- 业务查询**只用** `getTenantPrisma(req.tenantId!)`，不要直接 `import { prisma }` 跑业务查询（`plans.service.ts` 中的历史特例除外）。
+- 顶级 `app.ts` 已挂 `authMiddleware + requireTenant`，路由内不要重复挂。
+
+## 共享类型（单一事实源）
+
+- 前后端都用的**枚举 / 常量 / DTO 形状**放 `shared/types.ts`：
+  - 前端从根目录 `types.ts` re-export；后端从 `backend/src/types/index.ts` re-export。
+- 不要在两端各写一份枚举或字面量常量（例如 `FINANCE_DOC_NO_PREFIX`、各 `*Status`）。
+
+## 类型严格度
+
+- 新代码默认**不写 `any`**；边界（API 响应、Prisma `include` 结果）显式类型化。
+- 确需放宽时加注释说明原因；不要用 `any` 绕过 TS。
+
+## 文件大小与职责
+
+- 单 `.tsx` 视图超过约 500 行，或单 service 超过约 400 行，请拆分。
+- 拆分时的三件套：
+  - 数据/副作用 → `hooks/useXxx.ts`
+  - 大块 JSX / 弹窗 / 打印叠加 → 子组件
+  - 纯函数 → `utils/xxx.ts`
+
+## 文档同步
+
+改业务语义时顺手更 `docs/`：
+- 业务规则 → `docs/01-business-rules.md`
+- 数据结构 → `docs/02-data-structures.md`
+- API / 迁移阶段 / 模块收口 → `docs/04-migration-checklist.md` 与 `docs/06-current-architecture-and-migration-status.md`
+
+## 禁止项（高优先）
+
+- 新增只落前端 `localStorage` 的业务字段（当前正在往后端迁，别再制造新缺口）。
+- 在前端 View 内直接拼接 HTTP 请求；一律走 `services/api.ts`。
+- 业务规则硬编码字面量（用 `shared/types.ts` 中的枚举/常量）。
+- 绕过 `requireSubPermission` 的新路由。
+- 在 Prisma schema 未 migration 的情况下先改 service。

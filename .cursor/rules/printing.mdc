@@ -1,0 +1,40 @@
+---
+description: 打印 / 标签 / 导出上下文 builder 约定（纯函数，无框架依赖）
+globs:
+  - utils/build*PrintContext.ts
+  - utils/*PrintShared.ts
+  - utils/colorSizeMatrixPrint.ts
+  - utils/buildPlanPrintListRows.ts
+  - views/**/*PrintOverlays.tsx
+---
+
+# 打印链路约定
+
+打印 / 标签 / 导出的上下文构造是本仓库**易静默失败**的重点链路，参考 `docs/08-printing-and-label-flow.md`。
+
+## builder（`utils/build*PrintContext.ts`）必做
+
+- **纯函数**：入参是领域数据 + 设置；出参是可序列化的上下文对象。
+- **显式类型**：入参、出参都要有命名接口或类型别名，**不允许 `any`**。
+- **无副作用**：不调 `fetch`、不读 `localStorage`、不依赖 React state / context。
+- **无 React 依赖**：builder 文件内不 `import React`；JSX 放到配套的叠加层组件。
+- **单测友好**：新增 builder 同步加 `utils/xxx.test.ts`（参考 `utils/psiPrintShared.test.ts`）。
+
+## 叠加层 / 预览组件（`views/**/*PrintOverlays.tsx`）必做
+
+- 只负责把 builder 产出的数据**渲染**出来；不要在这里做数据组装/拉取。
+- 打印专用样式（避免与屏幕样式冲突）放 `styles/**` 或同文件 scoped class。
+- 触发打印用 `react-to-print`，保持现有用法。
+
+## 禁止
+
+- 在 builder 里写 `if (env === 'browser')` 这种分支；builder 必须对环境透明。
+- 把"样式/模板设置"与"领域数据"混在同一个参数里（保持两者参数分离）。
+- 在叠加层组件内做分页、汇总、价格换算等计算（→ 回到 builder 或 utils）。
+- 使用字面量单据前缀 / 枚举值；用 `shared/types.ts` 中的 `FINANCE_DOC_NO_PREFIX` 等。
+
+## 参考
+
+- 共享打印工具：`utils/psiPrintShared.ts` / `utils/psiPrintShared.test.ts`。
+- 范例 builder：`utils/buildSalesOrderPrintContext.ts`、`utils/buildPurchaseBillPrintContext.ts`。
+- 叠加层拆分范例：`views/plan-order-list/PlanPrintOverlays.tsx`。

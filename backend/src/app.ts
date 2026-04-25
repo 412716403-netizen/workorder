@@ -95,19 +95,18 @@ app.use('/api/roles',      authMiddleware, requireTenant, apiLimiter, rolesRoute
 app.use('/api/settings',   authMiddleware, requireTenant, apiLimiter, cacheControl(60), settingsRoutes);
 app.use('/api/master',     authMiddleware, requireTenant, apiLimiter, cacheControl(60), masterDataRoutes);
 app.use('/api/products',   authMiddleware, requireTenant, apiLimiter, cacheControl(60), productsRoutes);
-app.use('/api/plans',      authMiddleware, requireTenant, requirePermission('production'), apiLimiter, plansRoutes);
+app.use('/api/plans',      authMiddleware, requireTenant, apiLimiter, plansRoutes);
 app.use('/api/orders',     authMiddleware, requireTenant, requirePermission('production'), apiLimiter, ordersRoutes);
 app.use('/api/production', authMiddleware, requireTenant, requirePermission('production'), apiLimiter, productionRoutes);
 app.use('/api/psi',        authMiddleware, requireTenant, requirePermission('psi'),        apiLimiter, psiRoutes);
 app.use('/api/finance',    authMiddleware, requireTenant, requirePermission('finance'),    apiLimiter, financeRoutes);
 
 app.use('/api/collaboration', authMiddleware, requireTenant, apiLimiter, collaborationRoutes);
-app.use('/api/item-codes',    authMiddleware, requireTenant, requirePermission('production'), apiLimiter, itemCodesRoutes);
+app.use('/api/item-codes',    authMiddleware, requireTenant, apiLimiter, itemCodesRoutes);
 app.use(
   '/api/plan-virtual-batches',
   authMiddleware,
   requireTenant,
-  requirePermission('production'),
   apiLimiter,
   planVirtualBatchesRoutes,
 );

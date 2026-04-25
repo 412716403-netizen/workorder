@@ -32,66 +32,46 @@ import {
 } from '../styles/uiDensity';
 import { useModulePermission } from '../hooks/useModulePermission';
 import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useMasterData, useConfigData, useOrdersData, usePsiData, useFinanceData, useAppActions } from '../contexts/AppDataContext';
 
-interface FinanceViewProps {
-  orders: ProductionOrder[];
-  records: FinanceRecord[];
-  psiRecords?: any[];
-  prodRecords?: any[];
-  productMilestoneProgresses?: ProductMilestoneProgress[];
-  onAddRecord: (record: FinanceRecord) => void;
-  onUpdateRecord: (record: FinanceRecord) => void;
-  onDeleteRecord: (id: string) => void;
-  financeCategories: FinanceCategory[];
-  financeAccountTypes: FinanceAccountType[];
-  partners: Partner[];
-  workers: Worker[];
-  products: Product[];
-  partnerCategories: PartnerCategory[];
-  categories: ProductCategory[];
-  globalNodes: GlobalNodeTemplate[];
-  dictionaries?: AppDictionaries;
-  userPermissions?: string[];
-  tenantRole?: string;
-  plans: PlanOrder[];
-  receiptFormSettings: ReceiptFormSettings;
-  paymentFormSettings: PaymentFormSettings;
-  onUpdateReceiptFormSettings: (s: ReceiptFormSettings) => void | Promise<void>;
-  onUpdatePaymentFormSettings: (s: PaymentFormSettings) => void | Promise<void>;
-  printTemplates: PrintTemplate[];
-  onUpdatePrintTemplates: (list: PrintTemplate[]) => void | Promise<void>;
-  onRefreshPrintTemplates?: () => void | Promise<void>;
-}
+const FinanceView: React.FC = () => {
+  const m = useMasterData();
+  const c = useConfigData();
+  const o = useOrdersData();
+  const { psiRecords } = usePsiData();
+  const f = useFinanceData();
+  const a = useAppActions();
+  const { tenantCtx } = useAuth();
 
-const FinanceView: React.FC<FinanceViewProps> = ({
-  orders,
-  records,
-  psiRecords = [],
-  prodRecords = [],
-  productMilestoneProgresses = [],
-  onAddRecord,
-  onUpdateRecord,
-  onDeleteRecord,
-  financeCategories,
-  financeAccountTypes,
-  partners,
-  workers,
-  products,
-  partnerCategories,
-  categories,
-  globalNodes,
-  dictionaries,
-  userPermissions,
-  tenantRole,
-  plans,
-  receiptFormSettings,
-  paymentFormSettings,
-  onUpdateReceiptFormSettings,
-  onUpdatePaymentFormSettings,
-  printTemplates,
-  onUpdatePrintTemplates,
-  onRefreshPrintTemplates,
-}) => {
+  useEffect(() => { void a.ensureDeferredLoaded(); }, [a.ensureDeferredLoaded]);
+
+  const orders = o.orders;
+  const records = f.financeRecords;
+  const prodRecords = o.prodRecords;
+  const productMilestoneProgresses = o.productMilestoneProgresses;
+  const onAddRecord = a.onAddFinanceRecord;
+  const onUpdateRecord = a.onUpdateFinanceRecord;
+  const onDeleteRecord = a.onDeleteFinanceRecord;
+  const financeCategories = f.financeCategories;
+  const financeAccountTypes = f.financeAccountTypes;
+  const partners = m.partners;
+  const workers = m.workers;
+  const products = m.products;
+  const partnerCategories = m.partnerCategories;
+  const categories = m.categories;
+  const globalNodes = m.globalNodes;
+  const dictionaries = m.dictionaries;
+  const userPermissions = tenantCtx?.permissions;
+  const tenantRole = tenantCtx?.tenantRole;
+  const plans = o.plans;
+  const receiptFormSettings = c.receiptFormSettings;
+  const paymentFormSettings = c.paymentFormSettings;
+  const onUpdateReceiptFormSettings = a.onUpdateReceiptFormSettings;
+  const onUpdatePaymentFormSettings = a.onUpdatePaymentFormSettings;
+  const printTemplates = c.printTemplates;
+  const onUpdatePrintTemplates = a.onUpdatePrintTemplates;
+  const onRefreshPrintTemplates = a.refreshPrintTemplates;
   const [activeTab, setActiveTab] = useState<FinanceOpType>('RECEIPT');
   const setScrollSegment = useSetMainScrollSegment();
   useLayoutEffect(() => {
@@ -198,7 +178,7 @@ const FinanceView: React.FC<FinanceViewProps> = ({
           orders={orders}
           records={records.filter(r => r.type === activeTab)}
           allRecords={records}
-          psiRecords={psiRecords}
+          psiRecords={psiRecords ?? []}
           prodRecords={prodRecords}
           productMilestoneProgresses={productMilestoneProgresses}
           onAddRecord={onAddRecord}

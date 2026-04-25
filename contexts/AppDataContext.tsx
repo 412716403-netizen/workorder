@@ -11,7 +11,6 @@ import type {
   Warehouse,
   PlanFormSettings,
   OrderFormSettings,
-  PlanListPrintSettings,
   PurchaseOrderFormSettings,
   SalesOrderFormSettings,
   PurchaseBillFormSettings,
@@ -33,6 +32,10 @@ import type {
   MaterialFormSettings,
   OutsourceFormSettings,
   ReworkFormSettings,
+  PsiRecord,
+  Partner,
+  Worker,
+  Equipment,
 } from '../types';
 import {
   DEFAULT_MATERIAL_PANEL_SETTINGS,
@@ -42,438 +45,36 @@ import {
 } from '../types';
 import { normalizePartnersFromApi } from '../utils/partnerNormalize';
 import { currentOperatorDisplayName } from '../utils/currentOperatorDisplayName';
-import { ensureBuiltinSalesBillPrintTemplate } from '../utils/salesBillPrintTemplate';
-import { normalizePlanFormFieldConfigArray } from '../utils/planFormCustomField';
 import { broadcastPrintTemplatesSaved, subscribePrintTemplatesChanged } from '../utils/printTemplatesCrossTab';
 
-// ── Decimal normalizer ──
+import {
+  normalizeDecimals,
+  DEFAULT_PLAN_FORM_SETTINGS,
+  DEFAULT_ORDER_FORM_SETTINGS,
+  DEFAULT_PURCHASE_ORDER_FORM_SETTINGS,
+  DEFAULT_SALES_ORDER_FORM_SETTINGS,
+  DEFAULT_PURCHASE_BILL_FORM_SETTINGS,
+  DEFAULT_SALES_BILL_FORM_SETTINGS,
+  DEFAULT_RECEIPT_FORM_SETTINGS,
+  DEFAULT_PAYMENT_FORM_SETTINGS,
+  normalizePlanFormSettings,
+  normalizeOrderFormSettings,
+  normalizePurchaseOrderFormSettings,
+  normalizeSalesOrderFormSettings,
+  normalizePurchaseBillFormSettings,
+  normalizeSalesBillFormSettings,
+  normalizeReceiptFormSettings,
+  normalizePaymentFormSettings,
+  normalizeMaterialFormSettings,
+  normalizeOutsourceFormSettings,
+  normalizeReworkFormSettings,
+} from './formSettingsDefaults';
+import {
+  mergeById,
+  executeAppDataLoadCore,
+  executeAppDataDeferredLoad,
+} from './appDataLoadCore';
 
-const DECIMAL_KEYS = new Set([
-  'quantity', 'purchasePrice', 'salesPrice', 'amount', 'actualQuantity',
-  'systemQuantity', 'diffQuantity', 'unitPrice', 'taxRate', 'taxAmount',
-  'totalAmount', 'completedQuantity', 'defectiveQuantity', 'weight', 'rate',
-  'allocatedQuantity', 'shippedQuantity',
-]);
-
-function normalizeDecimals<T>(arr: T[]): T[] {
-  return arr.map(item => {
-    const copy = { ...item } as any;
-    for (const k of DECIMAL_KEYS) {
-      if (k in copy && copy[k] != null && typeof copy[k] === 'string') copy[k] = Number(copy[k]) || 0;
-    }
-    if (Array.isArray(copy.items)) {
-      copy.items = copy.items.map((sub: any) => {
-        const s = { ...sub };
-        for (const k of DECIMAL_KEYS) { if (k in s && s[k] != null && typeof s[k] === 'string') s[k] = Number(s[k]) || 0; }
-        return s;
-      });
-    }
-    if (Array.isArray(copy.milestones)) {
-      copy.milestones = copy.milestones.map((ms: any) => {
-        const m = { ...ms };
-        for (const k of DECIMAL_KEYS) { if (k in m && m[k] != null && typeof m[k] === 'string') m[k] = Number(m[k]) || 0; }
-        if (Array.isArray(m.reports)) {
-          m.reports = m.reports.map((r: any) => {
-            const rc = { ...r };
-            for (const k2 of DECIMAL_KEYS) { if (k2 in rc && rc[k2] != null && typeof rc[k2] === 'string') rc[k2] = Number(rc[k2]) || 0; }
-            return rc;
-          });
-          const reportsSum = m.reports.reduce((s: number, r: any) => s + (Number(r.quantity) || 0), 0);
-          if (m.completedQuantity !== reportsSum) m.completedQuantity = reportsSum;
-        }
-        return m;
-      });
-    }
-    return copy as T;
-  });
-}
-
-// ── Default form settings ──
-
-export const DEFAULT_PLAN_FORM_SETTINGS: PlanFormSettings = {
-  standardFields: [
-    { id: 'planNumber', label: '计划单号', showInList: true, showInCreate: false, showInDetail: true },
-    { id: 'customer', label: '客户', showInList: true, showInCreate: true, showInDetail: true },
-    { id: 'createdAt', label: '创建时间', showInList: true, showInCreate: false, showInDetail: true },
-  ],
-  customFields: [],
-  listPrint: { showPrintButton: true },
-};
-
-/** 合并租户已存配置与默认标准字段，避免旧数据缺少某项导致表单配置与新建/详情不同步 */
-function mergePlanStandardFields(
-  saved: PlanFormSettings['standardFields'] | undefined,
-): PlanFormSettings['standardFields'] {
-  const defs = DEFAULT_PLAN_FORM_SETTINGS.standardFields;
-  const arr = saved ?? [];
-  const used = new Set<string>();
-  const merged: PlanFormSettings['standardFields'] = defs.map(def => {
-    const hit = arr.find(x => x.id === def.id);
-    used.add(def.id);
-    return hit ? { ...def, ...hit } : def;
-  });
-  for (const f of arr) {
-    if (!used.has(f.id)) merged.push(f);
-  }
-  return merged;
-}
-
-export function normalizePlanFormSettings(raw: PlanFormSettings | null | undefined): PlanFormSettings {
-  const s = raw ?? DEFAULT_PLAN_FORM_SETTINGS;
-  const allowedList = s.listPrint?.allowedTemplateIds?.filter(Boolean) ?? [];
-  const allowedLabel = s.labelPrint?.allowedTemplateIds?.filter(Boolean) ?? [];
-  return {
-    ...s,
-    standardFields: mergePlanStandardFields(s.standardFields).filter(f => f.id !== 'dueDate'),
-    customFields: normalizePlanFormFieldConfigArray(s.customFields),
-    listPrint: {
-      showPrintButton: s.listPrint?.showPrintButton !== false,
-      allowedTemplateIds: allowedList.length > 0 ? allowedList : undefined,
-    },
-    labelPrint: s.labelPrint
-      ? {
-          ...s.labelPrint,
-          allowedTemplateIds: allowedLabel.length > 0 ? allowedLabel : undefined,
-          showPlanDetailTraceSection: s.labelPrint.showPlanDetailTraceSection !== false,
-        }
-      : s.labelPrint,
-  };
-}
-
-function normalizePlanListSlot(slot: PlanListPrintSettings | undefined): PlanListPrintSettings | undefined {
-  if (!slot) return undefined;
-  const allowed = slot.allowedTemplateIds?.filter(Boolean) ?? [];
-  return {
-    showPrintButton: slot.showPrintButton !== false,
-    allowedTemplateIds: allowed.length > 0 ? allowed : undefined,
-  };
-}
-
-export function normalizeOrderFormSettings(raw: OrderFormSettings | null | undefined): OrderFormSettings {
-  const s = raw ?? DEFAULT_ORDER_FORM_SETTINGS;
-  const stockInCustomFieldsRaw =
-    Array.isArray(s.stockInCustomFields) && s.stockInCustomFields.length > 0
-      ? s.stockInCustomFields
-      : Array.isArray(s.customFields) && s.customFields.length > 0
-        ? s.customFields
-        : [];
-  const stockInCustomFields = normalizePlanFormFieldConfigArray(stockInCustomFieldsRaw);
-  const base: OrderFormSettings = {
-    ...s,
-    stockInCustomFields,
-    /** 报工自定义在工序节点维护；入库自定义使用 stockInCustomFields */
-    customFields: [],
-    orderCenterPrint: s.orderCenterPrint,
-  };
-  const ocp = base.orderCenterPrint;
-  if (!ocp) return base;
-  return {
-    ...base,
-    orderCenterPrint: {
-      orderDetail: normalizePlanListSlot(ocp.orderDetail),
-      reportBatchDetail: normalizePlanListSlot(ocp.reportBatchDetail),
-      stockInFlowDetail: normalizePlanListSlot(ocp.stockInFlowDetail),
-    },
-  };
-}
-
-export function normalizeMaterialFormSettings(raw: MaterialFormSettings | null | undefined): MaterialFormSettings {
-  const s = raw ?? DEFAULT_MATERIAL_FORM_SETTINGS;
-  const issue = normalizePlanFormFieldConfigArray(s.materialIssueCustomFields ?? []);
-  const ret = normalizePlanFormFieldConfigArray(s.materialReturnCustomFields ?? []);
-  const osIssue = normalizePlanFormFieldConfigArray(s.outsourceMaterialIssueCustomFields ?? []);
-  const osRet = normalizePlanFormFieldConfigArray(s.outsourceMaterialReturnCustomFields ?? []);
-  const base: MaterialFormSettings = {
-    ...s,
-    materialIssueCustomFields: issue,
-    materialReturnCustomFields: ret,
-    outsourceMaterialIssueCustomFields: osIssue,
-    outsourceMaterialReturnCustomFields: osRet,
-  };
-  const mcp = base.materialCenterPrint;
-  if (!mcp) return base;
-  return {
-    ...base,
-    materialCenterPrint: {
-      stockOutFlowDetail: normalizePlanListSlot(mcp.stockOutFlowDetail),
-      stockReturnFlowDetail: normalizePlanListSlot(mcp.stockReturnFlowDetail),
-      outsourceStockOutFlowDetail: normalizePlanListSlot(mcp.outsourceStockOutFlowDetail),
-      outsourceStockReturnFlowDetail: normalizePlanListSlot(mcp.outsourceStockReturnFlowDetail),
-    },
-  };
-}
-
-export function normalizeOutsourceFormSettings(raw: OutsourceFormSettings | null | undefined): OutsourceFormSettings {
-  const s = raw ?? DEFAULT_OUTSOURCE_FORM_SETTINGS;
-  const dispatch = normalizePlanFormFieldConfigArray(s.outsourceDispatchCustomFields ?? []);
-  const receive = normalizePlanFormFieldConfigArray(s.outsourceReceiveCustomFields ?? []);
-  const base: OutsourceFormSettings = {
-    ...s,
-    outsourceDispatchCustomFields: dispatch,
-    outsourceReceiveCustomFields: receive,
-  };
-  const ocp = base.outsourceCenterPrint;
-  if (!ocp) return base;
-  return {
-    ...base,
-    outsourceCenterPrint: {
-      dispatchFlowDetail: normalizePlanListSlot(ocp.dispatchFlowDetail),
-      receiveFlowDetail: normalizePlanListSlot(ocp.receiveFlowDetail),
-    },
-  };
-}
-
-export function normalizeReworkFormSettings(raw: ReworkFormSettings | null | undefined): ReworkFormSettings {
-  const s = raw ?? DEFAULT_REWORK_FORM_SETTINGS;
-  const defect = normalizePlanFormFieldConfigArray(s.defectTreatmentCustomFields ?? []);
-  const report = normalizePlanFormFieldConfigArray(s.reworkReportCustomFields ?? []);
-  const base: ReworkFormSettings = {
-    ...s,
-    defectTreatmentCustomFields: defect,
-    reworkReportCustomFields: report,
-  };
-  const rcp = base.reworkCenterPrint;
-  if (!rcp) return base;
-  return {
-    ...base,
-    reworkCenterPrint: {
-      defectTreatmentFlowDetail: normalizePlanListSlot(rcp.defectTreatmentFlowDetail),
-      reworkReportFlowDetail: normalizePlanListSlot(rcp.reworkReportFlowDetail),
-    },
-  };
-}
-
-export const DEFAULT_ORDER_FORM_SETTINGS: OrderFormSettings = {
-  standardFields: [
-    { id: 'orderNumber', label: '工单号', showInList: true, showInCreate: false, showInDetail: true },
-    { id: 'customer', label: '客户', showInList: false, showInCreate: true, showInDetail: true },
-    { id: 'dueDate', label: '交期', showInList: false, showInCreate: true, showInDetail: true },
-    { id: 'startDate', label: '开始日期', showInList: false, showInCreate: true, showInDetail: true },
-  ],
-  customFields: [],
-  stockInCustomFields: [],
-};
-
-/** 采购订单已废弃的标准字段 id（历史配置中可能仍存在，加载时剔除） */
-const DEPRECATED_PURCHASE_ORDER_STANDARD_FIELD_IDS = new Set(['dueDate', 'createdAt', 'note']);
-
-export const DEFAULT_PURCHASE_ORDER_FORM_SETTINGS: PurchaseOrderFormSettings = {
-  standardFields: [
-    { id: 'docNumber', label: '单据编号', showInList: true, showInCreate: false, showInDetail: true },
-    { id: 'partner', label: '供应商', showInList: true, showInCreate: true, showInDetail: true },
-  ],
-  customFields: [],
-  listPrint: { showPrintButton: true },
-};
-
-function mergePurchaseOrderStandardFields(
-  saved: PurchaseOrderFormSettings['standardFields'] | undefined,
-): PurchaseOrderFormSettings['standardFields'] {
-  const defs = DEFAULT_PURCHASE_ORDER_FORM_SETTINGS.standardFields;
-  const arr = (saved ?? []).filter(f => !DEPRECATED_PURCHASE_ORDER_STANDARD_FIELD_IDS.has(f.id));
-  const used = new Set<string>();
-  const merged: PurchaseOrderFormSettings['standardFields'] = defs.map(def => {
-    const hit = arr.find(x => x.id === def.id);
-    used.add(def.id);
-    return hit ? { ...def, ...hit } : def;
-  });
-  for (const f of arr) {
-    if (!used.has(f.id) && !DEPRECATED_PURCHASE_ORDER_STANDARD_FIELD_IDS.has(f.id)) merged.push(f);
-  }
-  return merged.map(f => (f.id === 'docNumber' ? { ...f, showInCreate: false } : f));
-}
-
-export function normalizePurchaseOrderFormSettings(raw: PurchaseOrderFormSettings | null | undefined): PurchaseOrderFormSettings {
-  const s = raw ?? DEFAULT_PURCHASE_ORDER_FORM_SETTINGS;
-  const legacyDetail = normalizePlanListSlot(
-    (s as PurchaseOrderFormSettings & { detailPrint?: PlanListPrintSettings }).detailPrint,
-  );
-  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
-  const a = listNorm.allowedTemplateIds ?? [];
-  const b = legacyDetail?.allowedTemplateIds ?? [];
-  const mergedIds = a.length || b.length ? Array.from(new Set([...a, ...b])) : [];
-  const listPrint: PlanListPrintSettings = {
-    showPrintButton: listNorm.showPrintButton !== false,
-    allowedTemplateIds: mergedIds.length > 0 ? mergedIds : undefined,
-  };
-  const listDisplay: PurchaseOrderFormSettings['listDisplay'] = s.listDisplay?.onlyShowUnsettled
-    ? { onlyShowUnsettled: true }
-    : undefined;
-
-  return {
-    standardFields: mergePurchaseOrderStandardFields(s.standardFields),
-    customFields: normalizePlanFormFieldConfigArray(s.customFields),
-    listPrint,
-    listDisplay,
-  };
-}
-
-/** 销售订单已废弃的标准字段 id（与采购订单对齐） */
-const DEPRECATED_SALES_ORDER_STANDARD_FIELD_IDS = DEPRECATED_PURCHASE_ORDER_STANDARD_FIELD_IDS;
-
-export const DEFAULT_SALES_ORDER_FORM_SETTINGS: SalesOrderFormSettings = {
-  standardFields: [
-    { id: 'docNumber', label: '单据编号', showInList: true, showInCreate: false, showInDetail: true },
-    { id: 'partner', label: '客户', showInList: true, showInCreate: true, showInDetail: true },
-  ],
-  customFields: [],
-  listPrint: { showPrintButton: true },
-};
-
-function mergeSalesOrderStandardFields(
-  saved: SalesOrderFormSettings['standardFields'] | undefined,
-): SalesOrderFormSettings['standardFields'] {
-  const defs = DEFAULT_SALES_ORDER_FORM_SETTINGS.standardFields;
-  const arr = (saved ?? []).filter(f => !DEPRECATED_SALES_ORDER_STANDARD_FIELD_IDS.has(f.id));
-  const used = new Set<string>();
-  const merged: SalesOrderFormSettings['standardFields'] = defs.map(def => {
-    const hit = arr.find(x => x.id === def.id);
-    used.add(def.id);
-    return hit ? { ...def, ...hit } : def;
-  });
-  for (const f of arr) {
-    if (!used.has(f.id) && !DEPRECATED_SALES_ORDER_STANDARD_FIELD_IDS.has(f.id)) merged.push(f);
-  }
-  return merged.map(f => (f.id === 'docNumber' ? { ...f, showInCreate: false } : f));
-}
-
-export function normalizeSalesOrderFormSettings(raw: SalesOrderFormSettings | null | undefined): SalesOrderFormSettings {
-  const s = raw ?? DEFAULT_SALES_ORDER_FORM_SETTINGS;
-  const legacyDetail = normalizePlanListSlot(
-    (s as SalesOrderFormSettings & { detailPrint?: PlanListPrintSettings }).detailPrint,
-  );
-  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
-  const a = listNorm.allowedTemplateIds ?? [];
-  const b = legacyDetail?.allowedTemplateIds ?? [];
-  const mergedIds = a.length || b.length ? Array.from(new Set([...a, ...b])) : [];
-  const listPrint: PlanListPrintSettings = {
-    showPrintButton: listNorm.showPrintButton !== false,
-    allowedTemplateIds: mergedIds.length > 0 ? mergedIds : undefined,
-  };
-  const soListDisplay: SalesOrderFormSettings['listDisplay'] = s.listDisplay?.onlyShowNotFullyShipped
-    ? { onlyShowNotFullyShipped: true }
-    : undefined;
-
-  return {
-    standardFields: mergeSalesOrderStandardFields(s.standardFields),
-    customFields: normalizePlanFormFieldConfigArray(s.customFields),
-    listPrint,
-    listDisplay: soListDisplay,
-  };
-}
-
-/** 采购单（入库）已废弃的标准字段 id（历史配置加载时剔除） */
-const DEPRECATED_PURCHASE_BILL_STANDARD_FIELD_IDS = new Set(['createdAt', 'note']);
-
-export const DEFAULT_PURCHASE_BILL_FORM_SETTINGS: PurchaseBillFormSettings = {
-  standardFields: [
-    { id: 'docNumber', label: '单据编号', showInList: true, showInCreate: false, showInDetail: true },
-    { id: 'partner', label: '供应商', showInList: true, showInCreate: true, showInDetail: true },
-    { id: 'warehouse', label: '入库仓库', showInList: true, showInCreate: true, showInDetail: true },
-  ],
-  customFields: [],
-  listPrint: { showPrintButton: true },
-};
-
-function mergePurchaseBillStandardFields(
-  saved: PurchaseBillFormSettings['standardFields'] | undefined,
-): PurchaseBillFormSettings['standardFields'] {
-  const defs = DEFAULT_PURCHASE_BILL_FORM_SETTINGS.standardFields;
-  const arr = (saved ?? []).filter(f => !DEPRECATED_PURCHASE_BILL_STANDARD_FIELD_IDS.has(f.id));
-  const used = new Set<string>();
-  const merged: PurchaseBillFormSettings['standardFields'] = defs.map(def => {
-    const hit = arr.find(x => x.id === def.id);
-    used.add(def.id);
-    return hit ? { ...def, ...hit } : def;
-  });
-  for (const f of arr) {
-    if (!used.has(f.id) && !DEPRECATED_PURCHASE_BILL_STANDARD_FIELD_IDS.has(f.id)) merged.push(f);
-  }
-  return merged.map(f => (f.id === 'docNumber' ? { ...f, showInCreate: false } : f));
-}
-
-export function normalizePurchaseBillFormSettings(raw: PurchaseBillFormSettings | null | undefined): PurchaseBillFormSettings {
-  const s = raw ?? DEFAULT_PURCHASE_BILL_FORM_SETTINGS;
-  type PbLegacy = PurchaseBillFormSettings & {
-    detailPrint?: PlanListPrintSettings;
-    /** 历史采购单配置曾继承计划单 `labelPrint` */
-    labelPrint?: { allowedTemplateIds?: string[]; showPlanDetailTraceSection?: boolean };
-  };
-  const leg = s as PbLegacy;
-  const legacyDetail = normalizePlanListSlot(leg.detailPrint);
-  const legacyLabel = normalizePlanListSlot(
-    leg.labelPrint?.allowedTemplateIds?.length
-      ? { showPrintButton: true, allowedTemplateIds: leg.labelPrint.allowedTemplateIds }
-      : undefined,
-  );
-  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
-  const a = listNorm.allowedTemplateIds ?? [];
-  const b = legacyDetail?.allowedTemplateIds ?? [];
-  const c = legacyLabel?.allowedTemplateIds ?? [];
-  const mergedIds = a.length || b.length || c.length ? Array.from(new Set([...a, ...b, ...c])) : [];
-  const listPrint: PlanListPrintSettings = {
-    showPrintButton: listNorm.showPrintButton !== false,
-    allowedTemplateIds: mergedIds.length > 0 ? mergedIds : undefined,
-  };
-  return {
-    standardFields: mergePurchaseBillStandardFields(s.standardFields),
-    customFields: normalizePlanFormFieldConfigArray(s.customFields),
-    listPrint,
-  };
-}
-
-export const DEFAULT_SALES_BILL_FORM_SETTINGS: SalesBillFormSettings = {
-  standardFields: [],
-  customFields: [],
-  listPrint: { showPrintButton: true },
-};
-
-export function normalizeSalesBillFormSettings(raw: SalesBillFormSettings | null | undefined): SalesBillFormSettings {
-  const s = raw ?? DEFAULT_SALES_BILL_FORM_SETTINGS;
-  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
-  const rawIds = listNorm.allowedTemplateIds?.map(x => (x != null && x !== '' ? String(x).trim() : '')).filter(Boolean) ?? [];
-  const listPrint: PlanListPrintSettings = {
-    showPrintButton: listNorm.showPrintButton !== false,
-    allowedTemplateIds: rawIds.length > 0 ? Array.from(new Set(rawIds)) : undefined,
-  };
-  return {
-    standardFields: [],
-    customFields: normalizePlanFormFieldConfigArray(s.customFields),
-    listPrint,
-  };
-}
-
-export const DEFAULT_RECEIPT_FORM_SETTINGS: ReceiptFormSettings = {
-  listPrint: { showPrintButton: true },
-};
-
-export function normalizeReceiptFormSettings(raw: ReceiptFormSettings | null | undefined): ReceiptFormSettings {
-  const s = raw ?? DEFAULT_RECEIPT_FORM_SETTINGS;
-  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
-  const rawIds = listNorm.allowedTemplateIds?.map(x => (x != null && x !== '' ? String(x).trim() : '')).filter(Boolean) ?? [];
-  return {
-    listPrint: {
-      showPrintButton: listNorm.showPrintButton !== false,
-      allowedTemplateIds: rawIds.length > 0 ? Array.from(new Set(rawIds)) : undefined,
-    },
-  };
-}
-
-export const DEFAULT_PAYMENT_FORM_SETTINGS: PaymentFormSettings = {
-  listPrint: { showPrintButton: true },
-};
-
-export function normalizePaymentFormSettings(raw: PaymentFormSettings | null | undefined): PaymentFormSettings {
-  const s = raw ?? DEFAULT_PAYMENT_FORM_SETTINGS;
-  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
-  const rawIds = listNorm.allowedTemplateIds?.map(x => (x != null && x !== '' ? String(x).trim() : '')).filter(Boolean) ?? [];
-  return {
-    listPrint: {
-      showPrintButton: listNorm.showPrintButton !== false,
-      allowedTemplateIds: rawIds.length > 0 ? Array.from(new Set(rawIds)) : undefined,
-    },
-  };
-}
 
 const EMPTY_DICTIONARIES: AppDictionaries = { colors: [], sizes: [], units: [] };
 
@@ -484,7 +85,7 @@ export interface AppDataContextValue {
   products: Product[];
   orders: ProductionOrder[];
   plans: PlanOrder[];
-  psiRecords: any[];
+  psiRecords: PsiRecord[];
   financeRecords: FinanceRecord[];
   prodRecords: ProductionOpRecord[];
   categories: ProductCategory[];
@@ -492,9 +93,9 @@ export interface AppDataContextValue {
   dictionaries: AppDictionaries;
   globalNodes: GlobalNodeTemplate[];
   boms: BOM[];
-  partners: any[];
-  workers: any[];
-  equipment: any[];
+  partners: Partner[];
+  workers: Worker[];
+  equipment: Equipment[];
   warehouses: Warehouse[];
   financeCategories: FinanceCategory[];
   financeAccountTypes: FinanceAccountType[];
@@ -612,9 +213,9 @@ export interface MasterDataState {
   partnerCategories: PartnerCategory[];
   dictionaries: AppDictionaries;
   globalNodes: GlobalNodeTemplate[];
-  partners: any[];
-  workers: any[];
-  equipment: any[];
+  partners: Partner[];
+  workers: Worker[];
+  equipment: Equipment[];
   warehouses: Warehouse[];
   products: Product[];
   boms: BOM[];
@@ -647,7 +248,7 @@ export interface OrdersState {
 }
 
 export interface PsiState {
-  psiRecords: any[];
+  psiRecords: PsiRecord[];
 }
 
 export interface FinanceState {
@@ -674,7 +275,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [plans, setPlans] = useState<PlanOrder[]>([]);
-  const [psiRecords, setPsiRecords] = useState<any[]>([]);
+  const [psiRecords, setPsiRecords] = useState<PsiRecord[]>([]);
   const [financeRecords, setFinanceRecords] = useState<FinanceRecord[]>([]);
   const [prodRecords, setProdRecords] = useState<ProductionOpRecord[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
@@ -682,9 +283,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [dictionaries, setDictionaries] = useState<AppDictionaries>(EMPTY_DICTIONARIES);
   const [globalNodes, setGlobalNodes] = useState<GlobalNodeTemplate[]>([]);
   const [boms, setBoms] = useState<BOM[]>([]);
-  const [partners, setPartners] = useState<any[]>([]);
-  const [workers, setWorkers] = useState<any[]>([]);
-  const [equipment, setEquipment] = useState<any[]>([]);
+  const [partners, setPartners] = useState<Partner[]>([]);
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [financeCategories, setFinanceCategories] = useState<FinanceCategory[]>([]);
   const [financeAccountTypes, setFinanceAccountTypes] = useState<FinanceAccountType[]>([]);
@@ -711,9 +312,6 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [processSequenceMode, setProcessSequenceMode] = useState<ProcessSequenceMode>('free');
   const [allowExceedMaxReportQty, setAllowExceedMaxReportQty] = useState<boolean>(true);
   const [productMilestoneProgresses, setProductMilestoneProgresses] = useState<ProductMilestoneProgress[]>([]);
-
-  const val = (results: PromiseSettledResult<unknown>[], i: number) =>
-    results[i]?.status === 'fulfilled' ? (results[i] as PromiseFulfilledResult<unknown>).value : undefined;
 
   const activeTenantId = tenantCtx?.tenantId;
 
@@ -756,99 +354,39 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     setPrintTemplates([]);
     setProductMilestoneProgresses([]);
 
-    async function loadCore() {
-      const coreResults = await Promise.allSettled([
-        api.settings.getConfig(),                               // 0
-        api.settings.categories.list(),                         // 1
-        api.settings.partnerCategories.list(),                  // 2
-        api.settings.nodes.list(),                              // 3
-        api.settings.warehouses.list(),                         // 4
-        api.settings.financeCategories.list(),                  // 5
-        api.settings.financeAccountTypes.list(),                // 6
-        api.partners.list(),                                    // 7
-        api.dictionaries.list(),                                // 8
-        api.products.list(),                                    // 9
-        api.boms.list(),                                        // 10
-        api.tenants.getReportableMembers(activeTenantId),       // 11
-        api.equipment.list(),                                   // 12
-      ]);
-      if (cancelled) return;
-
-      const coreFailed = coreResults.filter(r => r.status === 'rejected');
-      if (coreFailed.length) console.warn(`核心数据加载: ${coreFailed.length}/${coreResults.length} 个请求失败`, coreFailed.map(r => (r as PromiseRejectedResult).reason?.message));
-
-      if (coreResults[9]?.status === 'rejected') {
-        const msg = (coreResults[9] as PromiseRejectedResult).reason?.message || '未知错误';
-        const isForbidden = /无权|403|Forbidden/i.test(msg) || msg.includes('请先选择或创建企业');
-        if (isForbidden) {
-          toast.error(`产品列表加载失败：${msg}。请在「成员管理」中为当前账号勾选「基础信息 → 产品档案」的查看权限（basic:products:view），或由企业管理员调整角色。`);
-        } else {
-          const migrateHint = /数据库|route_report|migration|P20|column|schema|Prisma/i.test(msg)
-            ? ' 若为数据库升级后首次使用，请在服务器执行 prisma migrate deploy 并重启后端。' : '';
-          const fetchHint =
-            /Failed to fetch|NetworkError|无法连接|超时/i.test(msg) && import.meta.env.DEV
-              ? ' 请确认后端已启动（backend 目录 `npm run dev`，或仓库根目录 `npm run dev:all`），且已配置数据库 `.env`。'
-              : '';
-          toast.error(`产品列表加载失败：${msg}。${migrateHint}${fetchHint}`.trim());
-        }
-      }
-
-      const cfg = (val(coreResults, 0) || {}) as Record<string, unknown>;
-      setProductionLinkMode((cfg.productionLinkMode as ProductionLinkMode) ?? 'order');
-      setProcessSequenceMode((cfg.processSequenceMode as ProcessSequenceMode) ?? 'free');
-      setAllowExceedMaxReportQty(cfg.allowExceedMaxReportQty !== false);
-      setPlanFormSettings(normalizePlanFormSettings(cfg.planFormSettings as PlanFormSettings));
-      setOrderFormSettings(normalizeOrderFormSettings((cfg.orderFormSettings as OrderFormSettings) ?? DEFAULT_ORDER_FORM_SETTINGS));
-      {
-        const po = (cfg.purchaseOrderFormSettings as PurchaseOrderFormSettings) ?? DEFAULT_PURCHASE_ORDER_FORM_SETTINGS;
-        setPurchaseOrderFormSettings(normalizePurchaseOrderFormSettings(po));
-      }
-      {
-        const so = (cfg.salesOrderFormSettings as SalesOrderFormSettings) ?? DEFAULT_SALES_ORDER_FORM_SETTINGS;
-        setSalesOrderFormSettings(normalizeSalesOrderFormSettings(so));
-      }
-      {
-        const pb = (cfg.purchaseBillFormSettings as PurchaseBillFormSettings) ?? DEFAULT_PURCHASE_BILL_FORM_SETTINGS;
-        setPurchaseBillFormSettings(normalizePurchaseBillFormSettings(pb));
-      }
-      {
-        const sb = (cfg.salesBillFormSettings as SalesBillFormSettings) ?? DEFAULT_SALES_BILL_FORM_SETTINGS;
-        setSalesBillFormSettings(normalizeSalesBillFormSettings(sb));
-      }
-      {
-        const rf = (cfg.receiptFormSettings as ReceiptFormSettings) ?? DEFAULT_RECEIPT_FORM_SETTINGS;
-        setReceiptFormSettings(normalizeReceiptFormSettings(rf));
-      }
-      {
-        const pf = (cfg.paymentFormSettings as PaymentFormSettings) ?? DEFAULT_PAYMENT_FORM_SETTINGS;
-        setPaymentFormSettings(normalizePaymentFormSettings(pf));
-      }
-      setMaterialPanelSettings((cfg.materialPanelSettings as MaterialPanelSettings) ?? DEFAULT_MATERIAL_PANEL_SETTINGS);
-      setMaterialFormSettings(normalizeMaterialFormSettings((cfg.materialFormSettings as MaterialFormSettings) ?? DEFAULT_MATERIAL_FORM_SETTINGS));
-      setOutsourceFormSettings(normalizeOutsourceFormSettings((cfg.outsourceFormSettings as OutsourceFormSettings) ?? DEFAULT_OUTSOURCE_FORM_SETTINGS));
-      setReworkFormSettings(normalizeReworkFormSettings((cfg.reworkFormSettings as ReworkFormSettings) ?? DEFAULT_REWORK_FORM_SETTINGS));
-      setPrintTemplates(
-        ensureBuiltinSalesBillPrintTemplate(Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : []),
-      );
-      if (val(coreResults, 1))  setCategories(val(coreResults, 1) as ProductCategory[]);
-      if (val(coreResults, 2))  setPartnerCategories(val(coreResults, 2) as PartnerCategory[]);
-      if (val(coreResults, 3))  setGlobalNodes(val(coreResults, 3) as GlobalNodeTemplate[]);
-      if (val(coreResults, 4))  setWarehouses(val(coreResults, 4) as Warehouse[]);
-      if (val(coreResults, 5))  setFinanceCategories(val(coreResults, 5) as FinanceCategory[]);
-      if (val(coreResults, 6))  setFinanceAccountTypes(val(coreResults, 6) as FinanceAccountType[]);
-      if (val(coreResults, 7)) setPartners(normalizePartnersFromApi(val(coreResults, 7) as any[]) as any[]);
-      if (val(coreResults, 8))  setDictionaries(val(coreResults, 8) as AppDictionaries);
-      if (val(coreResults, 9))  setProducts(normalizeDecimals(val(coreResults, 9) as Product[]));
-      if (val(coreResults, 10)) setBoms(normalizeDecimals(val(coreResults, 10) as BOM[]));
-      if (val(coreResults, 11)) setWorkers(val(coreResults, 11) as any[]);
-      if (val(coreResults, 12)) setEquipment(val(coreResults, 12) as any[]);
-
-      if (!cancelled) setDataLoading(false);
-    }
-
     (async () => {
       try {
-        await loadCore();
+        await executeAppDataLoadCore(activeTenantId, () => cancelled, {
+          setDataLoading,
+          setProductionLinkMode,
+          setProcessSequenceMode,
+          setAllowExceedMaxReportQty,
+          setPlanFormSettings,
+          setOrderFormSettings,
+          setPurchaseOrderFormSettings,
+          setSalesOrderFormSettings,
+          setPurchaseBillFormSettings,
+          setSalesBillFormSettings,
+          setReceiptFormSettings,
+          setPaymentFormSettings,
+          setMaterialPanelSettings,
+          setMaterialFormSettings,
+          setOutsourceFormSettings,
+          setReworkFormSettings,
+          setPrintTemplates,
+          setCategories,
+          setPartnerCategories,
+          setGlobalNodes,
+          setWarehouses,
+          setFinanceCategories,
+          setFinanceAccountTypes,
+          setPartners,
+          setDictionaries,
+          setProducts,
+          setBoms,
+          setWorkers,
+          setEquipment,
+        });
       } catch (err) {
         console.error('数据加载失败', err);
         if (!cancelled) setDataLoading(false);
@@ -874,46 +412,20 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     deferredLoadState.current = 'loading';
 
     try {
-      const metaResults = await Promise.allSettled([
-        api.plans.list(),                    // 0
-        api.orders.list(),                   // 1
-        api.orders.listProductProgress(),    // 2
-      ]);
-      if (val(metaResults, 0)) setPlans(normalizeDecimals(val(metaResults, 0) as PlanOrder[]));
-      if (val(metaResults, 1)) setOrders(normalizeDecimals(val(metaResults, 1) as ProductionOrder[]));
-      if (val(metaResults, 2)) setProductMilestoneProgresses(normalizeDecimals(val(metaResults, 2) as ProductMilestoneProgress[]));
-
-      const heavyResults = await Promise.allSettled([
-        api.production.list(),               // 0
-        api.psi.list(),                      // 1
-        api.finance.list(),                  // 2
-      ]);
-      if (val(heavyResults, 0)) setProdRecords(normalizeDecimals(val(heavyResults, 0) as ProductionOpRecord[]));
-      if (val(heavyResults, 1)) setPsiRecords(normalizeDecimals(val(heavyResults, 1) as any[]));
-      if (val(heavyResults, 2)) setFinanceRecords(normalizeDecimals(val(heavyResults, 2) as FinanceRecord[]));
-
-      const allFailed = [...metaResults, ...heavyResults].filter(r => r.status === 'rejected');
-      if (allFailed.length) console.warn(`延后数据加载: ${allFailed.length} 个请求失败`, allFailed.map(r => (r as PromiseRejectedResult).reason?.message));
-
-      const now = new Date().toISOString();
-      ['orders', 'products', 'plans', 'prodRecords', 'psiRecords', 'financeRecords'].forEach(k => { lastFetchTs.current[k] = now; });
+      await executeAppDataDeferredLoad(lastFetchTs, {
+        setPlans,
+        setOrders,
+        setProductMilestoneProgresses,
+        setProdRecords,
+        setPsiRecords,
+        setFinanceRecords,
+      });
     } catch (err) {
       console.error('延后数据加载失败', err);
     } finally {
       deferredLoadState.current = 'done';
     }
   }, []);
-
-  /**
-   * Merges incremental results into the existing state.
-   * If the server returns a full list (no updatedAfter support), it replaces entirely.
-   * If only partial, it merges by id.
-   */
-  function mergeById<T extends { id: string }>(prev: T[], incoming: T[]): T[] {
-    const map = new Map(prev.map(x => [x.id, x]));
-    for (const item of incoming) map.set(item.id, item);
-    return Array.from(map.values());
-  }
 
   // ── Refresh helpers (with incremental sync support) ──
   const refreshPlans = useCallback(async () => { setPlans(normalizeDecimals(await api.plans.list() as PlanOrder[])); markFetched('plans'); }, []);
@@ -957,9 +469,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const refreshPrintTemplates = useCallback(async () => {
     try {
       const cfg = (await api.settings.getConfig()) as Record<string, unknown>;
-      setPrintTemplates(
-        ensureBuiltinSalesBillPrintTemplate(Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : []),
-      );
+      setPrintTemplates(Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : []);
     } catch (err: any) {
       toast.error(err?.message || '打印模版刷新失败');
     }
@@ -1414,6 +924,29 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     </LoadingCtx.Provider>
   );
 }
+
+
+export {
+  DEFAULT_PLAN_FORM_SETTINGS,
+  DEFAULT_ORDER_FORM_SETTINGS,
+  DEFAULT_PURCHASE_ORDER_FORM_SETTINGS,
+  DEFAULT_SALES_ORDER_FORM_SETTINGS,
+  DEFAULT_PURCHASE_BILL_FORM_SETTINGS,
+  DEFAULT_SALES_BILL_FORM_SETTINGS,
+  DEFAULT_RECEIPT_FORM_SETTINGS,
+  DEFAULT_PAYMENT_FORM_SETTINGS,
+  normalizePlanFormSettings,
+  normalizeOrderFormSettings,
+  normalizePurchaseOrderFormSettings,
+  normalizeSalesOrderFormSettings,
+  normalizePurchaseBillFormSettings,
+  normalizeSalesBillFormSettings,
+  normalizeReceiptFormSettings,
+  normalizePaymentFormSettings,
+  normalizeMaterialFormSettings,
+  normalizeOutsourceFormSettings,
+  normalizeReworkFormSettings,
+} from './formSettingsDefaults';
 
 // ── Domain-specific hooks (fine-grained subscriptions) ──
 

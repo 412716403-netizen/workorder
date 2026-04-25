@@ -1,0 +1,51 @@
+---
+description: 后端路由（route）层约定：只做注册/校验/权限，业务下沉
+globs:
+  - backend/src/routes/**/*.ts
+---
+
+# 后端 routes/ 约定
+
+路由文件**只做**：
+1. 创建 `Router`。
+2. 声明 Zod schema（当请求体需要校验时）。
+3. 注册路径，挂中间件：`validate(schema)` + `requireSubPermission(...)`。
+4. 把处理函数指向 `controllers/*.controller.ts` 里的导出函数。
+
+## 必做
+
+- 每条改动数据的路由（`POST/PUT/PATCH/DELETE`）都要挂 `requireSubPermission('<module>:<resource>:<action>')`。
+- 列表/详情（`GET`）也要挂 `requireSubPermission('<module>:<resource>:view')`。
+- 请求体校验走 `validate(zodSchema)`（`backend/src/middleware/validate.ts`）；校验失败不要在 controller 里再查一遍。
+- 子权限字符串保持 `module:resource:action` 三段式，`action` 用 `view | create | edit | delete`（或现有约定词）。
+
+## 禁止
+
+- 在路由文件里写业务分支、查询、事务。
+- 直接引用 Prisma 或 `getTenantPrisma`。
+- 绕过 `validate`，自己手写 `if (!req.body.xxx) return res.status(400)`。
+- 在路由内重复挂 `authMiddleware` / `requireTenant`（`app.ts` 已经在挂载时挂好）。
+
+## 参考模板
+
+```ts
+import { Router } from 'express';
+import { z } from 'zod';
+import * as ctrl from '../controllers/xxx.controller.js';
+import { validate } from '../middleware/validate.js';
+import { requireSubPermission } from '../middleware/tenant.js';
+
+const router = Router();
+
+const createSchema = z.object({ /* ... */ }).passthrough();
+
+router.get('/',    requireSubPermission('module:resource:view'),   ctrl.list);
+router.get('/:id', requireSubPermission('module:resource:view'),   ctrl.get);
+router.post('/',   requireSubPermission('module:resource:create'), validate(createSchema), ctrl.create);
+router.put('/:id', requireSubPermission('module:resource:edit'),   validate(createSchema), ctrl.update);
+router.delete('/:id', requireSubPermission('module:resource:delete'), ctrl.remove);
+
+export default router;
+```
+
+参考现成文件：`backend/src/routes/plans.ts`。

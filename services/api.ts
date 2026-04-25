@@ -698,8 +698,15 @@ export const itemCodesApi = {
   scan: (token: string) =>
     request<import('../types').ScanResult>(`/item-codes/scan/${encodeURIComponent(token)}`),
 
-  trace: (token: string) =>
-    request<import('../types').TraceResult>(`/item-codes/trace/${encodeURIComponent(token)}`),
+  trace: (token: string, params?: { page?: number; pageSize?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.page != null) qs.set('page', String(params.page));
+    if (params?.pageSize != null) qs.set('pageSize', String(params.pageSize));
+    const q = qs.toString();
+    return request<import('../types').TraceResult>(
+      `/item-codes/trace/${encodeURIComponent(token)}${q ? `?${q}` : ''}`,
+    );
+  },
 };
 
 export const planVirtualBatchesApi = {
@@ -752,17 +759,39 @@ export const planVirtualBatchesApi = {
       body: JSON.stringify(body),
     }),
 
-  list: (params: { planOrderId?: string }) => {
+  list: (params: { planOrderId?: string; page?: number; pageSize?: number }) => {
     const qs = new URLSearchParams();
     if (params.planOrderId) qs.set('planOrderId', params.planOrderId);
-    return request<{ items: import('../types').PlanVirtualBatch[]; total: number }>(
-      `/plan-virtual-batches?${qs.toString()}`,
-    );
+    if (params.page != null) qs.set('page', String(params.page));
+    if (params.pageSize != null) qs.set('pageSize', String(params.pageSize));
+    return request<{
+      items: import('../types').PlanVirtualBatch[];
+      total: number;
+      page: number;
+      pageSize: number;
+    }>(`/plan-virtual-batches?${qs.toString()}`);
   },
+
+  subtreeAllocations: (params: { rootPlanOrderId: string }) =>
+    request<{
+      productId: string;
+      allocations: Array<{ variantId: string | null; allocated: number }>;
+    }>(
+      `/plan-virtual-batches/subtree-allocations?${new URLSearchParams({
+        rootPlanOrderId: params.rootPlanOrderId,
+      }).toString()}`,
+    ),
 
   scan: (token: string) =>
     request<import('../types').ScanResult>(`/plan-virtual-batches/scan/${encodeURIComponent(token)}`),
 
-  trace: (token: string) =>
-    request<import('../types').TraceResult>(`/plan-virtual-batches/trace/${encodeURIComponent(token)}`),
+  trace: (token: string, params?: { page?: number; pageSize?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.page != null) qs.set('page', String(params.page));
+    if (params?.pageSize != null) qs.set('pageSize', String(params.pageSize));
+    const q = qs.toString();
+    return request<import('../types').TraceResult>(
+      `/plan-virtual-batches/trace/${encodeURIComponent(token)}${q ? `?${q}` : ''}`,
+    );
+  },
 };

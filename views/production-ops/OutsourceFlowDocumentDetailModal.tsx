@@ -32,6 +32,12 @@ import {
   buildOutsourceReceiveLastPriceIndex,
   lookupOutsourceReceiveLastPrice,
 } from '../../utils/outsourceReceiveLastUnitPrice';
+import { formatOutsourceVariantLabel } from '../../utils/buildOutsourceFlowPrintContext';
+import {
+  aggregateOutsourceQtyByVariant,
+  computeDispatchReceiveRemaining,
+  filterOutsourceRecordsMatchingDocScope,
+} from '../../utils/outsourcePartnerFlowDetail';
 
 export interface OutsourceFlowDocumentDetailModalProps {
   productionLinkMode: 'order' | 'product';
@@ -89,24 +95,57 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   const [flowDetailUnitPrices, setFlowDetailUnitPrices] = useState<Record<string, number>>({});
   const [flowDetailEditCustom, setFlowDetailEditCustom] = useState<Record<string, unknown>>({});
 
+  const docRecords = useMemo(
+    () => records.filter(r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey),
+    [records, flowDetailKey],
+  );
+
   const outsourceCustomDefsDetail = useMemo(() => {
-    const dr = records.filter(r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey);
-    if (!dr.length) return [];
-    const recv = dr[0].status === '已收回';
+    if (!docRecords.length) return [];
+    const recv = docRecords[0].status === '已收回';
     const arr = recv ? outsourceFormSettings.outsourceReceiveCustomFields : outsourceFormSettings.outsourceDispatchCustomFields;
     return (arr ?? []).filter(f => f.showInDetail);
-  }, [records, flowDetailKey, outsourceFormSettings]);
+  }, [docRecords, outsourceFormSettings]);
 
   const outsourceCustomSnapshot = useMemo(() => {
-    const dr = records.filter(r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey);
-    if (!dr.length) return {} as Record<string, unknown>;
-    const recv = dr[0].status === '已收回';
+    if (!docRecords.length) return {} as Record<string, unknown>;
+    const recv = docRecords[0].status === '已收回';
     const key = recv ? OUTSOURCE_RECEIVE_CUSTOM_DATA_KEY : OUTSOURCE_DISPATCH_CUSTOM_DATA_KEY;
-    const raw = dr[0].collabData?.[key];
+    const raw = docRecords[0].collabData?.[key];
     return typeof raw === 'object' && raw != null && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {};
-  }, [records, flowDetailKey]);
+  }, [docRecords]);
 
-  const docRecords = records.filter(r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey);
+  const scopeFilteredForSummary = useMemo(
+    () => (docRecords.length ? filterOutsourceRecordsMatchingDocScope(records, docRecords) : []),
+    [records, docRecords],
+  );
+  const scopeAggForSummary = useMemo(
+    () => computeDispatchReceiveRemaining(scopeFilteredForSummary),
+    [scopeFilteredForSummary],
+  );
+  const currentDocVariantTotalsForSummary = useMemo(() => aggregateOutsourceQtyByVariant(docRecords), [docRecords]);
+  const currentDocGrandTotalForSummary = useMemo(
+    () => docRecords.reduce((s, r) => s + (Number(r.quantity) || 0), 0),
+    [docRecords],
+  );
+  const summaryVariantIdsForSummary = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of [...scopeFilteredForSummary, ...docRecords]) {
+      const v = (r.variantId || '').trim();
+      if (v) ids.add(v);
+    }
+    return [...ids].sort((a, b) => {
+      const ra =
+        docRecords.find(x => (x.variantId || '') === a) ?? scopeFilteredForSummary.find(x => (x.variantId || '') === a);
+      const rb =
+        docRecords.find(x => (x.variantId || '') === b) ?? scopeFilteredForSummary.find(x => (x.variantId || '') === b);
+      return formatOutsourceVariantLabel(ra?.productId, a, products, dictionaries).localeCompare(
+        formatOutsourceVariantLabel(rb?.productId, b, products, dictionaries),
+        'zh-CN',
+      );
+    });
+  }, [docRecords, scopeFilteredForSummary, products, dictionaries]);
+
   if (docRecords.length === 0) return null;
   const first = docRecords[0];
   const isReceiveDoc = first.status === '已收回';
@@ -368,6 +407,82 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
             ) : null}
           </div>
         </div>
+        {!flowDetailEditMode && (
+          <div className="px-6 py-3 border-b border-slate-100 bg-white shrink-0">
+            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">数量汇总</h4>
+            <div className="overflow-x-auto rounded-2xl border border-slate-200">
+              <table className="w-full min-w-[280px] border-collapse text-center text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-500">汇总项</th>
+                    <th className="px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500">总件数</th>
+                    {summaryVariantIdsForSummary.map(vid => {
+                      const ra =
+                        docRecords.find(x => (x.variantId || '') === vid) ??
+                        scopeFilteredForSummary.find(x => (x.variantId || '') === vid);
+                      const lab = formatOutsourceVariantLabel(ra?.productId, vid, products, dictionaries);
+                      return (
+                        <th key={vid} className="px-2 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500 max-w-[7rem] truncate" title={lab}>
+                          {lab}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  <tr className="bg-slate-50/40">
+                    <td className="px-3 py-2 text-left font-bold text-slate-700">本单</td>
+                    <td className="px-3 py-2 font-bold text-indigo-700 tabular-nums">{currentDocGrandTotalForSummary} 件</td>
+                    {summaryVariantIdsForSummary.map(vid => {
+                      const q = currentDocVariantTotalsForSummary[vid] ?? 0;
+                      return (
+                        <td key={vid} className="px-2 py-2 font-bold text-slate-800 tabular-nums">
+                          {q > 0 ? `${q} 件` : '—'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr className="bg-sky-50/30">
+                    <td className="px-3 py-2 text-left font-bold text-slate-700">外协发出（累计）</td>
+                    <td className="px-3 py-2 font-bold text-slate-900 tabular-nums">{scopeAggForSummary.dispatchTotal} 件</td>
+                    {summaryVariantIdsForSummary.map(vid => {
+                      const q = scopeAggForSummary.dispatchByVariant[vid] ?? 0;
+                      return (
+                        <td key={vid} className="px-2 py-2 font-bold text-slate-800 tabular-nums">
+                          {q > 0 ? `${q} 件` : '—'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr className="bg-amber-50/30">
+                    <td className="px-3 py-2 text-left font-bold text-slate-700">外协收回（累计）</td>
+                    <td className="px-3 py-2 font-bold text-slate-900 tabular-nums">{scopeAggForSummary.receiveTotal} 件</td>
+                    {summaryVariantIdsForSummary.map(vid => {
+                      const q = scopeAggForSummary.receiveByVariant[vid] ?? 0;
+                      return (
+                        <td key={vid} className="px-2 py-2 font-bold text-slate-800 tabular-nums">
+                          {q > 0 ? `${q} 件` : '—'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr className="bg-slate-100/90">
+                    <td className="px-3 py-2 text-left font-black text-slate-800">剩余数量</td>
+                    <td className="px-3 py-2 font-black text-slate-900 tabular-nums">{scopeAggForSummary.remainingTotal} 件</td>
+                    {summaryVariantIdsForSummary.map(vid => {
+                      const q = scopeAggForSummary.remainingByVariant[vid] ?? 0;
+                      return (
+                        <td key={vid} className="px-2 py-2 font-black text-slate-900 tabular-nums">
+                          {q > 0 ? `${q} 件` : '—'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
         <div className="flex-1 overflow-auto min-h-0 p-6">
           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">商品明细</h4>
           <div className="space-y-8">

@@ -1,19 +1,51 @@
 import type { TenantPrismaClient } from '../lib/prisma.js';
 import { prisma as basePrisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
-import { genId } from '../utils/genId.js';
+import { genUuidV7 } from '../utils/genId.js';
 import {
   type VirtualBatchQuota,
   generateScanToken,
+  parseScanTokenTenantHexPrefix,
+  resolveTenantIdFromScanTokenPrefix,
   collectPlanSubtreeIds,
   loadVirtualBatchQuota,
-  variantKey,
   resolveCallerContext,
   resolveVariantLabel,
   verifyCollaborationAccess,
 } from './planTreeQuota.service.js';
 
-// ── helpers ──────────────────────────────────────────────────
+const INSERT_CHUNK = 2000;
+
+/** 计划子树内各规格 ACTIVE 批次占用件数汇总（用于额度展示，避免拉全量批次列表） */
+export async function subtreeBatchAllocatedByVariant(
+  db: TenantPrismaClient,
+  rootPlanOrderId: string,
+) {
+  const plan = await db.planOrder.findUnique({
+    where: { id: rootPlanOrderId },
+    select: { productId: true },
+  });
+  if (!plan) throw new AppError(404, '计划单不存在');
+
+  const subtreeIds = await collectPlanSubtreeIds(db, rootPlanOrderId);
+  const agg = await db.planVirtualBatch.groupBy({
+    by: ['variantId'],
+    where: {
+      planOrderId: { in: subtreeIds },
+      productId: plan.productId,
+      status: 'ACTIVE',
+    },
+    _sum: { quantity: true },
+  });
+
+  return {
+    productId: plan.productId,
+    allocations: agg.map((r) => ({
+      variantId: r.variantId ?? null,
+      allocated: Number(r._sum.quantity ?? 0),
+    })),
+  };
+}
 
 /** Create N linked item-codes for a batch inside an existing transaction. */
 async function createLinkedItemCodesForBatch(
@@ -28,15 +60,22 @@ async function createLinkedItemCodesForBatch(
     batchId: string;
   },
 ): Promise<number> {
-  const { tenantId, planOrderId, productId, variantId, quantity, batchId } =
-    params;
+  const { tenantId, planOrderId, productId, variantId, quantity, batchId } = params;
   if (quantity <= 0) return 0;
 
-  const agg = await tx.itemCode.aggregate({
-    where: { planOrderId },
-    _max: { serialNo: true },
-  });
-  let seq = (agg._max.serialNo ?? 0) + 1;
+  await tx.$executeRawUnsafe(
+    `SELECT 1 FROM plan_orders WHERE id = $1 AND tenant_id = $2::uuid FOR UPDATE`,
+    planOrderId,
+    tenantId,
+  );
+
+  const maxSnRows = (await tx.$queryRawUnsafe(
+    `SELECT MAX(serial_no) AS m FROM item_codes
+     WHERE tenant_id = $1::uuid AND plan_order_id = $2`,
+    tenantId,
+    planOrderId,
+  )) as Array<{ m: number | null }>;
+  let seq = (maxSnRows[0]?.m ?? 0) + 1;
 
   const rows: Array<{
     id: string;
@@ -51,18 +90,22 @@ async function createLinkedItemCodesForBatch(
   }> = [];
   for (let i = 0; i < quantity; i++) {
     rows.push({
-      id: genId('ic'),
+      id: genUuidV7(),
       tenantId,
       planOrderId,
       productId,
       variantId,
       serialNo: seq++,
-      scanToken: generateScanToken(),
+      scanToken: generateScanToken(tenantId),
       status: 'ACTIVE',
       batchId,
     });
   }
-  await tx.itemCode.createMany({ data: rows });
+
+  for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
+    const chunk = rows.slice(i, i + INSERT_CHUNK);
+    if (chunk.length > 0) await tx.itemCode.createMany({ data: chunk });
+  }
   return quantity;
 }
 
@@ -70,25 +113,43 @@ async function createLinkedItemCodesForBatch(
 
 export async function listBatches(
   db: TenantPrismaClient,
-  opts: { planOrderId?: string },
+  opts: { planOrderId?: string; page?: number; pageSize?: number },
 ) {
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(500, Math.max(1, opts.pageSize ?? 15));
+
   const where: Record<string, unknown> = {};
   if (opts.planOrderId) where.planOrderId = opts.planOrderId;
 
-  const raw = await db.planVirtualBatch.findMany({
-    where,
-    orderBy: [{ sequenceNo: 'desc' }, { createdAt: 'desc' }],
-    include: {
-      _count: {
-        select: { itemCodes: { where: { status: 'ACTIVE' } } },
-      },
-    },
-  });
-  const items = raw.map(({ _count, ...rest }) => ({
+  const [raw, total] = await Promise.all([
+    db.planVirtualBatch.findMany({
+      where,
+      orderBy: [{ sequenceNo: 'desc' }, { createdAt: 'desc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    db.planVirtualBatch.count({ where }),
+  ]);
+
+  const batchIds = raw.map((b) => b.id);
+  let countByBatch = new Map<string, number>();
+  if (batchIds.length > 0) {
+    const agg = await db.itemCode.groupBy({
+      by: ['batchId'],
+      where: { batchId: { in: batchIds }, status: 'ACTIVE' },
+      _count: { id: true },
+    });
+    countByBatch = new Map(
+      agg.map((r) => [r.batchId!, r._count.id]).filter((e): e is [string, number] => e[0] != null),
+    );
+  }
+
+  const items = raw.map((rest) => ({
     ...rest,
-    itemCodeCount: _count.itemCodes,
+    itemCodeCount: rest.id ? countByBatch.get(rest.id) ?? 0 : 0,
   }));
-  return { items, total: items.length };
+
+  return { items, total, page, pageSize };
 }
 
 export async function createBatch(
@@ -120,21 +181,30 @@ export async function createBatch(
   }
 
   const { batch, itemCodesCreated } = await db.$transaction(async (tx) => {
-    const agg = await tx.planVirtualBatch.aggregate({
-      where: { planOrderId },
-      _max: { sequenceNo: true },
-    });
-    const sequenceNo = (agg._max.sequenceNo ?? 0) + 1;
+    await tx.$executeRawUnsafe(
+      `SELECT 1 FROM plan_orders WHERE id = $1 AND tenant_id = $2::uuid FOR UPDATE`,
+      planOrderId,
+      tenantId,
+    );
+
+    const maxSeqRows = await tx.$queryRawUnsafe<Array<{ m: number | null }>>(
+      `SELECT MAX(sequence_no) AS m FROM plan_virtual_batches
+       WHERE tenant_id = $1::uuid AND plan_order_id = $2`,
+      tenantId,
+      planOrderId,
+    );
+    const sequenceNo = (maxSeqRows[0]?.m ?? 0) + 1;
+
     const row = await tx.planVirtualBatch.create({
       data: {
-        id: genId('pvb'),
+        id: genUuidV7(),
         tenantId,
         planOrderId,
         productId: plan.productId,
         variantId,
         quantity,
         sequenceNo,
-        scanToken: generateScanToken(),
+        scanToken: generateScanToken(tenantId),
         status: 'ACTIVE',
       },
     });
@@ -188,24 +258,32 @@ export async function bulkSplit(
   }
 
   const { rows, itemCodesCreated } = await db.$transaction(async (tx) => {
-    const agg = await tx.planVirtualBatch.aggregate({
-      where: { planOrderId },
-      _max: { sequenceNo: true },
-    });
-    let seq = (agg._max.sequenceNo ?? 0) + 1;
+    await tx.$executeRawUnsafe(
+      `SELECT 1 FROM plan_orders WHERE id = $1 AND tenant_id = $2::uuid FOR UPDATE`,
+      planOrderId,
+      tenantId,
+    );
+
+    const maxSeqRows = await tx.$queryRawUnsafe<Array<{ m: number | null }>>(
+      `SELECT MAX(sequence_no) AS m FROM plan_virtual_batches
+       WHERE tenant_id = $1::uuid AND plan_order_id = $2`,
+      tenantId,
+      planOrderId,
+    );
+    let seq = (maxSeqRows[0]?.m ?? 0) + 1;
     const rowsOut: Awaited<ReturnType<typeof tx.planVirtualBatch.create>>[] = [];
     let codes = 0;
     for (const q of chunks) {
       const row = await tx.planVirtualBatch.create({
         data: {
-          id: genId('pvb'),
+          id: genUuidV7(),
           tenantId,
           planOrderId,
           productId: ctx.plan.productId,
           variantId,
           quantity: q,
           sequenceNo: seq++,
-          scanToken: generateScanToken(),
+          scanToken: generateScanToken(tenantId),
           status: 'ACTIVE',
         },
       });
@@ -331,24 +409,32 @@ export async function bulkSplitAllVariants(
   }
 
   const { rows, itemCodesCreated } = await db.$transaction(async (tx) => {
-    const agg = await tx.planVirtualBatch.aggregate({
-      where: { planOrderId },
-      _max: { sequenceNo: true },
-    });
-    let seq = (agg._max.sequenceNo ?? 0) + 1;
+    await tx.$executeRawUnsafe(
+      `SELECT 1 FROM plan_orders WHERE id = $1 AND tenant_id = $2::uuid FOR UPDATE`,
+      planOrderId,
+      tenantId,
+    );
+
+    const maxSeqRows = await tx.$queryRawUnsafe<Array<{ m: number | null }>>(
+      `SELECT MAX(sequence_no) AS m FROM plan_virtual_batches
+       WHERE tenant_id = $1::uuid AND plan_order_id = $2`,
+      tenantId,
+      planOrderId,
+    );
+    let seq = (maxSeqRows[0]?.m ?? 0) + 1;
     const rowsOut: Awaited<ReturnType<typeof tx.planVirtualBatch.create>>[] = [];
     let codes = 0;
     for (const p of pending) {
       const row = await tx.planVirtualBatch.create({
         data: {
-          id: genId('pvb'),
+          id: genUuidV7(),
           tenantId,
           planOrderId,
           productId: p.productId,
           variantId: p.variantId,
           quantity: p.quantity,
           sequenceNo: seq++,
-          scanToken: generateScanToken(),
+          scanToken: generateScanToken(tenantId),
           status: 'ACTIVE',
         },
       });
@@ -376,10 +462,18 @@ export async function bulkSplitAllVariants(
   };
 }
 
-export async function scanBatch(callerTenantId: string, token: string) {
-  const batch = await basePrisma.planVirtualBatch.findUnique({
-    where: { scanToken: token },
+async function findVirtualBatchByScanToken(scanToken: string) {
+  const prefix = parseScanTokenTenantHexPrefix(scanToken);
+  if (!prefix) return null;
+  const ownerTenantId = await resolveTenantIdFromScanTokenPrefix(prefix);
+  if (!ownerTenantId) return null;
+  return basePrisma.planVirtualBatch.findFirst({
+    where: { tenantId: ownerTenantId, scanToken },
   });
+}
+
+export async function scanBatch(callerTenantId: string, token: string) {
+  const batch = await findVirtualBatchByScanToken(token);
   if (!batch) throw new AppError(404, '批次码不存在');
 
   const ownerTenantId = batch.tenantId;
@@ -417,7 +511,7 @@ export async function scanBatch(callerTenantId: string, token: string) {
   );
 
   const itemCodes = await basePrisma.itemCode.findMany({
-    where: { batchId: batch.id, status: 'ACTIVE' },
+    where: { tenantId: ownerTenantId, batchId: batch.id, status: 'ACTIVE' },
     select: { id: true, serialNo: true, scanToken: true, status: true },
     orderBy: { serialNo: 'asc' },
   });

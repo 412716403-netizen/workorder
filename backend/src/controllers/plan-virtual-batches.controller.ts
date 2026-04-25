@@ -53,7 +53,20 @@ export const list = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
   const result = await batchService.listBatches(db, {
     planOrderId: optStr(req.query.planOrderId),
+    page: Math.max(1, parseInt(String(req.query.page ?? '1'), 10)),
+    pageSize: Math.min(500, Math.max(1, parseInt(String(req.query.pageSize ?? '15'), 10))),
   });
+  res.json(result);
+});
+
+export const subtreeAllocations = asyncHandler(async (req, res) => {
+  const db = getTenantPrisma(req.tenantId!);
+  const rootId = optStr(req.query.rootPlanOrderId);
+  if (!rootId) {
+    res.status(400).json({ error: '缺少 rootPlanOrderId' });
+    return;
+  }
+  const result = await batchService.subtreeBatchAllocatedByVariant(db, rootId);
   res.json(result);
 });
 
@@ -63,6 +76,8 @@ export const scan = asyncHandler(async (req, res) => {
 });
 
 export const trace = asyncHandler(async (req, res) => {
-  const result = await itemCodeService.traceVirtualBatch(req.tenantId!, str(req.params.token));
+  const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10));
+  const pageSize = Math.min(200, Math.max(1, parseInt(String(req.query.pageSize ?? '50'), 10)));
+  const result = await itemCodeService.traceVirtualBatch(req.tenantId!, str(req.params.token), page, pageSize);
   res.json(result);
 });
