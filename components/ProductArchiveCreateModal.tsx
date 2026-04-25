@@ -48,7 +48,7 @@ export const ProductArchiveCreateModal: React.FC<ProductArchiveCreateModalProps>
   onCreated,
 }) => {
   const { products, categories, boms, dictionaries, partners, globalNodes, partnerCategories } = useMasterData();
-  const { onUpdateProduct, onDeleteProduct, onUpdateBOM, refreshDictionaries } = useAppActions();
+  const { onUpdateProduct, onDeleteProduct, onUpdateBOM, refreshDictionaries, refreshPartners } = useAppActions();
   const [instanceKey, setInstanceKey] = useState(0);
 
   useEffect(() => {
@@ -123,6 +123,7 @@ export const ProductArchiveCreateModal: React.FC<ProductArchiveCreateModalProps>
             onDeleteProduct={onDeleteProduct}
             onUpdateBOM={onUpdateBOM}
             onRefreshDictionaries={refreshDictionaries}
+            onRefreshPartners={refreshPartners}
             onBack={onClose}
             permCanDelete={false}
             isPersistedProduct={false}

@@ -51,7 +51,7 @@ import {
   ItemCode,
   PlanVirtualBatch,
 } from '../../types';
-import { itemCodesApi } from '../../services/api';
+import { itemCodesApi, psi } from '../../services/api';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
 import { SearchableMultiSelectWithProcessTabs } from '../../components/SearchableMultiSelect';
 import { formatPlanOrderCreatedAtForList, localTodayYmd, planIdToLocalYmd, toLocalDateYmd } from '../../utils/localDateTime';
@@ -184,6 +184,10 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   const [relatedPOsMaterialId, setRelatedPOsMaterialId] = useState<string | null>(null);
   const [virtualBatches, setVirtualBatches] = useState<PlanVirtualBatch[]>([]);
 
+  /** BOM 库存列：与后端 `/psi/stock` 汇总一致（含生产入库、调拨等），非前端流水简单加减 */
+  const [serverStockMap, setServerStockMap] = useState<Record<string, number>>({});
+  const [serverStockStatus, setServerStockStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+
   const [itemCodePrintOpen, setItemCodePrintOpen] = useState(false);
   const [itemCodePrintPlan, setItemCodePrintPlan] = useState<PlanOrder | null>(null);
   const [itemCodePrintCodes, setItemCodePrintCodes] = useState<ItemCode[]>([]);
@@ -246,6 +250,36 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     const u = (dictionaries.units ?? []).find(x => x.id === p?.unitId);
     return u?.name ?? 'PCS';
   };
+
+  const loadServerStock = useCallback(async () => {
+    setServerStockStatus('loading');
+    try {
+      const rows = (await psi.getStock()) as unknown;
+      const m: Record<string, number> = {};
+      if (Array.isArray(rows)) {
+        for (const e of rows as Array<{ productId?: string; stock?: unknown }>) {
+          const pid = e?.productId;
+          if (!pid) continue;
+          m[pid] = Math.max(0, Number(e.stock) || 0);
+        }
+      }
+      setServerStockMap(m);
+      setServerStockStatus('ready');
+    } catch (err: unknown) {
+      setServerStockMap({});
+      setServerStockStatus('error');
+      const msg = err instanceof Error ? err.message : '加载库存失败';
+      toast.error(msg);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadServerStock();
+  }, [planId, psiRecords?.length, loadServerStock]);
+
+  const stockReady = serverStockStatus === 'ready';
+  const getServerStockQty = (materialId: string): number | null =>
+    stockReady ? (serverStockMap[materialId] ?? 0) : null;
 
   const materialIdsWithPO = useMemo(() => {
     if (!planNumbersForPO.length || !psiRecords?.length) return new Set<string>();
@@ -351,19 +385,6 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
       visited.delete(productId);
     };
 
-    const stockIndex = new Map<string, number>();
-    if (psiRecords && psiRecords.length > 0) {
-      for (const r of psiRecords) {
-        const pid = r.productId;
-        if (!pid) continue;
-        const prev = stockIndex.get(pid) || 0;
-        if (r.type === 'PURCHASE_BILL') stockIndex.set(pid, prev + (Number(r.quantity) || 0));
-        else if (r.type === 'SALES_BILL') stockIndex.set(pid, prev - (Number(r.quantity) || 0));
-        else if (r.type === 'STOCKTAKE') stockIndex.set(pid, prev + (Number(r.diffQuantity) || 0));
-      }
-    }
-    const getRealStock = (materialId: string) => stockIndex.get(materialId) || 0;
-
     tempPlanInfo.items.forEach((item: PlanItem) => {
       const planQty = Number(item.quantity) || 0;
       if (planQty <= 0) return;
@@ -383,9 +404,10 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     Object.values(reqMap).forEach(req => {
       const material = products.find(p => p.id === req.materialId);
       const node = globalNodes.find(n => n.id === req.nodeId);
-      const stock = getRealStock(req.materialId);
+      const stockQty = getServerStockQty(req.materialId);
+      const stock = stockQty ?? 0;
       const totalNeeded = req.quantity;
-      const shortage = Math.max(0, totalNeeded - stock);
+      const shortage = stockQty === null ? 0 : Math.max(0, totalNeeded - stockQty);
       const parentId = req.parentProductId ?? viewProduct.id;
       const rowKey = `${req.materialId}-${req.nodeId}-${parentId}`;
       const plannedQty = getEffectiveQty(req.materialId, req.nodeId, plannedQtyByKey[rowKey] !== undefined ? (plannedQtyByKey[rowKey] ?? 0) : shortage);
@@ -424,8 +446,9 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
         const totalNeeded = parentPlannedQty * unitPerParent;
         const material = products.find(p => p.id === productId);
         const node = globalNodes.find(n => n.id === nodeId);
-        const stock = getRealStock(productId);
-        const shortage = Math.max(0, totalNeeded - stock);
+        const stockQty = getServerStockQty(productId);
+        const stock = stockQty ?? 0;
+        const shortage = stockQty === null ? 0 : Math.max(0, totalNeeded - stockQty);
         const rowKey = `${productId}-${nodeId}-${parentProductId}`;
         const plannedQty = plannedQtyByKey[rowKey] !== undefined ? (plannedQtyByKey[rowKey] ?? 0) : shortage;
         list.push({
@@ -461,7 +484,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
       ...r,
       parentMaterialName: r.parentProductId ? (products.find(p => p.id === r.parentProductId)?.name) : undefined
     }));
-  }, [viewPlan, viewProduct, tempPlanInfo.items, boms, products, globalNodes, plannedQtyByKey, plans, effectivePlanForMaterial, psiRecords]);
+  }, [viewPlan, viewProduct, tempPlanInfo.items, boms, products, globalNodes, plannedQtyByKey, plans, effectivePlanForMaterial, stockReady, serverStockMap]);
 
   const hasProducibleNeedingSubPlan = (materialRequirements as any[]).some((r: any) => {
     const p = products.find(px => px.id === r.materialId);
@@ -1072,7 +1095,26 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                          <tr className="bg-slate-50/50 border-b border-slate-100">
                             <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">物料名称 / SKU</th>
                             <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">理论总需量</th>
-                            <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">库存</th>
+                            <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">
+                              <div className="inline-flex flex-col items-center gap-1 max-w-[120px] mx-auto">
+                                <div className="flex items-center justify-center gap-1">
+                                  <span>库存</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => void loadServerStock()}
+                                    disabled={serverStockStatus === 'loading'}
+                                    className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 disabled:opacity-40 transition-colors"
+                                    title="从服务端重新同步（与进销存/生产入库等汇总一致，全仓合计）"
+                                    aria-label="重新同步库存"
+                                  >
+                                    <RefreshCw className={`w-3.5 h-3.5 ${serverStockStatus === 'loading' ? 'animate-spin' : ''}`} />
+                                  </button>
+                                </div>
+                                <span className="text-[8px] font-semibold text-slate-400 normal-case tracking-normal leading-tight">
+                                  服务端汇总
+                                </span>
+                              </div>
+                            </th>
                             <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">计算缺料数</th>
                             <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center min-w-[140px]">计划用量</th>
                             <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center min-w-[220px]">状态</th>
@@ -1116,12 +1158,22 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                      <span className="text-sm font-black text-slate-600 whitespace-nowrap">{Number(req.totalNeeded).toFixed(2)} {getUnitName(req.materialId)}</span>
                                   </td>
                                   <td className="px-8 py-4 text-center">
-                                     <span className={`text-sm font-black whitespace-nowrap ${req.stock < req.totalNeeded ? 'text-rose-500' : 'text-emerald-500'}`}>
-                                        {Number(req.stock).toFixed(2)} {getUnitName(req.materialId)}
-                                     </span>
+                                     {!stockReady ? (
+                                       <span className="text-sm font-bold text-slate-400 whitespace-nowrap">
+                                         {serverStockStatus === 'error' ? '—' : '…'}
+                                       </span>
+                                     ) : (
+                                       <span className={`text-sm font-black whitespace-nowrap ${req.stock < req.totalNeeded ? 'text-rose-500' : 'text-emerald-500'}`}>
+                                         {Number(req.stock).toFixed(2)} {getUnitName(req.materialId)}
+                                       </span>
+                                     )}
                                   </td>
                                   <td className="px-8 py-4 text-right">
-                                     {req.shortage > 0 ? (
+                                     {!stockReady ? (
+                                       <span className="text-sm font-bold text-slate-400 whitespace-nowrap">
+                                         {serverStockStatus === 'error' ? '—' : '…'}
+                                       </span>
+                                     ) : req.shortage > 0 ? (
                                         <span className="text-sm font-black text-indigo-600 whitespace-nowrap">
                                           {Number(req.shortage).toFixed(2)} {getUnitName(req.materialId)}
                                            </span>

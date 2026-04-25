@@ -504,7 +504,7 @@ const BasicInfoView: React.FC = () => {
       <div className={showTabs ? subModuleMainContentTopClass : undefined}>
         {activeTab === 'PRODUCTS' && (
           <Suspense fallback={<BasicInfoPanelFallback />}>
-          <ProductManagementView products={products} globalNodes={globalNodes} categories={categories} boms={boms} dictionaries={dictionaries} partners={partners} partnerCategories={partnerCategories} onUpdateProduct={onUpdateProduct} onDeleteProduct={onDeleteProduct} onUpdateBOM={onUpdateBOM} onRefreshDictionaries={onRefreshDictionaries} onRefreshProducts={onRefreshProducts} onDetailViewChange={setProductDetailVisible} permCanCreate={canCreate('PRODUCTS')} permCanEdit={canEdit('PRODUCTS')} permCanDelete={canDelete('PRODUCTS')} initialProductId={initialProductId} onClearInitialProductId={clearInitialProductId} />
+          <ProductManagementView products={products} globalNodes={globalNodes} categories={categories} boms={boms} dictionaries={dictionaries} partners={partners} partnerCategories={partnerCategories} onUpdateProduct={onUpdateProduct} onDeleteProduct={onDeleteProduct} onUpdateBOM={onUpdateBOM} onRefreshDictionaries={onRefreshDictionaries} onRefreshPartners={onRefreshPartners} onRefreshProducts={onRefreshProducts} onDetailViewChange={setProductDetailVisible} permCanCreate={canCreate('PRODUCTS')} permCanEdit={canEdit('PRODUCTS')} permCanDelete={canDelete('PRODUCTS')} initialProductId={initialProductId} onClearInitialProductId={clearInitialProductId} />
           </Suspense>
         )}
 

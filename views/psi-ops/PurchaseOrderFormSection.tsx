@@ -67,7 +67,7 @@ interface PurchaseOrderFormSectionProps {
   productMapPSI: Map<string, Product>;
   formatQtyDisplay: (q: number | string | undefined | null) => number;
   getUnitName: (productId: string) => string;
-  formSettings: { standardFields: any[]; customFields: any[] };
+  formSettings: { standardFields: any[]; customFields: any[]; relatedProductEnabled?: boolean };
   /** 新增时展示的「将生成的单号」预览（保存逻辑在父组件强制自动生成） */
   previewAutoPoDocNumber?: string;
   partnerLabel: string;
@@ -164,6 +164,30 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
                 <p className="text-[10px] font-bold text-slate-400 ml-1 leading-snug">由系统自动生成，不可修改</p>
               </div>
             </div>
+            {formSettings.relatedProductEnabled && (
+              <div className="space-y-1.5 min-w-0 md:col-span-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">
+                  关联产品
+                </label>
+                <p className="text-[10px] font-bold text-slate-400 ml-1 mb-1 leading-snug">
+                  可选：说明本单采购物料主要服务于哪个产品（与下方明细「采购品项」不同）
+                </p>
+                <SearchableProductSelect
+                  categories={categories}
+                  options={products}
+                  value={String(form.customData?.relatedProductId ?? '')}
+                  placeholder="搜索并选择关联产品…"
+                  onChange={(id) => {
+                    const next = { ...(form.customData || {}) } as Record<string, unknown>;
+                    const t = String(id || '').trim();
+                    if (t) next.relatedProductId = t;
+                    else delete next.relatedProductId;
+                    setForm({ ...form, customData: next });
+                  }}
+                  triggerClassName={psiOrderBillFormFieldControlClass}
+                />
+              </div>
+            )}
             {editingDocNumber && formSettings.standardFields.find(f => f.id === 'dueDate')?.showInCreate !== false && (
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">期望到货日期</label>

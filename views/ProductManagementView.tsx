@@ -29,6 +29,7 @@ interface ProductManagementViewProps {
   onDeleteProduct?: (id: string) => Promise<boolean>;
   onUpdateBOM: (bom: BOM) => Promise<boolean>;
   onRefreshDictionaries: () => Promise<void>;
+  onRefreshPartners: () => Promise<void>;
   onDetailViewChange?: (inDetail: boolean) => void;
   onRefreshProducts?: () => Promise<void>;
   permCanCreate?: boolean;
@@ -50,6 +51,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   onDeleteProduct,
   onUpdateBOM,
   onRefreshDictionaries,
+  onRefreshPartners,
   onDetailViewChange,
   onRefreshProducts,
   permCanCreate = true,
@@ -157,6 +159,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
         onDeleteProduct={onDeleteProduct}
         onUpdateBOM={onUpdateBOM}
         onRefreshDictionaries={onRefreshDictionaries}
+        onRefreshPartners={onRefreshPartners}
         onBack={() => setEditingProduct(null)}
         permCanDelete={permCanDelete}
         isPersistedProduct={products.some(p => p.id === editingProduct.id)}

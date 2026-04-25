@@ -169,6 +169,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
       customFields: purchaseOrderFormSettings?.customFields ?? [],
       listPrint: purchaseOrderFormSettings?.listPrint ?? { showPrintButton: true },
       listDisplay: purchaseOrderFormSettings?.listDisplay,
+      relatedProductEnabled: purchaseOrderFormSettings?.relatedProductEnabled,
     }),
     [purchaseOrderFormSettings],
   );
@@ -656,6 +657,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               docNumber={editingPODocNumber!}
               recordsList={recordsList}
               productMapPSI={productMapPSI}
+              showPurchaseOrderRelatedProduct={safePurchaseOrderFormSettings.relatedProductEnabled === true}
               dictionaries={dictionaries}
               getUnitName={getUnitName}
               formatQtyDisplay={formatQtyDisplay}
@@ -1049,10 +1051,20 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                           <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatPsiDocListTime(docItems as any[])}</span>
                           <span className="flex items-center gap-1"><User className="w-3 h-3" /> 经办: {mainInfo.operator}</span>
                           {type === 'PURCHASE_ORDER' &&
+                            safePurchaseOrderFormSettings.relatedProductEnabled && (
+                              <span
+                                className="flex items-center gap-1 text-slate-500 normal-case"
+                                title={`关联产品: ${purchaseOrderStandardListText('relatedProduct', mainInfo, docNum, productMapPSI)}`}
+                              >
+                                关联产品: {purchaseOrderStandardListText('relatedProduct', mainInfo, docNum, productMapPSI)}
+                              </span>
+                            )}
+                          {type === 'PURCHASE_ORDER' &&
                             safePurchaseOrderFormSettings.standardFields
                               .filter(
                                 f =>
                                   f.showInList &&
+                                  f.id !== 'relatedProduct' &&
                                   f.id !== 'createdAt' &&
                                   f.id !== 'note' &&
                                   f.id !== 'docNumber' &&
@@ -1061,7 +1073,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                   f.id !== 'warehouseId',
                               )
                               .map(f => {
-                                const text = purchaseOrderStandardListText(f.id, mainInfo, docNum);
+                                const text = purchaseOrderStandardListText(f.id, mainInfo, docNum, productMapPSI);
                                 return (
                                   <span key={`po-std-${f.id}`} className="flex items-center gap-1 text-slate-500 normal-case" title={`${f.label}: ${text}`}>
                                     {f.label}: {text}
@@ -1112,7 +1124,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                   f.id !== 'partner',
                               )
                               .map(f => {
-                                const text = purchaseOrderStandardListText(f.id, mainInfo, docNum);
+                                const text = purchaseOrderStandardListText(f.id, mainInfo, docNum, productMapPSI);
                                 return (
                                   <span key={`so-std-${f.id}`} className="flex items-center gap-1 text-slate-500 normal-case" title={`${f.label}: ${text}`}>
                                     {f.label}: {text}

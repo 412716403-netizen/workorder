@@ -467,6 +467,11 @@ export interface PurchaseOrderFormSettings {
   listPrint?: PlanListPrintSettings;
   /** 列表筛选等 */
   listDisplay?: PurchaseOrderListDisplaySettings;
+  /**
+   * 为 true 时，采购订单在列表、新建/编辑、详情中展示「关联产品」（值存首行 `customData.relatedProductId`）。
+   * 与 `standardFields` 中的 `relatedProduct` 互斥：归一化时会迁移旧配置并剔除该伪标准字段。
+   */
+  relatedProductEnabled?: boolean;
 }
 
 /** 进销存销售订单列表展示与筛选 */

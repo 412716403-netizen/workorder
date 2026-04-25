@@ -242,13 +242,16 @@ export const DEFAULT_PURCHASE_ORDER_FORM_SETTINGS: PurchaseOrderFormSettings = {
   ],
   customFields: [],
   listPrint: { showPrintButton: true },
+  relatedProductEnabled: false,
 };
 
 function mergePurchaseOrderStandardFields(
   saved: PurchaseOrderFormSettings['standardFields'] | undefined,
 ): PurchaseOrderFormSettings['standardFields'] {
   const defs = DEFAULT_PURCHASE_ORDER_FORM_SETTINGS.standardFields;
-  const arr = (saved ?? []).filter(f => !DEPRECATED_PURCHASE_ORDER_STANDARD_FIELD_IDS.has(f.id));
+  const arr = (saved ?? []).filter(
+    f => !DEPRECATED_PURCHASE_ORDER_STANDARD_FIELD_IDS.has(f.id) && f.id !== 'relatedProduct',
+  );
   const used = new Set<string>();
   const merged: PurchaseOrderFormSettings['standardFields'] = defs.map(def => {
     const hit = arr.find(x => x.id === def.id);
@@ -278,11 +281,19 @@ export function normalizePurchaseOrderFormSettings(raw: PurchaseOrderFormSetting
     ? { onlyShowUnsettled: true }
     : undefined;
 
+  const legacyRelated = (s.standardFields ?? []).find(f => f.id === 'relatedProduct');
+  const relatedProductEnabled =
+    typeof s.relatedProductEnabled === 'boolean'
+      ? s.relatedProductEnabled
+      : !!legacyRelated &&
+        (legacyRelated.showInList || legacyRelated.showInCreate || legacyRelated.showInDetail);
+
   return {
     standardFields: mergePurchaseOrderStandardFields(s.standardFields),
     customFields: normalizePlanFormFieldConfigArray(s.customFields),
     listPrint,
     listDisplay,
+    relatedProductEnabled,
   };
 }
 

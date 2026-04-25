@@ -11,6 +11,8 @@ export interface PsiDocDetailSummaryProps {
   docNumber: string;
   recordsList: PsiRecord[];
   productMapPSI: Map<string, Product>;
+  /** 采购订单详情：是否展示「关联产品」（与表单配置 `relatedProductEnabled` 一致） */
+  showPurchaseOrderRelatedProduct?: boolean;
   warehouseMapPSI?: Map<string, Warehouse>;
   dictionaries: AppDictionaries;
   getUnitName: (productId: string) => string;
@@ -67,7 +69,8 @@ const ProductCell: React.FC<{ name?: string; sku?: string; variantLabel: string 
 );
 
 const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
-  docType, docNumber, recordsList, productMapPSI, warehouseMapPSI,
+  docType, docNumber, recordsList, productMapPSI, showPurchaseOrderRelatedProduct,
+  warehouseMapPSI,
   dictionaries, getUnitName, formatQtyDisplay, receivedByOrderLine,
 }) => {
   const meta = DOC_META[docType];
@@ -111,6 +114,24 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
       <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5 space-y-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
           <span className="font-black text-slate-800">{mainInfo.partner || '未指定单位'}</span>
+          {docType === 'PURCHASE_ORDER' &&
+            showPurchaseOrderRelatedProduct &&
+            (() => {
+              const rid = String(
+                (mainInfo.customData && typeof mainInfo.customData === 'object'
+                  ? (mainInfo.customData as Record<string, unknown>).relatedProductId
+                  : '') ?? '',
+              ).trim();
+              if (!rid) return null;
+              const rp = productMapPSI.get(rid);
+              const label = '关联产品';
+              return (
+                <span className="text-slate-600 font-bold normal-case text-xs sm:text-sm" title={label}>
+                  {label}：{rp?.name || rid}
+                  {rp?.sku ? <span className="text-slate-400 font-semibold"> · {rp.sku}</span> : null}
+                </span>
+              );
+            })()}
           <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest border bg-indigo-50 text-indigo-600 border-indigo-100">
             {formatPsiDocNumForList(docNumber)}
           </span>

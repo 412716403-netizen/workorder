@@ -1,6 +1,7 @@
 import type {
   PlanFormFieldConfig,
   Warehouse,
+  Product,
 } from '../../types';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import { toLocalDateYmd, formatCustomFieldDatetimeForPrint } from '../../utils/localDateTime';
@@ -42,6 +43,7 @@ export type PsiDocListMainRow = {
   createdAt?: string;
   note?: string;
   warehouseId?: string;
+  customData?: Record<string, unknown>;
 };
 
 /** 采购订单标准字段在列表中的显示文案（按 fieldId 分派） */
@@ -49,12 +51,20 @@ export function purchaseOrderStandardListText(
   fieldId: string,
   mainInfo: PsiDocListMainRow,
   docNum: string,
+  productMap?: Map<string, Product>,
 ): string {
   switch (fieldId) {
     case 'docNumber':
       return formatPsiDocNumForList(docNum);
     case 'partner':
       return mainInfo.partner || '—';
+    case 'relatedProduct': {
+      const id = String(mainInfo.customData?.relatedProductId ?? '').trim();
+      if (!id) return '—';
+      const p = productMap?.get(id);
+      if (!p) return id;
+      return p.sku ? `${p.name || '—'}（${p.sku}）` : (p.name || id);
+    }
     default:
       return '—';
   }

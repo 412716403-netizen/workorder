@@ -289,6 +289,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       standardFields: purchaseOrderFormSettings?.standardFields ?? [],
       customFields: purchaseOrderFormSettings?.customFields ?? [],
       listPrint: purchaseOrderFormSettings?.listPrint ?? { showPrintButton: true },
+      relatedProductEnabled: purchaseOrderFormSettings?.relatedProductEnabled,
     }),
     [purchaseOrderFormSettings],
   );
@@ -665,6 +666,14 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       }
       const timestamp = psiDocTimestampIsoForSave(recordsList, 'PURCHASE_ORDER', editingDocNumber);
 
+      const poHeaderCustomData: Record<string, unknown> | null = (() => {
+        const raw = form.customData && typeof form.customData === 'object' ? { ...form.customData } : {};
+        const rp = String(raw.relatedProductId ?? '').trim();
+        if (rp) raw.relatedProductId = rp;
+        else delete raw.relatedProductId;
+        return Object.keys(raw).length > 0 ? raw : null;
+      })();
+
       const poCreatedAtIso = (() => {
         if (!editingDocNumber) return localCalendarYmdStartToIso(localTodayYmd());
         const row = recordsList.find(
@@ -704,7 +713,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
               operator: docOperator,
               lineGroupId: item.id,
               createdAt: poCreatedAtIso,
-              ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
+              ...(poHeaderCustomData ? { customData: poHeaderCustomData } : {}),
             });
           });
         } else if ((item.quantity ?? 0) > 0) {
@@ -726,7 +735,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
             operator: docOperator,
             lineGroupId: item.id,
             createdAt: poCreatedAtIso,
-            ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
+            ...(poHeaderCustomData ? { customData: poHeaderCustomData } : {}),
           });
         }
       });

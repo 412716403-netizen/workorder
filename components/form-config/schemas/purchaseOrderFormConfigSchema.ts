@@ -9,7 +9,7 @@ export const purchaseOrderFormConfigSchema: FormConfigSchema<PurchaseOrderFormSe
   title: '采购订单表单配置',
   settingsKey: 'purchaseOrderFormSettings',
   subtitle: {
-    fields: '自定义单据内容将用于列表、登记与详情及打印；标准字段不在此配置。',
+    fields: '自定义单据内容用于列表、登记与详情；可选开启「关联产品」；打印模版在「打印模版」页。',
     listDisplay: '控制进销存「采购订单」列表默认展示范围。',
     print: '打印模版请在下方「增加模版」中创建或管理（列表与登记/详情共用）。',
   },
@@ -20,6 +20,15 @@ export const purchaseOrderFormConfigSchema: FormConfigSchema<PurchaseOrderFormSe
       id: 'fields',
       label: '字段配置',
       sections: [
+        {
+          kind: 'toggle',
+          id: 'relatedProductEnabled',
+          label: '关联产品',
+          description:
+            '勾选后，采购订单在列表、新建/编辑与详情中均可选择并展示关联产品（说明本单采购用途；与明细「采购品项」独立）。',
+          path: 'relatedProductEnabled',
+          defaultChecked: false,
+        },
         {
           kind: 'customFieldsTable',
           id: 'customFields',

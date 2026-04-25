@@ -78,6 +78,10 @@ function resolveProductSkuForSave(p: Product, catalog: Product[]): Product {
   return { ...p, sku: candidate };
 }
 
+function resolveDefaultPartnerCategoryId(categories: PartnerCategory[]): string {
+  return categories.find(c => c.name.includes('供应商'))?.id ?? categories[0]?.id ?? '';
+}
+
 function normalizeRouteReportValuesFromApi(raw: unknown): Record<string, Record<string, string>> {
   const out: Record<string, Record<string, string>> = {};
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
@@ -540,6 +544,7 @@ export interface ProductEditFormProps {
   onDeleteProduct?: (id: string) => Promise<boolean>;
   onUpdateBOM: (bom: BOM) => Promise<boolean>;
   onRefreshDictionaries: () => Promise<void>;
+  onRefreshPartners: () => Promise<void>;
   onBack: () => void;
   permCanDelete?: boolean;
   isPersistedProduct: boolean;
@@ -562,6 +567,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   onDeleteProduct,
   onUpdateBOM,
   onRefreshDictionaries,
+  onRefreshPartners,
   onBack,
   permCanDelete = true,
   isPersistedProduct,
@@ -580,6 +586,12 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   const [quickAddUnitOpen, setQuickAddUnitOpen] = useState(false);
   const [quickAddUnitName, setQuickAddUnitName] = useState('');
   const [quickAddUnitBusy, setQuickAddUnitBusy] = useState(false);
+  const [quickAddSupplierOpen, setQuickAddSupplierOpen] = useState(false);
+  const [quickAddSupplierName, setQuickAddSupplierName] = useState('');
+  const [quickAddSupplierCategoryId, setQuickAddSupplierCategoryId] = useState(() => resolveDefaultPartnerCategoryId(partnerCategories));
+  const [quickAddSupplierBusy, setQuickAddSupplierBusy] = useState(false);
+  /** 产品主图：拖放高亮（整块上传区） */
+  const [productImageDragOver, setProductImageDragOver] = useState(false);
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
   const [filePreview, setFilePreview] = useState<{ src: string; kind: 'image' | 'pdf' } | null>(null);
   const filePreviewRevokeRef = useRef<(() => void) | undefined>(undefined);
@@ -602,6 +614,17 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
     filePreviewRevokeRef.current?.();
     filePreviewRevokeRef.current = undefined;
     setFilePreview(null);
+  }, []);
+
+  const applyProductImageFile = useCallback((file: File | null | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('请使用图片文件（JPG、PNG、GIF 等）');
+      return;
+    }
+    const r = new FileReader();
+    r.onload = () => setWorkingProduct(wp => ({ ...wp, imageUrl: r.result as string }));
+    r.readAsDataURL(file);
   }, []);
 
   useEffect(() => () => {
@@ -655,6 +678,16 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   }, [copyBOMDropdownOpen]);
 
   const activeCategory = categories.find(c => c.id === workingProduct.categoryId);
+  const auth = useAuthOptional();
+  const canQuickAddSupplier = useMemo(() => {
+    const tctx = auth?.tenantCtx;
+    if (!tctx) return false;
+    if (tctx.tenantRole === 'owner') return true;
+    return (
+      hasSubPermission(tctx.permissions, 'basic:partners:view') &&
+      hasSubPermission(tctx.permissions, 'basic:partners:create')
+    );
+  }, [auth]);
 
   const generateVariants = (colorIds: string[], sizeIds: string[], existingVariants: ProductVariant[]): ProductVariant[] => {
     if (colorIds.length === 0 && sizeIds.length === 0) return [];
@@ -778,6 +811,41 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
       toast.error(err.message || '添加失败');
     } finally {
       setQuickAddUnitBusy(false);
+    }
+  };
+
+  const submitQuickAddSupplier = async () => {
+    const name = quickAddSupplierName.trim();
+    if (!name) {
+      toast.error('请输入供应商名称');
+      return;
+    }
+    const existing = partners.find(p => p.name.trim() === name);
+    if (existing) {
+      setWorkingProduct(wp => ({ ...wp, supplierId: existing.id }));
+      toast.info('该供应商已存在，已为您选中');
+      setQuickAddSupplierOpen(false);
+      setQuickAddSupplierName('');
+      return;
+    }
+    if (quickAddSupplierBusy) return;
+    setQuickAddSupplierBusy(true);
+    try {
+      const created = await api.partners.create({
+        name,
+        categoryId: quickAddSupplierCategoryId || undefined,
+        contact: '',
+        customData: {},
+      }) as Partner;
+      await onRefreshPartners();
+      setWorkingProduct(wp => ({ ...wp, supplierId: created.id }));
+      toast.success('已添加供应商');
+      setQuickAddSupplierOpen(false);
+      setQuickAddSupplierName('');
+    } catch (err: any) {
+      toast.error(err.message || '添加失败');
+    } finally {
+      setQuickAddSupplierBusy(false);
     }
   };
 
@@ -1110,6 +1178,90 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
           </div>
         )}
 
+        {quickAddSupplierOpen && (
+          <div className={`fixed inset-0 ${nestedOverlayZ} flex items-center justify-center p-4`}>
+            <div
+              role="presentation"
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              onClick={() => !quickAddSupplierBusy && setQuickAddSupplierOpen(false)}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="quick-add-supplier-title"
+              className="relative bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-200"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <h2 id="quick-add-supplier-title" className="text-lg font-bold text-slate-800">新增供应商</h2>
+                <button
+                  type="button"
+                  disabled={quickAddSupplierBusy}
+                  onClick={() => setQuickAddSupplierOpen(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-full transition-all disabled:opacity-50"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div>
+                <label htmlFor="quick-add-supplier-input" className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-0.5">供应商名称</label>
+                <input
+                  id="quick-add-supplier-input"
+                  autoFocus
+                  type="text"
+                  value={quickAddSupplierName}
+                  onChange={e => setQuickAddSupplierName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void submitQuickAddSupplier();
+                    }
+                  }}
+                  placeholder="例如：华南辅料厂"
+                  disabled={quickAddSupplierBusy}
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all disabled:opacity-60"
+                />
+              </div>
+              {partnerCategories.length > 0 && (
+                <div>
+                  <label htmlFor="quick-add-supplier-category" className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-0.5">合作单位分类</label>
+                  <select
+                    id="quick-add-supplier-category"
+                    value={quickAddSupplierCategoryId}
+                    onChange={e => setQuickAddSupplierCategoryId(e.target.value)}
+                    disabled={quickAddSupplierBusy}
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all disabled:opacity-60"
+                  >
+                    {partnerCategories.map(cat => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={quickAddSupplierBusy}
+                  onClick={() => setQuickAddSupplierOpen(false)}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all disabled:opacity-50"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  disabled={quickAddSupplierBusy}
+                  onClick={() => void submitQuickAddSupplier()}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {quickAddSupplierBusy ? '添加中…' : '确定添加'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {quickAddSpecOpen && (
           <div className={`fixed inset-0 ${nestedOverlayZ} flex items-center justify-center p-4`}>
             <div
@@ -1277,7 +1429,31 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
             {/* 产品图片 */}
             <div className="md:col-span-2 space-y-1">
               <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">产品图片</label>
-              <div className="flex items-center gap-4">
+              <div
+                className={`flex items-center gap-4 rounded-2xl p-3 -m-1 transition-all outline-none ${
+                  productImageDragOver
+                    ? 'bg-indigo-50/90 ring-2 ring-indigo-400 ring-offset-2 ring-offset-white'
+                    : 'border border-transparent'
+                }`}
+                onDragOver={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.dataTransfer.dropEffect = 'copy';
+                  setProductImageDragOver(true);
+                }}
+                onDragLeave={e => {
+                  e.preventDefault();
+                  const rt = e.relatedTarget as Node | null;
+                  if (rt && e.currentTarget.contains(rt)) return;
+                  setProductImageDragOver(false);
+                }}
+                onDrop={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setProductImageDragOver(false);
+                  applyProductImageFile(e.dataTransfer.files?.[0]);
+                }}
+              >
                 <div className="w-20 h-20 bg-slate-50 rounded-2xl flex items-center justify-center overflow-hidden border-2 border-dashed border-slate-200 flex-shrink-0">
                   {workingProduct.imageUrl ? (
                     <div className="relative w-full h-full group">
@@ -1299,19 +1475,16 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                     accept="image/*"
                     className="hidden"
                     onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f && f.type.startsWith('image/')) {
-                        const r = new FileReader();
-                        r.onload = () => setWorkingProduct({...workingProduct, imageUrl: r.result as string});
-                        r.readAsDataURL(f);
-                      }
+                      applyProductImageFile(e.target.files?.[0]);
                       e.target.value = '';
                     }}
                   />
                   <label htmlFor="product-image-upload" className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg text-sm font-semibold cursor-pointer hover:bg-indigo-100 transition-all w-fit">
                     <ImagePlus className="w-4 h-4 shrink-0" /> 上传图片
                   </label>
-                  <span className="text-[10px] text-slate-500 leading-relaxed">支持 JPG、PNG、GIF，建议尺寸 200×200</span>
+                  <span className="text-[10px] text-slate-500 leading-relaxed">
+                    支持 JPG、PNG、GIF，建议尺寸 200×200；也可将图片拖放到本区域
+                  </span>
                 </div>
               </div>
             </div>
@@ -1339,14 +1512,34 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">首选供应商 (档案关联)</label>
-                        <SearchablePartnerSelect
-                          options={partners}
-                          categories={partnerCategories}
-                          value={workingProduct.supplierId || ''}
-                          onChange={(_, id) => setWorkingProduct({ ...workingProduct, supplierId: id })}
-                          valueMode="id"
-                          placeholder="未关联供应商"
-                        />
+                        <div className="flex gap-2 items-start">
+                          <div className="flex-1 min-w-0">
+                            <SearchablePartnerSelect
+                              options={partners}
+                              categories={partnerCategories}
+                              value={workingProduct.supplierId || ''}
+                              onChange={(_, id) => setWorkingProduct({ ...workingProduct, supplierId: id })}
+                              valueMode="id"
+                              placeholder="未关联供应商"
+                              portalZIndex={embeddedInQuickCreateModal ? 10900 : undefined}
+                            />
+                          </div>
+                          {canQuickAddSupplier && (
+                            <button
+                              type="button"
+                              title="快速添加供应商"
+                              aria-label="快速添加供应商"
+                              onClick={() => {
+                                setQuickAddSupplierName('');
+                                setQuickAddSupplierCategoryId(resolveDefaultPartnerCategoryId(partnerCategories));
+                                setQuickAddSupplierOpen(true);
+                              }}
+                              className="shrink-0 inline-flex items-center justify-center px-3 h-12 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-0 outline-none transition-all"
+                            >
+                              <Plus className="w-5 h-5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </>
                  )}

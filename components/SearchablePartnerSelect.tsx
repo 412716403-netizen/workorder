@@ -7,6 +7,8 @@ import type { Partner, PartnerCategory } from '../types';
  * 合作单位选择：与 SearchableProductSelect 一致使用 Portal + fixed，避免在滚动/弹窗内被裁切。
  * onChange 始终回传 (名称, id)。value 可用名称或 id，由 valueMode 指定。
  */
+const DEFAULT_PARTNER_DROPDOWN_Z = 10050;
+
 export function SearchablePartnerSelect({
   options,
   value,
@@ -18,6 +20,8 @@ export function SearchablePartnerSelect({
   triggerClassName,
   valueMode = 'name',
   showCategoryHint = true,
+  /** Portal 下拉层 z-index；嵌入「新增产品」等高层弹窗时需高于外壳（默认 10050） */
+  portalZIndex = DEFAULT_PARTNER_DROPDOWN_Z,
 }: {
   options: Partner[];
   value: string;
@@ -31,6 +35,7 @@ export function SearchablePartnerSelect({
   valueMode?: 'name' | 'id';
   /** 为 false 时不显示触发器下方的「合作单位分类」一行（如财务筛选条） */
   showCategoryHint?: boolean;
+  portalZIndex?: number;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -85,7 +90,7 @@ export function SearchablePartnerSelect({
         left,
         width: w,
         maxHeight: cap,
-        zIndex: 10050,
+        zIndex: portalZIndex,
         display: 'flex',
         flexDirection: 'column',
       });
@@ -96,12 +101,12 @@ export function SearchablePartnerSelect({
         left,
         width: w,
         maxHeight: cap,
-        zIndex: 10050,
+        zIndex: portalZIndex,
         display: 'flex',
         flexDirection: 'column',
       });
     }
-  }, [isOpen]);
+  }, [isOpen, portalZIndex]);
 
   useEffect(() => {
     if (!isOpen) return;

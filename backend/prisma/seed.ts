@@ -91,6 +91,7 @@ async function main() {
       ],
       customFields: [],
       listPrint: { showPrintButton: true },
+      relatedProductEnabled: false,
     },
     salesOrderFormSettings: {
       standardFields: [
