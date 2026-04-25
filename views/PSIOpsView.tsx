@@ -29,6 +29,7 @@ import {
   PrintTemplate,
   PrintRenderContext,
   ProductionOrder,
+  PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER,
 } from '../types';
 import {
   formConfigToolbarButtonClass,
@@ -421,7 +422,11 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
       const parts: string[] = [docNum, formatPsiDocNumForList(docNum)];
       const main = docItems[0] as Record<string, unknown> | undefined;
       if (main) {
-        ['partner', 'operator', 'note', 'productName', 'productSku'].forEach(k => {
+        const mainTextKeys =
+          type === 'PURCHASE_ORDER'
+            ? (['partner', 'operator', 'productName', 'productSku'] as const)
+            : (['partner', 'operator', 'note', 'productName', 'productSku'] as const);
+        mainTextKeys.forEach(k => {
           const v = main[k];
           if (v != null && v !== '') parts.push(String(v));
         });
@@ -431,11 +436,24 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
             if (v != null && v !== '') parts.push(String(v));
           }
         }
+        if (type === 'PURCHASE_ORDER') {
+          const cdObj = main.customData && typeof main.customData === 'object' && !Array.isArray(main.customData)
+            ? (main.customData as Record<string, unknown>)
+            : undefined;
+          const rpId = String(cdObj?.relatedProductId ?? '').trim();
+          if (rpId) {
+            const rp = productMapPSI.get(rpId);
+            if (rp?.name) parts.push(rp.name);
+            if (rp?.sku) parts.push(rp.sku);
+          }
+        }
       }
       for (const line of docItems as Record<string, unknown>[]) {
         const pid = line.productId as string | undefined;
         const p = pid ? productMapPSI.get(pid) : undefined;
-        ['productName', 'productSku', 'note', 'lineNote'].forEach(k => {
+        const lineTextKeys =
+          type === 'PURCHASE_ORDER' ? (['productName', 'productSku'] as const) : (['productName', 'productSku', 'note', 'lineNote'] as const);
+        lineTextKeys.forEach(k => {
           const v = line[k];
           if (v != null && v !== '') parts.push(String(v));
         });
@@ -1050,6 +1068,20 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                         <div className="flex items-center gap-4 mt-1 text-[10px] font-bold text-slate-400 uppercase flex-wrap">
                           <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatPsiDocListTime(docItems as any[])}</span>
                           <span className="flex items-center gap-1"><User className="w-3 h-3" /> 经办: {mainInfo.operator}</span>
+                          {type === 'PURCHASE_ORDER' &&
+                            (() => {
+                              const sn = String(
+                                (mainInfo as { customData?: Record<string, unknown> }).customData?.[
+                                  PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER
+                                ] ?? '',
+                              ).trim();
+                              if (!sn) return null;
+                              return (
+                                <span className="flex items-center gap-1 text-slate-500 normal-case" title={`来源计划: ${sn}`}>
+                                  来源计划: {sn}
+                                </span>
+                              );
+                            })()}
                           {type === 'PURCHASE_ORDER' &&
                             safePurchaseOrderFormSettings.relatedProductEnabled && (
                               <span

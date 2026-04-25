@@ -3,6 +3,8 @@ export {
   OrderStatus,
   PlanStatus,
   FINANCE_DOC_NO_PREFIX,
+  PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID,
+  PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER,
   type ProcessPricingMode,
   type ProductionLinkMode,
   type ProcessSequenceMode,

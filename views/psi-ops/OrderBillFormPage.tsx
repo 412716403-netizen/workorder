@@ -11,6 +11,8 @@ import {
   PurchaseBillFormSettings,
   SalesBillFormSettings,
   PrintTemplate,
+  PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID,
+  PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER,
 } from '../../types';
 import PurchaseOrderFormSection from './PurchaseOrderFormSection';
 import SalesOrderFormSection from './SalesOrderFormSection';
@@ -671,6 +673,20 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         const rp = String(raw.relatedProductId ?? '').trim();
         if (rp) raw.relatedProductId = rp;
         else delete raw.relatedProductId;
+        if (editingDocNumber) {
+          const first = recordsList.find(
+            (r: { type?: string; docNumber?: string; customData?: unknown }) =>
+              r.type === 'PURCHASE_ORDER' && String(r.docNumber || '') === String(editingDocNumber),
+          ) as { customData?: Record<string, unknown> } | undefined;
+          const exist =
+            first?.customData && typeof first.customData === 'object' ? { ...first.customData } : {};
+          const sid = String(exist[PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID] ?? '').trim();
+          const snum = String(exist[PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER] ?? '').trim();
+          if (sid) raw[PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID] = sid;
+          else delete raw[PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID];
+          if (snum) raw[PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER] = snum;
+          else delete raw[PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER];
+        }
         return Object.keys(raw).length > 0 ? raw : null;
       })();
 

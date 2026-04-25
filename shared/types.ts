@@ -44,3 +44,7 @@ export const FINANCE_DOC_NO_PREFIX: Record<FinanceOpType, string> = {
   RECONCILIATION: 'DZD',
   SETTLEMENT: 'GZD',
 };
+
+/** 采购订单 `customData`：由生产计划详情生成 PO 时写入，进销存列表/详情展示来源计划 */
+export const PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID = 'sourcePlanId' as const;
+export const PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER = 'sourcePlanNumber' as const;

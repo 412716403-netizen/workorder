@@ -104,7 +104,8 @@
 | TRANSFER | 调拨 | fromWarehouseId, toWarehouseId, productId, quantity |
 
 **lineGroupId**：同一次添加的明细共用，用于列表/详情按组展示。  
-**sourceOrderNumber / sourceLineId**：采购单引用采购订单时记录来源，用于计算已入库数量。
+**sourceOrderNumber / sourceLineId**：采购单引用采购订单时记录来源，用于计算已入库数量。  
+**PURCHASE_ORDER.customData**：生产计划详情生成采购订单时写入 `sourcePlanId`、`sourcePlanNumber`（键名见 `shared/types.ts` 中 `PSI_PO_CUSTOM_DATA_SOURCE_*`），并自动写入 `relatedProductId` 为**该计划单的产品** `productId`（与表单「关联产品」一致，便于进销存列表/详情展示）；手工新建单可另选或留空。
 
 ---
 

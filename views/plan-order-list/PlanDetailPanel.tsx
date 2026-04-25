@@ -50,6 +50,8 @@ import {
   ProductionOrder,
   ItemCode,
   PlanVirtualBatch,
+  PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID,
+  PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER,
 } from '../../types';
 import { itemCodesApi, psi } from '../../services/api';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
@@ -62,10 +64,21 @@ import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesE
 import { isEquipmentAssignmentEnabled, isWorkerAssignmentEnabled } from '../../utils/nodeAssignmentFlags';
 import PlanTraceSection from './PlanTraceSection';
 import PlanPrintOverlays from './PlanPrintOverlays';
+import PlanPoSupplierAssignModal, {
+  type PlanPoSupplierAssignRow,
+  type PlanPoSupplierOverride,
+} from './PlanPoSupplierAssignModal';
 
 function formatPlanCreatedDateList(created: string | undefined | null): string {
   if (!created) return '';
   return toLocalDateYmd(created) || String(created).trim().slice(0, 10);
+}
+
+/** 产品档案上的默认供应商 id 是否在合作单位列表中有效 */
+function effectiveSupplierIdFromProduct(product: Product | undefined, partners: Partner[]): string | null {
+  const sid = product?.supplierId;
+  if (sid == null || sid === '') return null;
+  return partners.some(p => p.id === sid) ? sid : null;
 }
 
 interface ProposedOrder {
@@ -83,6 +96,20 @@ interface ProposedOrder {
     /** 与保存至采购订单的 purchasePrice 一致；可预览中微调 */
     purchasePrice: number;
   }[];
+}
+
+/** 采购订单是否属于当前计划面板（含子计划视角下的祖先单号、历史 note 匹配） */
+function purchaseOrderRecordMatchesPlanPanel(
+  r: { type?: string; note?: string | null; productId?: string; customData?: Record<string, unknown> | null },
+  planNumbersForPO: string[],
+  viewPlan: { id: string; planNumber: string } | null | undefined,
+): boolean {
+  if (!r || r.type !== 'PURCHASE_ORDER' || !r.productId || !viewPlan) return false;
+  const cd = r.customData && typeof r.customData === 'object' ? (r.customData as Record<string, unknown>) : {};
+  if (String(cd[PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID] ?? '').trim() === viewPlan.id) return true;
+  const sn = String(cd[PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER] ?? '').trim();
+  if (sn && planNumbersForPO.includes(sn)) return true;
+  return planNumbersForPO.some(planNum => String(r.note || '').includes(`计划单[${planNum}]`));
 }
 
 export interface PlanDetailPanelProps {
@@ -180,6 +207,10 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   const [tempNodeRates, setTempNodeRates] = useState<Record<string, number>>({});
   const [proposedOrders, setProposedOrders] = useState<ProposedOrder[]>([]);
   const [isProcessingPO, setIsProcessingPO] = useState(false);
+  const [supplierAssignModalOpen, setSupplierAssignModalOpen] = useState(false);
+  const [supplierAssignRows, setSupplierAssignRows] = useState<PlanPoSupplierAssignRow[]>([]);
+  /** 保存 PO 后需把 `supplierId` 写回产品档案的物料 id（生成预览时无有效档案供应商） */
+  const poSupplierBackfillMaterialIdsRef = useRef<Set<string>>(new Set());
   const [plannedQtyByKey, setPlannedQtyByKey] = useState<Record<string, number | null>>({});
   const [relatedPOsMaterialId, setRelatedPOsMaterialId] = useState<string | null>(null);
   const [virtualBatches, setVirtualBatches] = useState<PlanVirtualBatch[]>([]);
@@ -282,27 +313,25 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     stockReady ? (serverStockMap[materialId] ?? 0) : null;
 
   const materialIdsWithPO = useMemo(() => {
-    if (!planNumbersForPO.length || !psiRecords?.length) return new Set<string>();
+    if (!planNumbersForPO.length || !psiRecords?.length || !viewPlan) return new Set<string>();
     const ids = new Set<string>();
     psiRecords.forEach((r: any) => {
-      if (r.type !== 'PURCHASE_ORDER' || !r.note || !r.productId) return;
-      if (planNumbersForPO.some(planNum => String(r.note).includes(`计划单[${planNum}]`))) ids.add(r.productId);
+      if (!purchaseOrderRecordMatchesPlanPanel(r, planNumbersForPO, viewPlan)) return;
+      ids.add(r.productId);
     });
     return ids;
-  }, [planNumbersForPO, psiRecords]);
+  }, [planNumbersForPO, psiRecords, viewPlan]);
 
   const relatedPOsByMaterial = useMemo(() => {
-    if (!planNumbersForPO.length || !psiRecords?.length) return {} as Record<string, any[]>;
+    if (!planNumbersForPO.length || !psiRecords?.length || !viewPlan) return {} as Record<string, any[]>;
     const map: Record<string, any[]> = {};
     psiRecords.forEach((r: any) => {
-      if (r.type !== 'PURCHASE_ORDER' || !r.note || !r.productId) return;
-      if (planNumbersForPO.some(planNum => String(r.note).includes(`计划单[${planNum}]`))) {
-        if (!map[r.productId]) map[r.productId] = [];
-        map[r.productId].push(r);
-      }
+      if (!purchaseOrderRecordMatchesPlanPanel(r, planNumbersForPO, viewPlan)) return;
+      if (!map[r.productId]) map[r.productId] = [];
+      map[r.productId].push(r);
     });
     return map;
-  }, [planNumbersForPO, psiRecords]);
+  }, [planNumbersForPO, psiRecords, viewPlan]);
 
   const receivedByOrderLine = useMemo(() => {
     const map: Record<string, number> = {};
@@ -501,6 +530,50 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   const hasExistingPOs = Object.keys(relatedPOsByMaterial).length > 0;
   const canGeneratePO = leafWithShortage.length > 0 && allPlannedFilled && proposedOrders.length === 0 && !hasExistingPOs;
 
+  const buildProposedOrdersFromLeaves = useCallback(
+    (overrides: Record<string, PlanPoSupplierOverride>) => {
+      const groupedMap: Record<string, ProposedOrder> = {};
+      const backfill = new Set<string>();
+
+      leafWithShortage.forEach((item: any, index: number) => {
+        const materialProduct = products.find(p => p.id === item.materialId);
+        const effective = effectiveSupplierIdFromProduct(materialProduct, partners);
+        if (!effective) backfill.add(item.materialId);
+
+        const supplierIdResolved = effective || overrides[item.materialId]?.partnerId;
+        const supplier = supplierIdResolved ? partners.find(p => p.id === supplierIdResolved) : undefined;
+        if (!supplier) return;
+
+        if (!groupedMap[supplier.id]) {
+          const orderNumber = nextPsiDocNumber('PO', 'PURCHASE_ORDER', partners, psiRecords || [], supplier.id, supplier.name);
+          groupedMap[supplier.id] = { orderNumber, partnerId: supplier.id, partnerName: supplier.name, items: [] };
+        }
+        const qtyRounded = Math.round(Number(item.plannedQty ?? item.shortage) * 100) / 100;
+        const prod = products.find(p => p.id === item.materialId);
+        const lastPrice = getLastPurchaseUnitPrice(psiRecords, {
+          partnerId: supplier.id,
+          partnerName: supplier.name,
+          productId: item.materialId,
+        });
+        const purchasePrice = lastPrice ?? prod?.purchasePrice ?? 0;
+        groupedMap[supplier.id].items.push({
+          id: `item-${Date.now()}-${item.materialId}-${index}`,
+          productId: item.materialId,
+          materialName: item.materialName,
+          materialSku: item.materialSku,
+          quantity: qtyRounded,
+          suggestedQty: qtyRounded,
+          nodeName: item.nodeName,
+          purchasePrice,
+        });
+      });
+
+      poSupplierBackfillMaterialIdsRef.current = backfill;
+      setProposedOrders(Object.values(groupedMap));
+    },
+    [leafWithShortage, products, partners, psiRecords],
+  );
+
   // --- Effects ---
   useEffect(() => {
     if (viewProduct) {
@@ -521,6 +594,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
         customData: viewPlan.customData ? { ...viewPlan.customData } : {}
       });
       setProposedOrders([]);
+      poSupplierBackfillMaterialIdsRef.current = new Set();
     }
   }, [viewPlan]);
 
@@ -650,38 +724,37 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
       return;
     }
 
-    const groupedMap: Record<string, ProposedOrder> = {};
-
-    leafWithShortage.forEach((item: any, index: number) => {
-      const materialProduct = products.find(p => p.id === item.materialId);
-      const supplierId = materialProduct?.supplierId;
-      const supplier = (supplierId && partners.find(p => p.id === supplierId)) || partners[0];
-      if (!supplier) return;
-      if (!groupedMap[supplier.id]) {
-        const orderNumber = nextPsiDocNumber('PO', 'PURCHASE_ORDER', partners, psiRecords || [], supplier.id, supplier.name);
-        groupedMap[supplier.id] = { orderNumber, partnerId: supplier.id, partnerName: supplier.name, items: [] };
-      }
-      const qtyRounded = Math.round(Number(item.plannedQty ?? item.shortage) * 100) / 100;
-      const prod = products.find(p => p.id === item.materialId);
-      const lastPrice = getLastPurchaseUnitPrice(psiRecords, {
-        partnerId: supplier.id,
-        partnerName: supplier.name,
-        productId: item.materialId,
-      });
-      const purchasePrice = lastPrice ?? prod?.purchasePrice ?? 0;
-      groupedMap[supplier.id].items.push({
-        id: `item-${Date.now()}-${item.materialId}-${index}`,
-        productId: item.materialId,
-        materialName: item.materialName,
-        materialSku: item.materialSku,
-        quantity: qtyRounded,
-        suggestedQty: qtyRounded,
-        nodeName: item.nodeName,
-        purchasePrice,
-      });
+    const missingSupplierLeaves = leafWithShortage.filter((item: any) => {
+      const p = products.find(x => x.id === item.materialId);
+      return effectiveSupplierIdFromProduct(p, partners) == null;
     });
 
-    setProposedOrders(Object.values(groupedMap));
+    if (missingSupplierLeaves.length > 0) {
+      const rows: PlanPoSupplierAssignRow[] = missingSupplierLeaves.map((item: any) => ({
+        materialId: item.materialId,
+        materialName: item.materialName,
+        materialSku: item.materialSku,
+        nodeName: item.nodeName,
+        plannedQty: Number(item.plannedQty ?? item.shortage) || 0,
+        shortage: Number(item.shortage) || 0,
+      }));
+      setSupplierAssignRows(rows);
+      setSupplierAssignModalOpen(true);
+      return;
+    }
+
+    buildProposedOrdersFromLeaves({});
+  };
+
+  const handleSupplierAssignConfirm = (overrides: Record<string, PlanPoSupplierOverride>) => {
+    buildProposedOrdersFromLeaves(overrides);
+    setSupplierAssignModalOpen(false);
+    setSupplierAssignRows([]);
+  };
+
+  const handleSupplierAssignCancel = () => {
+    setSupplierAssignModalOpen(false);
+    setSupplierAssignRows([]);
   };
 
   const handleConfirmAndSaveOrders = async () => {
@@ -738,6 +811,14 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                     note: `计划单[${viewPlan?.planNumber}]补货需求 | 针对工序:${item.nodeName}`,
                     timestamp: new Date().toISOString(),
                     operator: '系统生成',
+                    customData: (() => {
+                      if (!viewPlan) return undefined;
+                      const cd: Record<string, string> = {};
+                      if (viewPlan.id) cd[PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID] = viewPlan.id;
+                      if (viewPlan.planNumber) cd[PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER] = viewPlan.planNumber;
+                      if (viewPlan.productId) cd.relatedProductId = viewPlan.productId;
+                      return Object.keys(cd).length > 0 ? cd : undefined;
+                    })(),
             });
         });
         });
@@ -748,10 +829,43 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
           for (const r of reversed) await onAddPSIRecord(r);
         }
 
+        const backfillIds = poSupplierBackfillMaterialIdsRef.current;
+        const toUpdate = new Map<string, Product>();
+        for (const order of proposedOrders) {
+          for (const item of order.items) {
+            if (!backfillIds.has(item.productId)) continue;
+            const prod = products.find(p => p.id === item.productId);
+            if (!prod || !order.partnerId) continue;
+            toUpdate.set(item.productId, { ...prod, supplierId: order.partnerId });
+          }
+        }
+
+        let supplierWriteFail = 0;
+        if (toUpdate.size > 0) {
+          for (const p of toUpdate.values()) {
+            try {
+              const updated = await onUpdateProduct(p);
+              if (updated == null) supplierWriteFail++;
+            } catch {
+              supplierWriteFail++;
+            }
+          }
+        }
+
+        poSupplierBackfillMaterialIdsRef.current = new Set();
+
+        const nPo = proposedOrders.length;
+        const nProd = toUpdate.size;
         setTimeout(() => {
-            setIsProcessingPO(false);
-            setProposedOrders([]);
-            toast.success(`已成功保存 ${proposedOrders.length} 张采购订单，可在进销存模块查看详情。`);
+          setIsProcessingPO(false);
+          setProposedOrders([]);
+          const extra =
+            nProd === 0
+              ? ''
+              : supplierWriteFail > 0
+                ? `；${supplierWriteFail} 个物料默认供应商写入失败，请在产品管理中补全`
+                : `；已将 ${nProd} 个物料的默认供应商写入产品档案`;
+          toast.success(`已成功保存 ${nPo} 张采购订单，可在进销存模块查看详情。${extra}`);
         }, 500);
     } catch (err) {
         setIsProcessingPO(false);
@@ -1304,7 +1418,16 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                            </div>
                         </div>
                         <div className="flex gap-3">
-                           <button onClick={() => setProposedOrders([])} className="px-4 py-2 text-[11px] font-black text-slate-400 hover:text-slate-600 uppercase">清空待办</button>
+                           <button
+                              type="button"
+                              onClick={() => {
+                                setProposedOrders([]);
+                                poSupplierBackfillMaterialIdsRef.current = new Set();
+                              }}
+                              className="px-4 py-2 text-[11px] font-black text-slate-400 hover:text-slate-600 uppercase"
+                            >
+                              清空待办
+                            </button>
                            <button
                               onClick={handleConfirmAndSaveOrders}
                               disabled={isProcessingPO}
@@ -1590,6 +1713,15 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     </div>
   );
       })()}
+
+      <PlanPoSupplierAssignModal
+        open={supplierAssignModalOpen}
+        rows={supplierAssignRows}
+        partners={partners}
+        partnerCategories={partnerCategories}
+        onConfirm={handleSupplierAssignConfirm}
+        onCancel={handleSupplierAssignCancel}
+      />
 
       <PlanPrintOverlays
         plan={viewPlan}

@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Clock, Package, User } from 'lucide-react';
 import type { AppDictionaries, Product, ProductVariant, PsiRecord, Warehouse } from '../../types';
+import { PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER } from '../../types';
 import { formatPsiDocListTime } from '../../utils/flowDocSort';
 import { formatPsiDocNumForList } from './psiOpsListFormatting';
 
@@ -129,6 +130,20 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
                 <span className="text-slate-600 font-bold normal-case text-xs sm:text-sm" title={label}>
                   {label}：{rp?.name || rid}
                   {rp?.sku ? <span className="text-slate-400 font-semibold"> · {rp.sku}</span> : null}
+                </span>
+              );
+            })()}
+          {docType === 'PURCHASE_ORDER' &&
+            (() => {
+              const sn = String(
+                (mainInfo.customData && typeof mainInfo.customData === 'object'
+                  ? (mainInfo.customData as Record<string, unknown>)[PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER]
+                  : '') ?? '',
+              ).trim();
+              if (!sn) return null;
+              return (
+                <span className="text-slate-600 font-bold normal-case text-xs sm:text-sm" title="来源计划">
+                  来源计划：{sn}
                 </span>
               );
             })()}

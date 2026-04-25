@@ -1,13 +1,26 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, Building2, ChevronRight } from 'lucide-react';
+import { Search, Building2, ChevronRight, Plus } from 'lucide-react';
+import { toast } from 'sonner';
 import type { Partner, PartnerCategory } from '../types';
+import * as api from '../services/api';
+import { useAuthOptional } from '../contexts/AuthContext';
+import { useAppActionsOptional } from '../contexts/AppDataContext';
+import { hasSubPermission } from '../utils/hasSubPermission';
 
 /**
  * 合作单位选择：与 SearchableProductSelect 一致使用 Portal + fixed，避免在滚动/弹窗内被裁切。
  * onChange 始终回传 (名称, id)。value 可用名称或 id，由 valueMode 指定。
  */
 const DEFAULT_PARTNER_DROPDOWN_Z = 10050;
+
+function resolveQuickCreateCategoryId(categories: PartnerCategory[], explicit?: string): string | undefined {
+  const ex = explicit?.trim();
+  if (ex) return ex;
+  const exact = categories.find(c => c.name.trim() === '供应商');
+  if (exact) return exact.id;
+  return categories.find(c => c.name.includes('供应商'))?.id;
+}
 
 export function SearchablePartnerSelect({
   options,
@@ -22,6 +35,10 @@ export function SearchablePartnerSelect({
   showCategoryHint = true,
   /** Portal 下拉层 z-index；嵌入「新增产品」等高层弹窗时需高于外壳（默认 10050） */
   portalZIndex = DEFAULT_PARTNER_DROPDOWN_Z,
+  /** 为 true 时在下拉内显示「新建」入口（需具备合作单位新建权限且至少有一个合作单位分类） */
+  allowQuickCreate = false,
+  /** 快捷新建表单中分类的默认值（id）；不传时尝试匹配名称「供应商」 */
+  quickCreateCategoryId,
 }: {
   options: Partner[];
   value: string;
@@ -36,12 +53,33 @@ export function SearchablePartnerSelect({
   /** 为 false 时不显示触发器下方的「合作单位分类」一行（如财务筛选条） */
   showCategoryHint?: boolean;
   portalZIndex?: number;
+  allowQuickCreate?: boolean;
+  quickCreateCategoryId?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<string>('all');
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [quickName, setQuickName] = useState('');
+  /** 快捷新建弹窗中选中的合作单位分类 id */
+  const [quickFormCategoryId, setQuickFormCategoryId] = useState('');
+  const [quickSubmitting, setQuickSubmitting] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
+
+  const auth = useAuthOptional();
+  const appActions = useAppActionsOptional();
+
+  const canQuickCreate = useMemo(() => {
+    if (!allowQuickCreate || categories.length === 0) return false;
+    const tctx = auth?.tenantCtx;
+    if (!tctx) return false;
+    if (tctx.tenantRole === 'owner') return true;
+    return (
+      hasSubPermission(tctx.permissions, 'basic:partners:view') &&
+      hasSubPermission(tctx.permissions, 'basic:partners:create')
+    );
+  }, [allowQuickCreate, categories.length, auth]);
 
   const selectedPartner =
     valueMode === 'id' ? options.find(p => p.id === value) : options.find(p => p.name === value);
@@ -128,6 +166,7 @@ export function SearchablePartnerSelect({
       const t = e.target as Node;
       if (triggerRef.current?.contains(t)) return;
       if ((e.target as Element)?.closest?.('[data-searchable-partner-dropdown]')) return;
+      if ((e.target as Element)?.closest?.('[data-searchable-partner-quick-create]')) return;
       setIsOpen(false);
     };
     if (isOpen) document.addEventListener('mousedown', handleClickOutside);
@@ -161,18 +200,38 @@ export function SearchablePartnerSelect({
       style={panelStyle}
       onMouseDown={e => e.preventDefault()}
     >
-      <div className={`relative flex-shrink-0 ${compact ? 'mb-2' : 'mb-4'}`}>
-        <Search
-          className={`absolute text-slate-400 ${compact ? 'left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5' : 'left-3.5 top-1/2 -translate-y-1/2 w-4 h-4'}`}
-        />
-        <input
-          autoFocus
-          type="text"
-          className={searchInputCls}
-          placeholder="搜索单位名称、联系人..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+      <div className={`flex items-center gap-2 flex-shrink-0 ${compact ? 'mb-2' : 'mb-4'}`}>
+        <div className="relative flex-1 min-w-0">
+          <Search
+            className={`absolute text-slate-400 ${compact ? 'left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5' : 'left-3.5 top-1/2 -translate-y-1/2 w-4 h-4'}`}
+          />
+          <input
+            autoFocus
+            type="text"
+            className={searchInputCls}
+            placeholder="搜索单位名称、联系人..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        {canQuickCreate && (
+          <button
+            type="button"
+            onClick={() => {
+              setQuickName('');
+              setQuickFormCategoryId(resolveQuickCreateCategoryId(categories, quickCreateCategoryId) ?? '');
+              setIsOpen(false);
+              setQuickCreateOpen(true);
+            }}
+            title="快捷新建合作单位（与基础信息一致，保存后出现在列表中）"
+            className={`shrink-0 inline-flex items-center gap-1 rounded-xl bg-indigo-600 text-white font-black uppercase tracking-wider hover:bg-indigo-700 active:bg-indigo-800 transition-all shadow-sm shadow-indigo-600/20 ${
+              compact ? 'px-2.5 py-2 text-[10px]' : 'px-3 py-3 text-[11px]'
+            }`}
+          >
+            <Plus className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+            新建
+          </button>
+        )}
       </div>
 
       <div className={`flex items-center gap-1 flex-shrink-0 overflow-x-auto no-scrollbar ${compact ? 'mb-2 pb-0.5' : 'mb-4 pb-1'}`}>
@@ -302,6 +361,112 @@ export function SearchablePartnerSelect({
       )}
 
       {dropdownPanel && createPortal(dropdownPanel, document.body)}
+
+      {quickCreateOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            data-searchable-partner-quick-create
+            className="fixed inset-0 flex items-center justify-center p-4 bg-slate-900/55 backdrop-blur-sm"
+            style={{ zIndex: portalZIndex + 500 }}
+            onClick={() => {
+              if (!quickSubmitting) setQuickCreateOpen(false);
+            }}
+            role="presentation"
+          >
+            <div
+              className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+              onClick={e => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="partner-quick-create-title"
+            >
+              <h4 id="partner-quick-create-title" className="text-base font-black text-slate-900">
+                快捷新建合作单位
+              </h4>
+              <p className="mt-1 text-xs font-medium text-slate-500">
+                与「基础信息 → 合作单位」使用相同接口创建；保存后将出现在列表中并自动选中。
+              </p>
+              <div className="mt-4 space-y-3">
+                <div>
+                  <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">单位名称</label>
+                  <input
+                    type="text"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="请输入单位名称"
+                    value={quickName}
+                    onChange={e => setQuickName(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">合作单位分类</label>
+                  <select
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={quickFormCategoryId}
+                    onChange={e => setQuickFormCategoryId(e.target.value)}
+                  >
+                    <option value="">请选择分类</option>
+                    {categories.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={quickSubmitting}
+                  onClick={() => !quickSubmitting && setQuickCreateOpen(false)}
+                  className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  disabled={quickSubmitting}
+                  onClick={async () => {
+                    const name = quickName.trim();
+                    if (!name) {
+                      toast.warning('请填写单位名称');
+                      return;
+                    }
+                    if (!quickFormCategoryId.trim()) {
+                      toast.warning('请选择合作单位分类');
+                      return;
+                    }
+                    setQuickSubmitting(true);
+                    try {
+                      const created = (await api.partners.create({
+                        name,
+                        contact: '',
+                        categoryId: quickFormCategoryId.trim(),
+                      })) as Partner;
+                      await appActions?.refreshPartners();
+                      onChange(created.name, created.id);
+                      setQuickCreateOpen(false);
+                      setQuickName('');
+                      setQuickFormCategoryId('');
+                      setSearch('');
+                      setIsOpen(false);
+                      toast.success('已添加合作单位');
+                    } catch (err: unknown) {
+                      toast.error(err instanceof Error ? err.message : '创建失败');
+                    } finally {
+                      setQuickSubmitting(false);
+                    }
+                  }}
+                  className="rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-black text-white shadow-lg hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {quickSubmitting ? '保存中…' : '保存并选用'}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
