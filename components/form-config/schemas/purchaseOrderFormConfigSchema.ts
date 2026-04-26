@@ -7,12 +7,10 @@ import type { FormConfigSchema } from '../formConfigSchema';
 
 export const purchaseOrderFormConfigSchema: FormConfigSchema<PurchaseOrderFormSettings> = {
   title: '采购订单表单配置',
-  settingsKey: 'purchaseOrderFormSettings',
   subtitle: {
-    fields: '自定义单据内容用于列表、登记与详情；可选开启「关联产品」；打印模版在「打印模版」页。',
-    listDisplay: '控制进销存「采购订单」列表默认展示范围。',
-    print: '打印模版请在下方「增加模版」中创建或管理（列表与登记/详情共用）。',
+    listDisplay: '以下选项作用于采购订单列表的默认筛选与展示。',
   },
+  settingsKey: 'purchaseOrderFormSettings',
   defaultValue: DEFAULT_PURCHASE_ORDER_FORM_SETTINGS,
   normalize: v => normalizePurchaseOrderFormSettings(v as PurchaseOrderFormSettings | null | undefined),
   tabs: [
@@ -24,8 +22,6 @@ export const purchaseOrderFormConfigSchema: FormConfigSchema<PurchaseOrderFormSe
           kind: 'toggle',
           id: 'relatedProductEnabled',
           label: '关联产品',
-          description:
-            '勾选后，采购订单在列表、新建/编辑与详情中均可选择并展示关联产品（说明本单采购用途；与明细「采购品项」独立）。',
           path: 'relatedProductEnabled',
           defaultChecked: false,
         },
@@ -46,7 +42,8 @@ export const purchaseOrderFormConfigSchema: FormConfigSchema<PurchaseOrderFormSe
           kind: 'toggle',
           id: 'onlyShowUnsettled',
           label: '只显示未交清',
-          description: '勾选后列表仅保留尚有未入库数量的采购订单；与列表中的入库进度一致。',
+          description:
+            '开启时，列表默认仅展示尚未全部到货或结清的订单；关闭则不在此项上过滤。仍可在列表页使用其它筛选条件。',
           path: 'listDisplay.onlyShowUnsettled',
           defaultChecked: false,
         },
@@ -62,7 +59,6 @@ export const purchaseOrderFormConfigSchema: FormConfigSchema<PurchaseOrderFormSe
           kind: 'printWhitelist',
           id: 'listPrint',
           title: '列表打印',
-          hint: '控制采购订单列表是否显示「打印」按钮。下方为可选模版白名单；未添加任何项时，打印时仍可使用全部模版。',
           scope: 'purchaseOrderList',
           path: 'listPrint',
           toggle: {

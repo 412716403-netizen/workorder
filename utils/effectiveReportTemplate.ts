@@ -1,4 +1,5 @@
 import type { GlobalNodeTemplate, Milestone, ReportFieldDefinition } from '../types';
+import { effectiveCustomDocFieldType, normalizeReportFieldDefinition } from './reportCustomDocField';
 
 /**
  * 里程碑上的 reportTemplate 为建单快照；节点库更新后以节点库为准（与报工弹窗一致）。
@@ -15,6 +16,37 @@ export function getEffectiveReportTemplate(
 
 const INTERNAL_CUSTOM_DATA_KEYS = new Set(['source', 'docNo']);
 
+/**
+ * 报工弹窗：从产品 routeReportValues 取默认值时做类型校验，避免旧数据（如文本写进文件项、data URL 写进文本项）污染表单。
+ */
+export function coerceRouteReportDefaultForField(
+  f: ReportFieldDefinition,
+  raw: unknown,
+): string | boolean | '' {
+  const norm = normalizeReportFieldDefinition(f);
+  const eff = effectiveCustomDocFieldType(norm);
+  if (raw === undefined || raw === null || raw === '') {
+    return eff === 'select' ? '' : '';
+  }
+  if (eff === 'select') {
+    if (typeof raw === 'boolean') return raw ? (norm.options?.[0] ?? '是') : (norm.options?.[1] ?? '否');
+    if (raw === true || raw === 'true' || raw === '1' || raw === 1) return norm.options?.[0] ?? '是';
+    if (raw === false || raw === 'false' || raw === '0' || raw === 0) return norm.options?.[1] ?? '否';
+    return String(raw);
+  }
+  if (eff === 'file') {
+    if (typeof raw !== 'string') return '';
+    const t = raw.trim();
+    if (t.startsWith('data:') || t.startsWith('[')) return raw as string;
+    return '';
+  }
+  if (eff === 'text' || eff === 'date') {
+    if (typeof raw === 'string' && raw.startsWith('data:')) return '';
+    return String(raw);
+  }
+  return String(raw);
+}
+
 /** 将报工 customData 按当前填报项定义格式化为只读行（用于流水/工单详情） */
 export function getReportCustomDataDisplayEntries(
   customData: Record<string, any> | undefined | null,
@@ -25,11 +57,15 @@ export function getReportCustomDataDisplayEntries(
   for (const f of fieldDefs) {
     const v = customData[f.id];
     if (v == null || v === '') continue;
-    if (f.type === 'boolean') {
-      out.push({ fieldId: f.id, label: f.label, display: v === true || v === 'true' || v === '1' ? '是' : '否' });
+    const norm = normalizeReportFieldDefinition(f);
+    const eff = effectiveCustomDocFieldType(norm);
+    if (eff === 'select') {
+      const disp = String(coerceRouteReportDefaultForField(norm, v));
+      if (!disp) continue;
+      out.push({ fieldId: f.id, label: f.label, display: disp });
       continue;
     }
-    if (f.type === 'file') {
+    if (eff === 'file') {
       const s = typeof v === 'string' ? v : '';
       if (!s) continue;
       if (s.startsWith('data:image/')) out.push({ fieldId: f.id, label: f.label, display: '（已上传图片）' });
@@ -46,33 +82,6 @@ export function getReportCustomDataDisplayEntries(
     out.push({ fieldId: k, label: k, display: typeof v === 'object' ? JSON.stringify(v) : String(v) });
   }
   return out;
-}
-
-/**
- * 报工弹窗：从产品 routeReportValues 取默认值时做类型校验，避免旧数据（如文本写进文件项、data URL 写进文本项）污染表单。
- */
-export function coerceRouteReportDefaultForField(
-  f: ReportFieldDefinition,
-  raw: unknown,
-): string | boolean | '' {
-  if (raw === undefined || raw === null || raw === '') {
-    return f.type === 'boolean' ? false : '';
-  }
-  if (f.type === 'boolean') {
-    return raw === true || raw === 'true' || raw === '1' || raw === 1;
-  }
-  if (f.type === 'file') {
-    if (typeof raw !== 'string') return '';
-    const t = raw.trim();
-    if (t.startsWith('data:') || t.startsWith('[')) return raw as string;
-    return '';
-  }
-  if (f.type === 'text' || f.type === 'number' || f.type === 'select' || f.type === 'date') {
-    if (typeof raw === 'string' && raw.startsWith('data:')) return '';
-    if (f.type === 'number' && typeof raw === 'number') return String(raw);
-    return String(raw);
-  }
-  return String(raw);
 }
 
 /**
@@ -99,7 +108,7 @@ export function mergeCustomDataForTemplate(
     } else if (route[f.id] !== undefined && route[f.id] !== '') {
       out[f.id] = coerceRouteReportDefaultForField(f, route[f.id]);
     } else {
-      out[f.id] = f.type === 'boolean' ? false : '';
+      out[f.id] = '';
     }
   }
   for (const [k, v] of Object.entries(ex)) {

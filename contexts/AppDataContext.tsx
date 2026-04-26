@@ -44,6 +44,12 @@ import {
   DEFAULT_REWORK_FORM_SETTINGS,
 } from '../types';
 import { normalizePartnersFromApi } from '../utils/partnerNormalize';
+import {
+  normalizeFinanceCategoriesFromApi,
+  normalizeGlobalNodesFromApi,
+  normalizePartnerCategoriesFromApi,
+  normalizeProductCategoriesFromApi,
+} from '../utils/reportCustomDocField';
 import { currentOperatorDisplayName } from '../utils/currentOperatorDisplayName';
 import { broadcastPrintTemplatesSaved, subscribePrintTemplatesChanged } from '../utils/printTemplatesCrossTab';
 
@@ -456,11 +462,25 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     markFetched('financeRecords');
   }, []);
   const refreshPMP = useCallback(async () => setProductMilestoneProgresses(normalizeDecimals(await api.orders.listProductProgress() as ProductMilestoneProgress[])), []);
-  const refreshCategories = useCallback(async () => setCategories(await api.settings.categories.list() as ProductCategory[]), []);
-  const refreshPartnerCategories = useCallback(async () => setPartnerCategories(await api.settings.partnerCategories.list() as PartnerCategory[]), []);
-  const refreshGlobalNodes = useCallback(async () => setGlobalNodes(await api.settings.nodes.list() as GlobalNodeTemplate[]), []);
+  const refreshCategories = useCallback(
+    async () => setCategories(normalizeProductCategoriesFromApi(await api.settings.categories.list() as ProductCategory[])),
+    [],
+  );
+  const refreshPartnerCategories = useCallback(
+    async () =>
+      setPartnerCategories(normalizePartnerCategoriesFromApi(await api.settings.partnerCategories.list() as PartnerCategory[])),
+    [],
+  );
+  const refreshGlobalNodes = useCallback(
+    async () => setGlobalNodes(normalizeGlobalNodesFromApi(await api.settings.nodes.list() as GlobalNodeTemplate[])),
+    [],
+  );
   const refreshWarehouses = useCallback(async () => setWarehouses(await api.settings.warehouses.list() as Warehouse[]), []);
-  const refreshFinanceCategories = useCallback(async () => setFinanceCategories(await api.settings.financeCategories.list() as FinanceCategory[]), []);
+  const refreshFinanceCategories = useCallback(
+    async () =>
+      setFinanceCategories(normalizeFinanceCategoriesFromApi(await api.settings.financeCategories.list() as FinanceCategory[])),
+    [],
+  );
   const refreshFinanceAccountTypes = useCallback(async () => setFinanceAccountTypes(await api.settings.financeAccountTypes.list() as FinanceAccountType[]), []);
   const refreshPartners = useCallback(async () => setPartners(normalizePartnersFromApi(await api.partners.list() as any[]) as any[]), []);
   const refreshWorkers = useCallback(async () => setWorkers(await api.tenants.getReportableMembers(tenantCtx!.tenantId) as any[]), [tenantCtx?.tenantId]);

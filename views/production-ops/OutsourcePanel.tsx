@@ -41,6 +41,7 @@ import {
   pageTitleClass,
 } from '../../styles/uiDensity';
 import { productGroupMaxReportableSum, combinedCompletedAtTemplate } from '../../utils/productReportAggregates';
+import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import {
   milestoneIndexInOrder,
   milestoneIndexInProduct,
@@ -1068,11 +1069,21 @@ const OutsourcePanel: React.FC<PanelProps> = ({
                         {productionLinkMode !== 'product' && orderNumber != null && <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-widest">{orderNumber}</span>}
                         <span className="text-base font-bold text-slate-800">{productName}</span>
                         {product?.sku && <span className="text-[10px] font-bold text-slate-500">{product.sku}</span>}
-                        {product && categories.find(c => c.id === product.categoryId)?.customFields?.filter(f => f.showInForm !== false && f.type !== 'file').map(f => {
-                          const val = product.categoryCustomData?.[f.id];
-                          if (val == null || val === '') return null;
-                          return <span key={f.id} className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">{f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}</span>;
-                        })}
+                      </div>
+                      <div className="mb-1 flex flex-wrap items-center gap-1">
+                        {product &&
+                          getProductCategoryCustomFieldEntries(
+                            product,
+                            categories.find(c => c.id === product.categoryId),
+                            { includeFile: false },
+                          ).map(({ field, display }) => (
+                            <span
+                              key={field.id}
+                              className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50"
+                            >
+                              {field.label}: {display}
+                            </span>
+                          ))}
                       </div>
                       <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                         {productionLinkMode !== 'product' && order?.customer && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {order.customer}</span>}

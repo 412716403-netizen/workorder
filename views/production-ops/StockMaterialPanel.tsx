@@ -27,6 +27,7 @@ import { PanelProps, hasOpsPerm, getOrderFamilyIds, type StockDocDetail } from '
 import { toLocalCompactYmd } from '../../utils/localDateTime';
 import { orderCreatedMs } from '../../utils/orderCenterSort';
 import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpCollab/material';
+import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 
 type MatRow = { productId: string; issue: number; returnQty: number; theoryCost: number };
 
@@ -127,11 +128,12 @@ const MaterialStatsTable: React.FC<{
   onSelectAll: (ids: Set<string>) => void;
   onToggleSelect: (productId: string) => void;
   productsById: Map<string, Product>;
+  categoryMap: Map<string, { id: string; customFields: import('../../types').ReportFieldDefinition[] }>;
   emptyMessage?: string;
-}> = ({ materials, selecting, compact, selectedIds, onSelectAll, onToggleSelect, productsById, emptyMessage = '暂无物料' }) => {
+}> = ({ materials, selecting, compact, selectedIds, onSelectAll, onToggleSelect, productsById, categoryMap, emptyMessage = '暂无物料' }) => {
   const cols = selecting ? 7 : 6;
   const px = compact ? 'px-2.5' : 'px-6';
-  const py = compact ? 'py-2' : 'py-3';
+  const py = compact ? 'py-1.5' : 'py-2.5';
   const thTrack = compact ? 'tracking-wider' : 'tracking-widest';
   const thBase = `${compact ? '' : px} ${py} text-[10px] font-black text-slate-400 uppercase ${thTrack}`;
   return (
@@ -164,6 +166,11 @@ const MaterialStatsTable: React.FC<{
             <tr><td colSpan={cols} className={compact ? 'px-4 py-6 text-center text-slate-400 text-sm' : 'px-6 py-8 text-center text-slate-400 text-sm'}>{emptyMessage}</td></tr>
           ) : materials.map(({ productId, issue, returnQty, theoryCost }) => {
             const prod = productsById.get(productId);
+            const customTags = getProductCategoryCustomFieldEntries(
+              prod,
+              prod ? categoryMap.get(prod.categoryId) : undefined,
+              { includeFile: false },
+            );
             const net = issue - returnQty;
             const balance = Math.round((net - theoryCost) * 100) / 100;
             return (
@@ -182,14 +189,38 @@ const MaterialStatsTable: React.FC<{
                 )}
                 <td className={compact ? `pl-4 pr-1 ${py} align-middle min-w-0` : `${px} ${py}`}>
                   {compact ? (
-                    <>
-                      <p className="text-sm font-bold text-slate-800 truncate" title={prod?.name}>{prod?.name ?? '未知物料'}</p>
-                      {prod?.sku && <p className="text-[10px] text-slate-400 truncate">{prod.sku}</p>}
-                    </>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-slate-800" title={prod?.name}>
+                        {prod?.name ?? '未知物料'}
+                        {prod?.sku ? <span className="ml-2 text-[10px] font-medium text-slate-400">{prod.sku}</span> : null}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {customTags.map(({ field, display }) => (
+                          <span
+                            key={field.id}
+                            className="rounded bg-slate-50 px-1 py-px text-[8px] font-bold text-slate-500"
+                          >
+                            {field.label}: {display}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
                   ) : (
-                    <div>
-                      <p className="text-sm font-bold text-slate-800">{prod?.name ?? '未知物料'}</p>
-                      {prod?.sku && <p className="text-[10px] text-slate-400 font-medium">{prod.sku}</p>}
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-800">
+                        {prod?.name ?? '未知物料'}
+                        {prod?.sku ? <span className="ml-2 text-[10px] font-medium text-slate-400">{prod.sku}</span> : null}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {customTags.map(({ field, display }) => (
+                          <span
+                            key={field.id}
+                            className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
+                          >
+                            {field.label}: {display}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </td>
@@ -257,6 +288,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   records,
   orders,
   products,
+  categories,
   warehouses,
   boms,
   dictionaries,
@@ -302,6 +334,17 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   useEffect(() => { setStockPage(1); }, [productionLinkMode, materialPanelSettings.groupByOutsourcePartner, debouncedMaterialSearch]);
 
   const idx = useDataIndexes(orders, products, boms, [] /* no globalNodes needed */, productMilestoneProgresses);
+  const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+  const renderProductCustomTags = useCallback((product: Product | undefined) => {
+    if (!product) return null;
+    return getProductCategoryCustomFieldEntries(product, categoryMap.get(product.categoryId), {
+      includeFile: false,
+    }).map(({ field, display }) => (
+      <span key={field.id} className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
+        {field.label}: {display}
+      </span>
+    ));
+  }, [categoryMap]);
 
   const resolveConfirmDefaultWarehouse = useCallback(
     (mode: 'stock_out' | 'stock_return') => {
@@ -1069,7 +1112,13 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                 <div className="px-5 py-3 border-b border-slate-50 flex flex-wrap items-center justify-between gap-3 bg-white">
                                   <div className="flex items-center gap-3 min-w-0">
                                     <Package className="w-4 h-4 text-indigo-400 shrink-0" />
-                                    <p className="text-sm font-bold text-slate-800 truncate">{fp?.name ?? '—'}{fp?.sku ? <span className="text-slate-400 font-medium text-xs ml-2">{fp.sku}</span> : null}</p>
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-bold text-slate-800 truncate">
+                                        {fp?.name ?? '—'}
+                                        {fp?.sku ? <span className="ml-2 text-xs font-medium text-slate-400">{fp.sku}</span> : null}
+                                        <span className="ml-1 inline-flex items-center gap-1 align-middle">{renderProductCustomTags(fp)}</span>
+                                      </p>
+                                    </div>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     {selecting ? (
@@ -1090,7 +1139,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                     )}
                                   </div>
                                 </div>
-                                <MaterialStatsTable materials={displayMaterials} selecting={selecting} compact selectedIds={stockSelectedIds} onSelectAll={setStockSelectedIds} onToggleSelect={toggleSelect} productsById={idx.productsById} />
+                                <MaterialStatsTable materials={displayMaterials} selecting={selecting} compact selectedIds={stockSelectedIds} onSelectAll={setStockSelectedIds} onToggleSelect={toggleSelect} productsById={idx.productsById} categoryMap={categoryMap} />
                               </div>,
                             ];
                           }
@@ -1105,7 +1154,13 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                     <Layers className="w-4 h-4 text-slate-400 shrink-0" />
                                     <div className="min-w-0">
                                       <p className="text-[10px] font-bold text-slate-400 truncate">{order.orderNumber}</p>
-                                      <p className="text-sm font-bold text-slate-800 truncate">{product?.name ?? order.productName ?? '—'}</p>
+                                      <p className="text-sm font-bold text-slate-800 truncate">
+                                        {product?.name ?? order.productName ?? '—'}
+                                        {(product?.sku ?? order.sku) ? (
+                                          <span className="ml-2 text-xs font-medium text-slate-400">{product?.sku ?? order.sku}</span>
+                                        ) : null}
+                                      </p>
+                                      <div className="mt-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(product) ?? null}</div>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
@@ -1127,7 +1182,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                     )}
                                   </div>
                                 </div>
-                                <MaterialStatsTable materials={displayMaterials} selecting={selecting} compact selectedIds={stockSelectedIds} onSelectAll={setStockSelectedIds} onToggleSelect={toggleSelect} productsById={idx.productsById} />
+                                <MaterialStatsTable materials={displayMaterials} selecting={selecting} compact selectedIds={stockSelectedIds} onSelectAll={setStockSelectedIds} onToggleSelect={toggleSelect} productsById={idx.productsById} categoryMap={categoryMap} />
                               </div>,
                           ];
                         })}
@@ -1171,14 +1226,18 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                 const displayMaterials = visibleMaterialRowsForList(materials, materialKw, idx.productsById);
                 return (
                   <div key={`fp-${fpId}`} className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="px-6 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
+                    <div className="px-6 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
                       <div className="flex items-center gap-4 min-w-0">
                         <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
                           <Package className="w-5 h-5" />
                         </div>
                         <div>
                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">关联产品（共 {orderCnt} 条工单）</p>
-                          <p className="text-base font-bold text-slate-900 mt-0.5">{fp?.name ?? '—'}{fp?.sku ? <span className="text-slate-400 font-medium text-sm ml-2">{fp.sku}</span> : null}</p>
+                          <p className="mt-0.5 text-base font-bold text-slate-900">
+                            {fp?.name ?? '—'}
+                            {fp?.sku ? <span className="ml-2 text-sm font-medium text-slate-400">{fp.sku}</span> : null}
+                            <span className="ml-1 inline-flex items-center gap-1 align-middle">{renderProductCustomTags(fp)}</span>
+                          </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1231,7 +1290,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                         )}
                       </div>
                     </div>
-                    <MaterialStatsTable materials={displayMaterials} selecting={!!selecting} selectedIds={stockSelectedIds} onSelectAll={setStockSelectedIds} onToggleSelect={toggleSelect} productsById={idx.productsById} emptyMessage="该产品暂无 BOM 物料，请先在产品中配置 BOM" />
+                    <MaterialStatsTable materials={displayMaterials} selecting={!!selecting} selectedIds={stockSelectedIds} onSelectAll={setStockSelectedIds} onToggleSelect={toggleSelect} productsById={idx.productsById} categoryMap={categoryMap} emptyMessage="该产品暂无 BOM 物料，请先在产品中配置 BOM" />
                 </div>
               );
               })}
@@ -1267,7 +1326,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
               const childCount = familyIds.length - 1;
               return (
                 <div key={order.id} className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="px-6 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
+                  <div className="px-6 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
                     <div className="flex items-center gap-4 min-w-0">
                       <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
                         <Layers className="w-5 h-5" />
@@ -1282,7 +1341,13 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                             {order.priority === 'High' ? 'HIGH' : 'LOW'}
                           </span>
                         )}
-                        <p className="text-base font-bold text-slate-900 mt-0.5">{product?.name ?? order.productName ?? '—'}</p>
+                        <p className="text-base font-bold text-slate-900 mt-0.5">
+                          {product?.name ?? order.productName ?? '—'}
+                          {(product?.sku ?? order.sku) ? (
+                            <span className="ml-2 text-sm font-medium text-slate-400">{product?.sku ?? order.sku}</span>
+                          ) : null}
+                        </p>
+                        <div className="mt-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(product) ?? null}</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1335,7 +1400,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                       )}
                     </div>
                   </div>
-                  <MaterialStatsTable materials={displayMaterials} selecting={stockSelectOrderId === order.id && !!stockSelectMode} selectedIds={stockSelectedIds} onSelectAll={setStockSelectedIds} onToggleSelect={toggleSelect} productsById={idx.productsById} emptyMessage="该工单暂无 BOM 物料，请先在产品中配置 BOM" />
+                  <MaterialStatsTable materials={displayMaterials} selecting={stockSelectOrderId === order.id && !!stockSelectMode} selectedIds={stockSelectedIds} onSelectAll={setStockSelectedIds} onToggleSelect={toggleSelect} productsById={idx.productsById} categoryMap={categoryMap} emptyMessage="该工单暂无 BOM 物料，请先在产品中配置 BOM" />
                 </div>
               );
             })}

@@ -13,6 +13,11 @@ import { getFileExtFromDataUrl } from '../../utils/fileHelpers';
 import { productColorSizeEnabled } from '../../utils/productColorSize';
 import { bomHasConfiguredItems } from '../../utils/bomEffective';
 import { parseRouteReportFileUrls } from '../../utils/routeReportFileUrls';
+import {
+  effectiveCustomDocFieldType,
+  formatReportCustomDataForList,
+  getShowInFormCategoryFields,
+} from '../../utils/reportCustomDocField';
 
 type FilePreviewKind = 'image' | 'pdf';
 
@@ -34,16 +39,11 @@ function formatRouteReportArchiveValue(
   raw: string | undefined
 ): { kind: 'file'; urls: string[] } | { kind: 'text'; text: string } | null {
   const v = raw ?? '';
-  if (field.type === 'file') {
+  if (effectiveCustomDocFieldType(field) === 'file') {
     const urls = parseRouteReportFileUrls(v);
     return urls.length > 0 ? { kind: 'file', urls } : null;
   }
   if (!String(v).trim()) return null;
-  if (field.type === 'boolean') {
-    const t = String(v).toLowerCase();
-    const text = t === 'true' || v === '1' ? '是' : t === 'false' || v === '0' ? '否' : String(v);
-    return { kind: 'text', text };
-  }
   return { kind: 'text', text: String(v) };
 }
 
@@ -76,6 +76,7 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
   }, [p.id, p.variants, boms]);
 
   const cat = categories.find(c => c.id === p.categoryId);
+  const visibleCustomFields = getShowInFormCategoryFields(cat, { includeFile: true });
   const unitName = p.unitId ? dictionaries.units?.find(u => u.id === p.unitId)?.name : '件';
   const supplier = p.supplierId ? partners.find(pt => pt.id === p.supplierId) : undefined;
 
@@ -234,13 +235,13 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
         </div>
       )}
 
-      {cat?.customFields && cat.customFields.length > 0 && (
+      {visibleCustomFields.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
             <Tag className="w-3.5 h-3.5" /> 分类扩展属性
           </h3>
           <div className="flex flex-wrap gap-2">
-            {cat.customFields.map(f => {
+            {visibleCustomFields.map(f => {
               const val = p.categoryCustomData?.[f.id];
               const empty = val == null || val === '';
               if (empty) {
@@ -306,7 +307,7 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
                 <div key={f.id} className="px-3 py-1.5 bg-slate-100 rounded-lg">
                   <span className="text-[10px] font-bold text-slate-400">{f.label}: </span>
                   <span className="text-sm font-bold text-slate-700">
-                    {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}
+                    {formatReportCustomDataForList(f, val)}
                   </span>
                 </div>
               );

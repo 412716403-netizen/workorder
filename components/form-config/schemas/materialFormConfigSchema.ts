@@ -22,12 +22,10 @@ const DEFAULT_MATERIAL_FORM_CONFIG_DRAFT: MaterialFormConfigDraft = {
 
 export const materialFormConfigSchema: FormConfigSchema<MaterialFormConfigDraft> = {
   title: '生产物料表单配置',
-  settingsKey: 'materialFormSettings',
   subtitle: {
-    fields:
-      '本厂领料/退料与外协加工厂领料/退料各两套自定义字段；带 partner 的外协单据使用外协两套。打印请在「打印模版」页签。',
-    print: '本厂与外协领退流水、详情弹窗的「打印」入口与可选模版范围（外协单走外协打印槽）。',
+    list: '以下选项写入「生产物料面板显示设置」，影响物料相关列表的分组与展示。',
   },
+  settingsKey: 'materialFormSettings',
   defaultValue: DEFAULT_MATERIAL_FORM_CONFIG_DRAFT,
   normalize: v => {
     const obj = (v ?? {}) as Partial<MaterialFormConfigDraft>;
@@ -57,7 +55,6 @@ export const materialFormConfigSchema: FormConfigSchema<MaterialFormConfigDraft>
           kind: 'customFieldsTable',
           id: 'materialIssueCustomFields',
           title: '领料发出自定义单据内容',
-          subtitle: '「新增时」对应确认领料弹窗；「详情中」对应领料单详情。',
           path: 'materialIssueCustomFields',
           idPrefix: 'material-issue-custom-',
           columns: ['label', 'type', 'options', 'showInAdd', 'showInDetail', 'remove'],
@@ -66,7 +63,6 @@ export const materialFormConfigSchema: FormConfigSchema<MaterialFormConfigDraft>
           kind: 'customFieldsTable',
           id: 'materialReturnCustomFields',
           title: '生产退料自定义单据内容',
-          subtitle: '「新增时」对应确认退料弹窗；「详情中」对应退料单详情。',
           path: 'materialReturnCustomFields',
           idPrefix: 'material-return-custom-',
           columns: ['label', 'type', 'options', 'showInAdd', 'showInDetail', 'remove'],
@@ -75,8 +71,6 @@ export const materialFormConfigSchema: FormConfigSchema<MaterialFormConfigDraft>
           kind: 'customFieldsTable',
           id: 'outsourceMaterialIssueCustomFields',
           title: '外协领料发出自定义单据内容',
-          subtitle:
-            '用于带加工厂的外协领料（生产物料确认领料、单行登记、详情）及外协管理「物料外发」；与「本厂领料发出」配置独立。',
           path: 'outsourceMaterialIssueCustomFields',
           idPrefix: 'outsource-material-issue-custom-',
           columns: ['label', 'type', 'options', 'showInAdd', 'showInDetail', 'remove'],
@@ -85,8 +79,6 @@ export const materialFormConfigSchema: FormConfigSchema<MaterialFormConfigDraft>
           kind: 'customFieldsTable',
           id: 'outsourceMaterialReturnCustomFields',
           title: '外协生产退料自定义单据内容',
-          subtitle:
-            '用于带加工厂的外协退料（生产物料确认退料等）及外协管理「物料退回」；与「本厂生产退料」配置独立。',
           path: 'outsourceMaterialReturnCustomFields',
           idPrefix: 'outsource-material-return-custom-',
           columns: ['label', 'type', 'options', 'showInAdd', 'showInDetail', 'remove'],
@@ -103,7 +95,6 @@ export const materialFormConfigSchema: FormConfigSchema<MaterialFormConfigDraft>
           kind: 'printWhitelist',
           id: 'stockOutFlowDetail',
           title: '领料发出详情打印',
-          hint: '用于领料退料流水或详情弹窗中领料单（STOCK_OUT）；模版纸张请选择「生产物料」数据源以便插入领料发出/明细占位符。',
           scope: 'materialIssueFlowDetail',
           path: 'materialCenterPrint.stockOutFlowDetail',
           toggle: {
@@ -116,7 +107,6 @@ export const materialFormConfigSchema: FormConfigSchema<MaterialFormConfigDraft>
           kind: 'printWhitelist',
           id: 'stockReturnFlowDetail',
           title: '生产退料详情打印',
-          hint: '用于领料退料流水或详情弹窗中退料单（STOCK_RETURN）；模版纸张请选择「生产物料」数据源。',
           scope: 'materialReturnFlowDetail',
           path: 'materialCenterPrint.stockReturnFlowDetail',
           toggle: {
@@ -129,7 +119,6 @@ export const materialFormConfigSchema: FormConfigSchema<MaterialFormConfigDraft>
           kind: 'printWhitelist',
           id: 'outsourceStockOutFlowDetail',
           title: '外协领料发出详情打印',
-          hint: '用于带加工厂的外协领料单（STOCK_OUT + partner）；模版纸张请选择「生产物料」，占位符用「外协领料发出」分组。',
           scope: 'materialOutsourceIssueFlowDetail',
           path: 'materialCenterPrint.outsourceStockOutFlowDetail',
           toggle: {
@@ -142,7 +131,6 @@ export const materialFormConfigSchema: FormConfigSchema<MaterialFormConfigDraft>
           kind: 'printWhitelist',
           id: 'outsourceStockReturnFlowDetail',
           title: '外协生产退料详情打印',
-          hint: '用于带加工厂的外协退料单（STOCK_RETURN + partner）；模版纸张请选择「生产物料」，占位符用「外协生产退料」分组。',
           scope: 'materialOutsourceReturnFlowDetail',
           path: 'materialCenterPrint.outsourceStockReturnFlowDetail',
           toggle: {
@@ -161,7 +149,8 @@ export const materialFormConfigSchema: FormConfigSchema<MaterialFormConfigDraft>
           kind: 'toggle',
           id: 'groupByOutsourcePartner',
           label: '按委外加工厂展示',
-          description: '开启后列表按 加工厂 → 产品/工单 → 物料 三层结构展示',
+          description:
+            '开启后，列表可按委外加工厂维度分组查看，便于按厂对账；关闭则使用默认列表结构。',
           path: '__panel.groupByOutsourcePartner',
           defaultChecked: false,
         },

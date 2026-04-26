@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
 import { Clock, Package, User } from 'lucide-react';
-import type { AppDictionaries, Product, ProductVariant, PsiRecord, Warehouse } from '../../types';
+import type { AppDictionaries, Product, ProductCategory, ProductVariant, PsiRecord, Warehouse } from '../../types';
 import { PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER } from '../../types';
 import { formatPsiDocListTime } from '../../utils/flowDocSort';
 import { formatPsiDocNumForList } from './psiOpsListFormatting';
+import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 
 type PsiDocType = 'PURCHASE_ORDER' | 'SALES_ORDER' | 'PURCHASE_BILL' | 'SALES_BILL';
 
@@ -12,6 +13,7 @@ export interface PsiDocDetailSummaryProps {
   docNumber: string;
   recordsList: PsiRecord[];
   productMapPSI: Map<string, Product>;
+  categories: ProductCategory[];
   /** 采购订单详情：是否展示「关联产品」（与表单配置 `relatedProductEnabled` 一致） */
   showPurchaseOrderRelatedProduct?: boolean;
   warehouseMapPSI?: Map<string, Warehouse>;
@@ -53,24 +55,42 @@ function resolveVariantLabel(
   return parts.length > 1 ? `多规格 (${parts.join(', ')})` : parts[0] ?? '';
 }
 
-const ProductCell: React.FC<{ name?: string; sku?: string; variantLabel: string }> = ({ name, sku, variantLabel }) => (
+const ProductCell: React.FC<{
+  name?: string;
+  sku?: string;
+  variantLabel: string;
+  customTags?: Array<{ label: string; display: string }>;
+}> = ({ name, sku, variantLabel, customTags }) => (
   <td className="py-2.5 px-3">
     <div className="flex items-start gap-2 min-w-0">
       <div className="w-7 h-7 shrink-0 bg-slate-50 rounded-lg flex items-center justify-center text-slate-300">
         <Package className="w-4 h-4" />
       </div>
       <div className="min-w-0">
-        <div className="font-bold text-slate-700">{name || '未知产品'}</div>
-        <p className="text-[9px] text-slate-300 font-bold uppercase tracking-tight">
-          {sku}{variantLabel ? ` · ${variantLabel}` : ''}
-        </p>
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="font-bold text-slate-700">{name || '未知产品'}</span>
+          {!!sku && (
+            <span className="text-[9px] text-slate-300 font-bold uppercase tracking-tight">
+              {sku}{variantLabel ? ` · ${variantLabel}` : ''}
+            </span>
+          )}
+        </div>
+        {!!customTags?.length && (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {customTags.map((tag, idx) => (
+              <span key={`${tag.label}-${idx}`} className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
+                {tag.label}: {tag.display}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   </td>
 );
 
 const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
-  docType, docNumber, recordsList, productMapPSI, showPurchaseOrderRelatedProduct,
+  docType, docNumber, recordsList, productMapPSI, categories, showPurchaseOrderRelatedProduct,
   warehouseMapPSI,
   dictionaries, getUnitName, formatQtyDisplay, receivedByOrderLine,
 }) => {
@@ -206,11 +226,16 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
               const rowAmount = grp.reduce((s, i) => s + formatQtyDisplay(i.quantity) * readPsiLinePrice(i, meta.priceField), 0);
               const avgPrice = orderQty !== 0 ? rowAmount / orderQty : 0;
               const variantLabel = resolveVariantLabel(grp, product, dictionaries);
+              const customTags = getProductCategoryCustomFieldEntries(
+                product,
+                categories.find(c => c.id === product?.categoryId),
+                { includeFile: false },
+              ).map(({ field, display }) => ({ label: field.label, display }));
               const unitName = first.productId ? getUnitName(first.productId) : 'PCS';
 
               return (
                 <tr key={gid}>
-                  <ProductCell name={rowProductName} sku={rowProductSku} variantLabel={variantLabel} />
+                  <ProductCell name={rowProductName} sku={rowProductSku} variantLabel={variantLabel} customTags={customTags} />
 
                   {isBill(docType) && (
                     <td className="py-2.5 px-3 text-center">

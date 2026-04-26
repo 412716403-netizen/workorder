@@ -4,6 +4,11 @@ import { Search, Package, ChevronRight, Plus } from 'lucide-react';
 import type { Product, ProductCategory } from '../types';
 import { useAuthOptional } from '../contexts/AuthContext';
 import { hasSubPermission } from '../utils/hasSubPermission';
+import {
+  effectiveCustomDocFieldType,
+  formatReportCustomDataForList,
+  getShowInFormCategoryFields,
+} from '../utils/reportCustomDocField';
 
 /** 动态加载，避免与 ProductEditForm 形成静态循环依赖（否则 BOM 内 SearchableProductSelect 会整段挂掉） */
 const ProductArchiveCreateModal = lazy(() => import('./ProductArchiveCreateModal'));
@@ -269,10 +274,10 @@ export function SearchableProductSelect({
                 >
                   {p.sku}
                 </p>
-                {cat?.customFields?.map(f => {
+                {getShowInFormCategoryFields(cat).map(f => {
                   const val = p.categoryCustomData?.[f.id];
                   if (val == null || val === '') return null;
-                  if (f.type === 'file' && typeof val === 'string' && val.startsWith('data:') && onFilePreview) {
+                  if (effectiveCustomDocFieldType(f) === 'file' && typeof val === 'string' && val.startsWith('data:') && onFilePreview) {
                     const isImg = val.startsWith('data:image/');
                     const isPdf = val.startsWith('data:application/pdf');
                     if (isImg) return (
@@ -291,7 +296,7 @@ export function SearchableProductSelect({
                       <a key={f.id} href={val} download={`附件.${getFileExtFromDataUrl(val)}`} onClick={e => e.stopPropagation()} className="text-[8px] font-bold text-indigo-500 px-1.5 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100">下载</a>
                     );
                   }
-                  if (f.type === 'file')
+                  if (effectiveCustomDocFieldType(f) === 'file')
                     return (
                       <span
                         key={f.id}
@@ -305,7 +310,7 @@ export function SearchableProductSelect({
                       key={f.id}
                       className={`font-bold text-slate-500 rounded bg-slate-50 leading-tight ${compact ? 'text-[8px] px-1 py-px' : 'text-[10px] px-1.5 py-0.5'}`}
                     >
-                      {f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}
+                      {f.label}: {formatReportCustomDataForList(f, val)}
                     </span>
                   );
                 })}
@@ -339,14 +344,14 @@ export function SearchableProductSelect({
               ? (() => {
                   const cat = categories.find(c => c.id === selectedProduct.categoryId);
                   const customParts =
-                    cat?.customFields
-                      ?.map(f => {
+                    getShowInFormCategoryFields(cat)
+                      .map(f => {
                         const v = selectedProduct.categoryCustomData?.[f.id];
                         if (v == null || v === '') return null;
-                        if (f.type === 'file') return `${f.label}: 已上传`;
-                        return `${f.label}: ${typeof v === 'boolean' ? (v ? '是' : '否') : String(v)}`;
+                        if (effectiveCustomDocFieldType(f) === 'file') return `${f.label}: 已上传`;
+                        return `${f.label}: ${formatReportCustomDataForList(f, v)}`;
                       })
-                      .filter(Boolean) ?? [];
+                      .filter(Boolean);
                   const base = `${selectedProduct.name} (${selectedProduct.sku})`;
                   return customParts.length > 0 ? `${base} ${customParts.join(' ')}` : base;
                 })()

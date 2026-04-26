@@ -70,6 +70,7 @@ import {
 import { nextSalesBillDocNumber } from '../utils/partnerDocNumber';
 import { effectiveAllocatedQuantity } from '../utils/psiAllocationDisplay';
 import { effectivePlanFormFieldType } from '../utils/planFormCustomField';
+import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
 import { toLocalDateYmd, formatCustomFieldDatetimeForPrint } from '../utils/localDateTime';
 import { hasModulePerm } from '../utils/hasModulePerm';
 import { usePsiStockIndex } from '../hooks/usePsiStockIndex';
@@ -675,6 +676,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               docNumber={editingPODocNumber!}
               recordsList={recordsList}
               productMapPSI={productMapPSI}
+              categories={categories}
               showPurchaseOrderRelatedProduct={safePurchaseOrderFormSettings.relatedProductEnabled === true}
               dictionaries={dictionaries}
               getUnitName={getUnitName}
@@ -749,6 +751,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               docNumber={editingPBDocNumber!}
               recordsList={recordsList}
               productMapPSI={productMapPSI}
+              categories={categories}
               warehouseMapPSI={warehouseMapPSI}
               dictionaries={dictionaries}
               getUnitName={getUnitName}
@@ -822,6 +825,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               docNumber={editingSODocNumber!}
               recordsList={recordsList}
               productMapPSI={productMapPSI}
+              categories={categories}
               dictionaries={dictionaries}
               getUnitName={getUnitName}
               formatQtyDisplay={formatQtyDisplay}
@@ -894,6 +898,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               docNumber={editingSBDocNumber!}
               recordsList={recordsList}
               productMapPSI={productMapPSI}
+              categories={categories}
               warehouseMapPSI={warehouseMapPSI}
               dictionaries={dictionaries}
               getUnitName={getUnitName}
@@ -1342,6 +1347,11 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                             const product = productMapPSI.get(first.productId);
                             const rowProductName = product?.name || (first as any)?.productName;
                             const rowProductSku = product?.sku || (first as any)?.productSku;
+                            const productCustomTags = getProductCategoryCustomFieldEntries(
+                              product,
+                              product ? categoryMapPSI.get(product.categoryId) : undefined,
+                              { includeFile: false },
+                            );
                             const warehouse = warehouseMapPSI.get(first.warehouseId);
                             const orderQty = grp.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
                             const allocatedQty = type === 'SALES_ORDER' ? grp.reduce((s, i) => s + (i.allocatedQuantity ?? 0), 0) : 0;
@@ -1400,11 +1410,25 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                         <span className="text-sm font-bold text-slate-700 shrink-0">
                                           {rowProductName || '未知产品'}
                                         </span>
+                                        {!!rowProductSku && (
+                                          <span className="text-[9px] text-slate-300 font-bold uppercase tracking-tight">
+                                            {rowProductSku}
+                                            {variantLabel && type !== 'SALES_ORDER' && type !== 'SALES_BILL' && ` · ${variantLabel}`}
+                                          </span>
+                                        )}
                                       </div>
-                                      <p className="text-[9px] text-slate-300 font-bold uppercase tracking-tight">
-                                        {rowProductSku}
-                                        {variantLabel && type !== 'SALES_ORDER' && type !== 'SALES_BILL' && ` · ${variantLabel}`}
-                                      </p>
+                                      {productCustomTags.length > 0 && (
+                                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                                          {productCustomTags.map(({ field, display }) => (
+                                            <span
+                                              key={field.id}
+                                              className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
+                                            >
+                                              {field.label}: {display}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 </td>

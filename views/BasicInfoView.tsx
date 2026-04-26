@@ -48,6 +48,7 @@ import {
 } from '../styles/uiDensity';
 import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
 import { useEquipmentFeaturesEffective } from '../hooks/useEquipmentFeaturesEffective';
+import ReportCustomFieldsEditor from '../components/ReportCustomFieldsEditor';
 import { useAuth } from '../contexts/AuthContext';
 import { useMasterData, useAppActions } from '../contexts/AppDataContext';
 
@@ -1180,28 +1181,23 @@ const BasicInfoView: React.FC = () => {
                        </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50/50 p-8 rounded-[32px] border border-slate-100">
-                      {partnerCategories.find(c => c.id === editPartner.categoryId)?.customFields.map(field => (
-                        <div key={field.id} className="space-y-1">
-                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{field.label} {field.required && <span className="text-rose-500">*</span>}</label>
-                           {field.type === 'text' && <input type="text" value={editPartner.customData?.[field.id] || ''} onChange={e => setEditPartner({...editPartner, customData: {...(editPartner.customData||{}), [field.id]: e.target.value}})} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm" placeholder={field.placeholder || `请输入${field.label}`} />}
-                           {field.type === 'number' && <input type="number" value={editPartner.customData?.[field.id] || ''} onChange={e => setEditPartner({...editPartner, customData: {...(editPartner.customData||{}), [field.id]: parseFloat(e.target.value)||0}})} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm" />}
-                           {field.type === 'select' && (
-                             <select value={editPartner.customData?.[field.id] || ''} onChange={e => setEditPartner({...editPartner, customData: {...(editPartner.customData||{}), [field.id]: e.target.value}})} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold outline-none shadow-sm h-[46px]">
-                               <option value="">请选择...</option>
-                               {field.options?.map(o => <option key={o} value={o}>{o}</option>)}
-                             </select>
-                           )}
-                           {field.type === 'boolean' && (
-                              <div className="flex items-center gap-3 h-[46px]">
-                                <button onClick={() => setEditPartner({...editPartner, customData: {...(editPartner.customData||{}), [field.id]: !editPartner.customData?.[field.id]}})} className={`w-12 h-6 rounded-full relative transition-colors ${editPartner.customData?.[field.id] ? 'bg-indigo-600' : 'bg-slate-300'}`}>
-                                  <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${editPartner.customData?.[field.id] ? 'left-7' : 'left-1'}`}></div>
-                                </button>
-                                <span className="text-xs font-bold text-slate-500">{editPartner.customData?.[field.id] ? '是 (True)' : '否 (False)'}</span>
-                              </div>
-                           )}
-                           {field.type === 'date' && <input type="date" value={editPartner.customData?.[field.id] || ''} onChange={e => setEditPartner({...editPartner, customData: {...(editPartner.customData||{}), [field.id]: e.target.value}})} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold outline-none shadow-sm" />}
-                        </div>
-                      ))}
+                      {(() => {
+                        const cf = partnerCategories.find(c => c.id === editPartner.categoryId)?.customFields.filter(f => f.showInForm !== false) ?? [];
+                        if (cf.length === 0) return null;
+                        return (
+                          <ReportCustomFieldsEditor
+                            fields={cf}
+                            values={editPartner.customData ?? {}}
+                            onChange={(fieldId, value) =>
+                              setEditPartner({
+                                ...editPartner,
+                                customData: { ...(editPartner.customData || {}), [fieldId]: value },
+                              })
+                            }
+                            inputClassName="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                          />
+                        );
+                      })()}
                       {partnerCategories.find(c => c.id === editPartner.categoryId)?.customFields.length === 0 && (
                         <div className="col-span-full py-4 text-center text-[10px] text-slate-300 font-bold uppercase italic">该分类未定义任何扩展属性</div>
                       )}

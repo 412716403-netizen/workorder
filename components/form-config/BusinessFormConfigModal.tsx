@@ -44,11 +44,11 @@ function resolveSubtitle(
 ): string | undefined {
   if (!subtitle) return undefined;
   if (typeof subtitle === 'string') return subtitle;
-  if (tabId && (tabId === 'fields' || tabId === 'print' || tabId === 'listDisplay')) {
-    const key = tabId as 'fields' | 'print' | 'listDisplay';
-    return subtitle[key];
+  if (tabId === 'fields' || tabId === 'print' || tabId === 'listDisplay' || tabId === 'list') {
+    const v = subtitle[tabId];
+    if (typeof v === 'string' && v.length > 0) return v;
   }
-  return subtitle.fields ?? subtitle.print;
+  return subtitle.fields ?? subtitle.print ?? subtitle.listDisplay ?? subtitle.list;
 }
 
 /**
@@ -203,6 +203,14 @@ export function BusinessFormConfigModal<TSettings extends Record<string, unknown
         )}
 
         <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
+          {tab?.hint != null && tab.hint !== '' && (
+            <div
+              role="note"
+              className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-relaxed text-slate-600"
+            >
+              {tab.hint}
+            </div>
+          )}
           {tab?.sections.map(section => (
             <SectionRenderer
               key={section.id}
@@ -300,6 +308,7 @@ const SectionRenderer: React.FC<SectionRendererProps> = ({
           addButtonLabel={section.addButtonLabel}
           emptyHint={section.emptyHint}
           idPrefix={section.idPrefix}
+          columnHints={section.columnHints}
         />
       );
     }
@@ -322,9 +331,24 @@ const SectionRenderer: React.FC<SectionRendererProps> = ({
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
                   <th className="px-4 py-3 text-[10px] font-black uppercase text-slate-500">字段</th>
-                  <th className="px-4 py-3 text-center text-[10px] font-black uppercase text-slate-500">列表中</th>
-                  <th className="px-4 py-3 text-center text-[10px] font-black uppercase text-slate-500">新增时</th>
-                  <th className="px-4 py-3 text-center text-[10px] font-black uppercase text-slate-500">详情中</th>
+                  <th
+                    className="cursor-help px-4 py-3 text-center text-[10px] font-black uppercase text-slate-500"
+                    title="勾选后，该标准字段作为列表表格中的一列展示（是否出现列、列宽等还受列表页布局影响）。"
+                  >
+                    列表中
+                  </th>
+                  <th
+                    className="cursor-help px-4 py-3 text-center text-[10px] font-black uppercase text-slate-500"
+                    title="勾选后，新建单据时可填写或选择该字段。"
+                  >
+                    新增时
+                  </th>
+                  <th
+                    className="cursor-help px-4 py-3 text-center text-[10px] font-black uppercase text-slate-500"
+                    title="勾选后，在单据详情中展示该字段。"
+                  >
+                    详情中
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -419,17 +443,17 @@ const SectionRenderer: React.FC<SectionRendererProps> = ({
       const raw = ctx.get(section.path) as boolean | undefined;
       const checked = raw === undefined ? defaultChecked : !!raw;
       return (
-        <label className="flex cursor-pointer items-start gap-2 text-sm font-bold text-slate-700">
+        <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-700">
           <input
             type="checkbox"
             className="mt-0.5 h-4 w-4 shrink-0 rounded text-indigo-600"
             checked={checked}
             onChange={e => ctx.set(section.path, e.target.checked)}
           />
-          <span>
-            {section.label}
+          <span className="min-w-0 flex-1 leading-relaxed">
+            <span className="font-bold">{section.label}</span>
             {section.description && (
-              <span className="mt-0.5 block text-xs font-normal font-medium text-slate-500">{section.description}</span>
+              <span className="ml-2 text-xs font-medium text-slate-500">{section.description}</span>
             )}
           </span>
         </label>

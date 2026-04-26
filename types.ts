@@ -1,3 +1,5 @@
+import type { CustomDocFieldType } from './shared/types';
+
 export {
   MilestoneStatus,
   OrderStatus,
@@ -11,7 +13,12 @@ export {
   type FinanceCategoryKind,
   type ProdOpType,
   type FinanceOpType,
+  type CustomDocFieldType,
+  type LegacyCustomDocFieldType,
 } from './shared/types';
+
+/** 与 CustomDocFieldType 相同，保留别名供计划单单据配置等既有命名 */
+export type PlanFormCustomFieldType = CustomDocFieldType;
 
 /** 单品码（一物一码）：计划内每件唯一扫码标识 */
 export interface ItemCode {
@@ -134,15 +141,19 @@ export interface TraceResult {
   hasMore?: boolean;
 }
 
-export type FieldType = 'text' | 'number' | 'select' | 'boolean' | 'date' | 'file';
+/**
+ * @deprecated 请使用 CustomDocFieldType；保留别名仅用于读取旧 JSON 时的宽类型标注。
+ * 新代码与归一化后的配置仅含 text | date | select | file。
+ */
+export type FieldType = import('./shared/types').LegacyCustomDocFieldType;
 
-/** 工序节点库「报工自定义单据内容」推荐类型；历史数据可能含 number / boolean */
-export type ProcessReportFieldType = 'text' | 'select' | 'file' | 'date';
+/** 工序节点库「报工自定义单据内容」类型，与单据自定义一致 */
+export type ProcessReportFieldType = CustomDocFieldType;
 
 export interface ReportFieldDefinition {
   id: string;
   label: string;
-  type: FieldType;
+  type: CustomDocFieldType;
   required?: boolean;
   options?: string[];
   /** type=date：登记/报工使用日期时间控件，可手输具体时间 */
@@ -403,9 +414,6 @@ export interface PlanOrder {
   /** 本计划单各工序计价方式（仅本单使用，不同步到商品）；未设时用产品的 nodePricingModes 或计件 */
   nodePricingModes?: Record<string, ProcessPricingMode>;
 }
-
-/** 计划单 / 采购单 / 入库等「自定义单据内容」字段类型（不含数字；历史数据中的 number 加载时会规范为 text） */
-export type PlanFormCustomFieldType = 'text' | 'date' | 'select' | 'file';
 
 /** 计划单表单字段显示配置（标准字段或自定义字段） */
 export interface PlanFormFieldConfig {

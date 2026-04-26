@@ -1,13 +1,11 @@
-import type { PlanFormFieldConfig } from '../types';
+import type { CustomDocFieldType, PlanFormFieldConfig } from '../types';
+import { effectiveCustomDocFieldType } from './reportCustomDocField';
 
-export type PlanFormCustomFieldValueType = 'text' | 'date' | 'select' | 'file';
+export type PlanFormCustomFieldValueType = CustomDocFieldType;
 
-/** 历史 type 含 number；统一为可渲染的类型 */
+/** 历史 type 含 number；统一为可渲染的类型（与分类扩展字段 effective 规则一致） */
 export function effectivePlanFormFieldType(cf: PlanFormFieldConfig): PlanFormCustomFieldValueType {
-  const t = cf.type as string | undefined;
-  if (t === 'number') return 'text';
-  if (t === 'date' || t === 'select' || t === 'file') return t;
-  return 'text';
+  return effectiveCustomDocFieldType(cf);
 }
 
 export function normalizePlanFormFieldConfigArray(fields: PlanFormFieldConfig[] | undefined): PlanFormFieldConfig[] {

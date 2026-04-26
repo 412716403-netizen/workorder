@@ -58,6 +58,7 @@ import { PlanPrintTemplateManageDialog } from '../components/plan-print/PlanPrin
 import { plans as plansApi } from '../services/api';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { formatPlanOrderCreatedAtForList } from '../utils/localDateTime';
+import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
 
 interface PlanOrderListViewProps {
   productionLinkMode?: 'order' | 'product';
@@ -230,6 +231,20 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   const displayPlans = fetchedPlans.length > 0 || debouncedPlanSearch || planPage > 1 ? fetchedPlans : plans;
   /** 列表统一按单据生成时间新在前（与后端分页 orderBy 一致，并修正子计划与父计划交错时的展示顺序） */
   const plansForView = useMemo(() => [...displayPlans].sort(comparePlansNewestFirst), [displayPlans]);
+  const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+  const renderProductCustomTags = useCallback(
+    (product: Product | undefined) => {
+      if (!product) return null;
+      return getProductCategoryCustomFieldEntries(product, categoryMap.get(product.categoryId), {
+        includeFile: false,
+      }).map(({ field, display }) => (
+        <span key={field.id} className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">
+          {field.label}: {display}
+        </span>
+      ));
+    },
+    [categoryMap],
+  );
   const totalPlanPages = Math.max(1, Math.ceil(totalPlans / PLAN_PAGE_SIZE));
 
   const splitPlan = splitPlanId ? plans.find(p => p.id === splitPlanId) ?? null : null;
@@ -524,8 +539,10 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                               {product.name || '未知产品'}
                             </button>
                           )}
+                          {showInList('product') && <span className="text-[10px] font-bold text-slate-500">{product?.sku ?? ''}</span>}
                           {showInList('assignedCount') && assignedCount > 0 && <span className="text-[9px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">已派发 {assignedCount} 工序</span>}
                       </div>
+                        <div className="mb-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(product)}</div>
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                           {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
                           {showInList('totalQty') && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 计划总量: {totalQty}</span>}
@@ -608,8 +625,10 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                   {showInList('product') && product && (
                                     <button type="button" onClick={(e) => { e.stopPropagation(); setViewProductId(product.id); }} className="text-left text-sm font-bold text-slate-800 hover:text-indigo-600 hover:underline">{product.name || '未知产品'}</button>
                                   )}
+                                  {showInList('product') && <span className="text-[10px] font-bold text-slate-500">{product?.sku ?? ''}</span>}
                                   {showInList('assignedCount') && assignedCount > 0 && <span className="text-[9px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">已派发 {assignedCount} 工序</span>}
                                 </div>
+                                <div className="mb-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(product)}</div>
                                 <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                                   {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
                                   {showInList('totalQty') && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 计划总量: {totalQty}</span>}
@@ -698,8 +717,10 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                     {product.name || '未知产品'}
                                   </button>
                                 )}
+                                {showInList('product') && <span className="text-[10px] font-bold text-slate-500">{product?.sku ?? ''}</span>}
                                 {showInList('assignedCount') && assignedCount > 0 && <span className="text-[9px] font-black bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">已派发 {assignedCount} 工序</span>}
                               </div>
+                              <div className="mb-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(product)}</div>
                               <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                                 {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
                                 {showInList('totalQty') && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 计划总量: {totalQty}</span>}

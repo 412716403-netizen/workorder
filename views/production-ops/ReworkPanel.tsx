@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Plus,
   Clock,
@@ -14,7 +14,7 @@ import {
   Sliders,
   Search,
 } from 'lucide-react';
-import type { PlanOrder, PrintTemplate, ProductionOpRecord, ProductionOrder } from '../../types';
+import type { PlanOrder, PrintTemplate, Product, ProductionOpRecord, ProductionOrder } from '../../types';
 import { DEFAULT_REWORK_FORM_SETTINGS } from '../../types';
 import {
   formConfigToolbarButtonClass,
@@ -47,6 +47,7 @@ import ReworkFormConfigModal from './ReworkFormConfigModal';
 import { nextOutsourceDocNumber } from '../../utils/partnerDocNumber';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { orderBelongsToProductInList } from '../../utils/reworkMergeBucketOrderId';
+import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 
 /** sourceReworkId → partner 的预建索引 */
 function buildReworkPartnerMap(allRecords: ProductionOpRecord[]): Map<string, string> {
@@ -132,6 +133,19 @@ const ReworkPanel: React.FC<PanelProps> = ({
   useEffect(() => { setReworkPage(1); }, [debouncedReworkMainSearch]);
 
   const idx = useDataIndexes(orders, products, boms, globalNodes, productMilestoneProgresses);
+  const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+  const renderProductCustomTags = useCallback((product: Product | undefined) => {
+    if (!product) return null;
+    return getProductCategoryCustomFieldEntries(
+      product,
+      categoryMap.get(product.categoryId),
+      { includeFile: false },
+    ).map(({ field, display }) => (
+      <span key={field.id} className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
+        {field.label}: {display}
+      </span>
+    ));
+  }, [categoryMap]);
 
   /** 父工单列表（无 parentOrderId 的为父工单） */
   const parentOrders = useMemo(() => orders.filter(o => !o.parentOrderId), [orders]);
@@ -627,6 +641,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
                           <span className={`font-bold text-slate-800 ${isChild ? 'text-sm' : 'text-base'}`}>{order.productName || '未知产品'}</span>
                           {order.sku && <span className="text-[10px] font-bold text-slate-500">{order.sku}</span>}
                         </div>
+                        <div className="mb-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(product) ?? null}</div>
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                           {productionLinkMode !== 'product' && order.customer && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {order.customer}</span>}
                           <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 总数: {orderTotalQty}</span>
@@ -749,6 +764,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
                           <span className="font-bold text-slate-800 text-base">{fp?.name ?? '未知产品'}</span>
                           {fp?.sku && <span className="text-[10px] font-bold text-slate-500">{fp.sku}</span>}
                         </div>
+                        <div className="mb-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(fp) ?? null}</div>
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                           <span className="flex items-center gap-1">
                             <Layers className="w-3 h-3" /> 合计件数: {totalQtyAll}

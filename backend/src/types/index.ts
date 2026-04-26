@@ -11,6 +11,8 @@ export {
   type FinanceCategoryKind,
   type ProdOpType,
   type FinanceOpType,
+  type CustomDocFieldType,
+  type LegacyCustomDocFieldType,
 } from '../../../shared/types.js';
 
 export interface JwtPayload {

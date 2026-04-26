@@ -253,4 +253,14 @@ interface ProductMilestoneProgress {
 
 ---
 
+## 10. 自定义扩展字段类型（与计划单一致）
+
+产品分类、合作单位分类、财务收付款类型、工序报工模板等处的 `ReportFieldDefinition.type` 与计划单自定义单据字段一致，仅 **`text` | `date` | `select` | `file`**（见 `shared/types.ts` 中的 `CustomDocFieldType`）。
+
+- 历史 JSON 中若仍存在 `number`，加载与归一化时视为 **`text`**；若存在 **`boolean`**，定义会规范为 **`select`**，缺省选项为 `['是','否']`（已有 `options` 则保留）。
+- 工序 **`reportDisplayTemplate`**（报工页只读展示）仅保留 **文本与附件** 语义：归一化时非 `text`/`file` 的项会降级为 **`text`**，与报工弹窗只读区展示逻辑一致。
+- 前端在 `appDataLoadCore` / 设置保存链路对 `customFields`、`reportTemplate`、`reportDisplayTemplate` 做归一化；设置 API 写入时对上述 JSON 数组做 Zod 校验，拒绝再写入 `number`/`boolean` 类型字面量。
+
+---
+
 *类型定义以 `types.ts` 为准。表设计时需考虑外键、索引及迁移时的数据导入。*

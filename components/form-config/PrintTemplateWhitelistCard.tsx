@@ -41,7 +41,7 @@ export const PrintTemplateWhitelistCard: React.FC<PrintTemplateWhitelistCardProp
   availableTemplates,
   onRequestAddTemplate,
   addButtonLabel = '增加模版',
-  emptyHint = '尚未加入任何模版；打印时可选全部。请点击「增加模版」选择模版后加入列表。',
+  emptyHint,
 }) => {
   const ids = allowedTemplateIds ?? [];
   return (
@@ -76,7 +76,9 @@ export const PrintTemplateWhitelistCard: React.FC<PrintTemplateWhitelistCardProp
       <p className="mt-3 text-[10px] font-black uppercase tracking-widest text-slate-400">可选模版（已加入）</p>
       <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto">
         {ids.length === 0 ? (
-          <span className="text-xs text-slate-400">{emptyHint}</span>
+          emptyHint ? (
+            <span className="text-xs text-slate-400">{emptyHint}</span>
+          ) : null
         ) : (
           ids.map(tid => {
             const t = availableTemplates.find(x => x.id === tid);

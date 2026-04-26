@@ -7,6 +7,7 @@ import * as api from '../services/api';
 import { useAuthOptional } from '../contexts/AuthContext';
 import { useAppActionsOptional } from '../contexts/AppDataContext';
 import { hasSubPermission } from '../utils/hasSubPermission';
+import { effectiveCustomDocFieldType, formatReportCustomDataForList } from '../utils/reportCustomDocField';
 
 /**
  * 合作单位选择：与 SearchableProductSelect 一致使用 Portal + fixed，避免在滚动/弹窗内被裁切。
@@ -280,7 +281,7 @@ export function SearchablePartnerSelect({
                 {cat?.customFields?.map(f => {
                   const val = p.customData?.[f.id];
                   if (val == null || val === '') return null;
-                  if (f.type === 'file')
+                  if (effectiveCustomDocFieldType(f) === 'file')
                     return (
                       <span
                         key={f.id}
@@ -294,7 +295,7 @@ export function SearchablePartnerSelect({
                       key={f.id}
                       className={`font-bold text-slate-500 rounded bg-slate-50 leading-tight ${compact ? 'text-[8px] px-1 py-px' : 'text-[10px] px-1.5 py-0.5'}`}
                     >
-                      {f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}
+                      {f.label}: {formatReportCustomDataForList(f, val)}
                     </span>
                   );
                 })}
@@ -336,8 +337,8 @@ export function SearchablePartnerSelect({
                       ?.map(f => {
                         const v = selectedPartner.customData?.[f.id];
                         if (v == null || v === '') return null;
-                        if (f.type === 'file') return `${f.label}: 已上传`;
-                        return `${f.label}: ${typeof v === 'boolean' ? (v ? '是' : '否') : String(v)}`;
+                        if (effectiveCustomDocFieldType(f) === 'file') return `${f.label}: 已上传`;
+                        return `${f.label}: ${formatReportCustomDataForList(f, v)}`;
                       })
                       .filter(Boolean) ?? [];
                   const base = selectedPartner.contact

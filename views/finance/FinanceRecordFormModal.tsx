@@ -8,13 +8,13 @@ import type {
   Product,
   ProductCategory,
   ProductionOrder,
-  ReportFieldDefinition,
   Worker,
   GlobalNodeTemplate,
 } from '../../types';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import WorkerSelectWithTabs from './WorkerSelectWithTabs';
+import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
 
 export interface FinanceRecordFormValues {
   amount: number;
@@ -48,39 +48,6 @@ interface FinanceRecordFormModalProps {
   workers: Worker[];
   globalNodes: GlobalNodeTemplate[];
   financeAccountTypes: FinanceAccountType[];
-}
-
-function CustomFieldInput({ field, value, onChange }: { field: ReportFieldDefinition; value: any; onChange: (v: any) => void }) {
-  const v = value ?? '';
-  if (field.type === 'number') {
-    return (
-      <input type="number" placeholder={field.placeholder} value={v} onChange={e => onChange(e.target.value === '' ? undefined : Number(e.target.value))} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
-    );
-  }
-  if (field.type === 'boolean') {
-    return (
-      <label className="flex items-center gap-2 cursor-pointer">
-        <input type="checkbox" checked={!!v} onChange={e => onChange(e.target.checked)} className="w-4 h-4 rounded text-indigo-600" />
-        <span className="text-sm font-bold text-slate-700">{field.label}</span>
-      </label>
-    );
-  }
-  if (field.type === 'date') {
-    return (
-      <input type="date" value={typeof v === 'string' ? v : ''} onChange={e => onChange(e.target.value || undefined)} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
-    );
-  }
-  if (field.type === 'select') {
-    return (
-      <select value={v} onChange={e => onChange(e.target.value)} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
-        <option value="">请选择...</option>
-        {(field.options || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
-      </select>
-    );
-  }
-  return (
-    <input type="text" placeholder={field.placeholder} value={v} onChange={e => onChange(e.target.value)} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
-  );
 }
 
 function OrderSearchSelect({ orders, products, value, onChange, label }: { orders: ProductionOrder[]; products: Product[]; value: string; onChange: (orderNumber: string) => void; label: string }) {
@@ -223,12 +190,18 @@ function FinanceRecordFormModal({
                         <SearchableProductSelect options={products} categories={categories} value={form.productId} onChange={id => setForm({ ...form, productId: id })} />
                       </div>
                     )}
-                    {(selectedCategory.customFields || []).map(field => (
-                      <div key={field.id} className="space-y-1">
-                        {field.type !== 'boolean' && <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{field.label}</label>}
-                        <CustomFieldInput field={field} value={form.customData[field.id]} onChange={v => setForm({ ...form, customData: { ...form.customData, [field.id]: v } })} />
+                    {(selectedCategory.customFields || []).filter(f => f.showInForm !== false).length > 0 && (
+                      <div className="lg:col-span-2 space-y-3">
+                        <ReportCustomFieldsEditor
+                          fields={(selectedCategory.customFields || []).filter(f => f.showInForm !== false)}
+                          values={form.customData}
+                          onChange={(fieldId, v) =>
+                            setForm({ ...form, customData: { ...form.customData, [fieldId]: v } })
+                          }
+                          inputClassName="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
                       </div>
-                    ))}
+                    )}
                   </>
                 )}
                 {!selectedCategory && (

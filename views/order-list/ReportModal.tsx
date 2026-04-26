@@ -149,7 +149,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
       if (raw !== undefined && raw !== '') {
         initialData[f.id] = coerceRouteReportDefaultForField(f, raw);
       } else {
-        initialData[f.id] = f.type === 'boolean' ? false : '';
+        initialData[f.id] = '';
       }
     });
     const category = categories.find(c => c.id === product?.categoryId);
@@ -518,7 +518,6 @@ const ReportModal: React.FC<ReportModalProps> = ({
     for (const f of tmpl) {
       if (!f.required) continue;
       const v = reportForm.customData[f.id];
-      if (f.type === 'boolean') continue;
       if (f.type === 'file') {
         if (v == null || (typeof v === 'string' && v.trim() === '')) {
           toast.error(`请上传或选择：${f.label}`);

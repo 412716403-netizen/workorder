@@ -14,6 +14,7 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { pageSubtitleClass, pageTitleClass } from '../styles/uiDensity';
 import ProductEditForm from './product-management/ProductEditForm';
 import { bomHasConfiguredItems } from '../utils/bomEffective';
+import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
 
 const PRODUCT_ARCHIVE_ALL = '__all__';
 
@@ -273,6 +274,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                     const purchase = product.purchasePrice ?? 0;
                     const displayPrice = sales > 0 ? sales : purchase;
                     const priceLabel = sales > 0 ? '销售' : '采购';
+                    const customTags = getProductCategoryCustomFieldEntries(product, category, { includeFile: false }).slice(0, 2);
                     return (
                       <tr key={product.id} className="group hover:bg-indigo-50/40 transition-colors cursor-pointer" onClick={() => permCanEdit && handleStartEditProduct(product)}>
                         <td className="py-3 pl-4 pr-2">
@@ -287,6 +289,15 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                         <td className="py-3 px-3">
                           <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors truncate max-w-[220px]">{product.name}</p>
                           <p className="sm:hidden text-[10px] text-slate-400 font-medium mt-0.5">{product.sku}</p>
+                          {customTags.length > 0 && (
+                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                              {customTags.map(({ field, display }) => (
+                                <span key={field.id} className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
+                                  {field.label}: {display}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </td>
                         <td className="py-3 px-3 hidden sm:table-cell">
                           <span className="text-xs text-slate-500 font-medium">{product.sku}</span>

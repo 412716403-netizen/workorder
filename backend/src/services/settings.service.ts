@@ -2,6 +2,30 @@ import type { TenantPrismaClient } from '../lib/prisma.js';
 import { prisma as basePrisma } from '../lib/prisma.js';
 import { genId } from '../utils/genId.js';
 import { sanitizeUpdate, sanitizeCreate } from '../utils/request.js';
+import { z } from 'zod';
+
+/** 与 `shared/types` 中 CustomDocFieldType 一致；写入设置 JSON 时拒绝 number/boolean 等脏类型 */
+const reportFieldDefRowZ = z
+  .object({
+    id: z.string(),
+    label: z.string(),
+    type: z.enum(['text', 'date', 'select', 'file']),
+  })
+  .passthrough();
+
+function parseJsonReportFieldDefinitions(path: string, raw: unknown): unknown {
+  const parsed = z.array(reportFieldDefRowZ).safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(`${path} 无效：自定义项 type 仅允许 text、date、select、file（${parsed.error.message}）`);
+  }
+  return parsed.data;
+}
+
+function maybeParseReportFields(data: Record<string, unknown>, key: string) {
+  if (Object.prototype.hasOwnProperty.call(data, key) && data[key] !== undefined) {
+    (data as Record<string, unknown>)[key] = parseJsonReportFieldDefinitions(key, data[key]) as unknown;
+  }
+}
 
 // ── 产品分类 ──
 
@@ -15,7 +39,8 @@ export async function createCategory(
   db: TenantPrismaClient,
   body: Record<string, unknown>,
 ) {
-  const data = sanitizeCreate(body);
+  const data = sanitizeCreate(body) as Record<string, unknown>;
+  maybeParseReportFields(data, 'customFields');
   if (!data.id) data.id = genId('cat');
   const maxRow = await db.productCategory.aggregate({ _max: { sortOrder: true } });
   data.sortOrder = (maxRow._max.sortOrder ?? -1) + 1;
@@ -27,8 +52,9 @@ export async function updateCategory(
   id: string,
   body: Record<string, unknown>,
 ) {
-  const data = sanitizeUpdate(body);
+  const data = sanitizeUpdate(body) as Record<string, unknown>;
   delete data.sortOrder;
+  maybeParseReportFields(data, 'customFields');
   return db.productCategory.update({ where: { id }, data });
 }
 
@@ -47,9 +73,10 @@ export async function createPartnerCategory(
   db: TenantPrismaClient,
   body: Record<string, unknown>,
 ) {
-  const data = sanitizeCreate(body);
+  const data = sanitizeCreate(body) as Record<string, unknown>;
+  maybeParseReportFields(data, 'customFields');
   if (!data.id) data.id = genId('pcat');
-  return db.partnerCategory.create({ data });
+  return db.partnerCategory.create({ data: data as any });
 }
 
 export async function updatePartnerCategory(
@@ -57,7 +84,9 @@ export async function updatePartnerCategory(
   id: string,
   body: Record<string, unknown>,
 ) {
-  return db.partnerCategory.update({ where: { id }, data: sanitizeUpdate(body) });
+  const data = sanitizeUpdate(body) as Record<string, unknown>;
+  maybeParseReportFields(data, 'customFields');
+  return db.partnerCategory.update({ where: { id }, data });
 }
 
 export async function deletePartnerCategory(db: TenantPrismaClient, id: string) {
@@ -88,7 +117,9 @@ export async function createNode(
   db: TenantPrismaClient,
   body: Record<string, unknown>,
 ) {
-  const data = sanitizeCreate(normalizeNodeData(body) as Record<string, unknown>);
+  const data = sanitizeCreate(normalizeNodeData(body) as Record<string, unknown>) as Record<string, unknown>;
+  maybeParseReportFields(data, 'reportTemplate');
+  maybeParseReportFields(data, 'reportDisplayTemplate');
   if (!data.id) data.id = genId('node');
   const maxRow = await db.globalNodeTemplate.aggregate({ _max: { sortOrder: true } });
   data.sortOrder = (maxRow._max.sortOrder ?? -1) + 1;
@@ -100,8 +131,10 @@ export async function updateNode(
   id: string,
   body: Record<string, unknown>,
 ) {
-  const data = sanitizeUpdate(normalizeNodeData(body) as Record<string, unknown>);
+  const data = sanitizeUpdate(normalizeNodeData(body) as Record<string, unknown>) as Record<string, unknown>;
   delete data.sortOrder;
+  maybeParseReportFields(data, 'reportTemplate');
+  maybeParseReportFields(data, 'reportDisplayTemplate');
   return db.globalNodeTemplate.update({ where: { id }, data: data as any });
 }
 
@@ -148,9 +181,10 @@ export async function createFinanceCategory(
   db: TenantPrismaClient,
   body: Record<string, unknown>,
 ) {
-  const data = sanitizeCreate(body);
+  const data = sanitizeCreate(body) as Record<string, unknown>;
+  maybeParseReportFields(data, 'customFields');
   if (!data.id) data.id = genId('fcat');
-  return db.financeCategory.create({ data });
+  return db.financeCategory.create({ data: data as any });
 }
 
 export async function updateFinanceCategory(
@@ -158,7 +192,9 @@ export async function updateFinanceCategory(
   id: string,
   body: Record<string, unknown>,
 ) {
-  return db.financeCategory.update({ where: { id }, data: sanitizeUpdate(body) });
+  const data = sanitizeUpdate(body) as Record<string, unknown>;
+  maybeParseReportFields(data, 'customFields');
+  return db.financeCategory.update({ where: { id }, data });
 }
 
 export async function deleteFinanceCategory(db: TenantPrismaClient, id: string) {

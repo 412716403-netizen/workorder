@@ -16,7 +16,6 @@ import {
   ShoppingCart,
   Maximize,
   Palette,
-  ChevronRight,
   ClipboardCheck,
   LayoutGrid,
   Boxes,
@@ -52,6 +51,7 @@ import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelec
 import { useAuthOptional } from '../../contexts/AuthContext';
 import { hasSubPermission } from '../../utils/hasSubPermission';
 import BomEditorPortal, { useBomEditorPortalState } from './BomEditorPortal';
+import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
 
 const LazyProductArchiveCreateModal = lazy(() => import('../../components/ProductArchiveCreateModal'));
 
@@ -226,59 +226,6 @@ const SpecSelectorModal = ({
           <button onClick={onClose} className="w-full py-4 bg-indigo-600 text-white rounded-[20px] font-black text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-[0.98] transition-all">确认选择 ({selectedIds.length})</button>
         </div>
       </div>
-    </div>
-  );
-};
-
-// 使用 Portal 的下拉选择（避免被 overflow 裁剪）
-const PortalSelect = ({ value, onChange, options, optionPairs, placeholder = '请选择...', className = '', compact = false }: { 
-  value: string; onChange: (v: string) => void; 
-  options?: string[]; 
-  optionPairs?: { value: string; label: string }[];
-  placeholder?: string; 
-  className?: string;
-  compact?: boolean; // 紧凑模式：下拉选项为单行高度
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const [style, setStyle] = useState<React.CSSProperties>({});
-
-  const items = optionPairs ?? (options || []).map(o => ({ value: o, label: o }));
-  const displayLabel = value ? (items.find(i => i.value === value)?.label ?? value) : placeholder;
-  const optionCls = compact ? 'px-3 py-1.5 text-xs font-bold' : 'px-4 py-2 text-sm font-bold';
-
-  useEffect(() => {
-    if (isOpen && triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      setStyle({ position: 'fixed' as const, top: rect.bottom + 4, left: rect.left, width: rect.width, zIndex: 11500 });
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (triggerRef.current?.contains(t) || (e.target as Element)?.closest?.('[data-portal-select]')) return;
-      setIsOpen(false);
-    };
-    if (isOpen) document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [isOpen]);
-
-  return (
-    <div className="relative">
-      <button ref={triggerRef} type="button" onClick={() => setIsOpen(!isOpen)} className={className || 'w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none appearance-none text-left flex items-center justify-between'}>
-        <span>{displayLabel}</span>
-        <ChevronRight className={`w-4 h-4 transition-transform flex-shrink-0 ml-2 ${isOpen ? 'rotate-90' : ''}`} />
-      </button>
-      {isOpen && typeof document !== 'undefined' && createPortal(
-        <div data-portal-select className={`bg-white border border-slate-200 rounded-xl shadow-xl ${compact ? 'py-0.5' : 'py-1'} max-h-48 overflow-y-auto`} style={style}>
-          <button type="button" onClick={() => { onChange(''); setIsOpen(false); }} className={`w-full text-left hover:bg-slate-50 text-slate-500 ${optionCls}`}>{placeholder}</button>
-          {items.map(item => (
-            <button key={item.value} type="button" onClick={() => { onChange(item.value); setIsOpen(false); }} className={`w-full text-left hover:bg-slate-50 ${value === item.value ? 'bg-indigo-50 text-indigo-600' : 'text-slate-800'} ${optionCls}`}>{item.label}</button>
-          ))}
-        </div>,
-        document.body
-      )}
     </div>
   );
 };
@@ -631,7 +578,6 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
     filePreviewRevokeRef.current?.();
   }, []);
 
-  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const routeReportDisplayFileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [routeReportDisplayFieldValues, setRouteReportDisplayFieldValues] = useState<Record<string, Record<string, string>>>(
     () => normalizeRouteReportValuesFromApi(initialProduct.routeReportDisplayValues)
@@ -1546,149 +1492,24 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
               </div>
             )}
 
-            {activeCategory?.customFields && activeCategory.customFields.length > 0 && (
+            {activeCategory?.customFields?.some(f => f.showInForm !== false) && (
               <div className="md:col-span-2 pt-5 border-t border-slate-50 mt-3 space-y-5">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1 flex items-center gap-2">
                   <Tag className="w-3.5 h-3.5" /> 分类专用扩展属性
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {activeCategory.customFields.map(field => (
-                    <div key={field.id} className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">
-                        {field.label} {field.required && <span className="text-rose-500">*</span>}
-                      </label>
-                      {field.type === 'text' && (
-                        <input 
-                          type="text" 
-                          value={workingProduct.categoryCustomData?.[field.id] || ''} 
-                          onChange={e => setWorkingProduct({
-                            ...workingProduct, 
-                            categoryCustomData: { ...workingProduct.categoryCustomData, [field.id]: e.target.value }
-                          })}
-                          className="w-full bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" 
-                        />
-                      )}
-                      {field.type === 'number' && (
-                        <input 
-                          type="number" 
-                          value={workingProduct.categoryCustomData?.[field.id] || ''} 
-                          onChange={e => setWorkingProduct({
-                            ...workingProduct, 
-                            categoryCustomData: { ...workingProduct.categoryCustomData, [field.id]: parseFloat(e.target.value) || 0 }
-                          })}
-                          className="w-full bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" 
-                        />
-                      )}
-                      {field.type === 'select' && (
-                        <PortalSelect
-                          value={workingProduct.categoryCustomData?.[field.id] || ''}
-                          onChange={v => setWorkingProduct({
-                            ...workingProduct,
-                            categoryCustomData: { ...workingProduct.categoryCustomData, [field.id]: v }
-                          })}
-                          options={field.options || []}
-                          placeholder="请选择..."
-                          className="w-full bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none text-left flex items-center justify-between"
-                        />
-                      )}
-                      {field.type === 'boolean' && (
-                        <div className="flex items-center gap-3 py-2 px-1">
-                          <button 
-                            onClick={() => setWorkingProduct({
-                              ...workingProduct,
-                              categoryCustomData: { ...workingProduct.categoryCustomData, [field.id]: !workingProduct.categoryCustomData?.[field.id] }
-                            })}
-                            className={`w-10 h-5 rounded-full relative transition-all duration-200 ${workingProduct.categoryCustomData?.[field.id] ? 'bg-indigo-600' : 'bg-slate-300'}`}
-                          >
-                            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all duration-200 shadow-sm ${workingProduct.categoryCustomData?.[field.id] ? 'left-5.5' : 'left-0.5'}`}></div>
-                          </button>
-                          <span className="text-[10px] font-bold text-slate-500">{workingProduct.categoryCustomData?.[field.id] ? '是' : '否'}</span>
-                        </div>
-                      )}
-                      {field.type === 'file' && (
-                        <div className="space-y-2">
-                          <input
-                            ref={el => { fileInputRefs.current[field.id] = el; }}
-                            type="file"
-                            className="hidden"
-                            onChange={e => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              const maxSize = 5 * 1024 * 1024; // 5MB
-                              if (file.size > maxSize) {
-                                toast.error('文件大小不能超过 5MB');
-                                return;
-                              }
-                              const reader = new FileReader();
-                              reader.onload = () => {
-                                const dataUrl = reader.result as string;
-                                setWorkingProduct({
-                                  ...workingProduct,
-                                  categoryCustomData: { ...workingProduct.categoryCustomData, [field.id]: dataUrl }
-                                });
-                              };
-                              reader.readAsDataURL(file);
-                              e.target.value = '';
-                            }}
-                          />
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {workingProduct.categoryCustomData?.[field.id] ? (
-                              <>
-                                {String(workingProduct.categoryCustomData[field.id]).startsWith('data:image/') ? (
-                                  <>
-                                    <img
-                                      src={workingProduct.categoryCustomData[field.id] as string}
-                                      alt={field.label}
-                                      className="h-16 w-16 object-cover rounded-xl border border-slate-200 cursor-pointer hover:ring-2 hover:ring-indigo-400 transition-all"
-                                      onClick={() => { openFilePreview(workingProduct.categoryCustomData![field.id] as string, 'image'); }}
-                                    />
-                                    <a href={workingProduct.categoryCustomData[field.id] as string} download={`附件.${getFileExtFromDataUrl(workingProduct.categoryCustomData[field.id] as string)}`} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
-                                      <Download className="w-3.5 h-3.5 shrink-0" /> 下载
-                                    </a>
-                                  </>
-                                ) : String(workingProduct.categoryCustomData[field.id]).startsWith('data:application/pdf') ? (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => { openFilePreview(workingProduct.categoryCustomData![field.id] as string, 'pdf'); }}
-                                      className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
-                                    >
-                                      <FileText className="w-3.5 h-3.5 shrink-0" /> 在线查看
-                                    </button>
-                                    <a href={workingProduct.categoryCustomData[field.id] as string} download={`附件.${getFileExtFromDataUrl(workingProduct.categoryCustomData[field.id] as string)}`} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
-                                      <Download className="w-3.5 h-3.5 shrink-0" /> 下载
-                                    </a>
-                                  </>
-                                ) : (
-                                  <a href={workingProduct.categoryCustomData[field.id] as string} download={`附件.${getFileExtFromDataUrl(workingProduct.categoryCustomData[field.id] as string)}`} className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-xs font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
-                                    <Download className="w-3.5 h-3.5 shrink-0" /> 下载
-                                  </a>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => setWorkingProduct({
-                                    ...workingProduct,
-                                    categoryCustomData: { ...workingProduct.categoryCustomData, [field.id]: '' }
-                                  })}
-                                  className="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-xs font-semibold hover:bg-rose-100"
-                                >
-                                  删除
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => fileInputRefs.current[field.id]?.click()}
-                                className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-lg text-sm font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
-                              >
-                                <ImagePlus className="w-4 h-4 shrink-0" /> 上传文件
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  <ReportCustomFieldsEditor
+                    fields={activeCategory.customFields.filter(f => f.showInForm !== false)}
+                    values={workingProduct.categoryCustomData ?? {}}
+                    onChange={(fieldId, value) =>
+                      setWorkingProduct({
+                        ...workingProduct,
+                        categoryCustomData: { ...workingProduct.categoryCustomData, [fieldId]: value },
+                      })
+                    }
+                    inputClassName="w-full bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    onFilePreview={openFilePreview}
+                  />
                 </div>
               </div>
             )}

@@ -11,13 +11,13 @@ import {
   ShoppingCart,
   Maximize,
   ListPlus,
-  PlusSquare,
   Trash2,
 } from 'lucide-react';
-import { ProductCategory, ReportFieldDefinition, FieldType } from '../../types';
+import { ProductCategory } from '../../types';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
-import { ExtFieldLabelInput, ProductCategorySelectOptions } from './shared';
+import { ExtFieldLabelInput } from './shared';
+import { ReportCustomFieldsConfigTable } from '../../components/form-config/CustomFieldsEditorTable';
 
 interface CategoriesTabProps {
   categories: ProductCategory[];
@@ -68,29 +68,6 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
       await api.settings.categories.update(id, updates);
       await onRefreshCategories();
     } catch (err: any) { toast.error(err.message || '操作失败'); }
-  };
-
-  const addCustomField = (catId: string) => {
-    const newField: ReportFieldDefinition = { id: `cf-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, label: '新属性名称', type: 'text', required: false };
-    const cat = categories.find(c => c.id === catId);
-    if (cat) {
-      updateCategoryConfig(catId, { customFields: [...cat.customFields, newField] });
-    }
-  };
-
-  const updateCustomField = (catId: string, fieldId: string, updates: Partial<ReportFieldDefinition>) => {
-    const cat = categories.find(c => c.id === catId);
-    if (cat) {
-      const newFields = cat.customFields.map(f => f.id === fieldId ? { ...f, ...updates } : f);
-      updateCategoryConfig(catId, { customFields: newFields });
-    }
-  };
-
-  const removeCustomField = (catId: string, fieldId: string) => {
-    const cat = categories.find(c => c.id === catId);
-    if (cat) {
-      updateCategoryConfig(catId, { customFields: cat.customFields.filter(f => f.id !== fieldId) });
-    }
   };
 
   return (
@@ -207,68 +184,18 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
                   </div>
 
                   <div className="space-y-4 pt-4 border-t border-slate-100">
-                     <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <ReportCustomFieldsConfigTable
+                      showRequiredColumn
+                      fields={cat.customFields}
+                      onChange={next => updateCategoryConfig(cat.id, { customFields: next })}
+                      title={
+                        <span className="flex items-center gap-2">
                           <ListPlus className="w-4 h-4" /> 3. 分类专属扩展字段
-                        </h3>
-                        <button onClick={() => addCustomField(cat.id)} className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black hover:bg-black transition-all">
-                          <PlusSquare className="w-3.5 h-3.5" /> 新增扩展项
-                        </button>
-                     </div>
-                     <div className="space-y-3">
-                        {cat.customFields.map((field) => (
-                          <div key={field.id} className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 flex flex-col gap-3 group hover:bg-white hover:border-indigo-200 transition-all">
-                            <div className="flex flex-col md:flex-row md:items-center gap-4">
-                              <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <ExtFieldLabelInput
-                                  inputKey={`prod-cf-${cat.id}-${field.id}`}
-                                  label={field.label}
-                                  placeholder="属性名称"
-                                  onPersist={(t) => updateCustomField(cat.id, field.id, { label: t })}
-                                  className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500"
-                                />
-                                <select
-                                  value={field.type}
-                                  onChange={(e) => {
-                                    const v = e.target.value as FieldType;
-                                    if (v === 'file') {
-                                      updateCustomField(cat.id, field.id, { type: v, options: undefined });
-                                    } else if (v === 'select') {
-                                      updateCustomField(cat.id, field.id, {
-                                        type: v,
-                                        options: field.type === 'select' && Array.isArray(field.options) && field.options.length > 0 ? field.options : [],
-                                      });
-                                    } else {
-                                      updateCustomField(cat.id, field.id, { type: v, options: undefined });
-                                    }
-                                  }}
-                                  className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer"
-                                >
-                                  <option value="text">文本输入</option><option value="number">数字录入</option><option value="select">下拉选择</option><option value="file">文件上传</option>
-                                </select>
-                                <div className="flex items-center gap-4 px-2 flex-wrap">
-                                  <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={field.required} onChange={e => updateCustomField(cat.id, field.id, { required: e.target.checked })} className="w-4 h-4 rounded text-indigo-600" /><span className="text-[10px] font-black text-slate-400 uppercase">必填</span></label>
-                                </div>
-                              </div>
-                              <button type="button" onClick={() => removeCustomField(cat.id, field.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-all self-start md:self-center shrink-0"><Trash2 className="w-4 h-4" /></button>
-                            </div>
-                            {field.type === 'select' && (
-                              <ProductCategorySelectOptions
-                                catId={cat.id}
-                                fieldId={field.id}
-                                options={field.options || []}
-                                onPersist={(cid, fid, next) => {
-                                  const c = categories.find((x) => x.id === cid);
-                                  if (!c) return;
-                                  updateCategoryConfig(cid, {
-                                    customFields: c.customFields.map((f) => (f.id === fid ? { ...f, options: next } : f)),
-                                  });
-                                }}
-                              />
-                            )}
-                          </div>
-                        ))}
-                     </div>
+                        </span>
+                      }
+                      addButtonLabel="新增扩展项"
+                      idPrefix={`cf-${cat.id}-`}
+                    />
                   </div>
                 </div>
               </div>

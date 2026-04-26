@@ -38,6 +38,7 @@ import {
   pmpCompletedAtTemplate,
   productGroupMaxReportableSum,
 } from '../utils/productReportAggregates';
+import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
 import { computePendingStockOrders } from '../utils/pendingStockCompute';
 import { buildDefectiveReworkByOrderMilestone } from '../utils/defectiveReworkByOrderMilestone';
 import { toLocalDateYmd } from '../utils/localDateTime';
@@ -681,11 +682,19 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                             {order.productName || '未知产品'}
                           </button>
                           <span className="text-[10px] font-bold text-slate-500">{order.sku}</span>
-                          {product && categoryMap.get(product.categoryId)?.customFields?.filter(f => f.showInForm !== false && f.type !== 'file').map(f => {
-                            const val = product.categoryCustomData?.[f.id];
-                            if (val == null || val === '') return null;
-                            return <span key={f.id} className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">{f.label}: {typeof val === 'boolean' ? (val ? '是' : '否') : String(val)}</span>;
-                          })}
+                        </div>
+                        <div className="mb-1 flex flex-wrap items-center gap-1">
+                          {product &&
+                            getProductCategoryCustomFieldEntries(product, categoryMap.get(product.categoryId), {
+                              includeFile: false,
+                            }).map(({ field, display }) => (
+                              <span
+                                key={field.id}
+                                className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50"
+                              >
+                                {field.label}: {display}
+                              </span>
+                            ))}
                         </div>
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                           {showInList('customer') && productionLinkMode !== 'product' && order.customer && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {order.customer}</span>}
@@ -916,6 +925,19 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                   {block.productName}
                                 </button>
                                 <span className="text-[10px] font-bold text-slate-500">{product?.sku || block.orders[0]?.sku}</span>
+                              </div>
+                              <div className="mb-1 flex flex-wrap items-center gap-1">
+                                {product &&
+                                  getProductCategoryCustomFieldEntries(product, categoryMap.get(product.categoryId), {
+                                    includeFile: false,
+                                  }).map(({ field, display }) => (
+                                    <span
+                                      key={field.id}
+                                      className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50"
+                                    >
+                                      {field.label}: {display}
+                                    </span>
+                                  ))}
                               </div>
                               <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                                 <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 合计 {totalQty} 件</span>

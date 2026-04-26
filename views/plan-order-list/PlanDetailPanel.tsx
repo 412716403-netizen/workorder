@@ -62,6 +62,7 @@ import { getLastPurchaseUnitPrice } from '../../utils/psiPartnerProductLastPrice
 import { PlanPrintTemplateManageDialog } from '../../components/plan-print/PlanPrintTemplateManageDialog';
 import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
 import { isEquipmentAssignmentEnabled, isWorkerAssignmentEnabled } from '../../utils/nodeAssignmentFlags';
+import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import PlanTraceSection from './PlanTraceSection';
 import PlanPrintOverlays from './PlanPrintOverlays';
 import PlanPoSupplierAssignModal, {
@@ -1252,18 +1253,37 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                            </span>
                                         )}
                                         <div className="flex flex-col gap-0.5">
-                                          <span className="text-sm font-bold text-slate-800">
-                                            {(() => {
-                                              const hasSku = req.materialSku && String(req.materialSku).trim() && req.materialSku !== '-';
-                                              const skuPart = hasSku ? `（${req.materialSku}）` : '';
-                                              return `${req.materialName}${skuPart}`;
-                                            })()}
-                                          </span>
                                           {(() => {
                                             const p = products.find(x => x.id === req.materialId);
-                                            const cat = categories.find(c => c.id === p?.categoryId);
-                                            const catName = cat?.name ?? '';
-                                            return catName ? <span className="text-[10px] font-medium text-slate-400">{catName}</span> : null;
+                                            const skuText =
+                                              req.materialSku && String(req.materialSku).trim() && req.materialSku !== '-'
+                                                ? String(req.materialSku).trim()
+                                                : '-';
+                                            const customTags = getProductCategoryCustomFieldEntries(
+                                              p,
+                                              categories.find(c => c.id === p?.categoryId),
+                                              { includeFile: false },
+                                            );
+                                            return (
+                                              <>
+                                                <span className="text-sm font-bold text-slate-800">
+                                                  {req.materialName}
+                                                  <span className="ml-2 text-[10px] font-medium text-slate-400">{skuText}</span>
+                                                </span>
+                                                {customTags.length > 0 && (
+                                                  <span className="mt-1 flex flex-wrap items-center gap-1">
+                                                    {customTags.map(({ field, display }) => (
+                                                      <span
+                                                        key={field.id}
+                                                        className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
+                                                      >
+                                                        {field.label}: {display}
+                                                      </span>
+                                                    ))}
+                                                  </span>
+                                                )}
+                                              </>
+                                            );
                                           })()}
                                         </div>
                                      </div>

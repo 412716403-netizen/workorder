@@ -13,13 +13,13 @@ import {
   UserPlus,
   Package,
   ListPlus,
-  PlusSquare,
   Trash2,
 } from 'lucide-react';
-import { FinanceCategory, FinanceCategoryKind, ReportFieldDefinition, FieldType } from '../../types';
+import { FinanceCategory, FinanceCategoryKind } from '../../types';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { ExtFieldLabelInput } from './shared';
+import { ReportCustomFieldsConfigTable } from '../../components/form-config/CustomFieldsEditorTable';
 
 interface FinanceCategoriesTabProps {
   financeCategories: FinanceCategory[];
@@ -69,29 +69,6 @@ const FinanceCategoriesTab: React.FC<FinanceCategoriesTabProps> = ({
       await api.settings.financeCategories.update(id, updates);
       await onRefreshFinanceCategories();
     } catch (err: any) { toast.error(err.message || '操作失败'); }
-  };
-
-  const addFinanceCustomField = (catId: string) => {
-    const newField: ReportFieldDefinition = { id: `fcf-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, label: '新扩展项', type: 'text', required: false };
-    const cat = financeCategories.find(c => c.id === catId);
-    if (cat) {
-      updateFinanceCategoryConfig(catId, { customFields: [...cat.customFields, newField] });
-    }
-  };
-
-  const updateFinanceCustomField = (catId: string, fieldId: string, updates: Partial<ReportFieldDefinition>) => {
-    const cat = financeCategories.find(c => c.id === catId);
-    if (cat) {
-      const newFields = cat.customFields.map(f => f.id === fieldId ? { ...f, ...updates } : f);
-      updateFinanceCategoryConfig(catId, { customFields: newFields });
-    }
-  };
-
-  const removeFinanceCustomField = (catId: string, fieldId: string) => {
-    const cat = financeCategories.find(c => c.id === catId);
-    if (cat) {
-      updateFinanceCategoryConfig(catId, { customFields: cat.customFields.filter(f => f.id !== fieldId) });
-    }
   };
 
   return (
@@ -212,41 +189,18 @@ const FinanceCategoriesTab: React.FC<FinanceCategoriesTabProps> = ({
                   </div>
 
                   <div className="space-y-4 pt-4 border-t border-slate-100">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><ListPlus className="w-4 h-4" /> 3. 自定义内容</h3>
-                      <button onClick={() => addFinanceCustomField(cat.id)} className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black hover:bg-black transition-all">
-                        <PlusSquare className="w-3.5 h-3.5" /> 新增扩展项
-                      </button>
-                    </div>
-                    <div className="space-y-3">
-                      {cat.customFields.length === 0 ? (
-                        <div className="py-12 border-2 border-dashed border-slate-100 rounded-[24px] text-center text-slate-300 text-xs italic">
-                          尚未定义自定义内容。可增加如：发票号、结算方式、备注等扩展字段。
-                        </div>
-                      ) : (
-                        cat.customFields.map((field, fIdx) => (
-                          <div key={field.id} className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 flex flex-col md:flex-row md:items-center gap-4 group hover:bg-white hover:border-indigo-200 transition-all">
-                            <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center font-black text-[10px]">{fIdx + 1}</div>
-                            <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
-                              <ExtFieldLabelInput
-                                inputKey={`finance-cf-${cat.id}-${field.id}`}
-                                label={field.label}
-                                placeholder="字段名称"
-                                onPersist={(t) => updateFinanceCustomField(cat.id, field.id, { label: t })}
-                                className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500"
-                              />
-                              <select value={field.type} onChange={e => updateFinanceCustomField(cat.id, field.id, { type: e.target.value as FieldType })} className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer">
-                                <option value="text">普通文本</option><option value="number">数字/金额</option><option value="select">下拉单选</option><option value="boolean">是否开关</option><option value="date">日期选择</option>
-                              </select>
-                              <div className="flex items-center gap-4 px-2">
-                                <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={field.required} onChange={e => updateFinanceCustomField(cat.id, field.id, { required: e.target.checked })} className="w-4 h-4 rounded text-indigo-600 border-slate-300" /><span className="text-[10px] font-black text-slate-400 uppercase">必填</span></label>
-                              </div>
-                            </div>
-                            <button onClick={() => removeFinanceCustomField(cat.id, field.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-all"><Trash2 className="w-4 h-4" /></button>
-                          </div>
-                        ))
-                      )}
-                    </div>
+                    <ReportCustomFieldsConfigTable
+                      showRequiredColumn
+                      fields={cat.customFields}
+                      onChange={next => updateFinanceCategoryConfig(cat.id, { customFields: next })}
+                      title={
+                        <span className="flex items-center gap-2">
+                          <ListPlus className="w-4 h-4" /> 3. 自定义内容
+                        </span>
+                      }
+                      addButtonLabel="新增扩展项"
+                      idPrefix={`fcf-${cat.id}-`}
+                    />
                   </div>
                 </div>
               </div>

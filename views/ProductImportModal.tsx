@@ -6,6 +6,7 @@ import {
 import { ProductCategory, AppDictionaries, Product, DictionaryItem } from '../types';
 import * as api from '../services/api';
 import { toast } from 'sonner';
+import { effectiveCustomDocFieldType } from '../utils/reportCustomDocField';
 
 interface ProductImportModalProps {
   isOpen: boolean;
@@ -65,9 +66,9 @@ function buildTemplateExample(category: ProductCategory): string[] {
     row.push('S,M,L');
   }
   for (const f of category.customFields ?? []) {
-    if (f.type === 'number') row.push('0');
-    else if (f.type === 'boolean') row.push('是');
-    else if (f.type === 'select' && f.options?.length) row.push(f.options[0]);
+    const eff = effectiveCustomDocFieldType(f);
+    if (eff === 'select' && f.options?.length) row.push(f.options[0]);
+    else if (eff === 'text') row.push('0');
     else row.push('');
   }
   return row;
@@ -465,9 +466,7 @@ export default function ProductImportModal({
           const val = String(rawVal);
           const fieldDef = (selectedCategory.customFields ?? []).find(f => f.id === fieldId);
           if (!fieldDef || !val) continue;
-          if (fieldDef.type === 'number') categoryCustomData[fieldId] = parseFloat(val) || 0;
-          else if (fieldDef.type === 'boolean') categoryCustomData[fieldId] = val === '是' || val === 'true' || val === '1';
-          else categoryCustomData[fieldId] = val;
+          categoryCustomData[fieldId] = val;
         }
 
         return {

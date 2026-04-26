@@ -7,12 +7,10 @@ import type { FormConfigSchema } from '../formConfigSchema';
 
 export const salesOrderFormConfigSchema: FormConfigSchema<SalesOrderFormSettings> = {
   title: '销售订单表单配置',
-  settingsKey: 'salesOrderFormSettings',
   subtitle: {
-    fields: '自定义单据内容将用于列表、登记与详情及打印；标准字段不在此配置。',
-    listDisplay: '控制进销存「销售订单」列表默认展示范围。',
-    print: '打印模版请在下方「增加模版」中创建或管理（列表与登记/详情共用）。',
+    listDisplay: '以下选项作用于销售订单列表的默认筛选与展示。',
   },
+  settingsKey: 'salesOrderFormSettings',
   defaultValue: DEFAULT_SALES_ORDER_FORM_SETTINGS,
   normalize: v => normalizeSalesOrderFormSettings(v as SalesOrderFormSettings | null | undefined),
   tabs: [
@@ -37,7 +35,8 @@ export const salesOrderFormConfigSchema: FormConfigSchema<SalesOrderFormSettings
           kind: 'toggle',
           id: 'onlyShowNotFullyShipped',
           label: '只显示未发齐',
-          description: '勾选后列表仅保留至少有一行未发齐的销售订单（订货数量大于已发数量）。',
+          description:
+            '开启时，列表默认仅展示尚未全部发货的订单；关闭则不在此项上过滤。仍可在列表页使用其它筛选条件。',
           path: 'listDisplay.onlyShowNotFullyShipped',
           defaultChecked: false,
         },
@@ -53,7 +52,6 @@ export const salesOrderFormConfigSchema: FormConfigSchema<SalesOrderFormSettings
           kind: 'printWhitelist',
           id: 'listPrint',
           title: '列表打印',
-          hint: '控制销售订单列表是否显示「打印」按钮。下方为可选模版白名单；未添加任何项时，打印时仍可使用全部模版。',
           scope: 'salesOrderList',
           path: 'listPrint',
           toggle: {

@@ -50,6 +50,8 @@ export interface FormConfigCustomFieldsSection {
   idPrefix?: string;
   /** 紧邻标题右侧的额外按钮（如「去工序节点库」入口） */
   renderHeaderExtra?: (ctx: FormConfigSlotContext) => ReactNode;
+  /** 表头 `title` 提示，覆盖默认文案（如「列表中」列含义） */
+  columnHints?: Partial<Record<CustomFieldEditorColumn, string>>;
 }
 
 /** 标准字段显示列表 section（PlanFormSettings 等含 standardFields 的配置使用） */
@@ -127,6 +129,11 @@ export interface FormConfigTab {
   label: string;
   /** 是否在该 tab 上挂 printer 图标 */
   iconPrinter?: boolean;
+  /**
+   * 当前 tab 内容区顶部说明（如「列表显示」页解释筛选项含义）。
+   * 与 schema.subtitle 不同：subtitle 显示在弹窗标题下，随当前 tab 的 key 切换。
+   */
+  hint?: ReactNode;
   sections: FormConfigSection[];
   /**
    * 切到该 tab 时触发（典型：切到 'print' tab 时刷新打印模板列表）。
@@ -138,7 +145,7 @@ export interface FormConfigTab {
 export interface FormConfigSchema<TSettings> {
   title: string;
   /** 字段/打印/列表显示等 tab 下的默认副标题（若 tab 没单独写 subtitle） */
-  subtitle?: string | { fields?: string; print?: string; listDisplay?: string };
+  subtitle?: string | { fields?: string; print?: string; listDisplay?: string; list?: string };
   /** 对应 SystemSetting.key / AppDataContext 中使用的 key，如 'planFormSettings' */
   settingsKey: string;
   defaultValue: TSettings;

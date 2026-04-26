@@ -5,13 +5,12 @@ import {
   ArrowRight,
   Settings,
   Building2,
-  PlusSquare,
   Trash2,
 } from 'lucide-react';
-import { PartnerCategory, ReportFieldDefinition, FieldType } from '../../types';
+import { PartnerCategory, ReportFieldDefinition } from '../../types';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
-import { ExtFieldLabelInput } from './shared';
+import { ReportCustomFieldsConfigTable } from '../../components/form-config/CustomFieldsEditorTable';
 
 interface PartnerCategoriesTabProps {
   partnerCategories: PartnerCategory[];
@@ -58,29 +57,6 @@ const PartnerCategoriesTab: React.FC<PartnerCategoriesTabProps> = ({
       await api.settings.partnerCategories.update(id, updates);
       await onRefreshPartnerCategories();
     } catch (err: any) { toast.error(err.message || '操作失败'); }
-  };
-
-  const addPCustomField = (catId: string) => {
-    const newField: ReportFieldDefinition = { id: `pcf-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, label: '新扩展项', type: 'text', required: false };
-    const cat = partnerCategories.find(c => c.id === catId);
-    if (cat) {
-      updatePCategoryConfig(catId, { customFields: [...cat.customFields, newField] });
-    }
-  };
-
-  const updatePCustomField = (catId: string, fieldId: string, updates: Partial<ReportFieldDefinition>) => {
-    const cat = partnerCategories.find(c => c.id === catId);
-    if (cat) {
-      const newFields = cat.customFields.map(f => f.id === fieldId ? { ...f, ...updates } : f);
-      updatePCategoryConfig(catId, { customFields: newFields });
-    }
-  };
-
-  const removePCustomField = (catId: string, fieldId: string) => {
-    const cat = partnerCategories.find(c => c.id === catId);
-    if (cat) {
-      updatePCategoryConfig(catId, { customFields: cat.customFields.filter(f => f.id !== fieldId) });
-    }
   };
 
   return (
@@ -167,44 +143,19 @@ const PartnerCategoriesTab: React.FC<PartnerCategoriesTabProps> = ({
                   </div>
 
                   <div className="space-y-4 pt-4 border-t border-slate-100">
-                     <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <ReportCustomFieldsConfigTable
+                      showRequiredColumn
+                      showShowInFormColumn={false}
+                      fields={cat.customFields}
+                      onChange={next => updatePCategoryConfig(cat.id, { customFields: next })}
+                      title={
+                        <span className="flex items-center gap-2">
                           <Building2 className="w-4 h-4" /> 2. 单位专属扩展字段 (自定义内容)
-                        </h3>
-                        <button onClick={() => addPCustomField(cat.id)} className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black hover:bg-black transition-all shadow-md">
-                          <PlusSquare className="w-3.5 h-3.5" /> 增加信息字段
-                        </button>
-                     </div>
-                     <div className="space-y-3">
-                        {cat.customFields.length === 0 ? (
-                          <div className="py-12 border-2 border-dashed border-slate-100 rounded-[24px] text-center text-slate-300 text-xs italic">
-                             尚未定义分类扩展信息。开启后，该类单位将支持录入如：纳税号、结算周期等自定义内容。
-                          </div>
-                        ) : (
-                          cat.customFields.map((field, fIdx) => (
-                            <div key={field.id} className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 flex flex-col md:flex-row md:items-center gap-4 group hover:bg-white hover:border-indigo-200 transition-all">
-                              <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center font-black text-[10px]">{fIdx + 1}</div>
-                              <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <ExtFieldLabelInput
-                                  inputKey={`partner-cf-${cat.id}-${field.id}`}
-                                  label={field.label}
-                                  placeholder="字段名称 (如：纳税识别号)"
-                                  onPersist={(t) => updatePCustomField(cat.id, field.id, { label: t })}
-                                  className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500"
-                                />
-                                <select value={field.type} onChange={e => updatePCustomField(cat.id, field.id, { type: e.target.value as FieldType })} className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none cursor-pointer">
-                                  <option value="text">普通文本</option><option value="number">数字/金额</option><option value="select">下拉单选</option><option value="boolean">是否开关</option><option value="date">日期选择</option>
-                                </select>
-                                <div className="flex items-center gap-4 px-2">
-                                  <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={field.required} onChange={e => updatePCustomField(cat.id, field.id, { required: e.target.checked })} className="w-4 h-4 rounded text-indigo-600 border-slate-300" /><span className="text-[10px] font-black text-slate-400 uppercase">必填</span></label>
-                                  <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={field.showInForm !== false} onChange={e => updatePCustomField(cat.id, field.id, { showInForm: e.target.checked })} className="w-4 h-4 rounded text-indigo-600 border-slate-300" /><span className="text-[10px] font-black text-slate-400 uppercase">表单中显示</span></label>
-                                </div>
-                              </div>
-                              <button onClick={() => removePCustomField(cat.id, field.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-all"><Trash2 className="w-4 h-4" /></button>
-                            </div>
-                          ))
-                        )}
-                     </div>
+                        </span>
+                      }
+                      addButtonLabel="增加信息字段"
+                      idPrefix={`pcf-${cat.id}-`}
+                    />
                   </div>
                 </div>
               </div>

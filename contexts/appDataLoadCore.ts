@@ -47,6 +47,12 @@ import {
 } from '../types';
 import { normalizePartnersFromApi } from '../utils/partnerNormalize';
 import {
+  normalizeFinanceCategoriesFromApi,
+  normalizeGlobalNodesFromApi,
+  normalizePartnerCategoriesFromApi,
+  normalizeProductCategoriesFromApi,
+} from '../utils/reportCustomDocField';
+import {
   DEFAULT_ORDER_FORM_SETTINGS,
   DEFAULT_PAYMENT_FORM_SETTINGS,
   DEFAULT_PLAN_FORM_SETTINGS,
@@ -187,11 +193,19 @@ export async function executeAppDataLoadCore(
   s.setOutsourceFormSettings(normalizeOutsourceFormSettings((cfg.outsourceFormSettings as OutsourceFormSettings) ?? DEFAULT_OUTSOURCE_FORM_SETTINGS));
   s.setReworkFormSettings(normalizeReworkFormSettings((cfg.reworkFormSettings as ReworkFormSettings) ?? DEFAULT_REWORK_FORM_SETTINGS));
   s.setPrintTemplates(Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : []);
-  if (settledVal(coreResults, 1)) s.setCategories(settledVal<ProductCategory[]>(coreResults, 1)!);
-  if (settledVal(coreResults, 2)) s.setPartnerCategories(settledVal<PartnerCategory[]>(coreResults, 2)!);
-  if (settledVal(coreResults, 3)) s.setGlobalNodes(settledVal<GlobalNodeTemplate[]>(coreResults, 3)!);
+  if (settledVal(coreResults, 1)) {
+    s.setCategories(normalizeProductCategoriesFromApi(settledVal<ProductCategory[]>(coreResults, 1)!));
+  }
+  if (settledVal(coreResults, 2)) {
+    s.setPartnerCategories(normalizePartnerCategoriesFromApi(settledVal<PartnerCategory[]>(coreResults, 2)!));
+  }
+  if (settledVal(coreResults, 3)) {
+    s.setGlobalNodes(normalizeGlobalNodesFromApi(settledVal<GlobalNodeTemplate[]>(coreResults, 3)!));
+  }
   if (settledVal(coreResults, 4)) s.setWarehouses(settledVal<Warehouse[]>(coreResults, 4)!);
-  if (settledVal(coreResults, 5)) s.setFinanceCategories(settledVal<FinanceCategory[]>(coreResults, 5)!);
+  if (settledVal(coreResults, 5)) {
+    s.setFinanceCategories(normalizeFinanceCategoriesFromApi(settledVal<FinanceCategory[]>(coreResults, 5)!));
+  }
   if (settledVal(coreResults, 6)) s.setFinanceAccountTypes(settledVal<FinanceAccountType[]>(coreResults, 6)!);
   if (settledVal(coreResults, 7)) {
     s.setPartners(normalizePartnersFromApi(settledVal<unknown[]>(coreResults, 7)!) as Partner[]);
