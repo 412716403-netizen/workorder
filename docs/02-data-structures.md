@@ -220,10 +220,13 @@ interface ProductionOpRecord {
   reworkNodeIds?: string[]; // 返工专用：返工目标工序 id 列表（多选时）
   weight?: number;                         // 仅当 node.enableWeightOnReport 时写入，本次交货总重量 (kg)
   materialBreakdown?: MaterialBreakdownRow[]; // 按 BOM 占比把 weight 拆成各子物料实际消耗的快照
+  batchNo?: string; // 领料出库 STOCK_OUT / 退料 STOCK_RETURN / 外协物料类流水：批次号（与 PSI 行 batchNo 对齐）
 }
 ```
 
 **说明**：领料出库、外协、返工、报损、生产入库通过 `orderId` 关联工单；`orderId` 为可选时表示关联产品模式，详见 [05-production-link-mode.md](./05-production-link-mode.md)。**报损 (SCRAP)**：记录不良品报损数量，工单详情各工序报工汇总中展示「报损」列。**返工 (REWORK)**：`sourceNodeId` 为不良来源工序，`nodeId`/`reworkNodeIds` 为返工目标工序（可多选）。
+
+**批次**：`PsiRecord` 采购类行字段为 `batchNo`（API）；持久化与打印上下文与 `ProductionOpRecord.batchNo` 一致，用于按批结存与扣减。
 
 **按重量报工（`GlobalNodeTemplate.enableWeightOnReport`）**：
 - 工序级开关。开启后，对应工序的工单报工 / 外协收货 / 返工报工三个入口会额外录入 `weight`（单位 kg）。

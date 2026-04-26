@@ -2,6 +2,7 @@ import type { TenantPrismaClient } from '../lib/prisma.js';
 import { prisma as basePrisma } from '../lib/prisma.js';
 import { genId } from '../utils/genId.js';
 import { sanitizeUpdate, sanitizeCreate } from '../utils/request.js';
+import { AppError } from '../middleware/errorHandler.js';
 import { z } from 'zod';
 
 /** 与 `shared/types` 中 CustomDocFieldType 一致；写入设置 JSON 时拒绝 number/boolean 等脏类型 */
@@ -35,12 +36,21 @@ export async function listCategories(db: TenantPrismaClient) {
   });
 }
 
+function assertCategoryBatchColorMutex(data: { hasColorSize?: unknown; hasBatchManagement?: unknown }) {
+  const hasColor = Boolean(data.hasColorSize);
+  const hasBatch = Boolean(data.hasBatchManagement);
+  if (hasColor && hasBatch) {
+    throw new AppError(400, '颜色尺码与批次管理不可同时启用');
+  }
+}
+
 export async function createCategory(
   db: TenantPrismaClient,
   body: Record<string, unknown>,
 ) {
   const data = sanitizeCreate(body) as Record<string, unknown>;
   maybeParseReportFields(data, 'customFields');
+  assertCategoryBatchColorMutex(data);
   if (!data.id) data.id = genId('cat');
   const maxRow = await db.productCategory.aggregate({ _max: { sortOrder: true } });
   data.sortOrder = (maxRow._max.sortOrder ?? -1) + 1;
@@ -55,6 +65,17 @@ export async function updateCategory(
   const data = sanitizeUpdate(body) as Record<string, unknown>;
   delete data.sortOrder;
   maybeParseReportFields(data, 'customFields');
+  const existing = await db.productCategory.findUnique({ where: { id } });
+  if (!existing) throw new AppError(404, '产品分类不存在');
+  const nextHasColor =
+    Object.prototype.hasOwnProperty.call(data, 'hasColorSize')
+      ? Boolean(data.hasColorSize)
+      : existing.hasColorSize;
+  const nextHasBatch =
+    Object.prototype.hasOwnProperty.call(data, 'hasBatchManagement')
+      ? Boolean(data.hasBatchManagement)
+      : existing.hasBatchManagement;
+  assertCategoryBatchColorMutex({ hasColorSize: nextHasColor, hasBatchManagement: nextHasBatch });
   return db.productCategory.update({ where: { id }, data });
 }
 

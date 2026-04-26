@@ -1,6 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ArrowUpFromLine, Package, X } from 'lucide-react';
-import { ProductionOpRecord, ProductionOrder, Product, Warehouse, BOM, GlobalNodeTemplate } from '../../types';
+import {
+  ProductionOpRecord,
+  ProductionOrder,
+  Product,
+  ProductCategory,
+  Warehouse,
+  BOM,
+  GlobalNodeTemplate,
+  PsiRecord,
+} from '../../types';
+import { categoryUsesBatchManagement } from '../../types';
+import { toast } from 'sonner';
+import * as api from '../../services/api';
+import { clampBatchNoInput } from '../../hooks/useBatchPicker';
+import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
+import { usePsiStockIndex } from '../../hooks/usePsiStockIndex';
 import { toLocalCompactYmd } from '../../utils/localDateTime';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
@@ -19,6 +34,9 @@ export interface ReworkMaterialIssueModalProps {
   warehouses: Warehouse[];
   boms: BOM[];
   globalNodes: GlobalNodeTemplate[];
+  categories?: ProductCategory[];
+  /** 与进销存快照合并批次下拉 */
+  psiRecords?: PsiRecord[];
   onAddRecord: (record: ProductionOpRecord) => void;
   onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
   onClose: () => void;
@@ -32,6 +50,8 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
   warehouses,
   boms,
   globalNodes,
+  categories = [],
+  psiRecords = [],
   onAddRecord,
   onAddRecordBatch,
   onClose,
@@ -39,8 +59,12 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
   const { currentUser, tenantCtx, userId } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
   const [reworkMaterialQty, setReworkMaterialQty] = useState<Record<string, number>>({});
+  const [reworkMaterialLineBatch, setReworkMaterialLineBatch] = useState<Record<string, string>>({});
   const [reworkMaterialWarehouseId, setReworkMaterialWarehouseId] = useState<string>(() => warehouses[0]?.id ?? '');
   const reworkIssueOpenKeyRef = useRef<string | null>(null);
+  const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
+  const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+  const { listAvailableBatches } = usePsiStockIndex(psiRecords, records);
 
   useEffect(() => {
     if (!reworkMaterialOrderId) {
@@ -113,29 +137,77 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
     return `${prefix}${todayStr}-${String(maxSeq + 1).padStart(4, '0')}`;
   };
 
+  const showBatchCol = bomMaterials.some(m => {
+    const p = productMap.get(m.productId);
+    return categoryUsesBatchManagement(categoryById.get(p?.categoryId ?? ''));
+  });
+
   const handleConfirm = async () => {
     const toIssue = bomMaterials.filter(m => (reworkMaterialQty[m.productId] ?? 0) > 0);
     if (toIssue.length === 0) return;
-    const docNo = getNextStockDocNoLocal();
     const warehouseId = reworkMaterialWarehouseId || (warehouses[0]?.id ?? '');
-    const batch: ProductionOpRecord[] = toIssue.map(m => ({
-      id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      type: 'STOCK_OUT' as const, orderId: order.id, productId: m.productId,
-      quantity: reworkMaterialQty[m.productId], operator: docOperator,
-      timestamp: new Date().toLocaleString(), status: '已完成',
-      warehouseId: warehouseId || undefined, docNo, reason: '来自于返工'
-    } as ProductionOpRecord));
-    if (onAddRecordBatch && batch.length > 1) { await onAddRecordBatch(batch); }
-    else { for (const rec of batch) await onAddRecord(rec); }
+    const wh = warehouseId || '';
+    if (wh) {
+      for (const m of toIssue) {
+        const p = productMap.get(m.productId);
+        const c = categoryById.get(p?.categoryId ?? '');
+        if (!categoryUsesBatchManagement(c)) continue;
+        const bn = clampBatchNoInput(reworkMaterialLineBatch[m.productId] ?? '');
+        if (!bn) {
+          toast.error(`请为物料「${m.name}」选择批次`);
+          return;
+        }
+        try {
+          const opts = await api.psi.getStockBatches({ productId: m.productId, warehouseId: wh });
+          const av = opts.find(o => o.batchNo === bn)?.stock ?? 0;
+          if ((reworkMaterialQty[m.productId] ?? 0) > av) {
+            toast.error(`物料「${m.name}」批次「${bn}」可用库存不足（${av}）`);
+            return;
+          }
+        } catch {
+          toast.error('校验批次库存失败，请稍后重试');
+          return;
+        }
+      }
+    }
+    const docNo = getNextStockDocNoLocal();
+    const batch: ProductionOpRecord[] = toIssue.map(m => {
+      const p = productMap.get(m.productId);
+      const c = categoryById.get(p?.categoryId ?? '');
+      const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(reworkMaterialLineBatch[m.productId] ?? '') : '';
+      return {
+        id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: 'STOCK_OUT' as const,
+        orderId: order.id,
+        productId: m.productId,
+        quantity: reworkMaterialQty[m.productId],
+        operator: docOperator,
+        timestamp: new Date().toLocaleString(),
+        status: '已完成',
+        warehouseId: warehouseId || undefined,
+        docNo,
+        reason: '来自于返工',
+        ...(bn ? { batchNo: bn } : {}),
+      } as ProductionOpRecord;
+    });
+    if (onAddRecordBatch && batch.length > 1) {
+      await onAddRecordBatch(batch);
+    } else {
+      for (const rec of batch) await onAddRecord(rec);
+    }
     if (warehouseId) {
       writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PROD_REWORK_MATERIAL_ISSUE, {
         warehouseId,
       });
     }
+    setReworkMaterialQty({});
+    setReworkMaterialLineBatch({});
     onClose();
   };
 
   const handleClose = () => {
+    setReworkMaterialQty({});
+    setReworkMaterialLineBatch({});
     onClose();
   };
 
@@ -154,7 +226,14 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
           {warehouses.length > 0 && (
             <div className="mb-4">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">出库仓库</label>
-              <select value={reworkMaterialWarehouseId} onChange={e => setReworkMaterialWarehouseId(e.target.value)} className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+              <select
+                value={reworkMaterialWarehouseId}
+                onChange={e => {
+                  setReworkMaterialWarehouseId(e.target.value);
+                  setReworkMaterialLineBatch({});
+                }}
+                className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+              >
                 {warehouses.map(w => (<option key={w.id} value={w.id}>{w.name}{w.code ? ` (${w.code})` : ''}</option>))}
               </select>
             </div>
@@ -171,6 +250,9 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
                     <tr className="bg-slate-50/80 border-b border-slate-100">
                       <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">物料</th>
                       <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">领料累计</th>
+                      {showBatchCol ? (
+                        <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-44">批次</th>
+                      ) : null}
                       <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-40">本次领料数量</th>
                     </tr>
                   </thead>
@@ -185,6 +267,20 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
                           {m.sku && <p className="text-[10px] text-slate-400 mt-0.5">{m.sku}</p>}
                         </td>
                         <td className="px-4 py-3 text-right text-sm font-bold text-slate-600">{reworkIssuedMap.get(m.productId) ?? 0}</td>
+                        {showBatchCol ? (
+                          <td className="px-4 py-3 align-top">
+                            <MaterialIssueBatchSelect
+                              product={productMap.get(m.productId)}
+                              categories={categories}
+                              warehouseId={reworkMaterialWarehouseId}
+                              value={reworkMaterialLineBatch[m.productId] ?? ''}
+                              onChange={v => setReworkMaterialLineBatch(prev => ({ ...prev, [m.productId]: v }))}
+                              mode="issue"
+                              hideLabel
+                              mergeBatches={listAvailableBatches(m.productId, reworkMaterialWarehouseId)}
+                            />
+                          </td>
+                        ) : null}
                         <td className="px-4 py-3">
                           <input type="number" min={0} step={1} value={reworkMaterialQty[m.productId] ?? ''} onChange={e => setReworkMaterialQty(prev => ({ ...prev, [m.productId]: Number(e.target.value) || 0 }))} className="w-full rounded-xl border border-slate-200 py-2 px-3 text-sm font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="0" />
                         </td>
@@ -199,7 +295,7 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
         {bomMaterials.length > 0 && (
           <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
             <button type="button" onClick={handleClose} className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">取消</button>
-            <button type="button" onClick={handleConfirm} disabled={!bomMaterials.some(m => (reworkMaterialQty[m.productId] ?? 0) > 0)} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+            <button type="button" onClick={() => void handleConfirm()} disabled={!bomMaterials.some(m => (reworkMaterialQty[m.productId] ?? 0) > 0)} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-colors">
               <ArrowUpFromLine className="w-4 h-4" /> 确认领料
             </button>
           </div>

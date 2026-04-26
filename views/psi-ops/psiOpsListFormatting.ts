@@ -46,6 +46,32 @@ export type PsiDocListMainRow = {
   customData?: Record<string, unknown>;
 };
 
+/**
+ * 采购单：按**所有行**的 `customData.relatedProductId` 去重后，顿号连接展示（列表/汇总用）。
+ * 无行级关联时回退为 — 。
+ */
+export function aggregatePurchaseBillRelatedProductListText(
+  lineRows: Array<{ customData?: unknown }>,
+  productMap?: Map<string, Product>,
+): string {
+  const ids: string[] = [];
+  for (const row of lineRows) {
+    const cd = row.customData;
+    if (!cd || typeof cd !== 'object' || Array.isArray(cd)) continue;
+    const id = String((cd as Record<string, unknown>).relatedProductId ?? '').trim();
+    if (id) ids.push(id);
+  }
+  const unique = Array.from(new Set(ids));
+  if (unique.length === 0) return '—';
+  return unique
+    .map((id) => {
+      const p = productMap?.get(id);
+      if (!p) return id;
+      return p.sku ? `${p.name || '—'}（${p.sku}）` : (p.name || id);
+    })
+    .join('、');
+}
+
 /** 采购订单标准字段在列表中的显示文案（按 fieldId 分派） */
 export function purchaseOrderStandardListText(
   fieldId: string,
@@ -70,18 +96,35 @@ export function purchaseOrderStandardListText(
   }
 }
 
+export type PurchaseBillListTextOptions = {
+  /** 传入同一单下全部行时，关联产品从各行汇总；不传则回退为单头/首行 `customData.relatedProductId`（旧数据） */
+  allLinesForRelatedProduct?: Array<{ customData?: unknown }>;
+};
+
 /** 采购单标准字段在列表中的显示文案（按 fieldId 分派，含仓库名查表） */
 export function purchaseBillStandardListText(
   fieldId: string,
   mainInfo: PsiDocListMainRow,
   docNum: string,
   warehouseMap: Map<string, Warehouse>,
+  productMap?: Map<string, Product>,
+  options?: PurchaseBillListTextOptions,
 ): string {
   switch (fieldId) {
     case 'docNumber':
       return formatPsiDocNumForList(docNum);
     case 'partner':
       return mainInfo.partner || '—';
+    case 'relatedProduct': {
+      if (options?.allLinesForRelatedProduct && options.allLinesForRelatedProduct.length > 0) {
+        return aggregatePurchaseBillRelatedProductListText(options.allLinesForRelatedProduct, productMap);
+      }
+      const id = String(mainInfo.customData?.relatedProductId ?? '').trim();
+      if (!id) return '—';
+      const p = productMap?.get(id);
+      if (!p) return id;
+      return p.sku ? `${p.name || '—'}（${p.sku}）` : (p.name || id);
+    }
     case 'warehouse': {
       const wid = mainInfo.warehouseId;
       if (!wid) return '—';

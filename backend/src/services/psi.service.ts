@@ -1,5 +1,8 @@
+import { Prisma } from '@prisma/client';
 import type { TenantPrismaClient } from '../lib/prisma.js';
+import { normalizeBatchNo } from '../../../shared/types.js';
 import { genId } from '../utils/genId.js';
+import { withSerializableRetry } from '../utils/withSerializableRetry.js';
 import { sanitizeUpdate, sanitizeCreate, normalizeDates } from '../utils/request.js';
 
 const PSI_STRIP_KEYS = new Set(['_savedAtMs', 'receivedQty', 'remainingQty', 'productName', 'productSku']);
@@ -29,6 +32,9 @@ function cleanPsi(data: Record<string, unknown>) {
     if (!('batchNo' in data)) data.batchNo = data.batch;
     delete data.batch;
   }
+  const bn = normalizeBatchNo(data.batchNo);
+  if (bn) data.batchNo = bn;
+  else delete data.batchNo;
   return data;
 }
 
@@ -102,19 +108,30 @@ export async function replaceRecords(
   deleteIds: string[] | undefined,
   newRecords: Record<string, unknown>[] | undefined,
 ) {
-  if (deleteIds?.length) {
-    await db.psiRecord.deleteMany({ where: { id: { in: deleteIds } } });
-  }
   const toInsert = (newRecords || []).map(r => {
     const data = cleanPsi(sanitizeCreate(r));
     if (!data.id) data.id = genId('psi');
     normalizeDates(data);
     return data as any;
   });
-  if (toInsert.length) {
-    await db.psiRecord.createMany({ data: toInsert });
-  }
-  return { message: '已替换' };
+  return withSerializableRetry(() =>
+    db.$transaction(
+      async tx => {
+        if (deleteIds?.length) {
+          await tx.psiRecord.deleteMany({ where: { id: { in: deleteIds } } });
+        }
+        if (toInsert.length) {
+          await tx.psiRecord.createMany({ data: toInsert });
+        }
+        return { message: '已替换' };
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        maxWait: 10_000,
+        timeout: 120_000,
+      },
+    ),
+  );
 }
 
 export async function deleteRecord(db: TenantPrismaClient, id: string) {
@@ -159,10 +176,11 @@ export async function getStock(
           _sum: { quantity: true },
         })
       : Promise.resolve([]),
+    /** 盘点：实盘与系统数的差额在 `diffQuantity`，与 `getStockBatches` / 前端 `usePsiStockIndex` 一致 */
     db.psiRecord.groupBy({
       by: ['productId'],
       where: { type: 'STOCKTAKE', ...productFilter, ...warehouseFilter },
-      _sum: { quantity: true },
+      _sum: { diffQuantity: true },
     }),
     db.productionOpRecord.groupBy({
       by: ['productId'],
@@ -175,7 +193,10 @@ export async function getStock(
   const stocktakeSet = new Set<string>();
 
   for (const r of stocktakeAgg) {
-    if (r.productId) { stockMap[r.productId] = Number(r._sum?.quantity || 0); stocktakeSet.add(r.productId); }
+    if (r.productId) {
+      stockMap[r.productId] = Number(r._sum?.diffQuantity || 0);
+      stocktakeSet.add(r.productId);
+    }
   }
   for (const r of inboundAgg) {
     if (r.productId) stockMap[r.productId] = (stockMap[r.productId] || 0) + Number(r._sum?.quantity || 0);
@@ -197,4 +218,107 @@ export async function getStock(
     productId: pid,
     stock: Math.max(0, qty),
   }));
+}
+
+type BatchAggRow = { batchNo: string | null; _sum: { quantity?: unknown; diffQuantity?: unknown } | null };
+
+function addBatchAgg(map: Map<string, number>, rows: BatchAggRow[], sign: 1 | -1, field: 'quantity' | 'diffQuantity') {
+  for (const r of rows) {
+    const key = normalizeBatchNo(r.batchNo);
+    if (!key) continue;
+    const raw = field === 'quantity' ? r._sum?.quantity : r._sum?.diffQuantity;
+    const q = Number(raw ?? 0) || 0;
+    if (!q) continue;
+    map.set(key, (map.get(key) || 0) + sign * q);
+  }
+}
+
+/** `production_op_records` 的 `groupBy({ by: ['batchNo'] })` 在部分 Prisma/客户端组合下会报 Unknown argument 'batchNo'，故用 findMany 后在内存按批号汇总。 */
+function addProdOpRowsToMap(
+  map: Map<string, number>,
+  rows: { batchNo: string | null; quantity: unknown }[],
+  sign: 1 | -1,
+) {
+  for (const r of rows) {
+    const bn = normalizeBatchNo(r.batchNo);
+    if (!bn) continue;
+    const q = Number(r.quantity ?? 0) || 0;
+    if (!q) continue;
+    map.set(bn, (map.get(bn) || 0) + sign * q);
+  }
+}
+
+/**
+ * 按「产品 + 仓库 + 批次号」汇总可用库存（与前端 `usePsiStockIndex` 中批次桶语义对齐，仅统计 `batchNo` 非空的流水）。
+ * `excludeProductionOpRecordId`：更新领料单某行时排除自身，避免把当前行已扣数量算进可用量。
+ */
+export async function getStockBatches(
+  db: TenantPrismaClient,
+  opts: { productId: string; warehouseId: string; excludeProductionOpRecordId?: string },
+): Promise<{ batchNo: string; stock: number }[]> {
+  const { productId, warehouseId, excludeProductionOpRecordId: exId } = opts;
+  const map = new Map<string, number>();
+
+  const prodEx = exId ? { id: { not: exId } } : {};
+
+  const [psiIn, psiOut, transferIn, transferOut, stocktakeRows, prodInRows, prodRetRows, prodOutRows] =
+    await Promise.all([
+      db.psiRecord.groupBy({
+        by: ['batchNo'],
+        where: {
+          productId,
+          warehouseId,
+          batchNo: { not: null },
+          type: { in: ['PURCHASE_BILL', 'STOCK_IN'] },
+        },
+        _sum: { quantity: true },
+      }),
+      db.psiRecord.groupBy({
+        by: ['batchNo'],
+        where: { productId, warehouseId, batchNo: { not: null }, type: 'SALES_BILL' },
+        _sum: { quantity: true },
+      }),
+      db.psiRecord.groupBy({
+        by: ['batchNo'],
+        where: { productId, toWarehouseId: warehouseId, batchNo: { not: null }, type: 'TRANSFER' },
+        _sum: { quantity: true },
+      }),
+      db.psiRecord.groupBy({
+        by: ['batchNo'],
+        where: { productId, fromWarehouseId: warehouseId, batchNo: { not: null }, type: 'TRANSFER' },
+        _sum: { quantity: true },
+      }),
+      db.psiRecord.groupBy({
+        by: ['batchNo'],
+        where: { productId, warehouseId, batchNo: { not: null }, type: 'STOCKTAKE' },
+        _sum: { diffQuantity: true },
+      }),
+      db.productionOpRecord.findMany({
+        where: { productId, warehouseId, batchNo: { not: null }, type: 'STOCK_IN', ...prodEx },
+        select: { batchNo: true, quantity: true },
+      }),
+      db.productionOpRecord.findMany({
+        where: { productId, warehouseId, batchNo: { not: null }, type: 'STOCK_RETURN', ...prodEx },
+        select: { batchNo: true, quantity: true },
+      }),
+      db.productionOpRecord.findMany({
+        where: { productId, warehouseId, batchNo: { not: null }, type: 'STOCK_OUT', ...prodEx },
+        select: { batchNo: true, quantity: true },
+      }),
+    ]);
+
+  addBatchAgg(map, psiIn, 1, 'quantity');
+  addBatchAgg(map, transferIn, 1, 'quantity');
+  addBatchAgg(map, stocktakeRows, 1, 'diffQuantity');
+  addProdOpRowsToMap(map, prodInRows, 1);
+  addProdOpRowsToMap(map, prodRetRows, 1);
+
+  addBatchAgg(map, psiOut, -1, 'quantity');
+  addBatchAgg(map, transferOut, -1, 'quantity');
+  addProdOpRowsToMap(map, prodOutRows, -1);
+
+  return [...map.entries()]
+    .map(([batchNo, stock]) => ({ batchNo, stock: Math.max(0, stock) }))
+    .filter(r => r.stock > 0)
+    .sort((a, b) => a.batchNo.localeCompare(b.batchNo, 'zh-CN'));
 }

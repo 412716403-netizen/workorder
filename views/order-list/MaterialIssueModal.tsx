@@ -4,13 +4,20 @@ import { Package, X, ArrowUpFromLine } from 'lucide-react';
 import {
   ProductionOrder,
   Product,
+  ProductCategory,
   BOM,
   Warehouse,
   AppDictionaries,
   ProductionOpRecord,
   ProdOpType,
   GlobalNodeTemplate,
+  PsiRecord,
 } from '../../types';
+import { categoryUsesBatchManagement } from '../../types';
+import { toast } from 'sonner';
+import * as api from '../../services/api';
+import { clampBatchNoInput } from '../../hooks/useBatchPicker';
+import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
 import { toLocalCompactYmd } from '../../utils/localDateTime';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
@@ -21,6 +28,8 @@ import {
   WAREHOUSE_DOC_KIND,
 } from '../../utils/warehouseDocPreference';
 import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
+import { usePsiStockIndex } from '../../hooks/usePsiStockIndex';
+import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 
 interface MaterialIssueModalProps {
   orderId: string | null;
@@ -38,6 +47,9 @@ interface MaterialIssueModalProps {
   onClose: () => void;
   userPermissions?: string[];
   tenantRole?: string;
+  categories?: ProductCategory[];
+  /** 与工单中心 PSI 快照合并批次下拉，缓解刚写入尚未刷新 API 的短暂不一致 */
+  psiRecords?: PsiRecord[];
 }
 
 type BomMaterial = {
@@ -81,10 +93,13 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
   prodRecords,
   onAddRecord,
   onClose,
+  categories = [],
+  psiRecords = [],
 }) => {
   const { currentUser, tenantCtx, userId } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
   const [materialIssueQty, setMaterialIssueQty] = useState<Record<string, number>>({});
+  const [materialIssueLineBatch, setMaterialIssueLineBatch] = useState<Record<string, string>>({});
   const [materialIssueWarehouseId, setMaterialIssueWarehouseId] = useState<string>(warehouses[0]?.id ?? '');
   const materialIssueOpenKeyRef = useRef<string | null>(null);
 
@@ -103,11 +118,31 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
   }, [orderId, forProduct?.productId, forProduct, warehouses, tenantCtx?.tenantId, userId]);
 
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
+  const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+
+  /** 与工单中心列表产品行一致：展示分类「表单中」勾选的自定义字段（不含附件列） */
+  const materialProductCustomTags = (productId: string) => {
+    const p = productMap.get(productId);
+    if (!p?.categoryId) return null;
+    const entries = getProductCategoryCustomFieldEntries(p, categoryById.get(p.categoryId), { includeFile: false });
+    if (entries.length === 0) return null;
+    return (
+      <div className="mt-1 flex flex-wrap items-center gap-1">
+        {entries.map(({ field, display }) => (
+          <span key={field.id} className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">
+            {field.label}: {display}
+          </span>
+        ))}
+      </div>
+    );
+  };
+  const { listAvailableBatches } = usePsiStockIndex(psiRecords, prodRecords);
 
   if (!orderId && !forProduct) return null;
 
   const handleClose = () => {
     setMaterialIssueQty({});
+    setMaterialIssueLineBatch({});
     onClose();
   };
 
@@ -189,11 +224,42 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
     prodRecords.filter(r => r.type === 'STOCK_OUT' && !r.partner && r.orderId === order.id && r.reason !== '来自于返工').forEach(r => {
       issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
     });
-    const handleIssueMaterials = () => {
+    const showOrderBatchCol = bomMaterials.some(m => {
+      const p = productMap.get(m.productId);
+      return categoryUsesBatchManagement(categoryById.get(p?.categoryId ?? ''));
+    });
+    const handleIssueMaterials = async () => {
       const toIssue = bomMaterials.filter(m => (materialIssueQty[m.productId] ?? 0) > 0);
       if (toIssue.length === 0) return;
+      const wh = materialIssueWarehouseId || '';
+      if (wh) {
+        for (const m of toIssue) {
+          const p = productMap.get(m.productId);
+          const c = categoryById.get(p?.categoryId ?? '');
+          if (!categoryUsesBatchManagement(c)) continue;
+          const bn = clampBatchNoInput(materialIssueLineBatch[m.productId] ?? '');
+          if (!bn) {
+            toast.error(`请为物料「${m.name}」选择批次`);
+            return;
+          }
+          try {
+            const opts = await api.psi.getStockBatches({ productId: m.productId, warehouseId: wh });
+            const av = opts.find(o => o.batchNo === bn)?.stock ?? 0;
+            if ((materialIssueQty[m.productId] ?? 0) > av) {
+              toast.error(`物料「${m.name}」批次「${bn}」可用库存不足（${av}）`);
+              return;
+            }
+          } catch {
+            toast.error('校验批次库存失败，请稍后重试');
+            return;
+          }
+        }
+      }
       const docNo = getNextStockDocNo();
       toIssue.forEach(m => {
+        const p = productMap.get(m.productId);
+        const c = categoryById.get(p?.categoryId ?? '');
+        const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(materialIssueLineBatch[m.productId] ?? '') : '';
         const rec: ProductionOpRecord = {
           id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           type: 'STOCK_OUT' as ProdOpType,
@@ -204,7 +270,8 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
           timestamp: new Date().toLocaleString(),
           status: '已完成',
           warehouseId: materialIssueWarehouseId || undefined,
-          docNo
+          docNo,
+          ...(bn ? { batchNo: bn } : {}),
         };
         onAddRecord(rec);
       });
@@ -218,8 +285,8 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
     return (
       <div className="fixed inset-0 z-[75] flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={handleClose} aria-hidden />
-        <div className="relative bg-white w-full max-w-2xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+        <div className="relative bg-white w-full max-w-4xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
+          <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0 bg-white">
             <div>
               <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
                 <Package className="w-5 h-5 text-indigo-600" /> 物料发出
@@ -230,13 +297,16 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
               <X className="w-5 h-5" />
             </button>
           </div>
-          <div className="flex-1 overflow-auto p-4">
+          <div className="flex-1 overflow-auto p-5 space-y-4">
             {warehouses.length > 0 && (
-              <div className="mb-4">
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">出库仓库</label>
                 <select
                   value={materialIssueWarehouseId}
-                  onChange={e => setMaterialIssueWarehouseId(e.target.value)}
+                  onChange={e => {
+                    setMaterialIssueWarehouseId(e.target.value);
+                    setMaterialIssueLineBatch({});
+                  }}
                   className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
                 >
                   {warehouses.map(w => (
@@ -248,13 +318,17 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
             {bomMaterials.length === 0 ? (
               <p className="py-8 text-center text-slate-400 text-sm">该工单未配置 BOM 物料，无法进行物料发出</p>
             ) : (
-              <table className="w-full text-left border-collapse">
+              <div className="overflow-x-auto rounded-2xl border border-slate-100">
+              <table className="w-full min-w-[760px] text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-100">
-                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">物料</th>
-                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">理论需量</th>
-                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-36">领料进度</th>
-                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-40">本次领料数量</th>
+                  <tr className="bg-slate-50/90 border-b border-slate-100">
+                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap">物料</th>
+                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-right whitespace-nowrap w-24">理论需量</th>
+                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-44">领料进度</th>
+                    {showOrderBatchCol ? (
+                      <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-48">批次</th>
+                    ) : null}
+                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-center whitespace-nowrap w-36">本次领料</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -262,17 +336,24 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                     const issued = issuedMap.get(m.productId) ?? 0;
                     return (
                     <tr key={m.productId} className="hover:bg-slate-50/50">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-bold text-slate-800">{m.name}</p>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          <span className="text-sm font-bold text-slate-800">{m.name}</span>
+                          {m.sku ? (
+                            <span className="text-xs font-bold text-slate-400 tabular-nums" title="产品编号">
+                              {m.sku}
+                            </span>
+                          ) : null}
                           {m.nodeNames.map(nn => (
-                            <span key={nn} className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{nn}</span>
+                            <span key={nn} className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                              {nn}
+                            </span>
                           ))}
                         </div>
-                        {m.sku && <p className="text-[10px] text-slate-400 mt-0.5">{m.sku}</p>}
+                        {materialProductCustomTags(m.productId)}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-slate-600 tabular-nums">{formatMaterialQtyDisplay(m.unitNeeded)}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-4 text-right text-sm font-black text-slate-700 tabular-nums">{formatMaterialQtyDisplay(m.unitNeeded)}</td>
+                      <td className="px-4 py-4">
                         {(() => {
                           const needed = m.unitNeeded;
                           const pct = needed > 0 ? Math.min(100, (issued / needed) * 100) : 0;
@@ -303,14 +384,29 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                           );
                         })()}
                       </td>
-                      <td className="px-4 py-3">
+                      {showOrderBatchCol ? (
+                        <td className="px-4 py-4 align-middle">
+                          <MaterialIssueBatchSelect
+                            product={productMap.get(m.productId)}
+                            categories={categories}
+                            warehouseId={materialIssueWarehouseId}
+                            value={materialIssueLineBatch[m.productId] ?? ''}
+                            onChange={v => setMaterialIssueLineBatch(prev => ({ ...prev, [m.productId]: v }))}
+                            mode="issue"
+                            hideLabel
+                            className="min-w-[170px]"
+                            mergeBatches={listAvailableBatches(m.productId, materialIssueWarehouseId)}
+                          />
+                        </td>
+                      ) : null}
+                      <td className="px-4 py-4">
                         <input
                           type="number"
                           min={0}
                           step={1}
                           value={materialIssueQty[m.productId] ?? ''}
                           onChange={e => setMaterialIssueQty(prev => ({ ...prev, [m.productId]: Number(e.target.value) || 0 }))}
-                          className="w-full rounded-xl border border-slate-200 py-2 px-3 text-sm font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
+                          className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 px-3 text-base font-black text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
                           placeholder="0"
                         />
                       </td>
@@ -319,10 +415,11 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                   })}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
           {bomMaterials.length > 0 && (
-            <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/60 flex justify-end gap-3 shrink-0">
               <button
                 type="button"
                 onClick={handleClose}
@@ -332,7 +429,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={handleIssueMaterials}
+                onClick={() => void handleIssueMaterials()}
                 disabled={!bomMaterials.some(m => (materialIssueQty[m.productId] ?? 0) > 0)}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-colors"
               >
@@ -441,11 +538,42 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
           (!r.sourceProductId && r.orderId && familyIds.has(r.orderId));
         if (hit) issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
       });
-    const handleIssueMaterials = () => {
+    const showFpBatchCol = bomMaterials.some(m => {
+      const p = productMap.get(m.productId);
+      return categoryUsesBatchManagement(categoryById.get(p?.categoryId ?? ''));
+    });
+    const handleIssueMaterials = async () => {
       const toIssue = bomMaterials.filter(m => (materialIssueQty[m.productId] ?? 0) > 0);
       if (toIssue.length === 0) return;
+      const wh = materialIssueWarehouseId || '';
+      if (wh) {
+        for (const m of toIssue) {
+          const p = productMap.get(m.productId);
+          const c = categoryById.get(p?.categoryId ?? '');
+          if (!categoryUsesBatchManagement(c)) continue;
+          const bn = clampBatchNoInput(materialIssueLineBatch[m.productId] ?? '');
+          if (!bn) {
+            toast.error(`请为物料「${m.name}」选择批次`);
+            return;
+          }
+          try {
+            const opts = await api.psi.getStockBatches({ productId: m.productId, warehouseId: wh });
+            const av = opts.find(o => o.batchNo === bn)?.stock ?? 0;
+            if ((materialIssueQty[m.productId] ?? 0) > av) {
+              toast.error(`物料「${m.name}」批次「${bn}」可用库存不足（${av}）`);
+              return;
+            }
+          } catch {
+            toast.error('校验批次库存失败，请稍后重试');
+            return;
+          }
+        }
+      }
       const docNo = getNextStockDocNo();
-      toIssue.forEach((m, i) => {
+      toIssue.forEach(m => {
+        const p = productMap.get(m.productId);
+        const c = categoryById.get(p?.categoryId ?? '');
+        const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(materialIssueLineBatch[m.productId] ?? '') : '';
         onAddRecord({
           id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           type: 'STOCK_OUT' as ProdOpType,
@@ -456,7 +584,8 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
           status: '已完成',
           warehouseId: materialIssueWarehouseId || undefined,
           docNo,
-          sourceProductId
+          sourceProductId,
+          ...(bn ? { batchNo: bn } : {}),
         });
       });
       if (materialIssueWarehouseId) {
@@ -474,8 +603,8 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
           onClick={handleClose}
           aria-hidden
         />
-        <div className="relative bg-white w-full max-w-2xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+        <div className="relative bg-white w-full max-w-4xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
+          <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0 bg-white">
             <div>
               <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
                 <Package className="w-5 h-5 text-indigo-600" /> 物料发出（关联产品）
@@ -492,13 +621,16 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
               <X className="w-5 h-5" />
             </button>
           </div>
-          <div className="flex-1 overflow-auto p-4">
+          <div className="flex-1 overflow-auto p-5 space-y-4">
             {warehouses.length > 0 && (
-              <div className="mb-4">
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">出库仓库</label>
                 <select
                   value={materialIssueWarehouseId}
-                  onChange={e => setMaterialIssueWarehouseId(e.target.value)}
+                  onChange={e => {
+                    setMaterialIssueWarehouseId(e.target.value);
+                    setMaterialIssueLineBatch({});
+                  }}
                   className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
                 >
                   {warehouses.map(w => (
@@ -513,13 +645,17 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
             {bomMaterials.length === 0 ? (
               <p className="py-8 text-center text-slate-400 text-sm">该产品未配置 BOM 物料，无法进行物料发出</p>
             ) : (
-              <table className="w-full text-left border-collapse">
+              <div className="overflow-x-auto rounded-2xl border border-slate-100">
+              <table className="w-full min-w-[760px] text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-100">
-                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">物料</th>
-                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">累计理论需量</th>
-                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-36">领料进度</th>
-                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-40">本次领料</th>
+                  <tr className="bg-slate-50/90 border-b border-slate-100">
+                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap">物料</th>
+                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-right whitespace-nowrap w-28">累计需量</th>
+                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-44">领料进度</th>
+                    {showFpBatchCol ? (
+                      <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-48">批次</th>
+                    ) : null}
+                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-center whitespace-nowrap w-36">本次领料</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -527,19 +663,24 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                     const issued = issuedMap.get(m.productId) ?? 0;
                     return (
                       <tr key={m.productId} className="hover:bg-slate-50/50">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-bold text-slate-800">{m.name}</p>
+                        <td className="px-4 py-4">
+                          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                            <span className="text-sm font-bold text-slate-800">{m.name}</span>
+                            {m.sku ? (
+                              <span className="text-xs font-bold text-slate-400 tabular-nums" title="产品编号">
+                                {m.sku}
+                              </span>
+                            ) : null}
                             {m.nodeNames.map(nn => (
                               <span key={nn} className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
                                 {nn}
                               </span>
                             ))}
                           </div>
-                          {m.sku && <p className="text-[10px] text-slate-400 mt-0.5">{m.sku}</p>}
+                          {materialProductCustomTags(m.productId)}
                         </td>
-                        <td className="px-4 py-3 text-right text-sm font-bold text-slate-600 tabular-nums">{formatMaterialQtyDisplay(m.unitNeeded)}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-4 text-right text-sm font-black text-slate-700 tabular-nums">{formatMaterialQtyDisplay(m.unitNeeded)}</td>
+                        <td className="px-4 py-4">
                           {(() => {
                             const needed = m.unitNeeded;
                             const pct = needed > 0 ? Math.min(100, (issued / needed) * 100) : 0;
@@ -576,7 +717,22 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                             );
                           })()}
                         </td>
-                        <td className="px-4 py-3">
+                        {showFpBatchCol ? (
+                          <td className="px-4 py-4 align-middle">
+                            <MaterialIssueBatchSelect
+                              product={productMap.get(m.productId)}
+                              categories={categories}
+                              warehouseId={materialIssueWarehouseId}
+                              value={materialIssueLineBatch[m.productId] ?? ''}
+                              onChange={v => setMaterialIssueLineBatch(prev => ({ ...prev, [m.productId]: v }))}
+                              mode="issue"
+                              hideLabel
+                              className="min-w-[170px]"
+                              mergeBatches={listAvailableBatches(m.productId, materialIssueWarehouseId)}
+                            />
+                          </td>
+                        ) : null}
+                        <td className="px-4 py-4">
                           <input
                             type="number"
                             min={0}
@@ -585,7 +741,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                             onChange={e =>
                               setMaterialIssueQty(prev => ({ ...prev, [m.productId]: Number(e.target.value) || 0 }))
                             }
-                            className="w-full rounded-xl border border-slate-200 py-2 px-3 text-sm font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
+                            className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 px-3 text-base font-black text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
                             placeholder="0"
                           />
                         </td>
@@ -594,10 +750,11 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                   })}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
           {bomMaterials.length > 0 && (
-            <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/60 flex justify-end gap-3 shrink-0">
               <button
                 type="button"
                 onClick={handleClose}
@@ -607,7 +764,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={handleIssueMaterials}
+                onClick={() => void handleIssueMaterials()}
                 disabled={!bomMaterials.some(m => (materialIssueQty[m.productId] ?? 0) > 0)}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-colors"
               >

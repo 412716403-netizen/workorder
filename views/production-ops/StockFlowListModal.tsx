@@ -133,7 +133,11 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
       sourceProductId: first.sourceProductId,
       timestamp: first.timestamp,
       warehouseId: first.warehouseId ?? '',
-      lines: docRecords.map(r => ({ productId: r.productId, quantity: r.quantity })),
+      lines: docRecords.map(r => ({
+        productId: r.productId,
+        quantity: r.quantity,
+        ...(r.batchNo ? { batchNo: r.batchNo } : {}),
+      })),
       reason: first.reason,
       operator: '',
       partner: first.partner,

@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import { Product, Warehouse, ProductCategory, AppDictionaries } from '../../types';
+import { categoryUsesBatchManagement, normalizeBatchNo } from '../../types';
+import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 
 interface TransferItem {
@@ -16,6 +18,7 @@ interface TransferItem {
   productId: string;
   quantity?: number;
   variantQuantities?: Record<string, number>;
+  batchNo?: string;
 }
 
 export interface TransferOrderModalProps {
@@ -26,7 +29,7 @@ export interface TransferOrderModalProps {
   setTransferForm: React.Dispatch<React.SetStateAction<{ fromWarehouseId: string; toWarehouseId: string; transferDate: string; note: string }>>;
   transferItems: TransferItem[];
   addTransferItem: () => void;
-  updateTransferItem: (id: string, updates: Partial<{ productId: string; quantity?: number; variantQuantities?: Record<string, number> }>) => void;
+  updateTransferItem: (id: string, updates: Partial<TransferItem>) => void;
   updateTransferVariantQty: (lineId: string, variantId: string, qty: number) => void;
   removeTransferItem: (id: string) => void;
   handleSaveTransfer: () => void;
@@ -112,6 +115,7 @@ const TransferOrderModal: React.FC<TransferOrderModalProps> = ({
               {transferItems.map((line) => {
                 const trProd = productMapPSI.get(line.productId);
                 const trHasVariants = trProd?.variants && trProd.variants.length > 0;
+                const trUsesBatch = categoryUsesBatchManagement(categories.find(c => c.id === trProd?.categoryId));
                 const trLineQty = trHasVariants
                   ? Object.values(line.variantQuantities || {}).reduce((s, q) => s + q, 0)
                   : (line.quantity ?? 0);
@@ -124,7 +128,12 @@ const TransferOrderModal: React.FC<TransferOrderModalProps> = ({
                         <SearchableProductSelect options={products} categories={categories} value={line.productId} onChange={(id) => {
                           const p = productMapPSI.get(id);
                           const hv = p?.variants && p.variants.length > 0;
-                          updateTransferItem(line.id, { productId: id, quantity: hv ? undefined : 0, variantQuantities: hv ? {} : undefined });
+                          updateTransferItem(line.id, {
+                            productId: id,
+                            quantity: hv ? undefined : 0,
+                            variantQuantities: hv ? {} : undefined,
+                            batchNo: undefined,
+                          });
                         }} />
                       </div>
                       {trHasVariants && (
@@ -133,6 +142,21 @@ const TransferOrderModal: React.FC<TransferOrderModalProps> = ({
                           <div className="py-2.5 px-3 text-sm font-black text-indigo-600 bg-indigo-50 rounded-xl border border-indigo-100">
                             {formatQtyDisplay(trLineQty)} {line.productId ? getUnitName(line.productId) : '—'}
                           </div>
+                        </div>
+                      )}
+                      {!trHasVariants && trUsesBatch && line.productId && (
+                        <div className="min-w-[10rem] w-44 max-w-[16rem] shrink-0 space-y-1">
+                          <MaterialIssueBatchSelect
+                            product={trProd}
+                            categories={categories}
+                            warehouseId={transferForm.fromWarehouseId}
+                            value={line.batchNo ?? ''}
+                            onChange={v =>
+                              updateTransferItem(line.id, { batchNo: normalizeBatchNo(v) ?? undefined })
+                            }
+                            mode="issue"
+                            controlVariant="formRow"
+                          />
                         </div>
                       )}
                       {!trHasVariants && (

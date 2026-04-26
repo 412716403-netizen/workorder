@@ -22,6 +22,8 @@ export const purchaseOrderFormConfigSchema: FormConfigSchema<PurchaseOrderFormSe
           kind: 'toggle',
           id: 'relatedProductEnabled',
           label: '关联产品',
+          description:
+            '开启后，可在列表、新建/编辑与详情中填写「关联产品」，用于说明本单采购物料主要服务于哪个成品（与下方明细「采购品项」不同）；关闭后整单不显示该字段。列表搜索可按关联产品的名称与编号匹配。',
           path: 'relatedProductEnabled',
           defaultChecked: false,
         },

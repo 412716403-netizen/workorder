@@ -20,6 +20,7 @@ import type {
   OutsourceFormSettings,
   ReworkFormSettings,
   PrintTemplate,
+  PsiRecord,
 } from '../types';
 import { DEFAULT_OUTSOURCE_FORM_SETTINGS } from '../types';
 import StockMaterialPanel from './production-ops/StockMaterialPanel';
@@ -62,6 +63,8 @@ interface ProductionMgmtOpsViewProps {
   onRefreshPrintTemplates?: () => void | Promise<void>;
   userPermissions?: string[];
   tenantRole?: string;
+  /** 生产物料领退料弹窗内合并本地进销存批次余量（可选） */
+  psiRecords?: PsiRecord[];
 }
 
 const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
@@ -99,6 +102,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
   onRefreshPrintTemplates,
   userPermissions,
   tenantRole,
+  psiRecords = [],
 }) => {
   const panelProps = {
     productionLinkMode,
@@ -136,6 +140,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
         onUpdatePrintTemplates={onUpdatePrintTemplates}
         onRefreshPrintTemplates={onRefreshPrintTemplates}
         plans={plans}
+        psiRecords={psiRecords}
       />
     );
   if (limitType === 'OUTSOURCE')
@@ -149,6 +154,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
         printTemplates={printTemplates}
         onUpdatePrintTemplates={onUpdatePrintTemplates}
         onRefreshPrintTemplates={onRefreshPrintTemplates}
+        psiRecords={psiRecords}
       />
     );
   if (limitType === 'REWORK')
@@ -161,6 +167,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
         printTemplates={printTemplates}
         onUpdatePrintTemplates={onUpdatePrintTemplates}
         onRefreshPrintTemplates={onRefreshPrintTemplates}
+        psiRecords={psiRecords}
       />
     );
 

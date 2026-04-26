@@ -59,6 +59,12 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
 
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     switch (err.code) {
+      case 'P2034':
+        res.status(409).json({
+          error:
+            '当前保存与其他操作冲突（库存事务繁忙）。请稍后重试；若多次失败请稍隔几秒再点保存。',
+        });
+        return;
       case 'P2025':
         res.status(404).json({ error: '记录不存在或已被删除' });
         return;

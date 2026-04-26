@@ -96,22 +96,34 @@ const WarehouseFlowDocumentDetailModal: React.FC<WarehouseFlowDocumentDetailModa
         toWarehouseId: first.toWarehouseId,
         orderNumber: '—',
       };
-    const detailLinesByProductVariant = new Map<string, { productId: string; variantId?: string; quantity: number; purchasePrice?: number; salesPrice?: number; record: any }>();
+    const detailLinesByProductVariant = new Map<
+      string,
+      { productId: string; variantId?: string; batchNo?: string; quantity: number; purchasePrice?: number; salesPrice?: number; record: any }
+    >();
     docRecords.forEach(r => {
       const vId = r.variantId ?? '';
-      const key = `${r.productId}|${vId}`;
+      const bnRaw = String((r as { batchNo?: string; batch?: string }).batchNo ?? (r as { batch?: string }).batch ?? '').trim();
+      const batchNorm = bnRaw || '__NONE__';
+      const key = `${r.productId}|${vId}|${batchNorm}`;
       const existing = detailLinesByProductVariant.get(key);
       const qty = r.quantity ?? 0;
       const price = r.purchasePrice ?? r.salesPrice;
       if (!existing) {
-        detailLinesByProductVariant.set(key, { productId: r.productId, variantId: vId || undefined, quantity: qty, purchasePrice: price, salesPrice: r.salesPrice, record: r });
+        detailLinesByProductVariant.set(key, {
+          productId: r.productId,
+          variantId: vId || undefined,
+          batchNo: bnRaw || undefined,
+          quantity: qty,
+          purchasePrice: price,
+          salesPrice: r.salesPrice,
+          record: r,
+        });
       } else {
         existing.quantity += qty;
       }
     });
     const detailLines = Array.from(detailLinesByProductVariant.values()).map(item => {
       const product = productMapPSI.get(item.productId);
-      const category = categoryMapPSI.get(product?.categoryId);
       let variantLabel = '';
       if (item.variantId && product?.variants) {
         const v = product.variants.find((vv: ProductVariant) => vv.id === item.variantId);
@@ -126,7 +138,7 @@ const WarehouseFlowDocumentDetailModal: React.FC<WarehouseFlowDocumentDetailModa
         productName: product?.name ?? '—',
         productSku: product?.sku ?? '—',
         unitName: item.productId ? getUnitName(item.productId) : 'PCS',
-        variantLabel
+        variantLabel,
       };
     });
     return { detailType, mainInfo, detailLines };
@@ -134,6 +146,7 @@ const WarehouseFlowDocumentDetailModal: React.FC<WarehouseFlowDocumentDetailModa
 
   if (!result) return null;
   const { detailType, mainInfo, detailLines } = result;
+  const showBatchCol = detailLines.some((l: { batchNo?: string }) => Boolean((l.batchNo ?? '').trim()));
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
@@ -208,6 +221,7 @@ const WarehouseFlowDocumentDetailModal: React.FC<WarehouseFlowDocumentDetailModa
                 <tr className="bg-slate-50 border-b border-slate-200">
                   <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">产品 / SKU</th>
                   {detailLines.some((l: any) => l.variantLabel) && <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">规格（颜色/尺码）</th>}
+                  {showBatchCol && <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">批次</th>}
                   <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">数量</th>
                   {(detailType === 'PURCHASE_BILL' || detailType === 'SALES_BILL') && <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">单价</th>}
                   {(detailType === 'PURCHASE_BILL' || detailType === 'SALES_BILL') && <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">金额</th>}
@@ -216,11 +230,15 @@ const WarehouseFlowDocumentDetailModal: React.FC<WarehouseFlowDocumentDetailModa
               <tbody>
                 {detailLines.map((line, idx) => {
                   const price = line.purchasePrice ?? line.salesPrice ?? 0;
+                  const batchCell = (line as { batchNo?: string }).batchNo?.trim() || '—';
                   return (
-                    <tr key={`${line.productId}-${line.variantId ?? ''}-${idx}`} className="border-b border-slate-100">
+                    <tr key={`${line.productId}-${line.variantId ?? ''}-${(line as { batchNo?: string }).batchNo ?? ''}-${idx}`} className="border-b border-slate-100">
                       <td className="px-4 py-3"><span className="font-bold text-slate-800">{line.productName}</span> <span className="text-slate-400 text-[10px]">{line.productSku}</span></td>
                       {detailLines.some((l: any) => l.variantLabel) && (
                         <td className="px-4 py-3 text-slate-600">{line.variantLabel || '—'}</td>
+                      )}
+                      {showBatchCol && (
+                        <td className="px-4 py-3 text-xs font-bold text-slate-600 break-all">{batchCell}</td>
                       )}
                       <td className="px-4 py-3 text-right font-bold text-indigo-600">{(line.quantity ?? 0)} {line.unitName}</td>
                       {(detailType === 'PURCHASE_BILL' || detailType === 'SALES_BILL') && (

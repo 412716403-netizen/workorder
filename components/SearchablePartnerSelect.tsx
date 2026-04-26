@@ -8,6 +8,7 @@ import { useAuthOptional } from '../contexts/AuthContext';
 import { useAppActionsOptional } from '../contexts/AppDataContext';
 import { hasSubPermission } from '../utils/hasSubPermission';
 import { effectiveCustomDocFieldType, formatReportCustomDataForList } from '../utils/reportCustomDocField';
+import { getSupplierCategoryId } from '../utils/resolvePartnerCategoryId';
 
 /**
  * 合作单位选择：与 SearchableProductSelect 一致使用 Portal + fixed，避免在滚动/弹窗内被裁切。
@@ -15,12 +16,13 @@ import { effectiveCustomDocFieldType, formatReportCustomDataForList } from '../u
  */
 const DEFAULT_PARTNER_DROPDOWN_Z = 10050;
 
-function resolveQuickCreateCategoryId(categories: PartnerCategory[], explicit?: string): string | undefined {
+function resolveQuickCreateFormCategoryId(
+  categories: PartnerCategory[],
+  explicit?: string
+): string | undefined {
   const ex = explicit?.trim();
   if (ex) return ex;
-  const exact = categories.find(c => c.name.trim() === '供应商');
-  if (exact) return exact.id;
-  return categories.find(c => c.name.includes('供应商'))?.id;
+  return getSupplierCategoryId(categories);
 }
 
 export function SearchablePartnerSelect({
@@ -40,6 +42,8 @@ export function SearchablePartnerSelect({
   allowQuickCreate = false,
   /** 快捷新建表单中分类的默认值（id）；不传时尝试匹配名称「供应商」 */
   quickCreateCategoryId,
+  /** 有值时仅允许选择该分类下合作单位；分类 Tab 仍显示，点其它分类时列表会为空或不含可选项 */
+  onlyCategoryId,
 }: {
   options: Partner[];
   value: string;
@@ -56,6 +60,7 @@ export function SearchablePartnerSelect({
   portalZIndex?: number;
   allowQuickCreate?: boolean;
   quickCreateCategoryId?: string;
+  onlyCategoryId?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -82,6 +87,14 @@ export function SearchablePartnerSelect({
     );
   }, [allowQuickCreate, categories.length, auth]);
 
+  const quickCreateCategoryOptions = useMemo(
+    () =>
+      onlyCategoryId?.trim()
+        ? categories.filter(c => c.id === onlyCategoryId)
+        : categories,
+    [categories, onlyCategoryId]
+  );
+
   const selectedPartner =
     valueMode === 'id' ? options.find(p => p.id === value) : options.find(p => p.name === value);
 
@@ -90,6 +103,9 @@ export function SearchablePartnerSelect({
   const filteredOptions = useMemo(() => {
     return options
       .filter(p => {
+        if (onlyCategoryId?.trim() && p.categoryId !== onlyCategoryId) {
+          return false;
+        }
         const hay = [
           p.name,
           p.contact || '',
@@ -104,7 +120,7 @@ export function SearchablePartnerSelect({
         return matchesSearch && matchesCategory;
       })
       .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id));
-  }, [options, searchNeedle, activeTab]);
+  }, [options, onlyCategoryId, searchNeedle, activeTab]);
 
   const updatePanelPosition = useCallback(() => {
     const el = triggerRef.current;
@@ -174,21 +190,25 @@ export function SearchablePartnerSelect({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
+  useEffect(() => {
+    setActiveTab('all');
+  }, [onlyCategoryId]);
+
   const triggerCls = compact
-    ? 'w-full bg-slate-50 border-none rounded-xl py-2.5 px-3 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between disabled:opacity-50 transition-all min-h-[40px]'
+    ? 'w-full bg-slate-50 border-none rounded-xl py-2 px-2.5 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between disabled:opacity-50 transition-all min-h-[36px]'
     : 'w-full bg-slate-50 border-none rounded-xl py-3.5 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between disabled:opacity-50 transition-all min-h-[48px]';
 
   const searchInputCls = compact
-    ? 'w-full bg-slate-50 border-none rounded-lg py-2 pl-9 pr-3 text-sm font-bold leading-tight outline-none focus:ring-2 focus:ring-indigo-500'
+    ? 'w-full bg-slate-50 border-none rounded-lg py-1.5 pl-8 pr-2.5 text-xs font-semibold leading-tight outline-none focus:ring-2 focus:ring-indigo-500'
     : 'w-full bg-slate-50 border-none rounded-xl py-3 pl-11 pr-4 text-sm font-bold leading-tight outline-none focus:ring-2 focus:ring-indigo-500';
 
   const tabBtnCls = (active: boolean) =>
     compact
-      ? `px-2 py-1 rounded-md text-[10px] font-black uppercase transition-all whitespace-nowrap ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`
-      : `px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all whitespace-nowrap ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`;
+      ? `px-2 py-0.5 rounded-md text-[11px] font-black uppercase transition-all whitespace-nowrap ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`
+      : `px-3 py-1.5 rounded-lg text-sm font-black uppercase transition-all whitespace-nowrap ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`;
 
   const rowBtnCls = (selected: boolean) => {
-    const pad = compact ? 'py-2 px-2.5 rounded-xl' : 'p-3 rounded-2xl';
+    const pad = compact ? 'py-1 px-2 rounded-lg' : 'p-3 rounded-2xl';
     return `w-full text-left ${pad} transition-all border-2 ${
       selected ? 'bg-indigo-50 border-indigo-600/20 text-indigo-700' : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'
     }`;
@@ -197,14 +217,14 @@ export function SearchablePartnerSelect({
   const dropdownPanel = isOpen && typeof document !== 'undefined' && (
     <div
       data-searchable-partner-dropdown
-      className={`bg-white border border-slate-200 shadow-2xl animate-in fade-in zoom-in-95 duration-150 ${compact ? 'rounded-xl p-3' : 'rounded-2xl p-4'}`}
+      className={`bg-white border border-slate-200 shadow-2xl animate-in fade-in zoom-in-95 duration-150 ${compact ? 'rounded-lg p-2' : 'rounded-2xl p-4'}`}
       style={panelStyle}
       onMouseDown={e => e.preventDefault()}
     >
-      <div className={`flex items-center gap-2 flex-shrink-0 ${compact ? 'mb-2' : 'mb-4'}`}>
+      <div className={`flex items-center gap-1.5 flex-shrink-0 ${compact ? 'mb-1.5' : 'mb-4'}`}>
         <div className="relative flex-1 min-w-0">
           <Search
-            className={`absolute text-slate-400 ${compact ? 'left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5' : 'left-3.5 top-1/2 -translate-y-1/2 w-4 h-4'}`}
+            className={`absolute text-slate-400 top-1/2 -translate-y-1/2 w-3.5 h-3.5 ${compact ? 'left-2' : 'left-3.5'}`}
           />
           <input
             autoFocus
@@ -220,22 +240,24 @@ export function SearchablePartnerSelect({
             type="button"
             onClick={() => {
               setQuickName('');
-              setQuickFormCategoryId(resolveQuickCreateCategoryId(categories, quickCreateCategoryId) ?? '');
+              setQuickFormCategoryId(resolveQuickCreateFormCategoryId(categories, quickCreateCategoryId) ?? '');
               setIsOpen(false);
               setQuickCreateOpen(true);
             }}
             title="快捷新建合作单位（与基础信息一致，保存后出现在列表中）"
-            className={`shrink-0 inline-flex items-center gap-1 rounded-xl bg-indigo-600 text-white font-black uppercase tracking-wider hover:bg-indigo-700 active:bg-indigo-800 transition-all shadow-sm shadow-indigo-600/20 ${
-              compact ? 'px-2.5 py-2 text-[10px]' : 'px-3 py-3 text-[11px]'
+            className={`shrink-0 inline-flex items-center gap-0.5 rounded-lg bg-indigo-600 text-white font-black uppercase tracking-wide hover:bg-indigo-700 active:bg-indigo-800 transition-all shadow-sm shadow-indigo-600/20 ${
+              compact ? 'px-1.5 py-1 text-[9px]' : 'px-3 py-3 text-[11px]'
             }`}
           >
-            <Plus className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+            <Plus className="w-3 h-3" />
             新建
           </button>
         )}
       </div>
 
-      <div className={`flex items-center gap-1 flex-shrink-0 overflow-x-auto no-scrollbar ${compact ? 'mb-2 pb-0.5' : 'mb-4 pb-1'}`}>
+      <div
+        className={`flex items-center flex-shrink-0 overflow-x-auto no-scrollbar ${compact ? 'gap-0.5 mb-1.5 pb-0.5' : 'gap-1 mb-4 pb-1'}`}
+      >
         <button type="button" onClick={() => setActiveTab('all')} className={tabBtnCls(activeTab === 'all')}>
           全部
         </button>
@@ -246,7 +268,7 @@ export function SearchablePartnerSelect({
         ))}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar space-y-0.5">
+      <div className={`min-h-0 flex-1 overflow-y-auto custom-scrollbar ${compact ? 'space-y-0' : 'space-y-0.5'}`}>
         {filteredOptions.map(p => {
           const cat = categories.find(c => c.id === p.categoryId);
           return (
@@ -260,11 +282,11 @@ export function SearchablePartnerSelect({
               }}
               className={rowBtnCls(valueMode === 'id' ? p.id === value : p.name === value)}
             >
-              <div className={`flex justify-between items-start gap-2 ${compact ? 'mb-0' : 'mb-0.5'}`}>
-                <p className={`font-black truncate leading-tight min-w-0 flex-1 ${compact ? 'text-xs' : 'text-sm'}`}>{p.name}</p>
+              <div className={`flex justify-between items-start ${compact ? 'gap-1.5 -my-px' : 'gap-2 mb-0.5'}`}>
+                <p className={`truncate leading-tight min-w-0 flex-1 ${compact ? 'text-xs font-bold' : 'text-sm font-black'}`}>{p.name}</p>
                 {cat && (
                   <span
-                    className={`rounded bg-slate-100 text-slate-500 font-black uppercase shrink-0 leading-none ${compact ? 'px-1.5 py-px text-[9px]' : 'px-2 py-0.5 text-[11px]'}`}
+                    className={`rounded bg-slate-100 text-slate-500 font-bold uppercase shrink-0 leading-tight ${compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-xs'}`}
                   >
                     {cat.name}
                   </span>
@@ -273,7 +295,7 @@ export function SearchablePartnerSelect({
               <div className="flex flex-wrap items-center gap-1">
                 {p.contact ? (
                   <p
-                    className={`font-bold uppercase tracking-widest leading-tight truncate max-w-full ${compact ? 'text-[11px]' : 'text-xs'} ${(valueMode === 'id' ? p.id === value : p.name === value) ? 'text-indigo-400' : 'text-slate-400'}`}
+                    className={`font-semibold uppercase tracking-tight leading-tight truncate max-w-full ${compact ? 'text-[9px]' : 'text-xs font-bold tracking-widest'} ${(valueMode === 'id' ? p.id === value : p.name === value) ? 'text-indigo-400' : 'text-slate-400'}`}
                   >
                     {p.contact}
                   </p>
@@ -285,7 +307,7 @@ export function SearchablePartnerSelect({
                     return (
                       <span
                         key={f.id}
-                        className={`font-bold text-slate-500 rounded bg-slate-50 leading-tight ${compact ? 'text-[8px] px-1 py-px' : 'text-[10px] px-1.5 py-0.5'}`}
+                        className={`font-bold text-slate-500 rounded bg-slate-50 leading-tight ${compact ? 'text-[10px] px-1.5 py-0.5' : 'text-[11px] px-1.5 py-0.5'}`}
                       >
                         {f.label}: 已上传
                       </span>
@@ -293,7 +315,7 @@ export function SearchablePartnerSelect({
                   return (
                     <span
                       key={f.id}
-                      className={`font-bold text-slate-500 rounded bg-slate-50 leading-tight ${compact ? 'text-[8px] px-1 py-px' : 'text-[10px] px-1.5 py-0.5'}`}
+                      className={`font-bold text-slate-500 rounded bg-slate-50 leading-tight ${compact ? 'text-[10px] px-1.5 py-0.5' : 'text-[11px] px-1.5 py-0.5'}`}
                     >
                       {f.label}: {formatReportCustomDataForList(f, val)}
                     </span>
@@ -304,9 +326,9 @@ export function SearchablePartnerSelect({
           );
         })}
         {filteredOptions.length === 0 && (
-          <div className={compact ? 'py-6 text-center' : 'py-10 text-center'}>
-            <Building2 className={`text-slate-100 mx-auto mb-2 block ${compact ? 'w-6 h-6' : 'w-8 h-8'}`} />
-            <p className={`text-slate-400 font-medium leading-tight ${compact ? 'text-xs' : 'text-sm'}`}>未找到符合条件的合作单位</p>
+          <div className={compact ? 'py-4 text-center' : 'py-10 text-center'}>
+            <Building2 className={`text-slate-100 mx-auto block ${compact ? 'mb-1.5 w-5 h-5' : 'mb-2 w-8 h-8'}`} />
+            <p className="text-slate-400 font-medium leading-tight text-xs">未找到符合条件的合作单位</p>
           </div>
         )}
       </div>
@@ -328,7 +350,7 @@ export function SearchablePartnerSelect({
       >
         <div className="flex items-center gap-2 truncate min-w-0">
           <Building2 className={`shrink-0 ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} ${selectedPartner ? 'text-indigo-600' : 'text-slate-300'}`} />
-          <span className={`font-bold truncate leading-tight ${compact ? 'text-xs' : 'text-[13px]'} ${selectedPartner ? 'text-slate-900' : 'text-slate-400'}`}>
+          <span className={`truncate leading-tight ${compact ? 'text-xs font-semibold' : 'text-[13px] font-bold'} ${selectedPartner ? 'text-slate-900' : 'text-slate-400'}`}>
             {selectedPartner
               ? (() => {
                   const cat = categories.find(c => c.id === selectedPartner.categoryId);
@@ -408,7 +430,7 @@ export function SearchablePartnerSelect({
                     onChange={e => setQuickFormCategoryId(e.target.value)}
                   >
                     <option value="">请选择分类</option>
-                    {categories.map(c => (
+                    {quickCreateCategoryOptions.map(c => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>

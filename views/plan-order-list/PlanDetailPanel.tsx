@@ -54,7 +54,7 @@ import {
   PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER,
 } from '../../types';
 import { itemCodesApi, psi } from '../../services/api';
-import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
+import { CustomerSelect } from '../../components/CustomerSelect';
 import { SearchableMultiSelectWithProcessTabs } from '../../components/SearchableMultiSelect';
 import { formatPlanOrderCreatedAtForList, localTodayYmd, planIdToLocalYmd, toLocalDateYmd } from '../../utils/localDateTime';
 import { nextPsiDocNumber } from '../../utils/partnerDocNumber';
@@ -1028,7 +1028,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                   {planFormSettings.standardFields.find(f => f.id === 'customer')?.showInDetail !== false && productionLinkMode !== 'product' && (
                     <div className="md:col-span-2 space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">计划客户（合作单位）</label>
-                      <SearchablePartnerSelect
+                      <CustomerSelect
                         options={partners}
                         categories={partnerCategories}
                         value={tempPlanInfo.customer}

@@ -24,7 +24,7 @@ export interface MaterialStockDocForPrint {
   sourceProductId?: string | null;
   timestamp?: string;
   warehouseId: string;
-  lines: { productId: string; quantity: number }[];
+  lines: { productId: string; quantity: number; batchNo?: string }[];
   reason?: string;
   operator?: string;
   partner?: string;
@@ -119,6 +119,7 @@ export function buildMaterialStockDocPrintContext(
       sku: p?.sku ?? '',
       quantity: l.quantity,
       unit: getUnitName(l.productId),
+      batchNo: l.batchNo?.trim() ? l.batchNo : '—',
     };
   });
   const productCtx = sourceProd ?? (order ? products.find(p => p.id === order.productId) : undefined) ?? undefined;

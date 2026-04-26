@@ -1,6 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import type { MaterialFormSettings, ProductionOpRecord, ProductionOrder, Product, Warehouse, ProdOpType } from '../../types';
-import { DEFAULT_MATERIAL_FORM_SETTINGS } from '../../types';
+import React, { useEffect, useId, useMemo, useState } from 'react';
+import type {
+  MaterialFormSettings,
+  ProductionOpRecord,
+  ProductionOrder,
+  Product,
+  ProductCategory,
+  Warehouse,
+  ProdOpType,
+} from '../../types';
+import { DEFAULT_MATERIAL_FORM_SETTINGS, categoryUsesBatchManagement } from '../../types';
+import { useWarehouseBatchOptions, clampBatchNoInput } from '../../hooks/useBatchPicker';
+import { toast } from 'sonner';
 import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpCollab/material';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
@@ -21,6 +31,7 @@ export interface StockMaterialFormModalProps {
   warehouses: Warehouse[];
   productionLinkMode: 'order' | 'product';
   materialFormSettings?: MaterialFormSettings;
+  categories?: ProductCategory[];
   onAddRecord: (record: ProductionOpRecord) => void;
   getNextStockDocNo: (type: 'STOCK_OUT' | 'STOCK_RETURN') => string;
 }
@@ -34,6 +45,7 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
   warehouses,
   productionLinkMode,
   materialFormSettings = DEFAULT_MATERIAL_FORM_SETTINGS,
+  categories = [],
   onAddRecord,
   getNextStockDocNo,
 }) => {
@@ -45,7 +57,8 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
     quantity: 0,
     reason: '',
     partner: '',
-    warehouseId: ''
+    warehouseId: '',
+    batchNo: '',
   });
   const [customValues, setCustomValues] = useState<Record<string, unknown>>({});
 
@@ -81,14 +94,45 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
         : WAREHOUSE_DOC_KIND.PROD_STOCK_MATERIAL_FORM_OUT;
     const pref = readWarehousePreference(tenantCtx?.tenantId, userId, kind);
     const wid = resolvePreferredSingleWarehouse(warehouses, pref, '');
-    setForm(f => ({ ...f, warehouseId: wid }));
+    setForm(f => ({ ...f, warehouseId: wid, batchNo: '' }));
   }, [visible, stockModalMode, warehouses, tenantCtx?.tenantId, userId]);
+
+  const batchListId = useId();
+
+  const selectedProduct = useMemo(
+    () => products.find(p => p.id === form.productId),
+    [products, form.productId],
+  );
+  const selectedCategory = useMemo(
+    () => categories.find(c => c.id === selectedProduct?.categoryId),
+    [categories, selectedProduct?.categoryId],
+  );
+  const batchEnabled = categoryUsesBatchManagement(selectedCategory);
+  const isReturn = stockModalMode === 'stock_return';
+  const { options: batchOptions, loading: batchLoading } = useWarehouseBatchOptions(
+    batchEnabled,
+    form.productId || undefined,
+    form.warehouseId || undefined,
+  );
 
   if (!visible || !stockModalMode) return null;
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     const isStockReturn = stockModalMode === 'stock_return';
     const recordType: ProdOpType = isStockReturn ? 'STOCK_RETURN' : 'STOCK_OUT';
+    if (batchEnabled && !isStockReturn) {
+      const bn = clampBatchNoInput(form.batchNo);
+      if (!bn) {
+        toast.error('请选择批次');
+        return;
+      }
+      const row = batchOptions.find(o => o.batchNo === bn);
+      const av = row?.stock ?? 0;
+      if ((form.quantity ?? 0) > av) {
+        toast.error(`批次「${bn}」可用库存不足（${av}）`);
+        return;
+      }
+    }
     const docNo = getNextStockDocNo(recordType);
     const collabExtra = buildMaterialStockCustomCollabPayload(
       customValues,
@@ -108,6 +152,9 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
       status: '已完成',
       warehouseId: form.warehouseId || undefined,
       docNo,
+      ...(batchEnabled && clampBatchNoInput(form.batchNo)
+        ? { batchNo: clampBatchNoInput(form.batchNo) }
+        : {}),
       ...collabExtra,
     };
     onAddRecord(newRecord);
@@ -118,7 +165,7 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
     if (form.warehouseId) {
       writeWarehousePreference(tenantCtx?.tenantId, userId, kind, { warehouseId: form.warehouseId });
     }
-    setForm({ orderId: '', productId: '', quantity: 0, reason: '', partner: '', warehouseId: '' });
+    setForm({ orderId: '', productId: '', quantity: 0, reason: '', partner: '', warehouseId: '', batchNo: '' });
     setCustomValues({});
     onClose();
   };
@@ -143,7 +190,7 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
             </label>
             <select
               value={form.warehouseId}
-              onChange={e => setForm(f => ({ ...f, warehouseId: e.target.value }))}
+              onChange={e => setForm(f => ({ ...f, warehouseId: e.target.value, batchNo: '' }))}
               className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
             >
               {warehouses.map(w => (
@@ -152,11 +199,49 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
             </select>
           </div>
         )}
+        {batchEnabled ? (
+          <div>
+            <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">批次</label>
+            {isReturn ? (
+              <>
+                <input
+                  type="text"
+                  list={batchListId}
+                  value={form.batchNo}
+                  onChange={e => setForm(f => ({ ...f, batchNo: e.target.value }))}
+                  placeholder="批号（可手输，选填）"
+                  className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+                <datalist id={batchListId}>
+                  {batchOptions.map(o => (
+                    <option key={o.batchNo} value={o.batchNo}>
+                      {o.batchNo}（余 {o.stock}）
+                    </option>
+                  ))}
+                </datalist>
+              </>
+            ) : (
+              <select
+                value={form.batchNo}
+                onChange={e => setForm(f => ({ ...f, batchNo: e.target.value }))}
+                disabled={!form.warehouseId}
+                className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+              >
+                <option value="">{batchLoading ? '加载中…' : form.warehouseId ? '选择批次' : '先选仓库'}</option>
+                {batchOptions.map(o => (
+                  <option key={o.batchNo} value={o.batchNo}>
+                    {o.batchNo}（余 {o.stock}）
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        ) : null}
         <div>
           <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">物料</label>
           <select
             value={form.productId}
-            onChange={e => setForm(f => ({ ...f, productId: e.target.value }))}
+            onChange={e => setForm(f => ({ ...f, productId: e.target.value, batchNo: '' }))}
             className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
           >
             <option value="">请选择物料</option>

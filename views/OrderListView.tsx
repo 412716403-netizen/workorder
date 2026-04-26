@@ -19,6 +19,7 @@ import {
   ProductMilestoneProgress,
   ProcessSequenceMode,
   Warehouse,
+  PsiRecord,
 } from '../types';
 import PlanProductDetail from './plan-order-list/PlanProductDetail';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
@@ -77,6 +78,8 @@ interface OrderListViewProps {
   onUpdatePrintTemplates: (list: PrintTemplate[]) => void | Promise<void>;
   onRefreshPrintTemplates?: () => void | Promise<void>;
   prodRecords?: ProductionOpRecord[];
+  /** 领料批次下拉与本地 PSI 合并用 */
+  psiRecords?: PsiRecord[];
   warehouses?: Warehouse[];
   onUpdateOrderFormSettings: (settings: OrderFormSettings) => void;
   onReportSubmit?: (orderId: string, milestoneId: string, quantity: number, customData: any, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string) => void;
@@ -138,6 +141,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   onUpdatePrintTemplates,
   onRefreshPrintTemplates,
   prodRecords = [],
+  psiRecords = [],
   warehouses = [],
   onUpdateOrderFormSettings,
   onReportSubmit,
@@ -1427,6 +1431,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           globalNodes={globalNodes}
           dictionaries={dictionaries}
           prodRecords={prodRecords}
+          psiRecords={psiRecords}
           productionLinkMode={productionLinkMode}
           onAddRecord={onAddRecord}
           onAddRecordBatch={onAddRecordBatch}
@@ -1436,6 +1441,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           }}
           userPermissions={userPermissions}
           tenantRole={tenantRole}
+          categories={categories}
         />
       )}
     </div>

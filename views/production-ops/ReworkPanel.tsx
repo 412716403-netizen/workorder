@@ -96,6 +96,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
   onRefreshPrintTemplates,
   userPermissions,
   tenantRole,
+  psiRecords = [],
 }) => {
   const rfSettings = reworkFormSettings ?? DEFAULT_REWORK_FORM_SETTINGS;
   const canViewMainList = hasOpsPerm(tenantRole, userPermissions, 'production:rework_list:allow');
@@ -942,6 +943,8 @@ const ReworkPanel: React.FC<PanelProps> = ({
           warehouses={warehouses}
           boms={boms}
           globalNodes={globalNodes}
+          categories={categories}
+          psiRecords={psiRecords}
           onAddRecord={onAddRecord}
           onAddRecordBatch={onAddRecordBatch}
           onClose={() => setReworkMaterialOrderId(null)}

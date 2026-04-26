@@ -58,6 +58,40 @@ export const psiOrderBillFormSectionIconEmeraldClass =
 /** 合作单位等触发器与 h-11 控件对齐 */
 export const psiOrderBillFormPartnerTriggerClass = 'text-sm w-full max-w-full !min-h-[44px] h-11';
 
+/** 与 SearchableProductSelect `compact`、明细行品项选择同密度 */
+export const psiOrderBillFormPartnerTriggerClassCompact =
+  'text-sm w-full max-w-full !min-h-9 h-9';
+
+/** 明细行字段标签（与销售单新增一致） */
+export const psiOrderBillCompactLineLabelClass =
+  'text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1';
+
+/** 明细行数字输入 / 与 `MaterialIssueBatchSelect` default 同高 */
+export const psiOrderBillCompactLineInputClass =
+  'h-9 min-h-9 w-full box-border rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold leading-tight text-slate-900 tabular-nums outline-none focus:ring-2 focus:ring-indigo-500';
+
+/** 明细行只读金额、总数等 */
+export const psiOrderBillCompactLineReadonlyClass =
+  'flex h-9 min-h-9 items-center box-border rounded-lg border border-slate-200 bg-white px-2 text-xs font-black leading-tight text-indigo-600';
+
+/** 基础信息只读单号内层（左侧预留给图标 `pl-10`） */
+export const psiOrderBillCompactDocReadonlyInnerClass =
+  'flex h-9 min-h-9 w-full min-w-0 items-center box-border truncate rounded-lg border border-slate-200 bg-slate-50 py-0 pl-10 pr-2 text-xs font-bold text-slate-800';
+
+/** 入库/出库仓库等原生 `<select>` */
+export const psiOrderBillCompactWarehouseSelectClass = `${psiOrderBillCompactLineInputClass} cursor-pointer`;
+
+/** 底部「总量 / 金额」紧凑汇总条 */
+export const psiOrderBillCompactSummaryBarClass =
+  'flex flex-wrap justify-end gap-x-5 gap-y-1 rounded-lg bg-indigo-600 px-3 py-2 text-white shadow-md shadow-indigo-200/40';
+
+export const psiOrderBillCompactSummaryLabelClass =
+  'text-[10px] font-bold uppercase tracking-wide text-white/75';
+
+export const psiOrderBillCompactSummaryValueClass = 'text-base font-black tabular-nums';
+
+export const psiOrderBillCompactSummaryUnitClass = 'ml-0.5 text-[10px] font-semibold text-white/80';
+
 // ── 进销存：四类单据列表页（紧凑，与新建页 max-w 对齐）──
 
 /** 列表纵向间距；宽度随父级/页面铺满，不设 max-w */

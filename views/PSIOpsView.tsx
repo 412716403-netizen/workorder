@@ -79,6 +79,7 @@ import {
   formatPsiDocNumForList,
   truncatePsiListNote,
   compactPsiListCustomValue,
+  aggregatePurchaseBillRelatedProductListText,
   purchaseOrderStandardListText,
   purchaseBillStandardListText,
   type PsiDocListMainRow,
@@ -180,6 +181,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
       standardFields: purchaseBillFormSettings?.standardFields ?? [],
       customFields: purchaseBillFormSettings?.customFields ?? [],
       listPrint: purchaseBillFormSettings?.listPrint ?? { showPrintButton: true },
+      relatedProductEnabled: purchaseBillFormSettings?.relatedProductEnabled,
     }),
     [purchaseBillFormSettings],
   );
@@ -446,6 +448,18 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
             const rp = productMapPSI.get(rpId);
             if (rp?.name) parts.push(rp.name);
             if (rp?.sku) parts.push(rp.sku);
+          }
+        }
+        if (type === 'PURCHASE_BILL') {
+          for (const line of docItems as Array<{ customData?: unknown }>) {
+            const cd = line.customData;
+            if (!cd || typeof cd !== 'object' || Array.isArray(cd)) continue;
+            const rpId = String((cd as Record<string, unknown>).relatedProductId ?? '').trim();
+            if (rpId) {
+              const rp = productMapPSI.get(rpId);
+              if (rp?.name) parts.push(rp.name);
+              if (rp?.sku) parts.push(rp.sku);
+            }
           }
         }
       }
@@ -752,6 +766,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               recordsList={recordsList}
               productMapPSI={productMapPSI}
               categories={categories}
+              showPurchaseBillRelatedProduct={safePurchaseBillFormSettings.relatedProductEnabled === true}
               warehouseMapPSI={warehouseMapPSI}
               dictionaries={dictionaries}
               getUnitName={getUnitName}
@@ -1130,9 +1145,19 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                               })}
                           {type === 'PURCHASE_BILL' &&
                             safePurchaseBillFormSettings.standardFields
-                              .filter(f => f.showInList && f.id !== 'createdAt' && f.id !== 'note')
+                              .filter(
+                                f =>
+                                  f.showInList &&
+                                  f.id !== 'relatedProduct' &&
+                                  f.id !== 'createdAt' &&
+                                  f.id !== 'note' &&
+                                  f.id !== 'docNumber' &&
+                                  f.id !== 'partner' &&
+                                  f.id !== 'warehouse' &&
+                                  f.id !== 'warehouseId',
+                              )
                               .map(f => {
-                                const text = purchaseBillStandardListText(f.id, mainInfo, docNum, warehouseMapPSI);
+                                const text = purchaseBillStandardListText(f.id, mainInfo, docNum, warehouseMapPSI, productMapPSI);
                                 return (
                                   <span key={`pb-std-${f.id}`} className="flex items-center gap-1 text-slate-500 normal-case" title={`${f.label}: ${text}`}>
                                     {f.label}: {text}
@@ -1304,6 +1329,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                     <table className="w-full text-left" style={{ tableLayout: 'fixed' }}>
                       <colgroup>
                         <col style={{ width: 'auto' }} />
+                        {type === 'PURCHASE_BILL' && safePurchaseBillFormSettings.relatedProductEnabled && (
+                          <col style={{ width: 120 }} />
+                        )}
                         {!current.hideWarehouse && <col style={{ width: 100 }} />}
                         {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <col style={{ width: 100 }} />}
                         {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <col style={{ width: 110 }} />}
@@ -1320,6 +1348,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                       <thead>
                         <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50">
                           <th className="pb-2 pr-3 text-left">产品信息 / SKU</th>
+                          {type === 'PURCHASE_BILL' && safePurchaseBillFormSettings.relatedProductEnabled && (
+                            <th className="pb-2 px-3 text-left normal-case">关联产品</th>
+                          )}
                           {!current.hideWarehouse && <th className="pb-2 px-3 text-center">{type === 'SALES_BILL' ? '出库仓库' : '入库仓库'}</th>}
                           {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <th className="pb-2 px-3 text-right">采购价</th>}
                           {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <th className="pb-2 px-3 text-right">金额</th>}
@@ -1382,6 +1413,10 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                               : variantParts[0]
                                 ? variantParts[0]
                                 : '';
+                            const pbLineRelatedListText =
+                              type === 'PURCHASE_BILL' && safePurchaseBillFormSettings.relatedProductEnabled
+                                ? aggregatePurchaseBillRelatedProductListText(grp, productMapPSI)
+                                : '';
                             let soBarShipPct = 0;
                             let soBarAllocPct = 0;
                             let soBarRosePct = 0;
@@ -1432,6 +1467,16 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                     </div>
                                   </div>
                                 </td>
+                                {type === 'PURCHASE_BILL' && safePurchaseBillFormSettings.relatedProductEnabled && (
+                                  <td className="py-2.5 px-3 align-top">
+                                    <span
+                                      className="text-[11px] font-bold text-slate-600 leading-snug line-clamp-2"
+                                      title={pbLineRelatedListText}
+                                    >
+                                      {pbLineRelatedListText}
+                                    </span>
+                                  </td>
+                                )}
                               {!current.hideWarehouse && (
                                   <td className="py-2.5 px-3 text-center">
                                   <span className="px-2 py-0.5 rounded-md bg-slate-50 text-slate-500 text-[10px] font-black uppercase border border-slate-100">

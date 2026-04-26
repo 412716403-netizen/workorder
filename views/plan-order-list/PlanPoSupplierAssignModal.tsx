@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Partner, PartnerCategory } from '../../types';
-import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
+import { SupplierSelect } from '../../components/SupplierSelect';
 
 export type PlanPoSupplierAssignRow = {
   materialId: string;
@@ -92,7 +92,7 @@ const PlanPoSupplierAssignModal: React.FC<PlanPoSupplierAssignModalProps> = ({
                   <td className="py-3 pr-4 align-top text-xs font-bold text-indigo-600">{row.nodeName}</td>
                   <td className="py-3 pr-4 align-top text-right font-mono text-slate-700">{Number(row.plannedQty).toFixed(2)}</td>
                   <td className="py-3 align-top">
-                    <SearchablePartnerSelect
+                    <SupplierSelect
                       options={partners}
                       categories={partnerCategories}
                       value={byMaterialId[row.materialId]?.partnerId ?? ''}

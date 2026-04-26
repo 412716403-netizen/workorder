@@ -47,6 +47,7 @@
 |------|------|------|------|
 | PSI 记录 CRUD | 已落地 | 已有 `/api/psi/records` 系列接口 | 继续核对前端大页面内是否仍有遗留本地计算假设 |
 | 库存查询 | 已落地 | 已有 `/api/psi/stock` 与前端 `getStock` 封装 | 对齐文档中的历史 mock / stableMockStock 描述 |
+| 按批次库存与生产扣减 | 已落地 | `GET /api/psi/stock/batches`、Prisma `production_op_records.batch_no` / `psi_records` 复合索引、领料/退料/外协物料/返工领料写入与校验；**销售出库**按批手选；`getStock` 盘点项用 `diffQuantity` 与按批口径一致；`shared/types.normalizeBatchNo` 归一化；调拨/盘点单行写 `batchNo`；仓库列表展开批次缓存随 `records` 失效；`replaceRecords`/领退料 Serializable 事务 + `withSerializableRetry`（P2034 冲突重试）；错误处理对 P2034 返回可读中文提示；**采购订单不按批**、转采购入库单时按批见 `docs/01-business-rules.md` | 协作跨租户批次等仍非本期范围 |
 | 采购单替换、批量写入、列表分组 | 部分落地 | API 已出现，但前端行为与列表分组策略仍需持续验证 | 细化“后端返回什么，前端只做展示什么” |
 
 ---

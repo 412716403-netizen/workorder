@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from 'react';
+import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
+import { usePsiStockIndex } from '../../hooks/usePsiStockIndex';
 import {
   Plus,
   ArrowLeft,
@@ -12,12 +14,22 @@ import {
   CheckSquare,
   Square,
   AlertCircle,
+  Search,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
-import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
+import { SupplierSelect } from '../../components/SupplierSelect';
 import type { PlanListPrintSettings, PrintRenderContext, PrintTemplate } from '../../types';
-import { Product, Warehouse, ProductCategory, Partner, PartnerCategory, AppDictionaries, ProductVariant } from '../../types';
+import {
+  Product,
+  Warehouse,
+  ProductCategory,
+  Partner,
+  PartnerCategory,
+  AppDictionaries,
+  ProductVariant,
+  categoryUsesBatchManagement,
+} from '../../types';
 import { PsiListPrintPicker } from '../../components/psi/PsiListPrintPicker';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { localTodayYmd, localCalendarYmdStartToIso } from '../../utils/localDateTime';
@@ -30,15 +42,23 @@ import {
   psiOrderBillFormDetailSplitClass,
   psiOrderBillFormGridGapClass,
   psiOrderBillFormFieldControlClass,
-  psiOrderBillFormReadonlyBoxClass,
   psiOrderBillFormSectionIconIndigoClass,
-  psiOrderBillFormPartnerTriggerClass,
+  psiOrderBillCompactLineLabelClass,
+  psiOrderBillCompactLineInputClass,
+  psiOrderBillCompactLineReadonlyClass,
+  psiOrderBillCompactDocReadonlyInnerClass,
+  psiOrderBillCompactWarehouseSelectClass,
+  psiOrderBillCompactSummaryBarClass,
+  psiOrderBillCompactSummaryLabelClass,
+  psiOrderBillCompactSummaryValueClass,
+  psiOrderBillCompactSummaryUnitClass,
 } from '../../styles/uiDensity';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
+import { formatPsiDocNumForList } from './psiOpsListFormatting';
 
 export interface PurchaseBillLineItem {
   id: string;
@@ -47,6 +67,8 @@ export interface PurchaseBillLineItem {
   purchasePrice: number;
   variantQuantities?: Record<string, number>;
   batch?: string;
+  /** 行级 `customData.relatedProductId`：本行采购物料主要服务的成品 */
+  relatedProductId?: string;
 }
 
 interface PurchaseBillFormSectionProps {
@@ -54,7 +76,7 @@ interface PurchaseBillFormSectionProps {
   setForm: (form: any) => void;
   purchaseBillItems: PurchaseBillLineItem[];
   onAddItem: () => void;
-  onUpdateItem: (id: string, updates: Partial<{ productId: string; quantity?: number; purchasePrice: number; variantQuantities?: Record<string, number>; batch?: string }>) => void;
+  onUpdateItem: (id: string, updates: Partial<{ productId: string; quantity?: number; purchasePrice: number; variantQuantities?: Record<string, number>; batch?: string; relatedProductId?: string }>) => void;
   onUpdateVariantQty: (lineId: string, variantId: string, qty: number) => void;
   onRemoveItem: (id: string) => void;
   onResetItems: () => void;
@@ -77,7 +99,7 @@ interface PurchaseBillFormSectionProps {
   categoryMapPSI: Map<string, ProductCategory>;
   formatQtyDisplay: (q: number | string | undefined | null) => number;
   getUnitName: (productId: string) => string;
-  formSettings: { standardFields: any[]; customFields: any[] };
+  formSettings: { standardFields: any[]; customFields: any[]; relatedProductEnabled?: boolean };
   partnerLabel: string;
   recordsList: any[];
   receivedByOrderLine: Record<string, number>;
@@ -109,12 +131,17 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
   const { currentUser } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
   const confirm = useConfirm();
+  const { listAvailableBatches } = usePsiStockIndex(recordsList ?? [], []);
 
   const [creationMethod, setCreationMethod] = useState<'MANUAL' | 'FROM_ORDER'>('MANUAL');
   const [selectedPOOrderNums, setSelectedPOOrderNums] = useState<string[]>([]);
   const [selectedPOItemIds, setSelectedPOItemIds] = useState<string[]>([]);
   const [selectedPOItemQuantities, setSelectedPOItemQuantities] = useState<Record<string, number>>({});
   const [selectedPOItemBatches, setSelectedPOItemBatches] = useState<Record<string, string>>({});
+  /** 来源订单卡片区：单号/供应商/行内品名 SKU */
+  const [fromOrderPODocSearch, setFromOrderPODocSearch] = useState('');
+  /** 待入库明细分组：品名/编号/SKU/单号 */
+  const [fromOrderLineSearch, setFromOrderLineSearch] = useState('');
 
   const allPOByGroups = useMemo(() => {
     const filtered = recordsList.filter(r => r.type === 'PURCHASE_ORDER');
@@ -138,6 +165,22 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
     });
   }, [allPOByGroups, receivedByOrderLine]);
 
+  const filteredPendingPOs = useMemo(() => {
+    const q = fromOrderPODocSearch.trim().toLowerCase();
+    if (!q) return pendingPOs;
+    return pendingPOs.filter(([docNum, items]) => {
+      const parts: string[] = [docNum, formatPsiDocNumForList(docNum)];
+      const first = items[0] as { partner?: string } | undefined;
+      if (first?.partner) parts.push(String(first.partner));
+      for (const it of items as { productId?: string }[]) {
+        const p = it.productId ? productMapPSI.get(it.productId) : undefined;
+        if (p?.name) parts.push(p.name);
+        if (p?.sku) parts.push(p.sku);
+      }
+      return parts.join('\0').toLowerCase().includes(q);
+    });
+  }, [pendingPOs, fromOrderPODocSearch, productMapPSI]);
+
   const availableItemsFromSelectedPOs = useMemo(() => {
     const items: any[] = [];
     selectedPOOrderNums.forEach(num => {
@@ -155,6 +198,21 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
     return items;
   }, [selectedPOOrderNums, allPOByGroups, receivedByOrderLine]);
 
+  const displayAvailableLineItems = useMemo(() => {
+    const q = fromOrderLineSearch.trim().toLowerCase();
+    if (!q) return availableItemsFromSelectedPOs;
+    return availableItemsFromSelectedPOs.filter((item) => {
+      const p = productMapPSI.get(item.productId);
+      const parts = [
+        item.docNumber,
+        formatPsiDocNumForList(String(item.docNumber || '')),
+        p?.name,
+        p?.sku,
+      ];
+      return parts.filter(Boolean).join('\0').toLowerCase().includes(q);
+    });
+  }, [availableItemsFromSelectedPOs, fromOrderLineSearch, productMapPSI]);
+
   const firstSelectedPOItem = useMemo(
     () => availableItemsFromSelectedPOs.find(i => selectedPOItemIds.includes(i.id)),
     [availableItemsFromSelectedPOs, selectedPOItemIds],
@@ -162,6 +220,18 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
   const previewPbFromOrder = !editingDocNumber && firstSelectedPOItem
     ? generatePBDocNumber(String(firstSelectedPOItem.partnerId || ''), String(firstSelectedPOItem.partner || ''))
     : undefined;
+
+  const readPoLineRelatedId = (row: { customData?: unknown }): string => {
+    const cd = row?.customData;
+    if (!cd || typeof cd !== 'object' || Array.isArray(cd)) return '';
+    return String((cd as Record<string, unknown>).relatedProductId ?? '').trim();
+  };
+
+  const formatRelatedProductLine = (id: string) => {
+    const p = productMapPSI.get(id);
+    if (p) return p.sku ? `${p.name || '—'}（${p.sku}）` : (p.name || id);
+    return id;
+  };
 
   const handleConvertPOToBill = () => {
     if (selectedPOItemIds.length === 0 || !form.warehouseId) return;
@@ -177,6 +247,19 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
       attempts++;
     }
     const baseId = Date.now();
+    const formBaseCustom = (() => {
+      const next = { ...(form.customData || {}) } as Record<string, unknown>;
+      delete next.relatedProductId;
+      return next;
+    })();
+    const lineCustomDataFor = (row: (typeof itemsToBill)[0]) => {
+      const next = { ...formBaseCustom } as Record<string, unknown>;
+      if (formSettings.relatedProductEnabled) {
+        const rid = readPoLineRelatedId(row);
+        if (rid) next.relatedProductId = rid;
+      }
+      return Object.keys(next).length > 0 ? next : undefined;
+    };
 
     let addedCount = 0;
     const newRecords: any[] = [];
@@ -185,7 +268,8 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
       if (qty <= 0) return;
       addedCount++;
       const batchVal = selectedPOItemBatches[item.id]?.trim();
-      const { receivedQty: _rq, remainingQty: _rm, ...poBase } = item;
+      const { receivedQty: _rq, remainingQty: _rm, customData: _poCustom, ...poBase } = item;
+      const lineCd = lineCustomDataFor(item);
       newRecords.push({
         ...poBase,
         id: `psi-pb-${baseId}-${idx}`,
@@ -201,7 +285,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
         operator: `${docOperator}(订单转化)`,
         lineGroupId: item.lineGroupId ?? item.id,
         createdAt: localCalendarYmdStartToIso(localTodayYmd()),
-        ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
+        ...(lineCd ? { customData: lineCd } : {}),
         ...(batchVal && { batch: batchVal })
       });
     });
@@ -234,12 +318,14 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
           <ArrowLeft className="w-4 h-4" /> 返回列表
         </button>
         <div className="flex items-center gap-3">
-          <PsiListPrintPicker
-            slot={listPrintSlot}
-            printTemplates={printTemplates}
-            buildContext={buildPurchaseBillPrintContext}
-            pickerSubtitle={editingDocNumber || previewAutoPbDocNumber || undefined}
-          />
+          {editingDocNumber && (
+            <PsiListPrintPicker
+              slot={listPrintSlot}
+              printTemplates={printTemplates}
+              buildContext={buildPurchaseBillPrintContext}
+              pickerSubtitle={editingDocNumber}
+            />
+          )}
           {editingDocNumber && onDeleteRecords && hasPsiPerm('psi:purchase_bill:delete') && (
             <button
               type="button"
@@ -303,26 +389,25 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
               <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">供应商</label>
-                  <SearchablePartnerSelect
+                  <SupplierSelect
                     options={partners}
                     categories={partnerCategories}
                     value={form.partner}
                     onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id })}
                     placeholder="选择供应商..."
-                    triggerClassName={psiOrderBillFormPartnerTriggerClass}
                   />
                 </div>
                 <div className="space-y-1 min-w-0">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据编号</label>
                   <div className="relative">
-                    <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
-                    <div className={psiOrderBillFormReadonlyBoxClass}>
+                    <FileText className="absolute left-2.5 top-1/2 z-[1] h-3.5 w-3.5 -translate-y-1/2 text-slate-300 pointer-events-none" />
+                    <div className={psiOrderBillCompactDocReadonlyInnerClass}>
                       {editingDocNumber ? (
                         <span className="truncate">{editingDocNumber}</span>
                       ) : form.partner ? (
                         <span className="truncate">{previewAutoPbDocNumber || '保存时自动生成'}</span>
                       ) : (
-                        <span className="text-slate-400 font-bold text-sm truncate">选择合作单位后自动生成</span>
+                        <span className="truncate font-bold text-slate-400">选择合作单位后自动生成</span>
                       )}
                     </div>
                   </div>
@@ -330,7 +415,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">入库仓库</label>
-                  <select value={form.warehouseId} onChange={e => setForm({...form, warehouseId: e.target.value})} className={`${psiOrderBillFormFieldControlClass} text-sm`}>
+                  <select value={form.warehouseId} onChange={e => setForm({...form, warehouseId: e.target.value})} className={psiOrderBillCompactWarehouseSelectClass}>
                     <option value="">选择仓库...</option>
                     {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                   </select>
@@ -368,76 +453,102 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                     : (line.quantity ?? 0);
                   const pbLineAmount = pbLineQty * (line.purchasePrice || 0);
                   return (
-                  <div key={line.id} className="p-3 bg-slate-50/50 rounded-xl border border-slate-100 space-y-3">
-                    <div className="flex flex-wrap items-end gap-3">
-                      <div className="flex-1 min-w-[200px] space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">目标采购品项 (支持搜索与分类筛选)</label>
-                        <SearchableProductSelect options={products} categories={categories} value={line.productId} onChange={(id) => {
-                          const p = productMapPSI.get(id);
-                          const hv = p?.variants && p.variants.length > 0;
-                          const price = resolveDefaultPurchasePrice
-                            ? resolveDefaultPurchasePrice(id)
-                            : (p?.purchasePrice ?? 0);
-                          onUpdateItem(line.id, {
-                            productId: id,
-                            purchasePrice: price,
-                            quantity: hv ? undefined : 0,
-                            variantQuantities: hv ? {} : undefined,
-                            batch: undefined
-                          });
-                        }} />
+                  <div key={line.id} className="space-y-2.5 rounded-xl border border-slate-100 bg-slate-50/50 p-2.5">
+                    <div className="flex flex-wrap items-end gap-2">
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <label className={psiOrderBillCompactLineLabelClass}>目标采购品项 (支持搜索与分类筛选)</label>
+                        <SearchableProductSelect
+                          compact
+                          options={products}
+                          categories={categories}
+                          value={line.productId}
+                          onChange={(id) => {
+                            const p = productMapPSI.get(id);
+                            const hv = p?.variants && p.variants.length > 0;
+                            const price = resolveDefaultPurchasePrice
+                              ? resolveDefaultPurchasePrice(id)
+                              : (p?.purchasePrice ?? 0);
+                            onUpdateItem(line.id, {
+                              productId: id,
+                              purchasePrice: price,
+                              quantity: hv ? undefined : 0,
+                              variantQuantities: hv ? {} : undefined,
+                              batch: undefined
+                            });
+                          }}
+                        />
                       </div>
-                      <div className="w-28 space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">采购价 (元)</label>
-                        <input type="number" min={0} step={0.01} value={line.purchasePrice || ''} onChange={e => onUpdateItem(line.id, { purchasePrice: parseFloat(e.target.value) || 0 })} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="0" />
+                      {pbProd && categoryUsesBatchManagement(categoryMapPSI.get(pbProd.categoryId)) && (
+                        <div className="w-[7.25rem] min-w-[7rem] max-w-[9rem] shrink-0 space-y-0.5">
+                          <label className={psiOrderBillCompactLineLabelClass}>批次</label>
+                          <MaterialIssueBatchSelect
+                            product={pbProd}
+                            categories={categories}
+                            warehouseId={form.warehouseId || ''}
+                            value={line.batch ?? ''}
+                            onChange={v => onUpdateItem(line.id, { batch: (v && String(v).trim()) || undefined })}
+                            mode="return"
+                            hideLabel
+                            mergeBatches={listAvailableBatches(line.productId, form.warehouseId)}
+                          />
+                        </div>
+                      )}
+                      <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                        <label className={psiOrderBillCompactLineLabelClass}>采购价 (元)</label>
+                        <input type="number" min={0} step={0.01} value={line.purchasePrice || ''} onChange={e => onUpdateItem(line.id, { purchasePrice: parseFloat(e.target.value) || 0 })} className={psiOrderBillCompactLineInputClass} placeholder="0" />
                       </div>
                       {pbHasVariants && (
                         <>
-                          <div className="w-24 space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">总数</label>
-                            <div className="py-2.5 px-3 text-sm font-black text-indigo-600 bg-white rounded-xl border border-slate-200">
+                          <div className="w-20 shrink-0 space-y-0.5">
+                            <label className={psiOrderBillCompactLineLabelClass}>总数</label>
+                            <div className={psiOrderBillCompactLineReadonlyClass}>
                               {formatQtyDisplay(pbLineQty)} {line.productId ? getUnitName(line.productId) : '—'}
                             </div>
                           </div>
-                          <div className="w-28 space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">金额 (元)</label>
-                            <div className="py-2.5 px-3 text-sm font-black text-indigo-600 bg-white rounded-xl border border-slate-200">
+                          <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                            <label className={psiOrderBillCompactLineLabelClass}>金额 (元)</label>
+                            <div className={psiOrderBillCompactLineReadonlyClass}>
                               {pbLineAmount.toFixed(2)}
                             </div>
                           </div>
-                          {pbProd && categoryMapPSI.get(pbProd.categoryId)?.hasBatchManagement && (
-                            <div className="w-28 space-y-1">
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">批次</label>
-                              <input type="text" value={line.batch || ''} onChange={e => onUpdateItem(line.id, { batch: e.target.value.trim() || undefined })} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="批号" />
-                            </div>
-                          )}
                         </>
                       )}
                       {!pbHasVariants && (
                         <>
-                          <div className="w-24 space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">数量</label>
-                            <div className="flex items-center gap-1.5">
-                              <input type="number" min={0} value={line.quantity || ''} onChange={e => onUpdateItem(line.id, { quantity: parseInt(e.target.value) || 0 })} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="0" />
-                              <span className="text-[10px] font-bold text-slate-400 shrink-0">{line.productId ? getUnitName(line.productId) : '—'}</span>
+                          <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                            <label className={psiOrderBillCompactLineLabelClass}>数量</label>
+                            <div className="flex h-9 min-h-9 items-stretch gap-1">
+                              <input type="number" min={0} value={line.quantity || ''} onChange={e => onUpdateItem(line.id, { quantity: parseInt(e.target.value) || 0 })} className={`${psiOrderBillCompactLineInputClass} min-w-0 flex-1`} placeholder="0" />
+                              <span className="flex shrink-0 items-center text-[9px] font-bold text-slate-400">{line.productId ? getUnitName(line.productId) : '—'}</span>
                             </div>
                           </div>
-                          <div className="w-28 space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">金额 (元)</label>
-                            <div className="py-2.5 px-3 text-sm font-black text-indigo-600 bg-white rounded-xl border border-slate-200">
+                          <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                            <label className={psiOrderBillCompactLineLabelClass}>金额 (元)</label>
+                            <div className={psiOrderBillCompactLineReadonlyClass}>
                               {pbLineAmount.toFixed(2)}
                             </div>
                           </div>
-                          {pbProd && categoryMapPSI.get(pbProd.categoryId)?.hasBatchManagement && (
-                            <div className="w-28 space-y-1">
-                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">批次</label>
-                              <input type="text" value={line.batch || ''} onChange={e => onUpdateItem(line.id, { batch: e.target.value.trim() || undefined })} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="批号" />
-                            </div>
-                          )}
                         </>
                       )}
-                      <button type="button" onClick={() => onRemoveItem(line.id)} className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"><Trash2 className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => onRemoveItem(line.id)} className="shrink-0 rounded-lg p-1 text-slate-300 transition-all hover:bg-rose-50 hover:text-rose-500"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
+                    {formSettings.relatedProductEnabled && (
+                      <div className="space-y-1 min-w-0 w-full max-w-2xl">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">关联成品（与采购品项不同，可选）</label>
+                        <SearchableProductSelect
+                          compact
+                          categories={categories}
+                          options={products}
+                          value={String(line.relatedProductId ?? '')}
+                          placeholder="本行料主要服务于哪张成品…"
+                          onChange={(id) => {
+                            const t = String(id || '').trim();
+                            onUpdateItem(line.id, { relatedProductId: t || undefined });
+                          }}
+                          triggerClassName={psiOrderBillCompactLineInputClass}
+                        />
+                      </div>
+                    )}
                     {pbHasVariants && line.productId && pbProd && (
                       <div className="pt-2 border-t border-slate-100 space-y-3">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">颜色尺码数量</label>
@@ -463,14 +574,19 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                   <Plus className="w-4 h-4" /> 添加明细行
                 </button>
               </div>
-              <div className="flex justify-end p-4 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-100/80 gap-6">
-                <div className="flex items-center gap-3">
-                  <p className="text-xs font-bold opacity-80">入库总量:</p>
-                  <p className="text-lg font-black">{purchaseBillItems.reduce((s, i) => s + (i.quantity || 0), 0)} <span className="text-xs font-medium">PCS</span></p>
+              <div className={psiOrderBillCompactSummaryBarClass}>
+                <div className="flex items-baseline gap-2">
+                  <span className={psiOrderBillCompactSummaryLabelClass}>入库总量</span>
+                  <span className={psiOrderBillCompactSummaryValueClass}>
+                    {purchaseBillItems.reduce((s, i) => s + (i.quantity || 0), 0)}
+                    <span className={psiOrderBillCompactSummaryUnitClass}>PCS</span>
+                  </span>
                 </div>
-                <div className="flex items-center gap-3 border-l border-white/30 pl-6">
-                  <p className="text-xs font-bold opacity-80">总金额:</p>
-                  <p className="text-lg font-black">¥{purchaseBillItems.reduce((s, i) => s + (i.quantity || 0) * (i.purchasePrice || 0), 0).toFixed(2)}</p>
+                <div className="flex items-baseline gap-2 border-l border-white/25 pl-4">
+                  <span className={psiOrderBillCompactSummaryLabelClass}>总金额</span>
+                  <span className={psiOrderBillCompactSummaryValueClass}>
+                    ¥{purchaseBillItems.reduce((s, i) => s + (i.quantity || 0) * (i.purchasePrice || 0), 0).toFixed(2)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -485,8 +601,22 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                   <p className="text-slate-400 font-bold italic text-xs">暂无未入库完成的采购订单</p>
                 </div>
               ) : (
+                <>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="search"
+                    value={fromOrderPODocSearch}
+                    onChange={e => setFromOrderPODocSearch(e.target.value)}
+                    placeholder="搜索单号、供应商或订单内品名/SKU…"
+                    className={`w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-800 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-indigo-500`}
+                  />
+                </div>
+                {filteredPendingPOs.length === 0 ? (
+                  <p className="text-center text-slate-400 text-sm py-6">无匹配订单，请调整搜索关键词</p>
+                ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {pendingPOs.map(([docNum, items]) => {
+                  {filteredPendingPOs.map(([docNum, items]) => {
                     const isSelected = selectedPOOrderNums.includes(docNum);
                     const partnerName = items[0]?.partner;
                     return (
@@ -513,37 +643,73 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                     );
                   })}
                 </div>
+                )}
+                </>
               )}
             </div>
 
             {selectedPOOrderNums.length > 0 && (
               <div className="space-y-3 pt-3 border-t border-slate-100">
-                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><ListFilter className="w-4 h-4" /> 2. 勾选并填写本次入库数量 (支持部分到货)</h4>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 shrink-0">
+                    <ListFilter className="w-4 h-4" /> 2. 勾选并填写本次入库数量 (支持部分到货)
+                  </h4>
+                  <div className="relative w-full sm:max-w-sm">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    <input
+                      type="search"
+                      value={fromOrderLineSearch}
+                      onChange={e => setFromOrderLineSearch(e.target.value)}
+                      placeholder="搜索品名、编号、SKU 或单号…"
+                      className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-800 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
                 <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                   <table className="w-full text-left">
                     <thead>
                       <tr className="bg-slate-50/80 border-b border-slate-100">
                         <th className="px-3 py-2 w-10 text-center">
-                          <button onClick={(e) => {
-                            e.stopPropagation();
-                            if (selectedPOItemIds.length === availableItemsFromSelectedPOs.length) {
-                              setSelectedPOItemIds([]);
-                              setSelectedPOItemQuantities({});
-                              setSelectedPOItemBatches({});
-                            } else {
-                              const ids = availableItemsFromSelectedPOs.map(i => i.id);
-                              setSelectedPOItemIds(ids);
-                              setSelectedPOItemQuantities(prev => {
-                                const next = { ...prev };
-                                availableItemsFromSelectedPOs.forEach(i => { next[i.id] = i.remainingQty; });
-                                return next;
-                              });
-                            }
-                          }} className="text-slate-400 hover:text-indigo-600">
-                            {selectedPOItemIds.length === availableItemsFromSelectedPOs.length ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const vis = displayAvailableLineItems;
+                              const allVisSelected = vis.length > 0 && vis.every(i => selectedPOItemIds.includes(i.id));
+                              if (allVisSelected) {
+                                setSelectedPOItemIds(prev => prev.filter(id => !vis.some(v => v.id === id)));
+                                setSelectedPOItemQuantities(prev => {
+                                  const n = { ...prev };
+                                  vis.forEach(i => { delete n[i.id]; });
+                                  return n;
+                                });
+                                setSelectedPOItemBatches(prev => {
+                                  const n = { ...prev };
+                                  vis.forEach(i => { delete n[i.id]; });
+                                  return n;
+                                });
+                              } else {
+                                setSelectedPOItemIds(prev => {
+                                  const s = new Set(prev);
+                                  vis.forEach(i => s.add(i.id));
+                                  return Array.from(s);
+                                });
+                                setSelectedPOItemQuantities(prev => {
+                                  const next = { ...prev };
+                                  vis.forEach(i => { next[i.id] = i.remainingQty; });
+                                  return next;
+                                });
+                              }
+                            }}
+                            className="text-slate-400 hover:text-indigo-600"
+                            title="按当前筛选项全选/取消"
+                          >
+                            {displayAvailableLineItems.length > 0 && displayAvailableLineItems.every(i => selectedPOItemIds.includes(i.id)) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                           </button>
                         </th>
                         <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">源订单 / 商品</th>
+                        {formSettings.relatedProductEnabled && (
+                          <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest min-w-[6rem]">关联成品</th>
+                        )}
                         <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">采购价</th>
                         <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">订单数量</th>
                         <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">已收</th>
@@ -553,10 +719,21 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                      {availableItemsFromSelectedPOs.map((item) => {
+                      {displayAvailableLineItems.length === 0 && availableItemsFromSelectedPOs.length > 0 && (
+                        <tr>
+                          <td
+                            colSpan={formSettings.relatedProductEnabled ? 9 : 8}
+                            className="px-3 py-8 text-center text-slate-400 text-sm"
+                          >
+                            无匹配明细，请调整搜索关键词
+                          </td>
+                        </tr>
+                      )}
+                      {displayAvailableLineItems.map((item) => {
+                        const relFromPo = readPoLineRelatedId(item);
                         const product = productMapPSI.get(item.productId);
                         const prodCategory = product && categoryMapPSI.get(product.categoryId);
-                        const hasBatch = prodCategory?.hasBatchManagement;
+                        const hasBatch = categoryUsesBatchManagement(prodCategory);
                         const isChecked = selectedPOItemIds.includes(item.id);
                         const qty = selectedPOItemQuantities[item.id] ?? item.remainingQty;
                         const handleToggle = () => {
@@ -590,6 +767,13 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                                 </span>
                               </div>
                             </td>
+                            {formSettings.relatedProductEnabled && (
+                              <td className="px-3 py-2 align-top max-w-[10rem]" onClick={e => e.stopPropagation()}>
+                                <span className="text-[10px] font-bold text-slate-600 leading-snug">
+                                  {relFromPo ? formatRelatedProductLine(relFromPo) : '—'}
+                                </span>
+                              </td>
+                            )}
                             <td className="px-3 py-2 text-right"><span className="text-xs font-bold text-slate-500">¥{(item.purchasePrice ?? 0).toFixed(2)}</span></td>
                             <td className="px-3 py-2 text-right"><span className="text-sm font-bold text-slate-600">{formatQtyDisplay(item.quantity)} {item.productId ? getUnitName(item.productId) : 'PCS'}</span></td>
                             <td className="px-3 py-2 text-right"><span className="text-xs font-bold text-slate-400">{item.receivedQty}</span></td>
@@ -623,8 +807,8 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                   <div className="space-y-1 md:col-span-2 md:max-w-lg">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">单据编号</label>
                     <div className="relative">
-                      <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
-                      <div className={psiOrderBillFormReadonlyBoxClass}>
+                      <FileText className="absolute left-2.5 top-1/2 z-[1] h-3.5 w-3.5 -translate-y-1/2 text-slate-300 pointer-events-none" />
+                      <div className={psiOrderBillCompactDocReadonlyInnerClass}>
                         <span className="truncate">{previewPbFromOrder || '保存时自动生成'}</span>
                       </div>
                     </div>
@@ -632,7 +816,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                   </div>
                   <div className="space-y-1 md:col-span-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">入库至指定仓库 <span className="text-rose-500">*</span></label>
-                    <select value={form.warehouseId} onChange={e => setForm({...form, warehouseId: e.target.value})} className={`${psiOrderBillFormFieldControlClass} text-sm`}>
+                    <select value={form.warehouseId} onChange={e => setForm({...form, warehouseId: e.target.value})} className={psiOrderBillCompactWarehouseSelectClass}>
                       <option value="">点击选择入库仓...</option>
                       {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                     </select>

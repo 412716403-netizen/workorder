@@ -5,13 +5,18 @@ import type {
   ProductionOpRecord,
   ProductionOrder,
   Product,
+  ProductCategory,
   ProdOpType,
   BOM,
   GlobalNodeTemplate,
   Warehouse,
   MaterialFormSettings,
+  PsiRecord,
 } from '../../types';
-import { DEFAULT_MATERIAL_FORM_SETTINGS } from '../../types';
+import { DEFAULT_MATERIAL_FORM_SETTINGS, categoryUsesBatchManagement } from '../../types';
+import * as api from '../../services/api';
+import { clampBatchNoInput } from '../../hooks/useBatchPicker';
+import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
 import { toLocalCompactYmd } from '../../utils/localDateTime';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
@@ -19,6 +24,8 @@ import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpCollab/material';
 import { writeWarehousePreference, WAREHOUSE_DOC_KIND } from '../../utils/warehouseDocPreference';
+import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
+import { usePsiStockIndex } from '../../hooks/usePsiStockIndex';
 
 /**
  * 子工单等：外协记录上的 variantId 常为父成品规格，与本产品 BOM 规格对不上。
@@ -85,11 +92,14 @@ export interface OutsourceMaterialDispatchModalProps {
   globalNodes: GlobalNodeTemplate[];
   records: ProductionOpRecord[];
   warehouses: Warehouse[];
+  categories?: ProductCategory[];
   /** 外协领料发出自定义字段（生产物料 → 字段配置） */
   materialFormSettings?: MaterialFormSettings;
   onAddRecord: (record: ProductionOpRecord) => void;
   onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
   onClose: () => void;
+  /** 进销存快照，合并批次下拉里余量 */
+  psiRecords?: PsiRecord[];
 }
 
 const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalProps> = ({
@@ -111,21 +121,47 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
   globalNodes,
   records,
   warehouses,
+  categories = [],
   materialFormSettings = DEFAULT_MATERIAL_FORM_SETTINGS,
   onAddRecord,
   onAddRecordBatch,
   onClose,
+  psiRecords = [],
 }) => {
   const { currentUser, tenantCtx, userId } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
   const [matDispatchCustomValues, setMatDispatchCustomValues] = useState<Record<string, unknown>>({});
+  const [lineBatchByProduct, setLineBatchByProduct] = useState<Record<string, string>>({});
+  const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+  const { listAvailableBatches } = usePsiStockIndex(psiRecords, records);
+  const productById = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
+  const materialProductCustomTags = (productId: string) => {
+    const p = productById.get(productId);
+    if (!p?.categoryId) return null;
+    const entries = getProductCategoryCustomFieldEntries(p, categoryById.get(p.categoryId), { includeFile: false });
+    if (entries.length === 0) return null;
+    return (
+      <div className="mt-1 flex flex-wrap items-center gap-1">
+        {entries.map(({ field, display }) => (
+          <span key={field.id} className="text-[9px] font-bold text-slate-500 px-1.5 py-0.5 rounded bg-slate-50">
+            {field.label}: {display}
+          </span>
+        ))}
+      </div>
+    );
+  };
   const materialCustomFieldDefs = useMemo(
     () => (materialFormSettings.outsourceMaterialIssueCustomFields ?? []).filter(f => f.showInCreate),
     [materialFormSettings.outsourceMaterialIssueCustomFields],
   );
   useEffect(() => {
     setMatDispatchCustomValues({});
+    setLineBatchByProduct({});
   }, [matDispatchOrderId, matDispatchProductId]);
+
+  useEffect(() => {
+    setLineBatchByProduct({});
+  }, [matDispatchPartner, matDispatchWarehouseId]);
   const isProductMode = productionLinkMode === 'product';
   const targetOrder = !isProductMode && matDispatchOrderId ? orders.find(o => o.id === matDispatchOrderId) : undefined;
   const targetProductId = isProductMode ? matDispatchProductId : targetOrder?.productId;
@@ -233,6 +269,10 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
   matMap.forEach((v, pid) => {
     bomMaterials.push({ productId: pid, ...v, nodeNames: Array.from(v.nodeNames) });
   });
+  const showDispatchBatchCol = bomMaterials.some(m => {
+    const p = products.find(x => x.id === m.productId);
+    return categoryUsesBatchManagement(categoryById.get(p?.categoryId ?? ''));
+  });
   const issuedMap = new Map<string, number>();
   if (isProductMode) {
     records.filter(r => r.type === 'STOCK_OUT' && r.partner && r.productId && (r.sourceProductId === targetProductId || (!r.orderId && !r.sourceProductId && r.productId))).forEach(r => {
@@ -266,25 +306,55 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
       toast.warning('请至少填写一项发出数量');
       return;
     }
+    const wh = matDispatchWarehouseId || '';
+    if (wh) {
+      for (const m of toIssue) {
+        const p = products.find(x => x.id === m.productId);
+        const c = categoryById.get(p?.categoryId ?? '');
+        if (!categoryUsesBatchManagement(c)) continue;
+        const bn = clampBatchNoInput(lineBatchByProduct[m.productId] ?? '');
+        if (!bn) {
+          toast.error(`请为物料「${m.name}」选择批次`);
+          return;
+        }
+        try {
+          const opts = await api.psi.getStockBatches({ productId: m.productId, warehouseId: wh });
+          const av = opts.find(o => o.batchNo === bn)?.stock ?? 0;
+          if ((matDispatchQty[m.productId] ?? 0) > av) {
+            toast.error(`物料「${m.name}」批次「${bn}」可用库存不足（${av}）`);
+            return;
+          }
+        } catch {
+          toast.error('校验批次库存失败，请稍后重试');
+          return;
+        }
+      }
+    }
     const docNo = getNextWfDocNo();
     const timestamp = new Date().toLocaleString();
     const collabExtra = buildMaterialStockCustomCollabPayload(matDispatchCustomValues, 'STOCK_OUT', matDispatchPartner);
-    const batch: ProductionOpRecord[] = toIssue.map(m => ({
-      id: `wf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      type: 'STOCK_OUT' as ProdOpType,
-      orderId: isProductMode ? undefined : (matDispatchOrderId ?? undefined),
-      productId: m.productId,
-      quantity: matDispatchQty[m.productId],
-      operator: docOperator,
-      timestamp,
-      status: '已完成',
-      partner: matDispatchPartner,
-      warehouseId: matDispatchWarehouseId || undefined,
-      docNo,
-      reason: matDispatchRemark.trim() || undefined,
-      sourceProductId: isProductMode ? (targetProductId ?? undefined) : undefined,
-      ...collabExtra,
-    }));
+    const batch: ProductionOpRecord[] = toIssue.map(m => {
+      const p = products.find(x => x.id === m.productId);
+      const c = categoryById.get(p?.categoryId ?? '');
+      const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(lineBatchByProduct[m.productId] ?? '') : '';
+      return {
+        id: `wf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: 'STOCK_OUT' as ProdOpType,
+        orderId: isProductMode ? undefined : (matDispatchOrderId ?? undefined),
+        productId: m.productId,
+        quantity: matDispatchQty[m.productId],
+        operator: docOperator,
+        timestamp,
+        status: '已完成',
+        partner: matDispatchPartner,
+        warehouseId: matDispatchWarehouseId || undefined,
+        docNo,
+        reason: matDispatchRemark.trim() || undefined,
+        sourceProductId: isProductMode ? (targetProductId ?? undefined) : undefined,
+        ...(bn ? { batchNo: bn } : {}),
+        ...collabExtra,
+      };
+    });
     if (onAddRecordBatch && batch.length > 1) {
       await onAddRecordBatch(batch);
     } else {
@@ -305,30 +375,37 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
   return (
     <div className="fixed inset-0 z-[55] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
-      <div className="relative bg-white w-full max-w-2xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
-          <div>
+      <div
+        className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0 bg-white">
+          <div className="min-w-0 flex-1">
             <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-              <Package className="w-5 h-5 text-indigo-600" /> 物料外发
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 shrink-0">
+                <Package className="w-5 h-5" />
+              </span>
+              物料外发
             </h3>
-            <p className="text-sm text-slate-500 mt-0.5">{headerLabel}</p>
+            <p className="text-sm text-slate-500 mt-1 font-medium line-clamp-2">{headerLabel}</p>
           </div>
-          <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50">
+          <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50 shrink-0" aria-label="关闭">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="flex-1 overflow-auto p-4 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
+        <div className="flex-1 overflow-auto p-5 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">外协工厂</label>
               {matDispatchPartnerOptions.length <= 1 ? (
-                <div className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 bg-slate-50">{matDispatchPartnerOptions[0] ?? '—'}</div>
+                <div className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 bg-white">{matDispatchPartnerOptions[0] ?? '—'}</div>
               ) : (
                 <select
                   value={matDispatchPartner}
                   onChange={e => {
                     setMatDispatchPartner(e.target.value);
                     setMatDispatchCustomValues({});
+                    setLineBatchByProduct({});
                   }}
                   className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
                 >
@@ -339,11 +416,14 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
               )}
             </div>
             {warehouses.length > 0 && (
-              <div>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">出库仓库</label>
                 <select
                   value={matDispatchWarehouseId}
-                  onChange={e => setMatDispatchWarehouseId(e.target.value)}
+                  onChange={e => {
+                    setMatDispatchWarehouseId(e.target.value);
+                    setLineBatchByProduct({});
+                  }}
                   className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
                 >
                   {warehouses.map(w => (
@@ -353,7 +433,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
               </div>
             )}
           </div>
-          <div>
+          <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">备注说明</label>
             <input
               type="text"
@@ -384,13 +464,17 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
           {bomMaterials.length === 0 ? (
             <p className="py-8 text-center text-slate-400 text-sm">该{isProductMode ? '产品' : '工单'}未配置 BOM 物料，无法进行物料外发</p>
           ) : (
-            <table className="w-full text-left border-collapse">
+            <div className="overflow-x-auto rounded-2xl border border-slate-100">
+            <table className="w-full min-w-[760px] text-left border-collapse text-sm">
               <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-100">
-                  <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">物料</th>
-                  <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">理论需量</th>
-                  <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-36">已发进度</th>
-                  <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-40">本次外发数量</th>
+                <tr className="bg-slate-50/90 border-b border-slate-100">
+                  <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap">物料</th>
+                  <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-right whitespace-nowrap">理论需量</th>
+                  <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-40">已发进度</th>
+                  {showDispatchBatchCol ? (
+                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-52">批次</th>
+                  ) : null}
+                  <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-center whitespace-nowrap w-44">本次外发数量</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -398,17 +482,22 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
                   const issued = issuedMap.get(m.productId) ?? 0;
                   return (
                     <tr key={m.productId} className="hover:bg-slate-50/50">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-bold text-slate-800">{m.name}</p>
+                      <td className="px-4 py-4 align-top">
+                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          <span className="text-sm font-bold text-slate-800">{m.name}</span>
+                          {m.sku ? (
+                            <span className="text-xs font-bold text-slate-400 tabular-nums" title="产品编号">
+                              {m.sku}
+                            </span>
+                          ) : null}
                           {m.nodeNames.map(nn => (
                             <span key={nn} className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{nn}</span>
                           ))}
                         </div>
-                        {m.sku && <p className="text-[10px] text-slate-400 mt-0.5">{m.sku}</p>}
+                        {materialProductCustomTags(m.productId)}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-slate-600 tabular-nums">{formatMaterialQtyDisplay(m.unitNeeded)}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-4 text-right text-sm font-bold text-slate-600 tabular-nums">{formatMaterialQtyDisplay(m.unitNeeded)}</td>
+                      <td className="px-4 py-4">
                         {(() => {
                           const needed = m.unitNeeded;
                           const pct = needed > 0 ? Math.min(100, (issued / needed) * 100) : 0;
@@ -439,14 +528,29 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
                           );
                         })()}
                       </td>
-                      <td className="px-4 py-3">
+                      {showDispatchBatchCol ? (
+                        <td className="px-4 py-4 align-middle">
+                          <MaterialIssueBatchSelect
+                            product={products.find(x => x.id === m.productId)}
+                            categories={categories}
+                            warehouseId={matDispatchWarehouseId}
+                            value={lineBatchByProduct[m.productId] ?? ''}
+                            onChange={v => setLineBatchByProduct(prev => ({ ...prev, [m.productId]: v }))}
+                            mode="issue"
+                            hideLabel
+                            className="min-w-[170px]"
+                            mergeBatches={listAvailableBatches(m.productId, matDispatchWarehouseId)}
+                          />
+                        </td>
+                      ) : null}
+                      <td className="px-4 py-4">
                         <input
                           type="number"
                           min={0}
                           step={1}
                           value={matDispatchQty[m.productId] ?? ''}
                           onChange={e => setMatDispatchQty(prev => ({ ...prev, [m.productId]: Number(e.target.value) || 0 }))}
-                          className="w-full rounded-xl border border-slate-200 py-2 px-3 text-sm font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none"
+                          className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 px-3 text-base font-black text-slate-800 text-right tabular-nums focus:ring-2 focus:ring-indigo-500 outline-none"
                           placeholder="0"
                         />
                       </td>
@@ -455,6 +559,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
         {bomMaterials.length > 0 && (

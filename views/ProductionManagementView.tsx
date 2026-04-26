@@ -302,6 +302,7 @@ const ProductionManagementView: React.FC = () => {
             onUpdatePrintTemplates={onUpdatePrintTemplates}
             onRefreshPrintTemplates={onRefreshPrintTemplates}
             prodRecords={prodRecords}
+            psiRecords={psiRecords}
             warehouses={warehouses}
             onUpdateOrderFormSettings={onUpdateOrderFormSettings}
             onReportSubmit={onReportSubmit}
@@ -362,6 +363,7 @@ const ProductionManagementView: React.FC = () => {
             onUpdateReworkFormSettings={onUpdateReworkFormSettings}
             userPermissions={userPermissions}
             tenantRole={tenantRole}
+            psiRecords={psiRecords}
           />
           </Suspense>
         )}

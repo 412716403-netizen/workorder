@@ -60,7 +60,7 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
   const confirm = useConfirm();
   const [stockDocEditForm, setStockDocEditForm] = useState<{
     warehouseId: string;
-    lines: { productId: string; quantity: number }[];
+    lines: { productId: string; quantity: number; batchNo?: string }[];
     reason: string;
     customData: Record<string, unknown>;
   } | null>(null);
@@ -104,11 +104,16 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
   };
   const isReturn = stockDocDetail.type === 'STOCK_RETURN';
   const isEditing = stockDocEditForm !== null;
+  const showBatchColumn = stockDocDetail.lines.some(l => Boolean(l.batchNo?.trim()));
   const startEdit = () => {
     const snap = { ...materialCustomSnapshot };
     setStockDocEditForm({
       warehouseId: stockDocDetail.warehouseId,
-      lines: stockDocDetail.lines.map(l => ({ productId: l.productId, quantity: l.quantity })),
+      lines: stockDocDetail.lines.map(l => ({
+        productId: l.productId,
+        quantity: l.quantity,
+        ...(l.batchNo ? { batchNo: l.batchNo } : {}),
+      })),
       reason: stockDocDetail.reason ?? '',
       customData: snap,
     });
@@ -131,6 +136,9 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
         onUpdateRecord({
           ...rec,
           quantity: line.quantity,
+          ...(line.batchNo != null && line.batchNo !== ''
+            ? { batchNo: line.batchNo }
+            : {}),
           warehouseId: stockDocEditForm.warehouseId || undefined,
           reason: stockDocEditForm.reason.trim() || undefined,
           collabData: { ...prevCd, [dataKey]: cleanCustom },
@@ -296,16 +304,24 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200">
                         <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">物料</th>
+                        {showBatchColumn ? (
+                          <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase w-36">批次</th>
+                        ) : null}
                         <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">数量</th>
                         <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase w-16">单位</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {stockDocDetail.lines.map(({ productId, quantity }) => {
+                      {stockDocDetail.lines.map(({ productId, quantity, batchNo }) => {
                         const prod = products.find(p => p.id === productId);
                         return (
                           <tr key={productId} className="border-b border-slate-100">
                             <td className="px-4 py-3 font-medium text-slate-800">{prod?.name ?? productId}</td>
+                            {showBatchColumn ? (
+                              <td className="px-4 py-3 text-sm font-mono font-bold text-slate-700">
+                                {batchNo?.trim() || '—'}
+                              </td>
+                            ) : null}
                             <td className="px-4 py-3 font-bold text-indigo-600 text-right">{quantity}</td>
                             <td className="px-4 py-3 text-slate-500">{getUnitName(productId)}</td>
                           </tr>
@@ -371,16 +387,22 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
                       <thead>
                         <tr className="bg-slate-50 border-b border-slate-200">
                           <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">物料</th>
+                          {showBatchColumn ? (
+                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase w-36">批次</th>
+                          ) : null}
                           <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">数量</th>
                           <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase w-16">单位</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {editForm.lines.map(({ productId, quantity }) => {
+                        {editForm.lines.map(({ productId, quantity, batchNo }) => {
                           const prod = products.find(p => p.id === productId);
                           return (
                             <tr key={productId} className="border-b border-slate-100">
                               <td className="px-4 py-3 font-medium text-slate-800">{prod?.name ?? productId}</td>
+                              {showBatchColumn ? (
+                                <td className="px-4 py-3 text-xs font-mono text-slate-500">{batchNo?.trim() || '—'}</td>
+                              ) : null}
                               <td className="px-4 py-3 text-right">
                                 <input
                                   type="number"

@@ -11,7 +11,7 @@ import type {
   Worker,
   GlobalNodeTemplate,
 } from '../../types';
-import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
+import { PartnerSelect } from '../../components/PartnerSelect';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import WorkerSelectWithTabs from './WorkerSelectWithTabs';
 import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
@@ -163,7 +163,7 @@ function FinanceRecordFormModal({
                     {selectedCategory.linkPartner && (
                       <div className="space-y-1">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{current.partnerLabel}</label>
-                        <SearchablePartnerSelect
+                        <PartnerSelect
                           options={partners}
                           categories={partnerCategories}
                           value={form.partner}
@@ -207,7 +207,7 @@ function FinanceRecordFormModal({
                 {!selectedCategory && (
                   <div className="space-y-1 lg:col-span-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{current.partnerLabel}</label>
-                    <SearchablePartnerSelect
+                    <PartnerSelect
                       options={partners}
                       categories={partnerCategories}
                       value={form.partner}
@@ -222,7 +222,7 @@ function FinanceRecordFormModal({
                 <OrderSearchSelect orders={orders} products={products} value={form.relatedId} onChange={v => setForm({ ...form, relatedId: v })} label="关联工单 / 计件参考" />
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{current.partnerLabel}</label>
-                  <SearchablePartnerSelect
+                  <PartnerSelect
                     options={partners}
                     categories={partnerCategories}
                     value={form.partner}

@@ -56,6 +56,9 @@ export interface PsiDocLineRecord {
   quantity?: number | string | null;
   purchasePrice?: number | string | null;
   salesPrice?: number | string | null;
+  batchNo?: string | null;
+  /** @deprecated API 历史字段，优先用 batchNo */
+  batch?: string | null;
 }
 
 /**

@@ -47,7 +47,7 @@ import { toast } from 'sonner';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import * as api from '../../services/api';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
-import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
+import { SupplierSelect } from '../../components/SupplierSelect';
 import { useAuthOptional } from '../../contexts/AuthContext';
 import { hasSubPermission } from '../../utils/hasSubPermission';
 import BomEditorPortal, { useBomEditorPortalState } from './BomEditorPortal';
@@ -1460,7 +1460,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                         <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">首选供应商 (档案关联)</label>
                         <div className="flex gap-2 items-start">
                           <div className="flex-1 min-w-0">
-                            <SearchablePartnerSelect
+                            <SupplierSelect
                               options={partners}
                               categories={partnerCategories}
                               value={workingProduct.supplierId || ''}

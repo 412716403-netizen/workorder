@@ -17,7 +17,8 @@ import type {
 } from '../../types';
 import { DEFAULT_OUTSOURCE_FORM_SETTINGS } from '../../types';
 import { hasOpsPerm } from './types';
-import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
+import { SupplierSelect } from '../../components/SupplierSelect';
+import { psiOrderBillFormPartnerTriggerClassCompact } from '../../styles/uiDensity';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
@@ -212,7 +213,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                   for (const rec of toDelete) await onDeleteRecord(rec.id);
                   const timestamp = first.timestamp || new Date().toLocaleString();
                   const newStatus = isReceiveDoc ? '已收回' : '加工中';
-                  const batch: ProductionOpRecord[] = [];
+                  const outsourcePendingWrites: ProductionOpRecord[] = [];
                   entries.forEach(([key, qty]) => {
                     const parts = key.split('|');
                     const nodeId = parts[1];
@@ -222,7 +223,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                       const bk = parts.length >= 2 ? `${productId}|${nodeId}` : key;
                       const unitPrice = isReceiveDoc ? (flowDetailUnitPrices[key] ?? flowDetailUnitPrices[bk] ?? 0) : undefined;
                       const amount = isReceiveDoc && unitPrice != null ? Number(qty) * unitPrice : undefined;
-                      batch.push({ id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, type: 'OUTSOURCE', productId, quantity: qty, reason: flowDetailEditRemark.trim() || undefined, operator: first.operator || flowDetailOperatorFallback, timestamp, status: newStatus, partner: partnerName, docNo: flowDetailKey, nodeId, variantId: variantId || undefined, unitPrice: unitPrice || undefined, amount: amount ?? undefined, ...mergeCollab(preservedCollabData) } as ProductionOpRecord);
+                      outsourcePendingWrites.push({ id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, type: 'OUTSOURCE', productId, quantity: qty, reason: flowDetailEditRemark.trim() || undefined, operator: first.operator || flowDetailOperatorFallback, timestamp, status: newStatus, partner: partnerName, docNo: flowDetailKey, nodeId, variantId: variantId || undefined, unitPrice: unitPrice || undefined, amount: amount ?? undefined, ...mergeCollab(preservedCollabData) } as ProductionOpRecord);
                       return;
                     }
                     const orderId = parts[0];
@@ -231,9 +232,13 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                     if (!order) return;
                     const unitPrice = isReceiveDoc ? (flowDetailUnitPrices[key] ?? flowDetailUnitPrices[bk] ?? 0) : undefined;
                     const amount = isReceiveDoc && unitPrice != null ? Number(qty) * unitPrice : undefined;
-                    batch.push({ id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, type: 'OUTSOURCE', orderId, productId: order.productId, quantity: qty, reason: flowDetailEditRemark.trim() || undefined, operator: first.operator || flowDetailOperatorFallback, timestamp, status: newStatus, partner: partnerName, docNo: flowDetailKey, nodeId, variantId: variantId || undefined, unitPrice: unitPrice || undefined, amount: amount ?? undefined, ...mergeCollab(preservedCollabData) } as ProductionOpRecord);
+                    outsourcePendingWrites.push({ id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, type: 'OUTSOURCE', orderId, productId: order.productId, quantity: qty, reason: flowDetailEditRemark.trim() || undefined, operator: first.operator || flowDetailOperatorFallback, timestamp, status: newStatus, partner: partnerName, docNo: flowDetailKey, nodeId, variantId: variantId || undefined, unitPrice: unitPrice || undefined, amount: amount ?? undefined, ...mergeCollab(preservedCollabData) } as ProductionOpRecord);
                   });
-                  if (onAddRecordBatch && batch.length > 1) { await onAddRecordBatch(batch); } else { for (const rec of batch) await onAddRecord(rec); }
+                  if (onAddRecordBatch && outsourcePendingWrites.length > 1) {
+                    await onAddRecordBatch(outsourcePendingWrites);
+                  } else {
+                    for (const rec of outsourcePendingWrites) await onAddRecord(rec);
+                  }
 
                   const collabDispatchIds = new Set<string>();
                   for (const rec of toDelete) {
@@ -241,7 +246,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                     if (cd?.dispatchId) collabDispatchIds.add(cd.dispatchId);
                   }
                   if (collabDispatchIds.size > 0) {
-                    const newRecordIds = batch.map(r => r.id);
+                    const newRecordIds = outsourcePendingWrites.map(r => r.id);
                     const doSync = await confirm({ message: '此单据关联协作发出（已同步给乙方）。是否将编辑后的数据同步给乙方？\n\n选择"确认"将推送修订给乙方确认。' });
                     if (doSync) {
                       for (const dispatchId of collabDispatchIds) {
@@ -357,7 +362,14 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
             <div className="space-y-1.5">
               <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">外协工厂</label>
               {flowDetailEditMode ? (
-                <SearchablePartnerSelect options={partners} categories={partnerCategories} value={flowDetailEditPartner} onChange={name => setFlowDetailEditPartner(name)} placeholder="搜索并选择外协工厂..." triggerClassName="bg-white border border-slate-200 min-h-[52px] rounded-xl" />
+                <SupplierSelect
+                  options={partners}
+                  categories={partnerCategories}
+                  value={flowDetailEditPartner}
+                  onChange={name => setFlowDetailEditPartner(name)}
+                  placeholder="搜索并选择外协工厂..."
+                  triggerClassName={`${psiOrderBillFormPartnerTriggerClassCompact} bg-white border border-slate-200`}
+                />
               ) : (
                 <div className="w-full h-[52px] rounded-xl border border-slate-200 py-3 px-4 text-sm font-bold text-slate-800 bg-white flex items-center">{docPartner}</div>
               )}

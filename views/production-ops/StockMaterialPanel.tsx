@@ -21,6 +21,7 @@ import type {
   MaterialFormSettings,
   PrintTemplate,
   MaterialBreakdownRow,
+  PsiRecord,
 } from '../../types';
 import { DEFAULT_MATERIAL_PANEL_SETTINGS, DEFAULT_MATERIAL_FORM_SETTINGS } from '../../types';
 import { PanelProps, hasOpsPerm, getOrderFamilyIds, type StockDocDetail } from './types';
@@ -28,6 +29,10 @@ import { toLocalCompactYmd } from '../../utils/localDateTime';
 import { orderCreatedMs } from '../../utils/orderCenterSort';
 import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpCollab/material';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
+import { categoryUsesBatchManagement } from '../../types';
+import { clampBatchNoInput } from '../../hooks/useBatchPicker';
+import * as api from '../../services/api';
+import { toast } from 'sonner';
 
 type MatRow = { productId: string; issue: number; returnQty: number; theoryCost: number };
 
@@ -251,6 +256,8 @@ const MaterialStatsTable: React.FC<{
 };
 
 interface StockMaterialPanelProps extends PanelProps {
+  /** 与进销存快照合并批次选项（领料确认弹窗） */
+  psiRecords?: PsiRecord[];
   plans?: PlanOrder[];
   materialPanelSettings?: MaterialPanelSettings;
   onUpdateMaterialPanelSettings?: (settings: MaterialPanelSettings) => void;
@@ -305,6 +312,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   printTemplates = [],
   onUpdatePrintTemplates,
   onRefreshPrintTemplates,
+  psiRecords = [],
 }) => {
   const { tenantCtx, userId } = useAuth();
   const canViewMainList = hasOpsPerm(tenantRole, userPermissions, 'production:material_list:allow');
@@ -322,6 +330,8 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   const [stockConfirmWarehouseId, setStockConfirmWarehouseId] = useState('');
   const [stockConfirmReason, setStockConfirmReason] = useState('');
   const [stockConfirmCustomValues, setStockConfirmCustomValues] = useState<Record<string, unknown>>({});
+  /** 确认领退料弹窗内按物料行的批次 */
+  const [stockConfirmBatches, setStockConfirmBatches] = useState<Record<string, string>>({});
   const [stockDocDetail, setStockDocDetail] = useState<StockDocDetail | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [materialFormConfigEntryTab, setMaterialFormConfigEntryTab] = useState<'fields' | 'print' | 'list'>('fields');
@@ -900,6 +910,33 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
     const toSubmit = Array.from(stockSelectedIds).filter(pid => (stockConfirmQuantities[pid] ?? 0) > 0);
     if (toSubmit.length === 0) return;
     const recordType: ProdOpType = stockSelectMode === 'stock_out' ? 'STOCK_OUT' : 'STOCK_RETURN';
+    const wh = stockConfirmWarehouseId || '';
+    /** 领料与退料：启用批次时须选批号；仅领料再校验该批可用量 */
+    if (wh) {
+      for (const pid of toSubmit) {
+        const p = idx.productsById.get(pid);
+        const c = categoryMap.get(p?.categoryId ?? '');
+        if (!categoryUsesBatchManagement(c)) continue;
+        const bn = clampBatchNoInput(stockConfirmBatches[pid] ?? '');
+        if (!bn) {
+          toast.error(`请为物料「${p?.name ?? pid}」选择批次`);
+          return;
+        }
+        if (recordType === 'STOCK_OUT') {
+          try {
+            const opts = await api.psi.getStockBatches({ productId: pid, warehouseId: wh });
+            const av = opts.find(o => o.batchNo === bn)?.stock ?? 0;
+            if ((stockConfirmQuantities[pid] ?? 0) > av) {
+              toast.error(`物料「${p?.name ?? pid}」批次「${bn}」可用库存不足（${av}）`);
+              return;
+            }
+          } catch {
+            toast.error('校验批次库存失败，请稍后重试');
+            return;
+          }
+        }
+      }
+    }
     const docNo = getNextStockDocNo(recordType);
     const timestamp = new Date().toLocaleString();
     const partnerForRecord = stockSelectPartner && stockSelectPartner !== '__internal__' ? stockSelectPartner : undefined;
@@ -910,21 +947,27 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
       partnerForRecord,
     );
     if (srcPid) {
-      const batch: ProductionOpRecord[] = toSubmit.map(pid => ({
-        id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        type: recordType,
-        orderId: undefined,
-        sourceProductId: srcPid,
-        productId: pid,
-        quantity: stockConfirmQuantities[pid],
-        reason: stockConfirmReason || undefined,
-        timestamp,
-        status: '已完成',
-        warehouseId: stockConfirmWarehouseId || undefined,
-        partner: partnerForRecord,
-        docNo,
-        ...collabExtra,
-      } as ProductionOpRecord));
+      const batch: ProductionOpRecord[] = toSubmit.map(pid => {
+        const p = idx.productsById.get(pid);
+        const c = categoryMap.get(p?.categoryId ?? '');
+        const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(stockConfirmBatches[pid] ?? '') : '';
+        return {
+          id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: recordType,
+          orderId: undefined,
+          sourceProductId: srcPid,
+          productId: pid,
+          quantity: stockConfirmQuantities[pid],
+          reason: stockConfirmReason || undefined,
+          timestamp,
+          status: '已完成',
+          warehouseId: stockConfirmWarehouseId || undefined,
+          partner: partnerForRecord,
+          docNo,
+          ...(bn ? { batchNo: bn } : {}),
+          ...collabExtra,
+        } as ProductionOpRecord;
+      });
       if (onAddRecordBatch && batch.length > 1) {
         await onAddRecordBatch(batch);
       } else {
@@ -937,26 +980,37 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         sourceProductId: srcPid,
         timestamp,
         warehouseId: stockConfirmWarehouseId || '',
-        lines: toSubmit.map(pid => ({ productId: pid, quantity: stockConfirmQuantities[pid] })),
+        lines: toSubmit.map(pid => {
+          const p = idx.productsById.get(pid);
+          const c = categoryMap.get(p?.categoryId ?? '');
+          const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(stockConfirmBatches[pid] ?? '') : '';
+          return { productId: pid, quantity: stockConfirmQuantities[pid], ...(bn ? { batchNo: bn } : {}) };
+        }),
         reason: stockConfirmReason || undefined,
         operator: '',
         partner: partnerForRecord,
       });
     } else if (stockSelectOrderId) {
-      const batch: ProductionOpRecord[] = toSubmit.map(pid => ({
-        id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        type: recordType,
-        orderId: stockSelectOrderId,
-        productId: pid,
-        quantity: stockConfirmQuantities[pid],
-        reason: stockConfirmReason || undefined,
-        timestamp,
-        status: '已完成',
-        warehouseId: stockConfirmWarehouseId || undefined,
-        partner: partnerForRecord,
-        docNo,
-        ...collabExtra,
-      } as ProductionOpRecord));
+      const batch: ProductionOpRecord[] = toSubmit.map(pid => {
+        const p = idx.productsById.get(pid);
+        const c = categoryMap.get(p?.categoryId ?? '');
+        const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(stockConfirmBatches[pid] ?? '') : '';
+        return {
+          id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: recordType,
+          orderId: stockSelectOrderId,
+          productId: pid,
+          quantity: stockConfirmQuantities[pid],
+          reason: stockConfirmReason || undefined,
+          timestamp,
+          status: '已完成',
+          warehouseId: stockConfirmWarehouseId || undefined,
+          partner: partnerForRecord,
+          docNo,
+          ...(bn ? { batchNo: bn } : {}),
+          ...collabExtra,
+        } as ProductionOpRecord;
+      });
       if (onAddRecordBatch && batch.length > 1) {
         await onAddRecordBatch(batch);
       } else {
@@ -968,7 +1022,12 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         orderId: stockSelectOrderId,
         timestamp,
         warehouseId: stockConfirmWarehouseId || '',
-        lines: toSubmit.map(pid => ({ productId: pid, quantity: stockConfirmQuantities[pid] })),
+        lines: toSubmit.map(pid => {
+          const p = idx.productsById.get(pid);
+          const c = categoryMap.get(p?.categoryId ?? '');
+          const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(stockConfirmBatches[pid] ?? '') : '';
+          return { productId: pid, quantity: stockConfirmQuantities[pid], ...(bn ? { batchNo: bn } : {}) };
+        }),
         reason: stockConfirmReason || undefined,
         operator: '',
         partner: partnerForRecord,
@@ -989,6 +1048,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
     setStockSelectMode(null);
     setStockSelectedIds(new Set());
     setStockConfirmQuantities({});
+    setStockConfirmBatches({});
     setStockConfirmReason('');
     setStockConfirmCustomValues({});
   };
@@ -1124,7 +1184,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                     {selecting ? (
                                       <>
                                         <span className="text-xs font-bold text-slate-500">已选 {stockSelectedIds.size} 项</span>
-                                        <button type="button" onClick={() => { if (stockSelectedIds.size === 0) return; setStockConfirmQuantities({}); setStockConfirmCustomValues({}); setStockConfirmWarehouseId(stockSelectMode ? resolveConfirmDefaultWarehouse(stockSelectMode) : ''); setShowStockConfirmModal(true); }} disabled={stockSelectedIds.size === 0} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm disabled:opacity-50 ${stockSelectMode === 'stock_out' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'}`}><Check className="w-3 h-3" /> {stockSelectMode === 'stock_out' ? '确认领料' : '确认退料'}</button>
+                                        <button type="button" onClick={() => { if (stockSelectedIds.size === 0) return; setStockConfirmQuantities({}); setStockConfirmBatches({}); setStockConfirmCustomValues({}); setStockConfirmWarehouseId(stockSelectMode ? resolveConfirmDefaultWarehouse(stockSelectMode) : ''); setShowStockConfirmModal(true); }} disabled={stockSelectedIds.size === 0} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm disabled:opacity-50 ${stockSelectMode === 'stock_out' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'}`}><Check className="w-3 h-3" /> {stockSelectMode === 'stock_out' ? '确认领料' : '确认退料'}</button>
                                         <button type="button" onClick={() => { setStockSelectSourceProductId(null); setStockSelectPartner(null); setStockSelectMode(null); setStockSelectedIds(new Set()); }} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all">取消</button>
                                       </>
                                     ) : (
@@ -1167,7 +1227,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                                     {selecting ? (
                                       <>
                                         <span className="text-xs font-bold text-slate-500">已选 {stockSelectedIds.size} 项</span>
-                                        <button type="button" onClick={() => { if (stockSelectedIds.size === 0) return; setStockConfirmQuantities({}); setStockConfirmCustomValues({}); setStockConfirmWarehouseId(stockSelectMode ? resolveConfirmDefaultWarehouse(stockSelectMode) : ''); setShowStockConfirmModal(true); }} disabled={stockSelectedIds.size === 0} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm disabled:opacity-50 ${stockSelectMode === 'stock_out' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'}`}><Check className="w-3 h-3" /> {stockSelectMode === 'stock_out' ? '确认领料' : '确认退料'}</button>
+                                        <button type="button" onClick={() => { if (stockSelectedIds.size === 0) return; setStockConfirmQuantities({}); setStockConfirmBatches({}); setStockConfirmCustomValues({}); setStockConfirmWarehouseId(stockSelectMode ? resolveConfirmDefaultWarehouse(stockSelectMode) : ''); setShowStockConfirmModal(true); }} disabled={stockSelectedIds.size === 0} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all shadow-sm disabled:opacity-50 ${stockSelectMode === 'stock_out' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'}`}><Check className="w-3 h-3" /> {stockSelectMode === 'stock_out' ? '确认领料' : '确认退料'}</button>
                                         <button type="button" onClick={() => { setStockSelectOrderId(null); setStockSelectPartner(null); setStockSelectMode(null); setStockSelectedIds(new Set()); }} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all">取消</button>
                                       </>
                                     ) : (
@@ -1249,6 +1309,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                               onClick={() => {
                                 if (stockSelectedIds.size === 0) return;
                                 setStockConfirmQuantities({});
+                                setStockConfirmBatches({});
                                 setStockConfirmCustomValues({});
                                 setStockConfirmWarehouseId(stockSelectMode ? resolveConfirmDefaultWarehouse(stockSelectMode) : '');
                                 setShowStockConfirmModal(true);
@@ -1359,6 +1420,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
                             onClick={() => {
                               if (stockSelectedIds.size === 0) return;
                               setStockConfirmQuantities({});
+                              setStockConfirmBatches({});
                               setStockConfirmCustomValues({});
                               setStockConfirmWarehouseId(stockSelectMode ? resolveConfirmDefaultWarehouse(stockSelectMode) : '');
                               setShowStockConfirmModal(true);
@@ -1423,6 +1485,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
           setShowStockConfirmModal(false);
           setStockConfirmReason('');
           setStockConfirmCustomValues({});
+          setStockConfirmBatches({});
         }}
         onSubmit={handleStockConfirmSubmit}
         stockSelectMode={stockSelectMode}
@@ -1432,7 +1495,10 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         stockConfirmQuantities={stockConfirmQuantities}
         onQuantityChange={(pid, qty) => setStockConfirmQuantities(prev => ({ ...prev, [pid]: qty }))}
         stockConfirmWarehouseId={stockConfirmWarehouseId}
-        onWarehouseChange={setStockConfirmWarehouseId}
+        onWarehouseChange={wid => {
+          setStockConfirmWarehouseId(wid);
+          setStockConfirmBatches({});
+        }}
         stockConfirmReason={stockConfirmReason}
         onReasonChange={setStockConfirmReason}
         materialCustomFieldDefs={stockConfirmMaterialCustomFieldDefs}
@@ -1445,6 +1511,11 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         warehouses={warehouses}
         dictionaries={dictionaries}
         partnerLabel={stockSelectPartner && stockSelectPartner !== '__internal__' ? stockSelectPartner : undefined}
+        categories={categories}
+        lineBatchByProduct={stockConfirmBatches}
+        onLineBatchChange={(pid, bn) => setStockConfirmBatches(prev => ({ ...prev, [pid]: bn }))}
+        psiRecords={psiRecords}
+        prodRecords={records}
       />
 
       <StockDocDetailModal
@@ -1493,6 +1564,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         warehouses={warehouses}
         productionLinkMode={productionLinkMode}
         materialFormSettings={materialFormSettings}
+        categories={categories}
         onAddRecord={onAddRecord}
         getNextStockDocNo={getNextStockDocNo}
       />

@@ -18,6 +18,7 @@ import type {
   OutsourceFormSettings,
   MaterialFormSettings,
   ReworkFormSettings,
+  PsiRecord,
 } from '../../types';
 
 export type OutsourceModalType = 'dispatch' | 'receive' | 'flow';
@@ -29,7 +30,7 @@ export interface StockDocDetail {
   sourceProductId?: string;
   timestamp: string;
   warehouseId: string;
-  lines: { productId: string; quantity: number }[];
+  lines: { productId: string; quantity: number; batchNo?: string }[];
   reason?: string;
   operator: string;
   partner?: string;
@@ -86,6 +87,8 @@ export interface PanelProps {
   /** 返工管理专用（可选） */
   reworkFormSettings?: ReworkFormSettings;
   onUpdateReworkFormSettings?: (settings: ReworkFormSettings) => void | Promise<void>;
+  /** 返工领料等弹窗内合并本地进销存批次余量（可选） */
+  psiRecords?: PsiRecord[];
 }
 
 export function hasOpsPerm(

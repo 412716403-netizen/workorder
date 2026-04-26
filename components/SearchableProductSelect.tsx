@@ -158,27 +158,27 @@ export function SearchableProductSelect({
   }, [isOpen]);
 
   const triggerCls = compact
-    ? 'w-full bg-slate-50 border-none rounded-xl py-2.5 px-3 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between disabled:opacity-50 transition-all min-h-[40px]'
-    : 'w-full bg-slate-50 border-none rounded-xl py-3.5 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between disabled:opacity-50 transition-all min-h-[48px]';
+    ? 'h-9 min-h-9 w-full box-border rounded-lg border border-slate-200 bg-white px-2 font-bold text-slate-900 outline-none flex items-center justify-between gap-1 disabled:opacity-50 transition-all focus:ring-2 focus:ring-indigo-500'
+    : 'w-full bg-slate-50 border-none rounded-xl py-2.5 px-3 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between disabled:opacity-50 transition-all min-h-[40px]';
 
   const searchInputCls = compact
-    ? 'w-full bg-slate-50 border-none rounded-lg py-2 pl-9 pr-3 text-sm font-bold leading-tight outline-none focus:ring-2 focus:ring-indigo-500'
-    : 'w-full bg-slate-50 border-none rounded-xl py-3 pl-11 pr-4 text-sm font-bold leading-tight outline-none focus:ring-2 focus:ring-indigo-500';
+    ? 'w-full bg-slate-50 border-none rounded-lg py-1.5 pl-8 pr-2.5 text-xs font-semibold leading-tight outline-none focus:ring-2 focus:ring-indigo-500'
+    : 'w-full bg-slate-50 border-none rounded-lg py-2 pl-8 pr-3 text-xs font-semibold leading-tight outline-none focus:ring-2 focus:ring-indigo-500';
 
   const tabBtnCls = (active: boolean) =>
     compact
-      ? `px-2 py-1 rounded-md text-[10px] font-black uppercase transition-all whitespace-nowrap ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`
-      : `px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all whitespace-nowrap ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`;
+      ? `px-2 py-0.5 rounded-md text-[11px] font-black uppercase transition-all whitespace-nowrap ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`
+      : `px-2.5 py-0.5 rounded-md text-xs font-black uppercase transition-all whitespace-nowrap ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`;
 
   const unavailableSet = useMemo(() => new Set(unavailableProductIds.filter(Boolean)), [unavailableProductIds]);
   const disabledProductSet = useMemo(() => new Set(disabledProductIds.filter(Boolean)), [disabledProductIds]);
 
   const rowBtnCls = (selected: boolean, unavailable: boolean) => {
-    const pad = compact ? 'py-2 px-2.5 rounded-xl' : 'p-3 rounded-2xl';
+    const pad = compact ? 'py-1 px-2 rounded-lg' : 'py-1.5 px-2 rounded-lg';
     if (unavailable) {
-      return `w-full text-left ${pad} transition-all border-2 opacity-50 cursor-not-allowed bg-slate-100 border-slate-100 text-slate-400`;
+      return `w-full text-left ${pad} transition-all border opacity-50 cursor-not-allowed bg-slate-100 border-slate-100 text-slate-400`;
     }
-    return `w-full text-left ${pad} transition-all border-2 ${
+    return `w-full text-left ${pad} transition-all border ${
       selected ? 'bg-indigo-50 border-indigo-600/20 text-indigo-700' : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'
     }`;
   };
@@ -186,14 +186,14 @@ export function SearchableProductSelect({
   const dropdownPanel = isOpen && typeof document !== 'undefined' && (
     <div
       data-searchable-product-dropdown
-      className={`bg-white border border-slate-200 shadow-2xl animate-in fade-in zoom-in-95 duration-150 ${compact ? 'rounded-xl p-3' : 'rounded-2xl p-4'}`}
+      className={`bg-white border border-slate-200 shadow-2xl animate-in fade-in zoom-in-95 duration-150 ${compact ? 'rounded-lg p-2' : 'rounded-xl p-2.5'}`}
       style={panelStyle}
       onMouseDown={e => e.preventDefault()}
     >
-      <div className={`flex items-center gap-2 flex-shrink-0 ${compact ? 'mb-2' : 'mb-4'}`}>
+      <div className={`flex items-center gap-1.5 flex-shrink-0 ${compact ? 'mb-1.5' : 'mb-2'}`}>
         <div className="relative flex-1 min-w-0">
           <Search
-            className={`absolute text-slate-400 ${compact ? 'left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5' : 'left-3.5 top-1/2 -translate-y-1/2 w-4 h-4'}`}
+            className={`absolute text-slate-400 left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5`}
           />
           <input
             autoFocus
@@ -212,17 +212,17 @@ export function SearchableProductSelect({
               setQuickCreateOpen(true);
             }}
             title="新增产品（与基础信息 → 产品档案一致：颜色尺码、工序、BOM 等）"
-            className={`shrink-0 inline-flex items-center gap-1 rounded-xl bg-indigo-600 text-white font-black uppercase tracking-wider hover:bg-indigo-700 active:bg-indigo-800 transition-all shadow-sm shadow-indigo-600/20 ${
-              compact ? 'px-2.5 py-2 text-[10px]' : 'px-3 py-3 text-[11px]'
+            className={`shrink-0 inline-flex items-center gap-0.5 rounded-lg bg-indigo-600 text-white font-black uppercase tracking-wide hover:bg-indigo-700 active:bg-indigo-800 transition-all shadow-sm shadow-indigo-600/20 ${
+              compact ? 'px-1.5 py-1 text-[9px]' : 'px-2 py-1.5 text-[10px]'
             }`}
           >
-            <Plus className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+            <Plus className="w-3 h-3" />
             新增
           </button>
         )}
       </div>
 
-      <div className={`flex items-center gap-1 flex-shrink-0 overflow-x-auto no-scrollbar ${compact ? 'mb-2 pb-0.5' : 'mb-4 pb-1'}`}>
+      <div className={`flex items-center gap-0.5 flex-shrink-0 overflow-x-auto no-scrollbar ${compact ? 'mb-1.5 pb-0.5' : 'mb-2 pb-0.5'}`}>
         <button type="button" onClick={() => setActiveTab('all')} className={tabBtnCls(activeTab === 'all')}>
           全部
         </button>
@@ -233,7 +233,7 @@ export function SearchableProductSelect({
         ))}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar space-y-0.5">
+      <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar space-y-0">
         {filteredOptions.map(p => {
           const cat = categories.find(c => c.id === p.categoryId);
           const duplicateUnavailable = unavailableSet.has(p.id) && p.id !== value;
@@ -258,11 +258,11 @@ export function SearchableProductSelect({
               }}
               className={rowBtnCls(p.id === value, unavailable)}
             >
-              <div className={`flex justify-between items-start gap-2 ${compact ? 'mb-0' : 'mb-0.5'}`}>
-                <p className={`font-black truncate leading-tight min-w-0 flex-1 ${compact ? 'text-sm' : 'text-base'}`}>{p.name}</p>
+              <div className="flex justify-between items-start gap-1.5 -my-px">
+                <p className={`font-bold truncate leading-tight min-w-0 flex-1 ${compact ? 'text-xs' : 'text-sm'}`}>{p.name}</p>
                 {cat && (
                   <span
-                    className={`rounded bg-slate-100 text-slate-500 font-black uppercase shrink-0 leading-none ${compact ? 'px-1.5 py-px text-[9px]' : 'px-2 py-0.5 text-[11px]'}`}
+                    className={`rounded bg-slate-100 text-slate-500 font-bold uppercase shrink-0 leading-tight ${compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[11px]'}`}
                   >
                     {cat.name}
                   </span>
@@ -270,7 +270,7 @@ export function SearchableProductSelect({
               </div>
               <div className="flex flex-wrap items-center gap-1">
                 <p
-                  className={`font-bold uppercase tracking-widest leading-tight ${compact ? 'text-[11px]' : 'text-xs'} ${p.id === value ? 'text-indigo-400' : 'text-slate-400'}`}
+                  className={`font-semibold uppercase tracking-tight leading-tight ${compact ? 'text-[9px]' : 'text-[10px]'} ${p.id === value ? 'text-indigo-400' : 'text-slate-400'}`}
                 >
                   {p.sku}
                 </p>
@@ -300,7 +300,7 @@ export function SearchableProductSelect({
                     return (
                       <span
                         key={f.id}
-                        className={`font-bold text-slate-500 rounded bg-slate-50 leading-tight ${compact ? 'text-[8px] px-1 py-px' : 'text-[10px] px-1.5 py-0.5'}`}
+                        className={`font-bold text-slate-500 rounded bg-slate-50 leading-tight ${compact ? 'text-[10px] px-1.5 py-0.5' : 'text-[11px] px-1.5 py-0.5'}`}
                       >
                         {f.label}: 已上传
                       </span>
@@ -308,7 +308,7 @@ export function SearchableProductSelect({
                   return (
                     <span
                       key={f.id}
-                      className={`font-bold text-slate-500 rounded bg-slate-50 leading-tight ${compact ? 'text-[8px] px-1 py-px' : 'text-[10px] px-1.5 py-0.5'}`}
+                      className={`font-bold text-slate-500 rounded bg-slate-50 leading-tight ${compact ? 'text-[10px] px-1.5 py-0.5' : 'text-[11px] px-1.5 py-0.5'}`}
                     >
                       {f.label}: {formatReportCustomDataForList(f, val)}
                     </span>
@@ -319,9 +319,9 @@ export function SearchableProductSelect({
           );
         })}
         {filteredOptions.length === 0 && (
-          <div className={compact ? 'py-6 text-center' : 'py-10 text-center'}>
-            <Package className={`text-slate-100 mx-auto mb-2 block ${compact ? 'w-6 h-6' : 'w-8 h-8'}`} />
-            <p className={`text-slate-400 font-medium leading-tight ${compact ? 'text-xs' : 'text-sm'}`}>未找到符合条件的产品</p>
+          <div className={compact ? 'py-4 text-center' : 'py-6 text-center'}>
+            <Package className="text-slate-100 mx-auto mb-1.5 block w-5 h-5" />
+            <p className="text-slate-400 font-medium leading-tight text-xs">未找到符合条件的产品</p>
           </div>
         )}
       </div>
@@ -337,9 +337,9 @@ export function SearchableProductSelect({
         onClick={() => setIsOpen(o => !o)}
         className={triggerClassName ? `${triggerCls} ${triggerClassName}` : triggerCls}
       >
-        <div className="flex items-center gap-2 truncate min-w-0">
-          <Package className={`shrink-0 ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} ${selectedProduct ? 'text-indigo-600' : 'text-slate-300'}`} />
-          <span className={`font-bold truncate leading-tight ${compact ? 'text-[13px]' : 'text-sm'} ${selectedProduct ? 'text-slate-900' : 'text-slate-400'}`}>
+        <div className="flex items-center gap-1.5 truncate min-w-0">
+          <Package className={`shrink-0 w-3.5 h-3.5 ${selectedProduct ? 'text-indigo-600' : 'text-slate-300'}`} />
+          <span className={`font-semibold truncate leading-tight text-xs ${selectedProduct ? 'text-slate-900' : 'text-slate-400'}`}>
             {selectedProduct
               ? (() => {
                   const cat = categories.find(c => c.id === selectedProduct.categoryId);
@@ -359,7 +359,7 @@ export function SearchableProductSelect({
           </span>
         </div>
         <ChevronRight
-          className={`shrink-0 transition-transform ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} ${isOpen ? 'rotate-90' : 'text-slate-400'}`}
+          className={`shrink-0 transition-transform w-3.5 h-3.5 ${isOpen ? 'rotate-90' : 'text-slate-400'}`}
         />
       </button>
 

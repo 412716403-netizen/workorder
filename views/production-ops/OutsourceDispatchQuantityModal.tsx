@@ -14,7 +14,8 @@ import type {
   ProductMilestoneProgress,
   PlanFormFieldConfig,
 } from '../../types';
-import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
+import { SupplierSelect } from '../../components/SupplierSelect';
+import { psiOrderBillFormPartnerTriggerClassCompact } from '../../styles/uiDensity';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { variantMaxGoodProductMode } from '../../utils/productReportAggregates';
@@ -341,13 +342,13 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">外协工厂</label>
-              <SearchablePartnerSelect
+              <SupplierSelect
                 options={partners}
                 categories={partnerCategories}
                 value={dispatchPartnerName}
                 onChange={name => setDispatchPartnerName(name)}
                 placeholder="搜索并选择外协工厂..."
-                triggerClassName="bg-white border border-slate-200 min-h-[52px] rounded-xl"
+                triggerClassName={`${psiOrderBillFormPartnerTriggerClassCompact} bg-white border border-slate-200`}
               />
             </div>
             <div>

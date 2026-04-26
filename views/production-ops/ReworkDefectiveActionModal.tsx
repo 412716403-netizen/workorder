@@ -17,7 +17,7 @@ import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldCo
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { splitQtyBySourceDefectiveAcrossParentOrders } from '../../utils/reworkSplitByProductOrders';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
-import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
+import { SupplierSelect } from '../../components/SupplierSelect';
 import {
   sectionTitleClass,
   psiOrderBillFormSectionStackClass,
@@ -25,7 +25,6 @@ import {
   psiOrderBillFormSectionIconIndigoClass,
   psiOrderBillFormSectionIconEmeraldClass,
   psiOrderBillFormFieldControlClass,
-  psiOrderBillFormPartnerTriggerClass,
 } from '../../styles/uiDensity';
 import { hasOpsPerm } from './types';
 import { useAuth } from '../../contexts/AuthContext';
@@ -634,13 +633,12 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
                 {reworkActionMode === 'outsource_rework' && (
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">外协工厂</label>
-                    <SearchablePartnerSelect
+                    <SupplierSelect
                       options={partners}
                       categories={partnerCategories}
                       value={outsourcePartnerName}
                       onChange={name => setOutsourcePartnerName(name)}
                       placeholder="搜索并选择外协工厂..."
-                      triggerClassName={psiOrderBillFormPartnerTriggerClass}
                     />
                   </div>
                 )}

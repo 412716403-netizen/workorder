@@ -23,7 +23,7 @@ import { PlanStatus } from '../../types';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
-import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
+import { CustomerSelect } from '../../components/CustomerSelect';
 import { sectionTitleClass } from '../../styles/uiDensity';
 import { localTodayYmd } from '../../utils/localDateTime';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
@@ -227,7 +227,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
                 {planFormSettings.standardFields.find(f => f.id === 'customer')?.showInCreate !== false && productionLinkMode !== 'product' && (
                   <div className="md:col-span-2 space-y-1">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">计划客户（合作单位）</label>
-                    <SearchablePartnerSelect
+                    <CustomerSelect
                       options={partners}
                       categories={partnerCategories}
                       value={form.customer}

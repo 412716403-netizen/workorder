@@ -28,6 +28,7 @@ import type {
   PartnerCategory,
   ProcessSequenceMode,
   ProductMilestoneProgress,
+  PsiRecord,
 } from '../../types';
 import { DEFAULT_MATERIAL_FORM_SETTINGS, DEFAULT_OUTSOURCE_FORM_SETTINGS } from '../../types';
 import { PanelProps, hasOpsPerm, OutsourceModalType } from './types';
@@ -78,7 +79,7 @@ import type { PartnerFlowDetailSeed } from '../../utils/outsourcePartnerFlowDeta
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 
-const OutsourcePanel: React.FC<PanelProps> = ({
+const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
   productionLinkMode,
   productMilestoneProgresses,
   records,
@@ -107,6 +108,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
   onUpdatePrintTemplates,
   onRefreshPrintTemplates,
   materialFormSettings = DEFAULT_MATERIAL_FORM_SETTINGS,
+  psiRecords = [],
 }) => {
   const { currentUser, tenantCtx, userId } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
@@ -1258,6 +1260,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           records={records}
           warehouses={warehouses}
           materialFormSettings={materialFormSettings}
+          categories={categories}
           onAddRecord={onAddRecord}
           onAddRecordBatch={onAddRecordBatch}
           onClose={() => {
@@ -1267,6 +1270,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
             setMatDispatchPartner('');
             setMatDispatchRemark('');
           }}
+          psiRecords={psiRecords}
         />
       )}
 
@@ -1291,6 +1295,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
           records={records}
           warehouses={warehouses}
           materialFormSettings={materialFormSettings}
+          categories={categories}
           onAddRecord={onAddRecord}
           onAddRecordBatch={onAddRecordBatch}
           onClose={() => {
@@ -1300,6 +1305,7 @@ const OutsourcePanel: React.FC<PanelProps> = ({
             setMatReturnPartner('');
             setMatReturnRemark('');
           }}
+          psiRecords={psiRecords}
         />
       )}
 

@@ -47,3 +47,19 @@ export const getStock = asyncHandler(async (req, res) => {
     warehouseId: optStr(req.query.warehouseId),
   }));
 });
+
+export const getStockBatches = asyncHandler(async (req, res) => {
+  const productId = optStr(req.query.productId);
+  const warehouseId = optStr(req.query.warehouseId);
+  if (!productId || !warehouseId) {
+    res.status(400).json({ error: '缺少 productId 或 warehouseId' });
+    return;
+  }
+  res.json(
+    await psiService.getStockBatches(getTenantPrisma(req.tenantId!), {
+      productId,
+      warehouseId,
+      excludeProductionOpRecordId: optStr(req.query.excludeProductionOpRecordId) ?? undefined,
+    }),
+  );
+});

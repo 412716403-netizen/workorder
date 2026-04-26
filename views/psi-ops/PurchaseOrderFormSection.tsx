@@ -1,3 +1,7 @@
+/**
+ * 采购订单：意向/数量与单价约定，不落 PSI 库存；行级无批次列。
+ * 批次在转采购入库单时由采购单（入库）表单按分类规则录入，见 `docs/01-business-rules.md`「采购订单与批次」。
+ */
 import React from 'react';
 import {
   Plus,
@@ -8,7 +12,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
-import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
+import { SupplierSelect } from '../../components/SupplierSelect';
 import { Product, ProductCategory, Partner, PartnerCategory, AppDictionaries } from '../../types';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import {
@@ -20,10 +24,16 @@ import {
   psiOrderBillFormDetailSplitClass,
   psiOrderBillFormGridGapClass,
   psiOrderBillFormFieldControlClass,
-  psiOrderBillFormReadonlyBoxClass,
   psiOrderBillFormSectionIconIndigoClass,
   psiOrderBillFormSectionIconEmeraldClass,
-  psiOrderBillFormPartnerTriggerClass,
+  psiOrderBillCompactLineLabelClass,
+  psiOrderBillCompactLineInputClass,
+  psiOrderBillCompactLineReadonlyClass,
+  psiOrderBillCompactDocReadonlyInnerClass,
+  psiOrderBillCompactSummaryBarClass,
+  psiOrderBillCompactSummaryLabelClass,
+  psiOrderBillCompactSummaryValueClass,
+  psiOrderBillCompactSummaryUnitClass,
 } from '../../styles/uiDensity';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
@@ -138,26 +148,25 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
             <div className={`md:col-span-2 grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
               <div className="space-y-1.5 min-w-0">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{partnerLabel}</label>
-                <SearchablePartnerSelect
+                <SupplierSelect
                   options={partners}
                   categories={partnerCategories}
                   value={form.partner}
                   onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id })}
                   placeholder={`选择${partnerLabel}...`}
-                  triggerClassName={psiOrderBillFormPartnerTriggerClass}
                 />
               </div>
               <div className="space-y-1 min-w-0">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据编号</label>
                 <div className="relative">
-                  <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
-                  <div className={psiOrderBillFormReadonlyBoxClass}>
+                  <FileText className="absolute left-2.5 top-1/2 z-[1] h-3.5 w-3.5 -translate-y-1/2 text-slate-300 pointer-events-none" />
+                  <div className={psiOrderBillCompactDocReadonlyInnerClass}>
                     {editingDocNumber ? (
                       <span className="truncate">{editingDocNumber}</span>
                     ) : form.partner ? (
                       <span className="truncate">{previewAutoPoDocNumber || '保存时自动生成'}</span>
                     ) : (
-                      <span className="text-slate-400 font-bold text-sm truncate">选择合作单位后自动生成</span>
+                      <span className="truncate font-bold text-slate-400">选择合作单位后自动生成</span>
                     )}
                   </div>
                 </div>
@@ -173,6 +182,7 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
                   可选：说明本单采购物料主要服务于哪个产品（与下方明细「采购品项」不同）
                 </p>
                 <SearchableProductSelect
+                  compact
                   categories={categories}
                   options={products}
                   value={String(form.customData?.relatedProductId ?? '')}
@@ -184,14 +194,14 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
                     else delete next.relatedProductId;
                     setForm({ ...form, customData: next });
                   }}
-                  triggerClassName={psiOrderBillFormFieldControlClass}
+                  triggerClassName={psiOrderBillCompactLineInputClass}
                 />
               </div>
             )}
             {editingDocNumber && formSettings.standardFields.find(f => f.id === 'dueDate')?.showInCreate !== false && (
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">期望到货日期</label>
-                <input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} className={psiOrderBillFormFieldControlClass} />
+                <input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} className={psiOrderBillCompactLineInputClass} />
               </div>
             )}
             {formSettings.customFields.filter(f => f.showInCreate).map(cf => {
@@ -232,10 +242,10 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
                 : (poDocNum ? (receivedByOrderLine[`${poDocNum}::${line.id}`] ?? 0) : 0);
               const progress = lineQty > 0 ? Math.min(1, received / lineQty) : 0;
               return (
-              <div key={line.id} className="p-3 bg-slate-50/50 rounded-xl border border-slate-100 space-y-3 shadow-sm hover:border-indigo-100/80 transition-all">
-                <div className="flex flex-wrap items-end gap-3">
-                  <div className="flex-1 min-w-[200px] space-y-1.5 min-w-0">
-                    <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block tracking-widest">目标采购品项 (支持搜索与分类筛选)</label>
+              <div key={line.id} className="p-2.5 bg-slate-50/50 rounded-xl border border-slate-100 space-y-2.5 shadow-sm hover:border-indigo-100/80 transition-all">
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <label className={psiOrderBillCompactLineLabelClass}>目标采购品项 (支持搜索与分类筛选)</label>
                     <SearchableProductSelect
                       compact
                       categories={categories}
@@ -257,21 +267,21 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
                       }}
                     />
                   </div>
-                  <div className="w-28 space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">采购价 (元)</label>
-                    <input type="number" min={0} step={0.01} value={line.purchasePrice || ''} onChange={e => onUpdateItem(line.id, { purchasePrice: parseFloat(e.target.value) || 0 })} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="0" />
+                  <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                    <label className={psiOrderBillCompactLineLabelClass}>采购价 (元)</label>
+                    <input type="number" min={0} step={0.01} value={line.purchasePrice || ''} onChange={e => onUpdateItem(line.id, { purchasePrice: parseFloat(e.target.value) || 0 })} className={psiOrderBillCompactLineInputClass} placeholder="0" />
                   </div>
                   {hasVariants && (
                     <>
-                      <div className="w-24 space-y-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">总数</label>
-                        <div className="py-2.5 px-3 text-sm font-black text-indigo-600 bg-white rounded-xl border border-slate-200">
+                      <div className="w-20 shrink-0 space-y-0.5">
+                        <label className={psiOrderBillCompactLineLabelClass}>总数</label>
+                        <div className={psiOrderBillCompactLineReadonlyClass}>
                           {formatQtyDisplay(lineQty)} {line.productId ? getUnitName(line.productId) : '—'}
                         </div>
                       </div>
-                      <div className="w-28 space-y-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">金额 (元)</label>
-                        <div className="py-2.5 px-3 text-sm font-black text-indigo-600 bg-white rounded-xl border border-slate-200">
+                      <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                        <label className={psiOrderBillCompactLineLabelClass}>金额 (元)</label>
+                        <div className={psiOrderBillCompactLineReadonlyClass}>
                           {lineAmount.toFixed(2)}
                         </div>
                       </div>
@@ -279,16 +289,16 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
                   )}
                   {!hasVariants && (
                     <>
-                      <div className="w-24 space-y-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">数量</label>
-                        <div className="flex items-center gap-1.5">
-                          <input type="number" min={0} value={line.quantity || ''} onChange={e => onUpdateItem(line.id, { quantity: parseInt(e.target.value) || 0 })} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="0" />
-                          <span className="text-[10px] font-bold text-slate-400 shrink-0">{line.productId ? getUnitName(line.productId) : '—'}</span>
+                      <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                        <label className={psiOrderBillCompactLineLabelClass}>数量</label>
+                        <div className="flex h-9 min-h-9 items-stretch gap-1">
+                          <input type="number" min={0} value={line.quantity || ''} onChange={e => onUpdateItem(line.id, { quantity: parseInt(e.target.value) || 0 })} className={`${psiOrderBillCompactLineInputClass} min-w-0 flex-1`} placeholder="0" />
+                          <span className="flex shrink-0 items-center text-[9px] font-bold text-slate-400">{line.productId ? getUnitName(line.productId) : '—'}</span>
                         </div>
                       </div>
-                      <div className="w-28 space-y-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block ml-1">金额 (元)</label>
-                        <div className="py-2.5 px-3 text-sm font-black text-indigo-600 bg-white rounded-xl border border-slate-200">
+                      <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                        <label className={psiOrderBillCompactLineLabelClass}>金额 (元)</label>
+                        <div className={psiOrderBillCompactLineReadonlyClass}>
                           {lineAmount.toFixed(2)}
                         </div>
                       </div>
@@ -314,7 +324,7 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
                       </div>
                     </div>
                   )}
-                  <button type="button" onClick={() => onRemoveItem(line.id)} className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all" aria-label="删除明细行"><Trash2 className="w-4 h-4" /></button>
+                  <button type="button" onClick={() => onRemoveItem(line.id)} className="shrink-0 rounded-lg p-1 text-slate-300 transition-all hover:bg-rose-50 hover:text-rose-500" aria-label="删除明细行"><Trash2 className="h-3.5 w-3.5" /></button>
                 </div>
                 {hasVariants && line.productId && prod && (
                   <div className="pt-2 border-t border-slate-100 space-y-3">
@@ -343,20 +353,26 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
               <Plus className="w-4 h-4 shrink-0" /> 添加明细行
             </button>
           </div>
-          <div className="flex justify-end p-4 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-100/80 gap-6">
-            <div className="flex items-center gap-3">
-              <p className="text-xs font-bold opacity-90">采购总量</p>
-              <p className="text-lg font-black tabular-nums">{purchaseOrderItems.reduce((s, i) => {
-              const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((a, v) => a + v, 0) : (i.quantity || 0);
-              return s + q;
-            }, 0)} <span className="text-xs font-semibold opacity-90">PCS</span></p>
+          <div className={psiOrderBillCompactSummaryBarClass}>
+            <div className="flex items-baseline gap-2">
+              <span className={psiOrderBillCompactSummaryLabelClass}>采购总量</span>
+              <span className={psiOrderBillCompactSummaryValueClass}>
+                {purchaseOrderItems.reduce((s, i) => {
+                  const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((a, v) => a + v, 0) : (i.quantity || 0);
+                  return s + q;
+                }, 0)}
+                <span className={psiOrderBillCompactSummaryUnitClass}>PCS</span>
+              </span>
             </div>
-            <div className="flex items-center gap-3 border-l border-white/30 pl-6">
-              <p className="text-xs font-bold opacity-90">订单金额</p>
-              <p className="text-lg font-black tabular-nums">¥{purchaseOrderItems.reduce((s, i) => {
-                const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((a, v) => a + v, 0) : (i.quantity || 0);
-                return s + q * (i.purchasePrice || 0);
-              }, 0).toFixed(2)}</p>
+            <div className="flex items-baseline gap-2 border-l border-white/25 pl-4">
+              <span className={psiOrderBillCompactSummaryLabelClass}>订单金额</span>
+              <span className={psiOrderBillCompactSummaryValueClass}>
+                ¥
+                {purchaseOrderItems.reduce((s, i) => {
+                  const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((a, v) => a + v, 0) : (i.quantity || 0);
+                  return s + q * (i.purchasePrice || 0);
+                }, 0).toFixed(2)}
+              </span>
             </div>
           </div>
         </div>

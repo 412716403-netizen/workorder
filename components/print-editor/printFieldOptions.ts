@@ -300,6 +300,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '采购单明细', value: '行.productName', label: '名称' },
     { group: '采购单明细', value: '行.colorName', label: '颜色' },
     { group: '采购单明细', value: '行.sizeName', label: '尺码' },
+    { group: '采购单明细', value: '行.batchNo', label: '批次' },
     { group: '采购单明细', value: '行.qty', label: '数量' },
     { group: '采购单明细', value: '行.unitPrice', label: '单价' },
     { group: '采购单明细', value: '行.amount', label: '金额' },
@@ -380,6 +381,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '领料发出明细行', value: '行.sku', label: '物料SKU' },
     { group: '领料发出明细行', value: '行.quantity', label: '数量' },
     { group: '领料发出明细行', value: '行.unit', label: '单位' },
+    { group: '领料发出明细行', value: '行.batchNo', label: '批次' },
   ];
   const materialReturnCustomOpts: PrintFieldOption[] = materialReturnCustomFields.map(f => ({
     group: '生产退料',
@@ -404,6 +406,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '生产退料明细行', value: '行.sku', label: '物料SKU' },
     { group: '生产退料明细行', value: '行.quantity', label: '数量' },
     { group: '生产退料明细行', value: '行.unit', label: '单位' },
+    { group: '生产退料明细行', value: '行.batchNo', label: '批次' },
   ];
   const outsourceMaterialIssueCustomOpts: PrintFieldOption[] = outsourceMaterialIssueCustomFields.map(f => ({
     group: '外协领料发出',
@@ -428,6 +431,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '外协领料发出明细行', value: '行.sku', label: '物料SKU' },
     { group: '外协领料发出明细行', value: '行.quantity', label: '数量' },
     { group: '外协领料发出明细行', value: '行.unit', label: '单位' },
+    { group: '外协领料发出明细行', value: '行.batchNo', label: '批次' },
   ];
   const outsourceMaterialReturnCustomOpts: PrintFieldOption[] = outsourceMaterialReturnCustomFields.map(f => ({
     group: '外协生产退料',
@@ -452,6 +456,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '外协生产退料明细行', value: '行.sku', label: '物料SKU' },
     { group: '外协生产退料明细行', value: '行.quantity', label: '数量' },
     { group: '外协生产退料明细行', value: '行.unit', label: '单位' },
+    { group: '外协生产退料明细行', value: '行.batchNo', label: '批次' },
   ];
   const outsourceDispatchCustomOpts: PrintFieldOption[] = outsourceDispatchCustomFields.map(f => ({
     group: '外协发出',

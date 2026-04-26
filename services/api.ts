@@ -511,6 +511,11 @@ export const psi = {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
     return request(`/psi/stock${qs}`);
   },
+  /** 按批次汇总某产品在某仓库的可用库存（仅 batchNo 非空流水） */
+  getStockBatches: (params: Record<string, string>) => {
+    const qs = '?' + new URLSearchParams(params).toString();
+    return request<Array<{ batchNo: string; stock: number }>>(`/psi/stock/batches${qs}`);
+  },
 };
 
 // ── Finance ──

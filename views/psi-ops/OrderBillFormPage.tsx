@@ -37,6 +37,9 @@ import {
   lookupLastPrice,
 } from '../../utils/psiPartnerProductLastPrice';
 import { hasModulePerm } from '../../utils/hasModulePerm';
+import { toast } from 'sonner';
+import * as api from '../../services/api';
+import { categoryUsesBatchManagement } from '../../types';
 
 type FormType = 'PURCHASE_ORDER' | 'PURCHASE_BILL' | 'SALES_ORDER' | 'SALES_BILL';
 
@@ -169,6 +172,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       standardFields: purchaseBillFormSettings?.standardFields ?? [],
       customFields: purchaseBillFormSettings?.customFields ?? [],
       listPrint: purchaseBillFormSettings?.listPrint ?? { showPrintButton: true },
+      relatedProductEnabled: purchaseBillFormSettings?.relatedProductEnabled,
     }),
     [purchaseBillFormSettings],
   );
@@ -199,7 +203,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       createdAt: localTodayYmd(),
       customData: {} as Record<string, any>,
     };
-    if (editingDocNumber) {
+        if (editingDocNumber) {
       const existing = recordsList.filter((r: any) => r.type === formType && r.docNumber === editingDocNumber);
       if (existing.length > 0) {
         const first = existing[0];
@@ -218,7 +222,11 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
             base.createdAt = toLocalDateYmd(first.createdAt) || localTodayYmd();
           }
         }
-        base.customData = first.customData ?? {};
+        base.customData = first.customData && typeof first.customData === 'object' ? { ...first.customData } : {};
+        if (formType === 'PURCHASE_BILL') {
+          const cd = base.customData as Record<string, unknown>;
+          delete cd.relatedProductId;
+        }
       }
     } else if (formType === 'PURCHASE_BILL' || formType === 'SALES_BILL') {
       const pref = readWarehousePreference(
@@ -306,7 +314,15 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   );
 
   // ── Purchase bill items ──
-  const [purchaseBillItems, setPurchaseBillItems] = useState<{ id: string; productId: string; quantity?: number; purchasePrice: number; variantQuantities?: Record<string, number>; batch?: string }[]>(() => {
+  const [purchaseBillItems, setPurchaseBillItems] = useState<{
+    id: string;
+    productId: string;
+    quantity?: number;
+    purchasePrice: number;
+    variantQuantities?: Record<string, number>;
+    batch?: string;
+    relatedProductId?: string;
+  }[]>(() => {
     if (formType !== 'PURCHASE_BILL' || !editingDocNumber) return [];
     const existing = recordsList.filter((r: any) => r.type === 'PURCHASE_BILL' && r.docNumber === editingDocNumber);
     if (existing.length === 0) return [];
@@ -322,13 +338,19 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       const vq: Record<string, number> = {};
       if (hasVar) recs.forEach((r: any) => { if (r.variantId) vq[r.variantId] = (vq[r.variantId] ?? 0) + (Number(r.quantity) || 0); });
       const lineQtyNoVar = recs.reduce((s, r: any) => s + (Number(r.quantity) || 0), 0);
+      const firstCd = first.customData;
+      const lineRel =
+        firstCd && typeof firstCd === 'object' && !Array.isArray(firstCd)
+          ? String((firstCd as Record<string, unknown>).relatedProductId ?? '').trim()
+          : '';
       return {
         id: lgId,
         productId: first.productId,
         quantity: hasVar ? undefined : lineQtyNoVar,
         purchasePrice: first.purchasePrice ?? 0,
         variantQuantities: hasVar ? vq : undefined,
-        batch: first.batch,
+        batch: first.batchNo ?? first.batch,
+        ...(lineRel ? { relatedProductId: lineRel } : {}),
       };
     });
   });
@@ -362,7 +384,17 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   });
 
   // ── Sales bill items ──
-  const [salesBillItems, setSalesBillItems] = useState<{ id: string; productId: string; quantity?: number; salesPrice: number; variantQuantities?: Record<string, number>; sourceRecordIds?: string[] }[]>(() => {
+  const [salesBillItems, setSalesBillItems] = useState<
+    {
+      id: string;
+      productId: string;
+      quantity?: number;
+      salesPrice: number;
+      variantQuantities?: Record<string, number>;
+      sourceRecordIds?: string[];
+      batch?: string;
+    }[]
+  >(() => {
     if (formType !== 'SALES_BILL' || !editingDocNumber) return [];
     const existing = recordsList.filter((r: any) => r.type === 'SALES_BILL' && r.docNumber === editingDocNumber);
     if (existing.length === 0) return [];
@@ -378,6 +410,9 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       const vq: Record<string, number> = {};
       if (hasVar) recs.forEach((r: any) => { if (r.variantId) vq[r.variantId] = (vq[r.variantId] ?? 0) + (Number(r.quantity) || 0); });
       const lineQtyNoVar = recs.reduce((s, r: any) => s + (Number(r.quantity) || 0), 0);
+      const batchRaw = first.batchNo ?? first.batch;
+      const batch =
+        typeof batchRaw === 'string' && batchRaw.trim() !== '' ? batchRaw.trim() : undefined;
       return {
         id: lgId,
         productId: first.productId,
@@ -385,6 +420,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         salesPrice: first.salesPrice ?? 0,
         variantQuantities: hasVar ? vq : undefined,
         sourceRecordIds: recs.map((r: any) => r.id),
+        batch: hasVar ? undefined : batch,
       };
     });
   });
@@ -563,8 +599,18 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
     [soDocNumberForPrint, form.partner, form.customData, salesOrderItems, productMapPSI, dictionaries, docOperator],
   );
 
-  const addSalesBillItem = () => setSalesBillItems(prev => [...prev, { id: `sb-line-${Date.now()}`, productId: '', quantity: 0, salesPrice: 0 }]);
-  const updateSalesBillItem = (id: string, updates: Partial<{ productId: string; quantity?: number; salesPrice: number; variantQuantities?: Record<string, number> }>) => {
+  const addSalesBillItem = () =>
+    setSalesBillItems(prev => [...prev, { id: `sb-line-${Date.now()}`, productId: '', quantity: 0, salesPrice: 0, batch: undefined }]);
+  const updateSalesBillItem = (
+    id: string,
+    updates: Partial<{
+      productId: string;
+      quantity?: number;
+      salesPrice: number;
+      variantQuantities?: Record<string, number>;
+      batch?: string;
+    }>,
+  ) => {
     setSalesBillItems(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i));
   };
   const updateSalesBillVariantQty = (lineId: string, variantId: string, qty: number) => {
@@ -607,8 +653,19 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
     [pbDocNumberForPrint, form.partner, form.customData, form.warehouseId, purchaseBillItems, productMapPSI, warehouseMapPSI, dictionaries, docOperator],
   );
 
-  const addPurchaseBillItem = () => setPurchaseBillItems(prev => [...prev, { id: `pb-line-${Date.now()}`, productId: '', quantity: 0, purchasePrice: 0 }]);
-  const updatePurchaseBillItem = (id: string, updates: Partial<{ productId: string; quantity?: number; purchasePrice: number; variantQuantities?: Record<string, number>; batch?: string }>) => {
+  const addPurchaseBillItem = () =>
+    setPurchaseBillItems(prev => [...prev, { id: `pb-line-${Date.now()}`, productId: '', quantity: 0, purchasePrice: 0 }]);
+  const updatePurchaseBillItem = (
+    id: string,
+    updates: Partial<{
+      productId: string;
+      quantity?: number;
+      purchasePrice: number;
+      variantQuantities?: Record<string, number>;
+      batch?: string;
+      relatedProductId?: string;
+    }>,
+  ) => {
     setPurchaseBillItems(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i));
   };
   const updatePurchaseBillVariantQty = (lineId: string, variantId: string, qty: number) => {
@@ -794,6 +851,15 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         }
       }
       const timestamp = psiDocTimestampIsoForSave(recordsList, 'PURCHASE_BILL', editingDocNumber);
+      const buildPurchaseBillLineCustomData = (lineRelatedProduct: string | undefined): Record<string, unknown> | null => {
+        const raw: Record<string, unknown> = form.customData && typeof form.customData === 'object' ? { ...form.customData } : {};
+        delete raw.relatedProductId;
+        if (safePurchaseBillFormSettings.relatedProductEnabled) {
+          const lr = String(lineRelatedProduct ?? '').trim();
+          if (lr) raw.relatedProductId = lr;
+        }
+        return Object.keys(raw).length > 0 ? raw : null;
+      };
       const pbCreatedAtIso = (() => {
         if (!editingDocNumber) return localCalendarYmdStartToIso(localTodayYmd());
         const row = recordsList.find(
@@ -810,6 +876,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       purchaseBillItems.forEach((item) => {
         if (!item.productId) return;
         const price = item.purchasePrice || 0;
+        const lineCustom = buildPurchaseBillLineCustomData(item.relatedProductId);
         if (item.variantQuantities && Object.keys(item.variantQuantities).length > 0) {
           Object.entries(item.variantQuantities).forEach(([variantId, qty]) => {
             if (!qty || qty <= 0) return;
@@ -831,7 +898,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
               operator: docOperator,
               lineGroupId: item.id,
               createdAt: pbCreatedAtIso,
-              ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
+              ...(lineCustom ? { customData: lineCustom } : {}),
               ...(item.batch != null && item.batch !== '' && { batch: item.batch })
             });
           });
@@ -853,7 +920,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
             operator: docOperator,
             lineGroupId: item.id,
             createdAt: pbCreatedAtIso,
-            ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
+            ...(lineCustom ? { customData: lineCustom } : {}),
             ...(item.batch != null && item.batch !== '' && { batch: item.batch })
           });
         }
@@ -981,6 +1048,38 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         return q !== 0;
       });
       if (!form.partner || !form.warehouseId || salesBillItems.length === 0 || !hasValidLine) return;
+      const wh = form.warehouseId;
+      for (const item of salesBillItems) {
+        if (!item.productId) continue;
+        const prod = productMapPSI.get(item.productId);
+        const hasVariants = Boolean(prod?.variants && prod.variants.length > 0);
+        const cat = categories.find(c => c.id === prod?.categoryId);
+        if (!categoryUsesBatchManagement(cat) || hasVariants) continue;
+        const lineQty = item.variantQuantities
+          ? Object.values(item.variantQuantities).reduce((s, v) => s + v, 0)
+          : (item.quantity ?? 0);
+        if (lineQty === 0) continue;
+        const bn = String(item.batch ?? '').trim();
+        if (!bn) {
+          toast.error('启用批次管理的产品须选择出库批次');
+          return;
+        }
+        if (wh && lineQty > 0) {
+          try {
+            const rows = await api.psi.getStockBatches({ productId: item.productId, warehouseId: wh });
+            const avail = Array.isArray(rows)
+              ? (rows as { batchNo: string; stock: number }[]).find(r => r.batchNo === bn)?.stock ?? 0
+              : 0;
+            if (lineQty > avail) {
+              toast.error(`产品 ${prod?.name ?? item.productId} 批次「${bn}」可用库存不足（当前 ${avail}）`);
+              return;
+            }
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : '校验批次库存失败');
+            return;
+          }
+        }
+      }
       const originalDocNumber = editingDocNumber || '';
       let docNumber = (editingDocNumber || generateSBDocNumber()).trim();
       if (!editingDocNumber) {
@@ -1033,7 +1132,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
               operator: docOperator,
               lineGroupId: item.id,
               createdAt: sbCreatedAtIso,
-              ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {})
+              ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
             });
           });
         } else if ((item.quantity ?? 0) !== 0) {
@@ -1054,7 +1153,8 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
             operator: docOperator,
             lineGroupId: item.id,
             createdAt: sbCreatedAtIso,
-            ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {})
+            ...(item.batch != null && item.batch !== '' && { batch: item.batch }),
+            ...(Object.keys(form.customData || {}).length ? { customData: form.customData } : {}),
           });
         }
       });
@@ -1168,6 +1268,8 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         partnerLabel={partnerLabel}
         formSettings={safeSalesBillFormSettings}
         resolveDefaultSalesPrice={resolveDefaultSalesPrice}
+        recordsList={recordsList}
+        prodRecords={prodRecords}
       />
     );
   }

@@ -362,13 +362,16 @@ export const DEFAULT_PURCHASE_BILL_FORM_SETTINGS: PurchaseBillFormSettings = {
   ],
   customFields: [],
   listPrint: { showPrintButton: true },
+  relatedProductEnabled: false,
 };
 
 function mergePurchaseBillStandardFields(
   saved: PurchaseBillFormSettings['standardFields'] | undefined,
 ): PurchaseBillFormSettings['standardFields'] {
   const defs = DEFAULT_PURCHASE_BILL_FORM_SETTINGS.standardFields;
-  const arr = (saved ?? []).filter(f => !DEPRECATED_PURCHASE_BILL_STANDARD_FIELD_IDS.has(f.id));
+  const arr = (saved ?? []).filter(
+    f => !DEPRECATED_PURCHASE_BILL_STANDARD_FIELD_IDS.has(f.id) && f.id !== 'relatedProduct',
+  );
   const used = new Set<string>();
   const merged: PurchaseBillFormSettings['standardFields'] = defs.map(def => {
     const hit = arr.find(x => x.id === def.id);
@@ -404,10 +407,17 @@ export function normalizePurchaseBillFormSettings(raw: PurchaseBillFormSettings 
     showPrintButton: listNorm.showPrintButton !== false,
     allowedTemplateIds: mergedIds.length > 0 ? mergedIds : undefined,
   };
+  const legacyRelated = (s.standardFields ?? []).find(f => f.id === 'relatedProduct');
+  const relatedProductEnabled =
+    typeof s.relatedProductEnabled === 'boolean'
+      ? s.relatedProductEnabled
+      : !!legacyRelated &&
+        (legacyRelated.showInList || legacyRelated.showInCreate || legacyRelated.showInDetail);
   return {
     standardFields: mergePurchaseBillStandardFields(s.standardFields),
     customFields: normalizePlanFormFieldConfigArray(s.customFields),
     listPrint,
+    relatedProductEnabled,
   };
 }
 

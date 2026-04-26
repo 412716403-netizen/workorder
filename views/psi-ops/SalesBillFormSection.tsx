@@ -8,9 +8,20 @@ import {
   FileText,
 } from 'lucide-react';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
-import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
+import { CustomerSelect } from '../../components/CustomerSelect';
 import type { PlanListPrintSettings, PrintRenderContext, PrintTemplate } from '../../types';
-import { Product, Warehouse, ProductCategory, Partner, PartnerCategory, AppDictionaries } from '../../types';
+import {
+  Product,
+  Warehouse,
+  ProductCategory,
+  Partner,
+  PartnerCategory,
+  AppDictionaries,
+  PsiRecord,
+  categoryUsesBatchManagement,
+} from '../../types';
+import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
+import { usePsiStockIndex } from '../../hooks/usePsiStockIndex';
 import { PsiListPrintPicker } from '../../components/psi/PsiListPrintPicker';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
@@ -24,10 +35,17 @@ import {
   psiOrderBillFormDetailSplitClass,
   psiOrderBillFormGridGapClass,
   psiOrderBillFormFieldControlClass,
-  psiOrderBillFormReadonlyBoxClass,
   psiOrderBillFormSectionIconIndigoClass,
   psiOrderBillFormSectionIconEmeraldClass,
-  psiOrderBillFormPartnerTriggerClass,
+  psiOrderBillCompactLineLabelClass,
+  psiOrderBillCompactLineInputClass,
+  psiOrderBillCompactLineReadonlyClass,
+  psiOrderBillCompactDocReadonlyInnerClass,
+  psiOrderBillCompactWarehouseSelectClass,
+  psiOrderBillCompactSummaryBarClass,
+  psiOrderBillCompactSummaryLabelClass,
+  psiOrderBillCompactSummaryValueClass,
+  psiOrderBillCompactSummaryUnitClass,
 } from '../../styles/uiDensity';
 import { useConfirm } from '../../contexts/ConfirmContext';
 
@@ -38,6 +56,8 @@ export interface SalesBillLineItem {
   salesPrice: number;
   variantQuantities?: Record<string, number>;
   sourceRecordIds?: string[];
+  /** 无变体且分类启用批次时：出库批号 */
+  batch?: string;
 }
 
 interface SalesBillFormSectionProps {
@@ -47,7 +67,16 @@ interface SalesBillFormSectionProps {
   readonlyDocNumber: string;
   salesBillItems: SalesBillLineItem[];
   onAddItem: () => void;
-  onUpdateItem: (id: string, updates: Partial<{ productId: string; quantity?: number; salesPrice: number; variantQuantities?: Record<string, number> }>) => void;
+  onUpdateItem: (
+    id: string,
+    updates: Partial<{
+      productId: string;
+      quantity?: number;
+      salesPrice: number;
+      variantQuantities?: Record<string, number>;
+      batch?: string;
+    }>,
+  ) => void;
   onUpdateVariantQty: (lineId: string, variantId: string, qty: number) => void;
   onRemoveItem: (id: string) => void;
   onSave: () => void;
@@ -72,6 +101,9 @@ interface SalesBillFormSectionProps {
   buildSalesBillPrintContext?: (template: PrintTemplate) => PrintRenderContext;
   /** 按合作单位 + 商品 解析默认销售价（优先上次成交价，回退产品档案价） */
   resolveDefaultSalesPrice?: (productId: string) => number;
+  /** 与进销存/生产快照合并批次选项（销售按批出库） */
+  recordsList?: PsiRecord[];
+  prodRecords?: unknown[];
 }
 
 const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
@@ -87,8 +119,11 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
   printTemplates = [],
   buildSalesBillPrintContext,
   resolveDefaultSalesPrice,
+  recordsList = [],
+  prodRecords = [],
 }) => {
   const confirm = useConfirm();
+  const { listAvailableBatches } = usePsiStockIndex(recordsList, prodRecords);
 
   return (
     <div className={psiOrderBillFormShellClass}>
@@ -97,12 +132,14 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
           <ArrowLeft className="w-4 h-4" /> 返回列表
         </button>
         <div className="flex items-center gap-3">
-          <PsiListPrintPicker
-            slot={listPrintSlot}
-            printTemplates={printTemplates}
-            buildContext={buildSalesBillPrintContext}
-            pickerSubtitle={readonlyDocNumber || undefined}
-          />
+          {editingDocNumber && (
+            <PsiListPrintPicker
+              slot={listPrintSlot}
+              printTemplates={printTemplates}
+              buildContext={buildSalesBillPrintContext}
+              pickerSubtitle={readonlyDocNumber || undefined}
+            />
+          )}
           {editingDocNumber && onDeleteRecords && hasPsiPerm('psi:sales_bill:delete') && (
             <button
               type="button"
@@ -125,6 +162,15 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
               if (!i.productId) return false;
               const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((s, v) => s + v, 0) : (i.quantity ?? 0);
               return q !== 0;
+            }) || salesBillItems.some(i => {
+              if (!i.productId) return false;
+              const prod = productMapPSI.get(i.productId);
+              const hasVariants = prod?.variants && prod.variants.length > 0;
+              const cat = categories.find(c => c.id === prod?.categoryId);
+              if (!categoryUsesBatchManagement(cat) || hasVariants) return false;
+              const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((s, v) => s + v, 0) : (i.quantity ?? 0);
+              if (q === 0) return false;
+              return !String(i.batch ?? '').trim();
             })}
             className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
           >
@@ -143,25 +189,23 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
             <div className={`md:col-span-2 grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass} items-start`}>
               <div className="w-full min-w-0 space-y-1.5">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{partnerLabel}</label>
-                <SearchablePartnerSelect
+                <CustomerSelect
                   options={partners}
                   categories={partnerCategories}
                   value={form.partner}
                   onChange={(name, id) => setForm({ ...form, partner: name, partnerId: id })}
                   placeholder={`选择${partnerLabel}...`}
-                  showCategoryHint={false}
-                  triggerClassName={psiOrderBillFormPartnerTriggerClass}
                 />
               </div>
               <div className="w-full min-w-0 space-y-1.5">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据编号（系统自动生成，不可改）</label>
                 <div className="relative">
-                  <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
-                  <div className={`${psiOrderBillFormReadonlyBoxClass} text-slate-700 box-border`}>
+                  <FileText className="absolute left-2.5 top-1/2 z-[1] h-3.5 w-3.5 -translate-y-1/2 text-slate-300 pointer-events-none" />
+                  <div className={psiOrderBillCompactDocReadonlyInnerClass}>
                     {readonlyDocNumber ? (
                       <span className="truncate">{readonlyDocNumber}</span>
                     ) : (
-                      <span className="text-slate-400 font-bold text-sm truncate">选择合作单位后自动生成</span>
+                      <span className="truncate font-bold text-slate-400">选择合作单位后自动生成</span>
                     )}
                   </div>
                 </div>
@@ -169,7 +213,7 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">出库仓库</label>
-              <select value={form.warehouseId} onChange={e => setForm({ ...form, warehouseId: e.target.value })} className={`${psiOrderBillFormFieldControlClass} text-sm`}>
+              <select value={form.warehouseId} onChange={e => setForm({ ...form, warehouseId: e.target.value })} className={psiOrderBillCompactWarehouseSelectClass}>
                 <option value="">选择仓库...</option>
                 {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
@@ -202,16 +246,19 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
             {salesBillItems.map((line) => {
               const prod = productMapPSI.get(line.productId);
               const hasVariants = prod?.variants && prod.variants.length > 0;
+              const lineCat = categories.find(c => c.id === prod?.categoryId);
+              const sbUsesBatch = categoryUsesBatchManagement(lineCat) && !hasVariants;
               const lineQty = hasVariants
                 ? Object.values(line.variantQuantities || {}).reduce((s, q) => s + q, 0)
                 : (line.quantity ?? 0);
               const lineAmount = lineQty * (line.salesPrice || 0);
               return (
-              <div key={line.id} className="p-3 bg-slate-50/50 rounded-xl border border-slate-100 space-y-3">
-                <div className="flex flex-wrap items-end gap-3">
-                  <div className="flex-1 min-w-[200px] space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">目标商品 (支持搜索与分类筛选)</label>
+              <div key={line.id} className="p-2.5 bg-slate-50/50 rounded-xl border border-slate-100 space-y-2.5">
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="flex-1 min-w-[160px] space-y-0.5">
+                    <label className={psiOrderBillCompactLineLabelClass}>目标商品 (支持搜索与分类筛选)</label>
                     <SearchableProductSelect
+                      compact
                       options={products}
                       categories={categories}
                       value={line.productId}
@@ -225,26 +272,42 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
                           productId: id,
                           salesPrice: price,
                           quantity: hv ? undefined : 0,
-                          variantQuantities: hv ? {} : undefined
+                          variantQuantities: hv ? {} : undefined,
+                          batch: undefined,
                         });
                       }}
                     />
                   </div>
-                  <div className="w-28 space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">销售价 (元)</label>
-                    <input type="number" min={0} step={0.01} value={line.salesPrice || ''} onChange={e => onUpdateItem(line.id, { salesPrice: parseFloat(e.target.value) || 0 })} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="0" />
+                  {sbUsesBatch && (
+                    <div className="w-[7.25rem] min-w-[7rem] max-w-[9rem] shrink-0 space-y-0.5">
+                      <label className={psiOrderBillCompactLineLabelClass}>批次</label>
+                      <MaterialIssueBatchSelect
+                        product={prod}
+                        categories={categories}
+                        warehouseId={form.warehouseId || ''}
+                        value={line.batch ?? ''}
+                        onChange={v => onUpdateItem(line.id, { batch: v && String(v).trim() ? v : undefined })}
+                        mode="issue"
+                        hideLabel
+                        mergeBatches={listAvailableBatches(line.productId, form.warehouseId)}
+                      />
+                    </div>
+                  )}
+                  <div className="w-[5.5rem] sm:w-24 shrink-0 space-y-0.5">
+                    <label className={psiOrderBillCompactLineLabelClass}>销售价 (元)</label>
+                    <input type="number" min={0} step={0.01} value={line.salesPrice || ''} onChange={e => onUpdateItem(line.id, { salesPrice: parseFloat(e.target.value) || 0 })} className={psiOrderBillCompactLineInputClass} placeholder="0" />
                   </div>
                   {hasVariants && (
                     <>
-                      <div className="w-24 space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">总数</label>
-                        <div className="py-2.5 px-3 text-sm font-black text-indigo-600 bg-white rounded-xl border border-slate-200">
+                      <div className="w-20 shrink-0 space-y-0.5">
+                        <label className={psiOrderBillCompactLineLabelClass}>总数</label>
+                        <div className={psiOrderBillCompactLineReadonlyClass}>
                           {formatQtyDisplay(lineQty)} {line.productId ? getUnitName(line.productId) : '—'}
                         </div>
                       </div>
-                      <div className="w-28 space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">金额 (元)</label>
-                        <div className="py-2.5 px-3 text-sm font-black text-indigo-600 bg-white rounded-xl border border-slate-200">
+                      <div className="w-[5.5rem] sm:w-24 shrink-0 space-y-0.5">
+                        <label className={psiOrderBillCompactLineLabelClass}>金额 (元)</label>
+                        <div className={psiOrderBillCompactLineReadonlyClass}>
                           {lineAmount.toFixed(2)}
                         </div>
                       </div>
@@ -252,22 +315,22 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
                   )}
                   {!hasVariants && (
                     <>
-                      <div className="w-28 space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">数量</label>
-                        <div className="flex items-center gap-1.5">
-                          <input type="number" value={line.quantity ?? ''} onChange={e => { const v = parseInt(e.target.value, 10); onUpdateItem(line.id, { quantity: Number.isNaN(v) ? 0 : v }); }} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="0" />
-                          <span className="text-[10px] font-bold text-slate-400 shrink-0">{line.productId ? getUnitName(line.productId) : '—'}</span>
+                      <div className="w-[5.5rem] sm:w-24 shrink-0 space-y-0.5">
+                        <label className={psiOrderBillCompactLineLabelClass}>数量</label>
+                        <div className="flex h-9 min-h-9 items-stretch gap-1">
+                          <input type="number" value={line.quantity ?? ''} onChange={e => { const v = parseInt(e.target.value, 10); onUpdateItem(line.id, { quantity: Number.isNaN(v) ? 0 : v }); }} className={`${psiOrderBillCompactLineInputClass} min-w-0 flex-1`} placeholder="0" />
+                          <span className="flex shrink-0 items-center text-[9px] font-bold text-slate-400">{line.productId ? getUnitName(line.productId) : '—'}</span>
                         </div>
                       </div>
-                      <div className="w-28 space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">金额 (元)</label>
-                        <div className="py-2.5 px-3 text-sm font-black text-indigo-600 bg-white rounded-xl border border-slate-200">
+                      <div className="w-[5.5rem] sm:w-24 shrink-0 space-y-0.5">
+                        <label className={psiOrderBillCompactLineLabelClass}>金额 (元)</label>
+                        <div className={psiOrderBillCompactLineReadonlyClass}>
                           {lineAmount.toFixed(2)}
                         </div>
                       </div>
                     </>
                   )}
-                  <button type="button" onClick={() => onRemoveItem(line.id)} className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"><Trash2 className="w-4 h-4" /></button>
+                  <button type="button" onClick={() => onRemoveItem(line.id)} className="p-1 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
                 {hasVariants && line.productId && prod && (
                   <div className="pt-2 border-t border-slate-100 space-y-3">
@@ -294,20 +357,26 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
               <Plus className="w-4 h-4" /> 添加明细行
             </button>
           </div>
-          <div className="flex justify-end p-4 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-100/80 gap-6">
-            <div className="flex items-center gap-3">
-              <p className="text-xs font-bold opacity-80">出库总量:</p>
-              <p className="text-lg font-black">{salesBillItems.reduce((s, i) => {
-              const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((a, v) => a + v, 0) : (i.quantity || 0);
-              return s + q;
-            }, 0)} <span className="text-xs font-medium">PCS</span></p>
+          <div className={psiOrderBillCompactSummaryBarClass}>
+            <div className="flex items-baseline gap-2">
+              <span className={psiOrderBillCompactSummaryLabelClass}>出库总量</span>
+              <span className={psiOrderBillCompactSummaryValueClass}>
+                {salesBillItems.reduce((s, i) => {
+                  const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((a, v) => a + v, 0) : (i.quantity || 0);
+                  return s + q;
+                }, 0)}
+                <span className={psiOrderBillCompactSummaryUnitClass}>PCS</span>
+              </span>
             </div>
-            <div className="flex items-center gap-3 border-l border-white/30 pl-6">
-              <p className="text-xs font-bold opacity-80">单据金额:</p>
-              <p className="text-lg font-black">¥{salesBillItems.reduce((s, i) => {
-                const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((a, v) => a + v, 0) : (i.quantity || 0);
-                return s + q * (i.salesPrice || 0);
-              }, 0).toFixed(2)}</p>
+            <div className={`flex items-baseline gap-2 border-l border-white/25 pl-4`}>
+              <span className={psiOrderBillCompactSummaryLabelClass}>单据金额</span>
+              <span className={psiOrderBillCompactSummaryValueClass}>
+                ¥
+                {salesBillItems.reduce((s, i) => {
+                  const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((a, v) => a + v, 0) : (i.quantity || 0);
+                  return s + q * (i.salesPrice || 0);
+                }, 0).toFixed(2)}
+              </span>
             </div>
           </div>
         </div>

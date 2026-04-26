@@ -7,6 +7,10 @@ export {
   FINANCE_DOC_NO_PREFIX,
   PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID,
   PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER,
+  BATCH_FIELD_MAX_LEN,
+  normalizeBatchNo,
+  PSI_TYPES_WITH_BATCH_LINE,
+  categoryUsesBatchManagement,
   type ProcessPricingMode,
   type ProductionLinkMode,
   type ProcessSequenceMode,
@@ -379,6 +383,9 @@ export interface PsiRecord {
   note?: string | null;
   /** 采购/销售单行金额等（列表 API 可能带） */
   amount?: number | string | null;
+  /** 批次号（API 多为 `batchNo`；部分写入路径仍可能带 `batch`） */
+  batchNo?: string | null;
+  batch?: string | null;
 }
 
 export interface PlanItem {
@@ -511,6 +518,11 @@ export interface PurchaseBillFormSettings {
   customFields: PlanFormFieldConfig[];
   /** 进销存采购单列表「打印」及登记/详情页「打印」入口与白名单 */
   listPrint?: PlanListPrintSettings;
+  /**
+   * 为 true 时，采购单在列表、新建/编辑、详情中展示「关联成品」：存**每行** `customData.relatedProductId`（与采购品项不同）；列表为各行的去重汇总。
+   * 与 `standardFields` 中历史遗留的 `relatedProduct` 伪字段互斥：归一化时会迁移并剔除该伪字段。
+   */
+  relatedProductEnabled?: boolean;
 }
 
 /**
@@ -1226,6 +1238,8 @@ export interface ProductionOpRecord {
    * 返工管理：`defectTreatmentCustomData`（处理不良批次）、`reworkReportCustomData`（返工报工批次）。
    */
   collabData?: Record<string, unknown>;
+  /** 领料/退料/外协物料等明细批次号，与进销存 `PsiRecord.batchNo` 对齐 */
+  batchNo?: string;
 }
 
 /**

@@ -3,7 +3,7 @@ import { Clock, Package, User } from 'lucide-react';
 import type { AppDictionaries, Product, ProductCategory, ProductVariant, PsiRecord, Warehouse } from '../../types';
 import { PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER } from '../../types';
 import { formatPsiDocListTime } from '../../utils/flowDocSort';
-import { formatPsiDocNumForList } from './psiOpsListFormatting';
+import { aggregatePurchaseBillRelatedProductListText, formatPsiDocNumForList } from './psiOpsListFormatting';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 
 type PsiDocType = 'PURCHASE_ORDER' | 'SALES_ORDER' | 'PURCHASE_BILL' | 'SALES_BILL';
@@ -16,6 +16,8 @@ export interface PsiDocDetailSummaryProps {
   categories: ProductCategory[];
   /** 采购订单详情：是否展示「关联产品」（与表单配置 `relatedProductEnabled` 一致） */
   showPurchaseOrderRelatedProduct?: boolean;
+  /** 采购单详情：是否展示「关联产品」（与表单配置 `relatedProductEnabled` 一致） */
+  showPurchaseBillRelatedProduct?: boolean;
   warehouseMapPSI?: Map<string, Warehouse>;
   dictionaries: AppDictionaries;
   getUnitName: (productId: string) => string;
@@ -90,7 +92,7 @@ const ProductCell: React.FC<{
 );
 
 const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
-  docType, docNumber, recordsList, productMapPSI, categories, showPurchaseOrderRelatedProduct,
+  docType, docNumber, recordsList, productMapPSI, categories, showPurchaseOrderRelatedProduct, showPurchaseBillRelatedProduct,
   warehouseMapPSI,
   dictionaries, getUnitName, formatQtyDisplay, receivedByOrderLine,
 }) => {
@@ -112,6 +114,13 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
     () => docItems.reduce((s, i) => s + formatQtyDisplay(i.quantity) * readPsiLinePrice(i, meta.priceField), 0),
     [docItems, formatQtyDisplay, meta.priceField],
   );
+
+  /** 采购入库 / 销售出库：任一行有批号即展示批次列 */
+  const showBillBatchColumn =
+    (docType === 'PURCHASE_BILL' || docType === 'SALES_BILL') &&
+    docItems.some(i => String((i.batchNo ?? (i as { batch?: string }).batch) ?? '').trim().length > 0);
+
+  const showPbLineRelatedColumn = docType === 'PURCHASE_BILL' && showPurchaseBillRelatedProduct === true;
 
   const rowGroups = useMemo(() => {
     const groups: Record<string, PsiRecord[]> = {};
@@ -150,6 +159,18 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
                 <span className="text-slate-600 font-bold normal-case text-xs sm:text-sm" title={label}>
                   {label}：{rp?.name || rid}
                   {rp?.sku ? <span className="text-slate-400 font-semibold"> · {rp.sku}</span> : null}
+                </span>
+              );
+            })()}
+          {docType === 'PURCHASE_BILL' &&
+            showPurchaseBillRelatedProduct &&
+            (() => {
+              const summary = aggregatePurchaseBillRelatedProductListText(docItems, productMapPSI);
+              if (summary === '—') return null;
+              const label = '关联成品';
+              return (
+                <span className="text-slate-600 font-bold normal-case text-xs sm:text-sm" title={label}>
+                  {label}：{summary}
                 </span>
               );
             })()}
@@ -203,11 +224,17 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
       {/* Detail table */}
       <div className="overflow-x-auto rounded-2xl border border-slate-200">
         <table className="w-full text-left text-sm" style={{ tableLayout: 'fixed' }}>
-          <TableColGroup docType={docType} />
+          <TableColGroup docType={docType} showPurchaseBatch={showBillBatchColumn} showPbLineRelated={showPbLineRelatedColumn} />
           <thead>
             <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/80">
               <th className="py-2.5 px-3 text-left">产品 / SKU</th>
+              {showPbLineRelatedColumn && (
+                <th className="py-2.5 px-3 text-left">关联成品</th>
+              )}
               {isBill(docType) && <th className="py-2.5 px-3 text-center">{docType === 'PURCHASE_BILL' ? '入库仓库' : '出库仓库'}</th>}
+              {showBillBatchColumn && (
+                <th className="py-2.5 px-3 text-center">批次</th>
+              )}
               {docType === 'SALES_ORDER' && <th className="py-2.5 px-3 text-right">数量</th>}
               <th className="py-2.5 px-3 text-right">{meta.priceLabel}</th>
               <th className="py-2.5 px-3 text-right">金额</th>
@@ -233,15 +260,43 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
               ).map(({ field, display }) => ({ label: field.label, display }));
               const unitName = first.productId ? getUnitName(first.productId) : 'PCS';
 
+              const lineRel = (() => {
+                const cd = first.customData;
+                if (!cd || typeof cd !== 'object' || Array.isArray(cd)) return '';
+                return String((cd as Record<string, unknown>).relatedProductId ?? '').trim();
+              })();
+              const lineRelProduct = lineRel ? productMapPSI.get(lineRel) : undefined;
+
               return (
                 <tr key={gid}>
                   <ProductCell name={rowProductName} sku={rowProductSku} variantLabel={variantLabel} customTags={customTags} />
+
+                  {showPbLineRelatedColumn && (
+                    <td className="py-2.5 px-3 align-top text-xs font-bold text-slate-600">
+                      {lineRel
+                        ? (
+                          <>
+                            {lineRelProduct?.name || lineRel}
+                            {lineRelProduct?.sku ? (
+                              <span className="text-slate-400 font-semibold"> · {lineRelProduct.sku}</span>
+                            ) : null}
+                          </>
+                        )
+                        : '—'}
+                    </td>
+                  )}
 
                   {isBill(docType) && (
                     <td className="py-2.5 px-3 text-center">
                       <span className="px-2 py-0.5 rounded-md bg-slate-50 text-slate-500 text-[10px] font-black uppercase border border-slate-100">
                         {warehouseMapPSI?.get(first.warehouseId)?.name || '默认库'}
                       </span>
+                    </td>
+                  )}
+
+                  {showBillBatchColumn && (
+                    <td className="py-2.5 px-3 text-center text-xs font-bold text-slate-600 break-all">
+                      {String((first.batchNo ?? (first as { batch?: string }).batch) ?? '').trim() || '—'}
                     </td>
                   )}
 
@@ -283,7 +338,11 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
   );
 };
 
-const TableColGroup: React.FC<{ docType: PsiDocType }> = ({ docType }) => {
+const TableColGroup: React.FC<{ docType: PsiDocType; showPurchaseBatch?: boolean; showPbLineRelated?: boolean }> = ({
+  docType,
+  showPurchaseBatch = false,
+  showPbLineRelated = false,
+}) => {
   switch (docType) {
     case 'PURCHASE_ORDER':
       return (
@@ -306,11 +365,23 @@ const TableColGroup: React.FC<{ docType: PsiDocType }> = ({ docType }) => {
         </colgroup>
       );
     case 'PURCHASE_BILL':
+      return (
+        <colgroup>
+          <col style={{ width: 'auto' }} />
+          {showPbLineRelated ? <col style={{ width: 120 }} /> : null}
+          <col style={{ width: 100 }} />
+          {showPurchaseBatch ? <col style={{ width: 88 }} /> : null}
+          <col style={{ width: 100 }} />
+          <col style={{ width: 110 }} />
+          <col style={{ width: 100 }} />
+        </colgroup>
+      );
     case 'SALES_BILL':
       return (
         <colgroup>
           <col style={{ width: 'auto' }} />
           <col style={{ width: 100 }} />
+          {showPurchaseBatch ? <col style={{ width: 88 }} /> : null}
           <col style={{ width: 100 }} />
           <col style={{ width: 110 }} />
           <col style={{ width: 100 }} />

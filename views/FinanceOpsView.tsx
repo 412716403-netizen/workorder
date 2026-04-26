@@ -21,7 +21,7 @@ import {
   ReceiptFormSettings,
   PaymentFormSettings,
 } from '../types';
-import { SearchablePartnerSelect } from '../components/SearchablePartnerSelect';
+import { PartnerSelect } from '../components/PartnerSelect';
 import type { ProductionOpRecord } from '../types';
 import {
   formConfigToolbarButtonClass,
@@ -29,6 +29,7 @@ import {
   pageSubtitleClass,
   pageTitleClass,
   primaryToolbarButtonClass,
+  psiOrderBillFormPartnerTriggerClassCompact,
 } from '../styles/uiDensity';
 import { PsiListPrintController, type PsiListPrintControllerHandle } from '../components/psi/PsiListPrintPicker';
 import { buildReceiptPrintContextFromRecord } from '../utils/buildReceiptPrintContext';
@@ -444,16 +445,14 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">合作单位</span>
                   <div className="min-w-[140px]">
-                    <SearchablePartnerSelect
+                    <PartnerSelect
                       options={partners}
                       categories={partnerCategories}
                       value={reconPartnerId}
                       onChange={(_, id) => setReconPartnerId(id)}
                       valueMode="id"
-                      compact
-                      showCategoryHint={false}
                       placeholder="请选择合作单位"
-                      triggerClassName="bg-white border border-slate-200"
+                      triggerClassName={`${psiOrderBillFormPartnerTriggerClassCompact} bg-white border border-slate-200`}
                     />
                   </div>
                 </div>

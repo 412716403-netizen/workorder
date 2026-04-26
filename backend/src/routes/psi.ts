@@ -32,5 +32,6 @@ router.delete('/records', validate(deleteBatchSchema), ctrl.deleteBatchRecords);
 router.delete('/records/:id', ctrl.deleteRecord);
 
 router.get('/stock', ctrl.getStock);
+router.get('/stock/batches', ctrl.getStockBatches);
 
 export default router;

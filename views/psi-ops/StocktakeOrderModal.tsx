@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Plus,
   X,
@@ -8,7 +8,9 @@ import {
   Trash2,
 } from 'lucide-react';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
-import { Product, Warehouse, ProductCategory, AppDictionaries } from '../../types';
+import { Product, Warehouse, ProductCategory, AppDictionaries, categoryUsesBatchManagement } from '../../types';
+import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
+import * as api from '../../services/api';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 
 interface StocktakeItem {
@@ -16,6 +18,7 @@ interface StocktakeItem {
   productId: string;
   quantity?: number;
   variantQuantities?: Record<string, number>;
+  batchNo?: string;
 }
 
 export interface StocktakeOrderModalProps {
@@ -26,7 +29,7 @@ export interface StocktakeOrderModalProps {
   setStocktakeForm: React.Dispatch<React.SetStateAction<{ warehouseId: string; stocktakeDate: string; note: string }>>;
   stocktakeItems: StocktakeItem[];
   addStocktakeItem: () => void;
-  updateStocktakeItem: (id: string, updates: Partial<{ productId: string; quantity?: number; variantQuantities?: Record<string, number> }>) => void;
+  updateStocktakeItem: (id: string, updates: Partial<StocktakeItem>) => void;
   updateStocktakeVariantQty: (lineId: string, variantId: string, qty: number) => void;
   removeStocktakeItem: (id: string) => void;
   handleSaveStocktake: () => void;
@@ -40,6 +43,39 @@ export interface StocktakeOrderModalProps {
   getVariantDisplayQty: (productId: string, warehouseId: string, variantId: string) => number;
   getStock: (productId: string, warehouseId: string, excludeStocktakeDocNumber?: string) => number;
 }
+
+const StocktakeBatchSystemCell: React.FC<{
+  productId: string;
+  warehouseId: string;
+  batchNo: string;
+  fallback: number;
+}> = ({ productId, warehouseId, batchNo, fallback }) => {
+  const [v, setV] = useState<number | null>(null);
+  useEffect(() => {
+    const b = batchNo.trim();
+    if (!b) {
+      setV(null);
+      return;
+    }
+    let cancel = false;
+    void (async () => {
+      try {
+        const rows = await api.psi.getStockBatches({ productId, warehouseId });
+        const n = rows.find(r => r.batchNo === b)?.stock ?? 0;
+        if (!cancel) setV(n);
+      } catch {
+        if (!cancel) setV(0);
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [productId, warehouseId, batchNo]);
+  const b = batchNo.trim();
+  if (!b) return <>{fallback}</>;
+  if (v === null) return <>…</>;
+  return <>{v}</>;
+};
 
 const StocktakeOrderModal: React.FC<StocktakeOrderModalProps> = ({
   open,
@@ -103,20 +139,28 @@ const StocktakeOrderModal: React.FC<StocktakeOrderModalProps> = ({
             <div className="flex items-center mb-3">
               <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Layers className="w-4 h-4 text-indigo-500" /> 盘点明细（可多产品）</h4>
             </div>
-            <p className="text-xs text-slate-500 mb-3">每行会显示当前「系统数量」供参考，录入实盘数量保存后将按差异调整库存。</p>
+            <p className="text-xs text-slate-500 mb-3">
+              每行会显示当前「系统数量」供参考，录入实盘数量保存后将按差异调整库存。启用批次管理的物料请先选择盘点仓库，再为每行选择批次（每行对应一个批号）。
+            </p>
             <div className="space-y-3">
               {stocktakeItems.map((line) => {
                 const stProd = productMapPSI.get(line.productId);
                 const stHasVariants = stProd?.variants && stProd.variants.length > 0;
+                const stUsesBatch = categoryUsesBatchManagement(categories.find(c => c.id === stProd?.categoryId));
                 const stLineQty = stHasVariants
                   ? Object.values(line.variantQuantities || {}).reduce((s, q) => s + q, 0)
                   : (line.quantity ?? 0);
                 const isLineEmpty = !line.productId;
-                const systemQtyForLine = line.productId && stocktakeForm.warehouseId
-                  ? (stHasVariants && stProd?.variants
+                const totalSystemQty =
+                  line.productId && stocktakeForm.warehouseId
+                    ? stHasVariants && stProd?.variants
                       ? stProd.variants.reduce((s, v) => s + getVariantDisplayQty(line.productId!, stocktakeForm.warehouseId!, v.id), 0)
-                      : getStock(line.productId, stocktakeForm.warehouseId, editingDocNumber ?? undefined))
-                  : null;
+                      : getStock(line.productId, stocktakeForm.warehouseId, editingDocNumber ?? undefined)
+                    : null;
+                const systemQtyForLine =
+                  stUsesBatch && !stHasVariants && line.productId && stocktakeForm.warehouseId && (line.batchNo ?? '').trim()
+                    ? null
+                    : totalSystemQty;
                 return (
                   <div key={line.id} className={`rounded-2xl border space-y-4 transition-all ${isLineEmpty ? 'bg-white border-slate-200 p-4 border-dashed' : 'bg-white border-slate-200 p-4 shadow-sm'}`}>
                     <div className="flex flex-wrap items-end gap-3">
@@ -125,15 +169,45 @@ const StocktakeOrderModal: React.FC<StocktakeOrderModalProps> = ({
                         <SearchableProductSelect options={products} categories={categories} value={line.productId} onChange={(id) => {
                           const p = productMapPSI.get(id);
                           const hv = p?.variants && p.variants.length > 0;
-                          updateStocktakeItem(line.id, { productId: id, quantity: hv ? undefined : 0, variantQuantities: hv ? {} : undefined });
+                          updateStocktakeItem(line.id, {
+                            productId: id,
+                            quantity: hv ? undefined : 0,
+                            variantQuantities: hv ? {} : undefined,
+                            batchNo: undefined,
+                          });
                         }} />
                       </div>
                       {line.productId && stocktakeForm.warehouseId && (
                         <div className="w-28 space-y-1">
                           <label className="text-[10px] font-bold text-slate-500 block">系统数量</label>
                           <div className="py-2.5 px-3 text-sm font-bold text-slate-600 bg-slate-50 rounded-xl border border-slate-200">
-                            {systemQtyForLine != null ? systemQtyForLine : '—'} {getUnitName(line.productId)}
+                            {stUsesBatch && !stHasVariants && (line.batchNo ?? '').trim() ? (
+                              <StocktakeBatchSystemCell
+                                productId={line.productId}
+                                warehouseId={stocktakeForm.warehouseId}
+                                batchNo={line.batchNo ?? ''}
+                                fallback={totalSystemQty ?? 0}
+                              />
+                            ) : systemQtyForLine != null ? (
+                              systemQtyForLine
+                            ) : (
+                              '—'
+                            )}{' '}
+                            {getUnitName(line.productId)}
                           </div>
+                        </div>
+                      )}
+                      {!stHasVariants && stUsesBatch && line.productId && (
+                        <div className="min-w-[10rem] w-44 max-w-[16rem] shrink-0 space-y-1">
+                          <MaterialIssueBatchSelect
+                            product={stProd}
+                            categories={categories}
+                            warehouseId={stocktakeForm.warehouseId}
+                            value={line.batchNo ?? ''}
+                            onChange={v => updateStocktakeItem(line.id, { batchNo: v })}
+                            mode="issue"
+                            controlVariant="formRow"
+                          />
                         </div>
                       )}
                       {stHasVariants && (

@@ -29,7 +29,16 @@ export type SalesBillLineInput = {
   quantity?: number;
   salesPrice: number;
   variantQuantities?: Record<string, number>;
+  /** 采购单打印等场景复用销售明细行结构时携带批次 */
+  batchNo?: string;
+  /** 与 PSI `batch` 入参一致（销售单保存常用 `batch`） */
+  batch?: string;
 };
+
+function lineBatchForPrint(line: SalesBillLineInput): string {
+  const raw = line.batchNo ?? line.batch;
+  return typeof raw === 'string' && raw.trim() !== '' ? raw.trim() : '';
+}
 
 function formatYmdChinese(ymd: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((ymd || '').trim());
@@ -80,6 +89,7 @@ export function buildSalesBillPrintListRows(
             unitPrice: fmtMoney(price),
             amount: fmtMoney(amount),
             remark: '',
+            batchNo: lineBatchForPrint(line),
           });
         }
       }
@@ -98,6 +108,7 @@ export function buildSalesBillPrintListRows(
         unitPrice: fmtMoney(price),
         amount: fmtMoney(amount),
         remark: '',
+        batchNo: lineBatchForPrint(line),
       });
     }
   }

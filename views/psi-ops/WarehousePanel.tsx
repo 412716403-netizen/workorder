@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
   X,
   Package,
@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product, Warehouse, ProductCategory, Partner, AppDictionaries } from '../../types';
+import { categoryUsesBatchManagement } from '../../types';
+import * as api from '../../services/api';
 import { sortedColorEntries } from '../../utils/sortVariantsByProduct';
 import { useProgressiveList } from '../../hooks/useProgressiveList';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -34,6 +36,21 @@ import WarehouseFlowModal from './WarehouseFlowModal';
 import ProductFlowDetailModal from './ProductFlowDetailModal';
 import WarehouseFlowDocumentDetailModal from './WarehouseFlowDocumentDetailModal';
 import { hasModulePerm } from '../../utils/hasModulePerm';
+
+type TransferLineDraft = {
+  id: string;
+  productId: string;
+  quantity?: number;
+  variantQuantities?: Record<string, number>;
+  batchNo?: string;
+};
+type StocktakeLineDraft = {
+  id: string;
+  productId: string;
+  quantity?: number;
+  variantQuantities?: Record<string, number>;
+  batchNo?: string;
+};
 
 interface WarehouseProps {
   products: Product[];
@@ -107,7 +124,20 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   const [transferForm, setTransferForm] = useState<{ fromWarehouseId: string; toWarehouseId: string; transferDate: string; note: string }>({
     fromWarehouseId: '', toWarehouseId: '', transferDate: localTodayYmd(), note: ''
   });
-  const [transferItems, setTransferItems] = useState<{ id: string; productId: string; quantity?: number; variantQuantities?: Record<string, number> }[]>([]);
+  const [transferItems, setTransferItems] = useState<TransferLineDraft[]>([]);
+  const prevTransferFromWarehouseIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!transferModalOpen) {
+      prevTransferFromWarehouseIdRef.current = null;
+      return;
+    }
+    const cur = transferForm.fromWarehouseId;
+    const prev = prevTransferFromWarehouseIdRef.current;
+    if (prev !== null && prev !== cur) {
+      setTransferItems(items => items.map(i => ({ ...i, batchNo: undefined })));
+    }
+    prevTransferFromWarehouseIdRef.current = cur;
+  }, [transferModalOpen, transferForm.fromWarehouseId]);
   const [editingTransferDocNumber, setEditingTransferDocNumber] = useState<string | null>(null);
   const [transferListModalOpen, setTransferListModalOpen] = useState(false);
   const [stocktakeListModalOpen, setStocktakeListModalOpen] = useState(false);
@@ -115,8 +145,60 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   const [stocktakeForm, setStocktakeForm] = useState<{ warehouseId: string; stocktakeDate: string; note: string }>({
     warehouseId: '', stocktakeDate: localTodayYmd(), note: ''
   });
-  const [stocktakeItems, setStocktakeItems] = useState<{ id: string; productId: string; quantity?: number; variantQuantities?: Record<string, number> }[]>([]);
+  const [stocktakeItems, setStocktakeItems] = useState<StocktakeLineDraft[]>([]);
   const [editingStocktakeDocNumber, setEditingStocktakeDocNumber] = useState<string | null>(null);
+  const prevStocktakeWarehouseIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!stocktakeModalOpen) {
+      prevStocktakeWarehouseIdRef.current = null;
+      return;
+    }
+    const cur = stocktakeForm.warehouseId;
+    const prev = prevStocktakeWarehouseIdRef.current;
+    if (prev !== null && prev !== cur) {
+      setStocktakeItems(items => items.map(i => ({ ...i, batchNo: undefined })));
+    }
+    prevStocktakeWarehouseIdRef.current = cur;
+  }, [stocktakeModalOpen, stocktakeForm.warehouseId]);
+
+  /** `${productId}::${warehouseId}` 展开时懒加载 `getStockBatches` */
+  const [batchBreakdownCache, setBatchBreakdownCache] = useState<
+    Record<string, { batchNo: string; stock: number }[] | 'loading'>
+  >({});
+  /** 与「成功但无批次数」区分：仅请求失败时写入 */
+  const [batchBreakdownError, setBatchBreakdownError] = useState<Record<string, string>>({});
+
+  const loadBatchBreakdown = useCallback(async (productId: string, warehouseId: string) => {
+    const k = `${productId}::${warehouseId}`;
+    const pid = productId?.trim() ?? '';
+    const wid = warehouseId?.trim() ?? '';
+    if (!pid || !wid) {
+      setBatchBreakdownError(prev => ({ ...prev, [k]: '缺少产品或仓库参数，无法拉取批次' }));
+      setBatchBreakdownCache(prev => ({ ...prev, [k]: [] }));
+      return;
+    }
+    setBatchBreakdownError(prev => {
+      if (!(k in prev)) return prev;
+      const n = { ...prev };
+      delete n[k];
+      return n;
+    });
+    setBatchBreakdownCache(prev => ({ ...prev, [k]: 'loading' }));
+    try {
+      const rows = await api.psi.getStockBatches({ productId: pid, warehouseId: wid });
+      setBatchBreakdownCache(prev => ({ ...prev, [k]: Array.isArray(rows) ? rows : [] }));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setBatchBreakdownError(prev => ({ ...prev, [k]: msg }));
+      setBatchBreakdownCache(prev => ({ ...prev, [k]: [] }));
+      toast.error(`加载批次结存失败：${msg}`, { id: `psi-batch-fail-${k}` });
+    }
+  }, []);
+
+  useEffect(() => {
+    setBatchBreakdownCache({});
+    setBatchBreakdownError({});
+  }, [records]);
 
   // ── 单号生成 ──
   const generateTRDocNumber = (): string => {
@@ -146,8 +228,8 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   };
 
   // ── 调拨明细行操作 ──
-  const addTransferItem = () => setTransferItems(prev => [...prev, { id: `tr-line-${Date.now()}`, productId: '', quantity: 0 }]);
-  const updateTransferItem = (id: string, updates: Partial<{ productId: string; quantity?: number; variantQuantities?: Record<string, number> }>) => {
+  const addTransferItem = () => setTransferItems(prev => [...prev, { id: `tr-line-${Date.now()}`, productId: '', quantity: 0, batchNo: undefined }]);
+  const updateTransferItem = (id: string, updates: Partial<TransferLineDraft>) => {
     setTransferItems(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i));
   };
   const updateTransferVariantQty = (lineId: string, variantId: string, qty: number) => {
@@ -160,8 +242,8 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   const removeTransferItem = (id: string) => setTransferItems(prev => prev.filter(i => i.id !== id));
 
   // ── 盘点明细行操作 ──
-  const addStocktakeItem = () => setStocktakeItems(prev => [...prev, { id: `st-line-${Date.now()}`, productId: '', quantity: 0 }]);
-  const updateStocktakeItem = (id: string, updates: Partial<{ productId: string; quantity?: number; variantQuantities?: Record<string, number> }>) => {
+  const addStocktakeItem = () => setStocktakeItems(prev => [...prev, { id: `st-line-${Date.now()}`, productId: '', quantity: 0, batchNo: undefined }]);
+  const updateStocktakeItem = (id: string, updates: Partial<StocktakeLineDraft>) => {
     setStocktakeItems(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i));
   };
   const updateStocktakeVariantQty = (lineId: string, variantId: string, qty: number) => {
@@ -194,6 +276,33 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
       toast.warning('请至少添加一条调拨明细且数量大于 0');
       return;
     }
+    for (const item of transferItems) {
+      if (!item.productId) continue;
+      const p = productMapPSI.get(item.productId);
+      const cat = categoryMapPSI.get(p?.categoryId ?? '');
+      if (!categoryUsesBatchManagement(cat)) continue;
+      const q =
+        item.variantQuantities && Object.keys(item.variantQuantities).length > 0
+          ? Object.values(item.variantQuantities).reduce((s, v) => s + v, 0)
+          : (item.quantity ?? 0);
+      if (q <= 0) continue;
+      const bn = (item.batchNo ?? '').trim();
+      if (!bn) {
+        toast.error(`调拨产品「${p?.name ?? item.productId}」启用批次管理，请选择批次`);
+        return;
+      }
+      try {
+        const opts = await api.psi.getStockBatches({ productId: item.productId, warehouseId: fromId });
+        const av = opts.find(o => o.batchNo === bn)?.stock ?? 0;
+        if (q > av) {
+          toast.error(`「${p?.name ?? item.productId}」批次「${bn}」在调出仓可用量不足（${av}）`);
+          return;
+        }
+      } catch {
+        toast.error('校验调拨批次库存失败');
+        return;
+      }
+    }
     const docNumber = editingTransferDocNumber || generateTRDocNumber();
     const timestamp = editingTransferDocNumber
       ? (recordsList.find((r: any) => r.type === 'TRANSFER' && r.docNumber === editingTransferDocNumber)?.timestamp ?? new Date().toLocaleString())
@@ -203,6 +312,9 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
     let trIdx = 0;
     transferItems.forEach((item) => {
       if (!item.productId) return;
+      const p = productMapPSI.get(item.productId);
+      const batchCat = categoryUsesBatchManagement(categoryMapPSI.get(p?.categoryId ?? ''));
+      const bn = (item.batchNo ?? '').trim();
       if (item.variantQuantities && Object.keys(item.variantQuantities).length > 0) {
         Object.entries(item.variantQuantities).forEach(([variantId, qty]) => {
           if (!qty || qty <= 0) return;
@@ -220,6 +332,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
             note: transferForm.note || undefined,
             lineGroupId: item.id,
             createdAt,
+            ...(batchCat && bn ? { batchNo: bn } : {}),
           });
         });
       } else if ((item.quantity ?? 0) > 0) {
@@ -236,6 +349,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
           note: transferForm.note || undefined,
           lineGroupId: item.id,
           createdAt,
+          ...(batchCat && bn ? { batchNo: bn } : {}),
         });
       }
     });
@@ -272,6 +386,35 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
       toast.warning('请至少添加一条盘点明细');
       return;
     }
+    for (const item of stocktakeItems) {
+      if (!item.productId) continue;
+      const p = productMapPSI.get(item.productId);
+      const cat = categoryMapPSI.get(p?.categoryId ?? '');
+      if (!categoryUsesBatchManagement(cat)) continue;
+      const q = item.variantQuantities
+        ? Object.values(item.variantQuantities).reduce((s, v) => s + v, 0)
+        : (item.quantity ?? 0);
+      if (q > 0 && !(item.batchNo ?? '').trim()) {
+        toast.error(`盘点产品「${p?.name ?? item.productId}」启用批次管理，请选择批次`);
+        return;
+      }
+    }
+    const batchSysByProductBatch = new Map<string, number>();
+    for (const item of stocktakeItems) {
+      if (!item.productId) continue;
+      const p = productMapPSI.get(item.productId);
+      const cat = categoryMapPSI.get(p?.categoryId ?? '');
+      const bn = (item.batchNo ?? '').trim();
+      if (!bn || !categoryUsesBatchManagement(cat)) continue;
+      const k = `${item.productId}::${bn}`;
+      if (batchSysByProductBatch.has(k)) continue;
+      try {
+        const opts = await api.psi.getStockBatches({ productId: item.productId, warehouseId });
+        batchSysByProductBatch.set(k, opts.find(o => o.batchNo === bn)?.stock ?? 0);
+      } catch {
+        batchSysByProductBatch.set(k, 0);
+      }
+    }
     const docNumber = editingStocktakeDocNumber || generateSTDocNumber();
     const timestamp = editingStocktakeDocNumber
       ? (recordsList.find((r: any) => r.type === 'STOCKTAKE' && r.docNumber === editingStocktakeDocNumber)?.timestamp ?? new Date().toLocaleString())
@@ -302,7 +445,13 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
           });
         });
       } else if ((item.quantity ?? 0) >= 0) {
-        const sysQtyAtSave = getStock(item.productId, warehouseId, editingStocktakeDocNumber ?? undefined);
+        const bn = (item.batchNo ?? '').trim();
+        const p = productMapPSI.get(item.productId);
+        const batchCat = categoryUsesBatchManagement(categoryMapPSI.get(p?.categoryId ?? ''));
+        const sysQtyAtSave =
+          batchCat && bn
+            ? (batchSysByProductBatch.get(`${item.productId}::${bn}`) ?? 0)
+            : getStock(item.productId, warehouseId, editingStocktakeDocNumber ?? undefined);
         newRecords.push({
           id: `psi-st-${Date.now()}-${stIdx++}`,
           type: 'STOCKTAKE',
@@ -316,17 +465,28 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
           note: stocktakeForm.note || undefined,
           lineGroupId: item.id,
           createdAt,
+          ...(batchCat && bn ? { batchNo: bn } : {}),
         });
       }
     });
     const originalDocNumber = editingStocktakeDocNumber ?? undefined;
+    newRecords.forEach(r => {
+      if (r.batchNo) {
+        r.diffQuantity = (Number(r.quantity) || 0) - (Number(r.systemQuantity) || 0);
+      }
+    });
+    const productIdsWithBatchLine = new Set(newRecords.filter((r: any) => r.batchNo).map((r: any) => r.productId));
     const byProductId = new Map<string, number>();
-    newRecords.forEach(r => { byProductId.set(r.productId, (byProductId.get(r.productId) ?? 0) + (r.quantity ?? 0)); });
+    newRecords.forEach((r: any) => {
+      if (r.batchNo) return;
+      byProductId.set(r.productId, (byProductId.get(r.productId) ?? 0) + (r.quantity ?? 0));
+    });
     const firstRecordIndexByProductId = new Map<string, number>();
-    newRecords.forEach((r, idx) => {
+    newRecords.forEach((r: any, idx: number) => {
       if (!firstRecordIndexByProductId.has(r.productId)) firstRecordIndexByProductId.set(r.productId, idx);
     });
     byProductId.forEach((actualTotal, productId) => {
+      if (productIdsWithBatchLine.has(productId)) return;
       const product = productMapPSI.get(productId);
       const hasVariants = (product?.variants?.length ?? 0) > 0;
       const systemQty = hasVariants
@@ -372,26 +532,31 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
     });
     const groups: Record<string, any[]> = {};
     docItems.forEach((item: any) => {
-      const gid = item.lineGroupId ?? item.id;
+      const batchPart = String(item.batchNo ?? item.batch ?? '').trim();
+      const gid = `${item.lineGroupId ?? item.id}|${batchPart}`;
       if (!groups[gid]) groups[gid] = [];
       groups[gid].push(item);
     });
-    setStocktakeItems(Object.entries(groups).map(([gid, grp]) => {
-      const firstItem = grp[0];
-      const variantQuantities: Record<string, number> = {};
-      let quantity = 0;
-      grp.forEach((item: any) => {
-        if (item.variantId) {
-          variantQuantities[item.variantId] = (variantQuantities[item.variantId] ?? 0) + (item.quantity ?? 0);
-        } else {
-          quantity += item.quantity ?? 0;
-        }
-      });
-      const hasVariants = Object.keys(variantQuantities).length > 0;
-      return hasVariants
-        ? { id: gid, productId: firstItem.productId, variantQuantities }
-        : { id: gid, productId: firstItem.productId, quantity };
-    }));
+    setStocktakeItems(
+      Object.entries(groups).map(([_gid, grp]) => {
+        const firstItem = grp[0];
+        const rowId = String(firstItem.lineGroupId ?? firstItem.id);
+        const batchNo = String(firstItem.batchNo ?? firstItem.batch ?? '').trim() || undefined;
+        const variantQuantities: Record<string, number> = {};
+        let quantity = 0;
+        grp.forEach((item: any) => {
+          if (item.variantId) {
+            variantQuantities[item.variantId] = (variantQuantities[item.variantId] ?? 0) + (item.quantity ?? 0);
+          } else {
+            quantity += item.quantity ?? 0;
+          }
+        });
+        const hasVariants = Object.keys(variantQuantities).length > 0;
+        return hasVariants
+          ? { id: rowId, productId: firstItem.productId, variantQuantities, batchNo }
+          : { id: rowId, productId: firstItem.productId, quantity, batchNo };
+      }),
+    );
     setStocktakeListModalOpen(false);
     setStocktakeModalOpen(true);
   }, []);
@@ -422,26 +587,31 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
     });
     const groups: Record<string, any[]> = {};
     docItems.forEach((item: any) => {
-      const gid = item.lineGroupId ?? item.id;
+      const batchPart = String(item.batchNo ?? item.batch ?? '').trim();
+      const gid = `${item.lineGroupId ?? item.id}|${batchPart}`;
       if (!groups[gid]) groups[gid] = [];
       groups[gid].push(item);
     });
-    setTransferItems(Object.entries(groups).map(([gid, grp]) => {
-      const firstItem = grp[0];
-      const variantQuantities: Record<string, number> = {};
-      let quantity = 0;
-      grp.forEach((item: any) => {
-        if (item.variantId) {
-          variantQuantities[item.variantId] = (variantQuantities[item.variantId] ?? 0) + (item.quantity ?? 0);
-        } else {
-          quantity += item.quantity ?? 0;
-        }
-      });
-      const hasVariants = Object.keys(variantQuantities).length > 0;
-      return hasVariants
-        ? { id: gid, productId: firstItem.productId, variantQuantities }
-        : { id: gid, productId: firstItem.productId, quantity };
-    }));
+    setTransferItems(
+      Object.entries(groups).map(([_gid, grp]) => {
+        const firstItem = grp[0];
+        const rowId = String(firstItem.lineGroupId ?? firstItem.id);
+        const batchNo = String(firstItem.batchNo ?? firstItem.batch ?? '').trim() || undefined;
+        const variantQuantities: Record<string, number> = {};
+        let quantity = 0;
+        grp.forEach((item: any) => {
+          if (item.variantId) {
+            variantQuantities[item.variantId] = (variantQuantities[item.variantId] ?? 0) + (item.quantity ?? 0);
+          } else {
+            quantity += item.quantity ?? 0;
+          }
+        });
+        const hasVariants = Object.keys(variantQuantities).length > 0;
+        return hasVariants
+          ? { id: rowId, productId: firstItem.productId, variantQuantities, batchNo }
+          : { id: rowId, productId: firstItem.productId, quantity, batchNo };
+      }),
+    );
     setTransferListModalOpen(false);
     setTransferModalOpen(true);
   }, []);
@@ -499,7 +669,15 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
             };
           })
         : undefined) as { variantId: string; colorId: string; sizeId: string; colorName: string; sizeName: string; totalQty: number; perWarehouse: { warehouseId: string; qty: number }[] }[] | undefined;
-      return { ...p, total, distribution, categoryName: category?.name || '未分类', variantBreakdown };
+      return {
+        ...p,
+        total,
+        distribution,
+        categoryName: category?.name || '未分类',
+        categoryId: p.categoryId,
+        usesBatch: categoryUsesBatchManagement(category),
+        variantBreakdown,
+      };
     });
     if (!debouncedSearchTerm.trim()) return allStocks;
     const term = debouncedSearchTerm.toLowerCase();
@@ -681,7 +859,16 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
               }))
             : undefined;
           const qtyForLine = d?.qty ?? 0;
-          return { productId: ps.id, name: ps.name, sku: ps.sku, categoryName: ps.categoryName, qty: qtyForLine, imageUrl: ps.imageUrl, variantBreakdown };
+          return {
+            productId: ps.id,
+            name: ps.name,
+            sku: ps.sku,
+            categoryName: ps.categoryName,
+            qty: qtyForLine,
+            imageUrl: ps.imageUrl,
+            variantBreakdown,
+            usesBatch: (ps as { usesBatch?: boolean }).usesBatch ?? false,
+          };
         });
       const totalQty = lines.reduce((s, l) => s + l.qty, 0);
       return { warehouseId: wh.id, warehouseName: wh.name, code: wh.code, category: wh.category, location: wh.location, contact: wh.contact, totalQty, skuCount: lines.length, lines };
@@ -837,7 +1024,9 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                                    {whRow.lines.map(line => {
                                      const expandKey = `${whRow.warehouseId}-${line.productId}`;
                                      const hasVariants = (line as any).variantBreakdown?.length > 0;
-                                     const isExpanded = expandedWarehouseProductKeys.has(expandKey);
+                                    const isExpanded = expandedWarehouseProductKeys.has(expandKey);
+                                    const usesBatch = (line as { usesBatch?: boolean }).usesBatch ?? false;
+                                    const canExpand = hasVariants || (usesBatch && line.qty !== 0);
                                      const groupedByColor: Record<string, { colorName: string; items: { sizeName: string; qty: number }[] }> = {};
                                      if (hasVariants) {
                                        ((line as any).variantBreakdown as { colorId: string; colorName: string; sizeName: string; qty: number }[]).forEach((vb: { colorId: string; colorName: string; sizeName: string; qty: number }) => {
@@ -848,9 +1037,18 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                                      return (
                                        <React.Fragment key={expandKey}>
                                          <tr className="hover:bg-slate-50/50 transition-colors">
-                                           <td className="px-2 py-3 w-10">
-                                             {hasVariants ? (
-                                               <button type="button" onClick={() => setExpandedWarehouseProductKeys(prev => { const next = new Set(prev); if (next.has(expandKey)) next.delete(expandKey); else next.add(expandKey); return next; })} className="p-1 rounded hover:bg-slate-100 text-slate-500">
+                                          <td className="px-2 py-3 w-10">
+                                            {canExpand ? (
+                                              <button type="button" onClick={() => setExpandedWarehouseProductKeys(prev => {
+                                                const next = new Set(prev);
+                                                if (next.has(expandKey)) {
+                                                  next.delete(expandKey);
+                                                } else {
+                                                  next.add(expandKey);
+                                                  if (usesBatch && line.qty !== 0) void loadBatchBreakdown(line.productId, whRow.warehouseId);
+                                                }
+                                                return next;
+                                              })} className="p-1 rounded hover:bg-slate-100 text-slate-500" title="展开明细">
                                                  {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                                                </button>
                                              ) : null}
@@ -874,8 +1072,12 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                                            </td>
                                            <td className="px-4 py-3 text-sm text-slate-600">{line.categoryName}</td>
                                            <td className="px-4 py-3 text-right">
-                                             <span className={`text-sm font-black ${line.qty < 0 ? 'text-rose-600' : 'text-indigo-600'}`}>{line.qty.toLocaleString()}</span>
-                                             <span className="text-[10px] text-slate-400 ml-1">{line.productId ? getUnitName(line.productId) : 'PCS'}</span>
+                                             <div className="flex flex-col items-end gap-1">
+                                               <div>
+                                                 <span className={`text-sm font-black ${line.qty < 0 ? 'text-rose-600' : 'text-indigo-600'}`}>{line.qty.toLocaleString()}</span>
+                                                 <span className="text-[10px] text-slate-400 ml-1">{line.productId ? getUnitName(line.productId) : 'PCS'}</span>
+                                               </div>
+                                             </div>
                                            </td>
                                            <td className="px-4 py-3 text-right">
                                              <button type="button" onClick={() => setProductFlowDetail({ productId: line.productId, productName: line.name, warehouseId: whRow.warehouseId, warehouseName: whRow.warehouseName })} className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-bold rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all whitespace-nowrap">
@@ -883,10 +1085,44 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                                              </button>
                                            </td>
                                          </tr>
-                                        {hasVariants && isExpanded && (
+                                        {isExpanded && (
                                           <tr>
                                             <td colSpan={6} className="px-4 py-3 bg-slate-50/60 border-b border-slate-100">
                                               <div className="space-y-3 pl-4">
+                                                {usesBatch && line.qty !== 0 && (() => {
+                                                  const bk = `${line.productId}::${whRow.warehouseId}`;
+                                                  const cache = batchBreakdownCache[bk];
+                                                  const errMsg = batchBreakdownError[bk];
+                                                  return (
+                                                    <div className="rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm">
+                                                      <div className="flex items-center justify-between gap-3 mb-3">
+                                                        <div>
+                                                          <p className="text-sm font-black text-slate-800">批次结存</p>
+                                                          <p className="text-[10px] font-bold text-slate-400">{whRow.warehouseName}</p>
+                                                        </div>
+                                                        <span className="text-xs font-black text-indigo-600 tabular-nums">{line.qty.toLocaleString()} {line.productId ? getUnitName(line.productId) : 'PCS'}</span>
+                                                      </div>
+                                                      {cache === 'loading' ? (
+                                                        <p className="text-xs text-slate-400">加载中…</p>
+                                                      ) : errMsg ? (
+                                                        <p className="text-xs text-rose-600 font-medium" title={errMsg}>无法加载批次数据：{errMsg}</p>
+                                                      ) : !cache || cache.length === 0 ? (
+                                                        <p className="text-xs text-slate-400">暂无批次明细（若已采购入库带批号，请确认入库行已保存批号且仓库与当前行一致）</p>
+                                                      ) : (
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                                          {cache.map(row => (
+                                                            <div key={row.batchNo} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                                                              <span className="truncate text-xs font-black text-slate-700" title={row.batchNo}>{row.batchNo}</span>
+                                                              <span className="text-xs font-black text-indigo-600 tabular-nums shrink-0">{row.stock.toLocaleString()}</span>
+                                                            </div>
+                                                          ))}
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  );
+                                                })()}
+                                                {hasVariants && (
+                                                  <>
                                                 {sortedColorEntries(groupedByColor, productMapPSI.get(line.productId)?.colorIds).map(([colorId, { colorName, items }]) => {
                                                   const color = dictionaries?.colors?.find(c => c.id === colorId);
                                                   return (
@@ -908,7 +1144,9 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                                                    </div>
                                                    );
                                                  })}
-                                                 {(() => {
+                                                  </>
+                                                )}
+                                                {hasVariants && (() => {
                                                    const variantSum = (Object.values(groupedByColor) as { items: { qty: number }[] }[]).reduce((s, g) => s + g.items.reduce((t, i) => t + i.qty, 0), 0);
                                                    const stocktakePart = line.qty - variantSum;
                                                    if (stocktakePart > 0) return (
@@ -969,12 +1207,27 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                               });
                             }
                             const colSpan = 6 + warehouses.length;
+                            const usesBatch = (ps as { usesBatch?: boolean }).usesBatch ?? false;
+                            const batchWarehouseIds = usesBatch
+                              ? warehouses
+                                  .filter(wh => (ps.distribution.find((x: { warehouseId: string }) => x.warehouseId === wh.id)?.qty ?? 0) !== 0)
+                                  .map(wh => wh.id)
+                              : [];
+                            const canExpand = hasVariants || batchWarehouseIds.length > 0;
                             return (
                               <React.Fragment key={ps.id}>
                                 <tr className="hover:bg-slate-50/50 transition-colors">
                                   <td className="px-2 py-3 w-10">
-                                    {hasVariants ? (
-                                      <button type="button" onClick={() => setExpandedProductIdByMaterial(prev => prev === ps.id ? null : ps.id)} className="p-1 rounded hover:bg-slate-100 text-slate-500">
+                                    {canExpand ? (
+                                      <button type="button" onClick={() => setExpandedProductIdByMaterial(prev => {
+                                        const next = prev === ps.id ? null : ps.id;
+                                        if (next === ps.id && batchWarehouseIds.length > 0) {
+                                          batchWarehouseIds.forEach(warehouseId => {
+                                            void loadBatchBreakdown(ps.id, warehouseId);
+                                          });
+                                        }
+                                        return next;
+                                      })} className="p-1 rounded hover:bg-slate-100 text-slate-500" title="展开明细">
                                         {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                                       </button>
                                     ) : null}
@@ -1006,7 +1259,9 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                                     const qty = d?.qty ?? 0;
                                     return (
                                       <td key={wh.id} className="px-4 py-3 text-right text-sm font-bold text-slate-600">
-                                        {qty !== 0 ? <span className={qty < 0 ? 'text-rose-600 font-bold' : ''}>{qty.toLocaleString()}</span> : '—'}
+                                        <div className="inline-flex flex-col items-end gap-1">
+                                          <span>{qty !== 0 ? <span className={qty < 0 ? 'text-rose-600 font-bold' : ''}>{qty.toLocaleString()}</span> : '—'}</span>
+                                        </div>
                                       </td>
                                     );
                                   })}
@@ -1016,10 +1271,56 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                                     </button>
                                   </td>
                                 </tr>
-                                {hasVariants && isExpanded && (
+                                {isExpanded && (
                                   <tr>
                                     <td colSpan={colSpan} className="px-4 py-3 bg-slate-50/60 border-b border-slate-100">
                                       <div className="space-y-3 pl-4">
+                                        {batchWarehouseIds.length > 0 && (
+                                          <div className="space-y-3 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4">
+                                            <div className="flex items-center justify-between gap-3">
+                                              <div>
+                                                <p className="text-sm font-black text-slate-800">按仓库批次结存</p>
+                                                <p className="text-[10px] font-bold text-slate-400">仅展示当前产品有结存的仓库批号</p>
+                                              </div>
+                                              <span className="text-xs font-black text-indigo-600">{batchWarehouseIds.length} 个仓库</span>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                                              {warehouses.map(wh => {
+                                                if (!batchWarehouseIds.includes(wh.id)) return null;
+                                                const bk = `${ps.id}::${wh.id}`;
+                                                const d = ps.distribution.find((x: { warehouseId: string }) => x.warehouseId === wh.id);
+                                                const cache = batchBreakdownCache[bk];
+                                                const errMsg = batchBreakdownError[bk];
+                                                return (
+                                                  <div key={bk} className="rounded-2xl border border-indigo-100 bg-white p-3 shadow-sm">
+                                                    <div className="flex items-center justify-between gap-3 mb-3">
+                                                      <p className="text-xs font-black text-slate-800 truncate" title={wh.name}>{wh.name}</p>
+                                                      <span className="text-[10px] font-black text-indigo-600 tabular-nums shrink-0">{(d?.qty ?? 0).toLocaleString()}</span>
+                                                    </div>
+                                                    {cache === 'loading' ? (
+                                                      <p className="text-xs text-slate-400">加载中…</p>
+                                                    ) : errMsg ? (
+                                                      <p className="text-xs text-rose-600 font-medium" title={errMsg}>无法加载：{errMsg}</p>
+                                                    ) : !cache || cache.length === 0 ? (
+                                                      <p className="text-xs text-slate-400">暂无批次明细（与总账一致时可忽略）</p>
+                                                    ) : (
+                                                      <div className="space-y-2">
+                                                        {cache.map(row => (
+                                                          <div key={row.batchNo} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                                                            <span className="truncate text-xs font-black text-slate-700" title={row.batchNo}>{row.batchNo}</span>
+                                                            <span className="text-xs font-black text-indigo-600 tabular-nums shrink-0">{row.stock.toLocaleString()}</span>
+                                                          </div>
+                                                        ))}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+                                        )}
+                                        {hasVariants && (
+                                          <>
                                         {sortedColorEntries(groupedByColor, productMapPSI.get(ps.id)?.colorIds).map(([colorId, { colorName, items }]) => {
                                           const color = dictionaries?.colors?.find(c => c.id === colorId);
                                           return (
@@ -1041,6 +1342,8 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                                             </div>
                                           );
                                         })}
+                                          </>
+                                        )}
                                       </div>
                                     </td>
                                   </tr>

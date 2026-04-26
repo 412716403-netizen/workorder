@@ -3,7 +3,8 @@ import { ArrowLeft, UserPlus, Building2, Link2, Unlink } from 'lucide-react';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
 import type { Partner, PartnerCategory } from '../../types';
-import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
+import { PartnerSelect } from '../../components/PartnerSelect';
+import { psiOrderBillFormPartnerTriggerClassCompact } from '../../styles/uiDensity';
 import { useConfirm } from '../../contexts/ConfirmContext';
 
 interface CollabSettingsPanelProps {
@@ -181,14 +182,14 @@ const CollabSettingsPanel: React.FC<CollabSettingsPanelProps> = ({
           <div className={`${sectionPad} py-5 border-b border-slate-100 grid grid-cols-1 lg:grid-cols-12 gap-4 items-end`}>
             <div className="space-y-1 lg:col-span-5 min-w-0">
               <label className="text-[10px] font-black text-slate-400 uppercase block ml-1">合作单位</label>
-              <SearchablePartnerSelect
+              <PartnerSelect
                 options={unboundPartners}
                 categories={partnerCategories}
                 value={bindPartnerId}
                 onChange={(_, id) => setBindPartnerId(id)}
                 valueMode="id"
                 placeholder="选择合作单位..."
-                triggerClassName="bg-slate-50 border border-slate-200"
+                triggerClassName={`${psiOrderBillFormPartnerTriggerClassCompact} border border-slate-200`}
               />
             </div>
             <div className="space-y-1 lg:col-span-5 min-w-0">

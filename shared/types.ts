@@ -57,3 +57,37 @@ export type CustomDocFieldType = 'text' | 'date' | 'select' | 'file';
 
 /** 历史持久化 JSON 中曾出现的 type，加载时应归一为 CustomDocFieldType */
 export type LegacyCustomDocFieldType = CustomDocFieldType | 'number' | 'boolean';
+
+/** 与 `psi_records.batch_no` / `production_op_records.batch_no` 一致的最大长度 */
+export const BATCH_FIELD_MAX_LEN = 100;
+
+/**
+ * 批次号写入/聚合键统一归一：trim、空串视为未填、超长截断至 {@link BATCH_FIELD_MAX_LEN}。
+ * 前后端与 Prisma 写入应共用，避免「同批号不同写法」在 Map 中分裂。
+ */
+export function normalizeBatchNo(input: unknown): string | undefined {
+  if (input == null) return undefined;
+  const s = String(input).trim();
+  if (s === '') return undefined;
+  return s.length > BATCH_FIELD_MAX_LEN ? s.slice(0, BATCH_FIELD_MAX_LEN) : s;
+}
+
+/**
+ * 可作为明细批次维度参与「按批次库存」汇总的 PSI 类型（与前端 `usePsiStockIndex` 对齐，供文档与扩展参考）。
+ */
+export const PSI_TYPES_WITH_BATCH_LINE = [
+  'PURCHASE_BILL',
+  'SALES_BILL',
+  'STOCK_IN',
+  'TRANSFER',
+  'STOCKTAKE',
+] as const;
+
+/**
+ * 产品分类是否按批次管理物料（与颜色尺码互斥：二者不应同时为 true，服务端会拒绝）。
+ */
+export function categoryUsesBatchManagement(
+  cat: { hasBatchManagement?: boolean | null; hasColorSize?: boolean | null } | null | undefined,
+): boolean {
+  return Boolean(cat?.hasBatchManagement) && !Boolean(cat?.hasColorSize);
+}

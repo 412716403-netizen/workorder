@@ -16,6 +16,7 @@ export type PurchaseBillLineInput = {
   quantity?: number;
   purchasePrice: number;
   variantQuantities?: Record<string, number>;
+  batchNo?: string;
 };
 
 /** 采购单动态列表行：与采购订单/销售单明细列键一致 */
@@ -30,6 +31,7 @@ export function buildPurchaseBillPrintListRows(
     quantity: l.quantity,
     salesPrice: Number(l.purchasePrice) || 0,
     variantQuantities: l.variantQuantities,
+    batchNo: l.batchNo,
   }));
   return buildSalesBillPrintListRows(asSales, productMap, dictionaries);
 }
@@ -69,13 +71,17 @@ export function buildPurchaseBillPrintRenderContext(params: {
 
 /** 从同一采购单下的 PSI 行记录聚合为打印行输入 */
 export function buildPurchaseBillLinesFromPsiRecords(docItems: PsiRecord[]): PurchaseBillLineInput[] {
-  return groupPsiDocLines<PurchaseBillLineInput>(docItems, (lgId, first, _recs, hasVar, vq, lineQtyNoVar) => ({
-    id: lgId,
-    productId: first.productId,
-    quantity: hasVar ? undefined : lineQtyNoVar,
-    purchasePrice: Number(first.purchasePrice) || 0,
-    variantQuantities: hasVar ? vq : undefined,
-  }));
+  return groupPsiDocLines<PurchaseBillLineInput>(docItems, (lgId, first, _recs, hasVar, vq, lineQtyNoVar) => {
+    const bn = String(first.batchNo ?? (first as { batch?: string }).batch ?? '').trim();
+    return {
+      id: lgId,
+      productId: first.productId,
+      quantity: hasVar ? undefined : lineQtyNoVar,
+      purchasePrice: Number(first.purchasePrice) || 0,
+      variantQuantities: hasVar ? vq : undefined,
+      ...(bn ? { batchNo: bn } : {}),
+    };
+  });
 }
 
 export function buildPurchaseBillPrintContextFromPsiDoc(params: {

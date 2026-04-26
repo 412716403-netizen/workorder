@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import type { TenantPrismaClient } from '../lib/prisma.js';
 import { prisma as basePrisma } from '../lib/prisma.js';
 import { generateDocNo } from '../utils/docNumber.js';
@@ -5,6 +6,11 @@ import { nextOutsourceDocNoForPartner } from '../utils/partnerDocNumberServer.js
 import { genId } from '../utils/genId.js';
 import { sanitizeUpdate, sanitizeCreate, normalizeDates } from '../utils/request.js';
 import { calcUsageByWeight } from '../utils/bomMaterialUsageByWeight.js';
+import { withSerializableRetry } from '../utils/withSerializableRetry.js';
+import {
+  validateStockOutBatchOnWrite,
+  validateStockReturnBatchOnWrite,
+} from './productionStockBatchWriteValidation.js';
 
 /**
  * 外协收回 / 生产报工等"按 BOM 占比把录入的本次交货总重量分摊为各子物料实际消耗"的统一算子。
@@ -138,7 +144,28 @@ export async function createRecord(
     }
   }
 
-  const record = await db.productionOpRecord.create({ data });
+  const stockish = data.type === 'STOCK_OUT' || data.type === 'STOCK_RETURN';
+  const record = stockish
+    ? await withSerializableRetry(() =>
+        db.$transaction(
+          async tx => {
+            const txDb = tx as unknown as TenantPrismaClient;
+            await validateStockReturnBatchOnWrite(txDb, data as Record<string, unknown>);
+            await validateStockOutBatchOnWrite(txDb, data as Record<string, unknown>, undefined);
+            return tx.productionOpRecord.create({ data: data as any });
+          },
+          {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            maxWait: 10_000,
+            timeout: 60_000,
+          },
+        ),
+      )
+    : await (async () => {
+        await validateStockReturnBatchOnWrite(db, data as Record<string, unknown>);
+        await validateStockOutBatchOnWrite(db, data as Record<string, unknown>, undefined);
+        return db.productionOpRecord.create({ data });
+      })();
 
   if (data.type === 'OUTSOURCE' && data.status === '已收回' && !data.sourceReworkId) {
     await applyOutsourceProgress({ ...record, tenantId: tenantId ?? null });
@@ -157,7 +184,56 @@ export async function updateRecord(
 
   const data = sanitizeUpdate(body);
   normalizeDates(data);
-  const record = await db.productionOpRecord.update({ where: { id }, data });
+
+  const stockishUpdate = oldRecord.type === 'STOCK_OUT' || oldRecord.type === 'STOCK_RETURN';
+
+  const record = stockishUpdate
+    ? await withSerializableRetry(() =>
+        db.$transaction(
+          async tx => {
+            const txDb = tx as unknown as TenantPrismaClient;
+            if (oldRecord.type === 'STOCK_OUT') {
+              const merged: Record<string, unknown> = {
+                type: 'STOCK_OUT',
+                productId: data.productId !== undefined ? data.productId : oldRecord.productId,
+                warehouseId: data.warehouseId !== undefined ? data.warehouseId : oldRecord.warehouseId ?? '',
+                batchNo:
+                  data.batchNo !== undefined
+                    ? data.batchNo
+                    : (oldRecord as { batchNo?: string | null }).batchNo,
+                quantity: data.quantity !== undefined ? data.quantity : oldRecord.quantity,
+              };
+              await validateStockOutBatchOnWrite(txDb, merged, oldRecord.id);
+              if (typeof merged.batchNo === 'string' && merged.batchNo) {
+                (data as Record<string, unknown>).batchNo = merged.batchNo;
+              }
+            }
+            if (oldRecord.type === 'STOCK_RETURN') {
+              const mergedRet: Record<string, unknown> = {
+                type: 'STOCK_RETURN',
+                productId: data.productId !== undefined ? data.productId : oldRecord.productId,
+                warehouseId: data.warehouseId !== undefined ? data.warehouseId : oldRecord.warehouseId ?? '',
+                batchNo:
+                  data.batchNo !== undefined
+                    ? data.batchNo
+                    : (oldRecord as { batchNo?: string | null }).batchNo,
+                quantity: data.quantity !== undefined ? data.quantity : oldRecord.quantity,
+              };
+              await validateStockReturnBatchOnWrite(txDb, mergedRet);
+              if (typeof mergedRet.batchNo === 'string' && mergedRet.batchNo) {
+                (data as Record<string, unknown>).batchNo = mergedRet.batchNo;
+              }
+            }
+            return tx.productionOpRecord.update({ where: { id }, data });
+          },
+          {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            maxWait: 10_000,
+            timeout: 60_000,
+          },
+        ),
+      )
+    : await db.productionOpRecord.update({ where: { id }, data });
 
   if (oldRecord.type === 'OUTSOURCE' && oldRecord.status === '已收回' && oldRecord.docNo) {
     await syncOutsourceReportOnUpdate(oldRecord, record);
