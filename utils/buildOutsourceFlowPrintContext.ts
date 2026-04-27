@@ -8,8 +8,12 @@ import type {
   ProductionOrder,
   Product,
 } from '../types';
+import { buildMatrixJsonAndTotalQtyFromVariantLine } from './buildSalesBillPrintContext';
 import { formatLocalDateTimeZh, parseProductionOpTimestampMs } from './localDateTime';
 import { OUTSOURCE_DISPATCH_CUSTOM_DATA_KEY, OUTSOURCE_RECEIVE_CUSTOM_DATA_KEY } from './productionOpCollab/outsource';
+import { COLOR_SIZE_MATRIX_JSON_KEY } from './colorSizeMatrixPrint';
+
+const EMPTY_DICTIONARIES: AppDictionaries = { colors: [], sizes: [], units: [] };
 
 /** 外协/打印/列表共用：按产品 + 规格 id 解析颜色尺码标签 */
 export function formatOutsourceVariantLabel(
@@ -58,32 +62,63 @@ export function buildOutsourceFlowPrintContext(opts: {
 
   const byGroup = new Map<string, ProductionOpRecord[]>();
   for (const r of docRecords) {
-    const k = r.orderId ? `${r.orderId}|${r.nodeId ?? ''}|${r.variantId ?? ''}` : `${r.productId}|${r.nodeId ?? ''}|${r.variantId ?? ''}`;
+    const k = r.orderId ? `${r.orderId}|${r.nodeId ?? ''}` : `${r.productId}|${r.nodeId ?? ''}`;
     const arr = byGroup.get(k) ?? [];
     arr.push(r);
     byGroup.set(k, arr);
   }
 
+  const dict = dictionaries ?? EMPTY_DICTIONARIES;
+  const productMap = new Map(products.map(p => [p.id, p] as const));
+
   const printListRows: PrintListRow[] = [];
   let idx = 0;
   for (const recs of byGroup.values()) {
     const r0 = recs[0];
-    const qty = recs.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+    const qtySum = recs.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
     idx += 1;
     const order = r0.orderId ? orders.find(o => o.id === r0.orderId) : undefined;
-    const product = products.find(p => p.id === (order?.productId ?? r0.productId));
+    const productId = order?.productId ?? r0.productId;
+    const product = products.find(p => p.id === productId);
     const nodeName = r0.nodeId ? globalNodes.find(n => n.id === r0.nodeId)?.name ?? r0.nodeId : '—';
     const unitPrice = isReceiveDoc ? (r0.unitPrice ?? recs.find(x => x.unitPrice != null)?.unitPrice ?? 0) : undefined;
     const amount = isReceiveDoc ? recs.reduce((s, r) => s + (Number(r.amount) || 0), 0) : undefined;
+
+    const variantQuantities: Record<string, number> = {};
+    for (const r of recs) {
+      const vid = r.variantId?.trim();
+      if (!vid) continue;
+      variantQuantities[vid] = (variantQuantities[vid] ?? 0) + (Number(r.quantity) || 0);
+    }
+    const hasVariantQty = Object.keys(variantQuantities).length > 0;
+    const matrixSlice =
+      product &&
+      (hasVariantQty
+        ? buildMatrixJsonAndTotalQtyFromVariantLine({
+            productId,
+            productMap,
+            dictionaries: dict,
+            variantQuantities,
+          })
+        : buildMatrixJsonAndTotalQtyFromVariantLine({
+            productId,
+            productMap,
+            dictionaries: dict,
+            quantity: qtySum,
+          }));
+    const qty = matrixSlice?.totalQty ?? qtySum;
+
     printListRows.push({
       index: idx,
       orderNumber: order?.orderNumber ?? (r0.orderId ? r0.orderId : '—'),
       productName: product?.name ?? '—',
+      sku: product?.sku ?? '',
       nodeName,
-      variantLabel: variantLabelForRecord(r0, products, dictionaries),
+      variantLabel: hasVariantQty ? '' : variantLabelForRecord(r0, products, dictionaries),
       quantity: qty,
       unitPrice: unitPrice != null ? unitPrice : undefined,
       amount: amount != null ? amount : undefined,
+      ...(matrixSlice ? { [COLOR_SIZE_MATRIX_JSON_KEY]: matrixSlice.colorSizeMatrixJson } : {}),
     });
   }
 

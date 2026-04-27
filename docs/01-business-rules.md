@@ -258,12 +258,22 @@
   - `materialBreakdown` 固化每个子物料的 `ratio / actualWeight / theoreticalQty` 快照，避免后续改 BOM 后历史记录失真。
 - 消耗口径切换：`StockMaterialPanel` 的“报工耗材(理论)”列在对应工序开启后，自动改用 `materialBreakdown.actualWeight` 汇总；“结余”列（净领用 − 报工耗材）即反映真实物料损耗/结余。未开启工序维持原“件数 × BOM 用量”口径，两种模式可在同一产品不同工序并存。
 
+### 5.5 协作派发：乙方接收与产品分类
+
+**真源**：乙方租户侧 `POST /api/collaboration/subcontract-transfers/:id/accept` 的 `createProduct` 与既有产品同步逻辑（`collaboration.service`）。
+
+- **分类不由甲方 `payload.categoryName` 自动写库**：甲方名称仅作前端默认提示；乙方必须在「接受派发 / 新建本地产品」时明确 `categoryDecision`：`existing`（绑定已有分类）、`create`（新建分类）、`none`（不归类）。
+- **颜色尺码与批次互斥**：若乙方选择「既有分类」且该分类已启用批次管理（`categoryUsesBatchManagement`），则本次派发若带颜色/尺码矩阵，不得绑定该分类（前端置灰选项，后端亦拒绝将分类升级为 `hasColorSize` 当分类仍带批次语义时）。
+- **复用本地同名/SKU 产品**：接受时除同步色码字典外，可按同一 `categoryDecision` 补绑分类、或在新增色码时将分类 `hasColorSize` 升为 `true`（仍受上述互斥守卫约束）。
+- **外协链转发**：中间站转发给下游的派发 `payload.categoryName` 优先取**链头甲方**最早派发单上的分类名（与色码沿用链头一致），避免中间站本地分类名污染下游默认展示。
+- **规格标签归一**：协作侧颜色/尺码名称使用 `normalizeCollabSpecLabel`（NFKC + 折叠空白），前后端一致，减少重复字典项。
+
 ---
 
 ## 6. 待持续补充
 
 - 生产报工更细粒度规则
-- 协作 / 打印 / 码管理的业务规则补充
+- 打印 / 码管理的业务规则补充
 - 后续新增业务模块
 
 ---

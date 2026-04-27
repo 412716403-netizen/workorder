@@ -76,6 +76,20 @@ PrintRenderContext.virtualBatch
 标签预览 / 打印
 ```
 
+### 3.4 动态列表「颜色尺码数量」与 `colorSizeMatrixJson`
+
+动态列表中列类型为「颜色尺码数量」时，每行 `printListRows` 可携带 `colorSizeMatrixJson`（JSON：`sizes[]` + `colorRows[].quantities[]`），由 `components/print-editor/DynamicListMatrixTable.tsx` 以 HTML 表格 + rowspan 渲染。
+
+会在下列打印上下文的明细行中写入该字段（模板可选用矩阵列）：**销售单**、**计划单列表**、**采购订单 / 采购单 / 销售订单**（与销售单一致为「货号块」一行，不再按规格拆多行；旧模板若依赖 `行.colorName` / `行.sizeName` 分列需改为矩阵列或 `行.qty` 等）、**外协发出与收回**、**返工报工与处理不良**、**生产退料与外协领料发出/外协生产退料**、**生产入库批次**、**报工批次**、**工单详情打印**。例外：**生产领料**（`materialIssuePrint`）仍为扁平行，**不**写入 `colorSizeMatrixJson`。
+
+实现入口：`utils/buildSalesBillPrintContext.ts`（`buildSalesBillPrintListRowsByProductLine`、`buildMatrixJsonAndTotalQtyFromVariantLine`）、`utils/variantMatrixPrintRows.ts` 及各 `utils/build*PrintContext.ts`。
+
+### 3.5 动态列表下方元素的垂直推挤
+
+当列表实际内容高度超过画布上为该组件设定的高度时，**页眉 / 页脚不动**；**body 内**位于该动态列表**下方**（按 `y` 自上而下）的文本、线、图等元素会整体下移，下移量等于「内容所需高度 − 组件框高」，使模板里预留的相对间距在打印时仍成立。列表本身通过 `heightGrowMm` 增高以免裁切。
+
+估算规则与分页一致：`utils/printListPagination.ts` 导出 `dynamicListHeaderHeightMm`、`DYNAMIC_LIST_DEFAULT_BODY_ROW_MM`；未设置 `bodyRowHeightMm` 时用默认 **6mm/行**（矩阵行按 `matrixVisualSubRowCountForRow` 累计子行数）。实现见 `components/print-editor/printBodyVerticalPush.ts`，由 `PrintPaper.tsx` 在预览/打印时应用。
+
 ---
 
 ## 4. 打印上下文怎么工作

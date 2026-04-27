@@ -99,6 +99,26 @@
 
 但近期新增能力仍应继续核对迁移链完整性，避免 schema 已更新、migration 历史却无法完整复现。
 
+### 3.5 协作派发接受（现状要点）
+
+- 乙方 `POST /collaboration/subcontract-transfers/:id/accept` 主逻辑在 `backend/src/services/collaboration.service.ts` 内以 **`$transaction` 单事务**提交；与工单创建、协作 SKU 映射、色码字典写入同进同退。
+- 新建本地产品时的分类由 `createProduct.categoryDecision`（`existing | create | none`）显式表达；**不再**用甲方派发 `payload.categoryName` 自动建分类写库。
+- 字典并发：`dictionary_items` 上 `(tenant_id, type, name)` 唯一约束 + `upsert`，避免并行接受相同色码名时反复 P2002。
+- 外协链多站转发时，下游派发 `payload.categoryName` 可与色码一致，**优先沿用链头甲方**最早派发单上的值（见 `getOriginChainDispatchCategoryName`）。
+
+### 3.6 生产关联模式：读口径混读 + 后端硬校验（现状要点）
+
+- **读口径双路求和**：`order` 与 `product` 模式切换时为防数据"看起来消失"，前后端报工口径统一为 `combinedCompletedAtTemplate = PMP(同 product+template) + milestone.completedQuantity`。
+  - 已对齐：`ReportModal`、`OrderDetailModal` 工序表、`OrderListView` 产品组卡、后端 `GET /orders/:id/reportable`。
+  - 工单卡圆心采用 `items.quantity` 比例摊回 PMP 的**估算值**（hover tip 已标注），精确数字以产品维度详情为准。
+- **列表小卡 hover tooltip 增补外协未收回**：`OrderListView` 工单卡 / 产品组卡圆下数字保持原口径（`可报 - 已报`，不扣外协，避免日常列表数字反复跳动），**hover tooltip** 上额外追加「外协剩余 Z 件」作为补充信息，与 `ReportModal` 的"扣外协剩余"口径互补。产品模式下工单卡的外协未收回按 `items.quantity` 比例摊回（与 PMP 摊回对称），产品组卡合并产品维度 + 旗下所有工单维度的外协。
+- **写口径仍按当前模式分流**：`order` 写 `Milestone`/`MilestoneReport`；`product` 写 `ProductMilestoneProgress`/`ProductProgressReport`。
+- **后端硬校验**：`createReport` / `createProductReport` 在写入前调用 `enforceReportQuantity`，受 `SystemSetting.allowExceedMaxReportQty` 控制。`false` 时拒绝 `(已报+本次) > totalQty` 的请求；`true` 时完全放行。`product` 范围以该产品下 `Σ orders.totalQty` 为上限。
+- **OutsourcePanel 跨模式收回（方案 A）**：待收回清单（`outsourceReceiveRows`）与收货录入弹窗（`OutsourceReceiveQuantityModal`）按行级 `orderId` 决定 scope（"工单级 / 产品级"维度徽标），与当前 `productionLinkMode` 无关；写入仍保持"发出维度 = 收回维度"对称（工单级回写 `Milestone`，产品级回写 `PMP`）。模式切换不再造成"数据黑洞"。
+- **模式切换前提示**：`ProductionConfigTab` 切换 `productionLinkMode` / `processSequenceMode` 通过 `useConfirm` 弹出影响说明。
+- **工单删除（product 模式）**：前端不再跳过 `hasReport / relatedRecords / childOrders` 三项校验；当该产品有 PMP 累计已报工时，确认弹窗追加"删除单工单不会清除产品池进度"提示。
+- 详见 `docs/05-production-link-mode.md` §12-§15。
+
 ## 4. 数据归属原则
 
 后续继续开发时，建议统一遵守以下规则：

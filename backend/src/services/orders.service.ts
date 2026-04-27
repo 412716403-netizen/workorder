@@ -1,5 +1,5 @@
 import type { TenantPrismaClient } from '../lib/prisma.js';
-import { prisma as basePrisma } from '../lib/prisma.js';
+import { prisma as basePrisma, getTenantPrisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { generateReportNo } from '../utils/docNumber.js';
 import { genId } from '../utils/genId.js';
@@ -201,14 +201,26 @@ export async function createReport(
   milestoneId: string,
   body: Record<string, unknown>,
 ) {
-  await verifyMilestoneTenant(milestoneId, tenantId);
+  const verified = await verifyMilestoneTenant(milestoneId, tenantId);
   const reportNo = await generateReportNo('BG', tenantId);
 
   /** 报工称重：若工序开启 enableWeightOnReport 且传入 weight，拉当前 BOM 现算 breakdown，固化到报工记录 */
   const milestone = await basePrisma.milestone.findUnique({
     where: { id: milestoneId },
-    select: { templateId: true, productionOrder: { select: { productId: true } } },
+    select: { templateId: true, productionOrder: { select: { id: true, productId: true } } },
   });
+
+  // 报工最大数量硬校验（受 SystemSetting.allowExceedMaxReportQty 控制）
+  if (milestone?.productionOrder?.id && milestone.templateId) {
+    const db = getTenantPrisma(tenantId);
+    await enforceReportQuantity(db, tenantId, {
+      mode: 'order',
+      orderId: milestone.productionOrder.id,
+      templateId: milestone.templateId,
+      addQty: Number(body.quantity) || 0,
+    });
+  }
+  void verified;
   const weightPayload = milestone?.productionOrder?.productId
     ? await buildReportWeightBreakdown({
         productId: milestone.productionOrder.productId,
@@ -277,6 +289,24 @@ export async function deleteReport(
 
 // ── reportable ──
 
+/**
+ * 单产品 + 单工序模板下，PMP（产品池报工）的累计完成量。
+ * 关联产品模式下报工写入 PMP（不带 orderId），与工单 milestone 的 completedQuantity 互不重叠
+ * （详见 docs/05-production-link-mode.md）。计算「上道工序完成量」时必须把两路相加，否则会
+ * 在产品模式下漏算 PMP，导致 maxReportable / remaining 长期为 0。
+ */
+async function pmpCompletedAtTemplate(
+  db: TenantPrismaClient,
+  productId: string,
+  templateId: string,
+): Promise<number> {
+  const rows = await db.productMilestoneProgress.findMany({
+    where: { productId, milestoneTemplateId: templateId },
+    select: { completedQuantity: true },
+  });
+  return rows.reduce((s, p) => s + Number(p.completedQuantity ?? 0), 0);
+}
+
 export async function getReportable(db: TenantPrismaClient, orderId: string) {
   const order = await db.productionOrder.findUnique({
     where: { id: orderId },
@@ -289,11 +319,25 @@ export async function getReportable(db: TenantPrismaClient, orderId: string) {
 
   const totalQty = order.items.reduce((s, i) => s + Number(i.quantity), 0);
 
+  // 预拉所有工序的 PMP 完成量，避免循环里反复查
+  const pmpByTpl = new Map<string, number>();
+  await Promise.all(
+    order.milestones.map(async (m) => {
+      pmpByTpl.set(m.templateId, await pmpCompletedAtTemplate(db, order.productId, m.templateId));
+    }),
+  );
+  const combinedAt = (idx: number) => {
+    if (idx < 0) return totalQty;
+    const ms = order.milestones[idx];
+    return Number(ms.completedQuantity) + (pmpByTpl.get(ms.templateId) ?? 0);
+  };
+
   return order.milestones.map((ms, idx) => {
     const reported = ms.reports.reduce((s, r) => s + Number(r.quantity), 0);
     const defective = ms.reports.reduce((s, r) => s + Number(r.defectiveQuantity), 0);
-    const prevCompleted =
-      idx > 0 ? Number(order.milestones[idx - 1].completedQuantity) : totalQty;
+    // 上道完成量：PMP（产品池）+ milestone（本工单）合并；首道用工单总量
+    const prevCompleted = idx > 0 ? combinedAt(idx - 1) : totalQty;
+    const reportedCombined = reported + (pmpByTpl.get(ms.templateId) ?? 0);
     return {
       milestoneId: ms.id,
       templateId: ms.templateId,
@@ -302,9 +346,77 @@ export async function getReportable(db: TenantPrismaClient, orderId: string) {
       reported,
       defective,
       maxReportable: prevCompleted - defective,
-      remaining: prevCompleted - reported,
+      remaining: prevCompleted - reportedCombined,
     };
   });
+}
+
+// ── 报工硬校验 ──
+
+/**
+ * 后端报工"最大可报数量"硬校验（兜底）：
+ * - 受 SystemSetting.allowExceedMaxReportQty 控制：true 时**完全跳过**校验（业务允许超报）；
+ *   false 时执行下面的兜底口径。
+ * - 兜底口径（保守）：`已报 + 本次报 ≤ 工单总量（或该产品全部工单总量）`。
+ *   不复刻前端的 sequential / 不良 / 返工等精确口径——前端 ReportModal 已做精确校验，
+ *   后端这里只做"防止 API 直连绕过前端时的明显越界"，避免后端在不知道顺序模式的情况下误拦
+ *   合法报工。
+ * - 已报 = milestone.reports 累计 + PMP.completedQuantity（两路合并，与 getReportable 一致）。
+ */
+async function enforceReportQuantity(
+  db: TenantPrismaClient,
+  tenantId: string,
+  scope:
+    | { mode: 'order'; orderId: string; templateId: string; addQty: number }
+    | { mode: 'product'; productId: string; templateId: string; addQty: number },
+): Promise<void> {
+  if (!(scope.addQty > 0)) return;
+  const setting = await basePrisma.systemSetting.findUnique({
+    where: { tenantId_key: { tenantId, key: 'allowExceedMaxReportQty' } },
+  });
+  const allowExceed = setting?.value === true;
+  if (allowExceed) return;
+
+  if (scope.mode === 'order') {
+    const order = await db.productionOrder.findUnique({
+      where: { id: scope.orderId },
+      include: { items: true, milestones: { include: { reports: true } } },
+    });
+    if (!order) throw new AppError(404, '工单不存在');
+    const totalQty = order.items.reduce((s, i) => s + Number(i.quantity), 0);
+    const ms = order.milestones.find((m) => m.templateId === scope.templateId);
+    if (!ms) throw new AppError(404, '工序不存在');
+    const reported = ms.reports.reduce((s, r) => s + Number(r.quantity), 0);
+    const pmpReported = await pmpCompletedAtTemplate(db, order.productId, scope.templateId);
+    if (reported + pmpReported + scope.addQty > totalQty) {
+      throw new AppError(
+        400,
+        `本次报工 ${scope.addQty} 件 + 已报 ${reported + pmpReported} 件 已超过工单总量 ${totalQty} 件，且系统未开启「允许超过最大可报数量」。`,
+      );
+    }
+    return;
+  }
+
+  const orders = await db.productionOrder.findMany({
+    where: { productId: scope.productId },
+    include: { items: true, milestones: { include: { reports: true } } },
+  });
+  const totalQty = orders.reduce(
+    (s, o) => s + o.items.reduce((a, i) => a + Number(i.quantity), 0),
+    0,
+  );
+  let reported = 0;
+  for (const o of orders) {
+    const ms = o.milestones.find((m) => m.templateId === scope.templateId);
+    if (ms) reported += ms.reports.reduce((s, r) => s + Number(r.quantity), 0);
+  }
+  const pmpReported = await pmpCompletedAtTemplate(db, scope.productId, scope.templateId);
+  if (reported + pmpReported + scope.addQty > totalQty) {
+    throw new AppError(
+      400,
+      `本次报工 ${scope.addQty} 件 + 该产品已报 ${reported + pmpReported} 件 已超过该产品全部工单总量 ${totalQty} 件，且系统未开启「允许超过最大可报数量」。`,
+    );
+  }
 }
 
 // ── product progress ──
@@ -333,6 +445,14 @@ export async function createProductReport(
   body: Record<string, unknown>,
 ) {
   const { productId, variantId, milestoneTemplateId, ...reportData } = body;
+
+  // 报工最大数量硬校验（受 SystemSetting.allowExceedMaxReportQty 控制）
+  await enforceReportQuantity(db, tenantId, {
+    mode: 'product',
+    productId: productId as string,
+    templateId: milestoneTemplateId as string,
+    addQty: Number(reportData.quantity) || 0,
+  });
 
   let progress = await db.productMilestoneProgress.findFirst({
     where: {

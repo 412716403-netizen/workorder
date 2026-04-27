@@ -40,8 +40,6 @@ export interface OutsourceDispatchQuantityModalProps {
   dispatchSelectedKeys: Set<string>;
   dispatchPartnerName: string;
   setDispatchPartnerName: React.Dispatch<React.SetStateAction<string>>;
-  dispatchRemark: string;
-  setDispatchRemark: React.Dispatch<React.SetStateAction<string>>;
   dispatchFormQuantities: Record<string, number>;
   setDispatchFormQuantities: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   orders: ProductionOrder[];
@@ -279,8 +277,6 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
   dispatchSelectedKeys,
   dispatchPartnerName,
   setDispatchPartnerName,
-  dispatchRemark,
-  setDispatchRemark,
   dispatchFormQuantities,
   setDispatchFormQuantities,
   orders,
@@ -339,22 +335,16 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
         </div>
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">单据基本信息</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">外协工厂</label>
-              <SupplierSelect
-                options={partners}
-                categories={partnerCategories}
-                value={dispatchPartnerName}
-                onChange={name => setDispatchPartnerName(name)}
-                placeholder="搜索并选择外协工厂..."
-                triggerClassName={`${psiOrderBillFormPartnerTriggerClassCompact} bg-white border border-slate-200`}
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">备注说明</label>
-              <input type="text" value={dispatchRemark} onChange={e => setDispatchRemark(e.target.value)} placeholder="选填" className="w-full h-[52px] rounded-xl border border-slate-200 py-3 px-4 text-sm font-bold text-slate-800 bg-white focus:ring-2 focus:ring-indigo-500 outline-none placeholder:text-slate-400" />
-            </div>
+          <div className="max-w-xl space-y-1.5">
+            <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">外协工厂</label>
+            <SupplierSelect
+              options={partners}
+              categories={partnerCategories}
+              value={dispatchPartnerName}
+              onChange={name => setDispatchPartnerName(name)}
+              placeholder="搜索并选择外协工厂..."
+              triggerClassName={`${psiOrderBillFormPartnerTriggerClassCompact} bg-white border border-slate-200`}
+            />
           </div>
           {dispatchCustomFieldDefs.length > 0 && setDispatchCustomValues ? (
             <div className="mt-4 space-y-3 rounded-xl border border-slate-100 bg-white/80 p-4">
@@ -376,12 +366,7 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
           ) : null}
         </div>
         <div className="flex-1 overflow-auto min-h-0 p-6">
-          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">商品明细</h4>
-          <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-            {productionLinkMode === 'product'
-              ? '有颜色尺码的产品按规格录入委外数量。每格「最多」与工单中心 · 关联产品报工该工序一致（规格级可报良品余量，已扣本工序已报良品；再扣本规格已外协未收回）。无规格区分的单规格产品可填合计。'
-              : '有颜色尺码的工单按规格录入。每格「最多」与该工序可报最多数量一致（顺序模式以前工序该规格完成量为基数），再扣已报良品及已外协未收回。'}
-          </p>
+          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">商品明细</h4>
           <div className="space-y-8">
           {outsourceDispatchRows.filter(row => dispatchSelectedKeys.has(row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}`)).map(row => {
             const dispatchRowKey = row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}`;

@@ -1,5 +1,5 @@
 import type { AppDictionaries, PrintListRow, PrintRenderContext, Product, PurchaseOrderPrintContext, PsiRecord } from '../types';
-import { buildSalesBillPrintListRows, type SalesBillLineInput } from './buildSalesBillPrintContext';
+import { buildSalesBillPrintListRowsByProductLine, type SalesBillLineInput } from './buildSalesBillPrintContext';
 import { sumPsiLineQty, sumPsiLineAmount, groupPsiDocLines } from './psiPrintShared';
 
 export type PurchaseOrderLineInput = {
@@ -23,7 +23,7 @@ export function buildPurchaseOrderPrintListRows(
     salesPrice: Number(l.purchasePrice) || 0,
     variantQuantities: l.variantQuantities,
   }));
-  return buildSalesBillPrintListRows(asSales, productMap, dictionaries);
+  return buildSalesBillPrintListRowsByProductLine(asSales, productMap, dictionaries);
 }
 
 /**

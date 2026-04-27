@@ -39,6 +39,7 @@ import { ScanInputButton } from '../../components/scan/ScanInputButton';
 import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
 import type { ScanPayload } from '../../utils/scanPayload';
 import { fmtDT } from '../../utils/formatTime';
+import { buildOneBlockMatrixPrintRows } from '../../utils/variantMatrixPrintRows';
 
 /** 将入库登记自定义字段写入 production_op_records.collabData.stockInCustomData */
 function stockInCollabFromCustomData(customData: Record<string, unknown> | undefined): { collabData?: Record<string, unknown> } {
@@ -1361,11 +1362,13 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                                     totalQty: detailBatch.totalQty,
                                     custom: detailBatch.stockInCustomSnapshot ?? {},
                                   },
-                                  printListRows: detailBatch.rows.map((r, i) => ({
-                                    index: i + 1,
-                                    variantLabel: getVariantLabel(r.variantId),
-                                    quantity: r.quantity,
-                                  })),
+                                  printListRows: buildOneBlockMatrixPrintRows({
+                                    productId: detailBatch.first.productId,
+                                    product: product ?? undefined,
+                                    products,
+                                    dictionaries,
+                                    rows: detailBatch.rows.map(r => ({ variantId: r.variantId, quantity: r.quantity })),
+                                  }),
                                 };
                               }}
                               pickerSubtitle={`入库单 ${detailBatch.docNo}`}

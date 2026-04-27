@@ -151,8 +151,9 @@ const DefectTreatmentFlowDetailModal: React.FC<DefectTreatmentFlowDetailModalPro
         orders,
         products,
         globalNodes,
+        dictionaries,
       }),
-    [productionLinkMode, detailBatch, records, orders, products, globalNodes],
+    [productionLinkMode, detailBatch, records, orders, products, globalNodes, dictionaries],
   );
 
   if (!first) return null;

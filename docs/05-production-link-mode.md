@@ -214,6 +214,61 @@
 2. 统一看板、打印、生产操作在两种模式下的字段口径
 3. 避免出现“前端页面按产品模式展示，后端统计仍按工单模式计算”的漂移
 4. 把模式分支沉淀为更稳定的 hooks / service / 文档结构，而不是散落在超大页面里
+5. 工单卡圆心圆周已报量在 `product` 模式下采用 PMP 按 `items.quantity` 比例摊回的**估算值**，精确数字以产品维度详情为准
+
+---
+
+## 12. 关键计算口径（混读规则）
+
+为避免模式切换时进度数据"看起来消失"，前后端采取**一致的"PMP + milestone 双路求和"读口径**：
+
+| 入口 | 已报口径 | 剩余口径 | 备注 |
+|------|----------|----------|------|
+| `ReportModal`（工单维度报工） | `combinedCompletedAtTemplate` = PMP(同 product+template) + milestone.completedQuantity | `可报最多 - 已报 - 外协未收回`；外协未收回单独显示 | 写入仍按当前模式分流到 PMP 或 milestone |
+| `OrderDetailModal` 工序进度表 | 同上 | — | 与 `ReportModal` 完全一致 |
+| `OrderListView` 工单卡圆心 | milestone + (PMP × `items.quantity / Σorders.totalQty` 比例摊回) | 圆下数字仍为 `可报 - 已报`（不扣外协）；**hover tooltip** 追加「外协剩余 Z 件」作为补充信息 | **估算值**，仅展示用 |
+| `OrderListView` 产品组卡 | PMP + 该产品下所有工单 milestone 求和 | 同上，外协合并产品维度 + 旗下所有工单维度后只在 tooltip 显示 | 精确值 |
+| 后端 `GET /orders/:id/reportable` | PMP(同 product+template) + milestone.completedQuantity | — | 与前端口径完全一致 |
+
+写口径仍按当前 `productionLinkMode` 分流：
+- `order` 模式：写 `Milestone` + `MilestoneReport`
+- `product` 模式：写 `ProductMilestoneProgress` + `ProductProgressReport`
+
+切回旧模式时**新增数据**走旧路径，但**历史数据保留在 PMP**，因此读口径必须双路合并才不会"丢"。
+
+---
+
+## 13. 后端硬校验
+
+`createReport` / `createProductReport` 在写入前调用 `enforceReportQuantity`：
+
+- 受 `SystemSetting.allowExceedMaxReportQty` 控制
+- `false`（默认）：拒绝 `(已报+本次) > totalQty` 的请求，防止前端校验被绕过
+- `true`：完全放行，由业务自行决定是否超报
+- `order` 范围以 `ProductionOrder.totalQty` 为上限
+- `product` 范围以该产品下所有工单 `Σ totalQty` 为上限
+
+这是一道**保守兜底**，复杂的顺序工序 / 不良 / 返工细粒度规则仍由前端按场景计算。
+
+---
+
+## 14. 模式切换前的提示
+
+`views/settings/ProductionConfigTab.tsx` 切换 `productionLinkMode` / `processSequenceMode` 时使用 `useConfirm` 弹出影响说明，避免用户在不了解数据归属变化的情况下切换。
+
+---
+
+## 15. 外协跨模式收回（方案 A）
+
+`views/production-ops/OutsourcePanel.tsx` 的待收回清单（`outsourceReceiveRows`）以及收货录入弹窗（`OutsourceReceiveQuantityModal`）已脱离当前 `productionLinkMode`，改为按发出单原始 `orderId` 决定**行的"维度"**：
+
+- `orderId` 非空：**工单级**，按 `orderId|nodeId` 聚合；收回写回 `Milestone` + `MilestoneReport`
+- `orderId` 为空：**产品级**，按 `productId|nodeId|partner` 聚合；收回写回 `ProductMilestoneProgress` + `ProductProgressReport`
+
+UI 在「待收回清单」和「收货录入」两处都增加「维度」徽标（工单级 / 产品级），用户可在任一模式下看到并收回所有未完成发出单，避免模式切换造成的"数据黑洞"。  
+"发出维度 = 收回维度"是核心不变量：工单级发出 → 工单级收回写回工单进度；产品级发出 → 产品级收回写回 PMP。
+
+详细数据结构与提交链路见 `docs/02-data-structures.md` 与 `docs/06-current-architecture-and-migration-status.md`。
 
 ---
 

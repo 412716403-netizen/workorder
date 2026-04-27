@@ -119,7 +119,6 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
   const [dispatchSelectedKeys, setDispatchSelectedKeys] = useState<Set<string>>(new Set());
   const [dispatchFormModalOpen, setDispatchFormModalOpen] = useState(false);
   const [dispatchFormQuantities, setDispatchFormQuantities] = useState<Record<string, number>>({});
-  const [dispatchRemark, setDispatchRemark] = useState('');
   const [collabSyncConfirm, setCollabSyncConfirm] = useState<{
     partnerName: string;
     collaborationTenantId: string;
@@ -133,7 +132,6 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
   const [receiveFormUnitPrices, setReceiveFormUnitPrices] = useState<Record<string, number>>({});
   /** 外协收货按工序开关录入的本次交货总重量（kg），baseKey 维度，用于 BOM 占比分摊 */
   const [receiveFormWeights, setReceiveFormWeights] = useState<Record<string, number>>({});
-  const [receiveFormRemark, setReceiveFormRemark] = useState('');
   const [receiveModal, setReceiveModal] = useState<{ orderId?: string; nodeId: string; productId: string; orderNumber?: string; productName: string; milestoneName: string; partner: string; pendingQty: number } | null>(null);
   const [receiveQty, setReceiveQty] = useState(0);
   const [flowDetailKey, setFlowDetailKey] = useState<string | null>(null);
@@ -200,9 +198,12 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
     if (isProductMode) {
       const dispatchedByKey: Record<string, number> = {};
       const receivedByKey: Record<string, number> = {};
+      // 全收：产品模式下按 productId|nodeId 聚合，无论记录是否绑工单（orderId）。
+      // 这样原 order 模式产生的外协单也能在切到 product 模式后被纳入产品维度统计，
+      // 避免切换模式后"已发外协凭空消失"。聚合 key 用 productId|nodeId，无双计风险。
       outsourceRecords.forEach(r => {
         if (!r.nodeId) return;
-        if (r.orderId) return;
+        if (!r.productId) return;
         const key = `${r.productId}|${r.nodeId}`;
         if (r.status === '加工中') dispatchedByKey[key] = (dispatchedByKey[key] ?? 0) + r.quantity;
         else if (r.status === '已收回') receivedByKey[key] = (receivedByKey[key] ?? 0) + r.quantity;
@@ -322,90 +323,102 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
     });
   }, [productionLinkMode, records, orders, products, globalNodes, productMilestoneProgresses, processSequenceMode, defectiveReworkByOrderForOutsource, idx]);
 
+  /**
+   * 待收回清单：跨模式全收（方案 A）。
+   *
+   * 行的"维度"由发出单原始 `orderId` 决定，与当前 `productionLinkMode` **无关**。
+   * - 工单级（`orderId` 非空）：聚合 key 为 `orderId|nodeId`
+   * - 产品级（`orderId` 空）：聚合 key 为 `productId|nodeId|partner`
+   *
+   * 这样模式切换后，历史发出单仍能在任一模式下被看到、被收回；
+   * 收回写入仍按发出单原模式分流（`handleReceiveFormSubmit` 内按 `row.orderId == null` 决定），
+   * 保持发出/收回对称的核心不变量。
+   */
   const outsourceReceiveRows = useMemo(() => {
     const outsourceRecords = records.filter(r => r.type === 'OUTSOURCE' && !r.sourceReworkId);
-    const isProductMode = productionLinkMode === 'product';
+    const byKey: Record<string, { scope: 'order' | 'product'; orderId?: string; productId: string; nodeId: string; partner: string; dispatched: number; received: number }> = {};
 
-    if (isProductMode) {
-      const byKey: Record<string, { dispatched: number; received: number; partner: string }> = {};
-      outsourceRecords.forEach(r => {
-        if (r.orderId || !r.nodeId || !r.productId) return;
-        const key = `${r.productId}|${r.nodeId}|${r.partner ?? ''}`;
-        if (!byKey[key]) byKey[key] = { dispatched: 0, received: 0, partner: r.partner ?? '' };
-        if (r.status === '加工中') { byKey[key].dispatched += r.quantity; }
-        else if (r.status === '已收回') byKey[key].received += r.quantity;
-      });
-      const rows: { orderId?: string; nodeId: string; productId: string; orderNumber?: string; productName: string; milestoneName: string; partner: string; dispatched: number; received: number; pending: number }[] = [];
-      Object.entries(byKey).forEach(([key, v]) => {
-        const pending = v.dispatched - v.received;
-        if (pending <= 0) return;
-        const [productId, nodeId] = key.split('|');
-        const product = idx.productsById.get(productId);
-        const node = idx.nodesById.get(nodeId);
+    outsourceRecords.forEach(r => {
+      if (!r.nodeId) return;
+      if (r.orderId) {
+        const k = `O|${r.orderId}|${r.nodeId}`;
+        if (!byKey[k]) {
+          const order = idx.ordersById.get(r.orderId);
+          if (!order) return;
+          byKey[k] = { scope: 'order', orderId: r.orderId, productId: order.productId, nodeId: r.nodeId, partner: r.partner ?? '', dispatched: 0, received: 0 };
+        }
+        if (r.status === '加工中') byKey[k].dispatched += r.quantity;
+        else if (r.status === '已收回') byKey[k].received += r.quantity;
+      } else if (r.productId) {
+        const k = `P|${r.productId}|${r.nodeId}|${r.partner ?? ''}`;
+        if (!byKey[k]) byKey[k] = { scope: 'product', productId: r.productId, nodeId: r.nodeId, partner: r.partner ?? '', dispatched: 0, received: 0 };
+        if (r.status === '加工中') byKey[k].dispatched += r.quantity;
+        else if (r.status === '已收回') byKey[k].received += r.quantity;
+      }
+    });
+
+    const rows: { orderId?: string; nodeId: string; productId: string; orderNumber?: string; productName: string; milestoneName: string; partner: string; dispatched: number; received: number; pending: number }[] = [];
+    Object.values(byKey).forEach(v => {
+      const pending = v.dispatched - v.received;
+      if (pending <= 0) return;
+      if (v.scope === 'order' && v.orderId) {
+        const order = idx.ordersById.get(v.orderId);
+        if (!order) return;
+        const ms = order.milestones.find(m => m.templateId === v.nodeId);
+        const product = idx.productsById.get(order.productId);
         rows.push({
-          nodeId,
-          productId,
-          productName: product?.name ?? '—',
-          milestoneName: node?.name ?? nodeId,
+          orderId: v.orderId,
+          nodeId: v.nodeId,
+          productId: order.productId,
+          orderNumber: order.orderNumber,
+          productName: product?.name ?? order.productName ?? '—',
+          milestoneName: ms?.name ?? v.nodeId,
           partner: v.partner,
           dispatched: v.dispatched,
           received: v.received,
           pending,
         });
-      });
-      return rows.sort((a, b) => {
-        const d = productNewestOrderCreatedMs(b.productId, orders) - productNewestOrderCreatedMs(a.productId, orders);
-        if (d !== 0) return d;
-        if (a.productId !== b.productId) return a.productId.localeCompare(b.productId);
-        const pa = idx.productsById.get(a.productId);
-        const pb = idx.productsById.get(b.productId);
-        const ni = milestoneIndexInProduct(pa, a.nodeId) - milestoneIndexInProduct(pb, b.nodeId);
-        if (ni !== 0) return ni;
-        return (a.partner || '').localeCompare(b.partner || '');
-      });
-    }
+      } else {
+        const product = idx.productsById.get(v.productId);
+        const node = idx.nodesById.get(v.nodeId);
+        rows.push({
+          nodeId: v.nodeId,
+          productId: v.productId,
+          productName: product?.name ?? '—',
+          milestoneName: node?.name ?? v.nodeId,
+          partner: v.partner,
+          dispatched: v.dispatched,
+          received: v.received,
+          pending,
+        });
+      }
+    });
 
-    const byKey: Record<string, { dispatched: number; received: number; partner: string }> = {};
-    outsourceRecords.forEach(r => {
-      if (!r.orderId || !r.nodeId) return;
-      const key = `${r.orderId}|${r.nodeId}`;
-      if (!byKey[key]) byKey[key] = { dispatched: 0, received: 0, partner: r.partner ?? '' };
-      if (r.status === '加工中') { byKey[key].dispatched += r.quantity; }
-      else if (r.status === '已收回') byKey[key].received += r.quantity;
-    });
-    const rows: { orderId?: string; nodeId: string; productId: string; orderNumber?: string; productName: string; milestoneName: string; partner: string; dispatched: number; received: number; pending: number }[] = [];
-    Object.entries(byKey).forEach(([key, v]) => {
-      const pending = v.dispatched - v.received;
-      if (pending <= 0) return;
-      const [orderId, nodeId] = key.split('|');
-      const order = idx.ordersById.get(orderId);
-      if (!order) return;
-      const ms = order.milestones.find(m => m.templateId === nodeId);
-      const product = idx.productsById.get(order.productId);
-      rows.push({
-        orderId,
-        nodeId,
-        productId: order.productId,
-        orderNumber: order.orderNumber,
-        productName: product?.name ?? order.productName ?? '—',
-        milestoneName: ms?.name ?? nodeId,
-        partner: v.partner,
-        dispatched: v.dispatched,
-        received: v.received,
-        pending,
-      });
-    });
+    /** 排序：工单级按工单创建时间倒序在前；产品级按产品下最新工单倒序在后；并列再按工序顺序、厂商。 */
     return rows.sort((a, b) => {
-      const oa = a.orderId ? idx.ordersById.get(a.orderId) : undefined;
-      const ob = b.orderId ? idx.ordersById.get(b.orderId) : undefined;
-      const d = orderCreatedMs(ob!) - orderCreatedMs(oa!);
+      const aIsOrder = a.orderId != null;
+      const bIsOrder = b.orderId != null;
+      if (aIsOrder !== bIsOrder) return aIsOrder ? -1 : 1;
+      if (aIsOrder && bIsOrder) {
+        const oa = idx.ordersById.get(a.orderId!);
+        const ob = idx.ordersById.get(b.orderId!);
+        const d = orderCreatedMs(ob!) - orderCreatedMs(oa!);
+        if (d !== 0) return d;
+        const ma = milestoneIndexInOrder(oa, a.nodeId);
+        const mb = milestoneIndexInOrder(ob, b.nodeId);
+        if (ma !== mb) return ma - mb;
+        return (a.orderNumber || '').localeCompare(b.orderNumber || '');
+      }
+      const d = productNewestOrderCreatedMs(b.productId, orders) - productNewestOrderCreatedMs(a.productId, orders);
       if (d !== 0) return d;
-      const ma = milestoneIndexInOrder(oa, a.nodeId);
-      const mb = milestoneIndexInOrder(ob, b.nodeId);
-      if (ma !== mb) return ma - mb;
-      return (a.orderNumber || '').localeCompare(b.orderNumber || '');
+      if (a.productId !== b.productId) return a.productId.localeCompare(b.productId);
+      const pa = idx.productsById.get(a.productId);
+      const pb = idx.productsById.get(b.productId);
+      const ni = milestoneIndexInProduct(pa, a.nodeId) - milestoneIndexInProduct(pb, b.nodeId);
+      if (ni !== 0) return ni;
+      return (a.partner || '').localeCompare(b.partner || '');
     });
-  }, [productionLinkMode, records, orders, products, globalNodes, productMilestoneProgresses, idx]);
+  }, [records, orders, products, globalNodes, productMilestoneProgresses, idx]);
 
   /**
    * 外协收货模态框打开时，按「合作单位 + 商品 + 工序」查询上次收回单价；
@@ -438,7 +451,9 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
   const outsourceStatsByOrder = useMemo(() => {
     const isProductMode = productionLinkMode === 'product';
     if (isProductMode) {
-      const outsourceRecs = records.filter(r => r.type === 'OUTSOURCE' && !r.sourceReworkId && !r.orderId && r.partner && r.productId);
+      // 全收：产品模式下不再因 r.orderId 存在而排除——原 order 模式产生的外协单也按其 productId 归到产品维度。
+      // 仍按 productId|partner|nodeId 聚合，避免双计。
+      const outsourceRecs = records.filter(r => r.type === 'OUTSOURCE' && !r.sourceReworkId && r.partner && r.productId);
       const byKey: Record<string, { productId: string; partner: string; nodeId: string; dispatched: number; received: number }> = {};
       outsourceRecs.forEach(r => {
         const nodeId = r.nodeId ?? '';
@@ -552,7 +567,8 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
 
   const outsourceFlowSummaryRows = useMemo(() => {
     const isProductMode = productionLinkMode === 'product';
-    const outsourceList = isProductMode ? records.filter(r => r.type === 'OUTSOURCE' && !r.sourceReworkId && !r.orderId) : records.filter(r => r.type === 'OUTSOURCE' && !r.sourceReworkId);
+    // 外协流水汇总：产品模式下全收（无论 r.orderId 是否为空），让切到产品模式后历史 order 模式流水也可见。
+    const outsourceList = records.filter(r => r.type === 'OUTSOURCE' && !r.sourceReworkId);
 
     if (isProductMode) {
       const key = (docNo: string, productId: string) => `${docNo}|${productId}`;
@@ -580,13 +596,12 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
           const dateStr = earliest?.timestamp ? (() => { try { const d = new Date(earliest.timestamp); return isNaN(d.getTime()) ? earliest.timestamp : d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); } catch { return earliest.timestamp; } })() : '—';
           const partner = row.records[0]?.partner ?? '—';
           const totalQuantity = row.records.reduce((s, r) => s + r.quantity, 0);
-          const remark = row.records.map(r => r.reason).filter(Boolean)[0] ?? '—';
           const nodeNames = [...new Set(row.records.map(r => r.nodeId).filter(Boolean))].map(nid => idx.nodesById.get(nid)?.name ?? nid);
           const milestoneStr = nodeNames.length ? nodeNames.join('、') : '—';
           const hasDispatch = row.records.some(r => r.status !== '已收回');
           const hasReceive = row.records.some(r => r.status === '已收回');
           const typeStr = hasDispatch && hasReceive ? '发出、收回' : hasDispatch ? '发出' : '收回';
-          return { ...row, orderId: '', orderNumber: '', records: sorted, dateStr, partner, totalQuantity, remark, milestoneStr, typeStr };
+          return { ...row, orderId: '', orderNumber: '', records: sorted, dateStr, partner, totalQuantity, milestoneStr, typeStr };
         })
         .sort((a, b) => {
           const ta = flowRecordsEarliestMs(a.records);
@@ -630,13 +645,12 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
         const dateStr = earliest?.timestamp ? (() => { try { const d = new Date(earliest.timestamp); return isNaN(d.getTime()) ? earliest.timestamp : d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); } catch { return earliest.timestamp; } })() : '—';
         const partner = row.records[0]?.partner ?? '—';
         const totalQuantity = row.records.reduce((s, r) => s + r.quantity, 0);
-        const remark = row.records.map(r => r.reason).filter(Boolean)[0] ?? '—';
         const nodeNames = [...new Set(row.records.map(r => r.nodeId).filter(Boolean))].map(nid => idx.nodesById.get(nid)?.name ?? nid);
         const milestoneStr = nodeNames.length ? nodeNames.join('、') : '—';
         const hasDispatch = row.records.some(r => r.status !== '已收回');
         const hasReceive = row.records.some(r => r.status === '已收回');
         const typeStr = hasDispatch && hasReceive ? '发出、收回' : hasDispatch ? '发出' : '收回';
-        return { ...row, records: sorted, dateStr, partner, totalQuantity, remark, milestoneStr, typeStr };
+        return { ...row, records: sorted, dateStr, partner, totalQuantity, milestoneStr, typeStr };
       })
       .sort((a, b) => {
         const ta = flowRecordsEarliestMs(a.records);
@@ -682,7 +696,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
           type: 'OUTSOURCE',
           productId,
           quantity: qty,
-          reason: dispatchRemark.trim() || undefined,
+          reason: undefined,
           operator: docOperator,
           timestamp,
           status: '加工中',
@@ -702,7 +716,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
           orderId,
           productId: order.productId,
           quantity: qty,
-          reason: dispatchRemark.trim() || undefined,
+          reason: undefined,
           operator: docOperator,
           timestamp,
           status: '加工中',
@@ -724,7 +738,6 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
     const collabTenantId = matchedPartner?.collaborationTenantId;
 
     setDispatchFormQuantities({});
-    setDispatchRemark('');
     setDispatchPartnerName('');
     setDispatchFormModalOpen(false);
     setOutsourceModal(null);
@@ -774,19 +787,54 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
   const productReceiveRowKey = (r: { productId: string; nodeId: string; partner?: string }) =>
     `${r.productId}|${r.nodeId}|${r.partner ?? ''}`;
 
+  /**
+   * 解析 receiveFormQuantities 的 entry key，返回命中的 row 与 scope。
+   * 与当前 productionLinkMode 无关，仅按 row 自身 `orderId` 决定 scope（方案 A）。
+   *
+   * key 形态：
+   * - product 无变体：`productId|nodeId|partner`
+   * - product 变体：`productId|nodeId|partner${RECEIVE_VARIANT_SEP}variantId`
+   * - order 无变体：`orderId|nodeId`
+   * - order 变体：`orderId|nodeId|variantId`
+   *
+   * 3 段 key 的歧义：先按 product baseKey 命中尝试，否则按 order 解析。
+   */
+  const resolveReceiveEntry = (
+    key: string,
+  ): {
+    row: typeof outsourceReceiveRows[number];
+    isProductScope: boolean;
+    baseKey: string;
+    variantId?: string;
+  } | null => {
+    if (key.includes(RECEIVE_VARIANT_SEP)) {
+      const [baseK, variantId] = key.split(RECEIVE_VARIANT_SEP);
+      const row = outsourceReceiveRows.find(r => r.orderId == null && productReceiveRowKey(r) === baseK);
+      if (row) return { row, isProductScope: true, baseKey: baseK!, variantId };
+      return null;
+    }
+    const productRow = outsourceReceiveRows.find(r => r.orderId == null && productReceiveRowKey(r) === key);
+    if (productRow) return { row: productRow, isProductScope: true, baseKey: key };
+    const parts = key.split('|');
+    const orderId = parts[0];
+    const nodeId = parts[1];
+    const variantId = parts[2];
+    const orderRow = outsourceReceiveRows.find(r => r.orderId === orderId && r.nodeId === nodeId);
+    if (orderRow) return { row: orderRow, isProductScope: false, baseKey: `${orderId}|${nodeId}`, variantId };
+    return null;
+  };
+
   const handleReceiveFormSubmit = () => {
     const entries = (Object.entries(receiveFormQuantities) as [string, number][]).filter(([, qty]) => qty > 0);
     if (entries.length === 0) {
       toast.warning('请至少填写一项收回数量。');
       return;
     }
-    const isProductMode = productionLinkMode === 'product';
     for (const [key, qty] of entries) {
-      const parts = key.split('|');
-      if (isProductMode) {
-        const baseK = key.includes(RECEIVE_VARIANT_SEP) ? key.split(RECEIVE_VARIANT_SEP)[0]! : key;
-        const row = outsourceReceiveRows.find(r => r.orderId == null && productReceiveRowKey(r) === baseK);
-        if (!row) continue;
+      const resolved = resolveReceiveEntry(key);
+      if (!resolved) continue;
+      const { row, isProductScope, variantId } = resolved;
+      if (isProductScope) {
         const dispatchR = records.filter(
           rr =>
             rr.type === 'OUTSOURCE' &&
@@ -816,8 +864,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
         const recNoVar = receiveR.filter(rr => !rr.variantId).reduce((s, rr) => s + rr.quantity, 0);
         const pendingNoVar = Math.max(0, dispNoVar - recNoVar);
         const hasVariantDispatch = dispatchR.some(rr => !!rr.variantId);
-        if (key.includes(RECEIVE_VARIANT_SEP)) {
-          const variantId = key.split(RECEIVE_VARIANT_SEP)[1] ?? '';
+        if (variantId !== undefined) {
           const maxQ = pendingVar(variantId);
           if (qty > maxQ) {
             toast.error(`本次收回数量不能大于该规格待收数量（最多${maxQ}）。`);
@@ -831,12 +878,9 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
           }
         }
       } else {
-        const orderId = parts[0];
-        const nodeId = parts[1];
-        const variantId = parts[2];
-        const row = outsourceReceiveRows.find(r => r.orderId === orderId && r.nodeId === nodeId);
-        if (!row) continue;
-        if (parts.length === 3) {
+        const nodeId = row.nodeId;
+        const orderId = row.orderId!;
+        if (variantId !== undefined) {
           const dispatchRecords = records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && !r.sourceReworkId && r.orderId === orderId && r.nodeId === nodeId);
           const receiveRecords = records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && !r.sourceReworkId && r.orderId === orderId && r.nodeId === nodeId);
           const dispatched = dispatchRecords.filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + r.quantity, 0);
@@ -861,80 +905,50 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
     const receiveDocNo = getNextReceiveDocNo(partnerName);
     const receiveCollab = outsourceCustomCollabPart(receiveCustomValues, 'receive');
     for (const [key, qty] of entries) {
-      const parts = key.split('|');
-      if (isProductMode) {
-        const baseKey = key.includes(RECEIVE_VARIANT_SEP) ? key.split(RECEIVE_VARIANT_SEP)[0]! : key;
-        const rowP = outsourceReceiveRows.find(r => r.orderId == null && productReceiveRowKey(r) === baseKey);
-        if (!rowP) continue;
-        const productId = rowP.productId;
-        const nodeId = rowP.nodeId;
-        const variantId = key.includes(RECEIVE_VARIANT_SEP) ? key.split(RECEIVE_VARIANT_SEP)[1] : undefined;
-        const unitPrice = receiveFormUnitPrices[baseKey] ?? 0;
-        const amount = qty * unitPrice;
-        /** 按工序开关取该批次总重量，若是按 variant 切的 key 则在 baseKey 维度按 qty 比例分摊 */
-        const nodeEnablesWeight = !!globalNodes.find(n => n.id === nodeId)?.enableWeightOnReport;
-        const rowTotalWeight = receiveFormWeights[baseKey] ?? 0;
-        let weightForThis: number | undefined;
-        if (nodeEnablesWeight && rowTotalWeight > 0) {
-          const rowTotalQty = Object.entries(receiveFormQuantities)
-            .filter(([k]) => k === baseKey || k.startsWith(`${baseKey}${RECEIVE_VARIANT_SEP}`) || k.startsWith(`${baseKey}|`))
-            .reduce((s, [, q]) => s + q, 0);
-          weightForThis = rowTotalQty > 0 ? rowTotalWeight * (qty / rowTotalQty) : rowTotalWeight;
-        }
-        onAddRecord({
-          id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          type: 'OUTSOURCE',
-          productId,
-          quantity: qty,
-          reason: receiveFormRemark.trim() || undefined,
-          operator: docOperator,
-          timestamp,
-          status: '已收回',
-          partner: partnerName,
-          nodeId,
-          variantId: variantId || undefined,
-          docNo: receiveDocNo,
-          unitPrice: unitPrice || undefined,
-          amount: amount || undefined,
-          weight: weightForThis,
-          ...receiveCollab,
-        });
+      const resolved = resolveReceiveEntry(key);
+      if (!resolved) continue;
+      const { row, isProductScope, baseKey, variantId } = resolved;
+      const nodeId = row.nodeId;
+      const unitPrice = receiveFormUnitPrices[baseKey] ?? 0;
+      const amount = qty * unitPrice;
+      const nodeEnablesWeight = !!globalNodes.find(n => n.id === nodeId)?.enableWeightOnReport;
+      const rowTotalWeight = receiveFormWeights[baseKey] ?? 0;
+      let weightForThis: number | undefined;
+      if (nodeEnablesWeight && rowTotalWeight > 0) {
+        const rowTotalQty = Object.entries(receiveFormQuantities)
+          .filter(([k]) => k === baseKey || k.startsWith(`${baseKey}${RECEIVE_VARIANT_SEP}`) || k.startsWith(`${baseKey}|`))
+          .reduce((s, [, q]) => s + (q as number), 0);
+        weightForThis = rowTotalQty > 0 ? rowTotalWeight * (qty / rowTotalQty) : rowTotalWeight;
+      }
+      const baseRecord = {
+        id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: 'OUTSOURCE' as const,
+        productId: row.productId,
+        quantity: qty,
+        reason: undefined,
+        operator: docOperator,
+        timestamp,
+        status: '已收回' as const,
+        partner: partnerName,
+        nodeId,
+        variantId: variantId || undefined,
+        docNo: receiveDocNo,
+        unitPrice: unitPrice || undefined,
+        amount: amount || undefined,
+        weight: weightForThis,
+        ...receiveCollab,
+      };
+      if (isProductScope) {
+        /** product 维度发出 → product 维度收回；不附 orderId，与发出对称 */
+        onAddRecord(baseRecord);
       } else {
-        const orderId = parts[0];
-        const nodeId = parts[1];
-        const variantId = parts[2];
-        const baseKey = parts.length === 3 ? `${orderId}|${nodeId}` : key;
-        const unitPrice = receiveFormUnitPrices[baseKey] ?? 0;
-        const amount = qty * unitPrice;
-        const order = idx.ordersById.get(orderId);
+        /** order 维度发出 → order 维度收回；附 orderId，写回 milestone，与发出对称 */
+        const order = idx.ordersById.get(row.orderId!);
         if (!order) continue;
-        const nodeEnablesWeight = !!globalNodes.find(n => n.id === nodeId)?.enableWeightOnReport;
-        const rowTotalWeight = receiveFormWeights[baseKey] ?? 0;
-        let weightForThis: number | undefined;
-        if (nodeEnablesWeight && rowTotalWeight > 0) {
-          const rowTotalQty = Object.entries(receiveFormQuantities)
-            .filter(([k]) => k === baseKey || k.startsWith(`${baseKey}|`))
-            .reduce((s, [, q]) => s + q, 0);
-          weightForThis = rowTotalQty > 0 ? rowTotalWeight * (qty / rowTotalQty) : rowTotalWeight;
-        }
         onAddRecord({
-          id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          type: 'OUTSOURCE',
-          orderId,
+          ...baseRecord,
+          orderId: row.orderId!,
           productId: order.productId,
-          quantity: qty,
-          reason: receiveFormRemark.trim() || undefined,
-          operator: docOperator,
-          timestamp,
-          status: '已收回',
-          partner: partnerName,
-          nodeId,
-          variantId: variantId || undefined,
-          docNo: receiveDocNo,
-          unitPrice: unitPrice || undefined,
-          amount: amount || undefined,
-          weight: weightForThis,
-          ...receiveCollab,
         });
       }
     }
@@ -945,7 +959,6 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
     setReceiveFormQuantities({});
     setReceiveFormUnitPrices({});
     setReceiveFormWeights({});
-    setReceiveFormRemark('');
     setReceiveFormModalOpen(false);
     setReceiveSelectedKeys(new Set());
   };
@@ -1331,8 +1344,6 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
           dispatchSelectedKeys={dispatchSelectedKeys}
           dispatchPartnerName={dispatchPartnerName}
           setDispatchPartnerName={setDispatchPartnerName}
-          dispatchRemark={dispatchRemark}
-          setDispatchRemark={setDispatchRemark}
           dispatchFormQuantities={dispatchFormQuantities}
           setDispatchFormQuantities={setDispatchFormQuantities}
           orders={orders}
@@ -1378,8 +1389,6 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
           setReceiveFormUnitPrices={setReceiveFormUnitPrices}
           receiveFormWeights={receiveFormWeights}
           setReceiveFormWeights={setReceiveFormWeights}
-          receiveFormRemark={receiveFormRemark}
-          setReceiveFormRemark={setReceiveFormRemark}
           orders={orders}
           products={products}
           categories={categories}

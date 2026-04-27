@@ -37,6 +37,11 @@ export function compactPsiListCustomValue(cf: PlanFormFieldConfig, value: unknow
   return str.length > 40 ? `${str.slice(0, 40)}…` : str;
 }
 
+/** 是否与 `compactPsiListCustomValue` 的非占位「—」展示一致（列表/详情是否渲染该项） */
+export function psiCustomFieldHasFilledDisplayValue(cf: PlanFormFieldConfig, value: unknown): boolean {
+  return compactPsiListCustomValue(cf, value) !== '—';
+}
+
 export type PsiDocListMainRow = {
   partner?: string;
   dueDate?: string;

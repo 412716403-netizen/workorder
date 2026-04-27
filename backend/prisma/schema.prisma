@@ -239,6 +239,7 @@ model DictionaryItem {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
+  @@unique([tenantId, type, name], map: "dictionary_items_tenant_type_name_key")
   @@index([tenantId])
   @@index([type])
   @@map("dictionary_items")

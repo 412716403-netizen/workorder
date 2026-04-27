@@ -1,13 +1,14 @@
 import React from 'react';
 import type { Product, ProductionOpRecord, AppDictionaries } from '../../types';
 import { buildVariantQtyMatrixLayout } from '../../utils/variantQtyMatrix';
+import { normalizeCollabSpecLabel } from '../../shared/types';
 
 export function normalizeAcceptSpecList(arr: unknown): string[] {
   if (!Array.isArray(arr)) return [];
   const seen = new Set<string>();
   const out: string[] = [];
   for (const x of arr) {
-    const t = typeof x === 'string' ? x.trim() : String(x ?? '').trim();
+    const t = normalizeCollabSpecLabel(typeof x === 'string' ? x : String(x ?? ''));
     if (!t || seen.has(t)) continue;
     seen.add(t);
     out.push(t);

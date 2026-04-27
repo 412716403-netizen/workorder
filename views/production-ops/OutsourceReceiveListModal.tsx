@@ -59,7 +59,8 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
     const productKw = (searchProduct || '').trim().toLowerCase();
     const partnerKw = (searchPartner || '').trim().toLowerCase();
     return outsourceReceiveRows.filter(row => {
-      if (productionLinkMode === 'order' && orderKw && !(row.orderNumber || '').toLowerCase().includes(orderKw)) return false;
+      /** 跨模式全收（方案 A）：行的工单号过滤对工单级生效；产品级行无工单号，自动忽略此过滤项。 */
+      if (orderKw && row.orderNumber != null && !(row.orderNumber || '').toLowerCase().includes(orderKw)) return false;
       if (productKw) {
         const product = products.find(p => p.id === row.productId);
         const nameMatch = (row.productName || '').toLowerCase().includes(productKw);
@@ -70,7 +71,7 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
       if (searchNodeId && row.nodeId !== searchNodeId) return false;
       return true;
     });
-  }, [outsourceReceiveRows, searchOrder, searchProduct, searchPartner, searchNodeId, products, productionLinkMode]);
+  }, [outsourceReceiveRows, searchOrder, searchProduct, searchPartner, searchNodeId, products]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -81,15 +82,15 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
           <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100"><X className="w-5 h-5" /></button>
         </div>
         <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/50 shrink-0">
-          <p className="text-xs text-slate-500">{productionLinkMode === 'product' ? '已发出未收回的产品+工序+外协厂汇总；勾选后点击「批量收回」填写本次收回数量。' : '已发出未收回的工单+工序汇总；点击「收回」填写本次收回数量。'}</p>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            已发出未收回的外协单按"维度"区分：<span className="inline-flex items-center px-1 py-0 rounded text-[10px] font-black bg-indigo-50 text-indigo-600 mx-0.5">工单级</span>来自关联工单模式发出，<span className="inline-flex items-center px-1 py-0 rounded text-[10px] font-black bg-emerald-50 text-emerald-700 mx-0.5">产品级</span>来自关联产品模式发出。任一模式下均可勾选收回，进度按发出维度回写。
+          </p>
         </div>
         <div className="px-6 py-3 border-b border-slate-100 bg-white shrink-0 flex flex-wrap items-center gap-3">
-          {productionLinkMode !== 'product' && (
-            <div className="flex items-center gap-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">单号</label>
-              <input type="text" value={searchOrder} onChange={e => setSearchOrder(e.target.value)} placeholder="工单号模糊搜索" className="w-36 rounded-lg border border-slate-200 py-2 px-3 text-sm font-bold text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 outline-none" />
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">单号</label>
+            <input type="text" value={searchOrder} onChange={e => setSearchOrder(e.target.value)} placeholder="工单号模糊搜索" className="w-36 rounded-lg border border-slate-200 py-2 px-3 text-sm font-bold text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 outline-none" />
+          </div>
           <div className="flex items-center gap-2">
             <label className="text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">货号</label>
             <input type="text" value={searchProduct} onChange={e => setSearchProduct(e.target.value)} placeholder="产品名/SKU 模糊搜索" className="w-36 rounded-lg border border-slate-200 py-2 px-3 text-sm font-bold text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 outline-none" />
@@ -111,21 +112,23 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
             <thead>
               <tr className="bg-slate-100 border-b border-slate-200 sticky top-0 z-10">
                 <th className="w-12 px-3 py-3" />
-                {productionLinkMode !== 'product' && <th className="w-[18%] px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">工单号</th>}
-                <th className={`${productionLinkMode === 'product' ? 'w-[28%]' : 'w-[18%]'} px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest`}>产品</th>
-                <th className={`${productionLinkMode === 'product' ? 'w-[17%]' : 'w-[14%]'} px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest`}>工序</th>
-                <th className={`${productionLinkMode === 'product' ? 'w-[19%]' : 'w-[14%]'} px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest`}>外协厂商</th>
-                <th className={`${productionLinkMode === 'product' ? 'w-[12%]' : 'w-[9%]'} px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right`}>发出总量</th>
-                <th className={`${productionLinkMode === 'product' ? 'w-[12%]' : 'w-[9%]'} px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right`}>已收总量</th>
-                <th className={`${productionLinkMode === 'product' ? 'w-[12%]' : 'w-[9%]'} px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right`}>待收数量</th>
+                <th className="w-[10%] px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">维度</th>
+                <th className="w-[16%] px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">工单号</th>
+                <th className="w-[18%] px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">产品</th>
+                <th className="w-[12%] px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">工序</th>
+                <th className="w-[14%] px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">外协厂商</th>
+                <th className="w-[10%] px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">发出总量</th>
+                <th className="w-[10%] px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">已收总量</th>
+                <th className="w-[10%] px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">待收数量</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredRows.length === 0 ? (
-                <tr><td colSpan={productionLinkMode === 'product' ? 7 : 8} className="px-6 py-16 text-center text-slate-400 text-sm">{outsourceReceiveRows.length === 0 ? '暂无待收回项。' : '无匹配项，请调整搜索条件。'}</td></tr>
+                <tr><td colSpan={9} className="px-6 py-16 text-center text-slate-400 text-sm">{outsourceReceiveRows.length === 0 ? '暂无待收回项。' : '无匹配项，请调整搜索条件。'}</td></tr>
               ) : (
                 filteredRows.map(row => {
-                  const key = row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}|${row.partner}`;
+                  const isOrderScope = row.orderId != null;
+                  const key = isOrderScope ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}|${row.partner}`;
                   const checked = receiveSelectedKeys.has(key);
                   const toggleRow = () => {
                     setReceiveSelectedKeys(prev => {
@@ -136,8 +139,7 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
                         const firstRow = outsourceReceiveRows.find(r => (r.orderId != null ? `${r.orderId}|${r.nodeId}` : `${r.productId}|${r.nodeId}|${r.partner}`) === firstKey);
                         const selectedPartner = firstRow?.partner ?? '';
                         if (selectedPartner !== (row.partner ?? '')) { toast.warning('只能选择同一外协工厂同时收货，请先取消其他加工厂的勾选。'); return prev; }
-                        const selectedNodeId = firstKey?.split('|')[1];
-                        if (selectedNodeId !== row.nodeId) { toast.warning('只能选择同一工序同时收货，请先取消其他工序的勾选。'); return prev; }
+                        if ((firstRow?.nodeId ?? '') !== row.nodeId) { toast.warning('只能选择同一工序同时收货，请先取消其他工序的勾选。'); return prev; }
                       }
                       next.add(key);
                       return next;
@@ -148,7 +150,16 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
                       <td className="w-12 px-3 py-3 align-middle" onClick={e => e.stopPropagation()}>
                         <input type="checkbox" checked={checked} onChange={toggleRow} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
                       </td>
-                      {productionLinkMode !== 'product' && <td className="px-4 py-3 text-sm font-bold text-slate-800 align-middle truncate" title={row.orderNumber}>{row.orderNumber}</td>}
+                      <td className="px-4 py-3 align-middle">
+                        {isOrderScope ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black bg-indigo-50 text-indigo-600 uppercase tracking-wider">工单级</span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black bg-emerald-50 text-emerald-700 uppercase tracking-wider">产品级</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-bold text-slate-800 align-middle truncate" title={row.orderNumber || '—'}>
+                        {row.orderNumber || <span className="text-slate-300">—</span>}
+                      </td>
                       <td className="px-4 py-3 text-sm font-bold text-slate-800 align-middle truncate" title={row.productName}>
                         {row.productName}
                       </td>

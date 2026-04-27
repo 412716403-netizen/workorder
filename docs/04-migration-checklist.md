@@ -35,9 +35,9 @@
 | 模块 | 当前状态 | 说明 | 剩余收口 |
 |------|------|------|------|
 | 计划单 CRUD、拆单、下达工单、子计划 | 已落地 | 已有 `/api/plans` 及相关动作接口 | 继续核对前端是否仍保留旧计算路径 |
-| 工单 CRUD、报工、可报量查询 | 已落地 | 已有 `/api/orders`、报工与产品进度接口 | 继续补充服务层与测试 |
+| 工单 CRUD、报工、可报量查询 | 已落地 | 已有 `/api/orders`、报工与产品进度接口；`GET /:id/reportable` 已合并 PMP；`createReport` / `createProductReport` 受 `allowExceedMaxReportQty` 控制做硬校验 | 继续补充服务层与测试 |
 | 生产操作记录 | 已落地 | 已有 `/api/production/records` 等接口 | 梳理大体量前端页面与复杂业务校验 |
-| 生产关联模式 | 部分落地 | 规则和实现已并存，但文档仍偏历史设计视角 | 统一“关联工单 / 关联产品”的文档入口与数据归属说明 |
+| 生产关联模式 | 已落地 | 规则与实现并存，读口径统一为"PMP + milestone 双路求和"（含 `OrderDetailModal` / `OrderListView` / 后端 `getReportable`）；OutsourcePanel 展示统计端已"全收"含 `orderId` 历史记录；**待收回清单与收货录入弹窗按行级 `orderId` 决定 scope，跨模式可见、可收回**（方案 A）；`OrderListView` 工单卡 / 产品组卡圆下剩余数字保持原口径（不扣外协），**hover tooltip 上额外提示"外协剩余 Z 件"**作为补充信息；`ProductionConfigTab` 切换前已加 `useConfirm` 提示；删除工单在 `product` 模式下不再跳过基础校验；后端 `createReport`/`createProductReport` 加 `enforceReportQuantity` 硬校验（受 `allowExceedMaxReportQty` 控制） | 持续在更多页面（看板、打印）核对模式分流口径 |
 
 ---
 
@@ -66,7 +66,7 @@
 
 | 模块 | 当前状态 | 说明 | 剩余收口 |
 |------|------|------|------|
-| 企业协作 / 外协路线 | 已落地 | 已有 collaboration 路由、数据模型与前端 API 封装 | 继续治理 controller 过胖与权限边界不一致问题 |
+| 企业协作 / 外协路线 | 已落地 | 已有 collaboration 路由、数据模型与前端 API 封装；接受派发 `createProduct` 含 `categoryDecision` + Zod 校验；`acceptTransfer` 事务化；字典项 `dictionary_items` 唯一约束 `(tenant_id, type, name)` 支撑并发 upsert；链头 `categoryName` 沿转发链路写入 payload | 继续治理 controller 过胖与权限边界不一致问题；可选后续：`collaborationCategoryMap` 甲方分类名 → 乙方分类预填 |
 | 打印模板、预览、标签 | 部分落地 | 前端能力完整，但文档入口尚未充分整理 | 后续可补独立打印链路文档 |
 | 单品码 `ItemCode` | 已落地 | 已有 schema、route、controller、前端 API 封装 | 补扫码响应类型与迁移链核验 |
 | 虚拟批次 `PlanVirtualBatch` | 已落地 | 已有 schema、route、controller、前端 API 封装 | 核对 migration 完整性与打印链路说明 |

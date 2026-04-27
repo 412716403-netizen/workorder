@@ -91,3 +91,39 @@ export function categoryUsesBatchManagement(
 ): boolean {
   return Boolean(cat?.hasBatchManagement) && !Boolean(cat?.hasColorSize);
 }
+
+/** 协作派发/接受：颜色尺码等规格标签归一（NFKC + 折叠空白），前后端与协作 payload 共用 */
+export function normalizeCollabSpecLabel(v: unknown): string | null {
+  if (v == null) return null;
+  let s = String(v).trim();
+  if (!s.length) return null;
+  try {
+    s = s.normalize('NFKC');
+  } catch {
+    /* ignore */
+  }
+  s = s.replace(/\s+/g, ' ').trim();
+  return s.length > 0 ? s : null;
+}
+
+/** 协作：乙方接受派发时产品分类由本地决策 */
+export const COLLAB_ACCEPT_CATEGORY_DECISION = ['existing', 'create', 'none'] as const;
+export type CollabAcceptCategoryDecision = (typeof COLLAB_ACCEPT_CATEGORY_DECISION)[number];
+
+export type CollabAcceptCreateProductPayload = {
+  name: string;
+  sku: string;
+  description?: string;
+  colorNames?: string[];
+  sizeNames?: string[];
+  categoryDecision: CollabAcceptCategoryDecision;
+  /** categoryDecision === 'existing' 时必填 */
+  categoryId?: string | null;
+  /** categoryDecision === 'create' 时必填 */
+  categoryNameToCreate?: string;
+};
+
+export type CollabAcceptTransferBody = {
+  dispatchIds?: string[];
+  createProduct?: CollabAcceptCreateProductPayload;
+};

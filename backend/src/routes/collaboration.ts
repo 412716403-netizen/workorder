@@ -43,6 +43,37 @@ const forwardTransferSchema = z.object({
   unitPrice: z.number().finite().min(0).optional(),
 }).passthrough();
 
+const collabCategoryDecisionZ = z.enum(['existing', 'create', 'none']);
+
+const acceptTransferCreateProductSchema = z
+  .object({
+    name: z.string().min(1),
+    sku: z.string().min(1),
+    description: z.string().optional(),
+    colorNames: z.array(z.string()).optional(),
+    sizeNames: z.array(z.string()).optional(),
+    categoryDecision: collabCategoryDecisionZ,
+    categoryId: z.string().optional().nullable(),
+    categoryNameToCreate: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.categoryDecision === 'existing') {
+      if (!data.categoryId || !String(data.categoryId).trim()) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: '选择既有分类时必须提供 categoryId', path: ['categoryId'] });
+      }
+    }
+    if (data.categoryDecision === 'create') {
+      if (!String(data.categoryNameToCreate ?? '').trim()) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: '新建分类时必须填写 categoryNameToCreate', path: ['categoryNameToCreate'] });
+      }
+    }
+  });
+
+const acceptTransferSchema = z.object({
+  dispatchIds: z.array(z.string().min(1)).optional(),
+  createProduct: acceptTransferCreateProductSchema.optional(),
+}).passthrough();
+
 // 租户互信
 router.post('/collaborations', validate(createCollabSchema), ctrl.createCollaboration);
 router.get('/collaborations', ctrl.listCollaborations);
@@ -64,7 +95,7 @@ router.get('/subcontract-transfers', ctrl.listTransfers);
 router.get('/subcontract-transfers/:id', ctrl.getTransfer);
 
 // 乙方接受
-router.post('/subcontract-transfers/:id/accept', ctrl.acceptTransfer);
+router.post('/subcontract-transfers/:id/accept', validate(acceptTransferSchema), ctrl.acceptTransfer);
 
 // 链式外协：乙方转发到下一站
 router.post('/subcontract-transfers/:id/forward', validate(forwardTransferSchema), ctrl.forwardTransfer);

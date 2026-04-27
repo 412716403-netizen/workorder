@@ -117,6 +117,7 @@ const CollaborationInboxView: React.FC = () => {
 
   const products = m.products;
   const partners = m.partners;
+  const categories = m.categories;
   const partnerCategories = m.partnerCategories;
   const orders = o.orders;
   const prodRecords = o.prodRecords;
@@ -647,6 +648,7 @@ const CollaborationInboxView: React.FC = () => {
           partners={partners}
           prodRecords={prodRecords}
           dictionaries={dictionaries}
+          categories={categories}
           onRefreshList={refresh}
           onRefreshOrders={onRefreshOrders}
           onRefreshProdRecords={onRefreshProdRecords}

@@ -112,6 +112,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '系统', value: '系统.pageCurrent', label: '当前页码' },
     { group: '系统', value: '系统.pageTotal', label: '总页数' },
   ];
+  const tenant: PrintFieldOption[] = [{ group: '租户', value: '租户.name', label: '公司名称' }];
   const planStatic: PrintFieldOption[] = [
     { group: '计划', value: '计划.planNumber', label: '计划单号' },
     { group: '计划', value: '计划.customer', label: '客户' },
@@ -475,6 +476,7 @@ export function buildPrintFieldOptions(opts: {
   const outsourceDispatchRow: PrintFieldOption[] = [
     { group: '外协发出明细行', value: '行.index', label: '行序号' },
     { group: '外协发出明细行', value: '行.orderNumber', label: '工单号' },
+    { group: '外协发出明细行', value: '行.sku', label: '货号' },
     { group: '外协发出明细行', value: '行.productName', label: '产品名称' },
     { group: '外协发出明细行', value: '行.nodeName', label: '工序名称' },
     { group: '外协发出明细行', value: '行.variantLabel', label: '规格' },
@@ -498,6 +500,7 @@ export function buildPrintFieldOptions(opts: {
   const outsourceReceiveRow: PrintFieldOption[] = [
     { group: '外协收回明细行', value: '行.index', label: '行序号' },
     { group: '外协收回明细行', value: '行.orderNumber', label: '工单号' },
+    { group: '外协收回明细行', value: '行.sku', label: '货号' },
     { group: '外协收回明细行', value: '行.productName', label: '产品名称' },
     { group: '外协收回明细行', value: '行.nodeName', label: '工序名称' },
     { group: '外协收回明细行', value: '行.variantLabel', label: '规格' },
@@ -525,6 +528,8 @@ export function buildPrintFieldOptions(opts: {
   ];
   const defectTreatmentRow: PrintFieldOption[] = [
     { group: '处理不良明细行', value: '行.index', label: '行序号' },
+    { group: '处理不良明细行', value: '行.sku', label: '货号' },
+    { group: '处理不良明细行', value: '行.productName', label: '产品名称' },
     { group: '处理不良明细行', value: '行.variantLabel', label: '规格' },
     { group: '处理不良明细行', value: '行.quantity', label: '数量' },
   ];
@@ -551,6 +556,8 @@ export function buildPrintFieldOptions(opts: {
   ];
   const reworkReportRow: PrintFieldOption[] = [
     { group: '返工报工明细行', value: '行.index', label: '行序号' },
+    { group: '返工报工明细行', value: '行.sku', label: '货号' },
+    { group: '返工报工明细行', value: '行.productName', label: '产品名称' },
     { group: '返工报工明细行', value: '行.variantLabel', label: '规格' },
     { group: '返工报工明细行', value: '行.quantity', label: '数量' },
     { group: '返工报工明细行', value: '行.nodeName', label: '工序' },
@@ -572,6 +579,7 @@ export function buildPrintFieldOptions(opts: {
   ];
   return [
     ...system,
+    ...tenant,
     ...plan,
     ...order,
     ...product,
@@ -679,6 +687,7 @@ const FIELD_GROUPS_BY_DOCUMENT: Record<Exclude<PrintTemplateDocumentType, 'all'>
   ]),
   outsource: new Set([
     '系统',
+    '租户',
     '工单',
     '产品',
     '计划',

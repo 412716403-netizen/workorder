@@ -2,6 +2,7 @@ import type {
   AppDictionaries,
   MaterialFormSettings,
   PlanListPrintSettings,
+  PrintListRow,
   PrintRenderContext,
   PrintTemplate,
   ProductionOpRecord,
@@ -9,12 +10,69 @@ import type {
   Product,
   Warehouse,
 } from '../types';
+import { buildMatrixJsonAndTotalQtyFromVariantLine } from './buildSalesBillPrintContext';
+import { COLOR_SIZE_MATRIX_JSON_KEY } from './colorSizeMatrixPrint';
 import { formatLocalDateTimeZh, parseProductionOpTimestampMs } from './localDateTime';
 import {
   isOutsourceMaterialPartner,
   materialStockCustomDataCollabKey,
   type MaterialStockCollabDataKey,
 } from './productionOpCollab/material';
+
+const EMPTY_DICTIONARIES: AppDictionaries = { colors: [], sizes: [], units: [] };
+
+function buildMaterialStockMatrixPrintRows(
+  lines: MaterialStockDocForPrint['lines'],
+  docRecords: ProductionOpRecord[],
+  products: Product[],
+  dictionaries: AppDictionaries | undefined,
+  getUnitName: (productId: string) => string,
+): PrintListRow[] {
+  const dict = dictionaries ?? EMPTY_DICTIONARIES;
+  const productMap = new Map(products.map(p => [p.id, p] as const));
+  return lines.map((l, i) => {
+    const batchNorm = (l.batchNo ?? '').trim();
+    const recs = docRecords.filter(r => {
+      if (r.productId !== l.productId) return false;
+      const rB = (r.batchNo ?? '').trim();
+      if (batchNorm) return rB === batchNorm;
+      return !rB;
+    });
+    const variantQuantities: Record<string, number> = {};
+    for (const r of recs) {
+      const vid = r.variantId?.trim();
+      if (!vid) continue;
+      variantQuantities[vid] = (variantQuantities[vid] ?? 0) + (Number(r.quantity) || 0);
+    }
+    const hasVar = Object.keys(variantQuantities).length > 0;
+    const p = products.find(x => x.id === l.productId);
+    const matrixSlice = p
+      ? hasVar
+        ? buildMatrixJsonAndTotalQtyFromVariantLine({
+            productId: l.productId,
+            productMap,
+            dictionaries: dict,
+            variantQuantities,
+          })
+        : buildMatrixJsonAndTotalQtyFromVariantLine({
+            productId: l.productId,
+            productMap,
+            dictionaries: dict,
+            quantity: l.quantity,
+          })
+      : null;
+    const qty = matrixSlice?.totalQty ?? l.quantity;
+    return {
+      index: i + 1,
+      productName: p?.name ?? l.productId,
+      sku: p?.sku ?? '',
+      quantity: qty,
+      unit: getUnitName(l.productId),
+      batchNo: l.batchNo?.trim() ? l.batchNo : '—',
+      ...(matrixSlice ? { [COLOR_SIZE_MATRIX_JSON_KEY]: matrixSlice.colorSizeMatrixJson } : {}),
+    };
+  });
+}
 
 /** 与领料/退料详情、流水打印一致的最小单据形状 */
 export interface MaterialStockDocForPrint {
@@ -111,7 +169,7 @@ export function buildMaterialStockDocPrintContext(
     totalQty: totalQtyPrint,
     custom: customSnapshot,
   };
-  const rows = stockDocDetail.lines.map((l, i) => {
+  const flatRows = stockDocDetail.lines.map((l, i) => {
     const p = products.find(x => x.id === l.productId);
     return {
       index: i + 1,
@@ -122,6 +180,13 @@ export function buildMaterialStockDocPrintContext(
       batchNo: l.batchNo?.trim() ? l.batchNo : '—',
     };
   });
+  const matrixRows = buildMaterialStockMatrixPrintRows(
+    stockDocDetail.lines,
+    docRecordsForPrint,
+    products,
+    dictionaries,
+    getUnitName,
+  );
   const productCtx = sourceProd ?? (order ? products.find(p => p.id === order.productId) : undefined) ?? undefined;
   if (isReturn) {
     if (outsource) {
@@ -129,14 +194,14 @@ export function buildMaterialStockDocPrintContext(
         order: order ?? undefined,
         product: productCtx,
         outsourceMaterialReturnPrint: head,
-        printListRows: rows,
+        printListRows: matrixRows,
       };
     }
     return {
       order: order ?? undefined,
       product: productCtx,
       materialReturnPrint: head,
-      printListRows: rows,
+      printListRows: matrixRows,
     };
   }
   if (outsource) {
@@ -144,13 +209,13 @@ export function buildMaterialStockDocPrintContext(
       order: order ?? undefined,
       product: productCtx,
       outsourceMaterialIssuePrint: head,
-      printListRows: rows,
+      printListRows: matrixRows,
     };
   }
   return {
     order: order ?? undefined,
     product: productCtx,
     materialIssuePrint: head,
-    printListRows: rows,
+    printListRows: flatRows,
   };
 }

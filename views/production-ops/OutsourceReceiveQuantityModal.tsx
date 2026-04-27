@@ -50,8 +50,6 @@ export interface OutsourceReceiveQuantityModalProps {
    */
   receiveFormWeights?: Record<string, number>;
   setReceiveFormWeights?: React.Dispatch<React.SetStateAction<Record<string, number>>>;
-  receiveFormRemark: string;
-  setReceiveFormRemark: React.Dispatch<React.SetStateAction<string>>;
   orders: ProductionOrder[];
   products: Product[];
   categories: ProductCategory[];
@@ -79,8 +77,6 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
   setReceiveFormUnitPrices,
   receiveFormWeights,
   setReceiveFormWeights,
-  receiveFormRemark,
-  setReceiveFormRemark,
   orders,
   products,
   categories,
@@ -164,7 +160,8 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
         const product = products.find((p) => p.id === row.productId);
         const category = categories.find((c) => c.id === product?.categoryId);
         const hasColorSizeMatrix = productHasColorSizeMatrix(product, category);
-        const isProductBlockRecv = productionLinkMode === 'product' && row.orderId == null;
+        /** 跨模式全收（方案 A）：以 row.orderId 决定 scope，与当前 productionLinkMode 无关 */
+        const isProductBlockRecv = row.orderId == null;
 
         let key = baseKey;
         if (hasColorSizeMatrix && variantId) {
@@ -214,16 +211,10 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
         </div>
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">单据基本信息</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">外协工厂</label>
-              <div className="w-full h-[52px] rounded-xl border border-slate-200 py-3 px-4 text-sm font-bold text-slate-800 bg-slate-50 flex items-center">
-                {(() => { const firstKey = receiveSelectedKeys.values().next().value; if (!firstKey) return '—'; const row = outsourceReceiveRows.find(r => (r.orderId != null ? `${r.orderId}|${r.nodeId}` : `${r.productId}|${r.nodeId}|${r.partner}`) === firstKey); return row?.partner || '—'; })()}
-              </div>
-            </div>
-            <div>
-              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">备注说明</label>
-              <input type="text" value={receiveFormRemark} onChange={e => setReceiveFormRemark(e.target.value)} placeholder="选填" className="w-full h-[52px] rounded-xl border border-slate-200 py-3 px-4 text-sm font-bold text-slate-800 bg-white focus:ring-2 focus:ring-indigo-500 outline-none placeholder:text-slate-400" />
+          <div className="max-w-xl">
+            <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">外协工厂</label>
+            <div className="flex h-[52px] w-full items-center rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-800">
+              {(() => { const firstKey = receiveSelectedKeys.values().next().value; if (!firstKey) return '—'; const row = outsourceReceiveRows.find(r => (r.orderId != null ? `${r.orderId}|${r.nodeId}` : `${r.productId}|${r.nodeId}|${r.partner}`) === firstKey); return row?.partner || '—'; })()}
             </div>
           </div>
           {receiveCustomFieldDefs.length > 0 && setReceiveCustomValues ? (
@@ -253,11 +244,6 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
               <ScanInputButton onScan={handleScanPayload} hint="扫码收货" />
             </div>
           </div>
-          <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-            {productionLinkMode === 'product'
-              ? '关联产品且发出单按颜色尺码录入时，按规格收回；每格「最多」= 该规格已发出未收回数。若有未带规格的发出的数量，在下方「未按规格」行收回。'
-              : '按规格收回时每格不超过该规格待收数量。'}
-          </p>
           <div className="space-y-8">
           {outsourceReceiveRows.filter(row => receiveSelectedKeys.has(row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}|${row.partner}`)).map(row => {
             const receiveRowKey = row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}|${row.partner}`;
@@ -265,7 +251,8 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
             const product = products.find(p => p.id === row.productId);
             const category = categories.find(c => c.id === product?.categoryId);
             const hasColorSizeMatrix = productHasColorSizeMatrix(product, category);
-            const hasColorSizeOrderRecv = productionLinkMode === 'order' && hasColorSizeMatrix;
+            /** 跨模式全收：order 维度发出单的颜色尺码矩阵收回；与当前 productionLinkMode 无关 */
+            const hasColorSizeOrderRecv = row.orderId != null && hasColorSizeMatrix;
             const baseKey = receiveRowKey;
             const variantIdsInOrderItems = new Set((order?.items ?? []).map(i => i.variantId).filter(Boolean));
             const variantIdsFromOrderMilestone = new Set<string>();
@@ -281,10 +268,11 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
               variantsInOrder = [...(product.variants as ProductVariant[])];
             }
             const aggregateOrderReceive = hasColorSizeOrderRecv && variantsInOrder.length > 0 && !orderRecvHasSpecBreakdown;
-            const dispatchRecords = productionLinkMode === 'product'
+            /** 跨模式全收：按 row.orderId 决定取 product 维度还是 order 维度的发出/收回记录 */
+            const dispatchRecords = row.orderId == null
               ? records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && !r.sourceReworkId && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId && (r.partner ?? '') === (row.partner ?? ''))
               : records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && !r.sourceReworkId && r.orderId === row.orderId && r.nodeId === row.nodeId);
-            const receiveRecords = productionLinkMode === 'product'
+            const receiveRecords = row.orderId == null
               ? records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && !r.sourceReworkId && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId && (r.partner ?? '') === (row.partner ?? ''))
               : records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && !r.sourceReworkId && r.orderId === row.orderId && r.nodeId === row.nodeId);
             const sumOtherVariantQtyRecvOrder = (currentId: string) =>
@@ -302,13 +290,14 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
             };
             const weightReportEnabled = !!weightEnabledByNodeId.get(row.nodeId);
             const currentRowWeight = receiveFormWeights?.[baseKey] ?? 0;
-            const totalQtyForWeight = productionLinkMode === 'product'
+            /** 跨模式全收：product 维度同时按 baseKey 和 baseKey__v__variantId 切；order 维度按 baseKey 与 baseKey|variantId 切 */
+            const totalQtyForWeight = row.orderId == null
               ? Object.entries(receiveFormQuantities)
                   .filter(([k]) => k === baseKey || k.startsWith(`${baseKey}${RECEIVE_VARIANT_SEP}`) || k.startsWith(`${baseKey}|`))
-                  .reduce((s, [, q]) => s + q, 0)
+                  .reduce((s, [, q]) => s + (q as number), 0)
               : Object.entries(receiveFormQuantities)
                   .filter(([k]) => k === baseKey || k.startsWith(`${baseKey}|`))
-                  .reduce((s, [, q]) => s + q, 0);
+                  .reduce((s, [, q]) => s + (q as number), 0);
             const weightPreviewRows = (() => {
               if (!weightReportEnabled || !(currentRowWeight > 0) || !(totalQtyForWeight > 0)) return [] as ReturnType<typeof calcUsageByWeight>;
               const bom = resolveBom(row.productId, row.nodeId);
@@ -371,7 +360,8 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                 </div>
               );
             };
-            const isProductBlockRecv = productionLinkMode === 'product' && row.orderId == null;
+            /** 跨模式全收：以 row.orderId 决定 scope */
+            const isProductBlockRecv = row.orderId == null;
             const blockOrdersRecv = isProductBlockRecv ? orders.filter(o => o.productId === row.productId) : [];
             const variantIdsInBlockRecv = new Set<string>();
             blockOrdersRecv.forEach(o => { (o.items ?? []).forEach(i => { if ((i.quantity ?? 0) > 0 && i.variantId) variantIdsInBlockRecv.add(i.variantId); }); });
@@ -494,7 +484,12 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
               return (
                 <div key={baseKey} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-4 space-y-4">
                   <div className="flex items-center gap-3 flex-wrap">
-                    {productionLinkMode !== 'product' && row.orderNumber != null && <span className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">{row.orderNumber}</span>}
+                    {row.orderId != null ? (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black bg-indigo-50 text-indigo-600 uppercase tracking-wider">工单级</span>
+                    ) : (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black bg-emerald-50 text-emerald-700 uppercase tracking-wider">产品级</span>
+                    )}
+                    {row.orderNumber != null && <span className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">{row.orderNumber}</span>}
                     <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">颜色尺码</span>
                     <span className="text-sm font-bold text-slate-800">{row.productName}</span>
                     <span className="text-sm font-bold text-indigo-600">{row.milestoneName}</span>
@@ -546,11 +541,16 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                       </span>
                       <span className="shrink-0 text-[10px] font-bold text-indigo-600 sm:text-[11px]">{row.milestoneName}</span>
                     </div>
-                    {productionLinkMode !== 'product' && row.orderNumber != null ? (
-                      <div className="mt-0.5 truncate text-[10px] font-medium text-slate-500 sm:text-[11px]">
-                        工单 <span className="font-bold text-slate-600 tabular-nums">{row.orderNumber}</span>
-                      </div>
-                    ) : null}
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] font-medium text-slate-500 sm:text-[11px]">
+                      {row.orderId != null ? (
+                        <span className="inline-flex items-center px-1 py-0 rounded text-[9px] font-black bg-indigo-50 text-indigo-600 uppercase tracking-wider">工单级</span>
+                      ) : (
+                        <span className="inline-flex items-center px-1 py-0 rounded text-[9px] font-black bg-emerald-50 text-emerald-700 uppercase tracking-wider">产品级</span>
+                      )}
+                      {row.orderNumber != null && (
+                        <span className="truncate">工单 <span className="font-bold text-slate-600 tabular-nums">{row.orderNumber}</span></span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex shrink-0 flex-wrap items-end gap-x-2.5 gap-y-2 sm:flex-nowrap sm:gap-x-3">
                     <div className="flex flex-col gap-0.5">

@@ -3,6 +3,7 @@ import { prisma as basePrisma } from '../lib/prisma.js';
 import { genId } from '../utils/genId.js';
 import { sanitizeUpdate, sanitizeCreate } from '../utils/request.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { assertCategoryBatchColorMutex } from '../utils/categoryMutex.js';
 import { z } from 'zod';
 
 /** 与 `shared/types` 中 CustomDocFieldType 一致；写入设置 JSON 时拒绝 number/boolean 等脏类型 */
@@ -34,14 +35,6 @@ export async function listCategories(db: TenantPrismaClient) {
   return db.productCategory.findMany({
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
   });
-}
-
-function assertCategoryBatchColorMutex(data: { hasColorSize?: unknown; hasBatchManagement?: unknown }) {
-  const hasColor = Boolean(data.hasColorSize);
-  const hasBatch = Boolean(data.hasBatchManagement);
-  if (hasColor && hasBatch) {
-    throw new AppError(400, '颜色尺码与批次管理不可同时启用');
-  }
 }
 
 export async function createCategory(

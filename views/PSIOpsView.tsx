@@ -12,6 +12,7 @@ import {
   Printer,
   Search,
   Sliders,
+  X,
 } from 'lucide-react';
 import {
   Product,
@@ -74,11 +75,13 @@ import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocFi
 import { toLocalDateYmd, formatCustomFieldDatetimeForPrint } from '../utils/localDateTime';
 import { hasModulePerm } from '../utils/hasModulePerm';
 import { usePsiStockIndex } from '../hooks/usePsiStockIndex';
+import { productHasColorSizeMatrix } from '../utils/productColorSize';
 
 import {
   formatPsiDocNumForList,
   truncatePsiListNote,
   compactPsiListCustomValue,
+  psiCustomFieldHasFilledDisplayValue,
   aggregatePurchaseBillRelatedProductListText,
   purchaseOrderStandardListText,
   purchaseBillStandardListText,
@@ -253,6 +256,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
   const [allocationQuantities, setAllocationQuantities] = useState<number | Record<string, number> | null>(null);
   // 配货弹窗选择的出库仓库
   const [allocationWarehouseId, setAllocationWarehouseId] = useState<string>('');
+  /** 进销存列表/单据详情内产品图点击放大 */
+  const [psiProductImagePreviewUrl, setPsiProductImagePreviewUrl] = useState<string | null>(null);
 
   // 切换标签时清除新增/编辑状态，避免出现不匹配的弹窗
   useEffect(() => {
@@ -266,6 +271,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
     setPurchaseBillModalPhase(null);
     setSalesOrderModalPhase(null);
     setSalesBillModalPhase(null);
+    setPsiProductImagePreviewUrl(null);
   }, [type]);
 
   const bizConfig: Record<string, any> = {
@@ -696,6 +702,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               getUnitName={getUnitName}
               formatQtyDisplay={formatQtyDisplay}
               receivedByOrderLine={receivedByOrderLine}
+              onProductImagePreview={setPsiProductImagePreviewUrl}
+              headerCustomFieldDefs={safePurchaseOrderFormSettings.customFields}
             />
           }
           formContent={
@@ -771,6 +779,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               dictionaries={dictionaries}
               getUnitName={getUnitName}
               formatQtyDisplay={formatQtyDisplay}
+              onProductImagePreview={setPsiProductImagePreviewUrl}
+              headerCustomFieldDefs={safePurchaseBillFormSettings.customFields}
             />
           }
           formContent={
@@ -844,6 +854,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               dictionaries={dictionaries}
               getUnitName={getUnitName}
               formatQtyDisplay={formatQtyDisplay}
+              onProductImagePreview={setPsiProductImagePreviewUrl}
+              headerCustomFieldDefs={safeSalesOrderFormSettings.customFields}
             />
           }
           formContent={
@@ -918,6 +930,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               dictionaries={dictionaries}
               getUnitName={getUnitName}
               formatQtyDisplay={formatQtyDisplay}
+              onProductImagePreview={setPsiProductImagePreviewUrl}
+              headerCustomFieldDefs={safeSalesBillFormSettings.customFields}
             />
           }
           formContent={
@@ -1135,6 +1149,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                           {type === 'PURCHASE_ORDER' &&
                             safePurchaseOrderFormSettings.customFields
                               .filter(f => f.showInList)
+                              .filter(cf => psiCustomFieldHasFilledDisplayValue(cf, mainInfo.customData?.[cf.id]))
                               .map(cf => {
                                 const text = compactPsiListCustomValue(cf, mainInfo.customData?.[cf.id]);
                                 return (
@@ -1167,6 +1182,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                           {type === 'PURCHASE_BILL' &&
                             safePurchaseBillFormSettings.customFields
                               .filter(f => f.showInList)
+                              .filter(cf => psiCustomFieldHasFilledDisplayValue(cf, mainInfo.customData?.[cf.id]))
                               .map(cf => {
                                 const text = compactPsiListCustomValue(cf, mainInfo.customData?.[cf.id]);
                                 return (
@@ -1196,6 +1212,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                           {type === 'SALES_ORDER' &&
                             safeSalesOrderFormSettings.customFields
                               .filter(f => f.showInList)
+                              .filter(cf => psiCustomFieldHasFilledDisplayValue(cf, mainInfo.customData?.[cf.id]))
                               .map(cf => {
                                 const text = compactPsiListCustomValue(cf, mainInfo.customData?.[cf.id]);
                                 return (
@@ -1207,6 +1224,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                           {type === 'SALES_BILL' &&
                             safeSalesBillFormSettings.customFields
                               .filter(f => f.showInList)
+                              .filter(cf => psiCustomFieldHasFilledDisplayValue(cf, mainInfo.customData?.[cf.id]))
                               .map(cf => {
                                 const text = compactPsiListCustomValue(cf, mainInfo.customData?.[cf.id]);
                                 return (
@@ -1334,13 +1352,14 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                         )}
                         {!current.hideWarehouse && <col style={{ width: 100 }} />}
                         {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <col style={{ width: 100 }} />}
+                        {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <col style={{ width: 100 }} />}
                         {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <col style={{ width: 110 }} />}
                         {type === 'SALES_ORDER' && <col style={{ width: 132 }} />}
                         {type === 'SALES_ORDER' && <col style={{ width: 82 }} />}
                         {type === 'SALES_ORDER' && <col style={{ width: 92 }} />}
+                        {type === 'SALES_BILL' && <col style={{ width: 132 }} />}
                         {type === 'SALES_BILL' && <col style={{ width: 82 }} />}
                         {type === 'SALES_BILL' && <col style={{ width: 92 }} />}
-                        {type !== 'SALES_ORDER' && <col style={{ width: type === 'SALES_BILL' ? 132 : 100 }} />}
                         {type === 'SALES_ORDER' && <col style={{ width: 140 }} />}
                         {type === 'SALES_ORDER' && <col style={{ width: 82 }} />}
                         {type === 'PURCHASE_ORDER' && <col style={{ width: 140 }} />}
@@ -1352,14 +1371,15 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                             <th className="pb-2 px-3 text-left normal-case">关联产品</th>
                           )}
                           {!current.hideWarehouse && <th className="pb-2 px-3 text-center">{type === 'SALES_BILL' ? '出库仓库' : '入库仓库'}</th>}
+                          {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <th className="pb-2 px-3 text-right">数量</th>}
                           {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <th className="pb-2 px-3 text-right">采购价</th>}
                           {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <th className="pb-2 px-3 text-right">金额</th>}
                           {type === 'SALES_ORDER' && <th className="pb-2 px-3 text-right">数量</th>}
                           {type === 'SALES_ORDER' && <th className="pb-2 px-3 text-right">销售价</th>}
                           {type === 'SALES_ORDER' && <th className="pb-2 px-3 text-right">金额</th>}
+                          {type === 'SALES_BILL' && <th className="pb-2 px-3 text-right">数量</th>}
                           {type === 'SALES_BILL' && <th className="pb-2 px-3 text-right">销售价</th>}
                           {type === 'SALES_BILL' && <th className="pb-2 px-3 text-right">金额</th>}
-                          {type !== 'SALES_ORDER' && <th className="pb-2 px-3 text-right">数量</th>}
                           {type === 'SALES_ORDER' && <th className="pb-2 px-3 text-left">配货进度</th>}
                           {type === 'SALES_ORDER' && <th className="pb-2 px-3 text-center">操作</th>}
                           {type === 'PURCHASE_ORDER' && <th className="pb-2 px-3 text-left">入库进度</th>}
@@ -1376,6 +1396,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                           return Object.entries(groups).map(([gid, grp]) => {
                             const first = grp[0];
                             const product = productMapPSI.get(first.productId);
+                            const lineCategory = product ? categoryMapPSI.get(product.categoryId) : undefined;
                             const rowProductName = product?.name || (first as any)?.productName;
                             const rowProductSku = product?.sku || (first as any)?.productSku;
                             const productCustomTags = getProductCategoryCustomFieldEntries(
@@ -1413,6 +1434,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                               : variantParts[0]
                                 ? variantParts[0]
                                 : '';
+                            const showVariantSuffixInSku = Boolean(
+                              variantLabel && !(product && productHasColorSizeMatrix(product, lineCategory)),
+                            );
                             const pbLineRelatedListText =
                               type === 'PURCHASE_BILL' && safePurchaseBillFormSettings.relatedProductEnabled
                                 ? aggregatePurchaseBillRelatedProductListText(grp, productMapPSI)
@@ -1437,9 +1461,29 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                               <tr key={gid} className="hover:bg-slate-50/30 transition-colors">
                                 <td className="py-2.5 pr-3">
                                   <div className="flex items-start gap-2 min-w-0">
-                                    <div className="w-7 h-7 shrink-0 bg-slate-50 rounded-lg flex items-center justify-center text-slate-300">
-                                      <Package className="w-4 h-4" />
-                                    </div>
+                                    {product?.imageUrl ? (
+                                      <button
+                                        type="button"
+                                        onClick={e => {
+                                          e.stopPropagation();
+                                          setPsiProductImagePreviewUrl(product.imageUrl!);
+                                        }}
+                                        className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-slate-50 transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                        aria-label="查看产品图片"
+                                      >
+                                        <img
+                                          src={product.imageUrl}
+                                          alt={rowProductName || product.name || ''}
+                                          className="h-full w-full object-cover"
+                                          loading="lazy"
+                                          decoding="async"
+                                        />
+                                      </button>
+                                    ) : (
+                                      <div className="h-9 w-9 shrink-0 rounded-lg bg-slate-50 flex items-center justify-center text-slate-300 border border-slate-100">
+                                        <Package className="w-4 h-4" />
+                                      </div>
+                                    )}
                                     <div className="min-w-0 flex-1">
                                       <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
                                         <span className="text-sm font-bold text-slate-700 shrink-0">
@@ -1448,7 +1492,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                         {!!rowProductSku && (
                                           <span className="text-[9px] text-slate-300 font-bold uppercase tracking-tight">
                                             {rowProductSku}
-                                            {variantLabel && type !== 'SALES_ORDER' && type !== 'SALES_BILL' && ` · ${variantLabel}`}
+                                            {showVariantSuffixInSku && ` · ${variantLabel}`}
                                           </span>
                                         )}
                                       </div>
@@ -1486,6 +1530,16 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                               )}
                                 {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && (
                                   <td className="py-2.5 px-3 text-right">
+                                    <span className={`text-sm font-black ${type === 'PURCHASE_BILL' ? 'text-indigo-600' : 'text-slate-700'}`}>
+                                      {type === 'PURCHASE_ORDER' && received > orderQty
+                                        ? `${received.toLocaleString()} / ${orderQty.toLocaleString()}`
+                                        : orderQty.toLocaleString()}{' '}
+                                      {first.productId ? getUnitName(first.productId) : 'PCS'}
+                                    </span>
+                                  </td>
+                                )}
+                                {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && (
+                                  <td className="py-2.5 px-3 text-right">
                                     <span className="text-sm font-bold text-slate-600">¥{avgPrice.toFixed(2)}</span>
                               </td>
                                 )}
@@ -1513,22 +1567,19 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                 )}
                                 {type === 'SALES_BILL' && (
                                   <td className="py-2.5 px-3 text-right">
+                                    <span className="text-sm font-black text-indigo-600">
+                                      {orderQty.toLocaleString()} {first.productId ? getUnitName(first.productId) : 'PCS'}
+                                    </span>
+                                  </td>
+                                )}
+                                {type === 'SALES_BILL' && (
+                                  <td className="py-2.5 px-3 text-right">
                                     <span className="text-sm font-bold text-slate-600">¥{avgPrice.toFixed(2)}</span>
                                   </td>
                                 )}
                                 {type === 'SALES_BILL' && (
                                   <td className="py-2.5 px-3 text-right">
                                     <span className="text-sm font-black text-indigo-600">¥{rowAmount.toFixed(2)}</span>
-                                  </td>
-                                )}
-                                {type !== 'SALES_ORDER' && (
-                                  <td className="py-2.5 px-3 text-right">
-                                    <span className={`text-sm font-black ${type.includes('BILL') ? 'text-indigo-600' : 'text-slate-700'}`}>
-                                      {type === 'PURCHASE_ORDER' && received > orderQty
-                                        ? `${received.toLocaleString()} / ${orderQty.toLocaleString()}`
-                                        : orderQty.toLocaleString()}{' '}
-                                      {first.productId ? getUnitName(first.productId) : 'PCS'}
-                                    </span>
                                   </td>
                                 )}
                                 {type === 'SALES_ORDER' && (
@@ -1865,6 +1916,29 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           orders={ordersList as ProductionOrder[]}
           products={products}
         />
+      )}
+
+      {psiProductImagePreviewUrl && (
+        <div
+          className="fixed inset-0 z-[100] flex animate-in fade-in items-center justify-center bg-black/80 p-4"
+          onClick={() => setPsiProductImagePreviewUrl(null)}
+          role="presentation"
+        >
+          <img
+            src={psiProductImagePreviewUrl}
+            alt="产品图片"
+            className="max-h-[90vh] max-w-full rounded-lg object-contain shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          />
+          <button
+            type="button"
+            onClick={() => setPsiProductImagePreviewUrl(null)}
+            className="absolute right-4 top-4 rounded-full bg-white/20 p-2 text-white transition-all hover:bg-white/30"
+            aria-label="关闭"
+          >
+            <X className="h-6 w-6" />
+          </button>
+        </div>
       )}
 
     </div>

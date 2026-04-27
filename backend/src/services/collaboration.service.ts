@@ -10,6 +10,8 @@ import { getNextWorkOrderNumber, generateDocNo } from '../utils/docNumber.js';
 import { nextOutsourceDocNoForPartner } from '../utils/partnerDocNumberServer.js';
 import { applyOutsourceProgress } from './production.service.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { assertCategoryBatchColorMutex, assertCategoryColorSizeUpgradeAllowed } from '../utils/categoryMutex.js';
+import { normalizeCollabSpecLabel, type CollabAcceptCreateProductPayload, type CollabAcceptTransferBody } from '../../../shared/types.js';
 
 // ── helpers ──
 
@@ -141,9 +143,7 @@ async function updateTransferStatus(transferId: string) {
 }
 
 function normalizeSpecLabel(v: unknown): string | null {
-  if (v == null) return null;
-  const s = String(v).trim();
-  return s.length > 0 ? s : null;
+  return normalizeCollabSpecLabel(v);
 }
 
 /** 链式转发派发上的 `originSettlement` 仅给甲方/填报方核算；下一站接收方 API 中脱敏。 */
@@ -271,25 +271,48 @@ async function getOriginChainDispatchSpecNames(originTransferId: string): Promis
   return mergedColorSizeNamesFromDispatches(origin.dispatches as any[]);
 }
 
+/** 链头甲方派发 payload 上的 categoryName（供转发下游默认展示，与色码沿用链头一致） */
+export async function getOriginChainDispatchCategoryName(originTransferId: string): Promise<string | null> {
+  const origin = await basePrisma.interTenantSubcontractTransfer.findUnique({
+    where: { id: originTransferId },
+    include: { dispatches: { orderBy: { createdAt: 'asc' } } },
+  });
+  if (!origin?.dispatches?.length) return null;
+  for (const d of origin.dispatches as { payload: unknown }[]) {
+    const p = d.payload as { categoryName?: unknown } | null;
+    const cn = typeof p?.categoryName === 'string' ? p.categoryName.trim() : '';
+    if (cn) return cn;
+  }
+  return null;
+}
+
+type CollabAcceptDb = Pick<
+  typeof basePrisma,
+  'collaborationProductMap' | 'interTenantSubcontractTransfer'
+>;
+
 /** 与 acceptTransfer 中解析乙方产品 id 的前几步一致（不含按 createProduct 在本地按名/SKU 匹配） */
-async function resolveReceiverProductIdForAcceptPreview(transfer: {
-  id: string;
-  receiverTenantId: string;
-  senderTenantId: string;
-  collaborationId: string | null;
-  senderProductSku: string | null;
-  senderProductId: string | null;
-  receiverProductId: string | null;
-}): Promise<string | null> {
+async function resolveReceiverProductIdForAcceptPreview(
+  transfer: {
+    id: string;
+    receiverTenantId: string;
+    senderTenantId: string;
+    collaborationId: string | null;
+    senderProductSku: string | null;
+    senderProductId: string | null;
+    receiverProductId: string | null;
+  },
+  db: CollabAcceptDb = basePrisma,
+): Promise<string | null> {
   let finalProductId = transfer.receiverProductId;
   if (!finalProductId && transfer.senderProductSku && transfer.collaborationId) {
-    const mapped = await basePrisma.collaborationProductMap.findUnique({
+    const mapped = await db.collaborationProductMap.findUnique({
       where: { collaborationId_senderSku: { collaborationId: transfer.collaborationId, senderSku: transfer.senderProductSku } },
     });
     if (mapped?.receiverProductId) finalProductId = mapped.receiverProductId;
   }
   if (!finalProductId && transfer.senderProductId) {
-    const resolvedTransfer = await basePrisma.interTenantSubcontractTransfer.findFirst({
+    const resolvedTransfer = await db.interTenantSubcontractTransfer.findFirst({
       where: {
         senderTenantId: transfer.senderTenantId,
         receiverTenantId: transfer.receiverTenantId,
@@ -332,7 +355,10 @@ async function computeAcceptDispatchUiMode(tenantId: string, transfer: any): Pro
   if (!resolved) {
     return { mode: 'CREATE', resolvedReceiverProductId: null };
   }
-  const product = await basePrisma.product.findFirst({ where: { id: resolved, tenantId } });
+  const product = await basePrisma.product.findFirst({
+    where: { id: resolved, tenantId },
+    include: { category: true },
+  });
   if (!product) {
     return { mode: 'CREATE', resolvedReceiverProductId: null };
   }
@@ -379,45 +405,94 @@ async function computeAcceptDispatchUiMode(tenantId: string, transfer: any): Pro
     }
   }
 
+  if (!drift && product.category && !product.category.hasColorSize) {
+    const senderAnySpec =
+      senderColorNames.size > 0 ||
+      senderSizeNames.size > 0 ||
+      (firstPayload?.items || []).some((it: any) => normalizeSpecLabel(it.colorName) || normalizeSpecLabel(it.sizeName));
+    if (senderAnySpec) drift = true;
+  }
+
   if (drift) return { mode: 'UPDATE_ACK', resolvedReceiverProductId: resolved };
   return { mode: 'READY', resolvedReceiverProductId: resolved };
 }
 
-async function ensureDictionaryItem(tenantId: string, type: string, name: string): Promise<string> {
+type CollabDictTx = { dictionaryItem: typeof basePrisma.dictionaryItem };
+
+async function ensureDictionaryItem(tx: CollabDictTx, tenantId: string, type: string, name: string): Promise<string> {
   const trimmed = normalizeSpecLabel(name);
   if (!trimmed) throw new AppError(400, '颜色/尺码名称不能为空');
-  const existing = await basePrisma.dictionaryItem.findFirst({ where: { tenantId, type, name: trimmed } });
-  if (existing) return existing.id;
-  const id = genId('dict');
-  await basePrisma.dictionaryItem.create({ data: { id, tenantId, type, name: trimmed, value: trimmed } });
-  return id;
+  try {
+    const row = await tx.dictionaryItem.upsert({
+      where: { tenantId_type_name: { tenantId, type, name: trimmed } },
+      create: { id: genId('dict'), tenantId, type, name: trimmed, value: trimmed },
+      update: {},
+    });
+    return row.id;
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      const again = await tx.dictionaryItem.findFirst({ where: { tenantId, type, name: trimmed } });
+      if (again) return again.id;
+    }
+    throw err;
+  }
 }
 
-async function createReceiverProduct(tenantId: string, cp: { name: string; sku: string; description?: string; colorNames?: string[]; sizeNames?: string[]; categoryName?: string }): Promise<string> {
+type CollabProductWriteTx = Pick<typeof basePrisma, 'product' | 'productCategory' | 'productVariant' | 'dictionaryItem'>;
+
+async function createReceiverProduct(tx: CollabProductWriteTx, tenantId: string, cp: CollabAcceptCreateProductPayload): Promise<string> {
   const productId = genId('prod');
   const colorNamesIn = dedupeTrimmedNames(cp.colorNames);
   const sizeNamesIn = dedupeTrimmedNames(cp.sizeNames);
   const colorIds: string[] = [];
-  for (const name of colorNamesIn) colorIds.push(await ensureDictionaryItem(tenantId, 'color', name));
+  for (const name of colorNamesIn) colorIds.push(await ensureDictionaryItem(tx, tenantId, 'color', name));
   const sizeIds: string[] = [];
-  for (const name of sizeNamesIn) sizeIds.push(await ensureDictionaryItem(tenantId, 'size', name));
+  for (const name of sizeNamesIn) sizeIds.push(await ensureDictionaryItem(tx, tenantId, 'size', name));
+  const hasColorSizeOnProduct = colorIds.length > 0 || sizeIds.length > 0;
   let categoryId: string | null = null;
-  const hasColorSize = colorIds.length > 0 || sizeIds.length > 0;
-  if (cp.categoryName?.trim()) {
-    const existing = await basePrisma.productCategory.findFirst({ where: { tenantId, name: cp.categoryName.trim() } });
-    if (existing) {
-      categoryId = existing.id;
-      if (hasColorSize && !existing.hasColorSize) await basePrisma.productCategory.update({ where: { id: existing.id }, data: { hasColorSize: true } });
-    } else {
-      categoryId = genId('cat');
-      await basePrisma.productCategory.create({ data: { id: categoryId, tenantId, name: cp.categoryName.trim(), hasColorSize } });
+  if (cp.categoryDecision === 'none') {
+    categoryId = null;
+  } else if (cp.categoryDecision === 'create') {
+    const n = (cp.categoryNameToCreate ?? '').trim();
+    if (!n) throw new AppError(400, '请填写新建产品分类名称');
+    assertCategoryBatchColorMutex({ hasColorSize: hasColorSizeOnProduct, hasBatchManagement: false });
+    categoryId = genId('cat');
+    await tx.productCategory.create({
+      data: { id: categoryId, tenantId, name: n, hasColorSize: hasColorSizeOnProduct },
+    });
+  } else if (cp.categoryDecision === 'existing') {
+    const cid = typeof cp.categoryId === 'string' ? cp.categoryId.trim() : '';
+    if (!cid) throw new AppError(400, '请选择产品分类');
+    const cat = await tx.productCategory.findFirst({ where: { id: cid, tenantId } });
+    if (!cat) throw new AppError(404, '产品分类不存在');
+    if (hasColorSizeOnProduct && !cat.hasColorSize) {
+      assertCategoryColorSizeUpgradeAllowed(cat);
+      await tx.productCategory.update({ where: { id: cat.id }, data: { hasColorSize: true } });
     }
+    categoryId = cat.id;
+  } else {
+    throw new AppError(400, '请提供有效的 categoryDecision');
   }
-  await basePrisma.product.create({ data: { id: productId, tenantId, sku: cp.sku, name: cp.name, description: cp.description, colorIds, sizeIds, ...(categoryId ? { categoryId } : {}) } });
+  await tx.product.create({
+    data: {
+      id: productId,
+      tenantId,
+      sku: cp.sku.trim(),
+      name: cp.name.trim(),
+      description: cp.description?.trim() || undefined,
+      colorIds: colorIds as unknown as Prisma.InputJsonValue,
+      sizeIds: sizeIds as unknown as Prisma.InputJsonValue,
+      categoryId,
+    },
+  });
   if (colorIds.length || sizeIds.length) {
     const colors = colorIds.length ? colorIds : [null];
     const sizes = sizeIds.length ? sizeIds : [null];
-    for (const colorId of colors) for (const sizeId of sizes) await basePrisma.productVariant.create({ data: { id: genId('pv'), productId, colorId, sizeId } });
+    for (const colorId of colors) {
+      for (const sizeId of sizes) {
+        await tx.productVariant.create({ data: { id: genId('pv'), productId, colorId, sizeId } });
+      }
+    }
   }
   return productId;
 }
@@ -434,6 +509,47 @@ function aggregateDispatchItems(dispatches: any[]): any[] {
     }
   }
   return [...map.values()];
+}
+
+function collabPayloadImpliesColorSize(firstPayload: unknown, cp?: CollabAcceptCreateProductPayload): boolean {
+  if (cp) {
+    if (dedupeTrimmedNames(cp.colorNames).length || dedupeTrimmedNames(cp.sizeNames).length) return true;
+  }
+  const p = firstPayload as { colorNames?: unknown; sizeNames?: unknown; items?: unknown } | null;
+  const cnArr = Array.isArray(p?.colorNames) ? (p.colorNames as string[]) : undefined;
+  const snArr = Array.isArray(p?.sizeNames) ? (p.sizeNames as string[]) : undefined;
+  if (dedupeTrimmedNames(cnArr).length || dedupeTrimmedNames(snArr).length) return true;
+  if (Array.isArray(p?.items) && p.items.some((it: any) => normalizeSpecLabel(it.colorName) || normalizeSpecLabel(it.sizeName))) return true;
+  return false;
+}
+
+async function applyCollabAcceptReuseCategoryTx(
+  tx: CollabProductWriteTx,
+  tenantId: string,
+  productId: string,
+  cp: CollabAcceptCreateProductPayload,
+  hasSpecOnPayload: boolean,
+) {
+  if (cp.categoryDecision === 'existing' && cp.categoryId?.trim()) {
+    const cat = await tx.productCategory.findFirst({ where: { id: cp.categoryId.trim(), tenantId } });
+    if (!cat) throw new AppError(404, '所选产品分类不存在');
+    if (hasSpecOnPayload && !cat.hasColorSize) {
+      assertCategoryColorSizeUpgradeAllowed(cat);
+      await tx.productCategory.update({ where: { id: cat.id }, data: { hasColorSize: true } });
+    }
+    await tx.product.update({ where: { id: productId }, data: { categoryId: cat.id } });
+  } else if (cp.categoryDecision === 'create') {
+    const n = (cp.categoryNameToCreate ?? '').trim();
+    if (!n) throw new AppError(400, '请填写新建产品分类名称');
+    assertCategoryBatchColorMutex({ hasColorSize: hasSpecOnPayload, hasBatchManagement: false });
+    const newCatId = genId('cat');
+    await tx.productCategory.create({
+      data: { id: newCatId, tenantId, name: n, hasColorSize: hasSpecOnPayload },
+    });
+    await tx.product.update({ where: { id: productId }, data: { categoryId: newCatId } });
+  } else if (cp.categoryDecision === 'none') {
+    await tx.product.update({ where: { id: productId }, data: { categoryId: null } });
+  }
 }
 
 async function createOrderItems(orderId: string, tenantId: string, productId: string, items: any[]) {
@@ -719,60 +835,75 @@ export async function getTransfer(tenantId: string, id: string) {
   return { ...sanitized, _acceptDispatchMode, _acceptResolvedReceiverProductId };
 }
 
-export async function acceptTransfer(tenantId: string, transferId: string, body: { createProduct?: { name: string; sku: string; description?: string; colorNames?: string[]; sizeNames?: string[] }; dispatchIds?: string[] }) {
-  const transfer = await basePrisma.interTenantSubcontractTransfer.findUnique({ where: { id: transferId }, include: { dispatches: true } });
-  if (!transfer) throw new AppError(404, '主单不存在');
-  assertTenantIs(tenantId, transfer.receiverTenantId);
-  const pendingDispatches = transfer.dispatches.filter(d => d.status === 'PENDING');
-  const toAccept = body.dispatchIds ? pendingDispatches.filter(d => body.dispatchIds!.includes(d.id)) : pendingDispatches;
-  if (!toAccept.length) throw new AppError(400, '没有待接受的 Dispatch');
-  let finalProductId = await resolveReceiverProductIdForAcceptPreview({
-    id: transfer.id,
-    receiverTenantId: transfer.receiverTenantId,
-    senderTenantId: transfer.senderTenantId,
-    collaborationId: transfer.collaborationId ?? null,
-    senderProductSku: transfer.senderProductSku ?? null,
-    senderProductId: transfer.senderProductId ?? null,
-    receiverProductId: transfer.receiverProductId ?? null,
-  });
-  /**
-   * 若 map / 主单历史都未解析出 finalProductId，先尝试用「乙方本地已有同 SKU / 同名产品」复用，避免盲目
-   * createReceiverProduct 直接触发 P2002。这样「甲方此前已经让乙方建过产品 → 乙方手动改过名或 SKU」
-   * 也能自然续接，避免「数据重复，违反唯一约束」报错。
-   */
-  if (!finalProductId && body.createProduct) {
-    const cp = body.createProduct;
-    const skuTrim = cp.sku?.trim() || '';
-    const nameTrim = cp.name?.trim() || '';
-    if (skuTrim) {
-      const bySku = await basePrisma.product.findFirst({ where: { tenantId, sku: skuTrim } });
-      if (bySku) finalProductId = bySku.id;
-    }
-    if (!finalProductId && nameTrim) {
-      const byName = await basePrisma.product.findFirst({ where: { tenantId, name: nameTrim } });
-      if (byName) finalProductId = byName.id;
-    }
-  }
-  if (!finalProductId && body.createProduct) {
-    const firstPayload = toAccept[0]?.payload as any;
-    finalProductId = await createReceiverProduct(tenantId, { ...body.createProduct, categoryName: firstPayload?.categoryName ?? null });
-  }
-  if (!finalProductId) throw new AppError(400, '请提供或新建乙方产品');
+export async function acceptTransfer(tenantId: string, transferId: string, body: CollabAcceptTransferBody) {
+  return basePrisma.$transaction(async (tx) => {
+    const transfer = await tx.interTenantSubcontractTransfer.findUnique({
+      where: { id: transferId },
+      include: { dispatches: true },
+    });
+    if (!transfer) throw new AppError(404, '主单不存在');
+    assertTenantIs(tenantId, transfer.receiverTenantId);
+    const pendingDispatches = transfer.dispatches.filter(d => d.status === 'PENDING');
+    const toAccept = body.dispatchIds?.length
+      ? pendingDispatches.filter(d => body.dispatchIds!.includes(d.id))
+      : pendingDispatches;
+    if (!toAccept.length) throw new AppError(400, '没有待接受的 Dispatch');
 
-  /**
-   * 乙方本地产品字段同步：把「甲方本次派发里携带的产品信息」同步到乙方本地产品，解决「甲方改了产品信息 / 色码，
-   * 乙方那边未同步导致出现错配（圆领毛衣→v 领打底、阿卡转发单色码缺失等）」的历史问题。
-   * 规则：
-   *   · name / sku：尝试 update，命中 P2002（与乙方另一产品冲突）则跳过并记录 reason；
-   *   · description：有差异直接覆盖；
-   *   · colorIds / sizeIds：取「当前 ∪ 新增」，避免剔除已存在的变体依赖；同时补建 productVariant 全组合；
-   *   · 变更结果以 `productInfoChanges[]` 返回给前端 toast.info 提示（由接受派发的前端流程汇总展示）。
-   */
-  const productInfoChanges: Array<{ field: string; from: string; to: string; skipped?: boolean; reason?: string }> = [];
-  try {
-    const existingProduct = await basePrisma.product.findUnique({ where: { id: finalProductId } });
+    const cp = body.createProduct;
+    let finalProductId = await resolveReceiverProductIdForAcceptPreview(
+      {
+        id: transfer.id,
+        receiverTenantId: transfer.receiverTenantId,
+        senderTenantId: transfer.senderTenantId,
+        collaborationId: transfer.collaborationId ?? null,
+        senderProductSku: transfer.senderProductSku ?? null,
+        senderProductId: transfer.senderProductId ?? null,
+        receiverProductId: transfer.receiverProductId ?? null,
+      },
+      tx,
+    );
+
+    let matchedLocalSkuOrName = false;
+    if (!finalProductId && cp) {
+      const skuTrim = cp.sku?.trim() || '';
+      const nameTrim = cp.name?.trim() || '';
+      if (skuTrim) {
+        const bySku = await tx.product.findFirst({ where: { tenantId, sku: skuTrim } });
+        if (bySku) {
+          finalProductId = bySku.id;
+          matchedLocalSkuOrName = true;
+        }
+      }
+      if (!finalProductId && nameTrim) {
+        const byName = await tx.product.findFirst({ where: { tenantId, name: nameTrim } });
+        if (byName) {
+          finalProductId = byName.id;
+          matchedLocalSkuOrName = true;
+        }
+      }
+    }
+
+    let createdFreshProduct = false;
+    if (!finalProductId && cp) {
+      if (!cp.categoryDecision) throw new AppError(400, '请在 createProduct 中指定 categoryDecision（existing | create | none）');
+      finalProductId = await createReceiverProduct(tx, tenantId, cp);
+      createdFreshProduct = true;
+    }
+    if (!finalProductId) throw new AppError(400, '请提供或新建乙方产品');
+
+    const firstPayload = toAccept[0]?.payload as any;
+    const hasPayloadSpec = collabPayloadImpliesColorSize(firstPayload, cp);
+
+    if (cp && matchedLocalSkuOrName && !createdFreshProduct) {
+      await applyCollabAcceptReuseCategoryTx(tx, tenantId, finalProductId, cp, hasPayloadSpec);
+    }
+
+    const productInfoChanges: Array<{ field: string; from: string; to: string; skipped?: boolean; reason?: string }> = [];
+    const existingProduct = await tx.product.findUnique({
+      where: { id: finalProductId },
+      include: { category: true },
+    });
     if (existingProduct) {
-      const firstPayload = toAccept[0]?.payload as any;
       const senderName = String(transfer.senderProductName || '').trim();
       const senderSku = String(transfer.senderProductSku || '').trim();
       const senderDesc = String(firstPayload?.description ?? '').trim();
@@ -781,7 +912,7 @@ export async function acceptTransfer(tenantId: string, transferId: string, body:
 
       if (senderName && senderName !== existingProduct.name) {
         try {
-          await basePrisma.product.update({ where: { id: finalProductId }, data: { name: senderName } });
+          await tx.product.update({ where: { id: finalProductId }, data: { name: senderName } });
           productInfoChanges.push({ field: '产品名称', from: existingProduct.name, to: senderName });
         } catch (err: any) {
           if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
@@ -791,7 +922,7 @@ export async function acceptTransfer(tenantId: string, transferId: string, body:
       }
       if (senderSku && senderSku !== existingProduct.sku) {
         try {
-          await basePrisma.product.update({ where: { id: finalProductId }, data: { sku: senderSku } });
+          await tx.product.update({ where: { id: finalProductId }, data: { sku: senderSku } });
           productInfoChanges.push({ field: 'SKU', from: existingProduct.sku, to: senderSku });
         } catch (err: any) {
           if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
@@ -800,124 +931,242 @@ export async function acceptTransfer(tenantId: string, transferId: string, body:
         }
       }
       if (senderDesc && senderDesc !== (existingProduct.description ?? '').trim()) {
-        await basePrisma.product.update({ where: { id: finalProductId }, data: { description: senderDesc } });
+        await tx.product.update({ where: { id: finalProductId }, data: { description: senderDesc } });
         productInfoChanges.push({ field: '描述', from: existingProduct.description ?? '', to: senderDesc });
       }
 
       if (senderColorNames.length > 0 || senderSizeNames.length > 0) {
-        const tenantDictItems = await basePrisma.dictionaryItem.findMany({ where: { tenantId } });
+        const tenantDictItems = await tx.dictionaryItem.findMany({ where: { tenantId } });
         const colorNameToId = new Map(tenantDictItems.filter(d => d.type === 'color').map(d => [d.name, d.id]));
         const sizeNameToId = new Map(tenantDictItems.filter(d => d.type === 'size').map(d => [d.name, d.id]));
-        const ensureColorId = async (name: string) => { const hit = colorNameToId.get(name); if (hit) return hit; const id = await ensureDictionaryItem(tenantId, 'color', name); colorNameToId.set(name, id); return id; };
-        const ensureSizeId = async (name: string) => { const hit = sizeNameToId.get(name); if (hit) return hit; const id = await ensureDictionaryItem(tenantId, 'size', name); sizeNameToId.set(name, id); return id; };
+        const ensureColorId = async (name: string) => {
+          const hit = colorNameToId.get(name);
+          if (hit) return hit;
+          const id = await ensureDictionaryItem(tx, tenantId, 'color', name);
+          colorNameToId.set(name, id);
+          return id;
+        };
+        const ensureSizeId = async (name: string) => {
+          const hit = sizeNameToId.get(name);
+          if (hit) return hit;
+          const id = await ensureDictionaryItem(tx, tenantId, 'size', name);
+          sizeNameToId.set(name, id);
+          return id;
+        };
 
         const existingColorIds = new Set<string>(jsonToStringIds((existingProduct as any).colorIds));
         const existingSizeIds = new Set<string>(jsonToStringIds((existingProduct as any).sizeIds));
-        const newColorIds: string[] = []; for (const n of senderColorNames) newColorIds.push(await ensureColorId(n));
-        const newSizeIds: string[] = []; for (const n of senderSizeNames) newSizeIds.push(await ensureSizeId(n));
+        const newColorIds: string[] = [];
+        for (const n of senderColorNames) newColorIds.push(await ensureColorId(n));
+        const newSizeIds: string[] = [];
+        for (const n of senderSizeNames) newSizeIds.push(await ensureSizeId(n));
         const colorAdded = newColorIds.filter(id => !existingColorIds.has(id));
         const sizeAdded = newSizeIds.filter(id => !existingSizeIds.has(id));
         if (colorAdded.length || sizeAdded.length) {
           const mergedColorIds = [...existingColorIds, ...colorAdded];
           const mergedSizeIds = [...existingSizeIds, ...sizeAdded];
-          await basePrisma.product.update({ where: { id: finalProductId }, data: { colorIds: mergedColorIds as any, sizeIds: mergedSizeIds as any } });
-          const existingVariants = await basePrisma.productVariant.findMany({ where: { productId: finalProductId } });
+          await tx.product.update({
+            where: { id: finalProductId },
+            data: { colorIds: mergedColorIds as any, sizeIds: mergedSizeIds as any },
+          });
+          const existingVariants = await tx.productVariant.findMany({ where: { productId: finalProductId } });
           const haveKey = new Set(existingVariants.map(v => `${v.colorId ?? ''}|${v.sizeId ?? ''}`));
           for (const cId of mergedColorIds) {
             for (const sId of mergedSizeIds) {
               const k = `${cId}|${sId}`;
               if (!haveKey.has(k)) {
-                await basePrisma.productVariant.create({ data: { id: genId('pv'), productId: finalProductId, colorId: cId, sizeId: sId } });
+                await tx.productVariant.create({
+                  data: { id: genId('pv'), productId: finalProductId, colorId: cId, sizeId: sId },
+                });
                 haveKey.add(k);
               }
             }
           }
+          const prodRow = await tx.product.findUnique({
+            where: { id: finalProductId },
+            select: { categoryId: true },
+          });
+          if (prodRow?.categoryId && (mergedColorIds.length > 0 || mergedSizeIds.length > 0)) {
+            const catRow = await tx.productCategory.findUnique({ where: { id: prodRow.categoryId } });
+            if (catRow && !catRow.hasColorSize) {
+              assertCategoryColorSizeUpgradeAllowed(catRow);
+              await tx.productCategory.update({ where: { id: catRow.id }, data: { hasColorSize: true } });
+              productInfoChanges.push({ field: '分类颜色尺码', from: '关闭', to: '启用' });
+            }
+          }
           if (colorAdded.length) {
             const colorIdToName = Object.fromEntries([...colorNameToId].map(([n, id]) => [id, n]));
-            productInfoChanges.push({ field: '颜色', from: [...existingColorIds].map(id => colorIdToName[id] ?? id).filter(Boolean).join('/'), to: mergedColorIds.map(id => colorIdToName[id] ?? id).filter(Boolean).join('/') });
+            productInfoChanges.push({
+              field: '颜色',
+              from: [...existingColorIds].map(id => colorIdToName[id] ?? id).filter(Boolean).join('/'),
+              to: mergedColorIds.map(id => colorIdToName[id] ?? id).filter(Boolean).join('/'),
+            });
           }
           if (sizeAdded.length) {
             const sizeIdToName = Object.fromEntries([...sizeNameToId].map(([n, id]) => [id, n]));
-            productInfoChanges.push({ field: '尺码', from: [...existingSizeIds].map(id => sizeIdToName[id] ?? id).filter(Boolean).join('/'), to: mergedSizeIds.map(id => sizeIdToName[id] ?? id).filter(Boolean).join('/') });
+            productInfoChanges.push({
+              field: '尺码',
+              from: [...existingSizeIds].map(id => sizeIdToName[id] ?? id).filter(Boolean).join('/'),
+              to: mergedSizeIds.map(id => sizeIdToName[id] ?? id).filter(Boolean).join('/'),
+            });
           }
         }
       }
     }
-  } catch (err) {
-    // 同步失败不阻断接受流程；前端仍会收到 productInfoChanges（已记录条目）。
-    console.error('[acceptTransfer] product info sync failed:', err);
-  }
-  const effectiveMode = transfer.bReceiveMode ?? await getProductionLinkMode(tenantId);
-  if (!transfer.bReceiveMode || !transfer.receiverProductId) {
-    await basePrisma.interTenantSubcontractTransfer.update({ where: { id: transferId }, data: { bReceiveMode: effectiveMode, receiverProductId: finalProductId } });
-  }
-  if (transfer.senderProductSku) {
-    await basePrisma.collaborationProductMap.upsert({ where: { collaborationId_senderSku: { collaborationId: transfer.collaborationId, senderSku: transfer.senderProductSku } }, update: { receiverProductId: finalProductId, senderProductName: transfer.senderProductName }, create: { collaborationId: transfer.collaborationId, senderSku: transfer.senderProductSku, senderProductName: transfer.senderProductName, receiverProductId: finalProductId } });
-  }
-  const displayName = transfer.senderProductName || '';
-  const displaySku = transfer.senderProductSku || '';
-  const product = await basePrisma.product.findUnique({ where: { id: finalProductId } });
-  let milestoneNodeIds = (product?.milestoneNodeIds as string[]) || [];
-  let fallbackMilestones: Array<{ templateId: string; name: string; reportTemplate: any; reportDisplayTemplate?: any; sortOrder: number }> | null = null;
-  if (milestoneNodeIds.length === 0) {
-    const existingOrder = await basePrisma.productionOrder.findFirst({ where: { productId: finalProductId, tenantId, milestones: { some: {} } }, include: { milestones: { orderBy: { sortOrder: 'asc' } } } });
-    if (existingOrder?.milestones?.length) {
-      fallbackMilestones = existingOrder.milestones.map(m => ({
-        templateId: m.templateId,
-        name: m.name,
-        reportTemplate: m.reportTemplate,
-        reportDisplayTemplate: (m as { reportDisplayTemplate?: unknown }).reportDisplayTemplate ?? [],
-        sortOrder: m.sortOrder,
-      }));
-    }
-  }
-  const nodes = milestoneNodeIds.length > 0 ? await basePrisma.globalNodeTemplate.findMany({ where: { tenantId } }) : [];
-  const hasProcesses = milestoneNodeIds.length > 0 || fallbackMilestones !== null;
-  const orderStatus = hasProcesses ? 'IN_PROGRESS' : 'PENDING_PROCESS';
-  const buildMilestones = () => {
-    if (milestoneNodeIds.length > 0) {
-      return milestoneNodeIds.map((nodeId, idx) => {
-        const node = nodes.find(n => n.id === nodeId);
-        return {
-          id: genId('ms'), templateId: nodeId, name: node?.name || nodeId, status: 'PENDING', completedQuantity: 0,
-          reportTemplate: (node as any)?.reportTemplate || [],
-          reportDisplayTemplate: (node as any)?.reportDisplayTemplate ?? [],
-          weight: 1, assignedWorkerIds: [], assignedEquipmentIds: [], sortOrder: idx,
-        };
+
+    const effectiveMode = transfer.bReceiveMode ?? await getProductionLinkMode(tenantId);
+    if (!transfer.bReceiveMode || !transfer.receiverProductId) {
+      await tx.interTenantSubcontractTransfer.update({
+        where: { id: transferId },
+        data: { bReceiveMode: effectiveMode, receiverProductId: finalProductId },
       });
     }
-    if (fallbackMilestones) {
-      return fallbackMilestones.map(fm => ({
-        id: genId('ms'), templateId: fm.templateId, name: fm.name, status: 'PENDING', completedQuantity: 0,
-        reportTemplate: fm.reportTemplate || [],
-        reportDisplayTemplate: fm.reportDisplayTemplate ?? [],
-        weight: 1, assignedWorkerIds: [], assignedEquipmentIds: [], sortOrder: fm.sortOrder,
-      }));
+    if (transfer.collaborationId && transfer.senderProductSku) {
+      await tx.collaborationProductMap.upsert({
+        where: {
+          collaborationId_senderSku: {
+            collaborationId: transfer.collaborationId,
+            senderSku: transfer.senderProductSku,
+          },
+        },
+        update: { receiverProductId: finalProductId, senderProductName: transfer.senderProductName },
+        create: {
+          collaborationId: transfer.collaborationId,
+          senderSku: transfer.senderProductSku,
+          senderProductName: transfer.senderProductName,
+          receiverProductId: finalProductId,
+        },
+      });
     }
-    return [];
-  };
-  const createdOrders: string[] = [];
-  if (effectiveMode === 'product') {
-    let existingOrderId = transfer.dispatches.find(d => d.receiverProductionOrderId)?.receiverProductionOrderId;
-    if (!existingOrderId) {
-      const orderId = genId('ord'); const orderNumber = await getNextWorkOrderNumber(tenantId); const milestones = buildMilestones();
-      await basePrisma.productionOrder.create({ data: { id: orderId, tenantId, orderNumber, productId: finalProductId, productName: displayName, sku: displaySku, status: orderStatus, ...(milestones.length > 0 ? { milestones: { create: milestones } } : {}) } });
-      for (const d of toAccept) await createOrderItemsWithSource(orderId, tenantId, finalProductId, (d.payload as any)?.items ?? [], d.id);
-      existingOrderId = orderId; createdOrders.push(orderId);
+    const displayName = transfer.senderProductName || '';
+    const displaySku = transfer.senderProductSku || '';
+    const product = await tx.product.findUnique({ where: { id: finalProductId } });
+    let milestoneNodeIds = (product?.milestoneNodeIds as string[]) || [];
+    let fallbackMilestones: Array<{ templateId: string; name: string; reportTemplate: any; reportDisplayTemplate?: any; sortOrder: number }> | null = null;
+    if (milestoneNodeIds.length === 0) {
+      const existingOrder = await tx.productionOrder.findFirst({
+        where: { productId: finalProductId, tenantId, milestones: { some: {} } },
+        include: { milestones: { orderBy: { sortOrder: 'asc' } } },
+      });
+      if (existingOrder?.milestones?.length) {
+        fallbackMilestones = existingOrder.milestones.map(m => ({
+          templateId: m.templateId,
+          name: m.name,
+          reportTemplate: m.reportTemplate,
+          reportDisplayTemplate: (m as { reportDisplayTemplate?: unknown }).reportDisplayTemplate ?? [],
+          sortOrder: m.sortOrder,
+        }));
+      }
+    }
+    const nodes = milestoneNodeIds.length > 0 ? await tx.globalNodeTemplate.findMany({ where: { tenantId } }) : [];
+    const hasProcesses = milestoneNodeIds.length > 0 || fallbackMilestones !== null;
+    const orderStatus = hasProcesses ? 'IN_PROGRESS' : 'PENDING_PROCESS';
+    const buildMilestones = () => {
+      if (milestoneNodeIds.length > 0) {
+        return milestoneNodeIds.map((nodeId, idx) => {
+          const node = nodes.find(n => n.id === nodeId);
+          return {
+            id: genId('ms'),
+            templateId: nodeId,
+            name: node?.name || nodeId,
+            status: 'PENDING',
+            completedQuantity: 0,
+            reportTemplate: (node as any)?.reportTemplate || [],
+            reportDisplayTemplate: (node as any)?.reportDisplayTemplate ?? [],
+            weight: 1,
+            assignedWorkerIds: [],
+            assignedEquipmentIds: [],
+            sortOrder: idx,
+          };
+        });
+      }
+      if (fallbackMilestones) {
+        return fallbackMilestones.map(fm => ({
+          id: genId('ms'),
+          templateId: fm.templateId,
+          name: fm.name,
+          status: 'PENDING',
+          completedQuantity: 0,
+          reportTemplate: fm.reportTemplate || [],
+          reportDisplayTemplate: fm.reportDisplayTemplate ?? [],
+          weight: 1,
+          assignedWorkerIds: [],
+          assignedEquipmentIds: [],
+          sortOrder: fm.sortOrder,
+        }));
+      }
+      return [];
+    };
+    const createdOrders: string[] = [];
+    if (effectiveMode === 'product') {
+      let existingOrderId = transfer.dispatches.find(d => d.receiverProductionOrderId)?.receiverProductionOrderId;
+      if (!existingOrderId) {
+        const orderId = genId('ord');
+        const orderNumber = await getNextWorkOrderNumber(tenantId, tx);
+        const milestones = buildMilestones();
+        await tx.productionOrder.create({
+          data: {
+            id: orderId,
+            tenantId,
+            orderNumber,
+            productId: finalProductId,
+            productName: displayName,
+            sku: displaySku,
+            status: orderStatus,
+            ...(milestones.length > 0 ? { milestones: { create: milestones } } : {}),
+          },
+        });
+        for (const d of toAccept) {
+          await createOrderItemsWithSource(tx, orderId, tenantId, finalProductId, (d.payload as any)?.items ?? [], d.id);
+        }
+        existingOrderId = orderId;
+        createdOrders.push(orderId);
+      } else {
+        for (const d of toAccept) {
+          await createOrderItemsWithSource(tx, existingOrderId!, tenantId, finalProductId, (d.payload as any)?.items ?? [], d.id);
+        }
+      }
+      for (const d of toAccept) {
+        await tx.subcontractCollaborationDispatch.update({
+          where: { id: d.id },
+          data: { status: 'ACCEPTED', receiverProductionOrderId: existingOrderId },
+        });
+      }
     } else {
-      for (const d of toAccept) await createOrderItemsWithSource(existingOrderId, tenantId, finalProductId, (d.payload as any)?.items ?? [], d.id);
+      for (const d of toAccept) {
+        const orderId = genId('ord');
+        const orderNumber = await getNextWorkOrderNumber(tenantId, tx);
+        const items = (d.payload as any)?.items ?? [];
+        const milestones = buildMilestones();
+        await tx.productionOrder.create({
+          data: {
+            id: orderId,
+            tenantId,
+            orderNumber,
+            productId: finalProductId,
+            productName: displayName,
+            sku: displaySku,
+            status: orderStatus,
+            ...(milestones.length > 0 ? { milestones: { create: milestones } } : {}),
+          },
+        });
+        await createOrderItemsWithSource(tx, orderId, tenantId, finalProductId, items, d.id);
+        await tx.subcontractCollaborationDispatch.update({
+          where: { id: d.id },
+          data: { status: 'ACCEPTED', receiverProductionOrderId: orderId },
+        });
+        createdOrders.push(orderId);
+      }
     }
-    for (const d of toAccept) await basePrisma.subcontractCollaborationDispatch.update({ where: { id: d.id }, data: { status: 'ACCEPTED', receiverProductionOrderId: existingOrderId } });
-  } else {
-    for (const d of toAccept) {
-      const orderId = genId('ord'); const orderNumber = await getNextWorkOrderNumber(tenantId); const items = (d.payload as any)?.items ?? []; const milestones = buildMilestones();
-      await basePrisma.productionOrder.create({ data: { id: orderId, tenantId, orderNumber, productId: finalProductId, productName: displayName, sku: displaySku, status: orderStatus, ...(milestones.length > 0 ? { milestones: { create: milestones } } : {}) } });
-      await createOrderItemsWithSource(orderId, tenantId, finalProductId, items, d.id);
-      await basePrisma.subcontractCollaborationDispatch.update({ where: { id: d.id }, data: { status: 'ACCEPTED', receiverProductionOrderId: orderId } });
-      createdOrders.push(orderId);
-    }
-  }
-  return { accepted: toAccept.length, bReceiveMode: effectiveMode, receiverProductId: finalProductId, createdOrders, pendingProcess: !hasProcesses, productInfoChanges };
+    return {
+      accepted: toAccept.length,
+      bReceiveMode: effectiveMode,
+      receiverProductId: finalProductId,
+      createdOrders,
+      pendingProcess: !hasProcesses,
+      productInfoChanges,
+    };
+  });
 }
 
 export async function createReturn(tenantId: string, transferId: string, body: { items: any[]; note?: string; dispatchId?: string; receiverProductionOrderId?: string; warehouseId?: string; returnGroupId?: string; sharedStockOutDocNo?: string }) {
@@ -1144,6 +1393,8 @@ export async function forwardTransfer(
   if (!fullColorNames.length) fullColorNames = [...new Set(forwardItems.map((i: any) => i.colorName).filter(Boolean))] as string[];
   if (!fullSizeNames.length) fullSizeNames = [...new Set(forwardItems.map((i: any) => i.sizeName).filter(Boolean))] as string[];
 
+  const chainCategoryName = await getOriginChainDispatchCategoryName(originTransferId);
+
   let forwardStockOutDocNo: string | null = null;
   /**
    * 批量同批次转发多产品时，调用方可传入 `sharedDispatchDocNo` 复用单号（第一笔成功后返回给后续笔）。
@@ -1160,6 +1411,7 @@ export async function forwardTransfer(
   const payload = {
     productName: transfer.senderProductName,
     productSku: transfer.senderProductSku,
+    ...(chainCategoryName ? { categoryName: chainCategoryName } : {}),
     colorNames: fullColorNames,
     sizeNames: fullSizeNames,
     items: forwardItems,
@@ -1442,7 +1694,7 @@ export async function confirmDispatchAmendment(tenantId: string, dispatchId: str
         const payload = d.payload as any;
         const items = payload?.items ?? [];
         if (items.length > 0) {
-          await createOrderItemsWithSource(orderId, tenantId, receiverProductId, items, d.id);
+          await createOrderItemsWithSource(basePrisma, orderId, tenantId, receiverProductId, items, d.id);
         }
       }
       orderItemsChanged = true;
@@ -1667,10 +1919,19 @@ export async function rejectReturnAmendment(tenantId: string, returnId: string) 
 
 // ── helper: createOrderItems with sourceDispatchId ──
 
-async function createOrderItemsWithSource(orderId: string, tenantId: string, productId: string, items: any[], sourceDispatchId: string) {
-  const dictItems = await basePrisma.dictionaryItem.findMany({ where: { tenantId } });
+type CollabOrderItemTx = Pick<typeof basePrisma, 'dictionaryItem' | 'productVariant' | 'orderItem'>;
+
+async function createOrderItemsWithSource(
+  tx: CollabOrderItemTx,
+  orderId: string,
+  tenantId: string,
+  productId: string,
+  items: any[],
+  sourceDispatchId: string,
+) {
+  const dictItems = await tx.dictionaryItem.findMany({ where: { tenantId } });
   const dictByName = new Map(dictItems.map(d => [`${d.type}:${d.name}`, d.id]));
-  const variants = await basePrisma.productVariant.findMany({ where: { productId } });
+  const variants = await tx.productVariant.findMany({ where: { productId } });
   for (const item of items) {
     if (!item.quantity || item.quantity <= 0) continue;
     let variantId: string | null = null;
@@ -1681,7 +1942,7 @@ async function createOrderItemsWithSource(orderId: string, tenantId: string, pro
       const sizeId = itemSize ? dictByName.get(`size:${itemSize}`) ?? null : null;
       variantId = variants.find(v => (colorId ? v.colorId === colorId : !v.colorId) && (sizeId ? v.sizeId === sizeId : !v.sizeId))?.id ?? null;
     }
-    await basePrisma.orderItem.create({ data: { productionOrderId: orderId, variantId, quantity: item.quantity, sourceDispatchId } });
+    await tx.orderItem.create({ data: { productionOrderId: orderId, variantId, quantity: item.quantity, sourceDispatchId } });
   }
 }
 

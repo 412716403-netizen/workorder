@@ -14,7 +14,6 @@ interface FlowSummaryRow {
   dateStr: string;
   partner: string;
   totalQuantity: number;
-  remark: string;
   milestoneStr: string;
   typeStr: string;
 }
@@ -215,7 +214,6 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">产品</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">工序</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">数量</th>
-                    <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">备注</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap w-24">操作</th>
                   </tr>
                 </thead>
@@ -239,7 +237,6 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
                         <td className="px-4 py-3 font-bold text-slate-800">{row.productName}</td>
                         <td className="px-4 py-3 font-bold text-slate-700">{row.milestoneStr}</td>
                         <td className="px-4 py-3 text-right font-black text-indigo-600">{row.totalQuantity}</td>
-                        <td className="px-4 py-3 text-xs text-slate-500 max-w-[180px] truncate" title={row.remark}>{row.remark}</td>
                         <td className="px-4 py-3">
                           {hasOpsPerm(tenantRole, userPermissions, 'production:outsource_records:view') && (
                             <button type="button" onClick={() => setFlowDetailKey(row.docNo)} className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all whitespace-nowrap shrink-0">
@@ -251,7 +248,7 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
                     );
                   })}
                   <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold">
-                    <td className="px-4 py-3" colSpan={productionLinkMode === 'product' ? 9 : 10}>
+                    <td className="px-4 py-3" colSpan={productionLinkMode === 'product' ? 8 : 9}>
                       <span className="text-[10px] text-slate-500 uppercase mr-3">合计</span>
                       <span className="text-xs text-indigo-600">发出 {outsourceFlowTotalDispatch} 件</span>
                       <span className="text-slate-300 mx-2">|</span>

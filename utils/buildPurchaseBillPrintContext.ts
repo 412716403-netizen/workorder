@@ -7,7 +7,7 @@ import type {
   PsiRecord,
   Warehouse,
 } from '../types';
-import { buildSalesBillPrintListRows, type SalesBillLineInput } from './buildSalesBillPrintContext';
+import { buildSalesBillPrintListRowsByProductLine, type SalesBillLineInput } from './buildSalesBillPrintContext';
 import { sumPsiLineQty, sumPsiLineAmount, groupPsiDocLines } from './psiPrintShared';
 
 export type PurchaseBillLineInput = {
@@ -33,7 +33,7 @@ export function buildPurchaseBillPrintListRows(
     variantQuantities: l.variantQuantities,
     batchNo: l.batchNo,
   }));
-  return buildSalesBillPrintListRows(asSales, productMap, dictionaries);
+  return buildSalesBillPrintListRowsByProductLine(asSales, productMap, dictionaries);
 }
 
 /**

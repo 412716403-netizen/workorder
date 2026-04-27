@@ -109,9 +109,13 @@ export async function getNextOrderNumber(tenantId?: string): Promise<string> {
 
 /**
  * 扫描租户下全部工单号，取 WO 后第一段数字的最大值 +1（与计划转工单 WO2-1-2 等规则一致，忽略 CO- 等前缀）
+ * @param db 事务内须传入 tx，否则读不到本事务内已插入的工单号、会重复单号。
  */
-export async function getNextWorkOrderNumber(tenantId: string): Promise<string> {
-  const rows = await prisma.productionOrder.findMany({
+export async function getNextWorkOrderNumber(
+  tenantId: string,
+  db: Pick<PrismaClient, 'productionOrder'> = prisma,
+): Promise<string> {
+  const rows = await db.productionOrder.findMany({
     where: { tenantId },
     select: { orderNumber: true },
   });

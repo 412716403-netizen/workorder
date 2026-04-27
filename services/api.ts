@@ -1,3 +1,5 @@
+import type { CollabAcceptTransferBody } from '../types';
+
 /** 生产或未走 Vite 时可用 VITE_API_BASE；开发默认走同源 /api，由 Vite 代理到本机 3001（支持局域网 IP 访问前端） */
 const API_BASE =
   import.meta.env.VITE_API_BASE ||
@@ -615,7 +617,7 @@ export const collaboration = {
   getTransfer: (id: string) =>
     request<any>(`/collaboration/subcontract-transfers/${id}`),
 
-  acceptTransfer: (id: string, data: any) =>
+  acceptTransfer: (id: string, data: CollabAcceptTransferBody) =>
     request<any>(`/collaboration/subcontract-transfers/${id}/accept`, { method: 'POST', body: JSON.stringify(data) }),
   forwardTransfer: (id: string, data: { items: Array<{ colorName: string | null; sizeName: string | null; quantity: number }>; note?: string; warehouseId?: string; sharedDispatchDocNo?: string; unitPrice?: number }) =>
     request<{ newTransferId: string; dispatchId: string; nextStep: any; dispatchDocNo: string | null }>(`/collaboration/subcontract-transfers/${id}/forward`, { method: 'POST', body: JSON.stringify(data) }),

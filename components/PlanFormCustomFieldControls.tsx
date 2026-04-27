@@ -151,17 +151,56 @@ export interface PlanFormCustomFieldReadonlyProps {
   cf: PlanFormFieldConfig;
   value: unknown;
   onFilePreview?: (url: string, type: 'image' | 'pdf') => void;
+  /** 与顶栏「时间 / 经办」同行：小字号、灰字（normal-case） */
+  variant?: 'default' | 'inlineMeta';
 }
 
-export const PlanFormCustomFieldReadonly: React.FC<PlanFormCustomFieldReadonlyProps> = ({ cf, value, onFilePreview }) => {
+export const PlanFormCustomFieldReadonly: React.FC<PlanFormCustomFieldReadonlyProps> = ({
+  cf,
+  value,
+  onFilePreview,
+  variant = 'default',
+}) => {
   const t = effectivePlanFormFieldType(cf);
   const str = value === undefined || value === null ? '' : String(value);
-  if (str === '') return <span className="text-sm font-bold text-slate-400">—</span>;
+  const inlineMeta = variant === 'inlineMeta';
+  const metaTextCls = 'text-[10px] font-bold text-slate-400 normal-case';
+  const defaultValueCls = 'text-sm font-bold text-slate-800';
+  const valueCls = inlineMeta ? metaTextCls : defaultValueCls;
+
+  if (str === '') {
+    return <span className={inlineMeta ? metaTextCls : 'text-sm font-bold text-slate-400'}>—</span>;
+  }
 
   if (t === 'date') {
     const display =
       str.includes('T') || /\d{4}-\d{2}-\d{2}\s+\d{1,2}:/.test(str) ? formatLocalDateTimeZh(str) : str.slice(0, 10);
-    return <span className="text-sm font-bold text-slate-800">{display || str}</span>;
+    return <span className={valueCls}>{display || str}</span>;
+  }
+
+  if (inlineMeta && t === 'file' && str.startsWith('data:')) {
+    const open = () => {
+      if (str.startsWith('data:image/')) {
+        if (onFilePreview) onFilePreview(str, 'image');
+        else window.open(str, '_blank', 'noopener,noreferrer');
+      } else if (str.startsWith('data:application/pdf')) {
+        if (onFilePreview) onFilePreview(str, 'pdf');
+        else window.open(str, '_blank', 'noopener,noreferrer');
+      } else {
+        if (onFilePreview) onFilePreview(str, 'pdf');
+        else window.open(str, '_blank', 'noopener,noreferrer');
+      }
+    };
+    const shortLabel = str.startsWith('data:image/') ? '图片' : str.startsWith('data:application/pdf') ? 'PDF' : '附件';
+    return (
+      <button
+        type="button"
+        onClick={open}
+        className={`${metaTextCls} underline decoration-slate-300/90 underline-offset-2 hover:text-slate-600`}
+      >
+        {shortLabel}
+      </button>
+    );
   }
 
   if (t === 'file' && str.startsWith('data:image/')) {
@@ -228,5 +267,5 @@ export const PlanFormCustomFieldReadonly: React.FC<PlanFormCustomFieldReadonlyPr
     );
   }
 
-  return <span className="text-sm font-bold text-slate-800">{str}</span>;
+  return <span className={valueCls}>{str}</span>;
 };

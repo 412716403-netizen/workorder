@@ -369,6 +369,70 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
   const showInList = (id: string) => orderFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
 
+  /**
+   * 关联产品模式下，PMP 没有 orderId 字段（详见 docs/05-production-link-mode.md），
+   * 工单卡圆心若只读 milestone.completedQuantity，会让产品池上的进度在工单卡上完全消失，
+   * 用户从弹窗（混读 PMP+milestone）退出回列表时数字突变。
+   *
+   * 这里按 `items.quantity` 比例把 PMP 摊回到工单卡——这是**估算值**，并非真实归属（PMP 设计上
+   * 不可逆向归属到具体工单）。`tooltip` 中会标注"估算"，避免用户误以为这是精确数据。
+   */
+  const pmpCompletedByProductTpl = useMemo(() => {
+    const m = new Map<string, number>();
+    (productMilestoneProgresses ?? []).forEach(p => {
+      const k = `${p.productId}|${p.milestoneTemplateId}`;
+      m.set(k, (m.get(k) ?? 0) + (p.completedQuantity ?? 0));
+    });
+    return m;
+  }, [productMilestoneProgresses]);
+
+  const productOrdersTotalQtyByPid = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const o of orders) {
+      const total = o.items.reduce((s, i) => s + i.quantity, 0);
+      m.set(o.productId, (m.get(o.productId) ?? 0) + total);
+    }
+    return m;
+  }, [orders]);
+
+  /**
+   * 工序级外协「已发未收回」聚合（用于列表小卡 tooltip 与剩余口径，与 ReportModal 对齐）。
+   *
+   * 排除 `sourceReworkId`（返工触发的外协计入返工链路，不影响主进度）。
+   * - `outsourceNetByOrderTpl`：按 `orderId|templateId`，对应工单维度发出的未收回数（order 模式 + 历史遗留）。
+   * - `outsourceNetByProductTpl`：按 `productId|templateId`，对应产品维度发出的未收回数（product 模式无 orderId）。
+   *
+   * 工单卡（product 模式）按 `items.quantity` 比例摊回 product 维度数据，与 PMP 摊回口径对称；
+   * 产品组卡直接合并两个维度的未收回数。
+   */
+  const outsourceNetByOrderTpl = useMemo(() => {
+    const m = new Map<string, number>();
+    (prodRecords ?? [])
+      .filter(r => r.type === 'OUTSOURCE' && !r.sourceReworkId && r.orderId && r.nodeId)
+      .forEach(r => {
+        const k = `${r.orderId}|${r.nodeId}`;
+        const cur = m.get(k) ?? 0;
+        if (r.status === '加工中') m.set(k, cur + (r.quantity ?? 0));
+        else if (r.status === '已收回') m.set(k, cur - (r.quantity ?? 0));
+      });
+    for (const [k, v] of m) m.set(k, Math.max(0, v));
+    return m;
+  }, [prodRecords]);
+
+  const outsourceNetByProductTpl = useMemo(() => {
+    const m = new Map<string, number>();
+    (prodRecords ?? [])
+      .filter(r => r.type === 'OUTSOURCE' && !r.sourceReworkId && !r.orderId && r.productId && r.nodeId)
+      .forEach(r => {
+        const k = `${r.productId}|${r.nodeId}`;
+        const cur = m.get(k) ?? 0;
+        if (r.status === '加工中') m.set(k, cur + (r.quantity ?? 0));
+        else if (r.status === '已收回') m.set(k, cur - (r.quantity ?? 0));
+      });
+    for (const [k, v] of m) m.set(k, Math.max(0, v));
+    return m;
+  }, [prodRecords]);
+
   /** 父子工单映射：父工单 id → 子工单列表 */
   const parentToSubOrders = useMemo(() => {
     const map = new Map<string, ProductionOrder[]>();
@@ -744,22 +808,60 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         {order.milestones.length > 0 ? (
                         <div className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden scroll-smooth custom-scrollbar touch-pan-x -mx-0.5">
                           <div className="flex items-stretch gap-1.5 flex-nowrap py-0.5 w-max px-0.5">
+                            {/* 产品模式：按工单 items.quantity 比例摊回 PMP（估算，详见 pmpCompletedByProductTpl 注释） */}
                             {order.milestones.map((ms) => {
                               const isCompleted = ms.status === MilestoneStatus.COMPLETED;
                               const canReport = !!onReportSubmit && canReportMilestone(order, ms);
+                              const productTotalAcrossOrders = productionLinkMode === 'product'
+                                ? (productOrdersTotalQtyByPid.get(order.productId) ?? orderTotalQty)
+                                : orderTotalQty;
+                              const shareRatio = productionLinkMode === 'product' && productTotalAcrossOrders > 0
+                                ? orderTotalQty / productTotalAcrossOrders
+                                : 0;
+                              const pmpShareAt = (templateId: string) => {
+                                if (productionLinkMode !== 'product' || shareRatio <= 0) return 0;
+                                const total = pmpCompletedByProductTpl.get(`${order.productId}|${templateId}`) ?? 0;
+                                return total * shareRatio;
+                              };
+                              const pmpShareCur = pmpShareAt(ms.templateId);
+                              const currentCompletedRaw = ms.completedQuantity + pmpShareCur;
+                              const currentCompleted = Math.round(currentCompletedRaw);
                               let baseQty = orderTotalQty;
-                              const currentCompleted = ms.completedQuantity;
                               if (processSequenceMode === 'sequential') {
                                 const idx = order.milestones.findIndex(m => m.id === ms.id);
                                 if (idx > 0) {
                                   const prev = order.milestones[idx - 1];
-                                  baseQty = prev?.completedQuantity ?? 0;
+                                  const pmpSharePrev = pmpShareAt(prev.templateId);
+                                  baseQty = (prev?.completedQuantity ?? 0) + pmpSharePrev;
                                 }
                               }
                               const { defective, rework } = getDefectiveRework(order.id, ms.templateId);
-                              const availableQty = Math.max(0, baseQty - defective + rework);
+                              const availableQty = Math.max(0, Math.round(baseQty - defective + rework));
                               const remaining = availableQty - currentCompleted;
-                              const tooltip = `工序「${ms.name}」：已完成 ${currentCompleted} 件，可报最多 ${availableQty} 件（已扣不良、加返工完成），剩余 ${remaining} 件`;
+                              /**
+                               * 小卡圆下的 `availableQty / remaining` 数字保持原口径（不扣外协），
+                               * 仅在 hover tooltip 上**额外**追加"外协剩余 X 件"，与 ReportModal 的"扣外协"剩余口径互补。
+                               * `product` 模式下产品维度外协按 `shareRatio` 摊回（与 PMP 摊回对称）。
+                               */
+                              const outsourceShareCurRaw =
+                                (outsourceNetByOrderTpl.get(`${order.id}|${ms.templateId}`) ?? 0) +
+                                (productionLinkMode === 'product'
+                                  ? (outsourceNetByProductTpl.get(`${order.productId}|${ms.templateId}`) ?? 0) * shareRatio
+                                  : 0);
+                              const outsourceShareCur = Math.max(0, Math.round(outsourceShareCurRaw));
+                              const tooltipParts = [
+                                `工序「${ms.name}」`,
+                                `可报 ${availableQty} 件（已扣不良、加返工完成）`,
+                                `已报 ${currentCompleted}`,
+                                `剩 ${remaining} 件`,
+                              ];
+                              if (outsourceShareCur > 0) {
+                                tooltipParts.push(`外协剩余 ${outsourceShareCur} 件`);
+                              }
+                              const tooltipBase = tooltipParts.join(' · ');
+                              const tooltip = productionLinkMode === 'product' && (pmpShareCur > 0 || (outsourceNetByProductTpl.get(`${order.productId}|${ms.templateId}`) ?? 0) > 0)
+                                ? `${tooltipBase}\n（产品池上的已报与外协未收回按工单数量比例摊回，为估算值；精确数字请查看产品维度详情）`
+                                : tooltipBase;
                               const content = (
                                 <>
                                   <span className="text-[10px] font-bold text-emerald-600 mb-1 leading-tight truncate w-full text-center">{ms.name}</span>
@@ -1014,11 +1116,30 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                     const remainingDisplay = allowExceedMaxReportQty ? remainingRaw : Math.max(0, remainingRaw);
                                     const remaining = availableQty - m.completed;
                                     const isDone = remaining <= 0 && m.completed > 0;
+                                    /**
+                                     * 小卡圆下数字保持原口径（不扣外协），仅 hover tooltip 额外提示"外协剩余 X 件"。
+                                     * 产品组卡精确合并两类外协（按 productId 维度 + 旗下所有工单维度）。
+                                     */
+                                    const outsourceForProductGroup =
+                                      (outsourceNetByProductTpl.get(`${block.productId}|${tid}`) ?? 0) +
+                                      block.orders.reduce(
+                                        (s, o) => s + (outsourceNetByOrderTpl.get(`${o.id}|${tid}`) ?? 0),
+                                        0,
+                                      );
                                     const allowReport = (onReportSubmit || (productionLinkMode === 'product' && onReportSubmitProduct)) && (
                                       processSequenceMode !== 'sequential' ||
                                       mIdx === 0 ||
                                       templateEntries[mIdx - 1][1].completed > 0
                                     );
+                                    const tooltipReadOnly = [
+                                      `可报最多 ${availDisplay}`,
+                                      `已报 ${m.completed}`,
+                                      `剩 ${remainingDisplay} 件`,
+                                      ...(outsourceForProductGroup > 0 ? [`外协剩余 ${outsourceForProductGroup} 件`] : []),
+                                    ].join(' · ');
+                                    const tooltipText = allowReport
+                                      ? `${tooltipReadOnly}（点击报工）`
+                                      : '需先完成前一道工序的报工后才能报本工序';
                                     const handleProductGroupMsClick = () => {
                                       if (!allowReport) return;
                                       if (!onReportSubmit && !(productionLinkMode === 'product' && onReportSubmitProduct)) return;
@@ -1092,11 +1213,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                             ? 'bg-slate-50 border-slate-100 hover:bg-slate-100 hover:border-slate-200 cursor-pointer'
                                             : 'bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed'
                                         }`}
-                                        title={
-                                          allowReport
-                                            ? `可报最多 ${availDisplay}，已完成 ${m.completed}，剩余 ${remainingDisplay}（点击报工）`
-                                            : '需先完成前一道工序的报工后才能报本工序'
-                                        }
+                                        title={tooltipText}
                                       >
                                         <span className="text-[10px] font-bold text-emerald-600 mb-1 leading-tight truncate w-full text-center">{m.name}</span>
                                         <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isDone ? 'border-emerald-400' : 'border-indigo-300'}`}>
@@ -1107,7 +1224,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                         </div>
                                       </button>
                                     ) : (
-                                      <div key={tid} className="flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 bg-slate-50 rounded-xl border border-slate-100">
+                                      <div key={tid} className="flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 bg-slate-50 rounded-xl border border-slate-100" title={tooltipReadOnly}>
                                         <span className="text-[10px] font-bold text-emerald-600 mb-1 leading-tight truncate w-full text-center">{m.name}</span>
                                         <div className={`w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center mb-1 shrink-0 ${isDone ? 'border-emerald-400' : 'border-indigo-300'}`}>
                                           <span className="text-base font-black text-slate-900 leading-none">{m.completed}</span>

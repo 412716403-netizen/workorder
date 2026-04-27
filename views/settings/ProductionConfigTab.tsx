@@ -5,6 +5,7 @@ import {
   ToggleRight,
 } from 'lucide-react';
 import { ProductionLinkMode, ProcessSequenceMode } from '../../types';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 interface ProductionConfigTabProps {
   productionLinkMode: ProductionLinkMode;
@@ -16,6 +17,47 @@ interface ProductionConfigTabProps {
   canEdit: boolean;
 }
 
+/**
+ * 关联模式切换会改变进度数据的归属语义（详见 docs/05-production-link-mode.md）：
+ * - order → product：旧 milestone 进度仍可见（视图层做了 PMP+milestone 双路合并），但新报工不再绑工单。
+ * - product → order：旧 PMP 上的进度因 PMP 没有 orderId 字段，只能按工单数量比例摊回展示，**不是真值**。
+ * 所以两个方向都要弹窗确认；工序顺序模式同理（影响新报工的"前一道完成"门禁口径）。
+ */
+const PRODUCTION_LINK_MODE_SWITCH_MESSAGE: Record<ProductionLinkMode, string> = {
+  order: [
+    '切换为「关联工单」模式后：',
+    '• 历史产品池 (PMP) 上累积的进度仍可见，但因为产品池没有工单归属，工单卡片上的「已报」会按工单数量比例摊回展示，**不是真值**。',
+    '• 新报工将精确绑定到具体工单。',
+    '',
+    '建议在切换前导出当前数据备份。确定要切换吗？',
+  ].join('\n'),
+  product: [
+    '切换为「关联产品」模式后：',
+    '• 历史工单上的报工进度仍可见，会与新产品池进度合并展示。',
+    '• 新报工将写入产品维度，不再绑定具体工单。',
+    '• 反向切换回「关联工单」时，新增的产品池数据无法精确归回具体工单。',
+    '',
+    '确定要切换吗？',
+  ].join('\n'),
+};
+
+const PROCESS_SEQUENCE_MODE_SWITCH_MESSAGE: Record<ProcessSequenceMode, string> = {
+  free: [
+    '切换为「不限制工序顺序」后：',
+    '• 所有工序均可独立报工，不再校验前一道工序是否已完成。',
+    '• 历史报工记录不会被修改。',
+    '',
+    '确定要切换吗？',
+  ].join('\n'),
+  sequential: [
+    '切换为「按工序顺序生产」后：',
+    '• 后一道工序必须等前一道工序产生报工后才允许报工。',
+    '• 已存在的"跳序"历史报工不会被回溯调整，但会影响新工序的可报最多数量计算口径。',
+    '',
+    '确定要切换吗？',
+  ].join('\n'),
+};
+
 const ProductionConfigTab: React.FC<ProductionConfigTabProps> = ({
   productionLinkMode,
   onUpdateProductionLinkMode,
@@ -25,6 +67,35 @@ const ProductionConfigTab: React.FC<ProductionConfigTabProps> = ({
   onUpdateAllowExceedMaxReportQty,
   canEdit,
 }) => {
+  const confirm = useConfirm();
+
+  const handleSwitchLinkMode = async (next: ProductionLinkMode) => {
+    if (!onUpdateProductionLinkMode) return;
+    if (next === productionLinkMode) return;
+    const ok = await confirm({
+      title: '切换生产关联模式',
+      message: PRODUCTION_LINK_MODE_SWITCH_MESSAGE[next],
+      confirmText: '确认切换',
+      cancelText: '取消',
+      danger: true,
+    });
+    if (!ok) return;
+    onUpdateProductionLinkMode(next);
+  };
+
+  const handleSwitchSequenceMode = async (next: ProcessSequenceMode) => {
+    if (!onUpdateProcessSequenceMode) return;
+    if (next === processSequenceMode) return;
+    const ok = await confirm({
+      title: '切换工序顺序模式',
+      message: PROCESS_SEQUENCE_MODE_SWITCH_MESSAGE[next],
+      confirmText: '确认切换',
+      cancelText: '取消',
+    });
+    if (!ok) return;
+    onUpdateProcessSequenceMode(next);
+  };
+
   return (
     <div className="max-w-2xl space-y-4">
       <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm p-8">
@@ -55,7 +126,7 @@ const ProductionConfigTab: React.FC<ProductionConfigTabProps> = ({
                 name="productionLinkMode"
                 checked={productionLinkMode === opt.id}
                 disabled={!canEdit}
-                onChange={() => onUpdateProductionLinkMode?.(opt.id)}
+                onChange={() => { void handleSwitchLinkMode(opt.id); }}
                 className="mt-1 w-4 h-4 text-indigo-600"
               />
               <div>
@@ -106,7 +177,7 @@ const ProductionConfigTab: React.FC<ProductionConfigTabProps> = ({
                 name="processSequenceMode"
                 checked={processSequenceMode === opt.id}
                 disabled={!canEdit}
-                onChange={() => onUpdateProcessSequenceMode?.(opt.id)}
+                onChange={() => { void handleSwitchSequenceMode(opt.id); }}
                 className="mt-1 w-4 h-4 text-indigo-600"
               />
               <div>

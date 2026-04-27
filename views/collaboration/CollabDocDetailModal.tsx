@@ -6,7 +6,9 @@ import {
 import { toast } from 'sonner';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import * as api from '../../services/api';
-import type { Partner, Product, ProductionOpRecord, AppDictionaries, Warehouse } from '../../types';
+import type { Partner, Product, ProductionOpRecord, AppDictionaries, Warehouse, ProductCategory } from '../../types';
+import { categoryUsesBatchManagement, normalizeCollabSpecLabel, type CollabAcceptCategoryDecision } from '../../types';
+import { initCollabAcceptCategoryFromPayload } from '../../utils/collabAcceptDecision';
 import {
   dispatchStatusLabel, normalizeAcceptSpecList, returnStatusLabel, resolvePreferredCollabMatrixOrder,
 } from './collabHelpers';
@@ -31,6 +33,8 @@ interface CollabDocDetailModalProps {
   partners: Partner[];
   prodRecords: ProductionOpRecord[];
   dictionaries: AppDictionaries;
+  /** 乙方接受派发时选择本地产品分类（默认按甲方 payload.categoryName 匹配） */
+  categories?: ProductCategory[];
   onRefreshList: () => void;
   onRefreshOrders?: () => Promise<void>;
   onRefreshProdRecords?: () => Promise<void>;
@@ -62,8 +66,10 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
   open, onClose, docKind, doc: initialDoc, transfer: initialTransfer,
   products,
   dictionaries,
+  categories: categoriesProp,
   onRefreshList, onRefreshOrders, onRefreshProdRecords, onRefreshPMP, onRefreshProducts,
 }) => {
+  const categories = categoriesProp ?? [];
   const confirm = useConfirm();
   const navigate = useNavigate();
   const [transfer, setTransfer] = useState<any>(initialTransfer);
@@ -78,6 +84,9 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
   const [acceptDesc, setAcceptDesc] = useState('');
   const [acceptColors, setAcceptColors] = useState<string[]>([]);
   const [acceptSizes, setAcceptSizes] = useState<string[]>([]);
+  const [acceptCategoryDecision, setAcceptCategoryDecision] = useState<CollabAcceptCategoryDecision>('none');
+  const [acceptCategoryId, setAcceptCategoryId] = useState('');
+  const [acceptCategoryNameToCreate, setAcceptCategoryNameToCreate] = useState('');
   /** 打开待接受派发时拉取 getTransfer，以使用后端 _acceptDispatchMode（CREATE / UPDATE_ACK / READY） */
   const [acceptUiLoading, setAcceptUiLoading] = useState(false);
 
@@ -391,7 +400,61 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
     setAcceptDesc(typeof payload.description === 'string' ? payload.description : '');
     setAcceptColors(colors);
     setAcceptSizes(sizes);
-  }, [open, docKind, doc, transfer]);
+    const catInit = initCollabAcceptCategoryFromPayload(
+      typeof payload.categoryName === 'string' ? payload.categoryName : undefined,
+      categories,
+    );
+    setAcceptCategoryDecision(catInit.categoryDecision);
+    setAcceptCategoryId(catInit.categoryId);
+    setAcceptCategoryNameToCreate(catInit.categoryNameToCreate);
+  }, [open, docKind, doc, transfer, categories]);
+
+  const linkedProductForAck = useMemo(
+    () => (transfer._acceptResolvedReceiverProductId
+      ? products.find(p => p.id === transfer._acceptResolvedReceiverProductId)
+      : undefined),
+    [products, transfer._acceptResolvedReceiverProductId],
+  );
+
+  const acceptUpdateAckPreview = useMemo(() => {
+    if (docKind !== 'dispatch') return null;
+    if ((transfer._acceptDispatchMode as string | undefined) !== 'UPDATE_ACK') return null;
+    const p = linkedProductForAck;
+    const pl = doc?.payload as Record<string, unknown> | undefined;
+    if (!p || !pl) return null;
+
+    const dictColorName = (id: string) => dictionaries.colors.find(c => c.id === id)?.name?.trim() ?? '';
+    const dictSizeName = (id: string) => dictionaries.sizes.find(s => s.id === id)?.name?.trim() ?? '';
+
+    const existingColorNames = new Set<string>();
+    for (const id of (Array.isArray((p as { colorIds?: string[] }).colorIds) ? (p as { colorIds: string[] }).colorIds : [])) {
+      const n = dictColorName(id);
+      if (n) existingColorNames.add(n);
+    }
+    const existingSizeNames = new Set<string>();
+    for (const id of (Array.isArray((p as { sizeIds?: string[] }).sizeIds) ? (p as { sizeIds: string[] }).sizeIds : [])) {
+      const n = dictSizeName(id);
+      if (n) existingSizeNames.add(n);
+    }
+
+    const senderColorNames = new Set(normalizeAcceptSpecList(pl.colorNames));
+    const senderSizeNames = new Set(normalizeAcceptSpecList(pl.sizeNames));
+    for (const it of (Array.isArray(pl.items) ? pl.items : []) as Array<{ colorName?: unknown; sizeName?: unknown }>) {
+      const cn = normalizeCollabSpecLabel(it?.colorName);
+      const sn = normalizeCollabSpecLabel(it?.sizeName);
+      if (cn) senderColorNames.add(cn);
+      if (sn) senderSizeNames.add(sn);
+    }
+    const newColors = [...senderColorNames].filter(c => c && !existingColorNames.has(c));
+    const newSizes = [...senderSizeNames].filter(s => s && !existingSizeNames.has(s));
+
+    const cat = p.categoryId ? categories.find(c => c.id === p.categoryId) : undefined;
+    const willUpgradeCategory = Boolean(cat && !cat.hasColorSize && (newColors.length > 0 || newSizes.length > 0));
+    const hasIncomingSpec = senderColorNames.size > 0 || senderSizeNames.size > 0;
+    const batchBlock = Boolean(cat && categoryUsesBatchManagement(cat) && hasIncomingSpec);
+
+    return { newColors, newSizes, catName: cat?.name ?? '—', willUpgradeCategory, batchBlock };
+  }, [docKind, transfer._acceptDispatchMode, linkedProductForAck, doc?.payload, dictionaries, categories]);
 
   const handleAcceptDispatch = async () => {
     if (acceptUiLoading) return;
@@ -414,6 +477,22 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
       }
       const specColors = normalizeAcceptSpecList(acceptColors);
       const specSizes = normalizeAcceptSpecList(acceptSizes);
+      const hasMatrixSpec = specColors.length > 0 || specSizes.length > 0;
+      if (acceptCategoryDecision === 'existing') {
+        if (!acceptCategoryId.trim()) {
+          toast.warning('请选择产品分类');
+          return;
+        }
+        const sel = categories.find(c => c.id === acceptCategoryId);
+        if (sel && categoryUsesBatchManagement(sel) && hasMatrixSpec) {
+          toast.warning('所选分类已启用批次管理，与颜色尺码互斥，请另选分类或改为不归类');
+          return;
+        }
+      }
+      if (acceptCategoryDecision === 'create' && !acceptCategoryNameToCreate.trim()) {
+        toast.warning('请填写新建分类名称');
+        return;
+      }
       Object.assign(payload, {
         createProduct: {
           name,
@@ -421,8 +500,15 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
           description: acceptDesc.trim() || undefined,
           colorNames: specColors.length ? specColors : undefined,
           sizeNames: specSizes.length ? specSizes : undefined,
+          categoryDecision: acceptCategoryDecision,
+          ...(acceptCategoryDecision === 'existing' ? { categoryId: acceptCategoryId.trim() } : {}),
+          ...(acceptCategoryDecision === 'create' ? { categoryNameToCreate: acceptCategoryNameToCreate.trim() } : {}),
         },
       });
+    }
+    if (mode === 'UPDATE_ACK' && acceptUpdateAckPreview?.batchBlock) {
+      toast.error('当前产品所属分类已启用批次管理，无法接受带颜色尺码的派发修订，请先在「设置 → 产品分类」调整该分类后再试。');
+      return;
     }
     const msg =
       mode === 'UPDATE_ACK'
@@ -649,6 +735,89 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
                     className="w-full bg-white border border-slate-200 rounded-lg py-2 px-3 text-sm font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
                   />
                 </div>
+                <div className="rounded-lg border border-indigo-100 bg-white/80 p-3 space-y-2">
+                  <span className="text-[10px] font-black text-slate-500 uppercase block">产品分类 *</span>
+                  <div className="flex flex-wrap gap-3 text-xs font-bold text-slate-700">
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="accept-cat-decision"
+                        checked={acceptCategoryDecision === 'existing'}
+                        onChange={() => setAcceptCategoryDecision('existing')}
+                        disabled={busy}
+                      />
+                      既有分类
+                    </label>
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="accept-cat-decision"
+                        checked={acceptCategoryDecision === 'create'}
+                        onChange={() => setAcceptCategoryDecision('create')}
+                        disabled={busy}
+                      />
+                      新建分类
+                    </label>
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="accept-cat-decision"
+                        checked={acceptCategoryDecision === 'none'}
+                        onChange={() => setAcceptCategoryDecision('none')}
+                        disabled={busy}
+                      />
+                      不归类
+                    </label>
+                  </div>
+                  {acceptCategoryDecision === 'existing' && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-500 uppercase block ml-0.5">选择分类</label>
+                      <select
+                        value={acceptCategoryId}
+                        onChange={e => setAcceptCategoryId(e.target.value)}
+                        disabled={busy}
+                        className="w-full bg-white border border-slate-200 rounded-lg py-2 px-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
+                      >
+                        <option value="">请选择…</option>
+                        {categories.map(cat => {
+                          const specColors = normalizeAcceptSpecList(acceptColors);
+                          const specSizes = normalizeAcceptSpecList(acceptSizes);
+                          const hasSpec = specColors.length > 0 || specSizes.length > 0;
+                          const mutex = categoryUsesBatchManagement(cat) && hasSpec;
+                          return (
+                            <option key={cat.id} value={cat.id} disabled={mutex}>
+                              {(cat.name ?? '').trim() || cat.id}
+                              {cat.hasColorSize ? ' · 色码' : ''}
+                              {mutex ? '（批次管理与色码互斥）' : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                      <p className="text-[11px] text-slate-500">
+                        若启用批次管理的分类与本次颜色/尺码冲突，请另选分类或改为「不归类」。
+                      </p>
+                    </div>
+                  )}
+                  {acceptCategoryDecision === 'create' && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-500 uppercase block ml-0.5">新分类名称</label>
+                      <input
+                        type="text"
+                        value={acceptCategoryNameToCreate}
+                        onChange={e => setAcceptCategoryNameToCreate(e.target.value)}
+                        disabled={busy}
+                        placeholder="填写分类名称"
+                        className="w-full bg-white border border-slate-200 rounded-lg py-2 px-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
+                      />
+                      <p className="text-[11px] text-slate-500">将新建分类并按本次是否含颜色/尺码自动启用色码标志。</p>
+                    </div>
+                  )}
+                  {acceptCategoryDecision === 'none' && (
+                    <p className="text-[11px] text-amber-800 bg-amber-50/80 rounded-md px-2 py-1.5">
+                      产品将进入「全部」未归类视图，建议后续在产品档案中补充分类。
+                    </p>
+                  )}
+                </div>
                 {(acceptColors.length > 0 || acceptSizes.length > 0) && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {acceptColors.length > 0 && (
@@ -689,10 +858,41 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
                 <p className="text-sm text-amber-950 font-bold leading-relaxed">
                   已关联本地产品「{linkedProductLabel}」。甲方本次派发的名称、SKU、描述或色码与本地不一致，确认接受后将把甲方数据同步到该产品（若个别字段在本地存在冲突则会跳过并提示）。
                 </p>
+                {acceptUpdateAckPreview && (
+                  <div className="rounded-lg border border-amber-100 bg-white/70 p-3 space-y-2 text-xs text-slate-800">
+                    {(acceptUpdateAckPreview.newColors.length > 0 || acceptUpdateAckPreview.newSizes.length > 0) && (
+                      <div>
+                        <span className="font-black text-amber-900 block mb-1">本次将新增规格字典</span>
+                        {acceptUpdateAckPreview.newColors.length > 0 && (
+                          <p>
+                            <span className="font-bold text-slate-600">颜色：</span>
+                            {acceptUpdateAckPreview.newColors.join('、')}
+                          </p>
+                        )}
+                        {acceptUpdateAckPreview.newSizes.length > 0 && (
+                          <p>
+                            <span className="font-bold text-slate-600">尺码：</span>
+                            {acceptUpdateAckPreview.newSizes.join('、')}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {acceptUpdateAckPreview.willUpgradeCategory && (
+                      <p className="font-bold text-indigo-900">
+                        分类「{acceptUpdateAckPreview.catName}」当前未启用颜色尺码；接受后将自动启用色码以容纳甲方规格。
+                      </p>
+                    )}
+                    {acceptUpdateAckPreview.batchBlock && (
+                      <p className="font-bold text-red-700">
+                        当前分类「{acceptUpdateAckPreview.catName}」已启用批次管理，与颜色尺码互斥，无法接受本派发修订。请先到「设置 → 产品分类」关闭批次管理或更换产品分类。
+                      </p>
+                    )}
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={handleAcceptDispatch}
-                  disabled={busy}
+                  disabled={busy || Boolean(acceptUpdateAckPreview?.batchBlock)}
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-black text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 transition-colors shadow-sm"
                 >
                   <Check className="w-4 h-4 shrink-0" />

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ScrollText, X, Check, Pencil, Trash2 } from 'lucide-react';
+import { ScrollText, X, Check, Pencil, Trash2, Clock, User, Package } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
   ProductionOpRecord,
@@ -29,16 +29,11 @@ import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderC
 import { buildOutsourceFlowPrintContext } from '../../utils/buildOutsourceFlowPrintContext';
 import { OUTSOURCE_DISPATCH_CUSTOM_DATA_KEY, OUTSOURCE_RECEIVE_CUSTOM_DATA_KEY } from '../../utils/productionOpCollab/outsource';
 import { PlanFormCustomFieldInput, PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
+import { psiCustomFieldHasFilledDisplayValue } from '../psi-ops/psiOpsListFormatting';
 import {
   buildOutsourceReceiveLastPriceIndex,
   lookupOutsourceReceiveLastPrice,
 } from '../../utils/outsourceReceiveLastUnitPrice';
-import { formatOutsourceVariantLabel } from '../../utils/buildOutsourceFlowPrintContext';
-import {
-  aggregateOutsourceQtyByVariant,
-  computeDispatchReceiveRemaining,
-  filterOutsourceRecordsMatchingDocScope,
-} from '../../utils/outsourcePartnerFlowDetail';
 
 export interface OutsourceFlowDocumentDetailModalProps {
   productionLinkMode: 'order' | 'product';
@@ -86,15 +81,15 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   printTemplates = [],
   onOpenOutsourceFormPrintTab,
 }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, tenantCtx } = useAuth();
   const flowDetailOperatorFallback = currentOperatorDisplayName(currentUser);
   const confirm = useConfirm();
   const [flowDetailEditMode, setFlowDetailEditMode] = useState(false);
   const [flowDetailEditPartner, setFlowDetailEditPartner] = useState('');
-  const [flowDetailEditRemark, setFlowDetailEditRemark] = useState('');
   const [flowDetailQuantities, setFlowDetailQuantities] = useState<Record<string, number>>({});
   const [flowDetailUnitPrices, setFlowDetailUnitPrices] = useState<Record<string, number>>({});
   const [flowDetailEditCustom, setFlowDetailEditCustom] = useState<Record<string, unknown>>({});
+  const [detailImagePreviewUrl, setDetailImagePreviewUrl] = useState<string | null>(null);
 
   const docRecords = useMemo(
     () => records.filter(r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey),
@@ -116,36 +111,10 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
     return typeof raw === 'object' && raw != null && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {};
   }, [docRecords]);
 
-  const scopeFilteredForSummary = useMemo(
-    () => (docRecords.length ? filterOutsourceRecordsMatchingDocScope(records, docRecords) : []),
-    [records, docRecords],
-  );
-  const scopeAggForSummary = useMemo(
-    () => computeDispatchReceiveRemaining(scopeFilteredForSummary),
-    [scopeFilteredForSummary],
-  );
-  const currentDocVariantTotalsForSummary = useMemo(() => aggregateOutsourceQtyByVariant(docRecords), [docRecords]);
-  const currentDocGrandTotalForSummary = useMemo(
+  const totalDocQty = useMemo(
     () => docRecords.reduce((s, r) => s + (Number(r.quantity) || 0), 0),
     [docRecords],
   );
-  const summaryVariantIdsForSummary = useMemo(() => {
-    const ids = new Set<string>();
-    for (const r of [...scopeFilteredForSummary, ...docRecords]) {
-      const v = (r.variantId || '').trim();
-      if (v) ids.add(v);
-    }
-    return [...ids].sort((a, b) => {
-      const ra =
-        docRecords.find(x => (x.variantId || '') === a) ?? scopeFilteredForSummary.find(x => (x.variantId || '') === a);
-      const rb =
-        docRecords.find(x => (x.variantId || '') === b) ?? scopeFilteredForSummary.find(x => (x.variantId || '') === b);
-      return formatOutsourceVariantLabel(ra?.productId, a, products, dictionaries).localeCompare(
-        formatOutsourceVariantLabel(rb?.productId, b, products, dictionaries),
-        'zh-CN',
-      );
-    });
-  }, [docRecords, scopeFilteredForSummary, products, dictionaries]);
 
   if (docRecords.length === 0) return null;
   const first = docRecords[0];
@@ -157,7 +126,6 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   const totalAmount = isReceiveDoc ? docRecords.reduce((s, r) => s + (r.amount ?? 0), 0) : 0;
   const docDateStr = first.timestamp ? (() => { try { const d = new Date(first.timestamp); return isNaN(d.getTime()) ? first.timestamp : d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); } catch { return first.timestamp; } })() : '—';
   const docPartner = first.partner ?? '—';
-  const docRemark = docRecords.map(r => r.reason).filter(Boolean)[0] ?? '—';
   const isProductModeDetail = productionLinkMode === 'product' && docRecords.some(r => !r.orderId);
   const byOrderNode = new Map<string, ProductionOpRecord[]>();
   docRecords.forEach(rec => {
@@ -179,9 +147,11 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/60" onClick={() => { onClose(); setFlowDetailEditMode(false); setFlowDetailEditCustom({}); }} aria-hidden />
-      <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-xl border border-slate-200 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
-          <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><ScrollText className="w-5 h-5 text-indigo-600" /> 单据详情 · {flowDetailKey}</h3>
+      <div className="relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
+          <h3 className="flex items-center gap-2 text-lg font-black text-slate-900">
+            <ScrollText className="h-5 w-5 shrink-0 text-indigo-600" /> 单据详情
+          </h3>
           <div className="flex items-center gap-2">
             {flowDetailEditMode ? (
               <>
@@ -223,7 +193,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                       const bk = parts.length >= 2 ? `${productId}|${nodeId}` : key;
                       const unitPrice = isReceiveDoc ? (flowDetailUnitPrices[key] ?? flowDetailUnitPrices[bk] ?? 0) : undefined;
                       const amount = isReceiveDoc && unitPrice != null ? Number(qty) * unitPrice : undefined;
-                      outsourcePendingWrites.push({ id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, type: 'OUTSOURCE', productId, quantity: qty, reason: flowDetailEditRemark.trim() || undefined, operator: first.operator || flowDetailOperatorFallback, timestamp, status: newStatus, partner: partnerName, docNo: flowDetailKey, nodeId, variantId: variantId || undefined, unitPrice: unitPrice || undefined, amount: amount ?? undefined, ...mergeCollab(preservedCollabData) } as ProductionOpRecord);
+                      outsourcePendingWrites.push({ id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, type: 'OUTSOURCE', productId, quantity: qty, reason: undefined, operator: first.operator || flowDetailOperatorFallback, timestamp, status: newStatus, partner: partnerName, docNo: flowDetailKey, nodeId, variantId: variantId || undefined, unitPrice: unitPrice || undefined, amount: amount ?? undefined, ...mergeCollab(preservedCollabData) } as ProductionOpRecord);
                       return;
                     }
                     const orderId = parts[0];
@@ -232,7 +202,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                     if (!order) return;
                     const unitPrice = isReceiveDoc ? (flowDetailUnitPrices[key] ?? flowDetailUnitPrices[bk] ?? 0) : undefined;
                     const amount = isReceiveDoc && unitPrice != null ? Number(qty) * unitPrice : undefined;
-                    outsourcePendingWrites.push({ id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, type: 'OUTSOURCE', orderId, productId: order.productId, quantity: qty, reason: flowDetailEditRemark.trim() || undefined, operator: first.operator || flowDetailOperatorFallback, timestamp, status: newStatus, partner: partnerName, docNo: flowDetailKey, nodeId, variantId: variantId || undefined, unitPrice: unitPrice || undefined, amount: amount ?? undefined, ...mergeCollab(preservedCollabData) } as ProductionOpRecord);
+                    outsourcePendingWrites.push({ id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, type: 'OUTSOURCE', orderId, productId: order.productId, quantity: qty, reason: undefined, operator: first.operator || flowDetailOperatorFallback, timestamp, status: newStatus, partner: partnerName, docNo: flowDetailKey, nodeId, variantId: variantId || undefined, unitPrice: unitPrice || undefined, amount: amount ?? undefined, ...mergeCollab(preservedCollabData) } as ProductionOpRecord);
                   });
                   if (onAddRecordBatch && outsourcePendingWrites.length > 1) {
                     await onAddRecordBatch(outsourcePendingWrites);
@@ -281,23 +251,23 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                 <OrderCenterDetailPrintBlock
                   printSlot={printSlot}
                   printTemplates={printTemplates}
-                  buildContext={(_template: PrintTemplate): PrintRenderContext =>
-                    buildOutsourceFlowPrintContext({
+                  buildContext={(_template: PrintTemplate): PrintRenderContext => ({
+                    ...buildOutsourceFlowPrintContext({
                       docRecords,
                       isReceiveDoc,
                       orders,
                       products,
                       globalNodes,
                       dictionaries,
-                    })
-                  }
+                    }),
+                    tenantName: tenantCtx?.tenantName?.trim() || undefined,
+                  })}
                   pickerSubtitle={`单号 ${flowDetailKey}`}
                   onAddPrintTemplate={onOpenOutsourceFormPrintTab}
                 />
                 {onUpdateRecord && hasOpsPerm(tenantRole, userPermissions, 'production:outsource_records:edit') && (
                   <button type="button" onClick={() => {
                     setFlowDetailEditPartner(docPartner);
-                    setFlowDetailEditRemark(docRemark);
                     setFlowDetailEditCustom({ ...outsourceCustomSnapshot });
                     const initQty: Record<string, number> = {};
                     docRecords.forEach(r => { const k = isProductModeDetail ? `${r.productId}|${r.nodeId}${r.variantId ? '|' + r.variantId : ''}` : `${r.orderId}|${r.nodeId}${r.variantId ? '|' + r.variantId : ''}`; initQty[k] = (initQty[k] || 0) + r.quantity; });
@@ -348,159 +318,132 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
             <p className="text-xs text-amber-700 leading-relaxed">此单据来源于协作回传，本地修改<strong>不会</strong>同步到乙方。如需双方数据一致，请通知乙方在协作管理中编辑并重新同步。</p>
           </div>
         )}
-        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
-          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">单据基本信息</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">单号</label>
-              <div className="w-full h-[52px] rounded-xl border border-slate-200 py-3 px-4 text-sm font-bold text-slate-800 bg-white flex items-center">{flowDetailKey}</div>
-            </div>
-            <div>
-              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">日期</label>
-              <div className="w-full h-[52px] rounded-xl border border-slate-200 py-3 px-4 text-sm font-bold text-slate-800 bg-white flex items-center">{docDateStr}</div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">外协工厂</label>
-              {flowDetailEditMode ? (
-                <SupplierSelect
-                  options={partners}
-                  categories={partnerCategories}
-                  value={flowDetailEditPartner}
-                  onChange={name => setFlowDetailEditPartner(name)}
-                  placeholder="搜索并选择外协工厂..."
-                  triggerClassName={`${psiOrderBillFormPartnerTriggerClassCompact} bg-white border border-slate-200`}
-                />
-              ) : (
-                <div className="w-full h-[52px] rounded-xl border border-slate-200 py-3 px-4 text-sm font-bold text-slate-800 bg-white flex items-center">{docPartner}</div>
-              )}
-            </div>
-            <div>
-              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">备注说明</label>
-              {flowDetailEditMode ? (
-                <input type="text" value={flowDetailEditRemark} onChange={e => setFlowDetailEditRemark(e.target.value)} placeholder="选填" className="w-full h-[52px] rounded-xl border border-slate-200 py-3 px-4 text-sm font-bold text-slate-800 bg-white focus:ring-2 focus:ring-indigo-500 outline-none placeholder:text-slate-400" />
-              ) : (
-                <div className="w-full h-[52px] rounded-xl border border-slate-200 py-3 px-4 text-sm font-bold text-slate-800 bg-white flex items-center truncate" title={docRemark}>{docRemark}</div>
-              )}
-            </div>
-            {isReceiveDoc && (
-              <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">加工费合计（元）</label>
-                <div className="w-full h-[52px] rounded-xl border border-slate-200 py-3 px-4 text-sm font-bold text-slate-800 bg-emerald-50 flex items-center">{totalAmount.toFixed(2)}</div>
-              </div>
-            )}
-            {outsourceCustomDefsDetail.length > 0 ? (
-              <div className="md:col-span-2 w-full rounded-2xl border border-slate-100 bg-slate-50/60 p-4 space-y-3">
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500">自定义内容</h4>
-                {flowDetailEditMode ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {outsourceCustomDefsDetail.map(cf => (
-                      <div key={cf.id} className="min-w-0 space-y-1">
-                        <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
+        <div className="shrink-0 px-6 pt-4 pb-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
+              <div className="min-w-0 flex-1 space-y-3">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                  {flowDetailEditMode ? (
+                    <div className="min-w-0 max-w-lg flex-1">
+                      <SupplierSelect
+                        options={partners}
+                        categories={partnerCategories}
+                        value={flowDetailEditPartner}
+                        onChange={name => setFlowDetailEditPartner(name)}
+                        placeholder="搜索并选择外协工厂..."
+                        triggerClassName={`${psiOrderBillFormPartnerTriggerClassCompact} min-h-[44px] rounded-xl border border-slate-200 bg-white`}
+                      />
+                    </div>
+                  ) : (
+                    <span className="font-black text-slate-800">{docPartner}</span>
+                  )}
+                  <span className="rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                    {flowDetailKey}
+                  </span>
+                  {isReceiveDoc ? (
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-tighter text-emerald-700">
+                      已收回
+                    </span>
+                  ) : (
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-tighter text-amber-800">
+                      加工中
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] font-bold uppercase text-slate-400">
+                  <span className="flex items-center gap-1 normal-case">
+                    <Clock className="h-3 w-3 shrink-0" />
+                    {docDateStr}
+                  </span>
+                  <span className="flex items-center gap-1 normal-case">
+                    <User className="h-3 w-3 shrink-0" />
+                    经办: {first.operator || '—'}
+                  </span>
+                  {!flowDetailEditMode &&
+                    outsourceCustomDefsDetail
+                      .filter(cf => psiCustomFieldHasFilledDisplayValue(cf, outsourceCustomSnapshot[cf.id]))
+                      .map(cf => (
+                        <span key={cf.id} className="inline-flex max-w-full min-w-0 items-baseline gap-1 normal-case">
+                          <span className="shrink-0">{cf.label}:</span>
+                          <span className="min-w-0">
+                            <PlanFormCustomFieldReadonly
+                              variant="inlineMeta"
+                              cf={cf}
+                              value={outsourceCustomSnapshot[cf.id]}
+                              onFilePreview={(url, type) => {
+                                if (type === 'image') setDetailImagePreviewUrl(url);
+                                else window.open(url, '_blank', 'noopener,noreferrer');
+                              }}
+                            />
+                          </span>
+                        </span>
+                      ))}
+                  {flowDetailEditMode &&
+                    outsourceCustomDefsDetail.map(cf => (
+                      <span key={cf.id} className="inline-flex max-w-full min-w-0 flex-col gap-0.5 normal-case sm:inline-flex sm:flex-row sm:items-end sm:gap-1">
+                        <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}:</span>
                         <PlanFormCustomFieldInput
                           cf={cf}
                           value={flowDetailEditCustom[cf.id]}
                           onChange={v => setFlowDetailEditCustom(prev => ({ ...prev, [cf.id]: v }))}
-                          controlClassName="min-h-[48px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                          controlClassName="h-9 min-w-[8rem] max-w-[14rem] rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                          onFilePreview={(url, type) => {
+                            if (type === 'image') setDetailImagePreviewUrl(url);
+                            else window.open(url, '_blank', 'noopener,noreferrer');
+                          }}
                         />
-                      </div>
+                      </span>
                     ))}
-                  </div>
-                ) : (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {outsourceCustomDefsDetail.map(cf => (
-                      <div key={cf.id} className="min-w-0">
-                        <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">{cf.label}</p>
-                        <PlanFormCustomFieldReadonly cf={cf} value={outsourceCustomSnapshot[cf.id]} />
-                      </div>
-                    ))}
-                  </div>
-                )}
+                </div>
               </div>
-            ) : null}
-          </div>
-        </div>
-        {!flowDetailEditMode && (
-          <div className="px-6 py-3 border-b border-slate-100 bg-white shrink-0">
-            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">数量汇总</h4>
-            <div className="overflow-x-auto rounded-2xl border border-slate-200">
-              <table className="w-full min-w-[280px] border-collapse text-center text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50">
-                    <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-slate-500">汇总项</th>
-                    <th className="px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500">总件数</th>
-                    {summaryVariantIdsForSummary.map(vid => {
-                      const ra =
-                        docRecords.find(x => (x.variantId || '') === vid) ??
-                        scopeFilteredForSummary.find(x => (x.variantId || '') === vid);
-                      const lab = formatOutsourceVariantLabel(ra?.productId, vid, products, dictionaries);
-                      return (
-                        <th key={vid} className="px-2 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500 max-w-[7rem] truncate" title={lab}>
-                          {lab}
-                        </th>
-                      );
-                    })}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  <tr className="bg-slate-50/40">
-                    <td className="px-3 py-2 text-left font-bold text-slate-700">本单</td>
-                    <td className="px-3 py-2 font-bold text-indigo-700 tabular-nums">{currentDocGrandTotalForSummary} 件</td>
-                    {summaryVariantIdsForSummary.map(vid => {
-                      const q = currentDocVariantTotalsForSummary[vid] ?? 0;
-                      return (
-                        <td key={vid} className="px-2 py-2 font-bold text-slate-800 tabular-nums">
-                          {q > 0 ? `${q} 件` : '—'}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                  <tr className="bg-sky-50/30">
-                    <td className="px-3 py-2 text-left font-bold text-slate-700">外协发出（累计）</td>
-                    <td className="px-3 py-2 font-bold text-slate-900 tabular-nums">{scopeAggForSummary.dispatchTotal} 件</td>
-                    {summaryVariantIdsForSummary.map(vid => {
-                      const q = scopeAggForSummary.dispatchByVariant[vid] ?? 0;
-                      return (
-                        <td key={vid} className="px-2 py-2 font-bold text-slate-800 tabular-nums">
-                          {q > 0 ? `${q} 件` : '—'}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                  <tr className="bg-amber-50/30">
-                    <td className="px-3 py-2 text-left font-bold text-slate-700">外协收回（累计）</td>
-                    <td className="px-3 py-2 font-bold text-slate-900 tabular-nums">{scopeAggForSummary.receiveTotal} 件</td>
-                    {summaryVariantIdsForSummary.map(vid => {
-                      const q = scopeAggForSummary.receiveByVariant[vid] ?? 0;
-                      return (
-                        <td key={vid} className="px-2 py-2 font-bold text-slate-800 tabular-nums">
-                          {q > 0 ? `${q} 件` : '—'}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                  <tr className="bg-slate-100/90">
-                    <td className="px-3 py-2 text-left font-black text-slate-800">剩余数量</td>
-                    <td className="px-3 py-2 font-black text-slate-900 tabular-nums">{scopeAggForSummary.remainingTotal} 件</td>
-                    {summaryVariantIdsForSummary.map(vid => {
-                      const q = scopeAggForSummary.remainingByVariant[vid] ?? 0;
-                      return (
-                        <td key={vid} className="px-2 py-2 font-black text-slate-900 tabular-nums">
-                          {q > 0 ? `${q} 件` : '—'}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                </tbody>
-              </table>
+              <div className="flex shrink-0 flex-wrap gap-6 border-t border-slate-200/80 pt-3 text-sm md:border-l md:border-t-0 md:border-slate-200/80 md:pl-6 md:pt-0">
+                <div className="min-w-[6.5rem] md:text-right">
+                  <p className="mb-0.5 text-[10px] font-black uppercase text-slate-400">合计数量</p>
+                  <p className="font-black tabular-nums text-slate-800">{totalDocQty.toLocaleString()} PCS</p>
+                </div>
+                {isReceiveDoc ? (
+                  <div className="min-w-[6.5rem] md:text-right">
+                    <p className="mb-0.5 text-[10px] font-black uppercase text-slate-400">加工费合计</p>
+                    <p className="font-black tabular-nums text-emerald-600">¥{totalAmount.toFixed(2)}</p>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
-        )}
-        <div className="flex-1 overflow-auto min-h-0 p-6">
-          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">商品明细</h4>
-          <div className="space-y-8">
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto bg-slate-50/30 p-6">
+          <h4 className="mb-4 text-[10px] font-black uppercase tracking-widest text-slate-400">商品明细</h4>
+          <div className="space-y-6">
             {detailLines.map(({ key, order, product, orderNumber, productName, nodeName, records: lineRecords, variantQty }) => {
               const category = categories.find(c => c.id === product?.categoryId);
               const matrixEnabled = productHasColorSizeMatrix(product, category);
+              const productThumb = (
+                <>
+                  {product?.imageUrl ? (
+                    <button
+                      type="button"
+                      onClick={e => {
+                        e.stopPropagation();
+                        setDetailImagePreviewUrl(product.imageUrl!);
+                      }}
+                      className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-slate-100 bg-white transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      aria-label="查看产品图片"
+                    >
+                      <img
+                        src={product.imageUrl}
+                        alt={productName}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </button>
+                  ) : (
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-100 bg-slate-50 text-slate-300">
+                      <Package className="h-4 w-4" />
+                    </div>
+                  )}
+                </>
+              );
               const allProductVariants = (product?.variants as ProductVariant[]) ?? [];
               const variantIdsInOrder = new Set((order?.items ?? []).map(i => i.variantId).filter(Boolean));
               const variantIdsFromRecords = new Set(Object.entries(variantQty).filter(([vid, q]) => vid !== '' && (Number(q) || 0) !== 0).map(([vid]) => vid));
@@ -536,28 +479,34 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                   : lineRecords.reduce((s, r) => s + (r.amount ?? 0), 0);
                 const matrixLineUnitPriceDisplay = lineRecords[0]?.unitPrice != null ? Number(lineRecords[0].unitPrice).toFixed(2) : '—';
                 return (
-                  <div key={key} className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
-                    <div className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-2">
-                      <div className="min-w-0 max-w-full shrink basis-[min(100%,11rem)] sm:max-w-[min(16rem,calc(100%-12rem))] sm:basis-auto">
-                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                          {productionLinkMode !== 'product' && orderNumber != null && orderNumber !== '' && (
-                            <span className="shrink-0 text-[10px] font-black uppercase tracking-wider text-indigo-600">{orderNumber}</span>
-                          )}
-                          <span className="min-w-0 truncate text-sm font-bold text-slate-800" title={productName}>
-                            {productName}
-                          </span>
-                          <span className="shrink-0 text-sm font-bold text-indigo-600">{nodeName}</span>
+                  <div key={key} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                    <div className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-3">
+                      <div className="flex min-w-0 flex-1 items-start gap-3">
+                        {productThumb}
+                        <div className="min-w-0 max-w-full shrink basis-[min(100%,11rem)] sm:max-w-[min(16rem,calc(100%-12rem))] sm:basis-auto">
+                          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                            {productionLinkMode !== 'product' && orderNumber != null && orderNumber !== '' && (
+                              <span className="shrink-0 text-[10px] font-black uppercase tracking-wider text-indigo-600">{orderNumber}</span>
+                            )}
+                            <span className="min-w-0 truncate text-sm font-black text-slate-800" title={productName}>
+                              {productName}
+                            </span>
+                            <span className="shrink-0 text-sm font-bold text-indigo-600">{nodeName}</span>
+                          </div>
+                          {product?.sku ? (
+                            <p className="mt-1 truncate text-[10px] font-bold uppercase tracking-tight text-slate-400">{product.sku}</p>
+                          ) : null}
                         </div>
                       </div>
                       <div className="flex shrink-0 flex-wrap items-end gap-x-3 sm:gap-x-4">
                         <div className="flex flex-col gap-0.5">
-                          <label className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide text-slate-400">数量（合计）</label>
-                          <div className="flex h-9 w-[7.5rem] items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-indigo-600 tabular-nums">{matrixLineTotalQty}</div>
+                          <label className="whitespace-nowrap text-[10px] font-black uppercase tracking-widest text-slate-400">数量（合计）</label>
+                          <div className="flex h-9 w-[7.5rem] items-center justify-center rounded-xl border border-slate-200 bg-slate-50/80 text-sm font-black tabular-nums text-indigo-600">{matrixLineTotalQty}</div>
                         </div>
                         {isReceiveDoc ? (
                           <>
                             <div className="flex flex-col gap-0.5">
-                              <label className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide text-slate-400">单价（元/件）</label>
+                              <label className="whitespace-nowrap text-[10px] font-black uppercase tracking-widest text-slate-400">单价（元）</label>
                               {flowDetailEditMode ? (
                                 <input
                                   type="number"
@@ -566,21 +515,21 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                                   value={flowDetailUnitPrices[key] ?? ''}
                                   onChange={e => setFlowDetailUnitPrices(prev => ({ ...prev, [key]: Number(e.target.value) || 0 }))}
                                   placeholder="0"
-                                  className="h-9 w-[7.5rem] rounded-lg border border-slate-200 bg-white px-2 text-center text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                                  className="h-9 w-[7.5rem] rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
                                 />
                               ) : (
-                                <div className="flex h-9 w-[7.5rem] items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-sm font-bold text-slate-700 tabular-nums">{matrixLineUnitPriceDisplay}</div>
+                                <div className="flex h-9 w-[7.5rem] items-center justify-center rounded-xl border border-slate-200 bg-slate-50/80 text-sm font-bold tabular-nums text-slate-700">{matrixLineUnitPriceDisplay}</div>
                               )}
                             </div>
                             <div className="flex flex-col gap-0.5">
-                              <label className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide text-slate-400">金额（元）</label>
-                              <div className="flex h-9 w-[7.5rem] items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-sm font-bold text-slate-700 tabular-nums">{matrixLineAmount.toFixed(2)}</div>
+                              <label className="whitespace-nowrap text-[10px] font-black uppercase tracking-widest text-slate-400">金额（元）</label>
+                              <div className="flex h-9 w-[7.5rem] items-center justify-center rounded-xl border border-slate-200 bg-slate-50/80 text-sm font-black tabular-nums text-indigo-600">{matrixLineAmount.toFixed(2)}</div>
                             </div>
                           </>
                         ) : null}
                       </div>
                     </div>
-                    <div className="space-y-4 border-t border-slate-100 pt-3">
+                    <div className="space-y-4 border-t border-slate-100 pt-4">
                       <VariantQtyMatrixInputs
                         product={matrixFlowProduct}
                         dictionaries={dictionaries}
@@ -601,41 +550,60 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
               const lineUnitPrice = flowDetailEditMode && isReceiveDoc ? (flowDetailUnitPrices[key] ?? lineRec?.unitPrice ?? 0) : (lineRec?.unitPrice ?? 0);
               const lineAmount = flowDetailEditMode && isReceiveDoc ? (singleQty * lineUnitPrice) : (lineRec?.amount ?? 0);
               return (
-                <div key={key} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-6">
-                  <div className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-2">
-                    <div className="min-w-0 max-w-full shrink basis-[min(100%,11rem)] sm:max-w-[min(16rem,calc(100%-12rem))] sm:basis-auto">
-                      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                        {productionLinkMode !== 'product' && orderNumber != null && orderNumber !== '' && (
-                          <span className="shrink-0 text-[10px] font-black uppercase tracking-wider text-indigo-600">{orderNumber}</span>
-                        )}
-                        <span className="min-w-0 truncate text-sm font-bold text-slate-800" title={productName}>
-                          {productName}
-                        </span>
-                        <span className="shrink-0 text-sm font-bold text-indigo-600">{nodeName}</span>
+                <div key={key} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                  <div className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-3">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                      {productThumb}
+                      <div className="min-w-0 max-w-full shrink basis-[min(100%,11rem)] sm:max-w-[min(16rem,calc(100%-12rem))] sm:basis-auto">
+                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          {productionLinkMode !== 'product' && orderNumber != null && orderNumber !== '' && (
+                            <span className="shrink-0 text-[10px] font-black uppercase tracking-wider text-indigo-600">{orderNumber}</span>
+                          )}
+                          <span className="min-w-0 truncate text-sm font-black text-slate-800" title={productName}>
+                            {productName}
+                          </span>
+                          <span className="shrink-0 text-sm font-bold text-indigo-600">{nodeName}</span>
+                        </div>
+                        {product?.sku ? (
+                          <p className="mt-1 truncate text-[10px] font-bold uppercase tracking-tight text-slate-400">{product.sku}</p>
+                        ) : null}
                       </div>
                     </div>
                     <div className="flex shrink-0 flex-wrap items-end gap-x-3 sm:gap-x-4">
                       <div className="flex flex-col gap-0.5">
-                        <label className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide text-slate-400">委外数量</label>
+                        <label className="whitespace-nowrap text-[10px] font-black uppercase tracking-widest text-slate-400">委外数量</label>
                         {flowDetailEditMode ? (
-                          <input type="number" min={0} value={flowDetailQuantities[key] ?? ''} onChange={e => setFlowDetailQuantities(prev => ({ ...prev, [key]: Number(e.target.value) || 0 }))} className="h-9 w-[7.5rem] rounded-lg border border-slate-200 bg-white px-2 text-center text-sm font-bold text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-200" />
+                          <input
+                            type="number"
+                            min={0}
+                            value={flowDetailQuantities[key] ?? ''}
+                            onChange={e => setFlowDetailQuantities(prev => ({ ...prev, [key]: Number(e.target.value) || 0 }))}
+                            className="h-9 w-[7.5rem] rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
                         ) : (
-                          <div className="flex h-9 w-[7.5rem] items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-indigo-600 tabular-nums">{totalQty}</div>
+                          <div className="flex h-9 w-[7.5rem] items-center justify-center rounded-xl border border-slate-200 bg-slate-50/80 text-sm font-black tabular-nums text-indigo-600">{totalQty}</div>
                         )}
                       </div>
                       {isReceiveDoc ? (
                         <>
                           <div className="flex flex-col gap-0.5">
-                            <label className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide text-slate-400">单价（元/件）</label>
+                            <label className="whitespace-nowrap text-[10px] font-black uppercase tracking-widest text-slate-400">单价（元）</label>
                             {flowDetailEditMode ? (
-                              <input type="number" min={0} step={0.01} value={flowDetailUnitPrices[key] ?? ''} onChange={e => setFlowDetailUnitPrices(prev => ({ ...prev, [key]: Number(e.target.value) || 0 }))} className="h-9 w-[7.5rem] rounded-lg border border-slate-200 bg-white px-2 text-center text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500" />
+                              <input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                value={flowDetailUnitPrices[key] ?? ''}
+                                onChange={e => setFlowDetailUnitPrices(prev => ({ ...prev, [key]: Number(e.target.value) || 0 }))}
+                                className="h-9 w-[7.5rem] rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                              />
                             ) : (
-                              <div className="flex h-9 w-[7.5rem] items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-sm font-bold text-slate-700 tabular-nums">{lineUnitPrice.toFixed(2)}</div>
+                              <div className="flex h-9 w-[7.5rem] items-center justify-center rounded-xl border border-slate-200 bg-slate-50/80 text-sm font-bold tabular-nums text-slate-700">{lineUnitPrice.toFixed(2)}</div>
                             )}
                           </div>
                           <div className="flex flex-col gap-0.5">
-                            <label className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide text-slate-400">金额（元）</label>
-                            <div className="flex h-9 w-[7.5rem] items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-sm font-bold text-slate-700 tabular-nums">{lineAmount.toFixed(2)}</div>
+                            <label className="whitespace-nowrap text-[10px] font-black uppercase tracking-widest text-slate-400">金额（元）</label>
+                            <div className="flex h-9 w-[7.5rem] items-center justify-center rounded-xl border border-slate-200 bg-slate-50/80 text-sm font-black tabular-nums text-indigo-600">{lineAmount.toFixed(2)}</div>
                           </div>
                         </>
                       ) : null}
@@ -647,6 +615,29 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
           </div>
         </div>
       </div>
+
+      {detailImagePreviewUrl && (
+        <div
+          className="fixed inset-0 z-[100] flex animate-in fade-in items-center justify-center bg-black/80 p-4"
+          onClick={() => setDetailImagePreviewUrl(null)}
+          role="presentation"
+        >
+          <img
+            src={detailImagePreviewUrl}
+            alt="产品图片"
+            className="max-h-[90vh] max-w-full rounded-lg object-contain shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          />
+          <button
+            type="button"
+            onClick={() => setDetailImagePreviewUrl(null)}
+            className="absolute right-4 top-4 rounded-full bg-white/20 p-2 text-white transition-all hover:bg-white/30"
+            aria-label="关闭"
+          >
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

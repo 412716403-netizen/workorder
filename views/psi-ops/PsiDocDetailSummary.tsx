@@ -1,10 +1,13 @@
 import React, { useMemo } from 'react';
 import { Clock, Package, User } from 'lucide-react';
-import type { AppDictionaries, Product, ProductCategory, ProductVariant, PsiRecord, Warehouse } from '../../types';
+import type { AppDictionaries, PlanFormFieldConfig, Product, ProductCategory, ProductVariant, PsiRecord, Warehouse } from '../../types';
 import { PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER } from '../../types';
 import { formatPsiDocListTime } from '../../utils/flowDocSort';
-import { aggregatePurchaseBillRelatedProductListText, formatPsiDocNumForList } from './psiOpsListFormatting';
+import { aggregatePurchaseBillRelatedProductListText, formatPsiDocNumForList, psiCustomFieldHasFilledDisplayValue } from './psiOpsListFormatting';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
+import { productHasColorSizeMatrix } from '../../utils/productColorSize';
+import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
+import { PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
 
 type PsiDocType = 'PURCHASE_ORDER' | 'SALES_ORDER' | 'PURCHASE_BILL' | 'SALES_BILL';
 
@@ -23,6 +26,10 @@ export interface PsiDocDetailSummaryProps {
   getUnitName: (productId: string) => string;
   formatQtyDisplay: (q: number | string | undefined | null) => number;
   receivedByOrderLine?: Record<string, number>;
+  /** 产品主图点击后交给父级打开大图（如进销存页全屏预览） */
+  onProductImagePreview?: (url: string) => void;
+  /** 当前 `docType` 对应表单配置的 `customFields`；详情顶栏（经办同行）展示 `showInCreate` 或 `showInDetail` 的项（只读） */
+  headerCustomFieldDefs?: PlanFormFieldConfig[];
 }
 
 function readPsiLinePrice(i: PsiRecord, priceField: string): number {
@@ -43,6 +50,8 @@ function resolveVariantLabel(
   grp: PsiRecord[],
   product: Product | undefined,
   dictionaries: AppDictionaries,
+  /** 下方已有颜色尺码矩阵时，SKU 行不再堆「多规格」摘要 */
+  suppressMultiSpecSummary?: boolean,
 ): string {
   const parts = grp
     .filter((i) => i.variantId && product?.variants)
@@ -54,7 +63,18 @@ function resolveVariantLabel(
       return [c, sz].filter(Boolean).join(' / ');
     })
     .filter(Boolean);
+  if (suppressMultiSpecSummary && parts.length > 1) return '';
   return parts.length > 1 ? `多规格 (${parts.join(', ')})` : parts[0] ?? '';
+}
+
+function aggregateVariantQuantitiesFromGrp(grp: PsiRecord[], formatQtyDisplay: (q: number | string | undefined | null) => number): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const i of grp) {
+    const vid = String(i.variantId ?? '').trim();
+    if (!vid) continue;
+    out[vid] = (out[vid] ?? 0) + formatQtyDisplay(i.quantity);
+  }
+  return out;
 }
 
 const ProductCell: React.FC<{
@@ -62,12 +82,49 @@ const ProductCell: React.FC<{
   sku?: string;
   variantLabel: string;
   customTags?: Array<{ label: string; display: string }>;
-}> = ({ name, sku, variantLabel, customTags }) => (
+  imageUrl?: string | null;
+  onImagePreview?: (url: string) => void;
+}> = ({ name, sku, variantLabel, customTags, imageUrl, onImagePreview }) => {
+  const thumb = (() => {
+    if (imageUrl) {
+      const imgEl = (
+        <img
+          src={imageUrl}
+          alt={name || '产品'}
+          className="h-full w-full object-cover"
+          loading="lazy"
+          decoding="async"
+        />
+      );
+      if (onImagePreview) {
+        return (
+          <button
+            type="button"
+            onClick={() => onImagePreview(imageUrl)}
+            className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-slate-50 transition-opacity hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            aria-label="查看产品图片"
+          >
+            {imgEl}
+          </button>
+        );
+      }
+      return (
+        <div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-slate-50">
+          {imgEl}
+        </div>
+      );
+    }
+    return (
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
+        <Package className="h-4 w-4" />
+      </div>
+    );
+  })();
+
+  return (
   <td className="py-2.5 px-3">
     <div className="flex items-start gap-2 min-w-0">
-      <div className="w-7 h-7 shrink-0 bg-slate-50 rounded-lg flex items-center justify-center text-slate-300">
-        <Package className="w-4 h-4" />
-      </div>
+      {thumb}
       <div className="min-w-0">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
           <span className="font-bold text-slate-700">{name || '未知产品'}</span>
@@ -89,12 +146,14 @@ const ProductCell: React.FC<{
       </div>
     </div>
   </td>
-);
+  );
+};
 
 const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
   docType, docNumber, recordsList, productMapPSI, categories, showPurchaseOrderRelatedProduct, showPurchaseBillRelatedProduct,
   warehouseMapPSI,
-  dictionaries, getUnitName, formatQtyDisplay, receivedByOrderLine,
+  dictionaries, getUnitName, formatQtyDisplay, receivedByOrderLine, onProductImagePreview,
+  headerCustomFieldDefs = [],
 }) => {
   const meta = DOC_META[docType];
 
@@ -132,6 +191,28 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
     return Object.entries(groups);
   }, [docItems]);
 
+  /** 详情表颜色尺码矩阵行通栏 colspan（与各类型表头列数一致） */
+  const detailVariantMatrixColSpan =
+    docType === 'SALES_BILL'
+      ? 5 + (showBillBatchColumn ? 1 : 0)
+      : docType === 'SALES_ORDER'
+        ? 5
+        : docType === 'PURCHASE_ORDER'
+          ? 5
+          : docType === 'PURCHASE_BILL'
+            ? 5 + (showPbLineRelatedColumn ? 1 : 0) + (showBillBatchColumn ? 1 : 0)
+            : 0;
+
+  const headerCustomDefsForDetail = useMemo(
+    () => (headerCustomFieldDefs ?? []).filter(f => f.showInCreate || f.showInDetail),
+    [headerCustomFieldDefs],
+  );
+  const headerCustomSnapshot = useMemo(() => {
+    const first = docItems[0];
+    const raw = first?.customData;
+    return typeof raw === 'object' && raw != null && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {};
+  }, [docItems]);
+
   if (!mainInfo) {
     return <p className="text-sm text-slate-500 py-8 text-center">{meta.emptyMsg}</p>;
   }
@@ -140,83 +221,110 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
 
   return (
     <div className="space-y-5">
-      {/* Header card */}
-      <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5 space-y-3">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-          <span className="font-black text-slate-800">{mainInfo.partner || '未指定单位'}</span>
-          {docType === 'PURCHASE_ORDER' &&
-            showPurchaseOrderRelatedProduct &&
-            (() => {
-              const rid = String(
-                (mainInfo.customData && typeof mainInfo.customData === 'object'
-                  ? (mainInfo.customData as Record<string, unknown>).relatedProductId
-                  : '') ?? '',
-              ).trim();
-              if (!rid) return null;
-              const rp = productMapPSI.get(rid);
-              const label = '关联产品';
-              return (
-                <span className="text-slate-600 font-bold normal-case text-xs sm:text-sm" title={label}>
-                  {label}：{rp?.name || rid}
-                  {rp?.sku ? <span className="text-slate-400 font-semibold"> · {rp.sku}</span> : null}
+      {/* Header card：左侧基本信息，右侧合计 */}
+      <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
+          <div className="min-w-0 flex-1 space-y-3">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+              <span className="font-black text-slate-800">{mainInfo.partner || '未指定单位'}</span>
+              {docType === 'PURCHASE_ORDER' &&
+                showPurchaseOrderRelatedProduct &&
+                (() => {
+                  const rid = String(
+                    (mainInfo.customData && typeof mainInfo.customData === 'object'
+                      ? (mainInfo.customData as Record<string, unknown>).relatedProductId
+                      : '') ?? '',
+                  ).trim();
+                  if (!rid) return null;
+                  const rp = productMapPSI.get(rid);
+                  const label = '关联产品';
+                  return (
+                    <span className="text-slate-600 font-bold normal-case text-xs sm:text-sm" title={label}>
+                      {label}：{rp?.name || rid}
+                      {rp?.sku ? <span className="text-slate-400 font-semibold"> · {rp.sku}</span> : null}
+                    </span>
+                  );
+                })()}
+              {docType === 'PURCHASE_BILL' &&
+                showPurchaseBillRelatedProduct &&
+                (() => {
+                  const summary = aggregatePurchaseBillRelatedProductListText(docItems, productMapPSI);
+                  if (summary === '—') return null;
+                  const label = '关联成品';
+                  return (
+                    <span className="text-slate-600 font-bold normal-case text-xs sm:text-sm" title={label}>
+                      {label}：{summary}
+                    </span>
+                  );
+                })()}
+              {docType === 'PURCHASE_ORDER' &&
+                (() => {
+                  const sn = String(
+                    (mainInfo.customData && typeof mainInfo.customData === 'object'
+                      ? (mainInfo.customData as Record<string, unknown>)[PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER]
+                      : '') ?? '',
+                  ).trim();
+                  if (!sn) return null;
+                  return (
+                    <span className="text-slate-600 font-bold normal-case text-xs sm:text-sm" title="来源计划">
+                      来源计划：{sn}
+                    </span>
+                  );
+                })()}
+              <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest border bg-indigo-50 text-indigo-600 border-indigo-100">
+                {formatPsiDocNumForList(docNumber)}
+              </span>
+              {isSalesBill && totalQty < 0 && (
+                <span className="text-[10px] font-black text-amber-600 uppercase tracking-tighter bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                  销售退货
                 </span>
-              );
-            })()}
-          {docType === 'PURCHASE_BILL' &&
-            showPurchaseBillRelatedProduct &&
-            (() => {
-              const summary = aggregatePurchaseBillRelatedProductListText(docItems, productMapPSI);
-              if (summary === '—') return null;
-              const label = '关联成品';
-              return (
-                <span className="text-slate-600 font-bold normal-case text-xs sm:text-sm" title={label}>
-                  {label}：{summary}
-                </span>
-              );
-            })()}
-          {docType === 'PURCHASE_ORDER' &&
-            (() => {
-              const sn = String(
-                (mainInfo.customData && typeof mainInfo.customData === 'object'
-                  ? (mainInfo.customData as Record<string, unknown>)[PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER]
-                  : '') ?? '',
-              ).trim();
-              if (!sn) return null;
-              return (
-                <span className="text-slate-600 font-bold normal-case text-xs sm:text-sm" title="来源计划">
-                  来源计划：{sn}
-                </span>
-              );
-            })()}
-          <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest border bg-indigo-50 text-indigo-600 border-indigo-100">
-            {formatPsiDocNumForList(docNumber)}
-          </span>
-          {isSalesBill && totalQty < 0 && (
-            <span className="text-[10px] font-black text-amber-600 uppercase tracking-tighter bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-              销售退货
-            </span>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-4 text-[10px] font-bold text-slate-400 uppercase">
-          <span className="flex items-center gap-1">
-            <Clock className="w-3 h-3" /> {formatPsiDocListTime(docItems)}
-          </span>
-          <span className="flex items-center gap-1">
-            <User className="w-3 h-3" /> 经办: {mainInfo.operator || '—'}
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-6 pt-1 border-t border-slate-200/80 text-sm">
-          <div>
-            <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">合计数量</p>
-            <p className={`font-black tabular-nums ${isSalesBill && totalQty < 0 ? 'text-amber-600' : 'text-slate-800'}`}>
-              {totalQty.toLocaleString()} PCS
-            </p>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] font-bold text-slate-400 uppercase">
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" /> {formatPsiDocListTime(docItems)}
+              </span>
+              <span className="flex items-center gap-1">
+                <User className="w-3 h-3" /> 经办: {mainInfo.operator || '—'}
+              </span>
+              {headerCustomDefsForDetail.some(cf => psiCustomFieldHasFilledDisplayValue(cf, headerCustomSnapshot[cf.id])) &&
+                headerCustomDefsForDetail
+                  .filter(cf => psiCustomFieldHasFilledDisplayValue(cf, headerCustomSnapshot[cf.id]))
+                  .map(cf => (
+                  <span key={cf.id} className="inline-flex max-w-full min-w-0 items-baseline gap-1">
+                    <span className="shrink-0">{cf.label}:</span>
+                    <span className="min-w-0">
+                      <PlanFormCustomFieldReadonly
+                        variant="inlineMeta"
+                        cf={cf}
+                        value={headerCustomSnapshot[cf.id]}
+                        onFilePreview={
+                          onProductImagePreview
+                            ? (url, type) => {
+                                if (type === 'image') onProductImagePreview(url);
+                                else window.open(url, '_blank', 'noopener,noreferrer');
+                              }
+                            : undefined
+                        }
+                      />
+                    </span>
+                  </span>
+                ))}
+            </div>
           </div>
-          <div>
-            <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">合计金额</p>
-            <p className={`font-black tabular-nums ${isSalesBill && totalAmount < 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-              ¥{totalAmount.toFixed(2)}
-            </p>
+          <div className="flex shrink-0 flex-wrap gap-6 border-t border-slate-200/80 pt-3 text-sm md:border-t-0 md:border-l md:border-slate-200/80 md:pt-0 md:pl-6">
+            <div className="min-w-[6.5rem] md:text-right">
+              <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">合计数量</p>
+              <p className={`font-black tabular-nums ${isSalesBill && totalQty < 0 ? 'text-amber-600' : 'text-slate-800'}`}>
+                {totalQty.toLocaleString()} PCS
+              </p>
+            </div>
+            <div className="min-w-[6.5rem] md:text-right">
+              <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">合计金额</p>
+              <p className={`font-black tabular-nums ${isSalesBill && totalAmount < 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                ¥{totalAmount.toFixed(2)}
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -236,29 +344,42 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
                 <th className="py-2.5 px-3 text-center">批次</th>
               )}
               {docType === 'SALES_ORDER' && <th className="py-2.5 px-3 text-right">数量</th>}
+              {docType === 'SALES_BILL' && <th className="py-2.5 px-3 text-right">数量</th>}
+              {(docType === 'PURCHASE_ORDER' || docType === 'PURCHASE_BILL') && (
+                <th className="py-2.5 px-3 text-right">数量</th>
+              )}
               <th className="py-2.5 px-3 text-right">{meta.priceLabel}</th>
               <th className="py-2.5 px-3 text-right">金额</th>
-              {docType !== 'SALES_ORDER' && <th className="py-2.5 px-3 text-right">数量</th>}
               {docType === 'PURCHASE_ORDER' && <th className="py-2.5 px-3 text-left">入库进度</th>}
               {docType === 'SALES_ORDER' && <th className="py-2.5 px-3 text-left">配货进度</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
-            {rowGroups.map(([gid, grp]) => {
+            {rowGroups.map(([gid, grp], groupIdx) => {
+              const hasGroupBelow = groupIdx < rowGroups.length - 1;
               const first = grp[0];
               const product = productMapPSI.get(first.productId);
+              const category = categories.find(c => c.id === product?.categoryId);
+              const showVariantMatrixRow =
+                (docType === 'SALES_BILL' ||
+                  docType === 'SALES_ORDER' ||
+                  docType === 'PURCHASE_ORDER' ||
+                  docType === 'PURCHASE_BILL') &&
+                product != null &&
+                productHasColorSizeMatrix(product, category);
               const rowProductName = product?.name ?? first.productName ?? undefined;
               const rowProductSku = product?.sku ?? first.productSku ?? undefined;
               const orderQty = grp.reduce((s, i) => s + formatQtyDisplay(i.quantity), 0);
               const rowAmount = grp.reduce((s, i) => s + formatQtyDisplay(i.quantity) * readPsiLinePrice(i, meta.priceField), 0);
               const avgPrice = orderQty !== 0 ? rowAmount / orderQty : 0;
-              const variantLabel = resolveVariantLabel(grp, product, dictionaries);
+              const variantLabel = resolveVariantLabel(grp, product, dictionaries, showVariantMatrixRow);
               const customTags = getProductCategoryCustomFieldEntries(
                 product,
-                categories.find(c => c.id === product?.categoryId),
+                category,
                 { includeFile: false },
               ).map(({ field, display }) => ({ label: field.label, display }));
               const unitName = first.productId ? getUnitName(first.productId) : 'PCS';
+              const variantQtyReadonly = showVariantMatrixRow ? aggregateVariantQuantitiesFromGrp(grp, formatQtyDisplay) : null;
 
               const lineRel = (() => {
                 const cd = first.customData;
@@ -267,68 +388,101 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
               })();
               const lineRelProduct = lineRel ? productMapPSI.get(lineRel) : undefined;
 
+              const groupBottomSep = hasGroupBelow ? 'border-b-2 border-slate-200/90' : '';
+
               return (
-                <tr key={gid}>
-                  <ProductCell name={rowProductName} sku={rowProductSku} variantLabel={variantLabel} customTags={customTags} />
+                <React.Fragment key={gid}>
+                  <tr className={showVariantMatrixRow ? undefined : groupBottomSep}>
+                    <ProductCell
+                      name={rowProductName}
+                      sku={rowProductSku}
+                      variantLabel={variantLabel}
+                      customTags={customTags}
+                      imageUrl={product?.imageUrl}
+                      onImagePreview={onProductImagePreview}
+                    />
 
-                  {showPbLineRelatedColumn && (
-                    <td className="py-2.5 px-3 align-top text-xs font-bold text-slate-600">
-                      {lineRel
-                        ? (
-                          <>
-                            {lineRelProduct?.name || lineRel}
-                            {lineRelProduct?.sku ? (
-                              <span className="text-slate-400 font-semibold"> · {lineRelProduct.sku}</span>
-                            ) : null}
-                          </>
-                        )
-                        : '—'}
-                    </td>
-                  )}
+                    {showPbLineRelatedColumn && (
+                      <td className="py-2.5 px-3 align-top text-xs font-bold text-slate-600">
+                        {lineRel
+                          ? (
+                            <>
+                              {lineRelProduct?.name || lineRel}
+                              {lineRelProduct?.sku ? (
+                                <span className="text-slate-400 font-semibold"> · {lineRelProduct.sku}</span>
+                              ) : null}
+                            </>
+                          )
+                          : '—'}
+                      </td>
+                    )}
 
-                  {isBill(docType) && (
-                    <td className="py-2.5 px-3 text-center">
-                      <span className="px-2 py-0.5 rounded-md bg-slate-50 text-slate-500 text-[10px] font-black uppercase border border-slate-100">
-                        {warehouseMapPSI?.get(first.warehouseId)?.name || '默认库'}
-                      </span>
-                    </td>
-                  )}
+                    {isBill(docType) && (
+                      <td className="py-2.5 px-3 text-center">
+                        <span className="px-2 py-0.5 rounded-md bg-slate-50 text-slate-500 text-[10px] font-black uppercase border border-slate-100">
+                          {warehouseMapPSI?.get(first.warehouseId)?.name || '默认库'}
+                        </span>
+                      </td>
+                    )}
 
-                  {showBillBatchColumn && (
-                    <td className="py-2.5 px-3 text-center text-xs font-bold text-slate-600 break-all">
-                      {String((first.batchNo ?? (first as { batch?: string }).batch) ?? '').trim() || '—'}
-                    </td>
-                  )}
+                    {showBillBatchColumn && (
+                      <td className="py-2.5 px-3 text-center text-xs font-bold text-slate-600 break-all">
+                        {String((first.batchNo ?? (first as { batch?: string }).batch) ?? '').trim() || '—'}
+                      </td>
+                    )}
 
-                  {docType === 'SALES_ORDER' && (
-                    <td className="py-2.5 px-3 text-right font-black text-indigo-600">
-                      {orderQty.toLocaleString()} {unitName}
-                    </td>
-                  )}
+                    {docType === 'SALES_ORDER' && (
+                      <td className="py-2.5 px-3 text-right font-black text-indigo-600">
+                        {orderQty.toLocaleString()} {unitName}
+                      </td>
+                    )}
 
-                  <td className="py-2.5 px-3 text-right font-bold text-slate-600">¥{avgPrice.toFixed(2)}</td>
-                  <td className="py-2.5 px-3 text-right font-black text-indigo-600">¥{rowAmount.toFixed(2)}</td>
+                    {docType === 'SALES_BILL' && (
+                      <td className="py-2.5 px-3 text-right font-black text-slate-700">
+                        {orderQty.toLocaleString()} {unitName}
+                      </td>
+                    )}
 
-                  {docType !== 'SALES_ORDER' && (
-                    <td className="py-2.5 px-3 text-right font-black text-slate-700">
-                      {docType === 'PURCHASE_ORDER' && receivedByOrderLine ? (() => {
-                        const received = grp.reduce((s, i) => s + (receivedByOrderLine[`${docNumber}::${i.id}`] ?? 0), 0);
-                        return received > orderQty
-                          ? `${received.toLocaleString()} / ${orderQty.toLocaleString()}`
-                          : orderQty.toLocaleString();
-                      })() : orderQty.toLocaleString()}{' '}
-                      {unitName}
-                    </td>
-                  )}
+                    {(docType === 'PURCHASE_ORDER' || docType === 'PURCHASE_BILL') && (
+                      <td className="py-2.5 px-3 text-right font-black text-slate-700">
+                        {docType === 'PURCHASE_ORDER' && receivedByOrderLine ? (() => {
+                          const received = grp.reduce((s, i) => s + (receivedByOrderLine[`${docNumber}::${i.id}`] ?? 0), 0);
+                          return received > orderQty
+                            ? `${received.toLocaleString()} / ${orderQty.toLocaleString()}`
+                            : orderQty.toLocaleString();
+                        })() : orderQty.toLocaleString()}{' '}
+                        {unitName}
+                      </td>
+                    )}
 
-                  {docType === 'PURCHASE_ORDER' && receivedByOrderLine && (
-                    <PurchaseOrderProgressCell grp={grp} orderQty={orderQty} docNumber={docNumber} receivedByOrderLine={receivedByOrderLine} />
-                  )}
+                    <td className="py-2.5 px-3 text-right font-bold text-slate-600">¥{avgPrice.toFixed(2)}</td>
+                    <td className="py-2.5 px-3 text-right font-black text-indigo-600">¥{rowAmount.toFixed(2)}</td>
 
-                  {docType === 'SALES_ORDER' && (
-                    <SalesOrderProgressCell grp={grp} orderQty={orderQty} />
-                  )}
-                </tr>
+                    {docType === 'PURCHASE_ORDER' && receivedByOrderLine && (
+                      <PurchaseOrderProgressCell grp={grp} orderQty={orderQty} docNumber={docNumber} receivedByOrderLine={receivedByOrderLine} />
+                    )}
+
+                    {docType === 'SALES_ORDER' && (
+                      <SalesOrderProgressCell grp={grp} orderQty={orderQty} />
+                    )}
+                  </tr>
+                  {showVariantMatrixRow && product && variantQtyReadonly && detailVariantMatrixColSpan > 0 ? (
+                    <tr className={`bg-slate-50/70 ${groupBottomSep}`}>
+                      <td
+                        colSpan={detailVariantMatrixColSpan}
+                        className={`border-t border-slate-100 px-3 pt-2 align-top ${hasGroupBelow ? 'pb-5' : 'pb-3'}`}
+                      >
+                        <VariantQtyMatrixInputs
+                          product={product}
+                          dictionaries={dictionaries}
+                          quantities={variantQtyReadonly}
+                          readOnly
+                          balancedNumericLayout
+                        />
+                      </td>
+                    </tr>
+                  ) : null}
+                </React.Fragment>
               );
             })}
           </tbody>
@@ -349,8 +503,8 @@ const TableColGroup: React.FC<{ docType: PsiDocType; showPurchaseBatch?: boolean
         <colgroup>
           <col style={{ width: 'auto' }} />
           <col style={{ width: 100 }} />
-          <col style={{ width: 110 }} />
           <col style={{ width: 100 }} />
+          <col style={{ width: 110 }} />
           <col style={{ width: 140 }} />
         </colgroup>
       );
@@ -372,8 +526,8 @@ const TableColGroup: React.FC<{ docType: PsiDocType; showPurchaseBatch?: boolean
           <col style={{ width: 100 }} />
           {showPurchaseBatch ? <col style={{ width: 88 }} /> : null}
           <col style={{ width: 100 }} />
-          <col style={{ width: 110 }} />
           <col style={{ width: 100 }} />
+          <col style={{ width: 110 }} />
         </colgroup>
       );
     case 'SALES_BILL':
@@ -383,8 +537,8 @@ const TableColGroup: React.FC<{ docType: PsiDocType; showPurchaseBatch?: boolean
           <col style={{ width: 100 }} />
           {showPurchaseBatch ? <col style={{ width: 88 }} /> : null}
           <col style={{ width: 100 }} />
-          <col style={{ width: 110 }} />
           <col style={{ width: 100 }} />
+          <col style={{ width: 110 }} />
         </colgroup>
       );
   }

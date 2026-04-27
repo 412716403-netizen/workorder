@@ -127,6 +127,48 @@ function sampleSalesBillPrintListRowsWithMatrix(): PrintListRow[] {
   }));
 }
 
+const SAMPLE_OUTSOURCE_MATRIX_ROWS: SalesBillMatrixGroup[] = [
+  {
+    lineNo: 1,
+    sku: 'WX-SKU-01',
+    productName: '示例外协成衣',
+    sizes: ['S', 'M', 'L'],
+    colorRows: [
+      { colorName: '黑色', quantities: [10, 20, 5] },
+      { colorName: '白色', quantities: [8, 12, 0] },
+    ],
+    totalQty: 55,
+    unitPrice: 0,
+    totalAmount: 0,
+    remark: '',
+  },
+  {
+    lineNo: 2,
+    sku: 'WX-SKU-02',
+    productName: '示例布片',
+    sizes: ['均码'],
+    colorRows: [{ colorName: '本白', quantities: [45] }],
+    totalQty: 45,
+    unitPrice: 0,
+    totalAmount: 0,
+    remark: '',
+  },
+];
+
+function sampleOutsourceDispatchPrintListRowsWithMatrix(): PrintListRow[] {
+  return SAMPLE_OUTSOURCE_MATRIX_ROWS.map((g, i) => ({
+    index: i + 1,
+    orderNumber: `WO-100${i + 1}`,
+    sku: g.sku,
+    productName: g.productName,
+    nodeName: i === 0 ? '横机' : '裁剪',
+    variantLabel: '',
+    quantity: g.totalQty,
+    remark: '',
+    [COLOR_SIZE_MATRIX_JSON_KEY]: serializeColorSizeMatrixPayload(matrixGroupToColorSizePayload(g)),
+  }));
+}
+
 const SAMPLE_MATERIAL_ISSUE_PRINT: MaterialFlowPrintContext = {
   docNo: 'LL20260417-0001',
   warehouseName: '原料仓',
@@ -403,6 +445,7 @@ export function augmentPrintPreviewContext(
   if (dt === 'outsource' && !next.outsourceDispatchPrint && !next.outsourceReceivePrint) {
     next = {
       ...next,
+      tenantName: next.tenantName ?? '示例公司名称',
       outsourceDispatchPrint: {
         docNo: 'WX-0001-001',
         partner: '示例加工厂',
@@ -412,24 +455,7 @@ export function augmentPrintPreviewContext(
         totalQty: 100,
         custom: {},
       },
-      printListRows: [
-        {
-          index: 1,
-          orderNumber: 'WO-1001',
-          productName: '示例产品',
-          nodeName: '裁剪',
-          variantLabel: '红色 / L',
-          quantity: 50,
-        },
-        {
-          index: 2,
-          orderNumber: 'WO-1002',
-          productName: '示例产品 B',
-          nodeName: '缝制',
-          variantLabel: '—',
-          quantity: 50,
-        },
-      ],
+      printListRows: sampleOutsourceDispatchPrintListRowsWithMatrix(),
     };
   }
   if (previewShouldInjectSampleVirtualBatch(template) && next.virtualBatch == null) {

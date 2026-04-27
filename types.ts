@@ -11,6 +11,11 @@ export {
   normalizeBatchNo,
   PSI_TYPES_WITH_BATCH_LINE,
   categoryUsesBatchManagement,
+  normalizeCollabSpecLabel,
+  COLLAB_ACCEPT_CATEGORY_DECISION,
+  type CollabAcceptCategoryDecision,
+  type CollabAcceptCreateProductPayload,
+  type CollabAcceptTransferBody,
   type ProcessPricingMode,
   type ProductionLinkMode,
   type ProcessSequenceMode,
@@ -861,6 +866,8 @@ export interface SalesBillMatrixGroup {
   unitPrice: number;
   totalAmount: number;
   remark: string;
+  /** 采购单等 PSI 行携带的批次，透传到 PrintListRow.batchNo */
+  batchNo?: string;
 }
 
 /** 采购订单打印：占位符 {{采购订单.xxx}} */
@@ -938,6 +945,8 @@ export interface SalesBillPrintDoc {
 
 /** 打印上下文：预览/打印时解析占位符 */
 export interface PrintRenderContext {
+  /** 当前租户公司名称；占位符 {{租户.name}} */
+  tenantName?: string;
   plan?: PlanOrder;
   order?: ProductionOrder;
   product?: Product;

@@ -17,10 +17,11 @@ import {
 } from '../types';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { productHasColorSizeMatrix } from '../utils/productColorSize';
+import { combinedCompletedAtTemplate } from '../utils/productReportAggregates';
 import { buildVariantQtyMatrixLayout } from '../utils/variantQtyMatrix';
 import QtyMatrixTable, { type QtyMatrixTableRow } from '../components/variant-matrix/QtyMatrixTable';
 import { getEffectiveReportTemplate, getReportCustomDataDisplayEntries } from '../utils/effectiveReportTemplate';
-import { buildPrintListRowsFromOrderItems } from '../utils/printListPagination';
+import { buildPrintListRowsFromOrderItemsMatrix } from '../utils/printListPagination';
 import { OrderCenterDetailPrintBlock } from '../components/order-print/OrderCenterDetailPrintBlock';
 import {
   formatLocalDateTimeZh,
@@ -143,20 +144,44 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   /** 关联产品模式：该产品下所有工单及工序进度汇总 */
   const productOrders = useMemo(() => order ? orders.filter(o => o.productId === order.productId) : [], [orders, order?.productId]);
   const productTotalQty = useMemo(() => productOrders.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0), [productOrders]);
+  /**
+   * 产品维度工序进度：合并 PMP（产品池报工）+ 各工单里程碑（关联工单报工 / 外协收回带 orderId 写入）。
+   * 与 ReportModal/工单中心的 `combinedCompletedAtTemplate` 口径保持一致，避免详情页与报工弹窗显示
+   * "数字突变"。模板范围：当前产品已存在 PMP 进度的工序 ∪ 该产品工序模板列表（取并集兜底新工序）。
+   */
   const progressByMilestone = useMemo(() => {
     if (!order) return [];
-    const byTpl = new Map<string, { name: string; completed: number }>();
+    const productOrdersForMilestones = productOrders;
+    const tplIds = new Set<string>();
     productMilestoneProgresses
       .filter(p => p.productId === order.productId)
-      .forEach(pmp => {
-        const name = globalNodes.find(n => n.id === pmp.milestoneTemplateId)?.name ?? pmp.milestoneTemplateId;
-        const cur = byTpl.get(pmp.milestoneTemplateId);
-        byTpl.set(pmp.milestoneTemplateId, {
-          name: cur?.name || name,
-          completed: (cur?.completed ?? 0) + (pmp.completedQuantity ?? 0)
-        });
+      .forEach(p => tplIds.add(p.milestoneTemplateId));
+    productOrdersForMilestones.forEach(o => {
+      o.milestones.forEach(m => {
+        if ((m.completedQuantity ?? 0) > 0 || (m.reports?.length ?? 0) > 0) tplIds.add(m.templateId);
       });
-    return Array.from(byTpl.entries()).sort(([a], [b]) => {
+    });
+    const tplNameById = new Map<string, string>();
+    productMilestoneProgresses
+      .filter(p => p.productId === order.productId)
+      .forEach(p => tplNameById.set(p.milestoneTemplateId, globalNodes.find(n => n.id === p.milestoneTemplateId)?.name ?? p.milestoneTemplateId));
+    productOrdersForMilestones.forEach(o => {
+      o.milestones.forEach(m => {
+        if (!tplNameById.has(m.templateId)) tplNameById.set(m.templateId, m.name);
+      });
+    });
+    const list: Array<[string, { name: string; completed: number }]> = [];
+    tplIds.forEach(tid => {
+      const completed = combinedCompletedAtTemplate(
+        productOrdersForMilestones,
+        productMilestoneProgresses,
+        order.productId,
+        tid,
+      );
+      if (completed <= 0) return;
+      list.push([tid, { name: tplNameById.get(tid) ?? tid, completed }]);
+    });
+    return list.sort(([a], [b]) => {
       const nodeIds = product?.milestoneNodeIds ?? [];
       const ia = nodeIds.indexOf(a);
       const ib = nodeIds.indexOf(b);
@@ -165,7 +190,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       if (ib === -1) return -1;
       return ia - ib;
     });
-  }, [order?.productId, productMilestoneProgresses, globalNodes, product?.milestoneNodeIds]);
+  }, [order?.productId, productOrders, productMilestoneProgresses, globalNodes, product?.milestoneNodeIds]);
 
   const buildOrderPrintContext = useCallback(
     (_template: PrintTemplate): PrintRenderContext => {
@@ -175,10 +200,10 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       return {
         order: o,
         product: p,
-        printListRows: buildPrintListRowsFromOrderItems(o),
+        printListRows: buildPrintListRowsFromOrderItemsMatrix(o, p, dictionaries),
       };
     },
-    [orderId, orders, products],
+    [orderId, orders, products, dictionaries],
   );
 
   if (!orderId || !order) return null;
@@ -241,26 +266,42 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     return item?.quantity ?? 0;
   };
 
+  /**
+   * 工单删除校验：原实现在 productionLinkMode === 'product' 时跳过全部前端校验，导致产品模式下
+   * 任何工单都能直接走到 confirm 弹窗（即便后端会拦，也是误导用户）。这里改为永远执行三道硬校验：
+   * 1) 该工单 milestone 是否已有报工 / completedQuantity > 0；
+   * 2) 该工单是否存在关联 ProductionOpRecord（按 orderId）；
+   * 3) 该工单是否存在子工单。
+   * 产品模式下另外做一次"PMP 进度提示"——PMP 是产品维度共享的，删除单张工单不会清掉它，
+   * 仅作信息告知，不阻止删除（PMP 没有 orderId，无法精确归属到具体工单）。
+   */
   const handleDelete = async () => {
     if (!onDeleteOrder) return;
-    if (productionLinkMode !== 'product') {
-      const hasReport = order.milestones.some(m => m.completedQuantity > 0 || (m.reports?.length ?? 0) > 0);
-      if (hasReport) {
-        toast.error('该工单已有报工记录，不允许删除。');
-        return;
-      }
-      const relatedRecords = prodRecords.filter(r => r.orderId === order.id);
-      if (relatedRecords.length > 0) {
-        toast.error(`该工单存在 ${relatedRecords.length} 条关联单据（领料出库/外协/返工/报损/生产入库），请先在相关模块删除后再试。`);
-        return;
-      }
-      const childOrders = orders.filter(o => o.parentOrderId === order.id);
-      if (childOrders.length > 0) {
-        toast.error(`该工单存在 ${childOrders.length} 条子工单，请先删除子工单后再试。`);
-        return;
+    const hasReport = order.milestones.some(m => m.completedQuantity > 0 || (m.reports?.length ?? 0) > 0);
+    if (hasReport) {
+      toast.error('该工单已有报工记录，不允许删除。');
+      return;
+    }
+    const relatedRecords = prodRecords.filter(r => r.orderId === order.id);
+    if (relatedRecords.length > 0) {
+      toast.error(`该工单存在 ${relatedRecords.length} 条关联单据（领料出库/外协/返工/报损/生产入库），请先在相关模块删除后再试。`);
+      return;
+    }
+    const childOrders = orders.filter(o => o.parentOrderId === order.id);
+    if (childOrders.length > 0) {
+      toast.error(`该工单存在 ${childOrders.length} 条子工单，请先删除子工单后再试。`);
+      return;
+    }
+    let confirmMsg = `确定要删除工单「${order.orderNumber}」吗？此操作不可恢复。`;
+    if (productionLinkMode === 'product') {
+      const pmpCompleted = productMilestoneProgresses
+        .filter(p => p.productId === order.productId)
+        .reduce((s, p) => s + (p.completedQuantity ?? 0), 0);
+      if (pmpCompleted > 0) {
+        confirmMsg = `该产品的产品池 (PMP) 上累计已报工 ${pmpCompleted} 件（跨该产品下所有工单共享）。\n删除本工单不会清除产品池进度，仅会移除本工单本身。\n\n${confirmMsg}`;
       }
     }
-    const ok = await confirm({ message: `确定要删除工单「${order.orderNumber}」吗？此操作不可恢复。`, danger: true });
+    const ok = await confirm({ message: confirmMsg, danger: true });
     if (!ok) return;
     onDeleteOrder(order.id);
     onClose();

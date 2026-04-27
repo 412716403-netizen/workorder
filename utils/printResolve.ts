@@ -278,6 +278,10 @@ function resolvePath(ctx: PrintRenderContext, path: string): unknown {
     if (sub === 'pageTotal' || sub === 'page.total') return String(ctx.page?.total ?? 1);
     return undefined;
   }
+  if (ns === '租户') {
+    if (sub === 'name') return ctx.tenantName?.trim() ?? '';
+    return undefined;
+  }
   if (ns === '计划' && ctx.plan) return planField(ctx.plan, sub, ctx);
   if (ns === '工单' && ctx.order) return orderField(ctx.order, sub);
   if (ns === '产品' && ctx.product) return productField(ctx.product, sub);
@@ -503,6 +507,7 @@ export function resolvePrintPlaceholders(text: string, ctx: PrintRenderContext):
     if (trimmed.startsWith('产品.') && (v === '' || v === undefined)) return '';
     if (trimmed.startsWith('工序.') && (v === '' || v === undefined)) return '';
     if (trimmed.startsWith('系统.') && (v === '' || v === undefined)) return '';
+    if (trimmed.startsWith('租户.') && (v === '' || v === undefined)) return '';
     if (trimmed.startsWith('收款单.') && (v === '' || v === undefined)) return '';
     if (trimmed.startsWith('付款单.') && (v === '' || v === undefined)) return '';
     return v != null && v !== '' ? String(v) : `${open}${raw}${close}`;

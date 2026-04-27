@@ -196,10 +196,11 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
         orders,
         products,
         globalNodes,
+        dictionaries,
         workers,
         equipment,
       }),
-    [productionLinkMode, detailBatch, records, orders, products, globalNodes, workers, equipment],
+    [productionLinkMode, detailBatch, records, orders, products, globalNodes, dictionaries, workers, equipment],
   );
 
   if (!first) return null;

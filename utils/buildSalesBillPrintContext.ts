@@ -141,6 +141,7 @@ export function buildSalesBillMatrixGroups(
         unitPrice: price,
         totalAmount: q * price,
         remark: '',
+        batchNo: lineBatchForPrint(line) || undefined,
       });
       continue;
     }
@@ -197,6 +198,7 @@ export function buildSalesBillMatrixGroups(
       unitPrice: price,
       totalAmount,
       remark: '',
+      batchNo: lineBatchForPrint(line) || undefined,
     });
   }
   return groups;
@@ -217,8 +219,38 @@ export function buildSalesBillPrintListRowsByProductLine(
     unitPrice: fmtMoney(g.unitPrice),
     amount: fmtMoney(g.totalAmount),
     remark: g.remark ?? '',
+    ...(g.batchNo ? { batchNo: g.batchNo } : {}),
     [COLOR_SIZE_MATRIX_JSON_KEY]: serializeColorSizeMatrixPayload(matrixGroupToColorSizePayload(g)),
   }));
+}
+
+/**
+ * 单条成品明细（无单价语义时用 salesPrice=0）：由规格数量汇总矩阵 JSON 与总件数。
+ * 供外协、返工、入库等 builder 复用，避免复制矩阵逻辑。
+ */
+export function buildMatrixJsonAndTotalQtyFromVariantLine(opts: {
+  productId: string;
+  productMap: Map<string, Product>;
+  dictionaries: AppDictionaries;
+  variantQuantities?: Record<string, number>;
+  quantity?: number;
+}): { colorSizeMatrixJson: string; totalQty: number } | null {
+  const { productId, productMap, dictionaries, variantQuantities, quantity } = opts;
+  if (!productId) return null;
+  const line: SalesBillLineInput = {
+    id: '__matrix_slice__',
+    productId,
+    salesPrice: 0,
+    quantity,
+    variantQuantities,
+  };
+  const groups = buildSalesBillMatrixGroups([line], productMap, dictionaries);
+  const g = groups[0];
+  if (!g) return null;
+  return {
+    colorSizeMatrixJson: serializeColorSizeMatrixPayload(matrixGroupToColorSizePayload(g)),
+    totalQty: g.totalQty,
+  };
 }
 
 export function buildSalesBillPrintRenderContext(opts: {

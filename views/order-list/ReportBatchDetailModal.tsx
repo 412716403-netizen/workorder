@@ -27,6 +27,7 @@ import { getEffectiveReportTemplate, getReportCustomDataDisplayEntries, mergeCus
 import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
 import { fmtDT } from '../../utils/formatTime';
+import { buildOneBlockMatrixPrintRows } from '../../utils/variantMatrixPrintRows';
 
 type OrderReportRow = {
   order: ProductionOrder;
@@ -193,22 +194,6 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
     [orders, reportDetailBatch],
   );
 
-  const variantLabelForPrint = useCallback(
-    (productId: string, variantId?: string) => {
-      const p = productMap.get(productId);
-      if (!variantId || !p?.variants) return '—';
-      const v = p.variants.find((x: { id: string }) => x.id === variantId);
-      if (!v) return variantId;
-      const color = (dictionaries.colors as { id: string; name: string }[] | undefined)?.find(c => c.id === v.colorId);
-      const size = (dictionaries.sizes as { id: string; name: string }[] | undefined)?.find(s => s.id === v.sizeId);
-      const parts: string[] = [];
-      if (color) parts.push(color.name);
-      if (size) parts.push(size.name);
-      return parts.length > 0 ? parts.join(' / ') : ((v as { skuSuffix?: string })?.skuSuffix || variantId);
-    },
-    [productMap, dictionaries.colors, dictionaries.sizes],
-  );
-
   const buildReportBatchPrintContext = useCallback(
     (_template: PrintTemplate): PrintRenderContext => {
       const b = reportDetailBatch;
@@ -240,31 +225,37 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
         firstOperator: fr.operator,
         firstTimestamp: fmtDT(fr.timestamp),
       };
-      const printListRows = b.rows.map((row, idx) => {
-        if (b.source === 'order') {
-          const r = row as OrderReportRow;
-          return {
-            index: idx + 1,
-            quantity: r.report.quantity,
-            defectiveQuantity: r.report.defectiveQuantity ?? 0,
-            operator: r.report.operator,
-            timestamp: fmtDT(r.report.timestamp),
-            variantLabel: variantLabelForPrint(r.order.productId, r.report.variantId),
-            orderNumber: r.order.orderNumber,
-            milestoneName: r.milestone.name,
-          };
-        }
-        const r = row as ProductReportRow;
-        return {
-          index: idx + 1,
-          quantity: r.report.quantity,
-          defectiveQuantity: r.report.defectiveQuantity ?? 0,
-          operator: r.report.operator,
-          timestamp: fmtDT(r.report.timestamp),
-          variantLabel: variantLabelForPrint(r.progress.productId, r.report.variantId),
-          orderNumber: '—',
-          milestoneName: b.milestoneName,
-        };
+      const qtyRows = b.rows.map(row =>
+        b.source === 'order'
+          ? {
+              variantId: (row as OrderReportRow).report.variantId,
+              quantity: (row as OrderReportRow).report.quantity,
+            }
+          : {
+              variantId: (row as ProductReportRow).report.variantId,
+              quantity: (row as ProductReportRow).report.quantity,
+            },
+      );
+      const defectiveSum = b.rows.reduce((s, row) => {
+        const dq =
+          b.source === 'order'
+            ? (row as OrderReportRow).report.defectiveQuantity
+            : (row as ProductReportRow).report.defectiveQuantity;
+        return s + (Number(dq) || 0);
+      }, 0);
+      const printListRows = buildOneBlockMatrixPrintRows({
+        productId,
+        product: productEntity,
+        products,
+        dictionaries,
+        rows: qtyRows,
+        extra: {
+          defectiveQuantity: defectiveSum,
+          operator: fr.operator,
+          timestamp: fmtDT(fr.timestamp),
+          orderNumber: b.source === 'order' ? (first as OrderReportRow).order.orderNumber : '—',
+          milestoneName,
+        },
       });
       return {
         order: orderForCtx,
@@ -275,7 +266,7 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
         printListRows,
       };
     },
-    [reportDetailBatch, productMap, variantLabelForPrint],
+    [reportDetailBatch, productMap, products, dictionaries],
   );
 
   const [editingReport, setEditingReport] = useState<{
