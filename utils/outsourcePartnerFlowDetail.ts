@@ -1,13 +1,8 @@
-import type {
-  AppDictionaries,
-  Product,
-  ProductCategory,
-  ProductionOpRecord,
-  ProductionOrder,
-} from '../types';
+import type { Product, ProductCategory, ProductionOpRecord, ProductionOrder } from '../types';
 import { flowRecordsEarliestMs } from './flowDocSort';
 import { formatLocalDateTimeZh } from './localDateTime';
 import { productHasColorSizeMatrix } from './productColorSize';
+import { OUTSOURCE_DISPATCH_DELIVERY_DATE_KEY } from './productionOpCollab/outsource';
 
 /** 加工厂往来数量明细弹窗：当前卡片的产品/工单、工序、加工厂上下文 */
 export interface PartnerFlowDetailSeed {
@@ -26,9 +21,19 @@ export interface PartnerFlowDocRow {
   records: ProductionOpRecord[];
   dateDisplay: string;
   typeLabel: string;
+  /** 外协发出交货日期（YYYY-MM-DD），无或非发出维度为「—」 */
+  deliveryDateDisplay: string;
   totalQty: number;
   /** 仅含非空 variantId 的聚合；无规格行只计入 totalQty */
   variantQty: Record<string, number>;
+}
+
+function deliveryDateDisplayFromDocRecords(recs: ProductionOpRecord[]): string {
+  const src = recs.find(r => r.status !== '已收回') ?? recs[0];
+  const raw = (src?.collabData as Record<string, unknown> | undefined)?.[OUTSOURCE_DISPATCH_DELIVERY_DATE_KEY];
+  if (typeof raw !== 'string') return '—';
+  const t = raw.trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : raw.trim() || '—';
 }
 
 /** 仅聚合有 variantId 的行；无规格数量只体现在总件数 */
@@ -124,6 +129,7 @@ export function buildPartnerFlowDocRows(
         records: sorted,
         dateDisplay,
         typeLabel: typeLabelFromRecords(sorted),
+        deliveryDateDisplay: deliveryDateDisplayFromDocRecords(sorted),
         totalQty,
         variantQty: aggregateOutsourceQtyByVariant(sorted),
       };

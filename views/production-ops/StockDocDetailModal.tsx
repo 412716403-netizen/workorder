@@ -13,6 +13,7 @@ import type {
   AppDictionaries,
 } from '../../types';
 import { DEFAULT_MATERIAL_FORM_SETTINGS } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 import { hasOpsPerm, type StockDocDetail } from './types';
 import { formatLocalDateTimeZh, parseProductionOpTimestampMs } from '../../utils/localDateTime';
 import {
@@ -87,6 +88,7 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
   userPermissions,
   tenantRole,
 }) => {
+  const { tenantCtx } = useAuth();
   const [stockDocEditForm, setStockDocEditForm] = useState<{
     warehouseId: string;
     lines: { productId: string; quantity: number; batchNo?: string }[];
@@ -243,6 +245,7 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
                 warehouses,
                 dictionaries,
                 customSnapshot: materialCustomSnapshot,
+                tenantName: tenantCtx?.tenantName,
               })
             }
             pickerSubtitle={`${isReturn ? '退料' : '领料'}单 ${stockDocDetail.docNo}`}

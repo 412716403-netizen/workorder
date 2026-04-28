@@ -1,7 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-
 const prisma = new PrismaClient();
 
 const ALL_PERMISSIONS = [
@@ -127,7 +126,12 @@ async function main() {
     outsourceFormSettings: {
       outsourceDispatchCustomFields: [],
       outsourceReceiveCustomFields: [],
+      showOutsourceDispatchDeliveryDate: false,
       showPartnerFlowDetailOnList: false,
+      outsourceCenterPrint: {
+        dispatchFlowDetail: { showPrintButton: true },
+        receiveFlowDetail: { showPrintButton: true },
+      },
     },
     reworkFormSettings: {
       defectTreatmentCustomFields: [],

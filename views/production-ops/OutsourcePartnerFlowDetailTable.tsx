@@ -9,6 +9,8 @@ export interface OutsourcePartnerFlowDetailTableProps {
   dictionaries?: AppDictionaries;
   /** 本弹窗维度是否曾有任何往来单（用于区分「无数据」与「筛选无匹配」） */
   hasAnyDoc: boolean;
+  /** 与表单配置「外协发出显示交货日期」一致时在「单据类型」后展示列 */
+  showDeliveryDateColumn?: boolean;
   docRows: PartnerFlowDocRow[];
   variantColumnIds: string[];
   showVariantCols: boolean;
@@ -32,6 +34,7 @@ const OutsourcePartnerFlowDetailTable: React.FC<OutsourcePartnerFlowDetailTableP
   products,
   dictionaries,
   hasAnyDoc,
+  showDeliveryDateColumn = false,
   docRows,
   variantColumnIds,
   showVariantCols,
@@ -47,7 +50,8 @@ const OutsourcePartnerFlowDetailTable: React.FC<OutsourcePartnerFlowDetailTableP
   }
 
   const variantLabel = (vid: string) => formatOutsourceVariantLabel(productId, vid, products, dictionaries);
-  const colCount = 3 + (showVariantCols ? variantColumnIds.length : 0);
+  const colCount = 3 + (showDeliveryDateColumn ? 1 : 0) + (showVariantCols ? variantColumnIds.length : 0);
+  const labelColSpan = showDeliveryDateColumn ? 3 : 2;
 
   return (
     <div className="w-full max-w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white">
@@ -56,6 +60,9 @@ const OutsourcePartnerFlowDetailTable: React.FC<OutsourcePartnerFlowDetailTableP
           <tr className="border-b border-slate-200 bg-slate-50">
             <th className="px-3 py-3 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">日期</th>
             <th className="px-3 py-3 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">单据类型</th>
+            {showDeliveryDateColumn ? (
+              <th className="px-3 py-3 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">交货日期</th>
+            ) : null}
             <th className="px-3 py-3 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">商品数量</th>
             {showVariantCols &&
               variantColumnIds.map(vid => (
@@ -84,6 +91,11 @@ const OutsourcePartnerFlowDetailTable: React.FC<OutsourcePartnerFlowDetailTableP
               <tr key={`${row.docNo}-${idx}`} className={rowTint(row.typeLabel)}>
                 <td className="px-3 py-2.5 font-bold text-slate-600 whitespace-nowrap tabular-nums">{row.dateDisplay}</td>
                 <td className="px-3 py-2.5 font-bold text-slate-700 whitespace-nowrap">{row.typeLabel}</td>
+                {showDeliveryDateColumn ? (
+                  <td className="px-3 py-2.5 font-bold text-slate-600 whitespace-nowrap tabular-nums">
+                    {row.deliveryDateDisplay}
+                  </td>
+                ) : null}
                 <td className="px-3 py-2.5 font-bold text-slate-800 tabular-nums">{row.totalQty} 件</td>
                 {showVariantCols &&
                   variantColumnIds.map(vid => {
@@ -98,7 +110,7 @@ const OutsourcePartnerFlowDetailTable: React.FC<OutsourcePartnerFlowDetailTableP
             ))
           )}
           <tr className="border-t-2 border-slate-200 bg-sky-50/90">
-            <td className="px-3 py-3 font-black text-indigo-800 whitespace-nowrap text-left" colSpan={2}>
+            <td className="px-3 py-3 font-black text-indigo-800 whitespace-nowrap text-left" colSpan={labelColSpan}>
               外协发出
             </td>
             <td className="px-3 py-3 font-black text-indigo-900 tabular-nums">{dispatchTotal} 件</td>
@@ -113,7 +125,7 @@ const OutsourcePartnerFlowDetailTable: React.FC<OutsourcePartnerFlowDetailTableP
               })}
           </tr>
           <tr className="border-t border-slate-200 bg-amber-50/80">
-            <td className="px-3 py-3 font-black text-amber-900 whitespace-nowrap text-left" colSpan={2}>
+            <td className="px-3 py-3 font-black text-amber-900 whitespace-nowrap text-left" colSpan={labelColSpan}>
               外协收回
             </td>
             <td className="px-3 py-3 font-black text-amber-950 tabular-nums">{receiveTotal} 件</td>
@@ -128,7 +140,7 @@ const OutsourcePartnerFlowDetailTable: React.FC<OutsourcePartnerFlowDetailTableP
               })}
           </tr>
           <tr className="border-t border-slate-200 bg-slate-100/90">
-            <td className="px-3 py-3 font-black text-slate-800 whitespace-nowrap text-left" colSpan={2}>
+            <td className="px-3 py-3 font-black text-slate-800 whitespace-nowrap text-left" colSpan={labelColSpan}>
               剩余数量
             </td>
             <td className="px-3 py-3 font-black text-slate-900 tabular-nums">{remainingTotal} 件</td>

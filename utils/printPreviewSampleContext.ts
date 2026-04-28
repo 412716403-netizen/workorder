@@ -265,6 +265,8 @@ const SAMPLE_OUTSOURCE_MATERIAL_RETURN_PRINT: MaterialFlowPrintContext = {
   custom: {},
 };
 
+const PREVIEW_TENANT_NAME_FALLBACK = '示例公司名称';
+
 export function augmentPrintPreviewContext(
   base: PrintRenderContext,
   template: PrintTemplate | null | undefined,
@@ -302,6 +304,7 @@ export function augmentPrintPreviewContext(
         docNo: 'RW20260417-0001',
         typeLabel: '返工',
         sourceNodeName: '缝制',
+        outsourceFactoryBlock: '外协工厂：示例加工厂\n',
         targetNodesLabel: '裁剪、缝制',
         totalQty: 12,
         timestamp: '2026-04-17 14:00',
@@ -315,6 +318,7 @@ export function augmentPrintPreviewContext(
         docNo: 'RB20260417-0001',
         nodeNames: '缝制',
         sourceNodeName: '裁剪',
+        reworkReportHeaderLeftBlock: '操作人：李四\n',
         totalQty: 8,
         timestamp: '2026-04-17 16:00',
         operators: '李四',
@@ -445,7 +449,6 @@ export function augmentPrintPreviewContext(
   if (dt === 'outsource' && !next.outsourceDispatchPrint && !next.outsourceReceivePrint) {
     next = {
       ...next,
-      tenantName: next.tenantName ?? '示例公司名称',
       outsourceDispatchPrint: {
         docNo: 'WX-0001-001',
         partner: '示例加工厂',
@@ -460,6 +463,9 @@ export function augmentPrintPreviewContext(
   }
   if (previewShouldInjectSampleVirtualBatch(template) && next.virtualBatch == null) {
     next = { ...next, virtualBatch: buildSampleVirtualBatchPrintRow(next) };
+  }
+  if (!next.tenantName?.trim()) {
+    next = { ...next, tenantName: PREVIEW_TENANT_NAME_FALLBACK };
   }
   return next;
 }

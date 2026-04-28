@@ -77,7 +77,7 @@ import {
   WAREHOUSE_DOC_KIND,
 } from '../../utils/warehouseDocPreference';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
-import { outsourceCustomCollabPart } from '../../utils/productionOpCollab/outsource';
+import { buildOutsourceDispatchCollabSnapshot, outsourceCustomCollabPart } from '../../utils/productionOpCollab/outsource';
 import OutsourceFormConfigModal from './OutsourceFormConfigModal';
 import type { PartnerFlowDetailSeed } from '../../utils/outsourcePartnerFlowDetail';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
@@ -160,6 +160,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
   const [showOutsourceConfig, setShowOutsourceConfig] = useState(false);
   const [outsourceConfigDefaultTab, setOutsourceConfigDefaultTab] = useState<'fields' | 'print'>('fields');
   const [dispatchCustomValues, setDispatchCustomValues] = useState<Record<string, unknown>>({});
+  const [dispatchDeliveryDate, setDispatchDeliveryDate] = useState('');
   const [receiveCustomValues, setReceiveCustomValues] = useState<Record<string, unknown>>({});
   const [receiveLineCustomValues, setReceiveLineCustomValues] = useState<Record<string, unknown>>({});
 
@@ -170,7 +171,10 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
   useEffect(() => { setOutsPage(1); }, [productionLinkMode]);
   useEffect(() => { setOutsPage(1); }, [debouncedOutsourceSearch]);
   useEffect(() => {
-    if (dispatchFormModalOpen) setDispatchCustomValues({});
+    if (dispatchFormModalOpen) {
+      setDispatchCustomValues({});
+      setDispatchDeliveryDate('');
+    }
   }, [dispatchFormModalOpen]);
   useEffect(() => {
     if (receiveFormModalOpen) setReceiveCustomValues({});
@@ -698,7 +702,10 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
     const docNo = getNextOutsourceDocNo(partnerName);
     const timestamp = new Date().toLocaleString();
     const isProductMode = productionLinkMode === 'product';
-    const dispatchCollab = outsourceCustomCollabPart(dispatchCustomValues, 'dispatch');
+    const dispatchCollab = buildOutsourceDispatchCollabSnapshot(
+      dispatchCustomValues,
+      outsourceFormSettings.showOutsourceDispatchDeliveryDate ? dispatchDeliveryDate : undefined,
+    );
     const batch: ProductionOpRecord[] = [];
     entries.forEach(([key, qty]) => {
       const parts = key.split('|');
@@ -1393,6 +1400,9 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
               dispatchCustomFieldDefs={dispatchCustomCreateDefs}
               dispatchCustomValues={dispatchCustomValues}
               setDispatchCustomValues={setDispatchCustomValues}
+              showDispatchDeliveryDate={outsourceFormSettings.showOutsourceDispatchDeliveryDate === true}
+              dispatchDeliveryDate={dispatchDeliveryDate}
+              setDispatchDeliveryDate={setDispatchDeliveryDate}
               onSubmit={handleDispatchFormSubmit}
               onClose={() => setDispatchFormModalOpen(false)}
             />
@@ -1486,6 +1496,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
         orders={orders}
         categories={categories}
         dictionaries={dictionaries}
+        outsourceFormSettings={outsourceFormSettings}
       />
 
       {outsourceModal === 'flow' && flowDetailKey && (

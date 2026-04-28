@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, useDroppable } from '@dnd-kit/core';
 import { toast } from 'sonner';
 import { ArrowLeft, Eye, Minus, Plus, Printer, Save } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { useMasterData, useConfigData, useOrdersData, useFinanceData, useAppActions } from '../contexts/AppDataContext';
 import type {
   PrintBodyElement,
@@ -11,7 +12,7 @@ import type {
   PrintLineElementConfig,
   PrintRenderContext,
 } from '../types';
-import { isSystemLockedPrintTemplateId } from '../types';
+import { isPlanPrintTemplateManageScope, isSystemLockedPrintTemplateId } from '../types';
 import { createBlankCustomTemplate, duplicatePrintTemplate } from '../utils/printTemplateDefaults';
 import { getPrintLayoutMetrics } from '../components/print-editor/layoutMetrics';
 import { ComponentLibrary } from '../components/print-editor/ComponentLibrary';
@@ -25,6 +26,7 @@ import {
   augmentPrintPreviewContext,
   type PrintPreviewPsiCustomSamples,
 } from '../utils/printPreviewSampleContext';
+import { defaultPrintTemplateFieldsForManageScope } from '../utils/printTemplateManageScope';
 
 function CanvasDropZone({
   children,
@@ -55,6 +57,7 @@ function CanvasDropZone({
 export default function PrintTemplateEditorView() {
   const { id: routeId } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { products, categories } = useMasterData();
   const {
     printTemplates,
@@ -71,6 +74,7 @@ export default function PrintTemplateEditorView() {
   const { orders, plans } = useOrdersData();
   const { financeCategories } = useFinanceData();
   const { onUpdatePrintTemplates } = useAppActions();
+  const { tenantCtx } = useAuth();
 
   const editor = usePrintEditor(createBlankCustomTemplate());
 
@@ -101,12 +105,17 @@ export default function PrintTemplateEditorView() {
 
   useEffect(() => {
     if (!routeId || routeId === 'new') {
-      setTemplate(createBlankCustomTemplate());
+      const blank = createBlankCustomTemplate();
+      const raw = searchParams.get('manageScope');
+      if (raw && isPlanPrintTemplateManageScope(raw)) {
+        Object.assign(blank, defaultPrintTemplateFieldsForManageScope(raw));
+      }
+      setTemplate(blank);
       return;
     }
     const t = printTemplates.find(x => x.id === routeId);
     if (t) setTemplate({ ...t });
-  }, [routeId, printTemplates, setTemplate]);
+  }, [routeId, printTemplates, setTemplate, searchParams]);
 
   const selectedElement = useMemo(
     () => (selection.kind === 'element' ? template.elements.find(e => e.id === selection.id) ?? null : null),
@@ -168,9 +177,10 @@ export default function PrintTemplateEditorView() {
       product,
       milestoneName: '示例工序',
       completedQuantity: 12,
+      tenantName: tenantCtx?.tenantName?.trim() || undefined,
     };
     return augmentPrintPreviewContext(base, template, psiCustomSamples);
-  }, [plans, orders, products, template, psiCustomSamples, productCategoryCustomPreviewSamples]);
+  }, [plans, orders, products, template, psiCustomSamples, productCategoryCustomPreviewSamples, tenantCtx?.tenantName]);
 
   const fieldOptionsAll = useMemo(
     () =>
@@ -410,7 +420,13 @@ export default function PrintTemplateEditorView() {
     }
     try {
       const others = printTemplates.filter(t => t.id !== template.id);
-      await onUpdatePrintTemplates([...others, { ...template, updatedAt: new Date().toISOString() }]);
+      const rawMs = searchParams.get('manageScope');
+      let toSave = { ...template, updatedAt: new Date().toISOString() };
+      if (rawMs && isPlanPrintTemplateManageScope(rawMs) && toSave.printTemplateManageScope == null) {
+        toSave = { ...toSave, printTemplateManageScope: rawMs };
+      }
+      await onUpdatePrintTemplates([...others, toSave]);
+      setTemplate({ ...toSave });
       toast.success('模板已保存');
       if (routeId === 'new') {
         navigate(`/print-editor/${template.id}`, { replace: true });
@@ -418,7 +434,7 @@ export default function PrintTemplateEditorView() {
     } catch {
       toast.error('保存失败');
     }
-  }, [printTemplates, template, onUpdatePrintTemplates, routeId, navigate]);
+  }, [printTemplates, template, onUpdatePrintTemplates, routeId, navigate, searchParams, setTemplate]);
 
   const { printRef, handlePrint } = usePrintTemplateAction(template, previewCtx);
 

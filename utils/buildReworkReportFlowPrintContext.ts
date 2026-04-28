@@ -30,6 +30,8 @@ export function buildReworkReportFlowPrintContext(
     dictionaries?: AppDictionaries;
     workers?: Worker[];
     equipment?: { id: string; name: string; code?: string; assignedMilestoneIds?: string[] }[];
+    /** 当前租户名称；供 `{{租户.name}}` */
+    tenantName?: string | null;
   },
 ): PrintRenderContext {
   const {
@@ -42,10 +44,14 @@ export function buildReworkReportFlowPrintContext(
     dictionaries,
     workers = [],
     equipment = [],
+    tenantName,
   } = opts;
+  const tenantSlice: Pick<PrintRenderContext, 'tenantName'> | Record<string, never> = tenantName?.trim()
+    ? { tenantName: tenantName.trim() }
+    : {};
   const first = detailBatch[0];
   if (!first) {
-    return { reworkReportPrint: { custom: {} } };
+    return { ...tenantSlice, reworkReportPrint: { custom: {} } };
   }
   const order = first.orderId ? orders.find(o => o.id === first.orderId) : undefined;
   const product = products.find(p => p.id === first.productId);
@@ -70,6 +76,13 @@ export function buildReworkReportFlowPrintContext(
   const opsInBatch = [...new Set(detailBatch.map(x => (x.operator ?? '').trim()).filter(Boolean))];
   const operatorsLabel =
     opsInBatch.length === 0 ? '—' : opsInBatch.length === 1 ? opsInBatch[0]! : `${opsInBatch[0]} 等${opsInBatch.length}人`;
+  const partnersInBatch = [...new Set(detailBatch.map(x => (x.partner ?? '').trim()).filter(Boolean))];
+  const reworkReportHeaderLeftBlock =
+    partnersInBatch.length > 0
+      ? `外协工厂：${partnersInBatch.length === 1 ? partnersInBatch[0]! : partnersInBatch.join('、')}\n`
+      : opsInBatch.length > 0
+        ? `操作人：${operatorsLabel}\n`
+        : undefined;
   const latestBatchTimestamp = detailBatch.reduce<{ t: number; ts?: string }>((best, x) => {
     const t = new Date(x.timestamp || 0).getTime();
     if (isNaN(t)) return best;
@@ -95,6 +108,7 @@ export function buildReworkReportFlowPrintContext(
     docNo: first.docNo ?? '—',
     nodeNames: nodeNamesLabel,
     sourceNodeName: sourceNodeName === '—' ? undefined : sourceNodeName,
+    reworkReportHeaderLeftBlock,
     totalQty,
     timestamp: formatTimestamp(latestBatchTimestamp),
     operators: operatorsLabel,
@@ -156,6 +170,7 @@ export function buildReworkReportFlowPrintContext(
   }
 
   return {
+    ...tenantSlice,
     order: productionLinkMode === 'order' ? order : undefined,
     product: product ?? undefined,
     reworkReportPrint,

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
@@ -17,29 +17,12 @@ import type {
   PrintTemplate,
   ProductionOrder,
   Product,
+  PlanPrintTemplateManageScope,
 } from '../../types';
 import { PrintTemplateManager } from '../PrintTemplateManager';
+import { filterPrintTemplatesForManageScope, mergeScopedPrintTemplateListIntoFull } from '../../utils/printTemplateManageScope';
 
-export type PlanPrintTemplateManageScope =
-  | 'planList'
-  | 'planLabel'
-  | 'orderDetail'
-  | 'reportBatchDetail'
-  | 'stockInFlowDetail'
-  | 'materialIssueFlowDetail'
-  | 'materialReturnFlowDetail'
-  | 'materialOutsourceIssueFlowDetail'
-  | 'materialOutsourceReturnFlowDetail'
-  | 'outsourceDispatchFlowDetail'
-  | 'outsourceReceiveFlowDetail'
-  | 'defectTreatmentFlowDetail'
-  | 'reworkReportFlowDetail'
-  | 'purchaseOrderList'
-  | 'salesOrderList'
-  | 'purchaseBillList'
-  | 'salesBillList'
-  | 'receiptList'
-  | 'paymentList';
+export type { PlanPrintTemplateManageScope };
 
 function allowedTemplateIdsForScope(
   form:
@@ -325,6 +308,19 @@ export const PlanPrintTemplateManageDialog: React.FC<PlanPrintTemplateManageDial
     toast.success('已加入可选模版');
   };
 
+  const scopedPrintTemplates = useMemo(
+    () => filterPrintTemplatesForManageScope(printTemplates, scope),
+    [printTemplates, scope],
+  );
+
+  const wrappedUpdatePrintTemplates = useCallback(
+    async (scopedList: PrintTemplate[]) => {
+      const merged = mergeScopedPrintTemplateListIntoFull(printTemplates, scopedList, scope);
+      await onUpdatePrintTemplates(merged);
+    },
+    [onUpdatePrintTemplates, printTemplates, scope],
+  );
+
   if (!open) return null;
 
   return (
@@ -349,11 +345,12 @@ export const PlanPrintTemplateManageDialog: React.FC<PlanPrintTemplateManageDial
         <div className="min-h-0 flex-1 overflow-hidden px-4 pb-2 pt-3">
           <div className="h-[min(70vh,640px)] min-h-[320px] overflow-hidden">
             <PrintTemplateManager
-              printTemplates={printTemplates}
-              onUpdatePrintTemplates={onUpdatePrintTemplates}
+              printTemplates={scopedPrintTemplates}
+              onUpdatePrintTemplates={wrappedUpdatePrintTemplates}
               plans={plans}
               orders={orders}
               products={products}
+              manageScope={scope}
               onAfterPersist={onAfterPersist}
               onSelectionChange={setSelectedTemplateId}
             />

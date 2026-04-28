@@ -27,12 +27,17 @@ export function buildDefectTreatmentPrintContext(
     products: Product[];
     globalNodes: GlobalNodeTemplate[];
     dictionaries?: AppDictionaries;
+    /** 当前租户名称；供 `{{租户.name}}` */
+    tenantName?: string | null;
   },
 ): PrintRenderContext {
-  const { productionLinkMode, detailBatch, records, orders, products, globalNodes, dictionaries } = opts;
+  const { productionLinkMode, detailBatch, records, orders, products, globalNodes, dictionaries, tenantName } = opts;
+  const tenantSlice: Pick<PrintRenderContext, 'tenantName'> | Record<string, never> = tenantName?.trim()
+    ? { tenantName: tenantName.trim() }
+    : {};
   const first = detailBatch[0];
   if (!first) {
-    return { defectTreatmentPrint: { custom: {} } };
+    return { ...tenantSlice, defectTreatmentPrint: { custom: {} } };
   }
   const order = first.orderId ? orders.find(o => o.id === first.orderId) : undefined;
   const product = products.find(p => p.id === first.productId);
@@ -52,12 +57,18 @@ export function buildDefectTreatmentPrintContext(
     first.type === 'REWORK' && (first.reworkNodeIds?.length ?? 0) > 0
       ? first.reworkNodeIds!.map(nid => globalNodes.find(n => n.id === nid)?.name ?? nid).join('、')
       : '';
+  const partnersInBatch = [...new Set(detailBatch.map(x => (x.partner ?? '').trim()).filter(Boolean))];
+  const outsourceFactoryBlock =
+    partnersInBatch.length > 0
+      ? `外协工厂：${partnersInBatch.length === 1 ? partnersInBatch[0]! : partnersInBatch.join('、')}\n`
+      : undefined;
 
   const custom = readDefectTreatmentCustomSnapshot(records, first.docNo);
   const defectTreatmentPrint: ReworkFlowPrintContext = {
     docNo: first.docNo ?? '—',
     typeLabel,
     sourceNodeName,
+    outsourceFactoryBlock,
     targetNodesLabel: targetNodesLabel || undefined,
     totalQty,
     timestamp: formatTimestamp(latestBatchTimestamp),
@@ -114,6 +125,7 @@ export function buildDefectTreatmentPrintContext(
   }
 
   return {
+    ...tenantSlice,
     order: productionLinkMode === 'order' ? order : undefined,
     product: product ?? undefined,
     defectTreatmentPrint,

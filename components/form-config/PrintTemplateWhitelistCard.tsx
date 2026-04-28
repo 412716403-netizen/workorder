@@ -24,6 +24,8 @@ export interface PrintTemplateWhitelistCardProps {
   onRequestAddTemplate: () => void;
   addButtonLabel?: string;
   emptyHint?: ReactNode;
+  /** 不展示「可选模版（已加入）」列表，仅在管理窗口维护白名单 */
+  hideOptionalTemplateList?: boolean;
 }
 
 /**
@@ -42,6 +44,7 @@ export const PrintTemplateWhitelistCard: React.FC<PrintTemplateWhitelistCardProp
   onRequestAddTemplate,
   addButtonLabel = '增加模版',
   emptyHint,
+  hideOptionalTemplateList = false,
 }) => {
   const ids = allowedTemplateIds ?? [];
   return (
@@ -73,37 +76,45 @@ export const PrintTemplateWhitelistCard: React.FC<PrintTemplateWhitelistCardProp
           </span>
         </label>
       )}
-      <p className="mt-3 text-[10px] font-black uppercase tracking-widest text-slate-400">可选模版（已加入）</p>
-      <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto">
-        {ids.length === 0 ? (
-          emptyHint ? (
-            <span className="text-xs text-slate-400">{emptyHint}</span>
-          ) : null
-        ) : (
-          ids.map(tid => {
-            const t = availableTemplates.find(x => x.id === tid);
-            return (
-              <div
-                key={tid}
-                className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white pl-2.5 pr-1 py-1 text-xs font-bold text-slate-700"
-              >
-                <span className="max-w-[200px] truncate">{t?.name ?? `已删除模版 (${tid.slice(0, 8)}…)`}</span>
-                <button
-                  type="button"
-                  title="从可选列表移除"
-                  onClick={() => {
-                    const next = ids.filter(x => x !== tid);
-                    onChangeAllowedTemplateIds(next.length > 0 ? next : undefined);
-                  }}
-                  className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            );
-          })
-        )}
-      </div>
+      {hideOptionalTemplateList ? (
+        <p className="mt-3 text-xs leading-relaxed text-slate-500">
+          已加入的打印模版不在此展示；请点「{addButtonLabel}」在管理窗口中选择模版并加入列表。
+        </p>
+      ) : (
+        <>
+          <p className="mt-3 text-[10px] font-black uppercase tracking-widest text-slate-400">可选模版（已加入）</p>
+          <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto">
+            {ids.length === 0 ? (
+              emptyHint ? (
+                <span className="text-xs text-slate-400">{emptyHint}</span>
+              ) : null
+            ) : (
+              ids.map(tid => {
+                const t = availableTemplates.find(x => x.id === tid);
+                return (
+                  <div
+                    key={tid}
+                    className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white pl-2.5 pr-1 py-1 text-xs font-bold text-slate-700"
+                  >
+                    <span className="max-w-[200px] truncate">{t?.name ?? `已删除模版 (${tid.slice(0, 8)}…)`}</span>
+                    <button
+                      type="button"
+                      title="从可选列表移除"
+                      onClick={() => {
+                        const next = ids.filter(x => x !== tid);
+                        onChangeAllowedTemplateIds(next.length > 0 ? next : undefined);
+                      }}
+                      className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 };

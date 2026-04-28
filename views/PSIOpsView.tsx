@@ -231,13 +231,13 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
   const [salesOrderModalPhase, setSalesOrderModalPhase] = useState<'detail' | 'edit' | null>(null);
   const [salesBillModalPhase, setSalesBillModalPhase] = useState<'detail' | 'edit' | null>(null);
   const [showPOFormConfigModal, setShowPOFormConfigModal] = useState(false);
-  const [poFormConfigEntryTab, setPoFormConfigEntryTab] = useState<'fields' | 'print'>('fields');
+  const [poFormConfigEntryTab, setPoFormConfigEntryTab] = useState<'fields' | 'print' | 'listDisplay'>('fields');
   const [showPBFormConfigModal, setShowPBFormConfigModal] = useState(false);
-  const [pbFormConfigEntryTab, setPbFormConfigEntryTab] = useState<'fields' | 'print'>('fields');
+  const [pbFormConfigEntryTab, setPbFormConfigEntryTab] = useState<'fields' | 'print' | 'listDisplay'>('fields');
   const [showSOFormConfigModal, setShowSOFormConfigModal] = useState(false);
-  const [soFormConfigEntryTab, setSoFormConfigEntryTab] = useState<'fields' | 'print'>('fields');
+  const [soFormConfigEntryTab, setSoFormConfigEntryTab] = useState<'fields' | 'print' | 'listDisplay'>('fields');
   const [showSBFormConfigModal, setShowSBFormConfigModal] = useState(false);
-  const [sbFormConfigEntryTab, setSbFormConfigEntryTab] = useState<'fields' | 'print'>('fields');
+  const [sbFormConfigEntryTab, setSbFormConfigEntryTab] = useState<'fields' | 'print' | 'listDisplay'>('fields');
   // 列表行「打印」按钮 → 选模版 Dialog → HiddenPrintSlot → 打印的完整链路，
   // 封装在 PsiListPrintController 内；4 个 type 各持一个 ref 以便触发 openPicker。
   const poListPrintControllerRef = useRef<PsiListPrintControllerHandle>(null);

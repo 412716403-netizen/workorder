@@ -30,6 +30,7 @@ import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderC
 import { buildOutsourceFlowPrintContext } from '../../utils/buildOutsourceFlowPrintContext';
 import {
   OUTSOURCE_DISPATCH_CUSTOM_DATA_KEY,
+  OUTSOURCE_DISPATCH_DELIVERY_DATE_KEY,
   OUTSOURCE_RECEIVE_CUSTOM_DATA_KEY,
   mergeOutsourceDetailEditCollab,
 } from '../../utils/productionOpCollab/outsource';
@@ -110,6 +111,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   /** 收回单、工序启用称重：按明细行 key（`产品|工序` 或 `工单|工序`）编辑交货总重 kg，保存时按数量比分摊到各规格记录 */
   const [flowDetailLineWeights, setFlowDetailLineWeights] = useState<Record<string, number>>({});
   const [flowDetailEditCustom, setFlowDetailEditCustom] = useState<Record<string, unknown>>({});
+  const [flowDetailDeliveryDate, setFlowDetailDeliveryDate] = useState('');
   const [detailImagePreviewUrl, setDetailImagePreviewUrl] = useState<string | null>(null);
 
   const docRecords = useMemo(
@@ -137,12 +139,27 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
     [docRecords],
   );
 
+  const dispatchDetailDeliveryDateLabel = useMemo(() => {
+    if (!docRecords.length) return '—';
+    if (docRecords[0]!.status === '已收回') return '—';
+    if (!outsourceFormSettings.showOutsourceDispatchDeliveryDate) return '—';
+    const raw = (docRecords[0]!.collabData as Record<string, unknown> | undefined)?.[OUTSOURCE_DISPATCH_DELIVERY_DATE_KEY];
+    if (typeof raw !== 'string' || !raw.trim()) return '—';
+    return raw.trim().slice(0, 10);
+  }, [docRecords, outsourceFormSettings.showOutsourceDispatchDeliveryDate]);
+
   const beginFlowDetailEdit = useCallback(() => {
     if (docRecords.length === 0) return;
     const firstD = docRecords[0];
     const docPartnerVal = firstD.partner ?? '—';
     setFlowDetailEditPartner(docPartnerVal);
     setFlowDetailEditCustom({ ...outsourceCustomSnapshot });
+    if (firstD.status !== '已收回') {
+      const rawDd = (firstD.collabData as Record<string, unknown> | undefined)?.[OUTSOURCE_DISPATCH_DELIVERY_DATE_KEY];
+      setFlowDetailDeliveryDate(typeof rawDd === 'string' ? rawDd.trim().slice(0, 10) : '');
+    } else {
+      setFlowDetailDeliveryDate('');
+    }
     const isProductMode = productionLinkMode === 'product' && docRecords.some(r => !r.orderId);
     const initQty: Record<string, number> = {};
     docRecords.forEach(r => {
@@ -213,6 +230,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
     setFlowDetailUnitPrices({});
     setFlowDetailLineWeights({});
     setFlowDetailEditCustom({});
+    setFlowDetailDeliveryDate('');
   }, [layout, phase]);
 
   useEffect(() => {
@@ -252,7 +270,11 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
     }
     const customDataKey = isReceiveDocSave ? OUTSOURCE_RECEIVE_CUSTOM_DATA_KEY : OUTSOURCE_DISPATCH_CUSTOM_DATA_KEY;
     const mergeCollab = (preserved: Record<string, unknown> | undefined): { collabData?: Record<string, unknown> } =>
-      mergeOutsourceDetailEditCollab(preserved, customDataKey, flowDetailEditCustom);
+      mergeOutsourceDetailEditCollab(preserved, customDataKey, flowDetailEditCustom, {
+        updateDispatchDeliveryDate:
+          !isReceiveDocSave && outsourceFormSettings.showOutsourceDispatchDeliveryDate === true,
+        dispatchDeliveryDate: flowDetailDeliveryDate,
+      });
     for (const rec of toDelete) await onDeleteRecord(rec.id);
     const timestamp = firstSave.timestamp || new Date().toLocaleString();
     const newStatus = isReceiveDocSave ? '已收回' : '加工中';
@@ -370,6 +392,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
     setFlowDetailUnitPrices({});
     setFlowDetailLineWeights({});
     setFlowDetailEditCustom({});
+    setFlowDetailDeliveryDate('');
     if (layout === 'docPhase') onPhaseDetail?.();
     else setFlowDetailEditMode(false);
   }, [
@@ -390,6 +413,8 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
     onPhaseDetail,
     confirm,
     globalNodes,
+    flowDetailDeliveryDate,
+    outsourceFormSettings.showOutsourceDispatchDeliveryDate,
   ]);
 
   if (docRecords.length === 0) return null;
@@ -462,7 +487,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
         }
       >
         {layout === 'standalone' && (
-          <div className="absolute inset-0 bg-slate-900/60" onClick={() => { onClose(); setFlowDetailEditMode(false); setFlowDetailEditCustom({}); }} aria-hidden />
+          <div className="absolute inset-0 bg-slate-900/60" onClick={() => { onClose(); setFlowDetailEditMode(false); setFlowDetailEditCustom({}); setFlowDetailDeliveryDate(''); }} aria-hidden />
         )}
         <div
           className={
@@ -487,6 +512,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                     setFlowDetailUnitPrices({});
                     setFlowDetailLineWeights({});
                     setFlowDetailEditCustom({});
+                    setFlowDetailDeliveryDate('');
                   }}
                   className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700"
                 >
@@ -528,6 +554,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                       onClose();
                       setFlowDetailEditMode(false);
                       setFlowDetailEditCustom({});
+                      setFlowDetailDeliveryDate('');
                     });
                   }} className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold">
                     <Trash2 className="w-4 h-4" /> 删除
@@ -535,7 +562,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                 )}
               </>
             )}
-            <button type="button" onClick={() => { onClose(); setFlowDetailEditMode(false); setFlowDetailEditCustom({}); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
+            <button type="button" onClick={() => { onClose(); setFlowDetailEditMode(false); setFlowDetailEditCustom({}); setFlowDetailDeliveryDate(''); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
           </div>
         </div>
         )}
@@ -587,6 +614,13 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                     <User className="h-3 w-3 shrink-0" />
                     <span className="normal-case">经办: {first.operator || '—'}</span>
                   </span>
+                  {!editActive && !isReceiveDoc && outsourceFormSettings.showOutsourceDispatchDeliveryDate ? (
+                    <span className="flex items-center gap-1 normal-case text-slate-500">
+                      <Package className="h-3 w-3 shrink-0" />
+                      <span className="font-bold">交货日期</span>
+                      <span className="text-slate-700 tabular-nums">{dispatchDetailDeliveryDateLabel}</span>
+                    </span>
+                  ) : null}
                   {!editActive &&
                     outsourceCustomDefsDetail
                       .filter(cf => psiCustomFieldHasFilledDisplayValue(cf, outsourceCustomSnapshot[cf.id]))
@@ -607,8 +641,21 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                         </span>
                       ))}
                 </div>
-                {editActive && outsourceCustomDefsDetail.length > 0 ? (
+                {editActive &&
+                ((!isReceiveDoc && outsourceFormSettings.showOutsourceDispatchDeliveryDate) ||
+                  outsourceCustomDefsDetail.length > 0) ? (
                   <div className="flex flex-col gap-3 border-t border-slate-200/80 pt-3">
+                    {!isReceiveDoc && outsourceFormSettings.showOutsourceDispatchDeliveryDate ? (
+                      <div className="min-w-0 space-y-1">
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">交货日期</label>
+                        <input
+                          type="date"
+                          value={flowDetailDeliveryDate}
+                          onChange={e => setFlowDetailDeliveryDate(e.target.value)}
+                          className="h-9 w-full max-w-xs rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                    ) : null}
                     {outsourceCustomDefsDetail.map(cf => (
                       <div key={cf.id} className="min-w-0 space-y-1">
                         <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>

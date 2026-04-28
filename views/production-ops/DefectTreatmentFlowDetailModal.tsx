@@ -37,6 +37,7 @@ import {
 } from '../../styles/uiDensity';
 import { psiCustomFieldHasFilledDisplayValue } from '../psi-ops/psiOpsListFormatting';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
+import { useAuth } from '../../contexts/AuthContext';
 
 const defectTreatmentCustomFieldEditControlClass =
   'h-9 w-full max-w-md rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500';
@@ -96,6 +97,7 @@ const DefectTreatmentFlowDetailModal: React.FC<DefectTreatmentFlowDetailModalPro
   onAddRecord,
   onClose,
 }) => {
+  const { tenantCtx } = useAuth();
   const r = defectFlowDetailRecord;
   const matchScope = (x: ProductionOpRecord) =>
     productionLinkMode === 'product' ? x.productId === r.productId : x.orderId === r.orderId;
@@ -177,8 +179,9 @@ const DefectTreatmentFlowDetailModal: React.FC<DefectTreatmentFlowDetailModalPro
         products,
         globalNodes,
         dictionaries,
+        tenantName: tenantCtx?.tenantName,
       }),
-    [productionLinkMode, detailBatch, records, orders, products, globalNodes, dictionaries],
+    [productionLinkMode, detailBatch, records, orders, products, globalNodes, dictionaries, tenantCtx?.tenantName],
   );
 
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);

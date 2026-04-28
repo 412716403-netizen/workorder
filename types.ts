@@ -30,7 +30,23 @@ export {
 /** 与 CustomDocFieldType 相同，保留别名供计划单单据配置等既有命名 */
 export type PlanFormCustomFieldType = CustomDocFieldType;
 
-export { isSystemLockedPrintTemplateId, SYSTEM_LOCKED_PRINT_TEMPLATE_IDS } from './shared/systemPrintTemplates';
+export {
+  BUILTIN_OUTSOURCE_DISPATCH_PRINT_TEMPLATE_ID,
+  BUILTIN_OUTSOURCE_RECEIVE_PRINT_TEMPLATE_ID,
+  BUILTIN_PURCHASE_ORDER_PRINT_TEMPLATE_ID,
+  BUILTIN_SALES_ORDER_PRINT_TEMPLATE_ID,
+  BUILTIN_PURCHASE_BILL_PRINT_TEMPLATE_ID,
+  BUILTIN_SALES_BILL_PRINT_TEMPLATE_ID,
+  BUILTIN_MATERIAL_ISSUE_PRINT_TEMPLATE_ID,
+  BUILTIN_MATERIAL_RETURN_PRINT_TEMPLATE_ID,
+  BUILTIN_OUTSOURCE_MATERIAL_ISSUE_PRINT_TEMPLATE_ID,
+  BUILTIN_OUTSOURCE_MATERIAL_RETURN_PRINT_TEMPLATE_ID,
+  BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID,
+  BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
+  isCodeMergedPrintTemplateId,
+  isSystemLockedPrintTemplateId,
+  SYSTEM_LOCKED_PRINT_TEMPLATE_IDS,
+} from './shared/systemPrintTemplates';
 
 /** 单品码（一物一码）：计划内每件唯一扫码标识 */
 export interface ItemCode {
@@ -633,12 +649,15 @@ export interface OutsourceFormSettings {
    * 为 true 时，外协列表加工厂旁的文档图标打开「加工厂往来数量明细」弹窗；为 false 或未设置时打开外协流水并带筛选。
    */
   showPartnerFlowDetailOnList?: boolean;
+  /** 为 true 时，外协发出新增/详情/编辑显示交货日期，加工厂往来明细表增加交货日期列（`collabData.outsourceDispatchDeliveryDate`）。 */
+  showOutsourceDispatchDeliveryDate?: boolean;
 }
 
 export const DEFAULT_OUTSOURCE_FORM_SETTINGS: OutsourceFormSettings = {
   outsourceDispatchCustomFields: [],
   outsourceReceiveCustomFields: [],
   showPartnerFlowDetailOnList: false,
+  showOutsourceDispatchDeliveryDate: false,
 };
 
 /** 返工管理：处理不良流水详情 / 返工报工流水详情打印入口与白名单 */
@@ -1051,6 +1070,14 @@ export interface ReworkFlowPrintContext extends StockInPrintContext {
   /** 返工 / 报损 等 */
   typeLabel?: string;
   sourceNodeName?: string;
+  /**
+   * 外协返工等：批次内带 `partner` 时用于打印摘要；有值时为 `外协工厂：xxx\\n`，否则不设（避免占位符前残留「外协工厂：」）。
+   */
+  outsourceFactoryBlock?: string;
+  /**
+   * 返工报工单左上角摘要：批次有 `partner` 时为「外协工厂：xxx\\n」；否则为本厂「操作人：xxx\\n」；无可显内容时不设。
+   */
+  reworkReportHeaderLeftBlock?: string;
   /** 返工目标工序（多选拼接） */
   targetNodesLabel?: string;
   /** 返工报工涉及工序名称 */
@@ -1089,6 +1116,35 @@ export type PrintTemplateDocumentType =
   | 'receipt'
   | 'payment';
 
+/** 与「增加/管理模版」弹窗入口一一对应；用于同数据源下多入口互斥展示（如外协发出 vs 外协收回） */
+export const PLAN_PRINT_TEMPLATE_MANAGE_SCOPES = [
+  'planList',
+  'planLabel',
+  'orderDetail',
+  'reportBatchDetail',
+  'stockInFlowDetail',
+  'materialIssueFlowDetail',
+  'materialReturnFlowDetail',
+  'materialOutsourceIssueFlowDetail',
+  'materialOutsourceReturnFlowDetail',
+  'outsourceDispatchFlowDetail',
+  'outsourceReceiveFlowDetail',
+  'defectTreatmentFlowDetail',
+  'reworkReportFlowDetail',
+  'purchaseOrderList',
+  'salesOrderList',
+  'purchaseBillList',
+  'salesBillList',
+  'receiptList',
+  'paymentList',
+] as const;
+
+export type PlanPrintTemplateManageScope = (typeof PLAN_PRINT_TEMPLATE_MANAGE_SCOPES)[number];
+
+export function isPlanPrintTemplateManageScope(s: string): s is PlanPrintTemplateManageScope {
+  return (PLAN_PRINT_TEMPLATE_MANAGE_SCOPES as readonly string[]).includes(s);
+}
+
 export interface PrintTemplate {
   id: string;
   name: string;
@@ -1096,6 +1152,11 @@ export interface PrintTemplate {
   isSystemTemplate?: boolean;
   /** 数据源单据类型；仅影响模版编辑时可选字段分组，不改变运行时解析 */
   documentType?: PrintTemplateDocumentType;
+  /**
+   * 从哪个「增加/管理模版」入口创建/归属（可选）。
+   * 同一 documentType 下多入口（外协发出/收回、返工两类、物料四类）按此互斥过滤；未设置的历史模版仍可在相关入口共用出现。
+   */
+  printTemplateManageScope?: PlanPrintTemplateManageScope;
   paperSize: { widthMm: number; heightMm: number };
   /** 纸张内边距（mm），作用于整张纸内的内容区 */
   paperMarginsMm?: PrintPaperMarginsMm;

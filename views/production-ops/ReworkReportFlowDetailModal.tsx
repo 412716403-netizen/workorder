@@ -29,6 +29,7 @@ import { psiOrderBillFormFieldControlClass } from '../../styles/uiDensity';
 import { psiCustomFieldHasFilledDisplayValue } from '../psi-ops/psiOpsListFormatting';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import DocPhaseModal, { DocPhaseEditToolbarPortalContext } from '../../components/DocPhaseModal';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   DocCustomFieldEditGrid,
   DocCustomFieldInlineReadList,
@@ -98,6 +99,7 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
   onAddRecord,
   onClose,
 }) => {
+  const { tenantCtx } = useAuth();
   const equipmentFeaturesOn = useEquipmentFeaturesEffective();
   const r = reworkFlowDetailRecord;
   const detailBatch = r.type === 'REWORK_REPORT'
@@ -236,8 +238,9 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
         dictionaries,
         workers,
         equipment,
+        tenantName: tenantCtx?.tenantName,
       }),
-    [productionLinkMode, detailBatch, records, orders, products, globalNodes, dictionaries, workers, equipment],
+    [productionLinkMode, detailBatch, records, orders, products, globalNodes, dictionaries, workers, equipment, tenantCtx?.tenantName],
   );
 
   const startEdit = () => {

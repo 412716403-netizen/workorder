@@ -9,6 +9,25 @@ const TRACE_CODE_LIST_PAGE_SIZE = 15;
 
 type TraceGenMode = null | 'item' | 'batch' | 'batchWithItems';
 
+/** 根据已存在的单品码/批次码推断应高亮的「生成类型」（仅用于打开详情时的初始态） */
+function inferTraceGenModeFromExisting(args: {
+  itemCodesTotal: number;
+  virtualBatchesTotal: number;
+  itemCodesSample: ItemCode[];
+}): TraceGenMode | null {
+  const { itemCodesTotal, virtualBatchesTotal, itemCodesSample } = args;
+  if (itemCodesTotal <= 0 && virtualBatchesTotal <= 0) return null;
+  if (virtualBatchesTotal > 0 && itemCodesTotal > 0) return 'batchWithItems';
+  if (virtualBatchesTotal > 0) return 'batch';
+  if (itemCodesTotal > 0) {
+    const linkedToBatch = itemCodesSample.some(
+      c => c.batchId != null && String(c.batchId).trim() !== '',
+    );
+    return linkedToBatch ? 'batchWithItems' : 'item';
+  }
+  return null;
+}
+
 function collectSubtreePlanIdsForPlan(rootId: string, allPlans: PlanOrder[]): string[] {
   const childrenMap = new Map<string, PlanOrder[]>();
   for (const p of allPlans) {
@@ -42,6 +61,8 @@ interface PlanTraceSectionProps {
   onOpenItemCodeSinglePrint: (plan: PlanOrder, code: ItemCode) => void;
   onOpenBatchPrint: (plan: PlanOrder, batch: PlanVirtualBatch) => void;
   onVirtualBatchesChange?: (batches: PlanVirtualBatch[]) => void;
+  /** 单品码数量可能变化时通知父级（用于详情页在「表单关闭追溯区块」时仍能根据已生成码展开区块） */
+  onTraceItemCodesInventoryMayHaveChanged?: () => void;
 }
 
 const PlanTraceSection: React.FC<PlanTraceSectionProps> = ({
@@ -56,6 +77,7 @@ const PlanTraceSection: React.FC<PlanTraceSectionProps> = ({
   onOpenItemCodeSinglePrint,
   onOpenBatchPrint,
   onVirtualBatchesChange,
+  onTraceItemCodesInventoryMayHaveChanged,
 }) => {
   const [traceGenMode, setTraceGenMode] = useState<TraceGenMode>(null);
 
@@ -190,12 +212,13 @@ const PlanTraceSection: React.FC<PlanTraceSectionProps> = ({
         toast.success(`已生成 ${res.generated} 个单品码${details ? `（${details}）` : ''}`);
       }
       await loadItemCodes(planOrderId, 1, itemCodesVariantFilter, itemCodesBatchFilter);
+      onTraceItemCodesInventoryMayHaveChanged?.();
     } catch (e: any) {
       toast.error(e.message || '生成单品码失败');
     } finally {
       setItemCodesGenerating(false);
     }
-  }, [loadItemCodes, itemCodesVariantFilter, itemCodesBatchFilter]);
+  }, [loadItemCodes, itemCodesVariantFilter, itemCodesBatchFilter, onTraceItemCodesInventoryMayHaveChanged]);
 
   const loadSubtreeAllocations = useCallback(async (rootPlanOrderId: string) => {
     try {
@@ -256,13 +279,24 @@ const PlanTraceSection: React.FC<PlanTraceSectionProps> = ({
         await loadVirtualBatches(planOrderId, 1);
         await loadSubtreeAllocations(planOrderId);
         await loadItemCodes(planOrderId, 1, itemCodesVariantFilter, itemCodesBatchFilter);
+        if (ic > 0) onTraceItemCodesInventoryMayHaveChanged?.();
       } catch (e: any) {
         toast.error(e.message || '生成失败');
       } finally {
         setVbCreating(false);
       }
     },
-    [vbQuantity, vbVariantId, traceGenMode, loadVirtualBatches, loadItemCodes, itemCodesVariantFilter, itemCodesBatchFilter],
+    [
+      vbQuantity,
+      vbVariantId,
+      traceGenMode,
+      loadVirtualBatches,
+      loadSubtreeAllocations,
+      loadItemCodes,
+      itemCodesVariantFilter,
+      itemCodesBatchFilter,
+      onTraceItemCodesInventoryMayHaveChanged,
+    ],
   );
 
   const handleBulkSplitVirtualBatches = useCallback(
@@ -290,17 +324,31 @@ const PlanTraceSection: React.FC<PlanTraceSectionProps> = ({
         await loadVirtualBatches(planOrderId, 1);
         await loadSubtreeAllocations(planOrderId);
         await loadItemCodes(planOrderId, 1, itemCodesVariantFilter, itemCodesBatchFilter);
+        if (ic > 0) onTraceItemCodesInventoryMayHaveChanged?.();
       } catch (e: any) {
         toast.error(e.message || '批量拆批失败');
       } finally {
         setVbBulkSplitting(false);
       }
     },
-    [vbBulkBatchSize, traceGenMode, loadVirtualBatches, loadItemCodes, itemCodesVariantFilter, itemCodesBatchFilter],
+    [
+      vbBulkBatchSize,
+      traceGenMode,
+      loadVirtualBatches,
+      loadSubtreeAllocations,
+      loadItemCodes,
+      itemCodesVariantFilter,
+      itemCodesBatchFilter,
+      onTraceItemCodesInventoryMayHaveChanged,
+    ],
   );
 
   useEffect(() => {
     if (planId) {
+      setItemCodes([]);
+      setItemCodesTotal(0);
+      setVirtualBatches([]);
+      setVirtualBatchesTotal(0);
       setItemCodesPaging(false);
       void loadItemCodes(planId);
       void loadSubtreeAllocations(planId);
@@ -321,6 +369,28 @@ const PlanTraceSection: React.FC<PlanTraceSectionProps> = ({
       setVirtualBatchesPage(1);
     }
   }, [planId, loadItemCodes, loadSubtreeAllocations]);
+
+  /** 已有追溯码/批次时，打开详情后自动选中对应「生成类型」；异步数据到齐后再推断，避免误判 */
+  useEffect(() => {
+    if (!planId) return;
+    if (itemCodesTotal <= 0 && virtualBatchesTotal <= 0) return;
+    if (itemCodesTotal > 0 && itemCodes.length === 0) return;
+    if (virtualBatchesTotal > 0 && virtualBatches.length === 0) return;
+
+    const inferred = inferTraceGenModeFromExisting({
+      itemCodesTotal,
+      virtualBatchesTotal,
+      itemCodesSample: itemCodes,
+    });
+    if (inferred == null) return;
+
+    setTraceGenMode(prev => {
+      if (prev === null) return inferred;
+      if (prev === 'item' && virtualBatchesTotal > 0 && itemCodesTotal > 0) return 'batchWithItems';
+      if (prev === 'batch' && itemCodesTotal > 0) return 'batchWithItems';
+      return prev;
+    });
+  }, [planId, itemCodesTotal, itemCodes, virtualBatchesTotal, virtualBatches]);
 
   useEffect(() => {
     if (!planId) return;

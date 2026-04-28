@@ -107,12 +107,13 @@ export function buildPrintFieldOptions(opts: {
   const salesBillCustomFields = opts.salesBillCustomFields ?? [];
   const financeCategories = opts.financeCategories ?? [];
   const productCategories = opts.productCategories ?? [];
+  /** 占位符仍为 `租户.name`（与 printResolve、存量模版一致）；编辑器里归入「系统」分组展示 */
   const system: PrintFieldOption[] = [
     { group: '系统', value: '系统.systemTime', label: '当前时间' },
     { group: '系统', value: '系统.pageCurrent', label: '当前页码' },
     { group: '系统', value: '系统.pageTotal', label: '总页数' },
+    { group: '系统', value: '租户.name', label: '公司名称' },
   ];
-  const tenant: PrintFieldOption[] = [{ group: '租户', value: '租户.name', label: '公司名称' }];
   const planStatic: PrintFieldOption[] = [
     { group: '计划', value: '计划.planNumber', label: '计划单号' },
     { group: '计划', value: '计划.customer', label: '客户' },
@@ -525,6 +526,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '处理不良', value: '处理不良.reason', label: '原因/备注' },
     { group: '处理不良', value: '处理不良.orderNumber', label: '工单号' },
     { group: '处理不良', value: '处理不良.productName', label: '产品名称' },
+    { group: '处理不良', value: '处理不良.outsourceFactoryBlock', label: '外协工厂（外协返工时有值，含换行）' },
     ...defectTreatmentCustomOpts,
   ];
   const defectTreatmentRow: PrintFieldOption[] = [
@@ -542,17 +544,14 @@ export function buildPrintFieldOptions(opts: {
   const reworkReportHeader: PrintFieldOption[] = [
     { group: '返工报工', value: '返工报工.docNo', label: '单据号' },
     { group: '返工报工', value: '返工报工.nodeNames', label: '工序名称' },
-    { group: '返工报工', value: '返工报工.sourceNodeName', label: '来源工序' },
     { group: '返工报工', value: '返工报工.totalQty', label: '合计数量' },
     { group: '返工报工', value: '返工报工.timestamp', label: '业务时间' },
     { group: '返工报工', value: '返工报工.operators', label: '操作人' },
-    { group: '返工报工', value: '返工报工.workerName', label: '报工人员' },
-    { group: '返工报工', value: '返工报工.equipmentName', label: '设备' },
-    { group: '返工报工', value: '返工报工.unitPrice', label: '单价（元）' },
-    { group: '返工报工', value: '返工报工.batchTotalAmount', label: '金额合计（元）' },
-    { group: '返工报工', value: '返工报工.reason', label: '备注' },
-    { group: '返工报工', value: '返工报工.orderNumber', label: '工单号' },
-    { group: '返工报工', value: '返工报工.productName', label: '产品名称' },
+    {
+      group: '返工报工',
+      value: '返工报工.reworkReportHeaderLeftBlock',
+      label: '左上角摘要（外协为外协工厂，本厂为操作人，含换行）',
+    },
     ...reworkReportCustomOpts,
   ];
   const reworkReportRow: PrintFieldOption[] = [
@@ -580,7 +579,6 @@ export function buildPrintFieldOptions(opts: {
   ];
   return [
     ...system,
-    ...tenant,
     ...plan,
     ...order,
     ...product,
@@ -688,7 +686,6 @@ const FIELD_GROUPS_BY_DOCUMENT: Record<Exclude<PrintTemplateDocumentType, 'all'>
   ]),
   outsource: new Set([
     '系统',
-    '租户',
     '工单',
     '产品',
     '计划',

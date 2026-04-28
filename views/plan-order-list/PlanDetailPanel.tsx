@@ -603,6 +603,30 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     setVirtualBatches([]);
   }, [planId]);
 
+  /** 表单可关闭「追溯码」区块；若本计划已有 ACTIVE 单品码，仍展示以免看不到已生成追溯码 */
+  const [planHasActiveItemCodes, setPlanHasActiveItemCodes] = useState(false);
+  const probePlanActiveItemCodes = useCallback(async () => {
+    if (!planId) {
+      setPlanHasActiveItemCodes(false);
+      return;
+    }
+    try {
+      const res = await itemCodesApi.list({
+        planOrderId: planId,
+        page: 1,
+        pageSize: 1,
+        status: 'ACTIVE',
+      });
+      setPlanHasActiveItemCodes(res.total > 0);
+    } catch {
+      setPlanHasActiveItemCodes(false);
+    }
+  }, [planId]);
+
+  useEffect(() => {
+    void probePlanActiveItemCodes();
+  }, [probePlanActiveItemCodes]);
+
   // --- Callbacks ---
   const handleUpdateDetail = () => {
     if (planId) {
@@ -948,7 +972,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   // --- Guard: bail out if plan or product not found ---
   if (!viewPlan || !viewProduct) return null;
 
-  const showPlanDetailTraceSection = planFormSettings.labelPrint?.showPlanDetailTraceSection !== false;
+  const showPlanDetailTraceSection =
+    planFormSettings.labelPrint?.showPlanDetailTraceSection !== false || planHasActiveItemCodes;
 
   // --- Render ---
   return (
@@ -1625,6 +1650,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                 onOpenItemCodeSinglePrint={(plan2, code) => setItemCodeSinglePrintModal({ plan: plan2, code })}
                 onOpenBatchPrint={(plan2, batch) => setBatchPrintModal({ plan: plan2, batch })}
                 onVirtualBatchesChange={setVirtualBatches}
+                onTraceItemCodesInventoryMayHaveChanged={probePlanActiveItemCodes}
               />
             )}
 

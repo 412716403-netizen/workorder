@@ -129,13 +129,19 @@ export interface BuildMaterialStockDocPrintContextArgs {
   dictionaries?: AppDictionaries;
   /** 与详情展示一致的自定义快照（已含外协 legacy 回退） */
   customSnapshot: Record<string, unknown>;
+  /** 当前租户名称；供 `{{租户.name}}` 等占位符 */
+  tenantName?: string | null;
 }
 
 export function buildMaterialStockDocPrintContext(
   _template: PrintTemplate,
   args: BuildMaterialStockDocPrintContextArgs,
 ): PrintRenderContext {
-  const { detail: stockDocDetail, records, orders, products, warehouses, dictionaries, customSnapshot } = args;
+  const { detail: stockDocDetail, records, orders, products, warehouses, dictionaries, customSnapshot, tenantName } =
+    args;
+  const tenantSlice: Pick<PrintRenderContext, 'tenantName'> | Record<string, never> = tenantName?.trim()
+    ? { tenantName: tenantName.trim() }
+    : {};
   const isReturn = stockDocDetail.type === 'STOCK_RETURN';
   const outsource = isOutsourceMaterialPartner(stockDocDetail.partner);
   const order = orders.find(o => o.id === stockDocDetail.orderId);
@@ -191,6 +197,7 @@ export function buildMaterialStockDocPrintContext(
   if (isReturn) {
     if (outsource) {
       return {
+        ...tenantSlice,
         order: order ?? undefined,
         product: productCtx,
         outsourceMaterialReturnPrint: head,
@@ -198,6 +205,7 @@ export function buildMaterialStockDocPrintContext(
       };
     }
     return {
+      ...tenantSlice,
       order: order ?? undefined,
       product: productCtx,
       materialReturnPrint: head,
@@ -206,6 +214,7 @@ export function buildMaterialStockDocPrintContext(
   }
   if (outsource) {
     return {
+      ...tenantSlice,
       order: order ?? undefined,
       product: productCtx,
       outsourceMaterialIssuePrint: head,
@@ -213,6 +222,7 @@ export function buildMaterialStockDocPrintContext(
     };
   }
   return {
+    ...tenantSlice,
     order: order ?? undefined,
     product: productCtx,
     materialIssuePrint: head,

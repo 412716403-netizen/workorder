@@ -21,8 +21,15 @@ import {
   DEFAULT_OUTSOURCE_FORM_SETTINGS,
   DEFAULT_REWORK_FORM_SETTINGS,
 } from '../types';
+import {
+  BUILTIN_MATERIAL_ISSUE_PRINT_TEMPLATE_ID,
+  BUILTIN_MATERIAL_RETURN_PRINT_TEMPLATE_ID,
+  BUILTIN_OUTSOURCE_MATERIAL_ISSUE_PRINT_TEMPLATE_ID,
+  BUILTIN_OUTSOURCE_MATERIAL_RETURN_PRINT_TEMPLATE_ID,
+  BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID,
+  BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
+} from '../shared/systemPrintTemplates';
 import { normalizePlanFormFieldConfigArray } from '../utils/planFormCustomField';
-
 // ── Decimal normalizer ──
 
 const DECIMAL_KEYS = new Set([
@@ -126,6 +133,10 @@ function normalizePlanListSlot(slot: PlanListPrintSettings | undefined): PlanLis
   };
 }
 
+function defaultMaterialCenterPrintSlot(builtinTemplateId: string): PlanListPrintSettings {
+  return { showPrintButton: true, allowedTemplateIds: [builtinTemplateId] };
+}
+
 /** 已移除的系统外协发出模版 id；白名单中残留时归一化剔除 */
 const REMOVED_BUILTIN_OUTSOURCE_DISPATCH_TEMPLATE_ID = 'builtin-outsource-dispatch-v1';
 
@@ -192,14 +203,32 @@ export function normalizeMaterialFormSettings(raw: MaterialFormSettings | null |
     outsourceMaterialReturnCustomFields: osRet,
   };
   const mcp = base.materialCenterPrint;
-  if (!mcp) return base;
+  if (!mcp) {
+    return {
+      ...base,
+      materialCenterPrint: {
+        stockOutFlowDetail: defaultMaterialCenterPrintSlot(BUILTIN_MATERIAL_ISSUE_PRINT_TEMPLATE_ID),
+        stockReturnFlowDetail: defaultMaterialCenterPrintSlot(BUILTIN_MATERIAL_RETURN_PRINT_TEMPLATE_ID),
+        outsourceStockOutFlowDetail: defaultMaterialCenterPrintSlot(BUILTIN_OUTSOURCE_MATERIAL_ISSUE_PRINT_TEMPLATE_ID),
+        outsourceStockReturnFlowDetail: defaultMaterialCenterPrintSlot(BUILTIN_OUTSOURCE_MATERIAL_RETURN_PRINT_TEMPLATE_ID),
+      },
+    };
+  }
   return {
     ...base,
     materialCenterPrint: {
-      stockOutFlowDetail: normalizePlanListSlot(mcp.stockOutFlowDetail),
-      stockReturnFlowDetail: normalizePlanListSlot(mcp.stockReturnFlowDetail),
-      outsourceStockOutFlowDetail: normalizePlanListSlot(mcp.outsourceStockOutFlowDetail),
-      outsourceStockReturnFlowDetail: normalizePlanListSlot(mcp.outsourceStockReturnFlowDetail),
+      stockOutFlowDetail:
+        normalizePlanListSlot(mcp.stockOutFlowDetail) ??
+        defaultMaterialCenterPrintSlot(BUILTIN_MATERIAL_ISSUE_PRINT_TEMPLATE_ID),
+      stockReturnFlowDetail:
+        normalizePlanListSlot(mcp.stockReturnFlowDetail) ??
+        defaultMaterialCenterPrintSlot(BUILTIN_MATERIAL_RETURN_PRINT_TEMPLATE_ID),
+      outsourceStockOutFlowDetail:
+        normalizePlanListSlot(mcp.outsourceStockOutFlowDetail) ??
+        defaultMaterialCenterPrintSlot(BUILTIN_OUTSOURCE_MATERIAL_ISSUE_PRINT_TEMPLATE_ID),
+      outsourceStockReturnFlowDetail:
+        normalizePlanListSlot(mcp.outsourceStockReturnFlowDetail) ??
+        defaultMaterialCenterPrintSlot(BUILTIN_OUTSOURCE_MATERIAL_RETURN_PRINT_TEMPLATE_ID),
     },
   };
 }
@@ -213,14 +242,23 @@ export function normalizeOutsourceFormSettings(raw: OutsourceFormSettings | null
     outsourceDispatchCustomFields: dispatch,
     outsourceReceiveCustomFields: receive,
     showPartnerFlowDetailOnList: s.showPartnerFlowDetailOnList === true,
+    showOutsourceDispatchDeliveryDate: s.showOutsourceDispatchDeliveryDate === true,
   };
   const ocp = base.outsourceCenterPrint;
-  if (!ocp) return base;
+  if (!ocp) {
+    return {
+      ...base,
+      outsourceCenterPrint: {
+        dispatchFlowDetail: normalizePlanListSlotWithoutRemovedBuiltin(undefined) ?? { showPrintButton: true },
+        receiveFlowDetail: normalizePlanListSlotWithoutRemovedBuiltin(undefined) ?? { showPrintButton: true },
+      },
+    };
+  }
   return {
     ...base,
     outsourceCenterPrint: {
-      dispatchFlowDetail: normalizePlanListSlotWithoutRemovedBuiltin(ocp.dispatchFlowDetail),
-      receiveFlowDetail: normalizePlanListSlotWithoutRemovedBuiltin(ocp.receiveFlowDetail),
+      dispatchFlowDetail: normalizePlanListSlotWithoutRemovedBuiltin(ocp.dispatchFlowDetail) ?? { showPrintButton: true },
+      receiveFlowDetail: normalizePlanListSlotWithoutRemovedBuiltin(ocp.receiveFlowDetail) ?? { showPrintButton: true },
     },
   };
 }
@@ -235,12 +273,24 @@ export function normalizeReworkFormSettings(raw: ReworkFormSettings | null | und
     reworkReportCustomFields: report,
   };
   const rcp = base.reworkCenterPrint;
-  if (!rcp) return base;
+  if (!rcp) {
+    return {
+      ...base,
+      reworkCenterPrint: {
+        defectTreatmentFlowDetail: defaultMaterialCenterPrintSlot(BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID),
+        reworkReportFlowDetail: defaultMaterialCenterPrintSlot(BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID),
+      },
+    };
+  }
   return {
     ...base,
     reworkCenterPrint: {
-      defectTreatmentFlowDetail: normalizePlanListSlot(rcp.defectTreatmentFlowDetail),
-      reworkReportFlowDetail: normalizePlanListSlot(rcp.reworkReportFlowDetail),
+      defectTreatmentFlowDetail:
+        normalizePlanListSlot(rcp.defectTreatmentFlowDetail) ??
+        defaultMaterialCenterPrintSlot(BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID),
+      reworkReportFlowDetail:
+        normalizePlanListSlot(rcp.reworkReportFlowDetail) ??
+        defaultMaterialCenterPrintSlot(BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID),
     },
   };
 }
@@ -286,10 +336,11 @@ export function normalizePurchaseOrderFormSettings(raw: PurchaseOrderFormSetting
   const a = listNorm.allowedTemplateIds ?? [];
   const b = legacyDetail?.allowedTemplateIds ?? [];
   const mergedIds = a.length || b.length ? Array.from(new Set([...a, ...b])) : [];
-  const listPrint: PlanListPrintSettings = {
+  const mergedSlot: PlanListPrintSettings = {
     showPrintButton: listNorm.showPrintButton !== false,
     allowedTemplateIds: mergedIds.length > 0 ? mergedIds : undefined,
   };
+  const listPrint = mergedSlot;
   const listDisplay: PurchaseOrderFormSettings['listDisplay'] = s.listDisplay?.onlyShowUnsettled
     ? { onlyShowUnsettled: true }
     : undefined;
@@ -348,10 +399,11 @@ export function normalizeSalesOrderFormSettings(raw: SalesOrderFormSettings | nu
   const a = listNorm.allowedTemplateIds ?? [];
   const b = legacyDetail?.allowedTemplateIds ?? [];
   const mergedIds = a.length || b.length ? Array.from(new Set([...a, ...b])) : [];
-  const listPrint: PlanListPrintSettings = {
+  const mergedSlot: PlanListPrintSettings = {
     showPrintButton: listNorm.showPrintButton !== false,
     allowedTemplateIds: mergedIds.length > 0 ? mergedIds : undefined,
   };
+  const listPrint = mergedSlot;
   const soListDisplay: SalesOrderFormSettings['listDisplay'] = s.listDisplay?.onlyShowNotFullyShipped
     ? { onlyShowNotFullyShipped: true }
     : undefined;
@@ -416,10 +468,11 @@ export function normalizePurchaseBillFormSettings(raw: PurchaseBillFormSettings 
   const b = legacyDetail?.allowedTemplateIds ?? [];
   const c = legacyLabel?.allowedTemplateIds ?? [];
   const mergedIds = a.length || b.length || c.length ? Array.from(new Set([...a, ...b, ...c])) : [];
-  const listPrint: PlanListPrintSettings = {
+  const mergedSlot: PlanListPrintSettings = {
     showPrintButton: listNorm.showPrintButton !== false,
     allowedTemplateIds: mergedIds.length > 0 ? mergedIds : undefined,
   };
+  const listPrint = mergedSlot;
   const legacyRelated = (s.standardFields ?? []).find(f => f.id === 'relatedProduct');
   const relatedProductEnabled =
     typeof s.relatedProductEnabled === 'boolean'
@@ -444,10 +497,11 @@ export function normalizeSalesBillFormSettings(raw: SalesBillFormSettings | null
   const s = raw ?? DEFAULT_SALES_BILL_FORM_SETTINGS;
   const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
   const rawIds = listNorm.allowedTemplateIds?.map(x => (x != null && x !== '' ? String(x).trim() : '')).filter(Boolean) ?? [];
-  const listPrint: PlanListPrintSettings = {
+  const mergedSlot: PlanListPrintSettings = {
     showPrintButton: listNorm.showPrintButton !== false,
     allowedTemplateIds: rawIds.length > 0 ? Array.from(new Set(rawIds)) : undefined,
   };
+  const listPrint = mergedSlot;
   return {
     standardFields: [],
     customFields: normalizePlanFormFieldConfigArray(s.customFields),

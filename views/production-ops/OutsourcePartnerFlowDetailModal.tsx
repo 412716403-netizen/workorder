@@ -2,11 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { FileText, Filter, X } from 'lucide-react';
 import type {
   AppDictionaries,
+  OutsourceFormSettings,
   Product,
   ProductCategory,
   ProductionOpRecord,
   ProductionOrder,
 } from '../../types';
+import { DEFAULT_OUTSOURCE_FORM_SETTINGS } from '../../types';
 import OutsourcePartnerFlowDetailTable from './OutsourcePartnerFlowDetailTable';
 import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 import {
@@ -29,6 +31,7 @@ export interface OutsourcePartnerFlowDetailModalProps {
   orders: ProductionOrder[];
   categories: ProductCategory[];
   dictionaries?: AppDictionaries;
+  outsourceFormSettings?: OutsourceFormSettings;
 }
 
 type DetailDocTypeFilter = 'all' | 'dispatch' | 'receive' | 'mixed';
@@ -83,6 +86,7 @@ const OutsourcePartnerFlowDetailModal: React.FC<OutsourcePartnerFlowDetailModalP
   orders,
   categories,
   dictionaries,
+  outsourceFormSettings = DEFAULT_OUTSOURCE_FORM_SETTINGS,
 }) => {
   const [detailDateFrom, setDetailDateFrom] = useState('');
   const [detailDateTo, setDetailDateTo] = useState('');
@@ -247,6 +251,7 @@ const OutsourcePartnerFlowDetailModal: React.FC<OutsourcePartnerFlowDetailModalP
             productId={seed.productId}
             products={products}
             dictionaries={dictionaries}
+            showDeliveryDateColumn={outsourceFormSettings.showOutsourceDispatchDeliveryDate === true}
             docRows={docRowsFiltered}
             variantColumnIds={variantColumnIds}
             showVariantCols={showVariantCols}

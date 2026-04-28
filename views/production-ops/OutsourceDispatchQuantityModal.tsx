@@ -75,6 +75,10 @@ export interface OutsourceDispatchQuantityModalProps {
   dispatchCustomFieldDefs?: PlanFormFieldConfig[];
   dispatchCustomValues?: Record<string, unknown>;
   setDispatchCustomValues?: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
+  /** 与表单配置「外协发出显示交货日期」联动 */
+  showDispatchDeliveryDate?: boolean;
+  dispatchDeliveryDate?: string;
+  setDispatchDeliveryDate?: React.Dispatch<React.SetStateAction<string>>;
   onSubmit: () => void;
   onClose: () => void;
   /** 嵌入 `DocPhaseModal` 时由外层提供遮罩与标题，本组件不渲染全屏壳与顶栏 */
@@ -306,6 +310,9 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
   dispatchCustomFieldDefs = [],
   dispatchCustomValues = {},
   setDispatchCustomValues,
+  showDispatchDeliveryDate = false,
+  dispatchDeliveryDate = '',
+  setDispatchDeliveryDate,
   onSubmit,
   onClose,
   embedded = false,
@@ -422,6 +429,19 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
                       triggerClassName={`${psiOrderBillFormPartnerTriggerClassCompact} rounded-lg border border-slate-200 bg-white`}
                     />
                   </div>
+                  {showDispatchDeliveryDate && setDispatchDeliveryDate ? (
+                    <div className="space-y-1.5 min-w-0 md:col-span-2">
+                      <label className="mb-1.5 ml-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        交货日期
+                      </label>
+                      <input
+                        type="date"
+                        value={dispatchDeliveryDate}
+                        onChange={e => setDispatchDeliveryDate(e.target.value)}
+                        className={`box-border w-full max-w-xs rounded-lg border border-slate-200 bg-white py-2 px-2.5 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-200`}
+                      />
+                    </div>
+                  ) : null}
                   {dispatchCustomFieldDefs.length > 0 && setDispatchCustomValues
                     ? dispatchCustomFieldDefs.map(cf => {
                         const eff = effectivePlanFormFieldType(cf);

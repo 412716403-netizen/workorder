@@ -7,7 +7,7 @@ import type {
   ProductionOrder,
   PlanOrder,
 } from '../../types';
-import type { PlanPrintTemplateManageScope } from '../plan-print/PlanPrintTemplateManageDialog';
+import type { PlanPrintTemplateManageScope } from '../../types';
 import type { CustomFieldEditorColumn } from './CustomFieldsEditorTable';
 
 /**
@@ -91,6 +91,10 @@ export interface FormConfigPrintWhitelistSection {
     defaultChecked?: boolean;
   };
   emptyHint?: ReactNode;
+  /**
+   * 为 true 时不展示「可选模版（已加入）」芯片列表；仍保留开关与「增加模版」（在管理窗口中加入白名单）。
+   */
+  hideOptionalTemplateList?: boolean;
 }
 
 /** 单个布尔开关 section（站在 section 级别，不嵌在 printWhitelist 中） */

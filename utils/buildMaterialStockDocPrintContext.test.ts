@@ -64,7 +64,9 @@ describe('buildMaterialStockDocPrintContext', () => {
       warehouses: [wh],
       dictionaries: dict,
       customSnapshot: {},
+      tenantName: '  测试租户  ',
     });
+    expect(ctx.tenantName).toBe('测试租户');
     expect(ctx.materialIssuePrint).toBeDefined();
     expect(ctx.printListRows?.[0]?.[COLOR_SIZE_MATRIX_JSON_KEY]).toBeUndefined();
   });

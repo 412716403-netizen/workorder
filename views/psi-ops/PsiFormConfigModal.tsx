@@ -30,7 +30,7 @@ interface PsiFormConfigModalProps {
   docType: PsiDocType;
   open: boolean;
   onClose: () => void;
-  defaultTabWhenOpen?: 'fields' | 'print';
+  defaultTabWhenOpen?: 'fields' | 'print' | 'listDisplay';
   settings: AnyPsiSettings;
   onSave: (s: any) => void | Promise<void>;
   printTemplates: PrintTemplate[];

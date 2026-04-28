@@ -33,7 +33,13 @@
 ### 2.1 打印模版配置与历史系统模版 id 清理
 
 - **`getConfig` / `updateConfig('printTemplates')`**：`shared/systemPrintTemplates.ts` 的 **`mergePrintTemplatesForTenantConfig`** / **`stripSystemPrintTemplatesForPersistence`** 在读写时过滤已废弃 id **`builtin-outsource-dispatch-v1`**（历史上曾代码统一下发的外协发出单模版，已删除），避免库内残留 JSON 仍出现在模版列表或写回数据库。
-- **外协表单白名单**：`normalizeOutsourceFormSettings`（`contexts/formSettingsDefaults.ts`）会从 `outsourceCenterPrint.*.allowedTemplateIds` 中剔除同一 id，避免外协详情打印白名单指向不存在的模版。
+- **统一下发外协发出单**：读配置时合并内置模版 **`builtin-outsource-dispatch-v2`**（241×140mm；列表显示名含「（颜色尺码）」）；写入 `printTemplates` 时剔除该 id，由读时再次注入，避免与租户 JSON 重复落库。
+- **统一下发外协收回单**：读配置时合并 **`builtin-outsource-receive-v2`**（241×140mm，动态列含单价/金额，表尾合计；显示名含「（颜色尺码）」）；持久化规则同上。
+- **统一下发采购订单 / 销售订单（列表打印）**：读配置时合并 **`builtin-purchase-order-v2`**、**`builtin-sales-order-v2`**（241×140mm；占位符 `采购订单.*` / `销售订单.*`；显示名含「（颜色尺码）」）；持久化规则同上。
+- **统一下发采购单 / 销售单（进销存入库、出库单列表打印）**：读配置时合并 **`builtin-purchase-bill-v2`**、**`builtin-sales-bill-v2`**（241×140mm；占位符 `采购单.*` / `销售单.*`；显示名含「（颜色尺码）」）；持久化规则同上。
+- **统一下发生产物料详情打印**：读配置时合并 **`builtin-material-issue-v1`**（领料发出）、**`builtin-material-return-v1`**（生产退料）、**`builtin-outsource-material-issue-v1`**（外协领料发出）、**`builtin-outsource-material-return-v1`**（外协生产退料），241×140mm；占位符分别为 `领料发出.*`、`生产退料.*`、`外协领料发出.*`、`外协生产退料.*`；持久化规则同上。`normalizeMaterialFormSettings` 在未配置 `materialCenterPrint` 或某一子槽为 `undefined` 时，为该槽写入默认白名单（指向对应内置 id）。
+- **统一下发返工管理详情打印**：读配置时合并 **`builtin-rework-defect-treatment-v1`**（处理不良单，版式参考外协发出）、**`builtin-rework-report-flow-v1`**（返工报工单，含工序列与颜色尺码矩阵）；占位符 `处理不良.*`、`返工报工.*`；持久化规则同上。`normalizeReworkFormSettings` 在未配置 `reworkCenterPrint` 或子槽为 `undefined` 时写入对应默认白名单。
+- **外协 / 进销存表单配置**：`normalizeOutsourceFormSettings` 等仅做字段归一化，并从 `outsourceCenterPrint.*.allowedTemplateIds` 中剔除已废弃 **`builtin-outsource-dispatch-v1`**；**不再**在归一化阶段自动写入内置模版 id。表单「打印模版」Tab 中的 **「可选模版（已加入）」** 与列表/详情 **「增加 / 管理模版」** 写入的 `allowedTemplateIds` 一致；若某 schema 将 **`hideOptionalTemplateList`** 设为 `true`，则隐藏芯片区（仅保留开关与「增加模版」），见 `PrintTemplateWhitelistCard`。
 
 ---
 

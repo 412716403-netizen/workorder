@@ -4,8 +4,8 @@ import { toast } from 'sonner';
 import type { PlanFormFieldConfig } from '../../types';
 import {
   PlanPrintTemplateManageDialog,
-  type PlanPrintTemplateManageScope,
 } from '../plan-print/PlanPrintTemplateManageDialog';
+import type { PlanPrintTemplateManageScope } from '../../types';
 import { useRefreshPrintTemplatesOnWindowFocus } from '../../hooks/useRefreshPrintTemplatesOnWindowFocus';
 import { CustomFieldsEditorTable } from './CustomFieldsEditorTable';
 import { PrintTemplateWhitelistCard } from './PrintTemplateWhitelistCard';
@@ -59,7 +59,7 @@ function resolveSubtitle(
  * - draft 生命周期：open 打开时 clone 一份 initialValue；关闭后清空
  * - tabs 切换 + `onActivate` 钩子（典型：切到 print tab 触发模板刷新）
  * - section 分派：customFieldsTable / standardFieldsList / printWhitelist / toggle / customSlot
- * - 内置 PlanPrintTemplateManageDialog 挂载：scope 由触发卡片决定；新增模板自动合并白名单
+ * - 内置 PlanPrintTemplateManageDialog 挂载：scope 由 printWhitelist 卡片触发；section.hideOptionalTemplateList 时可隐藏「可选模版」芯片区
  * - window.focus 刷新：当 schema 含任一 printWhitelist section 时自动启用
  * - 保存：先跑 `transformOnSave`，再 `onSave`；另起 `sideEffectSaves` 钩子支持多 key 写入
  */
@@ -94,7 +94,10 @@ export function BusinessFormConfigModal<TSettings extends Record<string, unknown
   useEffect(() => {
     if (open) {
       setDraftState(JSON.parse(JSON.stringify(initialValue)) as TSettings);
-      setTabId(defaultTabId ?? schema.tabs[0]?.id ?? '');
+      const tabIds = new Set(schema.tabs.map(t => t.id));
+      const fallback = schema.tabs[0]?.id ?? '';
+      const want = defaultTabId ?? fallback;
+      setTabId(tabIds.has(want) ? want : fallback);
       setSaving(false);
     } else {
       setDraftState(null);
@@ -435,6 +438,7 @@ const SectionRenderer: React.FC<SectionRendererProps> = ({
           availableTemplates={printTemplates}
           onRequestAddTemplate={() => onRequestAddTemplate(section)}
           emptyHint={section.emptyHint}
+          hideOptionalTemplateList={section.hideOptionalTemplateList === true}
         />
       );
     }

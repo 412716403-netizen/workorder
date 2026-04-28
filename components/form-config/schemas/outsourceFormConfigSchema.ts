@@ -17,6 +17,15 @@ export const outsourceFormConfigSchema: FormConfigSchema<OutsourceFormSettings> 
       label: '字段配置',
       sections: [
         {
+          kind: 'toggle',
+          id: 'showOutsourceDispatchDeliveryDate',
+          label: '外协发出显示交货日期',
+          description:
+            '勾选后，外协发出新增/详情/编辑页显示交货日期（与自定义单据内容同区）；加工厂往来数量明细在「单据类型」后增加交货日期列。',
+          path: 'showOutsourceDispatchDeliveryDate',
+          defaultChecked: false,
+        },
+        {
           kind: 'customFieldsTable',
           id: 'outsourceDispatchCustomFields',
           title: '外协发出自定义单据内容',

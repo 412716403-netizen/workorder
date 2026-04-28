@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeDecimals, normalizeOutsourceFormSettings } from './formSettingsDefaults';
+import {
+  normalizeDecimals,
+  normalizeOutsourceFormSettings,
+  normalizePurchaseOrderFormSettings,
+  normalizePurchaseBillFormSettings,
+  normalizeSalesOrderFormSettings,
+  normalizeSalesBillFormSettings,
+} from './formSettingsDefaults';
 
 describe('normalizeDecimals', () => {
   it('converts string quantity to number', () => {
@@ -55,9 +62,12 @@ describe('normalizeDecimals', () => {
 });
 
 describe('normalizeOutsourceFormSettings', () => {
-  it('does not inject default outsourceCenterPrint when unset', () => {
+  it('injects default outsourceCenterPrint without auto template whitelist', () => {
     const n = normalizeOutsourceFormSettings({});
-    expect(n.outsourceCenterPrint).toBeUndefined();
+    expect(n.showOutsourceDispatchDeliveryDate).toBe(false);
+    expect(n.outsourceCenterPrint?.dispatchFlowDetail?.allowedTemplateIds).toBeUndefined();
+    expect(n.outsourceCenterPrint?.receiveFlowDetail?.allowedTemplateIds).toBeUndefined();
+    expect(n.outsourceCenterPrint?.dispatchFlowDetail?.showPrintButton).not.toBe(false);
   });
 
   it('strips removed builtin-outsource-dispatch-v1 from dispatch whitelist', () => {
@@ -69,7 +79,7 @@ describe('normalizeOutsourceFormSettings', () => {
     expect(n.outsourceCenterPrint?.dispatchFlowDetail?.allowedTemplateIds).toEqual(['custom-1']);
   });
 
-  it('clears whitelist when only removed builtin id was listed', () => {
+  it('v1-only dispatch whitelist becomes empty', () => {
     const n = normalizeOutsourceFormSettings({
       outsourceCenterPrint: {
         dispatchFlowDetail: { allowedTemplateIds: ['builtin-outsource-dispatch-v1'] },
@@ -78,17 +88,68 @@ describe('normalizeOutsourceFormSettings', () => {
     expect(n.outsourceCenterPrint?.dispatchFlowDetail?.allowedTemplateIds).toBeUndefined();
   });
 
-  it('keeps explicit empty dispatch slot (no forced system id)', () => {
+  it('empty dispatch slot has no allowed ids', () => {
     const n = normalizeOutsourceFormSettings({
       outsourceCenterPrint: { dispatchFlowDetail: {} },
     });
     expect(n.outsourceCenterPrint?.dispatchFlowDetail?.allowedTemplateIds).toBeUndefined();
   });
 
-  it('preserves tenant whitelist without injecting system id', () => {
+  it('preserves tenant whitelist without prepending builtins', () => {
     const n = normalizeOutsourceFormSettings({
       outsourceCenterPrint: { dispatchFlowDetail: { allowedTemplateIds: ['custom-1'] } },
     });
     expect(n.outsourceCenterPrint?.dispatchFlowDetail?.allowedTemplateIds).toEqual(['custom-1']);
+  });
+
+  it('preserves receive whitelist as provided', () => {
+    const n = normalizeOutsourceFormSettings({
+      outsourceCenterPrint: { receiveFlowDetail: { allowedTemplateIds: ['recv-custom'] } },
+    });
+    expect(n.outsourceCenterPrint?.receiveFlowDetail?.allowedTemplateIds).toEqual(['recv-custom']);
+  });
+});
+
+describe('normalizePurchaseOrderFormSettings listPrint', () => {
+  it('does not inject allowed ids when unset', () => {
+    expect(normalizePurchaseOrderFormSettings({}).listPrint?.allowedTemplateIds).toBeUndefined();
+  });
+
+  it('keeps tenant whitelist', () => {
+    const n = normalizePurchaseOrderFormSettings({ listPrint: { allowedTemplateIds: ['a'] } });
+    expect(n.listPrint?.allowedTemplateIds).toEqual(['a']);
+  });
+});
+
+describe('normalizeSalesOrderFormSettings listPrint', () => {
+  it('does not inject allowed ids when unset', () => {
+    expect(normalizeSalesOrderFormSettings({}).listPrint?.allowedTemplateIds).toBeUndefined();
+  });
+
+  it('keeps tenant whitelist', () => {
+    const n = normalizeSalesOrderFormSettings({ listPrint: { allowedTemplateIds: ['b'] } });
+    expect(n.listPrint?.allowedTemplateIds).toEqual(['b']);
+  });
+});
+
+describe('normalizePurchaseBillFormSettings listPrint', () => {
+  it('does not inject allowed ids when unset', () => {
+    expect(normalizePurchaseBillFormSettings({}).listPrint?.allowedTemplateIds).toBeUndefined();
+  });
+
+  it('keeps tenant whitelist', () => {
+    const n = normalizePurchaseBillFormSettings({ listPrint: { allowedTemplateIds: ['c'] } });
+    expect(n.listPrint?.allowedTemplateIds).toEqual(['c']);
+  });
+});
+
+describe('normalizeSalesBillFormSettings listPrint', () => {
+  it('does not inject allowed ids when unset', () => {
+    expect(normalizeSalesBillFormSettings({}).listPrint?.allowedTemplateIds).toBeUndefined();
+  });
+
+  it('keeps tenant whitelist', () => {
+    const n = normalizeSalesBillFormSettings({ listPrint: { allowedTemplateIds: ['d'] } });
+    expect(n.listPrint?.allowedTemplateIds).toEqual(['d']);
   });
 });
