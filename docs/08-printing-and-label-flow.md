@@ -30,6 +30,11 @@
 | 批次码转标签行 | `utils/printVirtualBatch.ts` | 把 `PlanVirtualBatch` 转成打印上下文 |
 | 序列号文案 | `utils/serialLabels.ts` | `J-PLNxx-0001` / `B-PLNxx-0001` |
 
+### 2.1 打印模版配置与历史系统模版 id 清理
+
+- **`getConfig` / `updateConfig('printTemplates')`**：`shared/systemPrintTemplates.ts` 的 **`mergePrintTemplatesForTenantConfig`** / **`stripSystemPrintTemplatesForPersistence`** 在读写时过滤已废弃 id **`builtin-outsource-dispatch-v1`**（历史上曾代码统一下发的外协发出单模版，已删除），避免库内残留 JSON 仍出现在模版列表或写回数据库。
+- **外协表单白名单**：`normalizeOutsourceFormSettings`（`contexts/formSettingsDefaults.ts`）会从 `outsourceCenterPrint.*.allowedTemplateIds` 中剔除同一 id，避免外协详情打印白名单指向不存在的模版。
+
 ---
 
 ## 3. 打印主数据流

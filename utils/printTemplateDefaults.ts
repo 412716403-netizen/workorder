@@ -43,8 +43,9 @@ export function duplicatePrintTemplate(src: PrintTemplate): PrintTemplate {
     if (!idMap.has(oldId)) idMap.set(oldId, newElementId());
     return idMap.get(oldId)!;
   };
+  const { isSystemTemplate: _omitSys, ...rest } = src;
   return {
-    ...src,
+    ...rest,
     id: newPrintTemplateId(),
     name: `${src.name}（副本）`,
     elements: src.elements.map(el => ({ ...el, id: remap(el.id) })),

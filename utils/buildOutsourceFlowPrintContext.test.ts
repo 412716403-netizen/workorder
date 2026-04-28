@@ -84,5 +84,58 @@ describe('buildOutsourceFlowPrintContext', () => {
     expect(row[COLOR_SIZE_MATRIX_JSON_KEY]).toBeTruthy();
     expect(String(row[COLOR_SIZE_MATRIX_JSON_KEY])).toContain('白');
     expect(String(row[COLOR_SIZE_MATRIX_JSON_KEY])).toContain('粉');
+    expect(row.remark).toBe('');
+  });
+
+  it('fills 行.remark from line-level reason', () => {
+    const product: Product = {
+      id: 'prod1',
+      sku: '25012',
+      name: '成衣A',
+      colorIds: ['c1'],
+      sizeIds: ['s1'],
+      variants: [{ id: 'v1', colorId: 'c1', sizeId: 's1', skuSuffix: '' }],
+      milestoneNodeIds: ['n1'],
+    };
+    const order: ProductionOrder = {
+      id: 'o1',
+      orderNumber: 'WO-1',
+      productId: 'prod1',
+      productName: product.name,
+      sku: product.sku,
+      items: [],
+      customer: '',
+      startDate: '',
+      dueDate: '',
+      status: 'PRODUCING',
+      milestones: [],
+      priority: 'Medium',
+    };
+    const recs: ProductionOpRecord[] = [
+      {
+        id: 'r1',
+        type: 'OUTSOURCE',
+        productId: 'prod1',
+        orderId: 'o1',
+        nodeId: 'n1',
+        variantId: 'v1',
+        quantity: 3,
+        operator: 'a',
+        timestamp: '2026-01-01T00:00:00',
+        docNo: 'WX-1',
+        partner: '工厂',
+        status: '加工中',
+        reason: '加急',
+      },
+    ];
+    const ctx = buildOutsourceFlowPrintContext({
+      docRecords: recs,
+      isReceiveDoc: false,
+      orders: [order],
+      products: [product],
+      globalNodes: [{ id: 'n1', name: '裁剪', reportTemplate: [] }],
+      dictionaries: dict,
+    });
+    expect(ctx.printListRows?.[0]?.remark).toBe('加急');
   });
 });

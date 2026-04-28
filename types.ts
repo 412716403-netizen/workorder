@@ -30,6 +30,8 @@ export {
 /** 与 CustomDocFieldType 相同，保留别名供计划单单据配置等既有命名 */
 export type PlanFormCustomFieldType = CustomDocFieldType;
 
+export { isSystemLockedPrintTemplateId, SYSTEM_LOCKED_PRINT_TEMPLATE_IDS } from './shared/systemPrintTemplates';
+
 /** 单品码（一物一码）：计划内每件唯一扫码标识 */
 export interface ItemCode {
   id: string;
@@ -1090,6 +1092,8 @@ export type PrintTemplateDocumentType =
 export interface PrintTemplate {
   id: string;
   name: string;
+  /** 系统统一下发，仅服务端合并写入；租户不可改、不可入库覆盖 */
+  isSystemTemplate?: boolean;
   /** 数据源单据类型；仅影响模版编辑时可选字段分组，不改变运行时解析 */
   documentType?: PrintTemplateDocumentType;
   paperSize: { widthMm: number; heightMm: number };

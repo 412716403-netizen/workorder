@@ -208,8 +208,30 @@ async function request<T = unknown>(path: string, options: RequestInit = {}): Pr
   }
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || err.message || `HTTP ${res.status}`);
+    const rawText = await res.text().catch(() => '');
+    let errMsg: string | undefined;
+    try {
+      const j = rawText ? (JSON.parse(rawText) as { error?: string; message?: string }) : {};
+      if (typeof j.error === 'string') errMsg = j.error;
+      if (!errMsg && typeof j.message === 'string') errMsg = j.message;
+    } catch {
+      errMsg = rawText.trim() || undefined;
+    }
+    /**
+     * 仅起 Vite、未起后端时：代理 /api → 127.0.0.1:3001 会得到 500 + text/plain 且常为空正文，
+     * 旧逻辑用 res.json 失败后退回 statusText，Toast 只显示「Internal Server Error」误导用户。
+     */
+    const viteProxyBackendDown =
+      import.meta.env.DEV &&
+      res.status === 500 &&
+      (!rawText.trim() || errMsg === 'Internal Server Error' || /ECONNREFUSED/i.test(rawText));
+    if (viteProxyBackendDown) {
+      errMsg =
+        '无法连接 API（多为后端未在 3001 运行）。请在仓库根目录执行 npm run dev:all，或在 backend 目录执行 npm run dev。';
+    } else {
+      errMsg = errMsg || res.statusText || `HTTP ${res.status}`;
+    }
+    throw new Error(errMsg);
   }
 
   const text = await res.text();

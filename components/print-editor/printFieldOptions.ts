@@ -481,6 +481,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '外协发出明细行', value: '行.nodeName', label: '工序名称' },
     { group: '外协发出明细行', value: '行.variantLabel', label: '规格' },
     { group: '外协发出明细行', value: '行.quantity', label: '数量' },
+    { group: '外协发出明细行', value: '行.remark', label: '行备注（来自明细 reason）' },
   ];
   const outsourceReceiveCustomOpts: PrintFieldOption[] = outsourceReceiveCustomFields.map(f => ({
     group: '外协收回',

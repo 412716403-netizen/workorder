@@ -92,6 +92,7 @@ export const updateTenant = asyncHandler(async (req, res) => {
     }
     return t;
   });
+
   res.json({
     id: tenant.id,
     name: tenant.name,

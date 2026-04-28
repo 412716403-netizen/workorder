@@ -126,6 +126,19 @@ function normalizePlanListSlot(slot: PlanListPrintSettings | undefined): PlanLis
   };
 }
 
+/** 已移除的系统外协发出模版 id；白名单中残留时归一化剔除 */
+const REMOVED_BUILTIN_OUTSOURCE_DISPATCH_TEMPLATE_ID = 'builtin-outsource-dispatch-v1';
+
+function normalizePlanListSlotWithoutRemovedBuiltin(slot: PlanListPrintSettings | undefined): PlanListPrintSettings | undefined {
+  const n = normalizePlanListSlot(slot);
+  if (!n?.allowedTemplateIds?.length) return n;
+  const ids = n.allowedTemplateIds.filter(id => String(id).trim() !== REMOVED_BUILTIN_OUTSOURCE_DISPATCH_TEMPLATE_ID);
+  return {
+    ...n,
+    allowedTemplateIds: ids.length > 0 ? ids : undefined,
+  };
+}
+
 export const DEFAULT_ORDER_FORM_SETTINGS: OrderFormSettings = {
   standardFields: [
     { id: 'orderNumber', label: '工单号', showInList: true, showInCreate: false, showInDetail: true },
@@ -206,8 +219,8 @@ export function normalizeOutsourceFormSettings(raw: OutsourceFormSettings | null
   return {
     ...base,
     outsourceCenterPrint: {
-      dispatchFlowDetail: normalizePlanListSlot(ocp.dispatchFlowDetail),
-      receiveFlowDetail: normalizePlanListSlot(ocp.receiveFlowDetail),
+      dispatchFlowDetail: normalizePlanListSlotWithoutRemovedBuiltin(ocp.dispatchFlowDetail),
+      receiveFlowDetail: normalizePlanListSlotWithoutRemovedBuiltin(ocp.receiveFlowDetail),
     },
   };
 }

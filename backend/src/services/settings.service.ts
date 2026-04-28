@@ -4,6 +4,10 @@ import { genId } from '../utils/genId.js';
 import { sanitizeUpdate, sanitizeCreate } from '../utils/request.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { assertCategoryBatchColorMutex } from '../utils/categoryMutex.js';
+import {
+  mergePrintTemplatesForTenantConfig,
+  stripSystemPrintTemplatesForPersistence,
+} from '../../../shared/systemPrintTemplates.js';
 import { z } from 'zod';
 
 /** 与 `shared/types` 中 CustomDocFieldType 一致；写入设置 JSON 时拒绝 number/boolean 等脏类型 */
@@ -250,13 +254,18 @@ export async function getConfig(tenantId: string) {
   const settings = await basePrisma.systemSetting.findMany({ where: { tenantId } });
   const config: Record<string, unknown> = {};
   for (const s of settings) config[s.key] = s.value;
+  config.printTemplates = mergePrintTemplatesForTenantConfig(config.printTemplates);
   return config;
 }
 
 export async function updateConfig(tenantId: string, key: string, value: unknown) {
+  let nextValue = value;
+  if (key === 'printTemplates') {
+    nextValue = stripSystemPrintTemplatesForPersistence(value);
+  }
   return basePrisma.systemSetting.upsert({
     where: { tenantId_key: { tenantId, key } },
-    update: { value: value as any },
-    create: { tenantId, key, value: value as any },
+    update: { value: nextValue as any },
+    create: { tenantId, key, value: nextValue as any },
   });
 }

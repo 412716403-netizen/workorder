@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeDecimals } from './formSettingsDefaults';
+import { normalizeDecimals, normalizeOutsourceFormSettings } from './formSettingsDefaults';
 
 describe('normalizeDecimals', () => {
   it('converts string quantity to number', () => {
@@ -51,5 +51,44 @@ describe('normalizeDecimals', () => {
     const result = normalizeDecimals(input);
     expect(result[0].name).toBe('123');
     expect(result[0].productId).toBe('456');
+  });
+});
+
+describe('normalizeOutsourceFormSettings', () => {
+  it('does not inject default outsourceCenterPrint when unset', () => {
+    const n = normalizeOutsourceFormSettings({});
+    expect(n.outsourceCenterPrint).toBeUndefined();
+  });
+
+  it('strips removed builtin-outsource-dispatch-v1 from dispatch whitelist', () => {
+    const n = normalizeOutsourceFormSettings({
+      outsourceCenterPrint: {
+        dispatchFlowDetail: { allowedTemplateIds: ['builtin-outsource-dispatch-v1', 'custom-1'] },
+      },
+    });
+    expect(n.outsourceCenterPrint?.dispatchFlowDetail?.allowedTemplateIds).toEqual(['custom-1']);
+  });
+
+  it('clears whitelist when only removed builtin id was listed', () => {
+    const n = normalizeOutsourceFormSettings({
+      outsourceCenterPrint: {
+        dispatchFlowDetail: { allowedTemplateIds: ['builtin-outsource-dispatch-v1'] },
+      },
+    });
+    expect(n.outsourceCenterPrint?.dispatchFlowDetail?.allowedTemplateIds).toBeUndefined();
+  });
+
+  it('keeps explicit empty dispatch slot (no forced system id)', () => {
+    const n = normalizeOutsourceFormSettings({
+      outsourceCenterPrint: { dispatchFlowDetail: {} },
+    });
+    expect(n.outsourceCenterPrint?.dispatchFlowDetail?.allowedTemplateIds).toBeUndefined();
+  });
+
+  it('preserves tenant whitelist without injecting system id', () => {
+    const n = normalizeOutsourceFormSettings({
+      outsourceCenterPrint: { dispatchFlowDetail: { allowedTemplateIds: ['custom-1'] } },
+    });
+    expect(n.outsourceCenterPrint?.dispatchFlowDetail?.allowedTemplateIds).toEqual(['custom-1']);
   });
 });

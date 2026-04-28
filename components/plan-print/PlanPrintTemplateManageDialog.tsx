@@ -19,7 +19,6 @@ import type {
   Product,
 } from '../../types';
 import { PrintTemplateManager } from '../PrintTemplateManager';
-import { createBuiltinOutsourceDispatchPrintTemplate } from '../../utils/outsourceDispatchPrintTemplate';
 
 export type PlanPrintTemplateManageScope =
   | 'planList'
@@ -326,18 +325,6 @@ export const PlanPrintTemplateManageDialog: React.FC<PlanPrintTemplateManageDial
     toast.success('已加入可选模版');
   };
 
-  const handleAddBuiltinOutsourceDispatch = useCallback(() => {
-    if (scope !== 'outsourceDispatchFlowDetail') return;
-    const built = createBuiltinOutsourceDispatchPrintTemplate();
-    const nextList = [...printTemplates, built];
-    baselineIdsRef.current?.add(built.id);
-    void onUpdatePrintTemplates(nextList);
-    setSelectedTemplateId(built.id);
-    const allowed = allowedTemplateIdsForScope(planFormSettings, scope);
-    if (allowed?.length) onMergePrintWhitelist(built.id);
-    toast.success('已添加「外协发出单（二等分·矩阵）」模版');
-  }, [scope, printTemplates, onUpdatePrintTemplates, planFormSettings, onMergePrintWhitelist]);
-
   if (!open) return null;
 
   return (
@@ -378,15 +365,6 @@ export const PlanPrintTemplateManageDialog: React.FC<PlanPrintTemplateManageDial
             加入后模版会出现在表单配置「已加入」列表及对应打印选择器中；若此前未配置任何项，首次加入后仅允许使用已加入的模版。可在表单配置中删除某项以恢复为「未加入=全部可用」。
           </p>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {scope === 'outsourceDispatchFlowDetail' ? (
-              <button
-                type="button"
-                onClick={handleAddBuiltinOutsourceDispatch}
-                className="rounded-xl border border-indigo-200 bg-white px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-50"
-              >
-                添加内置：外协发出（二等分·矩阵）
-              </button>
-            ) : null}
             <button
               type="button"
               onClick={handleJoinWhitelist}

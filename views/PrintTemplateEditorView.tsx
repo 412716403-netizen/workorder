@@ -11,7 +11,8 @@ import type {
   PrintLineElementConfig,
   PrintRenderContext,
 } from '../types';
-import { createBlankCustomTemplate } from '../utils/printTemplateDefaults';
+import { isSystemLockedPrintTemplateId } from '../types';
+import { createBlankCustomTemplate, duplicatePrintTemplate } from '../utils/printTemplateDefaults';
 import { getPrintLayoutMetrics } from '../components/print-editor/layoutMetrics';
 import { ComponentLibrary } from '../components/print-editor/ComponentLibrary';
 import type { PaletteDropType } from '../components/print-editor/ComponentLibrary';
@@ -403,6 +404,10 @@ export default function PrintTemplateEditorView() {
   );
 
   const save = useCallback(async () => {
+    if (isSystemLockedPrintTemplateId(template.id)) {
+      toast.error('系统模版不可保存');
+      return;
+    }
     try {
       const others = printTemplates.filter(t => t.id !== template.id);
       await onUpdatePrintTemplates([...others, { ...template, updatedAt: new Date().toISOString() }]);
@@ -418,6 +423,104 @@ export default function PrintTemplateEditorView() {
   const { printRef, handlePrint } = usePrintTemplateAction(template, previewCtx);
 
   const [previewOpen, setPreviewOpen] = useState(false);
+
+  const systemLocked = useMemo(
+    () =>
+      (routeId != null && routeId !== 'new' && isSystemLockedPrintTemplateId(routeId)) ||
+      template.isSystemTemplate === true ||
+      isSystemLockedPrintTemplateId(template.id),
+    [routeId, template.id, template.isSystemTemplate],
+  );
+
+  const duplicateSystemTemplateAsOwn = useCallback(async () => {
+    const dup = duplicatePrintTemplate(template);
+    const userOnly = printTemplates.filter(t => !isSystemLockedPrintTemplateId(t.id));
+    await onUpdatePrintTemplates([...userOnly, dup]);
+    toast.success('已复制为自有模版');
+    navigate(`/print-editor/${dup.id}`);
+  }, [template, printTemplates, onUpdatePrintTemplates, navigate]);
+
+  if (systemLocked && routeId !== 'new') {
+    return (
+      <>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={() => navigate('/production')}
+                className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+              >
+                <ArrowLeft className="h-4 w-4" /> 返回
+              </button>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">打印模版 · 系统统一下发</p>
+                <h1 className="mt-0.5 truncate text-lg font-black text-slate-900">{template.name}</h1>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPreviewOpen(true)}
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              >
+                <Eye className="h-4 w-4" /> 预览模板
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePrint()}
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              >
+                <Printer className="h-4 w-4" /> 打印
+              </button>
+              <button
+                type="button"
+                onClick={() => void duplicateSystemTemplateAsOwn()}
+                className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-5 py-2 text-sm font-bold text-white hover:bg-indigo-700"
+              >
+                复制为自有模版
+              </button>
+            </div>
+          </header>
+          <div className="min-h-0 flex-1 overflow-auto p-6">
+            <div className="mx-auto max-w-2xl rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-950">
+              本模版由系统统一维护，全体租户共用；升级部署后自动与最新版对齐。不可在线修改或删除。若需定制版式，请使用「复制为自有模版」后在新模版上编辑。
+            </div>
+            <div className="mt-8 flex justify-center">
+              <PrintPaper template={template} ctx={previewCtx} />
+            </div>
+          </div>
+        </div>
+        <HiddenPrintSlot template={template} ctx={previewCtx} printRef={printRef} />
+        {previewOpen && (
+          <div
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+            onClick={() => setPreviewOpen(false)}
+          >
+            <div className="max-h-[90vh] overflow-auto rounded-2xl bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+              <h3 className="mb-4 text-lg font-black text-slate-900">打印预览</h3>
+              <PrintPaper template={template} ctx={previewCtx} />
+              <div className="mt-4 flex justify-end gap-2">
+                <button type="button" className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold" onClick={() => setPreviewOpen(false)}>
+                  关闭
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white"
+                  onClick={() => {
+                    setPreviewOpen(false);
+                    void handlePrint();
+                  }}
+                >
+                  打印
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
 
   return (
     <DndContext sensors={sensors} onDragEnd={onDragEnd}>

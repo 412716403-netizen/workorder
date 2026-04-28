@@ -580,7 +580,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const onUpdatePrintTemplates = useCallback(async (v: PrintTemplate[]) => {
     await api.settings.updateConfig('printTemplates', v);
-    setPrintTemplates(v);
+    try {
+      const cfg = (await api.settings.getConfig()) as Record<string, unknown>;
+      setPrintTemplates(Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : []);
+    } catch {
+      setPrintTemplates(v);
+    }
     broadcastPrintTemplatesSaved(printTemplatesCrossTabIdRef.current);
   }, []);
 

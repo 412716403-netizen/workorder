@@ -107,6 +107,8 @@ export function buildOutsourceFlowPrintContext(opts: {
             quantity: qtySum,
           }));
     const qty = matrixSlice?.totalQty ?? qtySum;
+    const remarkParts = recs.map(r => (r.reason ?? '').trim()).filter(Boolean);
+    const remark = remarkParts.length ? Array.from(new Set(remarkParts)).join('；') : '';
 
     printListRows.push({
       index: idx,
@@ -116,6 +118,7 @@ export function buildOutsourceFlowPrintContext(opts: {
       nodeName,
       variantLabel: hasVariantQty ? '' : variantLabelForRecord(r0, products, dictionaries),
       quantity: qty,
+      remark,
       unitPrice: unitPrice != null ? unitPrice : undefined,
       amount: amount != null ? amount : undefined,
       ...(matrixSlice ? { [COLOR_SIZE_MATRIX_JSON_KEY]: matrixSlice.colorSizeMatrixJson } : {}),
