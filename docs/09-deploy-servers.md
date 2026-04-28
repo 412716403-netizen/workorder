@@ -40,8 +40,19 @@
 
 ### 后端 API 进程
 
+- **进程管理**：**systemd**（旧的 `nohup node ... &` 方式已弃用）
+- **服务名**：`smarttrack-api.service`
+- **unit 文件**：`/etc/systemd/system/smarttrack-api.service`
+- **WorkingDirectory**：`/var/www/smarttrack-pro/backend`
+- **ExecStart**：`/usr/bin/node dist/backend/src/index.js`
+  - ⚠️ **不是** `dist/index.js`。`backend/tsconfig.json` 把 `../shared` include 进来后，TS 把公共 rootDir 自动提升到仓库根，编译产物落在 `dist/backend/src/`。详见下文「构建路径与历史坑（必读）」。
 - **监听端口**：**3001**（`ss -tlnp | grep 3001` 可见 `node` 进程）
-- **启动方式**：无 PM2；生产构建为 `node dist/index.js`（见下文命令）
+- **健康检查**：`curl -s http://127.0.0.1:3001/health` → `{"status":"ok",...}`
+- **常用操作**：
+  - 重启：`sudo systemctl restart smarttrack-api`
+  - 状态：`sudo systemctl status smarttrack-api --no-pager`
+  - 日志：`sudo journalctl -u smarttrack-api -f`（或 `--since "10 min ago"`）
+  - 查看 unit 内容：`systemctl cat smarttrack-api`
 
 ### 推荐发版顺序（测试机一条龙）
 
@@ -50,11 +61,13 @@
 1. `cd /var/www/smarttrack-pro && git pull origin main`
 2. `cd /var/www/smarttrack-pro/backend && npm ci`（无 lock 时用 `npm install`）
 3. `npx prisma migrate deploy`（有未应用 migration 时执行）
-4. `npm run build`
-5. `ss -tlnp | grep 3001` 查旧 PID，`kill <PID>`
-6. `nohup node dist/index.js > /var/log/smarttrack-api.log 2>&1 &`（日志路径可按运维规范调整）
-7. `cd /var/www/smarttrack-pro && npm ci && npm run build`
-8. 若改过 Nginx：`nginx -t && nginx -s reload`；仅更新 `dist` 时一般只需浏览器强刷或清 CDN
+4. `rm -rf dist && npm run build`
+   - `package.json` 的 `build` 已含 `rm -rf dist`，命令行上再写一遍是双保险，避免历史 `dist/index.js` 等旧产物残留导致 systemd 跑老代码。
+5. `sudo systemctl restart smarttrack-api`
+6. `sudo systemctl status smarttrack-api --no-pager | head -15` 确认 `active (running)`，且 `ExecStart` 指向 `dist/backend/src/index.js`
+7. `curl -s http://127.0.0.1:3001/health` 返回 `{"status":"ok"...}`
+8. 前端：`cd /var/www/smarttrack-pro && npm ci && npm run build`
+9. 若改过 Nginx：`nginx -t && nginx -s reload`；仅更新前端 `dist` 时一般只需浏览器强刷或清 CDN
 
 ### 数据库迁移（说明）
 
@@ -65,14 +78,41 @@
 
 ```bash
 cd /var/www/smarttrack-pro/backend
-npm ci
-# 若无 lock 文件则：npm install
+npm ci  # 若无 lock 文件则：npm install
 npx prisma migrate deploy
+rm -rf dist
 npm run build
-ss -tlnp | grep 3001
-kill <旧 node 的 PID>
-nohup node dist/index.js > /var/log/smarttrack-api.log 2>&1 &
+sudo systemctl restart smarttrack-api
+sudo systemctl status smarttrack-api --no-pager | head -15
+curl -s http://127.0.0.1:3001/health
 ```
+
+### 构建路径与历史坑（必读）
+
+**症状**：发版后 systemd 仍跑老代码，新功能不生效。  
+（典型案例：2026-04-28 阿里云测试机看不到「系统打印模板（外协发出/收回、采购销售订单/单据、领退料、返工等）」。）
+
+**根因**：
+
+- `backend/tsconfig.json` 的 `include` 同时包含 `src/**` 与 `../shared/**`，TypeScript 自动把**公共 rootDir 提升到仓库根**。
+- 因此 `tsc` 实际产物位置为：
+  - `backend/dist/backend/src/index.js`（后端入口）
+  - `backend/dist/backend/src/services/...`
+  - `backend/dist/shared/...`
+- 历史上 `package.json` 的 `start` 与 systemd `ExecStart` 都写 `dist/index.js`，但**新构建不会再写这个文件** —— 线上其实跑的是上一次部署残留的 `dist/index.js`，新代码全在旁边的 `dist/backend/src/` 里**从未被加载**。
+- 现象上很像「迁移成功 + Prisma generate 成功 + tsc 没报错 + 服务 active running + /health OK」一切都对，但任何 `services/*.ts` 改动都不生效。
+
+**当前已修复**：
+
+- `backend/package.json`：`"build": "rm -rf dist && tsc"`、`"start": "node dist/backend/src/index.js"`（commit `6bf2ef3`）。
+- systemd `ExecStart=/usr/bin/node dist/backend/src/index.js`（已在测试机改完）。
+
+**部署时必做**：
+
+- 每次发版前都执行 `rm -rf dist`（`npm run build` 内已有，命令行再来一遍当防御）。
+- 修改 `backend/tsconfig.json` 的 `include` 时，必须同步检查 `dist` 实际产物位置，并保持 systemd `ExecStart` 与 `package.json` 的 `start` 一致。
+- 升级关键功能时可 grep 编译产物快速验证，例如：  
+  `grep -c mergePrintTemplatesForTenantConfig /var/www/smarttrack-pro/backend/dist/backend/src/services/settings.service.js` 期望输出 `2`（import + 调用各一次）。
 
 ### 前端静态资源发布
 
@@ -86,15 +126,17 @@ npm run build
 
 ### 自检清单（测试发版后）
 
-1. 浏览器打开上文「测试环境访问地址」，确认登录、产品列表、系统设置等无「数据库结构不一致」类错误。
-2. `cd /var/www/smarttrack-pro/backend && npx prisma migrate status` 显示迁移已全部应用。
+1. `sudo systemctl status smarttrack-api --no-pager | head -15` 显示 `active (running)`，`Main PID` 后的命令行包含 `dist/backend/src/index.js`。
+2. `curl -s http://127.0.0.1:3001/health` 返回 `{"status":"ok",...}`。
 3. `ss -tlnp | grep 3001` 确认 API 在监听。
-4. 可选：`curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3001/`（Express 可能返回 404，仅表示进程在响应；真实接口需带路径与鉴权时再测）
+4. 浏览器打开上文「测试环境访问地址」，强刷一次，确认登录、产品列表、系统设置、**打印模板列表**、生产/PSI/财务等核心模块无「数据库结构不一致」或字段缺失类错误。
+5. `cd /var/www/smarttrack-pro/backend && npx prisma migrate status` 显示迁移已全部应用。
+6. 关键功能升级时可在线上 grep 编译产物，确认新逻辑已落地（例如系统打印模板合并：见上节「构建路径与历史坑」末尾）。
 
 ### 测试环境回滚（简要）
 
 1. `cd /var/www/smarttrack-pro && git checkout <上一提交的 hash 或 tag>`
-2. 按「推荐发版顺序」重新执行后端 `npm run build`、重启 `node`，以及前端 `npm run build`。
+2. 按「推荐发版顺序」重新执行：`rm -rf dist && npm run build` + `sudo systemctl restart smarttrack-api`，前端再 `npm run build`。
 3. **数据库迁移一般不回滚**；若新 migration 有问题，应在修复后向前迁移，而非在生产随意 `migrate resolve` 回退，除非有明确 DBA/运维方案。
 
 ---
