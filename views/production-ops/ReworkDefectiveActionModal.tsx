@@ -95,7 +95,6 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
   const canOutsourceRework = hasOpsPerm(tenantRole, userPermissions, 'production:rework_outsource:allow');
   const [reworkActionMode, setReworkActionMode] = useState<'scrap' | 'rework' | 'outsource_rework' | null>(null);
   const [reworkActionQty, setReworkActionQty] = useState(0);
-  const [reworkActionReason, setReworkActionReason] = useState('');
   const [reworkActionNodeIds, setReworkActionNodeIds] = useState<string[]>([]);
   const [reworkActionVariantQuantities, setReworkActionVariantQuantities] = useState<Record<string, number>>({});
   const [outsourcePartnerName, setOutsourcePartnerName] = useState('');
@@ -188,11 +187,10 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
   const useVariantQtyGrid = reworkActionHasColorSize && !reworkTreatMatrixQtyAsAggregate;
 
   const reworkActionVariantTotal = useMemo(() => (Object.values(reworkActionVariantQuantities) as number[]).reduce((s, q) => s + (Number(q) || 0), 0), [reworkActionVariantQuantities]);
+  /** 须保留 colorIds/sizeIds，矩阵布局才能与商品资料一致（勿置 undefined，否则会退化为按尺码名 localeCompare，顺序易反） */
   const defectMatrixProduct = useMemo(
     () =>
-      reworkActionProduct && reworkActionProduct.variants?.length
-        ? ({ ...reworkActionProduct, colorIds: undefined, sizeIds: undefined } as Product)
-        : null,
+      reworkActionProduct && reworkActionProduct.variants?.length ? reworkActionProduct : null,
     [reworkActionProduct],
   );
 
@@ -203,7 +201,6 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
   const resetMode = () => {
     setReworkActionMode(null);
     setReworkActionQty(0);
-    setReworkActionReason('');
     setReworkActionNodeIds([]);
     setReworkActionVariantQuantities({});
     setOutsourcePartnerName('');
@@ -213,7 +210,6 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
   const defectCollab = () => defectTreatmentCollabFromValues(defectCustomData);
 
   const handleScrapSubmit = () => {
-    const reason = reworkActionReason || undefined;
     const operator = docOperator;
     const timestamp = new Date().toLocaleString();
     const nodeIdSc = reworkActionRow.nodeId;
@@ -228,7 +224,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
       scrapSavedQty += q;
       onAddRecord({
         id: rid, type: 'SCRAP', orderId: oid || undefined, productId: reworkActionRow.productId, variantId: vid, quantity: q,
-        reason, operator, timestamp, nodeId: nodeIdSc, docNo: scrapDocNo,
+        operator, timestamp, nodeId: nodeIdSc, docNo: scrapDocNo,
         ...defectCollab(),
       });
     };
@@ -272,7 +268,6 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
   };
 
   const handleReworkSubmit = () => {
-    const reason = reworkActionReason || undefined;
     const operator = docOperator;
     const timestamp = new Date().toLocaleString();
     const sourceNodeId = reworkActionRow.nodeId;
@@ -301,7 +296,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
       reworkSavedQty += q;
       onAddRecord({
         id: rid, type: 'REWORK', orderId: oid || undefined, productId: reworkActionRow.productId, variantId: vid, quantity: q,
-        reason, operator, timestamp, status: '待返工', sourceNodeId, nodeId: nodeIdFirst, reworkNodeIds: reworkNodeIdsSorted, docNo: reworkDocNo,
+        operator, timestamp, status: '待返工', sourceNodeId, nodeId: nodeIdFirst, reworkNodeIds: reworkNodeIdsSorted, docNo: reworkDocNo,
         ...defectCollab(),
       });
     };
@@ -348,7 +343,6 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
   const handleOutsourceReworkSubmit = async () => {
     const partnerName = (outsourcePartnerName || '').trim();
     if (!partnerName) return;
-    const reason = reworkActionReason || undefined;
     const operator = docOperator;
     const timestamp = new Date().toLocaleString();
     const sourceNodeId = reworkActionRow.nodeId;
@@ -378,7 +372,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
       const reworkId = `rec-${now}-orw-${idx}-${oid || 'p'}`;
       const reworkRec: ProductionOpRecord = {
         id: reworkId, type: 'REWORK', orderId: oid || undefined, productId: reworkActionRow.productId,
-        variantId: vid, quantity: q, reason, operator, timestamp, status: '委外返工中',
+        variantId: vid, quantity: q, operator, timestamp, status: '委外返工中',
         sourceNodeId, nodeId: nodeIdFirst, reworkNodeIds: reworkNodeIdsSorted,
         partner: partnerName, docNo: reworkDocNo,
         ...defectCollab(),
@@ -387,7 +381,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
         id: `wx-${now}-orw-${idx}-${oid || 'p'}`, type: 'OUTSOURCE',
         orderId: isProductScope ? undefined : (oid || undefined),
         productId: reworkActionRow.productId,
-        variantId: vid, quantity: q, reason: reason ? `委外返工·${reason}` : '委外返工',
+        variantId: vid, quantity: q, reason: '委外返工',
         operator, timestamp, status: '加工中', partner: partnerName,
         nodeId: sourceNodeId, sourceReworkId: reworkId, docNo: outsourceDocNo,
       };
@@ -575,21 +569,6 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
             <>
               <div className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-3 sm:px-4">
                 <p className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{reworkActionRow.productName}</p>
-                <p className="mt-0.5 text-[10px] sm:text-[11px] font-medium text-slate-500">
-                  {reworkActionRow.scope === 'product' ? (
-                    <>
-                      <span className="font-bold text-indigo-700">按产品汇总</span>
-                      <span className="mx-1 text-slate-300">·</span>
-                      <span className="font-bold text-slate-600 tabular-nums">{reworkActionRow.orderNumber}</span>
-                    </>
-                  ) : (
-                    <span className="font-bold text-slate-600 tabular-nums">工单 {reworkActionRow.orderNumber}</span>
-                  )}
-                  <span className="mx-1.5 text-slate-300">·</span>
-                  <span className="font-bold text-indigo-600">{reworkActionRow.milestoneName}</span>
-                  <span className="mx-1.5 text-slate-300">·</span>
-                  待处理 <span className="font-bold text-indigo-600 tabular-nums">{reworkActionRow.pendingQty}</span> 件
-                </p>
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setReworkActionMode('scrap')} className="flex-1 py-3 rounded-xl text-sm font-bold border-2 border-slate-200 text-slate-700 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-800 transition-colors">
@@ -614,21 +593,6 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-3 sm:px-4">
                   <p className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{reworkActionRow.productName}</p>
-                  <p className="mt-0.5 text-[10px] sm:text-[11px] font-medium text-slate-500">
-                    {reworkActionRow.scope === 'product' ? (
-                      <>
-                        <span className="font-bold text-indigo-700">按产品汇总</span>
-                        <span className="mx-1 text-slate-300">·</span>
-                        <span className="font-bold text-slate-600 tabular-nums">{reworkActionRow.orderNumber}</span>
-                      </>
-                    ) : (
-                      <span className="font-bold text-slate-600 tabular-nums">工单 {reworkActionRow.orderNumber}</span>
-                    )}
-                    <span className="mx-1.5 text-slate-300">·</span>
-                    <span className="font-bold text-indigo-600">{reworkActionRow.milestoneName}</span>
-                    <span className="mx-1.5 text-slate-300">·</span>
-                    待处理 <span className="font-bold text-indigo-600 tabular-nums">{reworkActionRow.pendingQty}</span> 件
-                  </p>
                 </div>
                 {reworkActionMode === 'outsource_rework' && (
                   <div className="space-y-1.5">
@@ -692,29 +656,15 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
                 </div>
               </div>
 
-              <div className="space-y-3 border-t border-slate-100 pt-4">
-                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
-                  <div className={psiOrderBillFormSectionIconIndigoClass}><FileText className="w-4 h-4" /></div>
-                  <h3 className={sectionTitleClass}>3. 备注与扩展</h3>
+              {defectCustomFieldsOnly != null ? (
+                <div className="space-y-3 border-t border-slate-100 pt-4">
+                  <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
+                    <div className={psiOrderBillFormSectionIconIndigoClass}><FileText className="w-4 h-4" /></div>
+                    <h3 className={sectionTitleClass}>3. 备注与扩展</h3>
+                  </div>
+                  {defectCustomFieldsOnly}
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">原因（选填）</label>
-                  <input
-                    type="text"
-                    value={reworkActionReason}
-                    onChange={e => setReworkActionReason(e.target.value)}
-                    className={psiOrderBillFormFieldControlClass}
-                    placeholder={
-                      reworkActionMode === 'scrap'
-                        ? '如：不可修复'
-                        : reworkActionMode === 'outsource_rework'
-                          ? '如：工艺缺陷需外部修复'
-                          : '如：尺寸不良'
-                    }
-                  />
-                </div>
-                {defectCustomFieldsOnly}
-              </div>
+              ) : null}
 
               <div className="flex gap-3 border-t border-slate-100 pt-4">
                 <button type="button" onClick={resetMode} className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200">取消</button>

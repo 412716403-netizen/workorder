@@ -65,6 +65,10 @@ import OutsourceReceiveQuantityModal from './OutsourceReceiveQuantityModal';
 import OutsourceFlowListModal, { type OutsourceFlowOpenSeed } from './OutsourceFlowListModal';
 import OutsourcePartnerFlowDetailModal from './OutsourcePartnerFlowDetailModal';
 import OutsourceFlowDocumentDetailModal from './OutsourceFlowDocumentDetailModal';
+import DocPhaseModal from '../../components/DocPhaseModal';
+import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
+import { buildOutsourceFlowPrintContext } from '../../utils/buildOutsourceFlowPrintContext';
+import type { PrintRenderContext, PrintTemplate } from '../../types';
 import OutsourceCollabSyncModal from './OutsourceCollabSyncModal';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -135,6 +139,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
   const [receiveModal, setReceiveModal] = useState<{ orderId?: string; nodeId: string; productId: string; orderNumber?: string; productName: string; milestoneName: string; partner: string; pendingQty: number } | null>(null);
   const [receiveQty, setReceiveQty] = useState(0);
   const [flowDetailKey, setFlowDetailKey] = useState<string | null>(null);
+  const [flowDocPhase, setFlowDocPhase] = useState<'detail' | 'edit'>('detail');
   const [flowOpenSeed, setFlowOpenSeed] = useState<OutsourceFlowOpenSeed>(null);
   const [flowOpenNonce, setFlowOpenNonce] = useState(0);
   const [partnerQtyDetailSeed, setPartnerQtyDetailSeed] = useState<PartnerFlowDetailSeed | null>(null);
@@ -171,6 +176,9 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
     if (receiveFormModalOpen) setReceiveCustomValues({});
   }, [receiveFormModalOpen]);
   useEffect(() => {
+    if (flowDetailKey) setFlowDocPhase('detail');
+  }, [flowDetailKey]);
+  useEffect(() => {
     if (receiveModal) setReceiveLineCustomValues({});
   }, [receiveModal]);
 
@@ -189,6 +197,15 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
     () => buildDefectiveReworkByOrderMilestone(orders, records),
     [orders, records]
   );
+
+  const flowDetailRecordsForPrint = useMemo(
+    () => (flowDetailKey ? records.filter(r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey) : []),
+    [records, flowDetailKey],
+  );
+  const flowDetailPrintIsReceive = flowDetailRecordsForPrint[0]?.status === '已收回';
+  const flowDetailPrintSlot = flowDetailPrintIsReceive
+    ? outsourceFormSettings.outsourceCenterPrint?.receiveFlowDetail
+    : outsourceFormSettings.outsourceCenterPrint?.dispatchFlowDetail;
 
   const outsourceDispatchRows = useMemo(() => {
     if (globalNodes.length === 0) return [];
@@ -1338,30 +1355,48 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
       )}
 
       {dispatchFormModalOpen && (
-        <OutsourceDispatchQuantityModal
-          productionLinkMode={productionLinkMode}
-          outsourceDispatchRows={outsourceDispatchRows}
-          dispatchSelectedKeys={dispatchSelectedKeys}
-          dispatchPartnerName={dispatchPartnerName}
-          setDispatchPartnerName={setDispatchPartnerName}
-          dispatchFormQuantities={dispatchFormQuantities}
-          setDispatchFormQuantities={setDispatchFormQuantities}
-          orders={orders}
-          products={products}
-          categories={categories}
-          dictionaries={dictionaries}
-          globalNodes={globalNodes}
-          partners={partners}
-          partnerCategories={partnerCategories}
-          records={records}
-          processSequenceMode={processSequenceMode}
-          productMilestoneProgresses={productMilestoneProgresses}
-          defectiveReworkByOrderForOutsource={defectiveReworkByOrderForOutsource}
-          dispatchCustomFieldDefs={dispatchCustomCreateDefs}
-          dispatchCustomValues={dispatchCustomValues}
-          setDispatchCustomValues={setDispatchCustomValues}
-          onSubmit={handleDispatchFormSubmit}
+        <DocPhaseModal
+          open={dispatchFormModalOpen}
+          phase="edit"
+          editingDocNumber={null}
+          detailTitle="外协发出详情"
+          editTitle="外协发出 · 编辑"
+          newTitle="外协发出 · 录入数量"
+          showPrint={false}
+          hasPerm={p => hasOpsPerm(tenantRole, userPermissions, p)}
+          viewPerm="production:outsource_send:allow"
+          editPerm="production:outsource_send:allow"
           onClose={() => setDispatchFormModalOpen(false)}
+          onEnterEdit={() => {}}
+          onCancelEdit={() => {}}
+          renderContent={() => (
+            <OutsourceDispatchQuantityModal
+              embedded
+              productionLinkMode={productionLinkMode}
+              outsourceDispatchRows={outsourceDispatchRows}
+              dispatchSelectedKeys={dispatchSelectedKeys}
+              dispatchPartnerName={dispatchPartnerName}
+              setDispatchPartnerName={setDispatchPartnerName}
+              dispatchFormQuantities={dispatchFormQuantities}
+              setDispatchFormQuantities={setDispatchFormQuantities}
+              orders={orders}
+              products={products}
+              categories={categories}
+              dictionaries={dictionaries}
+              globalNodes={globalNodes}
+              partners={partners}
+              partnerCategories={partnerCategories}
+              records={records}
+              processSequenceMode={processSequenceMode}
+              productMilestoneProgresses={productMilestoneProgresses}
+              defectiveReworkByOrderForOutsource={defectiveReworkByOrderForOutsource}
+              dispatchCustomFieldDefs={dispatchCustomCreateDefs}
+              dispatchCustomValues={dispatchCustomValues}
+              setDispatchCustomValues={setDispatchCustomValues}
+              onSubmit={handleDispatchFormSubmit}
+              onClose={() => setDispatchFormModalOpen(false)}
+            />
+          )}
         />
       )}
 
@@ -1379,29 +1414,47 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
       )}
 
       {receiveFormModalOpen && (
-        <OutsourceReceiveQuantityModal
-          productionLinkMode={productionLinkMode}
-          outsourceReceiveRows={outsourceReceiveRows}
-          receiveSelectedKeys={receiveSelectedKeys}
-          receiveFormQuantities={receiveFormQuantities}
-          setReceiveFormQuantities={setReceiveFormQuantities}
-          receiveFormUnitPrices={receiveFormUnitPrices}
-          setReceiveFormUnitPrices={setReceiveFormUnitPrices}
-          receiveFormWeights={receiveFormWeights}
-          setReceiveFormWeights={setReceiveFormWeights}
-          orders={orders}
-          products={products}
-          categories={categories}
-          dictionaries={dictionaries}
-          records={records}
-          productMilestoneProgresses={productMilestoneProgresses}
-          receiveCustomFieldDefs={receiveCustomCreateDefs}
-          receiveCustomValues={receiveCustomValues}
-          setReceiveCustomValues={setReceiveCustomValues}
-          globalNodes={globalNodes}
-          boms={boms}
-          onSubmit={handleReceiveFormSubmit}
+        <DocPhaseModal
+          open={receiveFormModalOpen}
+          phase="edit"
+          editingDocNumber={null}
+          detailTitle="外协收货详情"
+          editTitle="外协收货 · 编辑"
+          newTitle="外协收货 · 录入数量"
+          showPrint={false}
+          hasPerm={p => hasOpsPerm(tenantRole, userPermissions, p)}
+          viewPerm="production:outsource_receive:allow"
+          editPerm="production:outsource_receive:allow"
           onClose={() => setReceiveFormModalOpen(false)}
+          onEnterEdit={() => {}}
+          onCancelEdit={() => {}}
+          renderContent={() => (
+            <OutsourceReceiveQuantityModal
+              embedded
+              productionLinkMode={productionLinkMode}
+              outsourceReceiveRows={outsourceReceiveRows}
+              receiveSelectedKeys={receiveSelectedKeys}
+              receiveFormQuantities={receiveFormQuantities}
+              setReceiveFormQuantities={setReceiveFormQuantities}
+              receiveFormUnitPrices={receiveFormUnitPrices}
+              setReceiveFormUnitPrices={setReceiveFormUnitPrices}
+              receiveFormWeights={receiveFormWeights}
+              setReceiveFormWeights={setReceiveFormWeights}
+              orders={orders}
+              products={products}
+              categories={categories}
+              dictionaries={dictionaries}
+              records={records}
+              productMilestoneProgresses={productMilestoneProgresses}
+              receiveCustomFieldDefs={receiveCustomCreateDefs}
+              receiveCustomValues={receiveCustomValues}
+              setReceiveCustomValues={setReceiveCustomValues}
+              globalNodes={globalNodes}
+              boms={boms}
+              onSubmit={handleReceiveFormSubmit}
+              onClose={() => setReceiveFormModalOpen(false)}
+            />
+          )}
         />
       )}
 
@@ -1436,30 +1489,92 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
       />
 
       {outsourceModal === 'flow' && flowDetailKey && (
-        <OutsourceFlowDocumentDetailModal
-          productionLinkMode={productionLinkMode}
-          flowDetailKey={flowDetailKey}
-          records={records}
-          orders={orders}
-          products={products}
-          categories={categories}
-          dictionaries={dictionaries}
-          globalNodes={globalNodes}
-          partners={partners}
-          partnerCategories={partnerCategories}
-          userPermissions={userPermissions}
-          tenantRole={tenantRole}
-          onAddRecord={onAddRecord}
-          onAddRecordBatch={onAddRecordBatch}
-          onUpdateRecord={onUpdateRecord}
-          onDeleteRecord={onDeleteRecord}
-          outsourceFormSettings={outsourceFormSettings}
-          printTemplates={printTemplates}
-          onOpenOutsourceFormPrintTab={() => {
-            setOutsourceConfigDefaultTab('print');
-            setShowOutsourceConfig(true);
+        <DocPhaseModal
+          open
+          phase={flowDocPhase}
+          editingDocNumber={flowDetailKey}
+          detailTitle={flowDetailPrintIsReceive ? '外协收回详情' : '外协发出详情'}
+          editTitle="编辑外协单据"
+          newTitle="外协单据"
+          showPrint={false}
+          zIndexClass="z-[90]"
+          hasPerm={p => hasOpsPerm(tenantRole, userPermissions, p)}
+          viewPerm="production:outsource_records:view"
+          editPerm="production:outsource_records:edit"
+          deletePerm={onDeleteRecord ? 'production:outsource_records:delete' : undefined}
+          deleteConfirmMessage="确定要删除该张外协单的所有记录吗？此操作不可恢复。"
+          onDelete={
+            onDeleteRecord && flowDetailRecordsForPrint.length > 0
+              ? () => {
+                  flowDetailRecordsForPrint.forEach(r => onDeleteRecord(r.id));
+                  setFlowDetailKey(null);
+                  setFlowDocPhase('detail');
+                }
+              : undefined
+          }
+          leadingDetailActions={
+            flowDetailRecordsForPrint.length > 0 ? (
+              <OrderCenterDetailPrintBlock
+                printSlot={flowDetailPrintSlot}
+                printTemplates={printTemplates}
+                buildContext={(_template: PrintTemplate): PrintRenderContext => ({
+                  ...buildOutsourceFlowPrintContext({
+                    docRecords: flowDetailRecordsForPrint,
+                    isReceiveDoc: !!flowDetailPrintIsReceive,
+                    orders,
+                    products,
+                    globalNodes,
+                    dictionaries,
+                  }),
+                  tenantName: tenantCtx?.tenantName?.trim() || undefined,
+                })}
+                pickerSubtitle={`单号 ${flowDetailKey}`}
+                onAddPrintTemplate={() => {
+                  setOutsourceConfigDefaultTab('print');
+                  setShowOutsourceConfig(true);
+                }}
+              />
+            ) : null
+          }
+          onClose={() => {
+            setFlowDetailKey(null);
+            setFlowDocPhase('detail');
           }}
-          onClose={() => setFlowDetailKey(null)}
+          onEnterEdit={() => setFlowDocPhase('edit')}
+          onCancelEdit={() => setFlowDocPhase('detail')}
+          renderContent={() => (
+            <OutsourceFlowDocumentDetailModal
+              layout="docPhase"
+              phase={flowDocPhase}
+              onPhaseDetail={() => setFlowDocPhase('detail')}
+              productionLinkMode={productionLinkMode}
+              flowDetailKey={flowDetailKey}
+              records={records}
+              orders={orders}
+              products={products}
+              categories={categories}
+              dictionaries={dictionaries}
+              globalNodes={globalNodes}
+              partners={partners}
+              partnerCategories={partnerCategories}
+              userPermissions={userPermissions}
+              tenantRole={tenantRole}
+              onAddRecord={onAddRecord}
+              onAddRecordBatch={onAddRecordBatch}
+              onUpdateRecord={onUpdateRecord}
+              onDeleteRecord={onDeleteRecord}
+              outsourceFormSettings={outsourceFormSettings}
+              printTemplates={printTemplates}
+              onOpenOutsourceFormPrintTab={() => {
+                setOutsourceConfigDefaultTab('print');
+                setShowOutsourceConfig(true);
+              }}
+              onClose={() => {
+                setFlowDetailKey(null);
+                setFlowDocPhase('detail');
+              }}
+            />
+          )}
         />
       )}
 

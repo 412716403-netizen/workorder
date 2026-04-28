@@ -22,6 +22,7 @@ export {
   type FinanceOpType,
   type CustomDocFieldType,
   type LegacyCustomDocFieldType,
+  type ProductionOpCollabData,
 } from '../../../shared/types.js';
 
 export interface JwtPayload {

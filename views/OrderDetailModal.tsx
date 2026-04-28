@@ -1,6 +1,7 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useContext } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
-import { X, Layers, Trash2, Pencil, Check, ClipboardList, Truck, FileText } from 'lucide-react';
+import { Layers, Check, ClipboardList, Truck, FileText, Clock } from 'lucide-react';
 import {
   ProductionOrder,
   Product,
@@ -14,8 +15,9 @@ import {
   ProductVariant,
   PrintTemplate,
   PrintRenderContext,
+  PlanFormFieldConfig,
+  ReportFieldDefinition,
 } from '../types';
-import { useConfirm } from '../contexts/ConfirmContext';
 import { productHasColorSizeMatrix } from '../utils/productColorSize';
 import { combinedCompletedAtTemplate } from '../utils/productReportAggregates';
 import { buildVariantQtyMatrixLayout } from '../utils/variantQtyMatrix';
@@ -30,6 +32,23 @@ import {
   toLocalDateYmd,
   YMD_ONLY,
 } from '../utils/localDateTime';
+import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
+import DocPhaseModal, { DocPhaseEditToolbarPortalContext } from '../components/DocPhaseModal';
+import { DocSummaryCard, DocInlineMetaRow, DocCustomFieldInlineReadList } from '../components/doc-modal';
+
+function reportFieldToPlanForm(cf: ReportFieldDefinition): PlanFormFieldConfig {
+  return {
+    id: cf.id,
+    label: cf.label,
+    type: cf.type,
+    options: cf.options,
+    dateWithTime: cf.dateWithTime,
+    dateAutoFill: cf.dateAutoFill,
+    showInList: true,
+    showInCreate: true,
+    showInDetail: true,
+  };
+}
 
 function fmtReportDetailTs(ts: string | Date | undefined | null): string {
   if (ts == null || ts === '') return '—';
@@ -40,6 +59,21 @@ function fmtReportDetailTs(ts: string | Date | undefined | null): string {
   const ms = parseProductionOpTimestampMs(ts);
   if (ms > 0) return formatLocalDateTimeZh(new Date(ms));
   return String(ts);
+}
+
+function OrderEditSavePortal({ active, onSave }: { active: boolean; onSave: () => void }) {
+  const host = useContext(DocPhaseEditToolbarPortalContext);
+  if (!active || !host) return null;
+  return createPortal(
+    <button
+      type="button"
+      onClick={onSave}
+      className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700"
+    >
+      <Check className="w-4 h-4" /> 保存
+    </button>,
+    host,
+  );
 }
 
 interface OrderDetailModalProps {
@@ -68,7 +102,6 @@ interface OrderDetailModalProps {
 const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   orderId, onClose, orders, products, prodRecords, dictionaries, categories, orderFormSettings, printTemplates = [], productionLinkMode, productMilestoneProgresses = [], globalNodes = [], productModeSingleOrderLayout = false, onOpenOrderFormPrintTab, onUpdateOrder, onDeleteOrder
 }) => {
-  const confirm = useConfirm();
   const showInDetail = (id: string) => orderFormSettings?.standardFields.find(f => f.id === id)?.showInDetail ?? true;
   const order = orders.find(o => o.id === orderId);
   const product = products.find(p => p.id === order?.productId);
@@ -85,6 +118,16 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   }>({ customer: '', dueDate: '', startDate: '', items: [] });
 
   const orderTotalQty = useMemo(() => order?.items.reduce((s, i) => s + i.quantity, 0) || 0, [order]);
+
+  /** 产品分类扩展属性（有填写值的项） */
+  const productCategoryCustomEntries = useMemo(
+    () =>
+      getProductCategoryCustomFieldEntries(product ?? null, category ?? null, {
+        includeFile: true,
+        includeEmpty: false,
+      }),
+    [product, category],
+  );
 
   /** 该工单的外协统计：按外协工厂+工序汇总 发出/收回/未收（用于详情页外协管理小便签） */
   const outsourceStatsForOrder = useMemo(() => {
@@ -292,17 +335,6 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       toast.error(`该工单存在 ${childOrders.length} 条子工单，请先删除子工单后再试。`);
       return;
     }
-    let confirmMsg = `确定要删除工单「${order.orderNumber}」吗？此操作不可恢复。`;
-    if (productionLinkMode === 'product') {
-      const pmpCompleted = productMilestoneProgresses
-        .filter(p => p.productId === order.productId)
-        .reduce((s, p) => s + (p.completedQuantity ?? 0), 0);
-      if (pmpCompleted > 0) {
-        confirmMsg = `该产品的产品池 (PMP) 上累计已报工 ${pmpCompleted} 件（跨该产品下所有工单共享）。\n删除本工单不会清除产品池进度，仅会移除本工单本身。\n\n${confirmMsg}`;
-      }
-    }
-    const ok = await confirm({ message: confirmMsg, danger: true });
-    if (!ok) return;
     onDeleteOrder(order.id);
     onClose();
   };
@@ -311,21 +343,58 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     ? editForm.items.reduce((s, i) => s + i.quantity, 0)
     : orderTotalQty;
 
+  const showCustomerField = showInDetail('customer') && productionLinkMode !== 'product';
+  const showDueField = showInDetail('dueDate') && productionLinkMode !== 'product';
+  const hasStandardFieldsBlock = showCustomerField || showDueField;
+  const createdTimeDisplay = (() => {
+    const raw = order.createdAt?.trim();
+    return raw ? fmtReportDetailTs(raw) : null;
+  })();
+  const productSkuDisplay = (product?.sku ?? '').trim() || (order.sku ?? '').trim();
+  const fieldControlClass =
+    'w-full max-w-lg rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200';
+
+  const categoryCustomFields = productCategoryCustomEntries.map(e => reportFieldToPlanForm(e.field));
+  const categoryCustomValues = Object.fromEntries(
+    productCategoryCustomEntries.map(e => [e.field.id, e.value]),
+  ) as Record<string, unknown>;
+
+  const deleteConfirmMsg = (() => {
+    let msg = `确定要删除工单「${order.orderNumber}」吗？此操作不可恢复。`;
+    if (productionLinkMode === 'product') {
+      const pmpCompleted = productMilestoneProgresses
+        .filter(p => p.productId === order.productId)
+        .reduce((s, p) => s + (p.completedQuantity ?? 0), 0);
+      if (pmpCompleted > 0) {
+        msg = `该产品的产品池 (PMP) 上累计已报工 ${pmpCompleted} 件（跨该产品下所有工单共享）。\n删除本工单不会清除产品池进度，仅会移除本工单本身。\n\n${msg}`;
+      }
+    }
+    return msg;
+  })();
+
   if (productionLinkMode === 'product' && !productModeSingleOrderLayout) {
     return (
-      <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
-        <div className="relative bg-white w-full max-w-2xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
-          <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-            <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-              <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{product?.name ?? order.productName}</span>
-              产品生产详情
-            </h3>
-            <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          <div className="flex-1 overflow-auto p-6 space-y-6">
+      <DocPhaseModal
+        zIndexClass="z-[85]"
+        open
+        phase="detail"
+        editingDocNumber={product?.name ?? order.productName}
+        detailTitle="产品生产详情"
+        editTitle=""
+        newTitle=""
+        hasPerm={() => false}
+        viewPerm="__none__"
+        editPerm="__none__"
+        renderDocBadge={() => (
+          <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
+            {product?.name ?? order.productName}
+          </span>
+        )}
+        onClose={onClose}
+        onEnterEdit={() => {}}
+        onCancelEdit={() => {}}
+        detailContent={
+          <div className="space-y-6">
             <div>
               <h2 className="text-xl font-bold text-slate-900 mb-4">{product?.name ?? order.productName}{order.sku ? ` · ${order.sku}` : ''}</h2>
               <div className="flex flex-wrap gap-4">
@@ -378,123 +447,147 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               </div>
             )}
           </div>
-        </div>
-      </div>
+        }
+      />
     );
   }
 
   return (
-    <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
-      <div className="relative bg-white w-full max-w-2xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-          <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-            <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{order.orderNumber}</span>
-            工单详情
-          </h3>
-          <div className="flex items-center gap-2">
-            {onUpdateOrder && (
-              isEditing ? (
-                <>
-                  <button onClick={() => setIsEditing(false)} className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">取消</button>
-                  <button onClick={handleSave} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700">
-                    <Check className="w-4 h-4" /> 保存
-                  </button>
-                </>
-              ) : (
-                <button onClick={() => setIsEditing(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200">
-                  <Pencil className="w-4 h-4" /> 编辑
-                </button>
-              )
-            )}
-            {onDeleteOrder && !isEditing && (
-              <button onClick={handleDelete} className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold">
-                <Trash2 className="w-4 h-4" /> 删除
-              </button>
-            )}
-            {(productionLinkMode !== 'product' || productModeSingleOrderLayout) && (
-              <OrderCenterDetailPrintBlock
-                printSlot={orderFormSettings?.orderCenterPrint?.orderDetail}
-                printTemplates={printTemplates}
-                buildContext={buildOrderPrintContext}
-                pickerSubtitle={`工单 ${order.orderNumber}`}
-                onAddPrintTemplate={onOpenOrderFormPrintTab}
-              />
-            )}
-            <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-auto p-6 space-y-6">
-          <div>
-            <h2 className="text-xl font-bold text-slate-900 mb-4">{order.productName}{order.sku ? ` · ${order.sku}` : ''}</h2>
-            <div className="flex flex-wrap gap-4">
-              <div className="bg-slate-50 rounded-xl px-4 py-2">
-                <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">工单总量</p>
+    <DocPhaseModal
+      zIndexClass="z-[85]"
+      open
+      phase={isEditing ? 'edit' : 'detail'}
+      editingDocNumber={order.orderNumber}
+      detailTitle="工单详情"
+      editTitle="工单 · 编辑"
+      newTitle=""
+      showPrint={false}
+      leadingDetailActions={
+        (productionLinkMode !== 'product' || productModeSingleOrderLayout) ? (
+          <OrderCenterDetailPrintBlock
+            printSlot={orderFormSettings?.orderCenterPrint?.orderDetail}
+            printTemplates={printTemplates}
+            buildContext={buildOrderPrintContext}
+            pickerSubtitle={`工单 ${order.orderNumber}`}
+            onAddPrintTemplate={onOpenOrderFormPrintTab}
+          />
+        ) : null
+      }
+      hasPerm={(perm) => {
+        if (perm === 'orders:edit' || perm === 'orders:view') return !!onUpdateOrder;
+        if (perm === 'orders:delete') return !!onDeleteOrder;
+        return true;
+      }}
+      viewPerm="orders:view"
+      editPerm="orders:edit"
+      deletePerm={onDeleteOrder ? 'orders:delete' : undefined}
+      deleteConfirmMessage={onDeleteOrder ? deleteConfirmMsg : ''}
+      onDelete={onDeleteOrder ? handleDelete : undefined}
+      renderDocBadge={() => (
+        <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
+          {order.orderNumber}
+        </span>
+      )}
+      onClose={onClose}
+      onEnterEdit={() => setIsEditing(true)}
+      onCancelEdit={() => setIsEditing(false)}
+      renderContent={() => (
+        <>
+          <OrderEditSavePortal active={isEditing} onSave={handleSave} />
+          <div className="space-y-6">
+          <DocSummaryCard
+            main={
+              <>
+                <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2 text-sm">
+                  <span className="font-black text-slate-800" title={order.productName}>
+                    {order.productName}
+                  </span>
+                  {productSkuDisplay ? (
+                    <span
+                      className="min-w-0 text-[10px] font-bold text-slate-400 normal-case tabular-nums"
+                      title="产品编号"
+                    >
+                      {productSkuDisplay}
+                    </span>
+                  ) : null}
+                  <span className="rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 font-mono text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                    {order.orderNumber}
+                  </span>
+                </div>
+                {categoryCustomFields.length > 0 || createdTimeDisplay ? (
+                  <DocInlineMetaRow>
+                    <DocCustomFieldInlineReadList
+                      fields={categoryCustomFields}
+                      values={categoryCustomValues}
+                      hasFilled={() => true}
+                    />
+                    {createdTimeDisplay ? (
+                      <span className="inline-flex items-center gap-1 normal-case">
+                        <Clock className="h-3 w-3 shrink-0" />
+                        <span>添加 {createdTimeDisplay}</span>
+                      </span>
+                    ) : null}
+                  </DocInlineMetaRow>
+                ) : null}
+                {hasStandardFieldsBlock ? (
+                  <div className="mt-3 space-y-3">
+                    {showCustomerField ? (
+                      <div className="min-w-0 space-y-1">
+                        <label className="ml-0.5 block text-[10px] font-black uppercase tracking-widest text-slate-400">客户</label>
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editForm.customer}
+                            onChange={e => setEditForm(f => ({ ...f, customer: e.target.value }))}
+                            className={fieldControlClass}
+                            placeholder="客户"
+                          />
+                        ) : (
+                          <p className="text-sm font-bold text-slate-800">{order.customer || '—'}</p>
+                        )}
+                      </div>
+                    ) : null}
+                    {showDueField ? (
+                      <div className="min-w-0 space-y-1">
+                        <label className="ml-0.5 block text-[10px] font-black uppercase tracking-widest text-slate-400">交期</label>
+                        {isEditing ? (
+                          <input
+                            type="date"
+                            value={editForm.dueDate}
+                            onChange={e => setEditForm(f => ({ ...f, dueDate: e.target.value }))}
+                            className={`${fieldControlClass} max-w-xs`}
+                          />
+                        ) : (
+                          <p className="text-sm font-bold text-slate-800">{toLocalDateYmd(order.dueDate) || order.dueDate || '—'}</p>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
+            }
+            side={
+              <div className="min-w-[6.5rem] md:text-right">
+                <p className="mb-0.5 text-[10px] font-black uppercase text-slate-400">合计数量</p>
                 {isEditing && !hasColorSize ? (
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-baseline justify-start gap-1.5 md:justify-end">
                     <input
                       type="number"
                       min={0}
                       value={displayTotalQty}
-                      onChange={e => handleSingleQuantityChange(parseInt(e.target.value) || 0)}
-                      className="w-24 bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200"
+                      onChange={e => handleSingleQuantityChange(parseInt(e.target.value, 10) || 0)}
+                      className="h-10 w-[7rem] rounded-xl border border-slate-200 bg-white px-3 text-right text-sm font-black tabular-nums text-slate-800 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200"
                     />
-                    <span className="text-sm font-bold text-slate-600">{unitName}</span>
+                    <span className="font-black text-slate-600">{unitName}</span>
                   </div>
                 ) : (
-                  <p className="text-sm font-bold text-indigo-600">{displayTotalQty} {unitName}</p>
+                  <p className="font-black tabular-nums text-slate-800">
+                    {displayTotalQty.toLocaleString()} {unitName}
+                  </p>
                 )}
               </div>
-              {showInDetail('customer') && productionLinkMode !== 'product' && (
-                <div className="bg-slate-50 rounded-xl px-4 py-2 min-w-[140px]">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">客户</p>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      value={editForm.customer}
-                      onChange={e => setEditForm(f => ({ ...f, customer: e.target.value }))}
-                      className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold outline-none"
-                    />
-                  ) : (
-                    <p className="text-sm font-bold text-slate-800">{order.customer || '—'}</p>
-                  )}
-                </div>
-              )}
-              {showInDetail('dueDate') && productionLinkMode !== 'product' && (
-                <div className="bg-slate-50 rounded-xl px-4 py-2">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">交期</p>
-                  {isEditing ? (
-                    <input
-                      type="date"
-                      value={editForm.dueDate}
-                      onChange={e => setEditForm(f => ({ ...f, dueDate: e.target.value }))}
-                      className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold outline-none"
-                    />
-                  ) : (
-                    <p className="text-sm font-bold text-slate-800">{toLocalDateYmd(order.dueDate) || order.dueDate || '—'}</p>
-                  )}
-                </div>
-              )}
-              {showInDetail('startDate') && (
-                <div className="bg-slate-50 rounded-xl px-4 py-2">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">开始日期</p>
-                  {isEditing ? (
-                    <input
-                      type="date"
-                      value={editForm.startDate}
-                      onChange={e => setEditForm(f => ({ ...f, startDate: e.target.value }))}
-                      className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm font-bold outline-none"
-                    />
-                  ) : (
-                    <p className="text-sm font-bold text-slate-800">{toLocalDateYmd(order.startDate) || order.startDate || '—'}</p>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+            }
+          />
 
           {/* 工单明细（仅在有颜色尺码时显示） */}
           {hasColorSize && (
@@ -694,9 +787,10 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               </div>
             </div>
           )}
-        </div>
-      </div>
-    </div>
+          </div>
+        </>
+      )}
+    />
   );
 };
 

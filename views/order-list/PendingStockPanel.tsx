@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { ArrowDownToLine, X, History, Check, Filter, FileText, Pencil, Trash2 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { X, History, Check, Filter, FileText, Clock, User, Package } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   ProductionOrder,
@@ -16,12 +17,11 @@ import {
   OrderFormSettings,
   PrintTemplate,
   PrintRenderContext,
-  PlanFormFieldConfig,
 } from '../../types';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { buildVariantQtyMatrixLayout } from '../../utils/variantQtyMatrix';
-import { useConfirm } from '../../contexts/ConfirmContext';
+
 import { toLocalCompactYmd, toLocalDateYmd } from '../../utils/localDateTime';
 import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 import { computePendingStockOrders } from '../../utils/pendingStockCompute';
@@ -34,83 +34,41 @@ import {
   WAREHOUSE_DOC_KIND,
 } from '../../utils/warehouseDocPreference';
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
-import { PlanFormCustomFieldInput, PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
+import { PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
 import { ScanInputButton } from '../../components/scan/ScanInputButton';
+import DocPhaseModal, { DocPhaseEditToolbarPortalContext } from '../../components/DocPhaseModal';
+import { DocSummaryCard, DocInlineMetaRow } from '../../components/doc-modal';
 import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
 import type { ScanPayload } from '../../utils/scanPayload';
 import { fmtDT } from '../../utils/formatTime';
 import { buildOneBlockMatrixPrintRows } from '../../utils/variantMatrixPrintRows';
+import {
+  psiOrderBillFormSectionStackClass,
+  psiOrderBillCompactWarehouseSelectClass,
+} from '../../styles/uiDensity';
+import { psiCustomFieldHasFilledDisplayValue } from '../psi-ops/psiOpsListFormatting';
+import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
+import {
+  stockInCollabFromCustomData,
+  StockInCustomCreateFields,
+  StockInCustomEditFields,
+  defaultQuantitiesForPendingItem,
+  type PendingStockItem,
+} from './pendingStockStockInHelpers';
 
-/** 将入库登记自定义字段写入 production_op_records.collabData.stockInCustomData */
-function stockInCollabFromCustomData(customData: Record<string, unknown> | undefined): { collabData?: Record<string, unknown> } {
-  const clean = Object.fromEntries(
-    Object.entries(customData ?? {}).filter(([, v]) => v !== '' && v != null && v !== undefined),
+function StockInFlowEditSavePortal({ active, onSave }: { active: boolean; onSave: () => void }) {
+  const host = React.useContext(DocPhaseEditToolbarPortalContext);
+  if (!active || !host) return null;
+  return createPortal(
+    <button
+      type="button"
+      onClick={onSave}
+      className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700"
+    >
+      <Check className="w-4 h-4" /> 保存
+    </button>,
+    host,
   );
-  if (!Object.keys(clean).length) return {};
-  return { collabData: { stockInCustomData: clean } };
-}
-
-function StockInCustomCreateFields({
-  fields,
-  values,
-  onChange,
-  onFilePreview,
-}: {
-  fields: PlanFormFieldConfig[];
-  values: Record<string, unknown>;
-  onChange: (id: string, value: unknown) => void;
-  onFilePreview?: (url: string, type: 'image' | 'pdf') => void;
-}) {
-  const list = fields.filter(f => f.showInCreate);
-  if (!list.length) return null;
-  return (
-    <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
-      <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">入库自定义内容</h4>
-      {list.map(cf => (
-        <div key={cf.id} className="space-y-1">
-          <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
-          <PlanFormCustomFieldInput
-            cf={cf}
-            value={values[cf.id]}
-            onChange={v => onChange(cf.id, v)}
-            controlClassName="h-[52px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
-            onFilePreview={onFilePreview}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-type PendingStockItem = {
-  rowKey: string;
-  ordersInRow: ProductionOrder[];
-  order: ProductionOrder;
-  orderTotal: number;
-  productBlockOrderTotal: number;
-  alreadyIn: number;
-  pendingTotal: number;
-  alreadyInByVariant: Record<string, number>;
-  /** 每规格待入库 = 该规格最后一道工序报工合计 - 该规格已入库（与成衣报工一致） */
-  pendingByVariant: Record<string, number>;
-  productTotalStockIn?: number;
-};
-
-function defaultQuantitiesForPendingItem(item: PendingStockItem): { variantQuantities: Record<string, number>; singleQuantity: number } {
-  let variantQuantities: Record<string, number> = {};
-  if (item.order.items.some(i => i.variantId) && Object.keys(item.pendingByVariant).length > 0) {
-    Object.entries(item.pendingByVariant).forEach(([vid, q]) => {
-      if (q > 0) variantQuantities[vid] = q;
-    });
-    const sum = Object.values(variantQuantities).reduce((s, q) => s + q, 0);
-    if (sum > item.pendingTotal && item.pendingTotal > 0) {
-      const scale = item.pendingTotal / sum;
-      variantQuantities = Object.fromEntries(
-        Object.entries(variantQuantities).map(([vid, q]) => [vid, Math.max(0, Math.round(q * scale))]),
-      );
-    }
-  }
-  return { variantQuantities, singleQuantity: item.pendingTotal };
 }
 
 interface PendingStockPanelProps {
@@ -161,7 +119,6 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
 }) => {
   const { currentUser, tenantCtx, userId } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
-  const confirm = useConfirm();
 
   const singlePendingStockInDefaultWh = useCallback(() => {
     const pref = readWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PROD_PENDING_STOCK_IN);
@@ -246,7 +203,8 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
   const [stockInFlowDetailDocNo, setStockInFlowDetailDocNo] = useState<string | null>(null);
   const [stockInFlowEditing, setStockInFlowEditing] = useState<{
     warehouseId: string;
-    operator: string;
+    customData: Record<string, unknown>;
+    /** id 为空表示该规格尚未有入库明细行，保存时走新增 */
     rows: { id: string; variantId?: string; quantity: number }[];
   } | null>(null);
 
@@ -322,31 +280,27 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
             !batchError;
 
           return (
-            <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
-              <div
-                className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
-                onClick={() => {
-                  setBatchStockInItems(null);
-                  setBatchStockForm({ warehouseId: '', customData: {}, lines: {} });
-                }}
-              />
-              <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                    <ArrowDownToLine className="w-5 h-5 text-indigo-600" /> 批量入库（{batchStockInItems.length} 笔）
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBatchStockInItems(null);
-                      setBatchStockForm({ warehouseId: '', customData: {}, lines: {} });
-                    }}
-                    className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
+            <DocPhaseModal
+              open
+              phase="detail"
+              editingDocNumber={null}
+              maxWidthClass="max-w-4xl"
+              zIndexClass="z-[85]"
+              detailTitle=""
+              editTitle=""
+              newTitle={`批量入库（${batchStockInItems.length} 笔）`}
+              hasPerm={() => false}
+              viewPerm=""
+              editPerm=""
+              onClose={() => {
+                setBatchStockInItems(null);
+                setBatchStockForm({ warehouseId: '', customData: {}, lines: {} });
+              }}
+              onEnterEdit={() => {}}
+              onCancelEdit={() => {}}
+              renderContent={() => (
+                <>
+                <div className="-mx-4 -mt-4 sm:-mx-6 sm:-mt-6 mb-4 px-6 py-4 border-b border-slate-100 bg-slate-50/50">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">入库仓库（共用）</label>
                   {warehouses.length > 0 ? (
                     <select
@@ -371,7 +325,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                     onFilePreview={(url, type) => setStockInFilePreview({ url, type })}
                   />
                 </div>
-                <div className="flex-1 overflow-auto p-4 space-y-4">
+                <div className="space-y-4">
                   {batchStockInItems.map(stockItem => {
                     const order = stockItem.order;
                     const lineKey = stockItem.rowKey;
@@ -440,7 +394,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                     );
                   })}
                 </div>
-                <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                <div className="sticky bottom-0 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 mt-4 px-6 py-4 border-t border-slate-100 bg-white flex justify-end gap-3">
                   <button
                     type="button"
                     onClick={() => {
@@ -545,8 +499,9 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                     <Check className="w-4 h-4" /> 确认批量入库
                   </button>
                 </div>
-              </div>
-            </div>
+                </>
+              )}
+            />
           );
         }
 
@@ -649,14 +604,24 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
           };
 
           return (
-            <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
-              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: singlePendingStockInDefaultWh(), variantQuantities: {}, singleQuantity: 0, customData: {} }); }} />
-              <div className="relative bg-white w-full max-w-2xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-                  <h3 className="font-bold text-slate-800 flex items-center gap-2"><ArrowDownToLine className="w-5 h-5 text-indigo-600" /> 选择入库 — {productionLinkMode === 'product' ? (order.productName || product?.name || '关联产品') : order.orderNumber}</h3>
-                  <button onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: singlePendingStockInDefaultWh(), variantQuantities: {}, singleQuantity: 0, customData: {} }); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
-                </div>
-                <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
+            <DocPhaseModal
+              open
+              phase="detail"
+              editingDocNumber={null}
+              maxWidthClass="max-w-2xl"
+              zIndexClass="z-[85]"
+              detailTitle=""
+              editTitle=""
+              newTitle={`选择入库 — ${productionLinkMode === 'product' ? (order.productName || product?.name || '关联产品') : order.orderNumber}`}
+              hasPerm={() => false}
+              viewPerm=""
+              editPerm=""
+              onClose={() => { setStockInOrder(null); setStockInForm({ warehouseId: singlePendingStockInDefaultWh(), variantQuantities: {}, singleQuantity: 0, customData: {} }); }}
+              onEnterEdit={() => {}}
+              onCancelEdit={() => {}}
+              renderContent={() => (
+                <>
+                <div className="-mx-4 -mt-4 sm:-mx-6 sm:-mt-6 mb-4 px-6 py-4 border-b border-slate-100 bg-slate-50/50">
                   <p className="text-sm font-bold text-slate-700">{order.productName || product?.name}</p>
                   <p className="text-xs text-slate-500 mt-0.5">
                     {productionLinkMode === 'product'
@@ -664,7 +629,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                       : <>工单总量 {stockInOrder.orderTotal} {unitName}，已入库 {stockInOrder.alreadyIn} {unitName}，待入库 {stockInOrder.pendingTotal} {unitName}</>}
                   </p>
                 </div>
-                <div className="flex-1 overflow-auto p-4 space-y-4">
+                <div className="space-y-4">
                   <div>
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">入库仓库</label>
                     {warehouses.length > 0 ? (
@@ -740,7 +705,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                     </div>
                   )}
                 </div>
-                <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                <div className="sticky bottom-0 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 mt-4 px-6 py-4 border-t border-slate-100 bg-white flex justify-end gap-3">
                   <button
                     type="button"
                     onClick={() => { setStockInOrder(null); setStockInForm({ warehouseId: singlePendingStockInDefaultWh(), variantQuantities: {}, singleQuantity: 0, customData: {} }); }}
@@ -881,19 +846,32 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                     <Check className="w-4 h-4" /> 确认入库
                   </button>
                 </div>
-              </div>
-            </div>
+                </>
+              )}
+            />
           );
         }
 
         // 待入库列表
         return (
-          <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
-            <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-              <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2"><ArrowDownToLine className="w-5 h-5 text-indigo-600" /> 待入库清单</h3>
-                <div className="flex items-center gap-2 flex-wrap justify-end">
+          <DocPhaseModal
+            open
+            phase="detail"
+            editingDocNumber={null}
+            maxWidthClass="max-w-4xl"
+            zIndexClass="z-[85]"
+            detailTitle=""
+            editTitle=""
+            newTitle="待入库清单"
+            hasPerm={() => false}
+            viewPerm=""
+            editPerm=""
+            onClose={onClose}
+            onEnterEdit={() => {}}
+            onCancelEdit={() => {}}
+            renderContent={() => (
+              <>
+                <div className="-mx-4 -mt-4 sm:-mx-6 sm:-mt-6 mb-4 px-6 py-3 border-b border-slate-100 flex items-center gap-2 flex-wrap justify-end">
                   {hasPerm('production:orders_pending_stock_in:create') && pendingStockOrders.length > 0 && (
                     <button
                       type="button"
@@ -922,10 +900,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                     <History className="w-4 h-4" /> 入库流水
                   </button>
                   )}
-                  <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
                 </div>
-              </div>
-              <div className="flex-1 overflow-auto p-4">
                 {pendingStockOrders.length === 0 ? (
                   <p className="text-slate-500 text-center py-12">暂无待入库工单（有完成数量且待入库&gt;0 的工单将显示在此）</p>
                 ) : (
@@ -1038,9 +1013,9 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                     </table>
                   </div>
                 )}
-              </div>
-            </div>
-          </div>
+              </>
+            )}
+          />
         );
       })()}
 
@@ -1146,14 +1121,24 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
 
         return (
           <>
-            <div className="fixed inset-0 z-[86] flex items-center justify-center p-4">
-              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setShowStockInFlowModal(false); setStockInFlowDetailDocNo(null); }} />
-              <div className="relative bg-white w-full max-w-6xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-                  <h3 className="font-bold text-slate-800 flex items-center gap-2"><History className="w-5 h-5 text-indigo-600" /> 生产入库流水</h3>
-                  <button onClick={() => { setShowStockInFlowModal(false); setStockInFlowDetailDocNo(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
-                </div>
-                <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
+            <DocPhaseModal
+              open
+              phase="detail"
+              editingDocNumber={null}
+              maxWidthClass="max-w-6xl"
+              zIndexClass="z-[86]"
+              detailTitle=""
+              editTitle=""
+              newTitle="生产入库流水"
+              hasPerm={() => false}
+              viewPerm=""
+              editPerm=""
+              onClose={() => { setShowStockInFlowModal(false); setStockInFlowDetailDocNo(null); }}
+              onEnterEdit={() => {}}
+              onCancelEdit={() => {}}
+              renderContent={() => (
+                <>
+                <div className="-mx-4 -mt-4 sm:-mx-6 sm:-mt-6 mb-4 px-6 py-4 border-b border-slate-100 bg-slate-50/50">
                   <div className="flex items-center gap-2 mb-3">
                     <Filter className="w-4 h-4 text-slate-500" />
                     <span className="text-xs font-bold text-slate-500 uppercase">筛选</span>
@@ -1197,7 +1182,6 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                     <span className="text-xs text-slate-400">共 {batches.length} 次入库，合计 {totalQtyAll} 件</span>
                   </div>
                 </div>
-                <div className="flex-1 overflow-auto p-4">
                   {batches.length === 0 ? (
                     <p className="text-slate-500 text-center py-12">暂无生产入库流水</p>
                   ) : (
@@ -1253,9 +1237,9 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                       </table>
                     </div>
                   )}
-                </div>
-              </div>
-            </div>
+                </>
+              )}
+            />
 
             {/* 入库流水详情弹窗 */}
             {detailBatch && (() => {
@@ -1264,10 +1248,27 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
               const hasColorSize = productHasColorSizeMatrix(product, category ?? undefined);
               const stockInDetailMatrixLayout =
                 product && dictionaries ? buildVariantQtyMatrixLayout(product, dictionaries) : null;
-              const useStockInDetailMatrix = Boolean(hasColorSize && stockInDetailMatrixLayout);
+              const stockInDetailMatrixProduct =
+                product && product.variants?.length
+                  ? ({ ...product, colorIds: undefined, sizeIds: undefined } as Product)
+                  : null;
+              const useStockInDetailMatrix = Boolean(
+                hasColorSize && stockInDetailMatrixLayout && stockInDetailMatrixProduct && dictionaries,
+              );
               const unitName = (product?.unitId && dictionaries?.units?.find(u => u.id === product.unitId)?.name) || '件';
               const wh = warehouses.find(w => w.id === detailBatch.first.warehouseId);
               const isEditing = stockInFlowEditing !== null;
+              const matrixSummaryCustomTags = product
+                ? getProductCategoryCustomFieldEntries(
+                    product,
+                    product.categoryId ? categoryMap.get(product.categoryId) ?? null : null,
+                    { includeFile: false, includeEmpty: false },
+                  )
+                : [];
+              const stockInSnap = detailBatch.stockInCustomSnapshot ?? {};
+              const stockInFieldsForDetailInline = stockInCustomFieldDefs.filter(f =>
+                f.showInDetail && psiCustomFieldHasFilledDisplayValue(f, stockInSnap[f.id]),
+              );
               const getVariantLabel = (variantId?: string) => {
                 if (!variantId) return '—';
                 const v = product?.variants?.find((x: { id: string }) => x.id === variantId);
@@ -1279,24 +1280,85 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                 if (size) parts.push(size.name);
                 return parts.length > 0 ? parts.join(' / ') : ((v as { skuSuffix?: string })?.skuSuffix || variantId);
               };
-              const startEdit = () => setStockInFlowEditing({
-                warehouseId: detailBatch.first.warehouseId ?? '',
-                operator: detailBatch.first.operator,
-                rows: detailBatch.rows.map(r => ({ id: r.id, variantId: r.variantId, quantity: r.quantity })),
-              });
+              const startEdit = () => {
+                const baseEdit = {
+                  warehouseId: detailBatch.first.warehouseId ?? '',
+                  customData: { ...(detailBatch.stockInCustomSnapshot ?? {}) },
+                };
+                if (useStockInDetailMatrix && stockInDetailMatrixLayout && product) {
+                  const layout = stockInDetailMatrixLayout;
+                  const byVid = new Map<string, (typeof detailBatch.rows)[number]>();
+                  for (const r of detailBatch.rows) {
+                    if (r.variantId) byVid.set(r.variantId, r);
+                  }
+                  const rows: { id: string; variantId?: string; quantity: number }[] = [];
+                  for (const cr of layout.colorRows) {
+                    for (const v of cr.variantAtSize) {
+                      if (!v) continue;
+                      const hit = byVid.get(v.id);
+                      if (hit) {
+                        rows.push({ id: hit.id, variantId: v.id, quantity: hit.quantity });
+                      } else {
+                        rows.push({ id: '', variantId: v.id, quantity: 0 });
+                      }
+                    }
+                  }
+                  setStockInFlowEditing({ ...baseEdit, rows });
+                  return;
+                }
+                setStockInFlowEditing({
+                  ...baseEdit,
+                  rows: detailBatch.rows.map(r => ({ id: r.id, variantId: r.variantId, quantity: r.quantity })),
+                });
+              };
               const cancelEdit = () => setStockInFlowEditing(null);
               const saveEdit = () => {
                 if (!stockInFlowEditing || !onUpdateRecord) return;
                 const docRecords = prodRecords.filter(r => r.type === 'STOCK_IN' && r.docNo === detailBatch.docNo);
+                const cleanCustom = Object.fromEntries(
+                  Object.entries(stockInFlowEditing.customData ?? {}).filter(
+                    ([, v]) => v !== '' && v != null && v !== undefined,
+                  ),
+                );
+                const firstCollab =
+                  (docRecords[0] as ProductionOpRecord & { collabData?: Record<string, unknown> }).collabData ?? {};
+                if (onAddRecord) {
+                  let seq = 0;
+                  for (const row of stockInFlowEditing.rows) {
+                    if (row.id) continue;
+                    if (!row.variantId || row.quantity <= 0) continue;
+                    void onAddRecord({
+                      id: `rec-stkin-edit-${Date.now()}-${seq++}-${row.variantId.slice(-6)}`,
+                      type: 'STOCK_IN',
+                      orderId: detailBatch.first.orderId,
+                      productId: detailBatch.first.productId,
+                      variantId: row.variantId,
+                      quantity: row.quantity,
+                      operator: detailBatch.first.operator,
+                      timestamp: new Date().toLocaleString(),
+                      status: '已完成',
+                      warehouseId: stockInFlowEditing.warehouseId || undefined,
+                      docNo: detailBatch.docNo,
+                      collabData: {
+                        ...firstCollab,
+                        stockInCustomData: cleanCustom,
+                      },
+                    } as ProductionOpRecord);
+                  }
+                }
                 docRecords.forEach(rec => {
                   const editRow = stockInFlowEditing.rows.find(r => r.id === rec.id);
                   if (editRow) {
+                    const prevCd = (rec as ProductionOpRecord & { collabData?: Record<string, unknown> }).collabData ?? {};
                     onUpdateRecord({
                       ...rec,
                       quantity: Math.max(0, editRow.quantity),
                       warehouseId: stockInFlowEditing.warehouseId || undefined,
-                      operator: stockInFlowEditing.operator,
-                      collabData: (rec as ProductionOpRecord & { collabData?: Record<string, unknown> }).collabData,
+                      operator: detailBatch.first.operator,
+                      collabData: {
+                        ...prevCd,
+                        stockInCustomData: cleanCustom,
+                      },
                     });
                   }
                 });
@@ -1304,351 +1366,608 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
               };
               const handleDelete = () => {
                 if (!onDeleteRecord) return;
-                void confirm({ message: '确定要删除该入库单的所有记录吗？此操作不可恢复。', danger: true }).then((ok) => {
-                  if (!ok) return;
-                  const docRecords = prodRecords.filter(r => r.type === 'STOCK_IN' && r.docNo === detailBatch.docNo);
-                  docRecords.forEach(rec => onDeleteRecord(rec.id));
-                  setStockInFlowDetailDocNo(null);
-                  setStockInFlowEditing(null);
-                });
+                const docRecords = prodRecords.filter(r => r.type === 'STOCK_IN' && r.docNo === detailBatch.docNo);
+                docRecords.forEach(rec => onDeleteRecord(rec.id));
+                setStockInFlowDetailDocNo(null);
+                setStockInFlowEditing(null);
               };
               const ef = stockInFlowEditing;
               const editTotalQty = ef ? ef.rows.reduce((s, r) => s + r.quantity, 0) : 0;
               return (
-                <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-                  <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setStockInFlowDetailDocNo(null); setStockInFlowEditing(null); }} />
-                  <div
-                    className={`relative bg-white w-full max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 ${
-                      useStockInDetailMatrix ? 'max-w-3xl' : 'max-w-2xl'
-                    }`}
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-                      <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                        <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
-                          {detailBatch.docNo}
-                        </span>
-                        入库详情
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        {isEditing ? (
-                          <>
-                            <button type="button" onClick={cancelEdit} className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">取消</button>
-                            <button type="button" onClick={saveEdit} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700">
-                              <Check className="w-4 h-4" /> 保存
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <OrderCenterDetailPrintBlock
-                              printSlot={orderFormSettings.orderCenterPrint?.stockInFlowDetail}
-                              printTemplates={printTemplates}
-                              onAddPrintTemplate={onOpenOrderFormPrintTab}
-                              buildContext={(_template: PrintTemplate): PrintRenderContext => {
-                                const od =
-                                  productionLinkMode !== 'product' && detailBatch.orderNumber
-                                    ? orders.find(o => o.orderNumber === detailBatch.orderNumber)
-                                    : undefined;
-                                return {
-                                  order: od,
-                                  product: product ?? undefined,
-                                  stockInPrint: {
-                                    docNo: detailBatch.docNo,
-                                    warehouseName: detailBatch.warehouseName || wh?.name || '',
-                                    operator: detailBatch.first.operator,
-                                    timestamp: fmtDT(detailBatch.first.timestamp),
-                                    productName: detailBatch.productName,
-                                    orderNumber: detailBatch.orderNumber || '—',
-                                    totalQty: detailBatch.totalQty,
-                                    custom: detailBatch.stockInCustomSnapshot ?? {},
-                                  },
-                                  printListRows: buildOneBlockMatrixPrintRows({
-                                    productId: detailBatch.first.productId,
-                                    product: product ?? undefined,
-                                    products,
-                                    dictionaries,
-                                    rows: detailBatch.rows.map(r => ({ variantId: r.variantId, quantity: r.quantity })),
-                                  }),
-                                };
-                              }}
-                              pickerSubtitle={`入库单 ${detailBatch.docNo}`}
-                            />
-                            {onUpdateRecord && hasPerm('production:orders_pending_stock_in:edit') && (
-                              <button type="button" onClick={startEdit} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200">
-                                <Pencil className="w-4 h-4" /> 编辑
-                              </button>
-                            )}
-                            {onDeleteRecord && hasPerm('production:orders_pending_stock_in:delete') && (
-                              <button type="button" onClick={handleDelete} className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold">
-                                <Trash2 className="w-4 h-4" /> 删除
-                              </button>
-                            )}
-                          </>
-                        )}
-                        <button onClick={() => { setStockInFlowDetailDocNo(null); setStockInFlowEditing(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50">
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex-1 overflow-auto p-4 space-y-4">
-                      {hasColorSize ? <h2 className="text-xl font-bold text-slate-900">{detailBatch.productName}</h2> : null}
+                <DocPhaseModal
+                  open
+                  phase={isEditing ? 'edit' : 'detail'}
+                  editingDocNumber={detailBatch.docNo || '—'}
+                  maxWidthClass={useStockInDetailMatrix ? 'max-w-3xl' : 'max-w-2xl'}
+                  zIndexClass="z-[90]"
+                  detailTitle="生产入库详情"
+                  editTitle="生产入库 · 编辑"
+                  newTitle=""
+                  showPrint={false}
+                  leadingDetailActions={
+                    <OrderCenterDetailPrintBlock
+                      printSlot={orderFormSettings.orderCenterPrint?.stockInFlowDetail}
+                      printTemplates={printTemplates}
+                      onAddPrintTemplate={onOpenOrderFormPrintTab}
+                      buildContext={(_template: PrintTemplate): PrintRenderContext => {
+                        const od =
+                          productionLinkMode !== 'product' && detailBatch.orderNumber
+                            ? orders.find(o => o.orderNumber === detailBatch.orderNumber)
+                            : undefined;
+                        return {
+                          order: od,
+                          product: product ?? undefined,
+                          stockInPrint: {
+                            docNo: detailBatch.docNo,
+                            warehouseName: detailBatch.warehouseName || wh?.name || '',
+                            operator: detailBatch.first.operator,
+                            timestamp: fmtDT(detailBatch.first.timestamp),
+                            productName: detailBatch.productName,
+                            orderNumber: detailBatch.orderNumber || '—',
+                            totalQty: detailBatch.totalQty,
+                            custom: detailBatch.stockInCustomSnapshot ?? {},
+                          },
+                          printListRows: buildOneBlockMatrixPrintRows({
+                            productId: detailBatch.first.productId,
+                            product: product ?? undefined,
+                            products,
+                            dictionaries,
+                            rows: detailBatch.rows.map(r => ({ variantId: r.variantId, quantity: r.quantity })),
+                          }),
+                        };
+                      }}
+                      pickerSubtitle={`入库单 ${detailBatch.docNo}`}
+                    />
+                  }
+                  hasPerm={hasPerm}
+                  viewPerm="production:orders_pending_stock_in:view"
+                  editPerm="production:orders_pending_stock_in:edit"
+                  deletePerm={onDeleteRecord ? 'production:orders_pending_stock_in:delete' : undefined}
+                  deleteConfirmMessage="确定要删除该入库单的所有记录吗？此操作不可恢复。"
+                  onDelete={onDeleteRecord ? handleDelete : undefined}
+                  renderDocBadge={() => (
+                    productionLinkMode === 'product' ? (
+                      <span
+                        className="max-w-[14rem] shrink-0 truncate rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-indigo-600"
+                        title={detailBatch.productName}
+                      >
+                        {detailBatch.productName || '—'}
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-indigo-600 tabular-nums">
+                        {detailBatch.orderNumber || '—'}
+                      </span>
+                    )
+                  )}
+                  onClose={() => { setStockInFlowDetailDocNo(null); setStockInFlowEditing(null); }}
+                  onEnterEdit={() => { if (onUpdateRecord) startEdit(); }}
+                  onCancelEdit={cancelEdit}
+                  renderContent={() => (
+                    <>
+                      <StockInFlowEditSavePortal active={isEditing} onSave={saveEdit} />
+                      <div className="space-y-4 min-h-0">
                       {isEditing && ef ? (
-                        <>
-                          <div className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-3 sm:px-4">
-                            <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                              <div>
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">入库仓库</label>
-                                <select
-                                  value={ef.warehouseId}
-                                  onChange={e => setStockInFlowEditing(prev => prev ? { ...prev, warehouseId: e.target.value } : prev)}
-                                  className="w-full h-9 bg-white border border-slate-200 rounded-lg px-2.5 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
-                                >
-                                  <option value="">请选择仓库</option>
-                                  {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}{w.code ? ` (${w.code})` : ''}</option>)}
-                                </select>
-                              </div>
-                              <div>
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">经办人</label>
-                                <input
-                                  type="text"
-                                  value={ef.operator}
-                                  onChange={e => setStockInFlowEditing(prev => prev ? { ...prev, operator: e.target.value } : prev)}
-                                  className="w-full h-9 bg-white border border-slate-200 rounded-lg px-2.5 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                          <div className="rounded-xl border border-slate-200 bg-slate-50/40 overflow-hidden">
-                            {useStockInDetailMatrix && product ? (
-                              <div className="space-y-3 p-3 sm:p-4">
-                                <p className="text-[11px] font-black uppercase tracking-wider text-slate-500">入库明细 · 颜色 × 尺码</p>
-                                <VariantQtyMatrixInputs
-                                  product={product}
-                                  dictionaries={dictionaries}
-                                  balancedNumericLayout
-                                  quantities={Object.fromEntries(ef.rows.map(r => [r.variantId ?? '', r.quantity]))}
-                                  onVariantQtyChange={(variantId, qty) => {
-                                    setStockInFlowEditing(prev =>
-                                      prev
-                                        ? {
-                                            ...prev,
-                                            rows: prev.rows.map(r =>
-                                              (r.variantId ?? '') === variantId ? { ...r, quantity: qty } : r,
-                                            ),
-                                          }
-                                        : prev,
-                                    );
-                                  }}
-                                />
-                                <div className="flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2.5 text-sm font-bold">
-                                  <span>合计</span>
-                                  <span className="text-emerald-600 tabular-nums">
-                                    {editTotalQty} {unitName}
+                        <div className={psiOrderBillFormSectionStackClass}>
+                          <DocSummaryCard
+                            className="mb-5"
+                            main={
+                              <>
+                                <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                                  {detailBatch.docNo?.trim() ? (
+                                    <span className="rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 font-mono text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                                      {detailBatch.docNo.trim()}
+                                    </span>
+                                  ) : null}
+                                  <span
+                                    className="inline-flex min-w-0 max-w-full shrink-0 items-center gap-x-1.5 text-xs font-bold normal-case text-slate-600 sm:text-sm"
+                                    title="入库仓库"
+                                  >
+                                    <span className="shrink-0 whitespace-nowrap">入库仓库：</span>
+                                    <select
+                                      value={ef.warehouseId}
+                                      onChange={e =>
+                                        setStockInFlowEditing(prev => (prev ? { ...prev, warehouseId: e.target.value } : prev))
+                                      }
+                                      className={`${psiOrderBillCompactWarehouseSelectClass} min-w-[9rem] max-w-[min(100%,20rem)]`}
+                                      aria-label="入库仓库"
+                                    >
+                                      <option value="">请选择</option>
+                                      {warehouses.map(w => (
+                                        <option key={w.id} value={w.id}>
+                                          {w.name}
+                                          {w.code ? ` (${w.code})` : ''}
+                                        </option>
+                                      ))}
+                                    </select>
                                   </span>
+                                  {productionLinkMode !== 'product' && detailBatch.orderNumber ? (
+                                    <span className="rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-indigo-600 tabular-nums">
+                                      {detailBatch.orderNumber}
+                                    </span>
+                                  ) : null}
                                 </div>
+                                <DocInlineMetaRow className="mt-1.5">
+                                  {detailBatch.first.timestamp ? (
+                                    <span className="inline-flex min-h-4 items-center gap-1.5 normal-case">
+                                      <Clock className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                                      <span className="leading-none">时间 {fmtDT(detailBatch.first.timestamp)}</span>
+                                    </span>
+                                  ) : null}
+                                  <span className="inline-flex min-h-4 items-center gap-1.5 normal-case">
+                                    <User className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                                    <span className="leading-none">
+                                      经办: {detailBatch.first.operator?.trim() || '—'}
+                                    </span>
+                                  </span>
+                                </DocInlineMetaRow>
+                                <StockInCustomEditFields
+                                  fields={stockInCustomFieldDefs}
+                                  values={ef.customData}
+                                  onChange={(id, v) =>
+                                    setStockInFlowEditing(prev =>
+                                      prev ? { ...prev, customData: { ...prev.customData, [id]: v } } : prev,
+                                    )
+                                  }
+                                  onFilePreview={(url, type) => setStockInFilePreview({ url, type })}
+                                />
+                              </>
+                            }
+                            side={
+                              <div className="min-w-[6.5rem] md:text-right">
+                                <p className="mb-0.5 text-[10px] font-black uppercase text-slate-400">合计数量</p>
+                                <p className="font-black tabular-nums text-slate-800">
+                                  {editTotalQty.toLocaleString()} {unitName}
+                                </p>
                               </div>
-                            ) : (
-                              <table className="w-full text-left text-sm">
-                                <thead>
-                                  <tr className="bg-slate-50 border-b border-slate-200">
-                                    {hasColorSize ? (
-                                      <>
-                                        <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase">规格</th>
-                                        <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">数量</th>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase">产品</th>
-                                        <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">数量</th>
-                                      </>
-                                    )}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {ef.rows.map(row => (
-                                    <tr key={row.id} className="border-b border-slate-100">
-                                      {hasColorSize ? (
-                                        <td className="px-3 py-2.5 sm:px-4 text-slate-800">{getVariantLabel(row.variantId)}</td>
-                                      ) : (
-                                        <td className="px-3 py-2.5 sm:px-4 align-middle min-w-0 max-w-[14rem]">
-                                          <span className="text-sm sm:text-base font-bold text-slate-900 leading-tight block truncate" title={detailBatch.productName}>
-                                            {detailBatch.productName}
-                                          </span>
-                                          {productionLinkMode !== 'product' && detailBatch.orderNumber ? (
-                                            <span className="mt-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-500 truncate">
-                                              工单 <span className="font-bold text-slate-600 tabular-nums">{detailBatch.orderNumber}</span>
-                                            </span>
-                                          ) : null}
-                                        </td>
-                                      )}
-                                      <td className="px-3 py-2.5 sm:px-4 text-right align-middle">
-                                        <input
-                                          type="number"
-                                          min={0}
-                                          value={row.quantity === 0 ? '' : row.quantity}
-                                          onChange={e =>
+                            }
+                          />
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                              {useStockInDetailMatrix ? '产品明细（按规格）' : '产品明细'}
+                            </p>
+                            {useStockInDetailMatrix && stockInDetailMatrixProduct && dictionaries ? (
+                              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                                <table className="w-full text-left text-sm">
+                                  <thead>
+                                    <tr className="border-b border-slate-100 bg-slate-50/80 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                                      <th className="px-3 py-2.5 text-left">产品 / SKU</th>
+                                      <th className="px-3 py-2.5 text-right">数量</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100 bg-white">
+                                    <tr>
+                                      <td className="px-3 py-2.5 align-top">
+                                        <div className="flex min-w-0 items-start gap-2">
+                                          {product?.imageUrl ? (
+                                            <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
+                                              <img
+                                                src={product.imageUrl}
+                                                alt={product.name}
+                                                className="h-full w-full object-cover"
+                                                loading="lazy"
+                                                decoding="async"
+                                              />
+                                            </div>
+                                          ) : (
+                                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
+                                              <Package className="h-4 w-4" />
+                                            </div>
+                                          )}
+                                          <div className="min-w-0">
+                                            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                                              <span className="font-bold text-slate-700">
+                                                {product?.name ?? detailBatch.first.productId ?? '—'}
+                                              </span>
+                                              {product?.sku?.trim() ? (
+                                                <span className="text-[9px] font-bold uppercase tracking-tight text-slate-300">
+                                                  {product.sku.trim()}
+                                                </span>
+                                              ) : null}
+                                            </div>
+                                            {matrixSummaryCustomTags.length > 0 ? (
+                                              <div className="mt-1 flex flex-wrap items-center gap-1">
+                                                {matrixSummaryCustomTags.map(({ field, display }) => (
+                                                  <span
+                                                    key={field.id}
+                                                    className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
+                                                  >
+                                                    {field.label}: {display}
+                                                  </span>
+                                                ))}
+                                              </div>
+                                            ) : null}
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td className="px-3 py-2.5 text-right align-middle font-black tabular-nums text-indigo-600">
+                                        {editTotalQty.toLocaleString()} {unitName}
+                                      </td>
+                                    </tr>
+                                    <tr className="bg-slate-50/70">
+                                      <td colSpan={2} className="space-y-2 border-t border-slate-100 px-3 pb-3 pt-2 align-top">
+                                        <VariantQtyMatrixInputs
+                                          product={stockInDetailMatrixProduct}
+                                          dictionaries={dictionaries}
+                                          balancedNumericLayout
+                                          quantities={Object.fromEntries(ef.rows.map(r => [r.variantId ?? '', r.quantity]))}
+                                          onVariantQtyChange={(variantId, qty) => {
                                             setStockInFlowEditing(prev =>
                                               prev
                                                 ? {
                                                     ...prev,
                                                     rows: prev.rows.map(r =>
-                                                      r.id === row.id
-                                                        ? { ...r, quantity: Math.max(0, parseInt(e.target.value, 10) || 0) }
-                                                        : r,
+                                                      (r.variantId ?? '') === variantId ? { ...r, quantity: qty } : r,
                                                     ),
                                                   }
                                                 : prev,
-                                            )
-                                          }
-                                          className="h-8 w-[4.75rem] inline-block rounded-md border border-slate-200 bg-white px-2 text-left text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200 tabular-nums placeholder:text-[9px] placeholder:text-slate-400"
-                                          placeholder="0"
+                                            );
+                                          }}
                                         />
                                       </td>
                                     </tr>
-                                  ))}
-                                </tbody>
-                                {ef.rows.length > 1 && (
-                                  <tfoot>
-                                    <tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold">
-                                      <td className="px-3 py-2.5 sm:px-4">合计</td>
-                                      <td className="px-3 py-2.5 sm:px-4 text-emerald-600 text-right tabular-nums">{editTotalQty} {unitName}</td>
-                                    </tr>
-                                  </tfoot>
-                                )}
-                              </table>
-                            )}
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div
-                            className={
-                              hasColorSize
-                                ? 'flex flex-wrap gap-4'
-                                : 'grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-3 sm:grid-cols-3 sm:gap-4 sm:px-4'
-                            }
-                          >
-                            {productionLinkMode !== 'product' && (
-                            <div className={hasColorSize ? 'bg-slate-50 rounded-xl px-4 py-2' : ''}>
-                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">工单号</p>
-                              <p className="text-xs sm:text-sm font-bold text-slate-800 tabular-nums">{detailBatch.orderNumber || '—'}</p>
-                            </div>
-                            )}
-                            <div className={hasColorSize ? 'bg-slate-50 rounded-xl px-4 py-2' : ''}>
-                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">入库仓库</p>
-                              <p className="text-xs sm:text-sm font-bold text-slate-800">{wh?.name || '—'}</p>
-                            </div>
-                            <div className={hasColorSize ? 'bg-slate-50 rounded-xl px-4 py-2' : ''}>
-                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">入库数量</p>
-                              <p className="text-xs sm:text-sm font-bold text-indigo-600 tabular-nums">{detailBatch.totalQty} {unitName}</p>
-                            </div>
-                            <div className={hasColorSize ? 'bg-slate-50 rounded-xl px-4 py-2' : ''}>
-                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">入库时间</p>
-                              <p className="text-xs sm:text-sm font-bold text-slate-800">{fmtDT(detailBatch.first.timestamp)}</p>
-                            </div>
-                            <div className={hasColorSize ? 'bg-slate-50 rounded-xl px-4 py-2' : ''}>
-                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">经办人</p>
-                              <p className="text-xs sm:text-sm font-bold text-slate-800">{detailBatch.first.operator}</p>
-                            </div>
-                          </div>
-                          {stockInCustomFieldDefs.filter(f => f.showInDetail).length > 0 && detailBatch.stockInCustomSnapshot && (
-                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                              {stockInCustomFieldDefs.filter(f => f.showInDetail).map(f => {
-                                const val = detailBatch.stockInCustomSnapshot![f.id];
-                                if (val == null || val === '') return null;
-                                return (
-                                  <div key={f.id} className="rounded-xl bg-slate-50 px-4 py-2">
-                                    <p className="mb-0.5 text-[10px] font-bold uppercase text-slate-400">{f.label}</p>
-                                    <div className="text-sm font-bold text-slate-800">
-                                      {typeof val === 'boolean' ? (
-                                        val ? '是' : '否'
-                                      ) : (
-                                        <PlanFormCustomFieldReadonly
-                                          cf={f}
-                                          value={val}
-                                          onFilePreview={(url, type) => setStockInFilePreview({ url, type })}
-                                        />
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                          <div className="rounded-xl border border-slate-200 bg-slate-50/40 overflow-hidden">
-                            {useStockInDetailMatrix && product ? (
-                              <div className="space-y-3 p-3 sm:p-4">
-                                <p className="text-[11px] font-black uppercase tracking-wider text-slate-500">入库明细 · 颜色 × 尺码</p>
-                                <VariantQtyMatrixInputs
-                                  product={product}
-                                  dictionaries={dictionaries}
-                                  balancedNumericLayout
-                                  readOnly
-                                  quantities={Object.fromEntries(detailBatch.rows.map(r => [r.variantId ?? '', r.quantity]))}
-                                />
-                                <div className="flex items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2.5 text-sm font-bold">
-                                  <span>合计</span>
-                                  <span className="text-emerald-600 tabular-nums">
-                                    {detailBatch.totalQty} {unitName}
-                                  </span>
-                                </div>
+                                  </tbody>
+                                </table>
                               </div>
                             ) : (
-                              <table className="w-full text-left text-sm">
-                                <thead>
-                                  <tr className="bg-slate-50 border-b border-slate-200">
-                                    {hasColorSize ? (
-                                      <>
-                                        <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase">规格</th>
-                                        <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">数量</th>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase">产品</th>
-                                        <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">数量</th>
-                                      </>
-                                    )}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {detailBatch.rows.map(row => (
-                                    <tr key={row.id} className="border-b border-slate-100">
+                              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                                <table className="w-full text-left text-sm">
+                                  <thead>
+                                    <tr className="border-b border-slate-100 bg-slate-50/80 text-[9px] font-black uppercase tracking-widest text-slate-400">
                                       {hasColorSize ? (
-                                        <td className="px-3 py-2.5 sm:px-4 text-slate-800">{getVariantLabel(row.variantId)}</td>
+                                        <>
+                                          <th className="px-3 py-2.5 text-left">规格</th>
+                                          <th className="px-3 py-2.5 text-right">数量</th>
+                                        </>
                                       ) : (
-                                        <td className="px-3 py-2.5 sm:px-4 align-middle min-w-0 max-w-[14rem]">
-                                          <span className="text-sm sm:text-base font-bold text-slate-900 leading-tight block truncate" title={detailBatch.productName}>
-                                            {detailBatch.productName}
-                                          </span>
-                                          {productionLinkMode !== 'product' && detailBatch.orderNumber ? (
-                                            <span className="mt-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-500 truncate">
-                                              工单 <span className="font-bold text-slate-600 tabular-nums">{detailBatch.orderNumber}</span>
-                                            </span>
-                                          ) : null}
-                                        </td>
+                                        <>
+                                          <th className="px-3 py-2.5 text-left">产品 / SKU</th>
+                                          <th className="px-3 py-2.5 text-right">数量</th>
+                                        </>
                                       )}
-                                      <td className="px-3 py-2.5 sm:px-4 text-sm font-bold text-emerald-600 text-right tabular-nums">
-                                        {row.quantity} {unitName}
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100 bg-white">
+                                    {!hasColorSize
+                                      ? ef.rows.map(row => (
+                                          <tr key={row.id}>
+                                            <td className="px-3 py-2.5 align-top">
+                                              <div className="flex min-w-0 items-start gap-2">
+                                                {product?.imageUrl ? (
+                                                  <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
+                                                    <img
+                                                      src={product.imageUrl}
+                                                      alt={product.name}
+                                                      className="h-full w-full object-cover"
+                                                      loading="lazy"
+                                                      decoding="async"
+                                                    />
+                                                  </div>
+                                                ) : (
+                                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
+                                                    <Package className="h-4 w-4" />
+                                                  </div>
+                                                )}
+                                                <div className="min-w-0">
+                                                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                                                    <span className="font-bold text-slate-700">{detailBatch.productName}</span>
+                                                    {product?.sku?.trim() ? (
+                                                      <span className="text-[9px] font-bold uppercase tracking-tight text-slate-300">
+                                                        {product.sku.trim()}
+                                                      </span>
+                                                    ) : null}
+                                                  </div>
+                                                  {productionLinkMode !== 'product' && detailBatch.orderNumber ? (
+                                                    <span className="mt-0.5 block text-[10px] font-medium text-slate-500">
+                                                      工单{' '}
+                                                      <span className="font-bold text-slate-600 tabular-nums">
+                                                        {detailBatch.orderNumber}
+                                                      </span>
+                                                    </span>
+                                                  ) : null}
+                                                </div>
+                                              </div>
+                                            </td>
+                                            <td className="px-3 py-2.5 text-right align-middle">
+                                              <input
+                                                type="number"
+                                                min={0}
+                                                value={row.quantity === 0 ? '' : row.quantity}
+                                                onChange={e =>
+                                                  setStockInFlowEditing(prev =>
+                                                    prev
+                                                      ? {
+                                                          ...prev,
+                                                          rows: prev.rows.map(r =>
+                                                            r.id === row.id
+                                                              ? { ...r, quantity: Math.max(0, parseInt(e.target.value, 10) || 0) }
+                                                              : r,
+                                                          ),
+                                                        }
+                                                      : prev,
+                                                  )
+                                                }
+                                                className="inline-block h-8 w-[4.75rem] rounded-md border border-slate-200 bg-white px-2 text-left text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200 tabular-nums placeholder:text-[9px] placeholder:text-slate-400"
+                                                placeholder="0"
+                                              />
+                                            </td>
+                                          </tr>
+                                        ))
+                                      : null}
+                                    {hasColorSize
+                                      ? ef.rows.map(row => (
+                                          <tr key={row.id} className="border-b border-slate-100">
+                                            <td className="px-3 py-2.5 text-slate-800">{getVariantLabel(row.variantId)}</td>
+                                            <td className="px-3 py-2.5 text-right align-middle">
+                                              <input
+                                                type="number"
+                                                min={0}
+                                                value={row.quantity === 0 ? '' : row.quantity}
+                                                onChange={e =>
+                                                  setStockInFlowEditing(prev =>
+                                                    prev
+                                                      ? {
+                                                          ...prev,
+                                                          rows: prev.rows.map(r =>
+                                                            r.id === row.id
+                                                              ? { ...r, quantity: Math.max(0, parseInt(e.target.value, 10) || 0) }
+                                                              : r,
+                                                          ),
+                                                        }
+                                                      : prev,
+                                                  )
+                                                }
+                                                className="inline-block h-8 w-[4.75rem] rounded-md border border-slate-200 bg-white px-2 text-left text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200 tabular-nums placeholder:text-[9px] placeholder:text-slate-400"
+                                                placeholder="0"
+                                              />
+                                            </td>
+                                          </tr>
+                                        ))
+                                      : null}
+                                  </tbody>
+                                  {ef.rows.length > 1 ? (
+                                    <tfoot>
+                                      <tr className="border-t-2 border-indigo-200 bg-indigo-50/80 font-bold">
+                                        <td className="px-3 py-2.5">合计</td>
+                                        <td className="px-3 py-2.5 text-right tabular-nums text-indigo-600">
+                                          {editTotalQty} {unitName}
+                                        </td>
+                                      </tr>
+                                    </tfoot>
+                                  ) : null}
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <DocSummaryCard
+                            className="mb-5"
+                            main={
+                              <>
+                                <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2 text-sm">
+                                  {detailBatch.docNo?.trim() ? (
+                                    <span className="rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 font-mono text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                                      {detailBatch.docNo.trim()}
+                                    </span>
+                                  ) : null}
+                                  {productionLinkMode !== 'product' && detailBatch.orderNumber ? (
+                                    <span className="rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-indigo-600 tabular-nums">
+                                      {detailBatch.orderNumber}
+                                    </span>
+                                  ) : null}
+                                  <span className="text-xs font-bold normal-case text-slate-600 sm:text-sm" title="入库仓库">
+                                    入库仓库：{wh?.name ?? '—'}
+                                  </span>
+                                </div>
+                                <DocInlineMetaRow className="mt-1.5">
+                                  {detailBatch.first.timestamp ? (
+                                    <span className="inline-flex min-h-4 items-center gap-1.5 normal-case">
+                                      <Clock className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                                      <span className="leading-none">时间 {fmtDT(detailBatch.first.timestamp)}</span>
+                                    </span>
+                                  ) : null}
+                                  <span className="inline-flex min-h-4 items-center gap-1.5 normal-case">
+                                    <User className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                                    <span className="leading-none">经办: {detailBatch.first.operator || '—'}</span>
+                                  </span>
+                                  {stockInFieldsForDetailInline.map(cf => (
+                                    <span key={cf.id} className="inline-flex max-w-full min-w-0 items-center gap-1.5 normal-case">
+                                      <span className="shrink-0 text-slate-400">{cf.label}:</span>
+                                      <span className="min-w-0 break-all font-bold leading-none text-slate-700">
+                                        <PlanFormCustomFieldReadonly
+                                          variant="inlineMeta"
+                                          cf={cf}
+                                          value={stockInSnap[cf.id]}
+                                          onFilePreview={(url, type) => setStockInFilePreview({ url, type })}
+                                        />
+                                      </span>
+                                    </span>
+                                  ))}
+                                </DocInlineMetaRow>
+                              </>
+                            }
+                            side={
+                              <div className="min-w-[6.5rem] md:text-right">
+                                <p className="mb-0.5 text-[10px] font-black uppercase text-slate-400">合计数量</p>
+                                <p className="font-black tabular-nums text-slate-800">
+                                  {detailBatch.totalQty.toLocaleString()} {unitName}
+                                </p>
+                              </div>
+                            }
+                          />
+                          <div className="flex-1 space-y-2 pb-4">
+                            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                              {useStockInDetailMatrix ? '产品明细（按规格）' : '产品明细'}
+                            </p>
+                            {useStockInDetailMatrix && stockInDetailMatrixProduct && dictionaries ? (
+                              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                                <table className="w-full text-left text-sm">
+                                  <thead>
+                                    <tr className="border-b border-slate-100 bg-slate-50/80 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                                      <th className="px-3 py-2.5 text-left">产品 / SKU</th>
+                                      <th className="px-3 py-2.5 text-right">数量</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100 bg-white">
+                                    <tr>
+                                      <td className="px-3 py-2.5 align-top">
+                                        <div className="flex min-w-0 items-start gap-2">
+                                          {product?.imageUrl ? (
+                                            <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
+                                              <img
+                                                src={product.imageUrl}
+                                                alt={product.name}
+                                                className="h-full w-full object-cover"
+                                                loading="lazy"
+                                                decoding="async"
+                                              />
+                                            </div>
+                                          ) : (
+                                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
+                                              <Package className="h-4 w-4" />
+                                            </div>
+                                          )}
+                                          <div className="min-w-0">
+                                            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                                              <span className="font-bold text-slate-700">
+                                                {product?.name ?? detailBatch.first.productId ?? '—'}
+                                              </span>
+                                              {product?.sku?.trim() ? (
+                                                <span className="text-[9px] font-bold uppercase tracking-tight text-slate-300">
+                                                  {product.sku.trim()}
+                                                </span>
+                                              ) : null}
+                                            </div>
+                                            {matrixSummaryCustomTags.length > 0 ? (
+                                              <div className="mt-1 flex flex-wrap items-center gap-1">
+                                                {matrixSummaryCustomTags.map(({ field, display }) => (
+                                                  <span
+                                                    key={field.id}
+                                                    className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
+                                                  >
+                                                    {field.label}: {display}
+                                                  </span>
+                                                ))}
+                                              </div>
+                                            ) : null}
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td className="px-3 py-2.5 text-right align-middle font-black tabular-nums text-indigo-600">
+                                        {detailBatch.totalQty.toLocaleString()} {unitName}
                                       </td>
                                     </tr>
-                                  ))}
-                                </tbody>
-                                {detailBatch.rows.length > 1 && (
-                                  <tfoot>
-                                    <tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold">
-                                      <td className="px-3 py-2.5 sm:px-4">合计</td>
-                                      <td className="px-3 py-2.5 sm:px-4 text-emerald-600 text-right tabular-nums">{detailBatch.totalQty} {unitName}</td>
+                                    <tr className="bg-slate-50/70">
+                                      <td colSpan={2} className="space-y-2 border-t border-slate-100 px-3 pb-3 pt-2 align-top">
+                                        <VariantQtyMatrixInputs
+                                          product={stockInDetailMatrixProduct}
+                                          dictionaries={dictionaries}
+                                          balancedNumericLayout
+                                          readOnly
+                                          quantities={Object.fromEntries(
+                                            detailBatch.rows.map(r => [r.variantId ?? '', r.quantity]),
+                                          )}
+                                        />
+                                      </td>
                                     </tr>
-                                  </tfoot>
-                                )}
-                              </table>
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : !hasColorSize ? (
+                              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                                <table className="w-full text-left text-sm">
+                                  <thead>
+                                    <tr className="border-b border-slate-100 bg-slate-50/80 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                                      <th className="px-3 py-2.5 text-left">产品 / SKU</th>
+                                      <th className="px-3 py-2.5 text-right">数量</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100 bg-white">
+                                    <tr>
+                                      <td className="px-3 py-2.5 align-top">
+                                        <div className="flex min-w-0 items-start gap-2">
+                                          {product?.imageUrl ? (
+                                            <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
+                                              <img
+                                                src={product.imageUrl}
+                                                alt={product.name}
+                                                className="h-full w-full object-cover"
+                                                loading="lazy"
+                                                decoding="async"
+                                              />
+                                            </div>
+                                          ) : (
+                                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
+                                              <Package className="h-4 w-4" />
+                                            </div>
+                                          )}
+                                          <div className="min-w-0">
+                                            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                                              <span className="font-bold text-slate-700">{detailBatch.productName}</span>
+                                              {product?.sku?.trim() ? (
+                                                <span className="text-[9px] font-bold uppercase tracking-tight text-slate-300">
+                                                  {product.sku.trim()}
+                                                </span>
+                                              ) : null}
+                                            </div>
+                                            {productionLinkMode !== 'product' && detailBatch.orderNumber ? (
+                                              <span className="mt-0.5 block text-[10px] font-medium text-slate-500">
+                                                工单{' '}
+                                                <span className="font-bold text-slate-600 tabular-nums">{detailBatch.orderNumber}</span>
+                                              </span>
+                                            ) : null}
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td className="px-3 py-2.5 text-right align-middle">
+                                        <span className="font-black tabular-nums text-indigo-600">
+                                          {detailBatch.totalQty.toLocaleString()} {unitName}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            ) : (
+                              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                                <table className="w-full text-left text-sm">
+                                  <thead>
+                                    <tr className="border-b border-slate-100 bg-slate-50/80 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                                      <th className="px-3 py-2.5 text-left">规格</th>
+                                      <th className="px-3 py-2.5 text-right">数量</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100 bg-white">
+                                    {detailBatch.rows.map(row => (
+                                      <tr key={row.id} className="border-b border-slate-100">
+                                        <td className="px-3 py-2.5 text-slate-800">{getVariantLabel(row.variantId)}</td>
+                                        <td className="px-3 py-2.5 text-right align-middle font-black tabular-nums text-indigo-600">
+                                          {row.quantity} {unitName}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                  {detailBatch.rows.length > 1 ? (
+                                    <tfoot>
+                                      <tr className="border-t-2 border-indigo-200 bg-indigo-50/80 font-bold">
+                                        <td className="px-3 py-2.5">合计</td>
+                                        <td className="px-3 py-2.5 text-right tabular-nums text-indigo-600">
+                                          {detailBatch.totalQty} {unitName}
+                                        </td>
+                                      </tr>
+                                    </tfoot>
+                                  ) : null}
+                                </table>
+                              </div>
                             )}
                           </div>
                         </>
                       )}
-                    </div>
-                  </div>
-                </div>
+                      </div>
+                    </>
+                  )}
+                />
               );
             })()}
           </>

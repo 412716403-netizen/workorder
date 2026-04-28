@@ -981,6 +981,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
           printTemplates={printTemplates}
           onUpdateRecord={onUpdateRecord}
           onDeleteRecord={onDeleteRecord}
+          onAddRecord={onAddRecord}
           onOpenReworkFormPrintTab={() => {
             setReworkFormConfigDefaultTab('print');
             void onRefreshPrintTemplates?.();
@@ -1022,6 +1023,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
           printTemplates={printTemplates}
           onUpdateRecord={onUpdateRecord}
           onDeleteRecord={onDeleteRecord}
+          onAddRecord={onAddRecord}
           onOpenReworkFormPrintTab={() => {
             setReworkFormConfigDefaultTab('print');
             void onRefreshPrintTemplates?.();
@@ -1067,7 +1069,6 @@ const ReworkPanel: React.FC<PanelProps> = ({
           equipment={equipment}
           processSequenceMode={processSequenceMode}
           partners={partners}
-          boms={boms}
           reworkReportCustomFields={rfSettings.reworkReportCustomFields}
           onAddRecord={onAddRecord}
           onUpdateRecord={onUpdateRecord}

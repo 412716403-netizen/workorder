@@ -167,3 +167,31 @@ export function subModuleTabButtonClass(active: boolean): string {
     ? `${base} bg-indigo-50 text-indigo-600 shadow-sm`
     : `${base} text-slate-400 hover:text-slate-600 hover:bg-slate-50/50`;
 }
+
+// ── 单据弹窗 / 生产密集表单：与 `psiOrderBill*` 同一套 token 的中性别名（新代码优先用 `docFormCompact*`）──
+export const docFormCompactFormShellClass = psiOrderBillFormShellClass;
+export const docFormCompactFormStickyBarClass = psiOrderBillFormStickyBarClass;
+export const docFormCompactFormCardClass = psiOrderBillFormCardClass;
+export const docFormCompactFormSectionStackClass = psiOrderBillFormSectionStackClass;
+export const docFormCompactFormDetailSplitClass = psiOrderBillFormDetailSplitClass;
+export const docFormCompactFormGridGapClass = psiOrderBillFormGridGapClass;
+export const docFormCompactFormFieldControlClass = psiOrderBillFormFieldControlClass;
+export const docFormCompactFormReadonlyBoxClass = psiOrderBillFormReadonlyBoxClass;
+export const docFormCompactFormSectionIconIndigoClass = psiOrderBillFormSectionIconIndigoClass;
+export const docFormCompactFormSectionIconEmeraldClass = psiOrderBillFormSectionIconEmeraldClass;
+export const docFormCompactFormPartnerTriggerClass = psiOrderBillFormPartnerTriggerClass;
+export const docFormCompactFormPartnerTriggerClassCompact = psiOrderBillFormPartnerTriggerClassCompact;
+export const docFormCompactLineLabelClass = psiOrderBillCompactLineLabelClass;
+export const docFormCompactLineInputClass = psiOrderBillCompactLineInputClass;
+export const docFormCompactLineReadonlyClass = psiOrderBillCompactLineReadonlyClass;
+export const docFormCompactDocReadonlyInnerClass = psiOrderBillCompactDocReadonlyInnerClass;
+export const docFormCompactWarehouseSelectClass = psiOrderBillCompactWarehouseSelectClass;
+export const docFormCompactSummaryBarClass = psiOrderBillCompactSummaryBarClass;
+export const docFormCompactSummaryLabelClass = psiOrderBillCompactSummaryLabelClass;
+export const docFormCompactSummaryValueClass = psiOrderBillCompactSummaryValueClass;
+export const docFormCompactSummaryUnitClass = psiOrderBillCompactSummaryUnitClass;
+export const docFormCompactListStackClass = psiOrderBillListStackClass;
+export const docFormCompactListEmptyClass = psiOrderBillListEmptyClass;
+export const docFormCompactListCardClass = psiOrderBillListCardClass;
+export const docFormCompactListCardHeaderClass = psiOrderBillListCardHeaderClass;
+export const docFormCompactListTableWrapClass = psiOrderBillListTableWrapClass;

@@ -16,7 +16,7 @@ interface EntitySelectorProps {
   value: string;
   onChange: (id: string) => void;
   placeholder?: string;
-  variant?: 'default' | 'compact';
+  variant?: 'default' | 'compact' | 'form';
   icon?: React.ComponentType<{ className?: string }>;
 }
 
@@ -93,20 +93,42 @@ const EntitySelector: React.FC<EntitySelectorProps> = ({
 
   const selected = options.find(o => o.id === value);
 
+  const triggerClass =
+    variant === 'form'
+      ? 'flex h-9 min-h-9 flex-nowrap items-center bg-white px-2 py-0'
+      : variant === 'compact'
+        ? 'flex min-h-[46px] flex-wrap bg-white p-2'
+        : 'flex min-h-[46px] flex-wrap bg-white p-3';
+
+  const triggerShellClass =
+    variant === 'form'
+      ? 'rounded-lg border-slate-200 hover:border-slate-300 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500'
+      : 'rounded-xl border-slate-200 hover:border-indigo-400 hover:ring-2 hover:ring-indigo-50';
+
   return (
     <div className="relative w-full" ref={containerRef}>
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full bg-white border border-slate-200 rounded-xl flex flex-wrap gap-1.5 cursor-pointer hover:border-indigo-400 hover:ring-2 hover:ring-indigo-50 transition-all min-h-[46px] ${variant === 'compact' ? 'p-2' : 'p-3'}`}
+        className={`flex w-full cursor-pointer gap-1.5 border transition-all outline-none ${triggerShellClass} ${triggerClass}`}
       >
         {!value ? (
-          <span className="text-slate-300 text-[11px] font-bold flex items-center gap-1.5 py-1">
-            <Icon className="w-3.5 h-3.5" /> {placeholder}
+          <span
+            className={`flex min-w-0 flex-1 items-center gap-1.5 font-bold ${
+              variant === 'form'
+                ? 'text-xs text-slate-400'
+                : 'text-slate-300 text-[11px] py-1'
+            }`}
+          >
+            <Icon className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{placeholder}</span>
           </span>
         ) : (
-          <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-lg text-[10px] font-black flex items-center gap-1 shadow-sm">
-            {selected?.name}
-            <X className="w-3 h-3 hover:text-rose-200" onClick={e => { e.stopPropagation(); onChange(''); }} />
+          <span
+            className={`flex min-w-0 max-w-full items-center gap-1 rounded-lg bg-indigo-600 px-2 py-0.5 font-black text-white shadow-sm ${
+              variant === 'form' ? 'text-xs' : 'text-[10px]'
+            }`}
+          >
+            <span className="min-w-0 truncate">{selected?.name}</span>
+            <X className="h-3 w-3 shrink-0 hover:text-rose-200" onClick={e => { e.stopPropagation(); onChange(''); }} />
           </span>
         )}
       </div>

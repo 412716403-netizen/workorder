@@ -221,8 +221,12 @@ interface ProductionOpRecord {
   weight?: number;                         // 仅当 node.enableWeightOnReport 时写入，本次交货总重量 (kg)
   materialBreakdown?: MaterialBreakdownRow[]; // 按 BOM 占比把 weight 拆成各子物料实际消耗的快照
   batchNo?: string; // 领料出库 STOCK_OUT / 退料 STOCK_RETURN / 外协物料类流水：批次号（与 PSI 行 batchNo 对齐）
+  /** 协作元数据、单据级自定义字段等；Prisma 列 `collab_data` JSON；形状见 `shared/types.ts` 的 `ProductionOpCollabData` */
+  collabData?: Record<string, unknown>;
 }
 ```
+
+**`collabData`**：单一事实源类型为 `shared/types.ts` 中的 `ProductionOpCollabData`（与 `Record<string, unknown>` 交叉）；常见键见 [`docs/04-migration-checklist.md`](./04-migration-checklist.md)「流水自定义 collabData 键映射」。
 
 **说明**：领料出库、外协、返工、报损、生产入库通过 `orderId` 关联工单；`orderId` 为可选时表示关联产品模式，详见 [05-production-link-mode.md](./05-production-link-mode.md)。**报损 (SCRAP)**：记录不良品报损数量，工单详情各工序报工汇总中展示「报损」列。**返工 (REWORK)**：`sourceNodeId` 为不良来源工序，`nodeId`/`reworkNodeIds` 为返工目标工序（可多选）。
 

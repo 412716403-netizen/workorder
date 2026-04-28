@@ -39,6 +39,22 @@
 | 生产操作记录 | 已落地 | 已有 `/api/production/records` 等接口 | 梳理大体量前端页面与复杂业务校验 |
 | 生产关联模式 | 已落地 | 规则与实现并存，读口径统一为"PMP + milestone 双路求和"（含 `OrderDetailModal` / `OrderListView` / 后端 `getReportable`）；OutsourcePanel 展示统计端已"全收"含 `orderId` 历史记录；**待收回清单与收货录入弹窗按行级 `orderId` 决定 scope，跨模式可见、可收回**（方案 A）；`OrderListView` 工单卡 / 产品组卡圆下剩余数字保持原口径（不扣外协），**hover tooltip 上额外提示"外协剩余 Z 件"**作为补充信息；`ProductionConfigTab` 切换前已加 `useConfirm` 提示；删除工单在 `product` 模式下不再跳过基础校验；后端 `createReport`/`createProductReport` 加 `enforceReportQuantity` 硬校验（受 `allowExceedMaxReportQty` 控制） | 持续在更多页面（看板、打印）核对模式分流口径 |
 
+### 3.1 流水自定义 `collabData` 键映射
+
+`production_op_records.collab_data`（前端 `ProductionOpRecord.collabData`）为 JSON 杂物袋，下列键与 `utils/productionOpCollab/*` 及打印上下文一致；长期迁移目标是将高频查询字段逐步建模为独立列或规范化子表。
+
+| 键名 | 用途 |
+|------|------|
+| `stockInCustomData` | 生产入库流水自定义字段快照 |
+| `outsourceDispatchCustomData` | 外协发出自定义字段 |
+| `outsourceReceiveCustomData` | 外协收回自定义字段 |
+| `reworkReportCustomData` | 返工报工批次自定义字段 |
+| `defectTreatmentCustomData` | 处理不良品批次自定义字段 |
+| `materialStockCustomData` | 领料/退料/外协物料单自定义字段 |
+| `source` | 协作等业务来源标记（如 `collaborationReturn`） |
+
+类型定义：`shared/types.ts` → `ProductionOpCollabData`。
+
 ---
 
 ## 4. 进销存（PSI）
@@ -75,10 +91,17 @@
 
 ## 7. 当前主要收口项
 
-1. 文档已明显落后于代码实现，应以“当前架构现状 + 收口清单”取代旧的“未来接后端”口径。
-2. 前端超大页面文件需要拆分，否则后端能力越完整，前端维护成本越高。
-3. 后端需逐步从“route -> controller -> prisma”过渡到更稳定的 service 分层。
-4. Prisma schema 与 migrations 需要继续核对，尤其是近期新增的单品码/批次码链路。
+### 待产品确认（行为口径）
+
+以下项实现上已有路径，但**跨单据/打印展示**的产品语义需业务侧拍板后再改代码，避免反复：
+
+1. **外协流水详情中修改加工厂（合作方）**：`docNo` / 单号 segment 是否随厂重算、抑或保留原号仅 UI 提示，见 `OutsourceFlowDocumentDetailModal` 与 `utils/partnerDocNumber.ts`。
+2. **报工批次编辑保存**：批次内多行 `customData` 不一致时，当前保存会**统一覆盖**为编辑表单一份 `customData`（有 toast 预警）；若需「逐行保留」需另定规则。
+
+3. 文档已明显落后于代码实现，应以“当前架构现状 + 收口清单”取代旧的“未来接后端”口径。
+4. 前端超大页面文件需要拆分，否则后端能力越完整，前端维护成本越高。
+5. 后端需逐步从“route -> controller -> prisma”过渡到更稳定的 service 分层。
+6. Prisma schema 与 migrations 需要继续核对，尤其是近期新增的单品码/批次码链路。
 
 ## 8. 前后端职责划分
 

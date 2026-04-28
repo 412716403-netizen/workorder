@@ -220,9 +220,13 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
     matMap.forEach((v, productId) => {
       bomMaterials.push({ productId, ...v, nodeNames: Array.from(v.nodeNames) });
     });
+    /** 领料进度 = 本厂生产领料 − 本厂生产退料（与工单中心物料表「净领用」一致；不含外协 partner、不含返工领料） */
     const issuedMap = new Map<string, number>();
     prodRecords.filter(r => r.type === 'STOCK_OUT' && !r.partner && r.orderId === order.id && r.reason !== '来自于返工').forEach(r => {
       issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
+    });
+    prodRecords.filter(r => r.type === 'STOCK_RETURN' && !r.partner && r.orderId === order.id).forEach(r => {
+      issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) - r.quantity);
     });
     const showOrderBatchCol = bomMaterials.some(m => {
       const p = productMap.get(m.productId);
@@ -373,11 +377,11 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                               <span className="text-[9px] font-bold text-slate-500 tabular-nums">
                                 {overIssue ? (
                                   <span>
-                                    已发 {formatMaterialQtyDisplay(issued)}{' '}
+                                    净已领 {formatMaterialQtyDisplay(issued)}{' '}
                                     <span className="text-rose-500">（超发 {formatMaterialQtyDisplay(issued - needed)}）</span>
                                   </span>
                                 ) : (
-                                  `已发 ${formatMaterialQtyDisplay(issued)}`
+                                  `净已领 ${formatMaterialQtyDisplay(issued)}`
                                 )}
                               </span>
                             </div>
@@ -529,14 +533,19 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
       bomMaterials.push({ productId: pid, ...v, nodeNames: Array.from(v.nodeNames) });
     });
     const familyIds = new Set(groupOrders.map(o => o.id));
+    const materialIssueHit = (r: ProductionOpRecord): boolean =>
+      r.sourceProductId === sourceProductId ||
+      (!r.sourceProductId && r.orderId != null && familyIds.has(r.orderId));
     const issuedMap = new Map<string, number>();
     prodRecords
       .filter(r => r.type === 'STOCK_OUT' && !r.partner && r.reason !== '来自于返工')
       .forEach(r => {
-        const hit =
-          r.sourceProductId === sourceProductId ||
-          (!r.sourceProductId && r.orderId && familyIds.has(r.orderId));
-        if (hit) issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
+        if (materialIssueHit(r)) issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
+      });
+    prodRecords
+      .filter(r => r.type === 'STOCK_RETURN' && !r.partner)
+      .forEach(r => {
+        if (materialIssueHit(r)) issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) - r.quantity);
       });
     const showFpBatchCol = bomMaterials.some(m => {
       const p = productMap.get(m.productId);
@@ -706,11 +715,11 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
                                 <span className="text-[9px] font-bold text-slate-500 tabular-nums">
                                   {overIssue ? (
                                     <span>
-                                      已发 {formatMaterialQtyDisplay(issued)}{' '}
+                                      净已领 {formatMaterialQtyDisplay(issued)}{' '}
                                       <span className="text-rose-500">（超发 {formatMaterialQtyDisplay(issued - needed)}）</span>
                                     </span>
                                   ) : (
-                                    `已发 ${formatMaterialQtyDisplay(issued)}`
+                                    `净已领 ${formatMaterialQtyDisplay(issued)}`
                                   )}
                                 </span>
                               </div>

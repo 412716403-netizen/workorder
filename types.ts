@@ -24,6 +24,7 @@ export {
   type FinanceOpType,
   type CustomDocFieldType,
   type LegacyCustomDocFieldType,
+  type ProductionOpCollabData,
 } from './shared/types';
 
 /** 与 CustomDocFieldType 相同，保留别名供计划单单据配置等既有命名 */
@@ -1246,7 +1247,7 @@ export interface ProductionOpRecord {
    * 外协：`outsourceDispatchCustomData` / `outsourceReceiveCustomData`。
    * 返工管理：`defectTreatmentCustomData`（处理不良批次）、`reworkReportCustomData`（返工报工批次）。
    */
-  collabData?: Record<string, unknown>;
+  collabData?: ProductionOpCollabData;
   /** 领料/退料/外协物料等明细批次号，与进销存 `PsiRecord.batchNo` 对齐 */
   batchNo?: string;
 }

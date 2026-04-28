@@ -273,19 +273,81 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
     const p = products.find(x => x.id === m.productId);
     return categoryUsesBatchManagement(categoryById.get(p?.categoryId ?? ''));
   });
+  /**
+   * 已发进度：当前所选外协工厂的「外协领料发出」合计 − 同工厂「外协生产退料」退回（与物料退回弹窗口径一致）。
+   * 仅统计带 partner 的流水；工单模式排除返工领料 reason。
+   */
   const issuedMap = new Map<string, number>();
-  if (isProductMode) {
-    records.filter(r => r.type === 'STOCK_OUT' && r.partner && r.productId && (r.sourceProductId === targetProductId || (!r.orderId && !r.sourceProductId && r.productId))).forEach(r => {
-      issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
-    });
-    const relatedOrderIds = new Set(orders.filter(o => o.productId === targetProductId).map(o => o.id));
-    records.filter(r => r.type === 'STOCK_OUT' && r.partner && r.orderId && relatedOrderIds.has(r.orderId)).forEach(r => {
-      issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
-    });
-  } else if (targetOrder) {
-    records.filter(r => r.type === 'STOCK_OUT' && r.partner && r.orderId === targetOrder.id && r.reason !== '来自于返工').forEach(r => {
-      issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
-    });
+  const dispatchPartner = (matDispatchPartner || '').trim();
+  if (dispatchPartner) {
+    if (isProductMode && targetProductId) {
+      records
+        .filter(
+          r =>
+            r.type === 'STOCK_OUT' &&
+            r.partner === dispatchPartner &&
+            r.productId &&
+            (r.sourceProductId === targetProductId || (!r.orderId && !r.sourceProductId && r.productId)),
+        )
+        .forEach(r => {
+          issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
+        });
+      const relatedOrderIds = new Set(orders.filter(o => o.productId === targetProductId).map(o => o.id));
+      records
+        .filter(
+          r =>
+            r.type === 'STOCK_OUT' &&
+            r.partner === dispatchPartner &&
+            r.orderId &&
+            relatedOrderIds.has(r.orderId),
+        )
+        .forEach(r => {
+          issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
+        });
+      records
+        .filter(
+          r =>
+            r.type === 'STOCK_RETURN' &&
+            r.partner === dispatchPartner &&
+            (r.sourceProductId === targetProductId || (!r.orderId && !r.sourceProductId && r.productId)),
+        )
+        .forEach(r => {
+          issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) - r.quantity);
+        });
+      records
+        .filter(
+          r =>
+            r.type === 'STOCK_RETURN' &&
+            r.partner === dispatchPartner &&
+            r.orderId &&
+            relatedOrderIds.has(r.orderId),
+        )
+        .forEach(r => {
+          issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) - r.quantity);
+        });
+    } else if (targetOrder) {
+      records
+        .filter(
+          r =>
+            r.type === 'STOCK_OUT' &&
+            r.partner === dispatchPartner &&
+            r.orderId === targetOrder.id &&
+            r.reason !== '来自于返工',
+        )
+        .forEach(r => {
+          issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) + r.quantity);
+        });
+      records
+        .filter(
+          r =>
+            r.type === 'STOCK_RETURN' &&
+            r.partner === dispatchPartner &&
+            r.orderId === targetOrder.id,
+        )
+        .forEach(r => {
+          issuedMap.set(r.productId, (issuedMap.get(r.productId) ?? 0) - r.quantity);
+        });
+    }
   }
   const getNextWfDocNo = () => {
     const prefix = 'WF';
@@ -470,7 +532,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
                 <tr className="bg-slate-50/90 border-b border-slate-100">
                   <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap">物料</th>
                   <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-right whitespace-nowrap">理论需量</th>
-                  <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-40">已发进度</th>
+                  <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-40">净已发进度</th>
                   {showDispatchBatchCol ? (
                     <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-52">批次</th>
                   ) : null}
@@ -517,11 +579,11 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
                               <span className="text-[9px] font-bold text-slate-500 tabular-nums">
                                 {overIssue ? (
                                   <span>
-                                    已发 {formatMaterialQtyDisplay(issued)}{' '}
+                                    净已发 {formatMaterialQtyDisplay(issued)}{' '}
                                     <span className="text-rose-500">（超发 {formatMaterialQtyDisplay(issued - needed)}）</span>
                                   </span>
                                 ) : (
-                                  `已发 ${formatMaterialQtyDisplay(issued)}`
+                                  `净已发 ${formatMaterialQtyDisplay(issued)}`
                                 )}
                               </span>
                             </div>

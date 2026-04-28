@@ -1,5 +1,5 @@
 import React, { useMemo, useCallback, useRef } from 'react';
-import { ArrowDownToLine, X, Check, Scale } from 'lucide-react';
+import { ArrowDownToLine, X, Check, Scale, Package, FileText, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 import { ScanInputButton } from '../../components/scan/ScanInputButton';
 import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
@@ -20,6 +20,29 @@ import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldCo
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { calcUsageByWeight } from '../../utils/bomMaterialUsageByWeight';
+import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
+import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
+import {
+  sectionTitleClass,
+  psiOrderBillFormCardClass,
+  psiOrderBillFormSectionStackClass,
+  psiOrderBillFormDetailSplitClass,
+  psiOrderBillFormGridGapClass,
+  psiOrderBillCompactWarehouseSelectClass,
+  psiOrderBillFormSectionIconIndigoClass,
+  psiOrderBillFormSectionIconEmeraldClass,
+  psiOrderBillCompactLineLabelClass,
+  psiOrderBillCompactLineInputClass,
+  psiOrderBillCompactLineReadonlyClass,
+  psiOrderBillCompactSummaryBarClass,
+  psiOrderBillCompactSummaryLabelClass,
+  psiOrderBillCompactSummaryValueClass,
+  psiOrderBillCompactSummaryUnitClass,
+} from '../../styles/uiDensity';
+
+/** 外协收货矩阵：与明细行 `psiOrderBillCompactLineInputClass` 同高 (h-9)；「最多」在输入框右侧由 hint 展示 */
+const receiveQtyMatrixInputClass =
+  'h-9 min-h-9 w-[3.5rem] shrink-0 rounded-lg border border-slate-200 bg-slate-50/90 px-2 text-left text-xs font-bold tabular-nums text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200';
 
 export interface ReceiveRow {
   orderId?: string;
@@ -65,10 +88,12 @@ export interface OutsourceReceiveQuantityModalProps {
   boms?: BOM[];
   onSubmit: () => void;
   onClose: () => void;
+  /** 嵌入 `DocPhaseModal` 时由外层提供遮罩与标题 */
+  embedded?: boolean;
 }
 
 const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps> = ({
-  productionLinkMode,
+  productionLinkMode: _productionLinkMode,
   outsourceReceiveRows,
   receiveSelectedKeys,
   receiveFormQuantities,
@@ -90,6 +115,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
   boms,
   onSubmit,
   onClose,
+  embedded = false,
 }) => {
   const productsById = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
 
@@ -105,6 +131,44 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
       ),
     [outsourceReceiveRows, receiveSelectedKeys],
   );
+
+  const getUnitName = (productId: string | undefined) => {
+    if (!productId) return 'PCS';
+    const p = products.find(pr => pr.id === productId);
+    const u = (dictionaries?.units ?? []).find(x => x.id === p?.unitId);
+    return u?.name ?? 'PCS';
+  };
+
+  const receiveSummaryTotals = useMemo(() => {
+    let totalQty = 0;
+    let totalAmt = 0;
+    const unitLabels: string[] = [];
+    for (const row of visibleRows) {
+      const baseKey = row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}|${row.partner}`;
+      const pRow = products.find(pr => pr.id === row.productId);
+      const uRow = (dictionaries?.units ?? []).find(x => x.id === pRow?.unitId);
+      unitLabels.push(uRow?.name ?? 'PCS');
+      let rowQty = 0;
+      for (const [k, v] of Object.entries(receiveFormQuantities)) {
+        if (
+          k === baseKey ||
+          k.startsWith(`${baseKey}|`) ||
+          k.startsWith(`${baseKey}${RECEIVE_VARIANT_SEP}`)
+        ) {
+          rowQty += Number(v) || 0;
+        }
+      }
+      totalQty += rowQty;
+      totalAmt += rowQty * (receiveFormUnitPrices[baseKey] ?? 0);
+    }
+    const uniq = [...new Set(unitLabels)];
+    return { totalQty, totalAmt, summaryUnit: uniq.length === 1 ? uniq[0]! : 'PCS' };
+  }, [visibleRows, receiveFormQuantities, receiveFormUnitPrices, products, dictionaries]);
+
+  const receiveMilestoneTitle = useMemo(() => {
+    const names = [...new Set(visibleRows.map(r => r.milestoneName).filter(n => n && String(n).trim()))];
+    return names.length ? names.join('、') : '';
+  }, [visibleRows]);
 
   const handleScanPayload = useCallback(
     async (payload: ScanPayload) => {
@@ -182,7 +246,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
         toast.error((e as Error)?.message || '扫码查询失败');
       }
     },
-    [visibleRows, productionLinkMode, products, categories, setReceiveFormQuantities],
+    [visibleRows, products, categories, setReceiveFormQuantities],
   );
 
   const weightEnabledByNodeId = useMemo(() => {
@@ -201,51 +265,86 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
     }
     return forProduct.find(b => !b.variantId) ?? forProduct[0];
   };
-  return (
-    <div className="fixed inset-0 z-[55] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/60" onClick={onClose} aria-hidden />
-      <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-xl border border-slate-200 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+  const body = (
+    <div
+      className={
+        embedded
+          ? 'flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-white'
+          : 'relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl'
+      }
+      onClick={e => e.stopPropagation()}
+    >
+        {!embedded && (
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
           <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><ArrowDownToLine className="w-5 h-5 text-indigo-600" /> 外协收货 · 录入数量</h3>
           <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100"><X className="w-5 h-5" /></button>
         </div>
-        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
-          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">单据基本信息</h4>
-          <div className="max-w-xl">
-            <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">外协工厂</label>
-            <div className="flex h-[52px] w-full items-center rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-800">
-              {(() => { const firstKey = receiveSelectedKeys.values().next().value; if (!firstKey) return '—'; const row = outsourceReceiveRows.find(r => (r.orderId != null ? `${r.orderId}|${r.nodeId}` : `${r.productId}|${r.nodeId}|${r.partner}`) === firstKey); return row?.partner || '—'; })()}
-            </div>
-          </div>
-          {receiveCustomFieldDefs.length > 0 && setReceiveCustomValues ? (
-            <div className="mt-4 space-y-3 rounded-xl border border-slate-100 bg-white/80 p-4">
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500">自定义内容</h4>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {receiveCustomFieldDefs.map(cf => (
-                  <div key={cf.id} className="min-w-0 space-y-1">
-                    <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
-                    <PlanFormCustomFieldInput
-                      cf={cf}
-                      value={receiveCustomValues[cf.id]}
-                      onChange={v => setReceiveCustomValues(prev => ({ ...prev, [cf.id]: v }))}
-                      controlClassName="h-[48px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
+        )}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-auto p-6">
+            <div className={psiOrderBillFormCardClass}>
+              <div className={psiOrderBillFormSectionStackClass}>
+                <div className="flex flex-wrap items-baseline gap-2.5 border-b border-slate-200 pb-2.5">
+                  <div className={`${psiOrderBillFormSectionIconIndigoClass} shrink-0 self-start`}>
+                    <FileText className="h-4 w-4" />
                   </div>
-                ))}
+                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <h3 className={sectionTitleClass}>1. 外协收货基本信息</h3>
+                    {receiveMilestoneTitle ? (
+                      <span className="text-sm font-bold normal-case tracking-normal text-slate-600">工序：{receiveMilestoneTitle}</span>
+                    ) : null}
+                  </div>
+                </div>
+                <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
+                  <div className="space-y-1.5 min-w-0 md:col-span-2">
+                    <label className="mb-1.5 ml-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">外协工厂</label>
+                    <div className="flex h-9 min-h-9 w-full min-w-0 items-center rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-800">
+                      {(() => {
+                        const firstKey = receiveSelectedKeys.values().next().value;
+                        if (!firstKey) return '—';
+                        const r0 = outsourceReceiveRows.find(r =>
+                          (r.orderId != null ? `${r.orderId}|${r.nodeId}` : `${r.productId}|${r.nodeId}|${r.partner}`) === firstKey,
+                        );
+                        return r0?.partner || '—';
+                      })()}
+                    </div>
+                  </div>
+                  {receiveCustomFieldDefs.length > 0 && setReceiveCustomValues
+                    ? receiveCustomFieldDefs.map(cf => {
+                        const eff = effectivePlanFormFieldType(cf);
+                        return (
+                          <div key={cf.id} className={eff === 'text' || eff === 'file' ? 'md:col-span-2 space-y-1' : 'space-y-1'}>
+                            <label className="mb-1.5 ml-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
+                            <PlanFormCustomFieldInput
+                              cf={cf}
+                              value={receiveCustomValues[cf.id]}
+                              onChange={v => setReceiveCustomValues(prev => ({ ...prev, [cf.id]: v }))}
+                              controlClassName={
+                                eff === 'select' ? psiOrderBillCompactWarehouseSelectClass : psiOrderBillCompactLineInputClass
+                              }
+                            />
+                          </div>
+                        );
+                      })
+                    : null}
+                </div>
               </div>
-            </div>
-          ) : null}
-        </div>
-        <div className="flex-1 overflow-auto min-h-0 p-6">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">商品明细</h4>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">扫码录入</span>
-              <ScanInputButton onScan={handleScanPayload} hint="扫码收货" />
-            </div>
-          </div>
-          <div className="space-y-8">
-          {outsourceReceiveRows.filter(row => receiveSelectedKeys.has(row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}|${row.partner}`)).map(row => {
+
+              <div className={psiOrderBillFormDetailSplitClass}>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className={psiOrderBillFormSectionIconEmeraldClass}>
+                      <Layers className="h-4 w-4" />
+                    </div>
+                    <h3 className={sectionTitleClass}>2. 外协收货明细录入</h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase text-slate-400">扫码录入</span>
+                    <ScanInputButton onScan={handleScanPayload} hint="扫码收货" />
+                  </div>
+                </div>
+                <div className="space-y-3">
+          {visibleRows.map(row => {
             const receiveRowKey = row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}|${row.partner}`;
             const order = row.orderId != null ? orders.find(o => o.id === row.orderId) : undefined;
             const product = products.find(p => p.id === row.productId);
@@ -260,13 +359,8 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
             (msRecv?.reports ?? []).forEach(r => { if (r.variantId) variantIdsFromOrderMilestone.add(r.variantId); });
             const variantIdsForOrderRecv = new Set([...variantIdsInOrderItems, ...variantIdsFromOrderMilestone]);
             const orderRecvHasSpecBreakdown = variantIdsForOrderRecv.size > 0;
-            let variantsInOrder =
-              hasColorSizeOrderRecv && product?.variants
-                ? (product.variants as ProductVariant[]).filter(v => variantIdsForOrderRecv.has(v.id))
-                : [];
-            if (hasColorSizeOrderRecv && product?.variants && product.variants.length > 0 && variantsInOrder.length === 0) {
-              variantsInOrder = [...(product.variants as ProductVariant[])];
-            }
+            const variantsInOrder =
+              hasColorSizeOrderRecv && product?.variants ? [...(product.variants as ProductVariant[])] : [];
             const aggregateOrderReceive = hasColorSizeOrderRecv && variantsInOrder.length > 0 && !orderRecvHasSpecBreakdown;
             /** 跨模式全收：按 row.orderId 决定取 product 维度还是 order 维度的发出/收回记录 */
             const dispatchRecords = row.orderId == null
@@ -307,10 +401,10 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
             const renderWeightFooter = () => {
               if (!weightReportEnabled) return null;
               return (
-                <div className="mt-2 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 space-y-2">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <label className="text-[10px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-1.5">
-                      <Scale className="w-3.5 h-3.5" /> 本次交货总重量 (kg)
+                <div className="mt-1.5 space-y-1 rounded-lg border border-indigo-100 bg-indigo-50/60 px-2 py-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-indigo-700">
+                      <Scale className="h-3.5 w-3.5 shrink-0" /> 本次交货总重量 (kg)
                     </label>
                     <input
                       type="number"
@@ -323,30 +417,32 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                         const v = Number.isFinite(n) && n > 0 ? n : 0;
                         setReceiveFormWeights(prev => ({ ...prev, [baseKey]: v }));
                       }}
-                      className="w-32 rounded-xl border border-indigo-200 bg-white py-2 px-3 text-sm font-bold text-indigo-700 text-right outline-none focus:ring-2 focus:ring-indigo-200"
+                      className="h-9 min-h-9 w-32 box-border rounded-lg border border-indigo-200 bg-white px-2 text-right text-xs font-bold tabular-nums text-indigo-700 outline-none focus:ring-2 focus:ring-indigo-200"
                     />
-                    <span className="text-[10px] text-indigo-500 font-bold">将按 BOM 占比分摊为各子物料实际消耗</span>
+                    <span className="text-[10px] font-bold text-indigo-500">将按 BOM 占比分摊为各子物料实际消耗</span>
                   </div>
                   {weightPreviewRows.length > 0 ? (
-                    <div className="overflow-hidden rounded-lg border border-indigo-100 bg-white">
+                    <div className="overflow-hidden rounded-md border border-indigo-100 bg-white">
                       <table className="w-full text-[11px]">
-                        <thead className="bg-indigo-50/70 text-[10px] font-bold text-indigo-500 uppercase tracking-widest">
+                        <thead className="bg-indigo-50/70 text-[10px] font-bold uppercase tracking-widest text-indigo-500">
                           <tr>
-                            <th className="px-2 py-1 text-left">物料</th>
-                            <th className="px-2 py-1 text-right">占比</th>
-                            <th className="px-2 py-1 text-right" title="BOM 单位用量 × 收货件数">理论重量 (kg)</th>
-                            <th className="px-2 py-1 text-right">实际消耗 (kg)</th>
+                            <th className="px-2 py-0.5 text-left">物料</th>
+                            <th className="px-2 py-0.5 text-right">占比</th>
+                            <th className="px-2 py-0.5 text-right" title="BOM 单位用量 × 收货件数">
+                              理论重量 (kg)
+                            </th>
+                            <th className="px-2 py-0.5 text-right">实际消耗 (kg)</th>
                           </tr>
                         </thead>
                         <tbody>
                           {weightPreviewRows.map(prow => (
                             <tr key={prow.materialProductId} className="border-t border-slate-100 last:border-b-0">
-                              <td className="px-2 py-1 text-slate-700 font-bold">{prow.materialName || prow.materialProductId}</td>
-                              <td className="px-2 py-1 text-right text-slate-500 tabular-nums">{(prow.ratio * 100).toFixed(1)}%</td>
-                              <td className="px-2 py-1 text-right text-slate-500 tabular-nums">
+                              <td className="px-2 py-0.5 font-bold text-slate-700">{prow.materialName || prow.materialProductId}</td>
+                              <td className="px-2 py-0.5 text-right tabular-nums text-slate-500">{(prow.ratio * 100).toFixed(1)}%</td>
+                              <td className="px-2 py-0.5 text-right tabular-nums text-slate-500">
                                 {prow.theoreticalQty != null ? prow.theoreticalQty.toFixed(4) : '—'}
                               </td>
-                              <td className="px-2 py-1 text-right text-indigo-600 font-bold tabular-nums">{prow.actualWeight.toFixed(4)}</td>
+                              <td className="px-2 py-0.5 text-right font-bold tabular-nums text-indigo-600">{prow.actualWeight.toFixed(4)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -354,7 +450,9 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                     </div>
                   ) : (
                     currentRowWeight > 0 && (
-                      <p className="text-[10px] text-amber-600 font-bold">未找到该工序下适用的 BOM 或无可分摊子项，提交后将仅保存重量。</p>
+                      <p className="text-[10px] font-bold leading-snug text-amber-600">
+                        未找到该工序下适用的 BOM 或无可分摊子项，提交后将仅保存重量。
+                      </p>
                     )
                   )}
                 </div>
@@ -380,9 +478,6 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
             const variantIdsForProductRecvSet = new Set([...variantIdsInBlockRecv, ...variantIdsFromProgressRecv]);
             let variantsInProductBlockRecv: ProductVariant[] = [];
             if (isProductBlockRecv && hasColorSizeMatrix && product?.variants) {
-              variantsInProductBlockRecv = (product.variants as ProductVariant[]).filter(v => variantIdsForProductRecvSet.has(v.id));
-            }
-            if (isProductBlockRecv && hasColorSizeMatrix && product?.variants && product.variants.length > 0 && variantsInProductBlockRecv.length === 0) {
               variantsInProductBlockRecv = [...(product.variants as ProductVariant[])];
             }
             const aggregateProductReceive =
@@ -414,19 +509,77 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
               const rowTotalPb = variantsInProductBlockRecv.reduce((s, v) => s + (receiveFormQuantities[`${baseKey}${RECEIVE_VARIANT_SEP}${v.id}`] ?? 0), 0) + (pendingNoVarRecv > 0 && !aggregateProductReceive ? receiveFormQuantities[baseKey] ?? 0 : 0);
               const rowUnitPb = receiveFormUnitPrices[baseKey] ?? 0;
               const rowAmountPb = rowTotalPb * rowUnitPb;
+              const unitPb = getUnitName(row.productId);
+              const productCustomTagsRecvPb =
+                product && category ? getProductCategoryCustomFieldEntries(product, category, { includeFile: false }) : [];
               return (
-                <div key={baseKey} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-4 space-y-4">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">关联产品 · 颜色尺码</span>
-                    <span className="text-sm font-bold text-slate-800">{row.productName}</span>
-                    <span className="text-sm font-bold text-indigo-600">{row.milestoneName}</span>
-                    <span className="text-xs text-slate-500">
-                      {aggregateProductReceive
-                        ? `待收回 ${row.pending} 件（发出未带规格：各格合计不超过此数）`
-                        : `待收回合计 ${row.pending} 件`}
-                    </span>
+                <div
+                  key={baseKey}
+                  className="space-y-2.5 rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 shadow-sm transition-all hover:border-indigo-100/80"
+                >
+                  <div className="flex flex-wrap items-start gap-2 sm:gap-3">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <label className={psiOrderBillCompactLineLabelClass}>收货明细</label>
+                      <div className="flex min-w-0 items-start gap-2">
+                        {product?.imageUrl ? (
+                          <img
+                            src={product.imageUrl}
+                            alt=""
+                            className="h-9 w-9 shrink-0 rounded-lg border border-slate-100 object-cover"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        ) : (
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
+                            <Package className="h-4 w-4" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                            <span className="font-bold text-slate-700">{row.productName}</span>
+                            {product?.sku ? (
+                              <span className="text-[9px] font-bold uppercase tracking-tight text-slate-300">{product.sku}</span>
+                            ) : null}
+                          </div>
+                          {productCustomTagsRecvPb.length > 0 ? (
+                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                              {productCustomTagsRecvPb.map(({ field, display }) => (
+                                <span key={field.id} className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
+                                  {field.label}: {display}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap items-start gap-2 sm:gap-3">
+                      <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                        <label className={psiOrderBillCompactLineLabelClass}>数量</label>
+                        <div className={psiOrderBillCompactLineReadonlyClass}>
+                          {rowTotalPb.toLocaleString()} {unitPb}
+                        </div>
+                      </div>
+                      <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                        <label className={psiOrderBillCompactLineLabelClass}>加工单价 (元)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={receiveFormUnitPrices[baseKey] ?? ''}
+                          onChange={e => setReceiveFormUnitPrices(prev => ({ ...prev, [baseKey]: Number(e.target.value) || 0 }))}
+                          placeholder="0"
+                          className={psiOrderBillCompactLineInputClass}
+                        />
+                      </div>
+                      <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                        <label className={psiOrderBillCompactLineLabelClass}>金额 (元)</label>
+                        <div className={psiOrderBillCompactLineReadonlyClass}>{rowAmountPb.toFixed(2)}</div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-4">
+                  <div className="space-y-3 border-t border-slate-100 pt-2">
+                    <p className="ml-1 text-[10px] font-black uppercase tracking-widest text-slate-400">数量明细（有颜色尺码）</p>
                     {matrixProductRecvPb && dictionaries && (
                       <VariantQtyMatrixInputs
                         product={matrixProductRecvPb}
@@ -446,28 +599,35 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                           const maxV = getPendingForVariantProduct(v.id);
                           return { max: maxV, hint: `最多${maxV}` };
                         }}
+                        inputClassName={receiveQtyMatrixInputClass}
                       />
                     )}
                   </div>
                   {pendingNoVarRecv > 0 && !aggregateProductReceive && (
-                    <div className="p-4 bg-white rounded-xl border border-dashed border-slate-200 flex flex-wrap items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-4 rounded-xl border border-dashed border-slate-200 bg-white p-3">
                       <span className="text-sm font-bold text-slate-600">未按规格发出的待收回</span>
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] font-bold text-slate-400">数量</span>
-                        <input type="number" min={0} max={pendingNoVarRecv} value={(receiveFormQuantities[baseKey] ?? 0) === 0 ? '' : receiveFormQuantities[baseKey]} onChange={e => { const raw = Math.max(0, Math.floor(Number(e.target.value) || 0)); setReceiveFormQuantities(prev => ({ ...prev, [baseKey]: Math.min(raw, pendingNoVarRecv) })); }} placeholder={`最多${pendingNoVarRecv}`} className="w-36 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-200 placeholder:text-[10px] placeholder:text-slate-400" />
+                      <div className="space-y-0.5">
+                        <span className={psiOrderBillCompactLineLabelClass}>数量</span>
+                        <div className="flex min-w-0 max-w-[18rem] items-center gap-2">
+                          <input
+                            type="number"
+                            min={0}
+                            max={pendingNoVarRecv}
+                            value={(receiveFormQuantities[baseKey] ?? 0) === 0 ? '' : receiveFormQuantities[baseKey]}
+                            onChange={e => {
+                              const raw = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                              setReceiveFormQuantities(prev => ({ ...prev, [baseKey]: Math.min(raw, pendingNoVarRecv) }));
+                            }}
+                            placeholder="0"
+                            title={`最多 ${pendingNoVarRecv}`}
+                            className={`${psiOrderBillCompactLineInputClass} min-w-0 flex-1 text-indigo-600`}
+                          />
+                          <span className="shrink-0 text-[9px] font-bold tabular-nums text-slate-400">最多{pendingNoVarRecv}</span>
+                          <span className="w-8 shrink-0 text-right text-[9px] font-bold text-slate-400">{unitPb}</span>
+                        </div>
                       </div>
                     </div>
                   )}
-                  <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-slate-100">
-                    <div className="flex items-center gap-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">单价（元/件）</label>
-                      <input type="number" min={0} step={0.01} value={receiveFormUnitPrices[baseKey] ?? ''} onChange={e => setReceiveFormUnitPrices(prev => ({ ...prev, [baseKey]: Number(e.target.value) || 0 }))} placeholder="0" className="w-28 rounded-xl border border-slate-200 py-2 px-3 text-sm font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500 outline-none" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">本行金额（元）</label>
-                      <div className="w-28 rounded-xl border border-slate-100 bg-slate-50 py-2 px-3 text-sm font-bold text-slate-700 text-center min-h-[40px] flex items-center justify-center">{rowAmountPb.toFixed(2)}</div>
-                    </div>
-                  </div>
                   {renderWeightFooter()}
                 </div>
               );
@@ -481,23 +641,80 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
               const rowTotalQty = variantsInOrder.reduce((s, v) => s + (receiveFormQuantities[`${baseKey}|${v.id}`] ?? 0), 0);
               const rowUnitPrice = receiveFormUnitPrices[baseKey] ?? 0;
               const rowAmount = rowTotalQty * rowUnitPrice;
+              const unitOrd = getUnitName(row.productId);
+              const productCustomTagsRecvOrd =
+                product && category ? getProductCategoryCustomFieldEntries(product, category, { includeFile: false }) : [];
               return (
-                <div key={baseKey} className="bg-slate-50/50 rounded-2xl border border-slate-200 p-4 space-y-4">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    {row.orderId != null ? (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black bg-indigo-50 text-indigo-600 uppercase tracking-wider">工单级</span>
-                    ) : (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black bg-emerald-50 text-emerald-700 uppercase tracking-wider">产品级</span>
-                    )}
-                    {row.orderNumber != null && <span className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">{row.orderNumber}</span>}
-                    <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">颜色尺码</span>
-                    <span className="text-sm font-bold text-slate-800">{row.productName}</span>
-                    <span className="text-sm font-bold text-indigo-600">{row.milestoneName}</span>
-                    {aggregateOrderReceive && (
-                      <span className="text-xs text-slate-500">（发出未带规格：各规格合计不超过待收回 {row.pending}）</span>
-                    )}
+                <div
+                  key={baseKey}
+                  className="space-y-2.5 rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 shadow-sm transition-all hover:border-indigo-100/80"
+                >
+                  <div className="flex flex-wrap items-start gap-2 sm:gap-3">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <label className={psiOrderBillCompactLineLabelClass}>收货明细</label>
+                      <div className="flex min-w-0 items-start gap-2">
+                        {product?.imageUrl ? (
+                          <img
+                            src={product.imageUrl}
+                            alt=""
+                            className="h-9 w-9 shrink-0 rounded-lg border border-slate-100 object-cover"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        ) : (
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
+                            <Package className="h-4 w-4" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                            <span className="font-bold text-slate-700">{row.productName}</span>
+                            {product?.sku ? (
+                              <span className="text-[9px] font-bold uppercase tracking-tight text-slate-300">{product.sku}</span>
+                            ) : null}
+                          </div>
+                          {productCustomTagsRecvOrd.length > 0 ? (
+                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                              {productCustomTagsRecvOrd.map(({ field, display }) => (
+                                <span key={field.id} className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
+                                  {field.label}: {display}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                          {row.orderNumber != null ? (
+                            <div className="mt-0.5 text-[10px] font-bold tabular-nums text-slate-500">工单 {row.orderNumber}</div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap items-start gap-2 sm:gap-3">
+                      <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                        <label className={psiOrderBillCompactLineLabelClass}>数量</label>
+                        <div className={psiOrderBillCompactLineReadonlyClass}>
+                          {rowTotalQty.toLocaleString()} {unitOrd}
+                        </div>
+                      </div>
+                      <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                        <label className={psiOrderBillCompactLineLabelClass}>加工单价 (元)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={receiveFormUnitPrices[baseKey] ?? ''}
+                          onChange={e => setReceiveFormUnitPrices(prev => ({ ...prev, [baseKey]: Number(e.target.value) || 0 }))}
+                          placeholder="0"
+                          className={psiOrderBillCompactLineInputClass}
+                        />
+                      </div>
+                      <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                        <label className={psiOrderBillCompactLineLabelClass}>金额 (元)</label>
+                        <div className={psiOrderBillCompactLineReadonlyClass}>{rowAmount.toFixed(2)}</div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-4">
+                  <div className="space-y-3 border-t border-slate-100 pt-2">
+                    <p className="ml-1 text-[10px] font-black uppercase tracking-widest text-slate-400">数量明细（有颜色尺码）</p>
                     {matrixProductRecvOrder && (
                       <VariantQtyMatrixInputs
                         product={matrixProductRecvOrder}
@@ -514,63 +731,87 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                           const maxVariant = getPendingForVariant(v.id);
                           return { max: maxVariant, hint: `最多${maxVariant}` };
                         }}
+                        inputClassName={receiveQtyMatrixInputClass}
                       />
                     )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-slate-100">
-                    <div className="flex items-center gap-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">单价（元/件）</label>
-                      <input type="number" min={0} step={0.01} value={receiveFormUnitPrices[baseKey] ?? ''} onChange={e => setReceiveFormUnitPrices(prev => ({ ...prev, [baseKey]: Number(e.target.value) || 0 }))} placeholder="0" className="w-28 rounded-xl border border-slate-200 py-2 px-3 text-sm font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500 outline-none" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">本行金额（元）</label>
-                      <div className="w-28 rounded-xl border border-slate-100 bg-slate-50 py-2 px-3 text-sm font-bold text-slate-700 text-center min-h-[40px] flex items-center justify-center">{rowAmount.toFixed(2)}</div>
-                    </div>
                   </div>
                   {renderWeightFooter()}
                 </div>
               );
             }
+            const unitSimple = getUnitName(row.productId);
+            const productCustomTagsRecvSimple =
+              product && category ? getProductCategoryCustomFieldEntries(product, category, { includeFile: false }) : [];
             return (
-              <div key={baseKey} className="rounded-xl border border-slate-200 bg-slate-50/40 px-4 pb-4 pt-3.5 space-y-2">
-                <div className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-2.5">
-                  <div className="min-w-0 max-w-[min(100%,15rem)] shrink sm:max-w-[18rem]">
-                    <div className="flex min-w-0 items-baseline gap-x-2">
-                      <span className="truncate text-base font-bold leading-snug text-slate-900 sm:text-lg" title={row.productName}>
-                        {row.productName}
-                      </span>
-                      <span className="shrink-0 text-[10px] font-bold text-indigo-600 sm:text-[11px]">{row.milestoneName}</span>
-                    </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] font-medium text-slate-500 sm:text-[11px]">
-                      {row.orderId != null ? (
-                        <span className="inline-flex items-center px-1 py-0 rounded text-[9px] font-black bg-indigo-50 text-indigo-600 uppercase tracking-wider">工单级</span>
+              <div
+                key={baseKey}
+                className="space-y-2 rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 shadow-sm transition-all hover:border-indigo-100/80"
+              >
+                <div className="flex flex-wrap items-start gap-2 sm:gap-3">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <label className={psiOrderBillCompactLineLabelClass}>收货明细</label>
+                    <div className="flex min-w-0 items-start gap-2">
+                      {product?.imageUrl ? (
+                        <img
+                          src={product.imageUrl}
+                          alt=""
+                          className="h-9 w-9 shrink-0 rounded-lg border border-slate-100 object-cover"
+                          loading="lazy"
+                          decoding="async"
+                        />
                       ) : (
-                        <span className="inline-flex items-center px-1 py-0 rounded text-[9px] font-black bg-emerald-50 text-emerald-700 uppercase tracking-wider">产品级</span>
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
+                          <Package className="h-4 w-4" />
+                        </div>
                       )}
-                      {row.orderNumber != null && (
-                        <span className="truncate">工单 <span className="font-bold text-slate-600 tabular-nums">{row.orderNumber}</span></span>
-                      )}
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                          <span className="font-bold text-slate-700">{row.productName}</span>
+                          {product?.sku ? (
+                            <span className="text-[9px] font-bold uppercase tracking-tight text-slate-300">{product.sku}</span>
+                          ) : null}
+                        </div>
+                        {productCustomTagsRecvSimple.length > 0 ? (
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            {productCustomTagsRecvSimple.map(({ field, display }) => (
+                              <span key={field.id} className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
+                                {field.label}: {display}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        {row.orderNumber != null ? (
+                          <div className="mt-0.5 text-[10px] font-bold tabular-nums text-slate-500">工单 {row.orderNumber}</div>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex shrink-0 flex-wrap items-end gap-x-2.5 gap-y-2 sm:flex-nowrap sm:gap-x-3">
-                    <div className="flex flex-col gap-0.5">
-                      <label className="text-[9px] font-black uppercase tracking-wide text-slate-400 whitespace-nowrap">本次收回</label>
-                      <div className="flex items-center gap-1.5">
+                  <div className="flex shrink-0 flex-wrap items-start gap-2 sm:gap-3">
+                    <div className="min-w-[10rem] max-w-[18rem] flex-1 space-y-0.5 sm:min-w-[11rem]">
+                      <label className={`${psiOrderBillCompactLineLabelClass} !ml-0`}>数量</label>
+                      <div className="flex min-w-0 items-center gap-2">
                         <input
                           type="number"
                           min={0}
                           max={row.pending}
                           value={(receiveFormQuantities[baseKey] ?? 0) === 0 ? '' : receiveFormQuantities[baseKey]}
-                          onChange={e => setReceiveFormQuantities(prev => ({ ...prev, [baseKey]: Number(e.target.value) || 0 }))}
+                          onChange={e => {
+                            const raw = Number(e.target.value) || 0;
+                            setReceiveFormQuantities(prev => ({
+                              ...prev,
+                              [baseKey]: Math.min(Math.max(0, raw), row.pending),
+                            }));
+                          }}
                           placeholder="0"
                           title={`最多 ${row.pending}`}
-                          className="h-8 w-[4.5rem] rounded-md border border-slate-200 bg-white px-2 text-left text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200 tabular-nums placeholder:text-[9px] placeholder:text-slate-400"
+                          className={`${psiOrderBillCompactLineInputClass} min-w-0 flex-1`}
                         />
-                        <span className="text-[10px] font-medium tabular-nums text-slate-400 whitespace-nowrap">最多 {row.pending}</span>
+                        <span className="shrink-0 text-[9px] font-bold tabular-nums text-slate-400">最多{row.pending}</span>
+                        <span className="w-8 shrink-0 text-right text-[9px] font-bold text-slate-400">{unitSimple}</span>
                       </div>
                     </div>
-                    <div className="flex flex-col gap-0.5">
-                      <label className="text-[9px] font-black uppercase tracking-wide text-slate-400 whitespace-nowrap">单价（元/件）</label>
+                    <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                      <label className={psiOrderBillCompactLineLabelClass}>加工单价 (元)</label>
                       <input
                         type="number"
                         min={0}
@@ -578,12 +819,12 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                         value={receiveFormUnitPrices[baseKey] ?? ''}
                         onChange={e => setReceiveFormUnitPrices(prev => ({ ...prev, [baseKey]: Number(e.target.value) || 0 }))}
                         placeholder="0"
-                        className="h-8 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-200 tabular-nums sm:w-[5.25rem]"
+                        className={psiOrderBillCompactLineInputClass}
                       />
                     </div>
-                    <div className="flex flex-col gap-0.5">
-                      <label className="text-[9px] font-black uppercase tracking-wide text-slate-400 whitespace-nowrap">金额（元）</label>
-                      <div className="flex h-8 w-20 min-w-[4.5rem] items-center justify-center rounded-md border border-slate-100 bg-white px-1.5 text-xs font-bold text-slate-700 tabular-nums sm:w-[5.25rem]">
+                    <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                      <label className={psiOrderBillCompactLineLabelClass}>金额 (元)</label>
+                      <div className={psiOrderBillCompactLineReadonlyClass}>
                         {((receiveFormQuantities[baseKey] ?? 0) * (receiveFormUnitPrices[baseKey] ?? 0)).toFixed(2)}
                       </div>
                     </div>
@@ -593,14 +834,38 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
               </div>
             );
           })}
+                </div>
+                <div className={`${psiOrderBillCompactSummaryBarClass} flex-wrap justify-between gap-y-2 sm:justify-end`}>
+                  <div className="flex items-baseline gap-2">
+                    <span className={psiOrderBillCompactSummaryLabelClass}>本次收回合计</span>
+                    <span className={psiOrderBillCompactSummaryValueClass}>
+                      {receiveSummaryTotals.totalQty.toLocaleString()}
+                      <span className={psiOrderBillCompactSummaryUnitClass}>{receiveSummaryTotals.summaryUnit}</span>
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2 border-l border-white/25 pl-0 sm:pl-4">
+                    <span className={psiOrderBillCompactSummaryLabelClass}>加工费合计</span>
+                    <span className={psiOrderBillCompactSummaryValueClass}>¥{receiveSummaryTotals.totalAmt.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/30 shrink-0">
-          <button type="button" onClick={onSubmit} className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all">
-            <Check className="w-4 h-4" /> 确认收货
+        <div className="shrink-0 border-t border-slate-100 bg-slate-50/30 px-6 py-4">
+          <button type="button" onClick={onSubmit} className="flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-bold text-white transition-all hover:bg-indigo-700">
+            <Check className="h-4 w-4" /> 确认收货
           </button>
         </div>
-      </div>
+    </div>
+  );
+
+  if (embedded) return body;
+
+  return (
+    <div className="fixed inset-0 z-[55] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/60" onClick={onClose} aria-hidden />
+      {body}
     </div>
   );
 };

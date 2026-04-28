@@ -1,6 +1,7 @@
 
-import React, { useState, useMemo, useCallback } from 'react';
-import { X, Trash2, Check, Pencil, UserPlus } from 'lucide-react';
+import React, { useState, useMemo, useCallback, useContext } from 'react';
+import { createPortal } from 'react-dom';
+import { Check, UserPlus, Clock, User, Package } from 'lucide-react';
 import {
   ProductionOrder,
   Product,
@@ -18,7 +19,8 @@ import {
 } from '../../types';
 import WorkerSelector from '../../components/WorkerSelector';
 import { buildDefectiveReworkByOrderMilestone } from '../../utils/defectiveReworkByOrderMilestone';
-import { useConfirm } from '../../contexts/ConfirmContext';
+import DocPhaseModal, { DocPhaseEditToolbarPortalContext } from '../../components/DocPhaseModal';
+import { DocInlineMetaRow, DocSummaryCard } from '../../components/doc-modal';
 import { toast } from 'sonner';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { buildVariantQtyMatrixLayout } from '../../utils/variantQtyMatrix';
@@ -28,6 +30,45 @@ import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor'
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
 import { fmtDT } from '../../utils/formatTime';
 import { buildOneBlockMatrixPrintRows } from '../../utils/variantMatrixPrintRows';
+import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
+import { reportBatchRowWeightForPayload } from '../../utils/reportBatchSaveWeight';
+
+function reportNodeUsesWeight(globalNodes: GlobalNodeTemplate[], templateId: string): boolean {
+  return !!globalNodes.find(n => n.id === templateId)?.enableWeightOnReport;
+}
+
+function formatReportWeightKgDisplay(w: unknown): string {
+  const n = typeof w === 'number' ? w : typeof w === 'string' ? parseFloat(String(w)) : NaN;
+  if (!Number.isFinite(n) || n <= 0) return '—';
+  if (Number.isInteger(n)) return String(Math.trunc(n));
+  const t = n.toFixed(4).replace(/\.?0+$/, '');
+  return t || '0';
+}
+
+function weightToNumberSumPart(w: unknown): number {
+  const n = typeof w === 'number' ? w : typeof w === 'string' ? parseFloat(String(w)) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function parseWeightFieldForEdit(w: unknown): number | '' {
+  const n = typeof w === 'number' ? w : typeof w === 'string' ? parseFloat(String(w)) : NaN;
+  if (!Number.isFinite(n) || n < 0) return '';
+  return n;
+}
+
+/** 按良品数量比例分摊批次总重到各行，最后一行吃掉舍入误差 */
+function distributeReportWeightsByGoodQty(batchW: number, rows: { quantity: number }[]): number[] {
+  const goodSum = rows.reduce((s, r) => s + r.quantity, 0);
+  if (rows.length === 0) return [];
+  if (goodSum <= 0) return rows.map(() => 0);
+  let allocated = 0;
+  return rows.map((row, idx) => {
+    if (idx === rows.length - 1) return Math.round((batchW - allocated) * 1e6) / 1e6;
+    const part = Math.round(((batchW * row.quantity) / goodSum) * 1e6) / 1e6;
+    allocated += part;
+    return part;
+  });
+}
 
 type OrderReportRow = {
   order: ProductionOrder;
@@ -35,7 +76,7 @@ type OrderReportRow = {
   report: {
     id: string; timestamp: string; operator: string; quantity: number;
     defectiveQuantity?: number; variantId?: string; reportBatchId?: string; reportNo?: string;
-    [k: string]: any;
+    [k: string]: unknown;
   };
 };
 type ProductReportRow = { progress: ProductMilestoneProgress; report: OrderReportRow['report'] };
@@ -81,8 +122,48 @@ type ReportUpdateParams = {
   operator?: string;
   newOrderId?: string;
   newMilestoneId?: string;
-  customData?: Record<string, any>;
+  customData?: Record<string, unknown>;
+  weight?: number | null;
 };
+
+/** 报工编辑行：矩阵模式下 `reportId` 为空表示该规格尚未有记录，保存时走新增 */
+type BatchRowEdit = {
+  reportId: string;
+  variantId?: string;
+  orderId: string;
+  milestoneId: string;
+  progressId?: string;
+  quantity: number;
+  defectiveQuantity: number;
+  weightKg?: number | '';
+};
+
+function resolveOrderMilestoneForVariant(
+  batchRows: OrderReportRow[],
+  variantId: string,
+  templateId: string,
+): { orderId: string; milestoneId: string } {
+  const withItem = batchRows.find(({ order }) => order.items.some(i => i.variantId === variantId));
+  const base = withItem ?? batchRows[0]!;
+  const order = base.order;
+  const ms = order.milestones.find(m => m.templateId === templateId);
+  return { orderId: order.id, milestoneId: ms?.id ?? base.milestone.id };
+}
+
+function ReportBatchEditSavePortal({ active, onSave }: { active: boolean; onSave: () => void }) {
+  const host = useContext(DocPhaseEditToolbarPortalContext);
+  if (!active || !host) return null;
+  return createPortal(
+    <button
+      type="button"
+      onClick={onSave}
+      className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700"
+    >
+      <Check className="w-4 h-4" /> 保存
+    </button>,
+    host,
+  );
+}
 
 interface ReportBatchDetailModalProps {
   batch: ReportDetailBatch;
@@ -102,9 +183,36 @@ interface ReportBatchDetailModalProps {
   onOpenOrderFormPrintTab?: () => void;
   onUpdateReport?: (params: ReportUpdateParams) => void;
   onDeleteReport?: (params: { orderId: string; milestoneId: string; reportId: string }) => void;
-  onUpdateReportProduct?: (params: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string; customData?: Record<string, any> }) => void;
+  onUpdateReportProduct?: (params: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string; customData?: Record<string, unknown>; weight?: number | null }) => void;
   onDeleteReportProduct?: (params: { progressId: string; reportId: string }) => void;
   onUpdateProduct?: (product: Product) => Promise<Product | null>;
+  /** 矩阵编辑补录新规格时用，与 {@link ReportModal} 多规格报工一致 */
+  onReportSubmit?: (
+    oId: string,
+    mId: string,
+    qty: number,
+    data: Record<string, unknown> | null,
+    vId?: string,
+    workerId?: string,
+    defectiveQty?: number,
+    equipmentId?: string,
+    reportBatchId?: string,
+    reportNo?: string,
+    weight?: number,
+  ) => Promise<void>;
+  onReportSubmitProduct?: (
+    productId: string,
+    milestoneTemplateId: string,
+    qty: number,
+    data: Record<string, unknown> | null,
+    vId?: string,
+    workerId?: string,
+    defectiveQty?: number,
+    equipmentId?: string,
+    reportBatchId?: string,
+    reportNo?: string,
+    weight?: number,
+  ) => Promise<void>;
   hasOrderPerm: (permKey: string) => boolean;
 }
 
@@ -129,9 +237,10 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
   onUpdateReportProduct,
   onDeleteReportProduct,
   onUpdateProduct,
+  onReportSubmit,
+  onReportSubmitProduct,
   hasOrderPerm,
 }) => {
-  const confirm = useConfirm();
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
 
@@ -176,6 +285,21 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
       defectiveByVariant,
     };
   }, [reportDetailBatch, products, categoryMap, dictionaries]);
+
+  const reportDetailViewTemplateId =
+    reportDetailBatch.source === 'order'
+      ? reportDetailBatch.first.milestone.templateId
+      : reportDetailBatch.milestoneTemplateId;
+  const reportDetailViewNodeUsesWeight = useMemo(
+    () => reportNodeUsesWeight(globalNodes, reportDetailViewTemplateId),
+    [globalNodes, reportDetailViewTemplateId],
+  );
+  const reportDetailBatchTotalWeightKg = useMemo(() => {
+    if (reportDetailBatch.source === 'order') {
+      return (reportDetailBatch.rows as OrderReportRow[]).reduce((s, { report }) => s + weightToNumberSumPart(report.weight), 0);
+    }
+    return (reportDetailBatch.rows as ProductReportRow[]).reduce((s, { report }) => s + weightToNumberSumPart(report.weight), 0);
+  }, [reportDetailBatch]);
 
   const defectiveAndReworkByOrderMilestone = useMemo(
     () => buildDefectiveReworkByOrderMilestone(orders, prodRecords),
@@ -279,250 +403,391 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
       operator: string;
       workerId: string;
       rate: number;
-      customData: Record<string, any>;
-      rowEdits: {
-        reportId: string;
-        orderId: string;
-        milestoneId: string;
-        progressId?: string;
-        quantity: number;
-        defectiveQuantity: number;
-      }[];
+      customData: Record<string, unknown>;
+      /** 有规格矩阵且工序开启称重时：本批总重 (kg)，保存时按各规格良品数量比例分摊到各 report */
+      weightKg?: number | '';
+      rowEdits: BatchRowEdit[];
     };
   } | null>(null);
 
+  const handleClose = () => {
+    setEditingReport(null);
+    onClose();
+  };
+
+  const handleSave = async () => {
+    if (!editingReport) return;
+    const f = editingReport.form;
+    const ts = new Date(f.timestamp);
+    const tsStr = isNaN(ts.getTime()) ? new Date().toLocaleString() : ts.toLocaleString();
+    const customDataPayload = f.customData;
+    const matrixMode = !!batchDetailMatrix;
+    if (reportDetailBatch.source === 'order' && onUpdateReport) {
+      const origMilestoneId = reportDetailBatch.first.milestone.id;
+      const changedMilestone = editingReport.milestoneId !== origMilestoneId;
+      const usesW = reportNodeUsesWeight(globalNodes, editingReport.templateId);
+      const matrix = batchDetailMatrix;
+      const weightParts =
+        matrix && usesW && typeof f.weightKg === 'number' && Number.isFinite(f.weightKg)
+          ? distributeReportWeightsByGoodQty(f.weightKg, f.rowEdits.map(r => ({ quantity: Math.max(0, r.quantity) })))
+          : null;
+      const fr = reportDetailBatch.first as OrderReportRow;
+      const equipFromBatch = (fr.report as { equipmentId?: string }).equipmentId;
+      const batchIdPersist = (fr.report.reportBatchId ?? undefined) as string | undefined;
+      const reportNoPersist = (fr.report.reportNo ?? undefined) as string | undefined;
+      let idx = 0;
+      for (const row of f.rowEdits) {
+        const weight = reportBatchRowWeightForPayload({
+          usesWeight: usesW, isMatrix: !!matrix, batchTotalWeightKg: f.weightKg,
+          distributedParts: weightParts, rowIndex: idx, rowWeightKg: row.weightKg,
+        });
+        idx += 1;
+        const qGood = Math.max(0, row.quantity);
+        const qDef = Math.max(0, row.defectiveQuantity);
+        if (matrixMode && row.variantId && !row.reportId) {
+          if (qGood + qDef <= 0) continue;
+          if (!onReportSubmit) {
+            toast.error('无法新增规格：缺少报工提交回调');
+            continue;
+          }
+          await onReportSubmit(
+            row.orderId,
+            row.milestoneId,
+            qGood,
+            customDataPayload as Record<string, unknown> | null,
+            row.variantId,
+            f.workerId || undefined,
+            qDef,
+            equipFromBatch,
+            batchIdPersist,
+            reportNoPersist,
+            usesW && weight !== undefined ? weight : undefined,
+          );
+          continue;
+        }
+        await onUpdateReport({
+          orderId: row.orderId, milestoneId: row.milestoneId, reportId: row.reportId,
+          quantity: qGood, defectiveQuantity: qDef,
+          timestamp: tsStr, operator: f.operator,
+          newMilestoneId: changedMilestone ? editingReport.milestoneId : undefined,
+          customData: customDataPayload,
+          ...(usesW && weight !== undefined ? { weight } : {}),
+        });
+      }
+    } else if (reportDetailBatch.source === 'product' && onUpdateReportProduct) {
+      const origTemplateId = reportDetailBatch.milestoneTemplateId;
+      const changedTemplate = editingReport.templateId !== origTemplateId;
+      const usesW = reportNodeUsesWeight(globalNodes, editingReport.templateId);
+      const matrix = batchDetailMatrix;
+      const weightParts =
+        matrix && usesW && typeof f.weightKg === 'number' && Number.isFinite(f.weightKg)
+          ? distributeReportWeightsByGoodQty(f.weightKg, f.rowEdits.map(r => ({ quantity: Math.max(0, r.quantity) })))
+          : null;
+      const fr = reportDetailBatch.first as ProductReportRow;
+      const equipFromBatch = (fr.report as { equipmentId?: string }).equipmentId;
+      const batchIdPersist = (fr.report.reportBatchId ?? undefined) as string | undefined;
+      const reportNoPersist = (fr.report.reportNo ?? undefined) as string | undefined;
+      let idx = 0;
+      for (const row of f.rowEdits) {
+        const weight = reportBatchRowWeightForPayload({
+          usesWeight: usesW, isMatrix: !!matrix, batchTotalWeightKg: f.weightKg,
+          distributedParts: weightParts, rowIndex: idx, rowWeightKg: row.weightKg,
+        });
+        idx += 1;
+        const qGood = Math.max(0, row.quantity);
+        const qDef = Math.max(0, row.defectiveQuantity);
+        if (matrixMode && row.variantId && !row.reportId) {
+          if (qGood + qDef <= 0) continue;
+          if (!onReportSubmitProduct) {
+            toast.error('无法新增规格：缺少报工提交回调');
+            continue;
+          }
+          await onReportSubmitProduct(
+            editingReport.productId,
+            editingReport.templateId,
+            qGood,
+            customDataPayload as Record<string, unknown> | null,
+            row.variantId,
+            f.workerId || undefined,
+            qDef,
+            equipFromBatch,
+            batchIdPersist,
+            reportNoPersist,
+            usesW && weight !== undefined ? weight : undefined,
+          );
+          continue;
+        }
+        if (!row.progressId) continue;
+        await onUpdateReportProduct({
+          progressId: row.progressId, reportId: row.reportId,
+          quantity: qGood, defectiveQuantity: qDef,
+          timestamp: tsStr, operator: f.operator,
+          newMilestoneTemplateId: changedTemplate ? editingReport.templateId : undefined,
+          customData: customDataPayload,
+          ...(usesW && weight !== undefined ? { weight } : {}),
+        });
+      }
+    }
+    if (onUpdateProduct && f.rate >= 0) {
+      const product = productMap.get(editingReport.productId);
+      if (product) {
+        onUpdateProduct({
+          ...product,
+          nodeRates: { ...(product.nodeRates || {}), [editingReport.templateId]: f.rate },
+        });
+      }
+    }
+    setEditingReport(null);
+    onClose();
+  };
+  const handleEnterEdit = () => {
+    if (reportDetailBatch.rows.length === 0) return;
+    if (reportDetailBatch.source === 'order') {
+      if (!onUpdateReport) return;
+      const { order, milestone, report } = (reportDetailBatch.rows as OrderReportRow[])[0];
+      const ts = report.timestamp;
+      let dt = new Date(ts);
+      if (isNaN(dt.getTime())) dt = new Date();
+      const tsStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}T${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+      const product = productMap.get(order.productId);
+      const rate = product?.nodeRates?.[milestone.templateId] ?? 0;
+      const matchingWorker = workers.find(w => w.name === report.operator);
+      const msFull = order.milestones?.find(m => m.templateId === milestone.templateId);
+      const customData = mergeCustomDataForTemplate(
+        report.customData, milestone.templateId, msFull?.reportTemplate,
+        product?.routeReportValues?.[milestone.templateId], globalNodes,
+      );
+      const tidInit = milestone.templateId;
+      const usesWInit = reportNodeUsesWeight(globalNodes, tidInit);
+      const sumBatchW = (reportDetailBatch.rows as OrderReportRow[]).reduce(
+        (s, row) => s + weightToNumberSumPart(row.report.weight), 0,
+      );
+      if (reportDetailBatch.rows.length > 1) {
+        const first = JSON.stringify(report.customData ?? {});
+        const hasDiff = reportDetailBatch.rows.some(r => JSON.stringify(r.report.customData ?? {}) !== first);
+        if (hasDiff) toast.warning('批次内各行的填报项数据不一致，编辑后将统一为同一份填报项');
+      }
+      if (batchDetailMatrix) {
+        if (!onReportSubmit) {
+          toast.error('无法补录新规格：缺少报工提交回调');
+          return;
+        }
+        const { layout } = batchDetailMatrix;
+        const ordRows = reportDetailBatch.rows as OrderReportRow[];
+        const rowEdits: BatchRowEdit[] = [];
+        const variantMap = new Map<string, OrderReportRow>();
+        for (const or of ordRows) {
+          const vid = or.report.variantId;
+          if (vid) variantMap.set(vid, or);
+        }
+        for (const cr of layout.colorRows) {
+          for (const v of cr.variantAtSize) {
+            if (!v) continue;
+            const hit = variantMap.get(v.id);
+            if (hit) {
+              rowEdits.push({
+                reportId: hit.report.id,
+                variantId: v.id,
+                orderId: hit.order.id,
+                milestoneId: hit.milestone.id,
+                quantity: hit.report.quantity,
+                defectiveQuantity: hit.report.defectiveQuantity ?? 0,
+              });
+            } else {
+              const { orderId, milestoneId } = resolveOrderMilestoneForVariant(ordRows, v.id, milestone.templateId);
+              rowEdits.push({
+                reportId: '',
+                variantId: v.id,
+                orderId,
+                milestoneId,
+                quantity: 0,
+                defectiveQuantity: 0,
+              });
+            }
+          }
+        }
+        setEditingReport({
+          orderId: order.id, milestoneId: milestone.id,
+          templateId: milestone.templateId, productId: order.productId,
+          form: {
+            timestamp: tsStr, operator: report.operator,
+            workerId: matchingWorker?.id || '', rate, customData,
+            ...(usesWInit ? { weightKg: sumBatchW > 0 ? sumBatchW : '' as const } : {}),
+            rowEdits,
+          },
+        });
+        return;
+      }
+      setEditingReport({
+        orderId: order.id, milestoneId: milestone.id,
+        templateId: milestone.templateId, productId: order.productId,
+        form: {
+          timestamp: tsStr, operator: report.operator,
+          workerId: matchingWorker?.id || '', rate, customData,
+          ...(batchDetailMatrix && usesWInit ? { weightKg: sumBatchW > 0 ? sumBatchW : '' as const } : {}),
+          rowEdits: (reportDetailBatch.rows as OrderReportRow[]).map(({ order: o, milestone: m, report: r }) => ({
+            reportId: r.id, orderId: o.id, milestoneId: m.id,
+            quantity: r.quantity, defectiveQuantity: r.defectiveQuantity ?? 0,
+            ...(!batchDetailMatrix && usesWInit ? { weightKg: parseWeightFieldForEdit(r.weight) } : {}),
+          })),
+        },
+      });
+    } else {
+      if (!onUpdateReportProduct) return;
+      const { progress, report } = (reportDetailBatch.rows as ProductReportRow[])[0];
+      const ts = report.timestamp;
+      let dt = new Date(ts);
+      if (isNaN(dt.getTime())) dt = new Date();
+      const tsStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}T${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+      const product = productMap.get(progress.productId);
+      const rate = product?.nodeRates?.[progress.milestoneTemplateId] ?? 0;
+      const matchingWorker = workers.find(w => w.name === report.operator);
+      const customData = mergeCustomDataForTemplate(
+        report.customData, progress.milestoneTemplateId, undefined,
+        product?.routeReportValues?.[progress.milestoneTemplateId], globalNodes,
+      );
+      const tidInit = progress.milestoneTemplateId;
+      const usesWInit = reportNodeUsesWeight(globalNodes, tidInit);
+      const sumBatchW = (reportDetailBatch.rows as ProductReportRow[]).reduce(
+        (s, row) => s + weightToNumberSumPart(row.report.weight), 0,
+      );
+      if (reportDetailBatch.rows.length > 1) {
+        const first = JSON.stringify(report.customData ?? {});
+        const hasDiff = reportDetailBatch.rows.some(r => JSON.stringify(r.report.customData ?? {}) !== first);
+        if (hasDiff) toast.warning('批次内各行的填报项数据不一致，编辑后将统一为同一份填报项');
+      }
+      if (batchDetailMatrix) {
+        if (!onReportSubmitProduct) {
+          toast.error('无法补录新规格：缺少报工提交回调');
+          return;
+        }
+        const { layout } = batchDetailMatrix;
+        const prRows = reportDetailBatch.rows as ProductReportRow[];
+        const rowEdits: BatchRowEdit[] = [];
+        const variantMap = new Map<string, ProductReportRow>();
+        for (const pr of prRows) {
+          variantMap.set(pr.progress.variantId, pr);
+        }
+        for (const cr of layout.colorRows) {
+          for (const v of cr.variantAtSize) {
+            if (!v) continue;
+            const hit = variantMap.get(v.id);
+            if (hit) {
+              rowEdits.push({
+                reportId: hit.report.id,
+                variantId: v.id,
+                orderId: '',
+                milestoneId: '',
+                progressId: hit.progress.id,
+                quantity: hit.report.quantity,
+                defectiveQuantity: hit.report.defectiveQuantity ?? 0,
+              });
+            } else {
+              rowEdits.push({
+                reportId: '',
+                variantId: v.id,
+                orderId: '',
+                milestoneId: '',
+                progressId: '',
+                quantity: 0,
+                defectiveQuantity: 0,
+              });
+            }
+          }
+        }
+        setEditingReport({
+          orderId: '', milestoneId: '',
+          templateId: progress.milestoneTemplateId, productId: progress.productId,
+          form: {
+            timestamp: tsStr, operator: report.operator,
+            workerId: matchingWorker?.id || '', rate, customData,
+            ...(usesWInit ? { weightKg: sumBatchW > 0 ? sumBatchW : '' as const } : {}),
+            rowEdits,
+          },
+        });
+        return;
+      }
+      setEditingReport({
+        orderId: '', milestoneId: '',
+        templateId: progress.milestoneTemplateId, productId: progress.productId,
+        form: {
+          timestamp: tsStr, operator: report.operator,
+          workerId: matchingWorker?.id || '', rate, customData,
+          ...(batchDetailMatrix && usesWInit ? { weightKg: sumBatchW > 0 ? sumBatchW : '' as const } : {}),
+          rowEdits: (reportDetailBatch.rows as ProductReportRow[]).map(({ progress: pr, report: r }) => ({
+            reportId: r.id, orderId: '', milestoneId: '', progressId: pr.id,
+            quantity: r.quantity, defectiveQuantity: r.defectiveQuantity ?? 0,
+            ...(!batchDetailMatrix && usesWInit ? { weightKg: parseWeightFieldForEdit(r.weight) } : {}),
+          })),
+        },
+      });
+    }
+  };
+  const handleDelete = (() => {
+    if (reportDetailBatch.source === 'order' && onDeleteReport) {
+      return () => {
+        (reportDetailBatch.rows as OrderReportRow[]).forEach(({ order, milestone, report }) => {
+          onDeleteReport({ orderId: order.id, milestoneId: milestone.id, reportId: report.id });
+        });
+        setEditingReport(null);
+        onClose();
+      };
+    }
+    if (reportDetailBatch.source === 'product' && onDeleteReportProduct) {
+      return () => {
+        (reportDetailBatch.rows as ProductReportRow[]).forEach(({ progress, report }) => {
+          onDeleteReportProduct({ progressId: progress.id, reportId: report.id });
+        });
+        setEditingReport(null);
+        onClose();
+      };
+    }
+    return undefined;
+  })();
+
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { onClose(); setEditingReport(null); }} />
-      <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-          <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-            <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
-              {reportDetailBatch.source === 'order' ? reportDetailBatch.first.order.orderNumber : '产品'}
-            </span>
-            报工详情
-          </h3>
-          <div className="flex items-center gap-2">
-            {editingReport ? (
-              <>
-                <button onClick={() => setEditingReport(null)} className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">取消</button>
-                <button
-                  onClick={() => {
-                    const f = editingReport.form;
-                    const ts = new Date(f.timestamp);
-                    const tsStr = isNaN(ts.getTime()) ? new Date().toLocaleString() : ts.toLocaleString();
-                    const customDataPayload = f.customData;
-                    if (reportDetailBatch.source === 'order' && onUpdateReport) {
-                      const origMilestoneId = reportDetailBatch.first.milestone.id;
-                      const changedMilestone = editingReport.milestoneId !== origMilestoneId;
-                      f.rowEdits.forEach(row => {
-                        onUpdateReport({
-                          orderId: row.orderId,
-                          milestoneId: row.milestoneId,
-                          reportId: row.reportId,
-                          quantity: Math.max(0, row.quantity),
-                          defectiveQuantity: Math.max(0, row.defectiveQuantity),
-                          timestamp: tsStr,
-                          operator: f.operator,
-                          newMilestoneId: changedMilestone ? editingReport.milestoneId : undefined,
-                          customData: customDataPayload,
-                        });
-                      });
-                    } else if (reportDetailBatch.source === 'product' && onUpdateReportProduct) {
-                      const origTemplateId = reportDetailBatch.milestoneTemplateId;
-                      const changedTemplate = editingReport.templateId !== origTemplateId;
-                      f.rowEdits.forEach(row => {
-                        if (!row.progressId) return;
-                        onUpdateReportProduct({
-                          progressId: row.progressId,
-                          reportId: row.reportId,
-                          quantity: Math.max(0, row.quantity),
-                          defectiveQuantity: Math.max(0, row.defectiveQuantity),
-                          timestamp: tsStr,
-                          operator: f.operator,
-                          newMilestoneTemplateId: changedTemplate ? editingReport.templateId : undefined,
-                          customData: customDataPayload,
-                        });
-                      });
-                    }
-                    if (onUpdateProduct && f.rate >= 0) {
-                      const product = productMap.get(editingReport.productId);
-                      if (product) {
-                        onUpdateProduct({
-                          ...product,
-                          nodeRates: { ...(product.nodeRates || {}), [editingReport.templateId]: f.rate }
-                        });
-                      }
-                    }
-                    setEditingReport(null);
-                    onClose();
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700"
-                >
-                  <Check className="w-4 h-4" /> 保存
-                </button>
-              </>
-            ) : (
-              <>
-                <OrderCenterDetailPrintBlock
-                  printSlot={orderFormSettings?.orderCenterPrint?.reportBatchDetail}
-                  printTemplates={printTemplates}
-                  buildContext={buildReportBatchPrintContext}
-                  onAddPrintTemplate={onOpenOrderFormPrintTab}
-                  pickerSubtitle={
-                    reportDetailBatch.reportNo
-                      ? `报工批次 ${reportDetailBatch.reportNo}`
-                      : reportDetailBatch.source === 'order'
-                        ? `工单 ${(reportDetailBatch.first as OrderReportRow).order.orderNumber}`
-                        : reportDetailBatch.productName
-                  }
-                />
-                {reportDetailBatch.source === 'order' && onUpdateReport && reportDetailBatch.rows.length > 0 && hasOrderPerm('production:orders_report_records:edit') && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const { order, milestone, report } = reportDetailBatch.rows[0];
-                      const ts = report.timestamp;
-                      let dt = new Date(ts);
-                      if (isNaN(dt.getTime())) dt = new Date();
-                      const tsStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}T${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
-                      const product = productMap.get(order.productId);
-                      const rate = product?.nodeRates?.[milestone.templateId] ?? 0;
-                      const matchingWorker = workers.find(w => w.name === report.operator);
-                      const msFull = order.milestones?.find(m => m.templateId === milestone.templateId);
-                      const customData = mergeCustomDataForTemplate(
-                        report.customData,
-                        milestone.templateId,
-                        msFull?.reportTemplate,
-                        product?.routeReportValues?.[milestone.templateId],
-                        globalNodes,
-                      );
-                      if (reportDetailBatch.rows.length > 1) {
-                        const first = JSON.stringify(report.customData ?? {});
-                        const hasDiff = reportDetailBatch.rows.some(r => JSON.stringify(r.report.customData ?? {}) !== first);
-                        if (hasDiff) toast.warning('批次内各行的填报项数据不一致，编辑后将统一为同一份填报项');
-                      }
-                      setEditingReport({
-                        orderId: order.id,
-                        milestoneId: milestone.id,
-                        templateId: milestone.templateId,
-                        productId: order.productId,
-                        form: {
-                          timestamp: tsStr,
-                          operator: report.operator,
-                          workerId: matchingWorker?.id || '',
-                          rate,
-                          customData,
-                          rowEdits: reportDetailBatch.rows.map(({ order: o, milestone: m, report: r }) => ({
-                            reportId: r.id,
-                            orderId: o.id,
-                            milestoneId: m.id,
-                            quantity: r.quantity,
-                            defectiveQuantity: r.defectiveQuantity ?? 0
-                          }))
-                        }
-                      });
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  >
-                    <Pencil className="w-4 h-4" /> 编辑
-                  </button>
-                )}
-                {reportDetailBatch.source === 'product' && onUpdateReportProduct && reportDetailBatch.rows.length > 0 && hasOrderPerm('production:orders_report_records:edit') && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const { progress, report } = reportDetailBatch.rows[0];
-                      const ts = report.timestamp;
-                      let dt = new Date(ts);
-                      if (isNaN(dt.getTime())) dt = new Date();
-                      const tsStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}T${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
-                      const product = productMap.get(progress.productId);
-                      const rate = product?.nodeRates?.[progress.milestoneTemplateId] ?? 0;
-                      const matchingWorker = workers.find(w => w.name === report.operator);
-                      const customData = mergeCustomDataForTemplate(
-                        report.customData,
-                        progress.milestoneTemplateId,
-                        undefined,
-                        product?.routeReportValues?.[progress.milestoneTemplateId],
-                        globalNodes,
-                      );
-                      if (reportDetailBatch.rows.length > 1) {
-                        const first = JSON.stringify(report.customData ?? {});
-                        const hasDiff = reportDetailBatch.rows.some(r => JSON.stringify(r.report.customData ?? {}) !== first);
-                        if (hasDiff) toast.warning('批次内各行的填报项数据不一致，编辑后将统一为同一份填报项');
-                      }
-                      setEditingReport({
-                        orderId: '',
-                        milestoneId: '',
-                        templateId: progress.milestoneTemplateId,
-                        productId: progress.productId,
-                        form: {
-                          timestamp: tsStr,
-                          operator: report.operator,
-                          workerId: matchingWorker?.id || '',
-                          rate,
-                          customData,
-                          rowEdits: reportDetailBatch.rows.map(({ progress: pr, report: r }) => ({
-                            reportId: r.id,
-                            orderId: '',
-                            milestoneId: '',
-                            progressId: pr.id,
-                            quantity: r.quantity,
-                            defectiveQuantity: r.defectiveQuantity ?? 0
-                          }))
-                        }
-                      });
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  >
-                    <Pencil className="w-4 h-4" /> 编辑
-                  </button>
-                )}
-                {reportDetailBatch.source === 'order' && onDeleteReport && hasOrderPerm('production:orders_report_records:delete') && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void confirm({ message: '确定要删除该次报工的所有记录吗？此操作不可恢复。', danger: true }).then((ok) => {
-                        if (!ok) return;
-                        reportDetailBatch.rows.forEach(({ order, milestone, report }) => {
-                          onDeleteReport({ orderId: order.id, milestoneId: milestone.id, reportId: report.id });
-                        });
-                        setEditingReport(null);
-                        onClose();
-                      });
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold"
-                  >
-                    <Trash2 className="w-4 h-4" /> 删除
-                  </button>
-                )}
-                {reportDetailBatch.source === 'product' && onDeleteReportProduct && hasOrderPerm('production:orders_report_records:delete') && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void confirm({ message: '确定要删除该次报工的所有记录吗？此操作不可恢复。', danger: true }).then((ok) => {
-                        if (!ok) return;
-                        reportDetailBatch.rows.forEach(({ progress, report }) => {
-                          onDeleteReportProduct({ progressId: progress.id, reportId: report.id });
-                        });
-                        setEditingReport(null);
-                        onClose();
-                      });
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold"
-                  >
-                    <Trash2 className="w-4 h-4" /> 删除
-                  </button>
-                )}
-              </>
-            )}
-            <button onClick={() => { onClose(); setEditingReport(null); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-        <div className="flex-1 overflow-auto p-4 sm:p-5 space-y-4">
+    <DocPhaseModal
+      zIndexClass="z-[90]"
+      open
+      phase={editingReport ? 'edit' : 'detail'}
+      editingDocNumber={reportDetailBatch.source === 'order' ? (reportDetailBatch.first as OrderReportRow).order.orderNumber : (reportDetailBatch.productName || '—')}
+      maxWidthClass="max-w-4xl"
+      detailTitle="报工详情"
+      editTitle="报工 · 编辑"
+      newTitle=""
+      leadingDetailActions={
+        <OrderCenterDetailPrintBlock
+          printSlot={orderFormSettings?.orderCenterPrint?.reportBatchDetail}
+          printTemplates={printTemplates}
+          buildContext={buildReportBatchPrintContext}
+          onAddPrintTemplate={onOpenOrderFormPrintTab}
+          pickerSubtitle={
+            reportDetailBatch.reportNo
+              ? `报工批次 ${reportDetailBatch.reportNo}`
+              : reportDetailBatch.source === 'order'
+                ? `工单 ${(reportDetailBatch.first as OrderReportRow).order.orderNumber}`
+                : reportDetailBatch.productName
+          }
+        />
+      }
+      hasPerm={hasOrderPerm}
+      viewPerm="production:orders_report_records:view"
+      editPerm="production:orders_report_records:edit"
+      deletePerm={handleDelete ? 'production:orders_report_records:delete' : undefined}
+      deleteConfirmMessage="确定要删除该次报工的所有记录吗？此操作不可恢复。"
+      onDelete={handleDelete}
+      renderDocBadge={() => (
+        <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
+          {reportDetailBatch.source === 'order' ? (reportDetailBatch.first as OrderReportRow).order.orderNumber : '产品'}
+        </span>
+      )}
+      onClose={handleClose}
+      onEnterEdit={handleEnterEdit}
+      onCancelEdit={() => setEditingReport(null)}
+      renderContent={() => (
+        <>
+          <ReportBatchEditSavePortal active={!!editingReport} onSave={handleSave} />
+          <div className="space-y-4">
           {reportDetailBatch.source === 'order' ? (
             <div className="space-y-0.5">
               <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium">
@@ -534,6 +799,7 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
             const order = reportDetailBatch.source === 'order' ? orders.find(o => o.id === editingReport.orderId) : null;
             const milestone = order?.milestones.find(m => m.templateId === editingReport.templateId);
             const tid = editingReport.templateId;
+            const editFlatUsesWeight = reportNodeUsesWeight(globalNodes, tid);
             const effectiveRemainingSaved =
               reportDetailBatch.source === 'order'
                 ? [...new Set(reportDetailBatch.rows.map(r => r.order.id))].reduce((sum, oid) => {
@@ -608,12 +874,21 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                           product?.routeReportValues?.[newTemplateId],
                           globalNodes,
                         );
-                        setEditingReport(prev => prev ? {
-                          ...prev,
-                          templateId: newTemplateId,
-                          milestoneId: newMilestone?.id || prev.milestoneId,
-                          form: { ...prev.form, rate: newRate, customData: newCd }
-                        } : prev);
+                        setEditingReport(prev => {
+                          if (!prev) return prev;
+                          const nextRows = prev.form.rowEdits.map(row => {
+                            if (!row.orderId) return row;
+                            const o = orders.find(ox => ox.id === row.orderId);
+                            const nm = o?.milestones.find(m => m.templateId === newTemplateId);
+                            return nm ? { ...row, milestoneId: nm.id } : row;
+                          });
+                          return {
+                            ...prev,
+                            templateId: newTemplateId,
+                            milestoneId: newMilestone?.id || prev.milestoneId,
+                            form: { ...prev.form, rate: newRate, customData: newCd, rowEdits: nextRows },
+                          };
+                        });
                       } else {
                         const newCd = mergeCustomDataForTemplate(
                           editingReport.form.customData,
@@ -657,10 +932,35 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                         setEditingReport(prev => prev ? { ...prev, form: { ...prev.form, workerId: id, operator: w?.name || prev.form.operator } } : prev);
                       }}
                       placeholder="选择操作人..."
-                      variant="default"
+                      variant="form"
                       icon={UserPlus}
                     />
                   </div>
+                  {!batchDetailMatrix ? (
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">工价</label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={editingReport.form.rate}
+                          onChange={e =>
+                            setEditingReport(prev =>
+                              prev ? { ...prev, form: { ...prev.form, rate: parseFloat(e.target.value) || 0 } } : prev,
+                            )
+                          }
+                          className="h-9 w-[6rem] rounded-lg border border-slate-200 bg-white px-2 text-sm font-bold text-slate-800 text-right outline-none focus:ring-2 focus:ring-indigo-200"
+                        />
+                        <span className="text-xs text-slate-500">
+                          元/
+                          {(productMap.get(editingReport.productId)?.unitId &&
+                            dictionaries.units.find(u => u.id === productMap.get(editingReport.productId)?.unitId)?.name) ||
+                            '件'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
               {(() => {
@@ -679,7 +979,7 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                         values={cd}
                         onChange={(fieldId, value) => setEditingReport(prev => prev ? { ...prev, form: { ...prev.form, customData: { ...prev.form.customData, [fieldId]: value } } } : prev)}
                         namePrefix="stp-batch-edit"
-                        inputClassName="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-sm outline-none"
+                        inputClassName="h-9 w-full max-w-md rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
                         fileHint="已选择文件，保存后生效"
                       />
                     </div>
@@ -689,9 +989,28 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
               {batchDetailMatrix ? (
                 <div className="space-y-2">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">报工明细（按规格）</p>
-                  <div className="rounded-xl bg-slate-50/50 p-2 ring-1 ring-slate-100/80">
+                  <div className="overflow-x-auto rounded-2xl border border-slate-200">
                     {(() => {
-                      const { layout, variantToReportId } = batchDetailMatrix;
+                      const { layout, product: matrixProduct } = batchDetailMatrix;
+                      const editNodeUsesWeight = reportNodeUsesWeight(globalNodes, editingReport.templateId);
+                      const matrixUnit =
+                        (matrixProduct.unitId &&
+                          dictionaries.units.find(u => u.id === matrixProduct.unitId)?.name) ||
+                        '件';
+                      const goodTotal = editingReport.form.rowEdits.reduce((s, r) => s + r.quantity, 0);
+                      const amountTotal = editingReport.form.rowEdits.reduce(
+                        (s, r) => s + r.quantity * editingReport.form.rate,
+                        0,
+                      );
+                      const categoryForMatrix = matrixProduct.categoryId
+                        ? categoryMap.get(matrixProduct.categoryId)
+                        : undefined;
+                      const matrixCustomTags = getProductCategoryCustomFieldEntries(
+                        matrixProduct,
+                        categoryForMatrix ?? null,
+                        { includeFile: false, includeEmpty: false },
+                      );
+                      const matrixColSpan = 4 + (editNodeUsesWeight ? 1 : 0);
                       const isOrderBatch = reportDetailBatch.source === 'order';
                       const rows: QtyMatrixTableRow[] = layout.colorRows.map(row => {
                         let rowSum = 0;
@@ -699,16 +1018,13 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                           if (!variant) {
                             return <span key={`${row.key}-e-${si}`} className="text-sm text-slate-300">—</span>;
                           }
-                          const reportId = variantToReportId.get(variant.id);
-                          const rowEdit = reportId
-                            ? editingReport.form.rowEdits.find(r => r.reportId === reportId)
-                            : undefined;
-                          if (!reportId || !rowEdit) {
+                          const rowEdit = editingReport.form.rowEdits.find(r => r.variantId === variant.id);
+                          if (!rowEdit) {
                             return <span key={variant.id} className="text-sm text-slate-300">—</span>;
                           }
                           rowSum += rowEdit.quantity;
                           const otherGoodSum = editingReport.form.rowEdits
-                            .filter(r => r.reportId !== reportId)
+                            .filter(r => r.variantId !== variant.id)
                             .reduce((s, r) => s + r.quantity, 0);
                           const maxThisRow = isOrderBatch ? Math.max(0, maxBatchGood - otherGoodSum) : Number.POSITIVE_INFINITY;
                           return (
@@ -731,7 +1047,7 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                                             form: {
                                               ...prev.form,
                                               rowEdits: prev.form.rowEdits.map(r =>
-                                                r.reportId === reportId ? { ...r, quantity: v } : r,
+                                                r.variantId === variant.id ? { ...r, quantity: v } : r,
                                               ),
                                             },
                                           }
@@ -757,7 +1073,7 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                                     setEditingReport(prev => {
                                       if (!prev) return prev;
                                       const nextEdits = prev.form.rowEdits.map(r =>
-                                        r.reportId === reportId ? { ...r, defectiveQuantity: v } : r,
+                                        r.variantId === variant.id ? { ...r, defectiveQuantity: v } : r,
                                       );
                                       if (!isOrderBatch) {
                                         return { ...prev, form: { ...prev.form, rowEdits: nextEdits } };
@@ -819,51 +1135,156 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                           subtotalCell: rowSum,
                         };
                       });
+                      const productThumbEdit = matrixProduct.imageUrl ? (
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-100 bg-white">
+                          <img
+                            src={matrixProduct.imageUrl}
+                            alt={matrixProduct.name}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
+                          <Package className="h-4 w-4" />
+                        </div>
+                      );
                       return (
-                        <QtyMatrixTable
-                          sizeHeaders={layout.sizeColumns.map(c => c.header)}
-                          rows={rows}
-                          dense
-                        />
+                        <table className="w-full text-left text-sm">
+                          <thead>
+                            <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/80">
+                              <th className="py-2.5 px-3 text-left">产品 / SKU</th>
+                              <th className="py-2.5 px-3 text-right">数量</th>
+                              <th className="py-2.5 px-3 text-right">工价</th>
+                              <th className="py-2.5 px-3 text-right">金额(元)</th>
+                              {editNodeUsesWeight ? (
+                                <th
+                                  className="py-2.5 px-3 text-right whitespace-nowrap"
+                                  title="工序开启称重时，本批报工总重量（kg），保存时按各规格良品数量比例写入各条记录"
+                                >
+                                  重量 (kg)
+                                </th>
+                              ) : null}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 bg-white">
+                            <tr>
+                              <td className="py-2.5 px-3 align-top">
+                                <div className="flex min-w-0 items-start gap-2">
+                                  {productThumbEdit}
+                                  <div className="min-w-0">
+                                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                                      <span className="font-bold text-slate-700">{matrixProduct.name}</span>
+                                      {matrixProduct.sku ? (
+                                        <span className="text-[9px] font-bold uppercase tracking-tight text-slate-300">
+                                          {matrixProduct.sku}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    {matrixCustomTags.length > 0 ? (
+                                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                                        {matrixCustomTags.map(({ field, display }) => (
+                                          <span
+                                            key={field.id}
+                                            className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
+                                          >
+                                            {field.label}: {display}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3 text-right align-middle">
+                                <span className="font-black text-indigo-600 tabular-nums">
+                                  {goodTotal.toLocaleString()} {matrixUnit}
+                                </span>
+                                {editingReport.form.rowEdits.reduce((s, r) => s + r.defectiveQuantity, 0) > 0 ? (
+                                  <span className="mt-0.5 block text-[10px] font-medium text-amber-700 tabular-nums">
+                                    不良{' '}
+                                    {editingReport.form.rowEdits.reduce((s, r) => s + r.defectiveQuantity, 0)}{' '}
+                                    {matrixUnit}
+                                  </span>
+                                ) : null}
+                              </td>
+                              <td className="py-2.5 px-3 align-middle text-right">
+                                <div className="inline-flex items-center justify-end gap-1.5">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step={0.01}
+                                    value={editingReport.form.rate}
+                                    onChange={e =>
+                                      setEditingReport(prev =>
+                                        prev
+                                          ? { ...prev, form: { ...prev.form, rate: parseFloat(e.target.value) || 0 } }
+                                          : prev,
+                                      )
+                                    }
+                                    className="h-9 w-[5.25rem] shrink-0 rounded-lg border border-slate-200 bg-white px-2 text-sm font-bold text-slate-800 text-right outline-none focus:ring-2 focus:ring-indigo-200"
+                                  />
+                                  <span className="shrink-0 text-xs font-medium whitespace-nowrap text-slate-500">
+                                    元/{matrixUnit}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3 text-right align-middle text-sm font-black text-indigo-600 tabular-nums">
+                                {amountTotal > 0 ? amountTotal.toFixed(2) : '—'}
+                              </td>
+                              {editNodeUsesWeight ? (
+                                <td className="py-2.5 px-3 align-middle text-right">
+                                  <div className="inline-flex items-center justify-end">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step={0.0001}
+                                      value={
+                                        editingReport.form.weightKg === ''
+                                          ? ''
+                                          : typeof editingReport.form.weightKg === 'number'
+                                            ? editingReport.form.weightKg
+                                            : ''
+                                      }
+                                      onChange={e => {
+                                        const raw = e.target.value.trim();
+                                        if (raw === '') {
+                                          setEditingReport(prev =>
+                                            prev ? { ...prev, form: { ...prev.form, weightKg: '' } } : prev,
+                                          );
+                                          return;
+                                        }
+                                        const n = parseFloat(raw);
+                                        if (!Number.isFinite(n) || n < 0) return;
+                                        setEditingReport(prev =>
+                                          prev ? { ...prev, form: { ...prev.form, weightKg: n } } : prev,
+                                        );
+                                      }}
+                                      placeholder="kg"
+                                      title="本批报工总重量 (kg)"
+                                      className="h-9 w-full max-w-[6.5rem] shrink-0 rounded-lg border border-slate-200 bg-white px-2 text-right text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                  </div>
+                                </td>
+                              ) : null}
+                            </tr>
+                            <tr className="bg-slate-50/70">
+                              <td
+                                colSpan={matrixColSpan}
+                                className="border-t border-slate-100 px-3 pb-3 pt-2 align-top"
+                              >
+                                <QtyMatrixTable
+                                  sizeHeaders={layout.sizeColumns.map(c => c.header)}
+                                  rows={rows}
+                                  dense
+                                />
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
                       );
                     })()}
-                  </div>
-                  <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-indigo-50/50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="font-bold text-slate-600">工价</span>
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={editingReport.form.rate}
-                        onChange={e =>
-                          setEditingReport(prev =>
-                            prev ? { ...prev, form: { ...prev.form, rate: parseFloat(e.target.value) || 0 } } : prev,
-                          )
-                        }
-                        className="h-8 w-[5.25rem] rounded-lg border border-slate-200 bg-white px-1.5 text-xs font-bold text-slate-800 text-right outline-none focus:ring-2 focus:ring-indigo-200"
-                      />
-                      <span className="text-slate-500">
-                        元/
-                        {(batchDetailMatrix.product.unitId &&
-                          dictionaries.units.find(u => u.id === batchDetailMatrix.product.unitId)?.name) ||
-                          '件'}
-                      </span>
-                    </div>
-                    <div className="text-xs font-bold text-indigo-700 tabular-nums">
-                      合计 良品 {editingReport.form.rowEdits.reduce((s, r) => s + r.quantity, 0)}{' '}
-                      {(batchDetailMatrix.product.unitId &&
-                        dictionaries.units.find(u => u.id === batchDetailMatrix.product.unitId)?.name) ||
-                        '件'}
-                      {' · '}
-                      不良{' '}
-                      {editingReport.form.rowEdits.reduce((s, r) => s + r.defectiveQuantity, 0)}{' '}
-                      {(batchDetailMatrix.product.unitId &&
-                        dictionaries.units.find(u => u.id === batchDetailMatrix.product.unitId)?.name) ||
-                        '件'}
-                      {' · '}
-                      金额 {editingReport.form.rowEdits.reduce((s, r) => s + r.quantity * editingReport.form.rate, 0).toFixed(2)} 元
-                    </div>
                   </div>
                 </div>
               ) : (
@@ -878,6 +1299,11 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                       <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-left">数量</th>
                       <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">工价</th>
                       <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">金额(元)</th>
+                      {editFlatUsesWeight ? (
+                        <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">
+                          重量 (kg)
+                        </th>
+                      ) : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -963,6 +1389,52 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                                 <span className="text-slate-600 text-xs">{editingReport.form.rate > 0 ? `${editingReport.form.rate.toFixed(2)} 元/${detailUnit}` : '—'}</span>
                               </td>
                               <td className="px-3 py-2.5 sm:px-4 align-middle text-sm font-bold text-indigo-600 text-right tabular-nums">{amount >= 0 ? amount.toFixed(2) : '—'}</td>
+                              {editFlatUsesWeight ? (
+                                <td className="px-3 py-2.5 sm:px-4 align-middle text-right">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step={0.0001}
+                                    value={rowEdit.weightKg === '' || rowEdit.weightKg === undefined ? '' : rowEdit.weightKg}
+                                    onChange={e => {
+                                      const raw = e.target.value.trim();
+                                      if (raw === '') {
+                                        setEditingReport(prev =>
+                                          prev
+                                            ? {
+                                                ...prev,
+                                                form: {
+                                                  ...prev.form,
+                                                  rowEdits: prev.form.rowEdits.map(r =>
+                                                    r.reportId === report.id ? { ...r, weightKg: '' } : r,
+                                                  ),
+                                                },
+                                              }
+                                            : prev,
+                                        );
+                                        return;
+                                      }
+                                      const n = parseFloat(raw);
+                                      if (!Number.isFinite(n) || n < 0) return;
+                                      setEditingReport(prev =>
+                                        prev
+                                          ? {
+                                              ...prev,
+                                              form: {
+                                                ...prev.form,
+                                                rowEdits: prev.form.rowEdits.map(r =>
+                                                  r.reportId === report.id ? { ...r, weightKg: n } : r,
+                                                ),
+                                              },
+                                            }
+                                          : prev,
+                                      );
+                                    }}
+                                    placeholder="kg"
+                                    className="ml-auto block h-8 w-full max-w-[6.5rem] rounded-lg border border-slate-200 bg-white px-2 text-right text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-200 tabular-nums"
+                                  />
+                                </td>
+                              ) : null}
                             </tr>
                           );
                         })
@@ -1028,46 +1500,57 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                                 <span className="text-slate-600 text-xs">{editingReport.form.rate > 0 ? `${editingReport.form.rate.toFixed(2)} 元/${detailUnit}` : '—'}</span>
                               </td>
                               <td className="px-3 py-2.5 sm:px-4 align-middle text-sm font-bold text-indigo-600 text-right tabular-nums">{amount >= 0 ? amount.toFixed(2) : '—'}</td>
+                              {editFlatUsesWeight ? (
+                                <td className="px-3 py-2.5 sm:px-4 align-middle text-right">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step={0.0001}
+                                    value={rowEdit.weightKg === '' || rowEdit.weightKg === undefined ? '' : rowEdit.weightKg}
+                                    onChange={e => {
+                                      const raw = e.target.value.trim();
+                                      if (raw === '') {
+                                        setEditingReport(prev =>
+                                          prev
+                                            ? {
+                                                ...prev,
+                                                form: {
+                                                  ...prev.form,
+                                                  rowEdits: prev.form.rowEdits.map(r =>
+                                                    r.reportId === report.id ? { ...r, weightKg: '' } : r,
+                                                  ),
+                                                },
+                                              }
+                                            : prev,
+                                        );
+                                        return;
+                                      }
+                                      const n = parseFloat(raw);
+                                      if (!Number.isFinite(n) || n < 0) return;
+                                      setEditingReport(prev =>
+                                        prev
+                                          ? {
+                                              ...prev,
+                                              form: {
+                                                ...prev.form,
+                                                rowEdits: prev.form.rowEdits.map(r =>
+                                                  r.reportId === report.id ? { ...r, weightKg: n } : r,
+                                                ),
+                                              },
+                                            }
+                                          : prev,
+                                      );
+                                    }}
+                                    placeholder="kg"
+                                    className="ml-auto block h-8 w-full max-w-[6.5rem] rounded-lg border border-slate-200 bg-white px-2 text-right text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-200 tabular-nums"
+                                  />
+                                </td>
+                              ) : null}
                             </tr>
                           );
                         })}
                   </tbody>
                 </table>
-                    </div>
-                    <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-indigo-50/50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex flex-wrap items-center gap-2 text-xs">
-                        <span className="font-bold text-slate-600">工价</span>
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={editingReport.form.rate}
-                          onChange={e =>
-                            setEditingReport(prev =>
-                              prev ? { ...prev, form: { ...prev.form, rate: parseFloat(e.target.value) || 0 } } : prev,
-                            )
-                          }
-                          className="h-8 w-[5.25rem] rounded-lg border border-slate-200 bg-white px-1.5 text-xs font-bold text-slate-800 text-right outline-none focus:ring-2 focus:ring-indigo-200"
-                        />
-                        <span className="text-slate-500">
-                          元/
-                          {(products.find(px => px.id === editingReport.productId)?.unitId &&
-                            dictionaries.units.find(u => u.id === products.find(px => px.id === editingReport.productId)?.unitId)?.name) ||
-                            '件'}
-                        </span>
-                      </div>
-                      <div className="text-xs font-bold text-indigo-700 tabular-nums">
-                        合计 良品 {editingReport.form.rowEdits.reduce((s, r) => s + r.quantity, 0)}{' '}
-                        {(products.find(px => px.id === editingReport.productId)?.unitId &&
-                          dictionaries.units.find(u => u.id === products.find(px => px.id === editingReport.productId)?.unitId)?.name) ||
-                          '件'}
-                        {' · '}不良{' '}
-                        {editingReport.form.rowEdits.reduce((s, r) => s + r.defectiveQuantity, 0)}{' '}
-                        {(products.find(px => px.id === editingReport.productId)?.unitId &&
-                          dictionaries.units.find(u => u.id === products.find(px => px.id === editingReport.productId)?.unitId)?.name) ||
-                          '件'}
-                        {' · '}金额 {editingReport.form.rowEdits.reduce((s, r) => s + r.quantity * editingReport.form.rate, 0).toFixed(2)} 元
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -1076,61 +1559,22 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
           );
           })() : (
             <>
-              <div className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-3 sm:px-4">
-                {(() => {
-                  const productId = reportDetailBatch.source === 'order' ? reportDetailBatch.first.order.productId : reportDetailBatch.productId;
-                  const p = products.find(px => px.id === productId);
-                  const unitName = (p?.unitId && dictionaries?.units?.find(u => u.id === p.unitId)?.name) || '件';
-                  const milestoneName = reportDetailBatch.source === 'order'
-                    ? reportDetailBatch.first.milestone.name
-                    : reportDetailBatch.milestoneName;
-                  const tid = reportDetailBatch.source === 'order' ? reportDetailBatch.first.milestone.templateId : reportDetailBatch.milestoneTemplateId;
-                  const effectiveRemainingView =
-                    reportDetailBatch.source === 'order'
-                      ? [...new Set(reportDetailBatch.rows.map(r => r.order.id))].reduce((sum, oid) => {
-                          const o = resolveOrderById(oid);
-                          if (!o) return sum;
-                          return sum + orderEffectiveRemainingAtTemplate(o, tid, processSequenceMode, getDefectiveRework, prodRecords);
-                        }, 0)
-                      : null;
-                  return (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
-                      <div>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">工序</p>
-                        <p className="text-xs sm:text-sm font-bold text-slate-800">{milestoneName || '—'}</p>
-                      </div>
-                      {reportDetailBatch.source === 'order' && (
-                        <div>
-                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">
-                            本工序还可报（批次涉及工单合计）
-                          </p>
-                          <p className="text-xs sm:text-sm font-bold text-indigo-600 tabular-nums">
-                            {effectiveRemainingView ?? 0} {unitName}
-                            <span className="block text-[10px] font-normal text-slate-400 mt-0.5">已扣不良、返工、外协在制</span>
-                          </p>
-                        </div>
-                      )}
-                      <div>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">本次报工量</p>
-                        <p className="text-xs sm:text-sm font-bold text-indigo-600 tabular-nums">{reportDetailBatch.totalGood} {unitName}</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">报工时间</p>
-                        <p className="text-xs sm:text-sm font-bold text-slate-800">{fmtDT(reportDetailBatch.first.report.timestamp)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">操作人</p>
-                        <p className="text-xs sm:text-sm font-bold text-slate-800">{reportDetailBatch.first.report.operator}</p>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
               {(() => {
-                const tid =
+                const productId = reportDetailBatch.source === 'order' ? reportDetailBatch.first.order.productId : reportDetailBatch.productId;
+                const p = products.find(px => px.id === productId);
+                const unitName = (p?.unitId && dictionaries?.units?.find(u => u.id === p.unitId)?.name) || '件';
+                const milestoneName = reportDetailBatch.source === 'order'
+                  ? reportDetailBatch.first.milestone.name
+                  : reportDetailBatch.milestoneName;
+                const tid = reportDetailBatch.source === 'order' ? reportDetailBatch.first.milestone.templateId : reportDetailBatch.milestoneTemplateId;
+                const effectiveRemainingView =
                   reportDetailBatch.source === 'order'
-                    ? reportDetailBatch.first.milestone.templateId
-                    : reportDetailBatch.milestoneTemplateId;
+                    ? [...new Set(reportDetailBatch.rows.map(r => r.order.id))].reduce((sum, oid) => {
+                        const o = resolveOrderById(oid);
+                        if (!o) return sum;
+                        return sum + orderEffectiveRemainingAtTemplate(o, tid, processSequenceMode, getDefectiveRework, prodRecords);
+                      }, 0)
+                    : null;
                 const ms =
                   reportDetailBatch.source === 'order'
                     ? reportDetailBatch.first.order.milestones?.find(m => m.templateId === tid)
@@ -1138,28 +1582,135 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                 const tmpl = getEffectiveReportTemplate(ms ?? { templateId: tid, reportTemplate: [] }, globalNodes);
                 const cd = reportDetailBatch.first.report?.customData;
                 const entries = getReportCustomDataDisplayEntries(cd, tmpl);
-                if (entries.length === 0) return null;
+                const orderNo =
+                  reportDetailBatch.source === 'order' ? reportDetailBatch.first.order.orderNumber : null;
+                const batchNoLabel = reportDetailBatch.reportNo?.trim() || null;
                 return (
-                  <div className="space-y-2 shrink-0">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">报工填报项</p>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 space-y-1.5">
-                      {entries.map(e => (
-                        <p key={e.fieldId} className="text-xs leading-relaxed">
-                          <span className="font-bold text-slate-600">{e.label}：</span>
-                          <span className="text-slate-800 break-all">{e.display}</span>
-                        </p>
-                      ))}
-                    </div>
-                  </div>
+                  <DocSummaryCard
+                    className="mb-5"
+                    main={
+                      <>
+                        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2 text-sm">
+                          {orderNo ? (
+                            <span className="rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                              {orderNo}
+                            </span>
+                          ) : null}
+                          {batchNoLabel ? (
+                            <span className="rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 font-mono text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                              {batchNoLabel}
+                            </span>
+                          ) : null}
+                          <span className="text-slate-600 font-bold normal-case text-xs sm:text-sm" title="工序">
+                            工序：{milestoneName || '—'}
+                          </span>
+                        </div>
+                        <DocInlineMetaRow className="mt-1.5">
+                          {reportDetailBatch.first.report.timestamp ? (
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                              <span className="normal-case">添加 {fmtDT(reportDetailBatch.first.report.timestamp)}</span>
+                            </span>
+                          ) : null}
+                          <span className="flex items-center gap-1">
+                            <User className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                            <span className="normal-case">经办: {reportDetailBatch.first.report.operator || '—'}</span>
+                          </span>
+                          {reportDetailBatch.source === 'order' ? (
+                            <span className="inline-flex min-h-4 items-center normal-case text-indigo-600">
+                              本工序还可报（合计）{effectiveRemainingView ?? 0} {unitName}
+                            </span>
+                          ) : null}
+                          {entries.map(e => (
+                            <span
+                              key={e.fieldId}
+                              className="inline-flex max-w-full min-w-0 items-center gap-1.5 normal-case"
+                            >
+                              <span className="shrink-0 text-slate-400">{e.label}:</span>
+                              <span className="min-w-0 font-bold text-slate-700 break-all">{e.display}</span>
+                            </span>
+                          ))}
+                        </DocInlineMetaRow>
+                      </>
+                    }
+                    side={
+                      <>
+                        <div className="min-w-[6.5rem] md:text-right">
+                          <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">本次报工</p>
+                          <p className="font-black tabular-nums text-slate-800">
+                            {reportDetailBatch.totalGood.toLocaleString()} {unitName}
+                          </p>
+                        </div>
+                        {reportDetailBatch.totalAmount > 0 ? (
+                          <div className="min-w-[6.5rem] md:text-right">
+                            <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">本批金额</p>
+                            <p className="font-black tabular-nums text-emerald-600">¥{reportDetailBatch.totalAmount.toFixed(2)}</p>
+                          </div>
+                        ) : null}
+                        {reportDetailViewNodeUsesWeight && reportDetailBatchTotalWeightKg > 0 ? (
+                          <div className="min-w-[6.5rem] md:text-right">
+                            <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">本批重量</p>
+                            <p className="font-black tabular-nums text-slate-800">
+                              {formatReportWeightKgDisplay(reportDetailBatchTotalWeightKg)} kg
+                            </p>
+                          </div>
+                        ) : null}
+                      </>
+                    }
+                  />
                 );
               })()}
               <div className="flex-1 overflow-auto pb-4 -mt-1">
                 {batchDetailMatrix ? (
                   <div className="space-y-2">
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">报工明细（按规格）</p>
-                    <div className="rounded-xl bg-slate-50/50 p-2 ring-1 ring-slate-100/80">
+                    <div className="overflow-x-auto rounded-2xl border border-slate-200">
                       {(() => {
-                        const { layout, goodByVariant, defectiveByVariant, variantToReportId } = batchDetailMatrix;
+                        const { layout, goodByVariant, defectiveByVariant, variantToReportId, product: viewMatrixProduct } =
+                          batchDetailMatrix;
+                        const viewMatrixUnit =
+                          (viewMatrixProduct.unitId &&
+                            dictionaries.units.find(u => u.id === viewMatrixProduct.unitId)?.name) ||
+                          '件';
+                        const viewMatrixCustomTags = getProductCategoryCustomFieldEntries(
+                          viewMatrixProduct,
+                          viewMatrixProduct.categoryId ? categoryMap.get(viewMatrixProduct.categoryId) ?? null : null,
+                          { includeFile: false, includeEmpty: false },
+                        );
+                        const viewMatrixColSpan = 4 + (reportDetailViewNodeUsesWeight ? 1 : 0);
+                        const viewMatrixRate =
+                          reportDetailBatch.source === 'order'
+                            ? (() => {
+                                const r0 = reportDetailBatch.rows[0] as OrderReportRow;
+                                return (
+                                  r0.report.rate ??
+                                  viewMatrixProduct.nodeRates?.[r0.milestone.templateId] ??
+                                  0
+                                );
+                              })()
+                            : (() => {
+                                const r0 = reportDetailBatch.rows[0] as ProductReportRow;
+                                return (
+                                  r0.report.rate ??
+                                  viewMatrixProduct.nodeRates?.[r0.progress.milestoneTemplateId] ??
+                                  0
+                                );
+                              })();
+                        const productThumbView = viewMatrixProduct.imageUrl ? (
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-100 bg-white">
+                            <img
+                              src={viewMatrixProduct.imageUrl}
+                              alt={viewMatrixProduct.name}
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
+                            <Package className="h-4 w-4" />
+                          </div>
+                        );
                         const rows: QtyMatrixTableRow[] = layout.colorRows.map(row => {
                           let rowSum = 0;
                           const cells = row.variantAtSize.map((variant: ProductVariant | null, si: number) => {
@@ -1199,47 +1750,85 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                           };
                         });
                         return (
-                          <QtyMatrixTable
-                            sizeHeaders={layout.sizeColumns.map(c => c.header)}
-                            rows={rows}
-                            dense
-                          />
+                          <table className="w-full text-left text-sm">
+                            <thead>
+                              <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/80">
+                                <th className="py-2.5 px-3 text-left">产品 / SKU</th>
+                                <th className="py-2.5 px-3 text-right">数量</th>
+                                <th className="py-2.5 px-3 text-right">工价</th>
+                                <th className="py-2.5 px-3 text-right">金额(元)</th>
+                                {reportDetailViewNodeUsesWeight ? (
+                                  <th className="py-2.5 px-3 text-right whitespace-nowrap">重量 (kg)</th>
+                                ) : null}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 bg-white">
+                              <tr>
+                                <td className="py-2.5 px-3 align-top">
+                                  <div className="flex min-w-0 items-start gap-2">
+                                    {productThumbView}
+                                    <div className="min-w-0">
+                                      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                                        <span className="font-bold text-slate-700">{viewMatrixProduct.name}</span>
+                                        {viewMatrixProduct.sku ? (
+                                          <span className="text-[9px] font-bold uppercase tracking-tight text-slate-300">
+                                            {viewMatrixProduct.sku}
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                      {viewMatrixCustomTags.length > 0 ? (
+                                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                                          {viewMatrixCustomTags.map(({ field, display }) => (
+                                            <span
+                                              key={field.id}
+                                              className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
+                                            >
+                                              {field.label}: {display}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="py-2.5 px-3 text-right align-middle">
+                                  <span className="font-black text-indigo-600 tabular-nums">
+                                    {reportDetailBatch.totalGood.toLocaleString()} {viewMatrixUnit}
+                                  </span>
+                                  {reportDetailBatch.totalDefective > 0 ? (
+                                    <span className="mt-0.5 block text-[10px] font-medium text-amber-700 tabular-nums">
+                                      不良 {reportDetailBatch.totalDefective} {viewMatrixUnit}
+                                    </span>
+                                  ) : null}
+                                </td>
+                                <td className="py-2.5 px-3 text-right align-middle text-xs text-slate-600">
+                                  {viewMatrixRate > 0 ? `${viewMatrixRate.toFixed(2)} 元/${viewMatrixUnit}` : '—'}
+                                </td>
+                                <td className="py-2.5 px-3 text-right align-middle text-sm font-black text-indigo-600 tabular-nums">
+                                  {reportDetailBatch.totalAmount > 0 ? reportDetailBatch.totalAmount.toFixed(2) : '—'}
+                                </td>
+                                {reportDetailViewNodeUsesWeight ? (
+                                  <td className="py-2.5 px-3 text-right align-middle text-xs font-bold tabular-nums text-slate-700">
+                                    {formatReportWeightKgDisplay(reportDetailBatchTotalWeightKg)}
+                                  </td>
+                                ) : null}
+                              </tr>
+                              <tr className="bg-slate-50/70">
+                                <td
+                                  colSpan={viewMatrixColSpan}
+                                  className="border-t border-slate-100 px-3 pb-3 pt-2 align-top"
+                                >
+                                  <QtyMatrixTable
+                                    sizeHeaders={layout.sizeColumns.map(c => c.header)}
+                                    rows={rows}
+                                    dense
+                                  />
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
                         );
                       })()}
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-indigo-50/50 px-3 py-2 text-xs font-bold text-slate-700">
-                      <span className="tabular-nums">
-                        {(() => {
-                          const du =
-                            (batchDetailMatrix.product.unitId &&
-                              dictionaries.units.find(u => u.id === batchDetailMatrix.product.unitId)?.name) ||
-                            '件';
-                          const rate =
-                            reportDetailBatch.source === 'order'
-                              ? (() => {
-                                  const r0 = reportDetailBatch.rows[0] as OrderReportRow;
-                                  return (
-                                    r0.report.rate ??
-                                    batchDetailMatrix.product.nodeRates?.[r0.milestone.templateId] ??
-                                    0
-                                  );
-                                })()
-                              : (() => {
-                                  const r0 = reportDetailBatch.rows[0] as ProductReportRow;
-                                  return (
-                                    r0.report.rate ??
-                                    batchDetailMatrix.product.nodeRates?.[r0.progress.milestoneTemplateId] ??
-                                    0
-                                  );
-                                })();
-                          return rate > 0 ? `工价 ${rate.toFixed(2)} 元/${du}` : '工价 —';
-                        })()}
-                      </span>
-                      <span className="text-indigo-700 tabular-nums">
-                        合计 良品 {reportDetailBatch.totalGood} · 不良{' '}
-                        {reportDetailBatch.totalDefective > 0 ? reportDetailBatch.totalDefective : '—'} · 本批金额{' '}
-                        {reportDetailBatch.totalAmount.toFixed(2)} 元
-                      </span>
                     </div>
                   </div>
                 ) : (
@@ -1254,6 +1843,11 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                           <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-left">数量</th>
                           <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">工价</th>
                           <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">金额(元)</th>
+                          {reportDetailViewNodeUsesWeight ? (
+                            <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">
+                              重量 (kg)
+                            </th>
+                          ) : null}
                         </tr>
                       </thead>
                       <tbody>
@@ -1290,6 +1884,11 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                                   <td className="px-3 py-2.5 sm:px-4 align-middle text-sm font-bold text-indigo-600 text-right tabular-nums">
                                     {amount > 0 ? amount.toFixed(2) : '—'}
                                   </td>
+                                  {reportDetailViewNodeUsesWeight ? (
+                                    <td className="px-3 py-2.5 sm:px-4 align-middle text-right text-xs font-bold tabular-nums text-slate-700">
+                                      {formatReportWeightKgDisplay(report.weight)}
+                                    </td>
+                                  ) : null}
                                 </tr>
                               );
                             })
@@ -1322,40 +1921,16 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                                   <td className="px-3 py-2.5 sm:px-4 align-middle text-sm font-bold text-indigo-600 text-right tabular-nums">
                                     {amount > 0 ? amount.toFixed(2) : '—'}
                                   </td>
+                                  {reportDetailViewNodeUsesWeight ? (
+                                    <td className="px-3 py-2.5 sm:px-4 align-middle text-right text-xs font-bold tabular-nums text-slate-700">
+                                      {formatReportWeightKgDisplay(report.weight)}
+                                    </td>
+                                  ) : null}
                                 </tr>
                               );
                             })}
                       </tbody>
                     </table>
-                      </div>
-                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-indigo-50/50 px-3 py-2 text-xs font-bold text-slate-700">
-                        <span className="tabular-nums">
-                          {(() => {
-                            const productId =
-                              reportDetailBatch.source === 'order'
-                                ? reportDetailBatch.first.order.productId
-                                : reportDetailBatch.productId;
-                            const p = products.find(px => px.id === productId);
-                            const du =
-                              (p?.unitId && dictionaries.units.find(u => u.id === p.unitId)?.name) || '件';
-                            const rate =
-                              reportDetailBatch.source === 'order'
-                                ? (() => {
-                                    const r0 = reportDetailBatch.rows[0] as OrderReportRow;
-                                    return r0.report.rate ?? p?.nodeRates?.[r0.milestone.templateId] ?? 0;
-                                  })()
-                                : (() => {
-                                    const r0 = reportDetailBatch.rows[0] as ProductReportRow;
-                                    return r0.report.rate ?? p?.nodeRates?.[r0.progress.milestoneTemplateId] ?? 0;
-                                  })();
-                            return rate > 0 ? `工价 ${rate.toFixed(2)} 元/${du}` : '工价 —';
-                          })()}
-                        </span>
-                        <span className="text-indigo-700 tabular-nums">
-                          合计 良品 {reportDetailBatch.totalGood} · 不良{' '}
-                          {reportDetailBatch.totalDefective > 0 ? reportDetailBatch.totalDefective : '—'} · 本批金额{' '}
-                          {reportDetailBatch.totalAmount.toFixed(2)} 元
-                        </span>
                       </div>
                     </div>
                   </div>
@@ -1363,9 +1938,10 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
               </div>
             </>
           )}
-        </div>
-      </div>
-    </div>
+          </div>
+        </>
+      )}
+    />
   );
 };
 

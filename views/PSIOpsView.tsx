@@ -1117,7 +1117,10 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                               );
                             })()}
                           {type === 'PURCHASE_ORDER' &&
-                            safePurchaseOrderFormSettings.relatedProductEnabled && (
+                            safePurchaseOrderFormSettings.relatedProductEnabled &&
+                            String(
+                              (mainInfo as { customData?: Record<string, unknown> }).customData?.relatedProductId ?? '',
+                            ).trim() !== '' && (
                               <span
                                 className="flex items-center gap-1 text-slate-500 normal-case"
                                 title={`关联产品: ${purchaseOrderStandardListText('relatedProduct', mainInfo, docNum, productMapPSI)}`}

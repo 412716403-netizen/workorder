@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef } from 'react';
-import { FileText, X, UserPlus, Scale, Layers } from 'lucide-react';
+import { FileText, X, UserPlus, Layers, Package } from 'lucide-react';
 import { toast } from 'sonner';
 import { ScanInputButton } from '../../components/scan/ScanInputButton';
 import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
@@ -15,19 +15,26 @@ import {
   ProcessSequenceMode,
   Partner,
   PlanFormFieldConfig,
-  BOM,
-  MaterialBreakdownRow,
 } from '../../types';
-import { calcUsageByWeight } from '../../utils/bomMaterialUsageByWeight';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
+import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import {
   sectionTitleClass,
+  psiOrderBillFormCardClass,
   psiOrderBillFormSectionStackClass,
   psiOrderBillFormDetailSplitClass,
+  psiOrderBillFormGridGapClass,
   psiOrderBillFormSectionIconIndigoClass,
   psiOrderBillFormSectionIconEmeraldClass,
-  psiOrderBillFormFieldControlClass,
+  psiOrderBillCompactLineLabelClass,
+  psiOrderBillCompactLineInputClass,
+  psiOrderBillCompactLineReadonlyClass,
+  psiOrderBillCompactSummaryBarClass,
+  psiOrderBillCompactSummaryLabelClass,
+  psiOrderBillCompactSummaryValueClass,
+  psiOrderBillCompactSummaryUnitClass,
+  psiOrderBillCompactWarehouseSelectClass,
 } from '../../styles/uiDensity';
 import WorkerSelector from '../../components/WorkerSelector';
 import EquipmentSelector from '../../components/EquipmentSelector';
@@ -37,6 +44,7 @@ import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayNa
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { REWORK_REPORT_CUSTOM_DATA_KEY } from '../../utils/productionOpCollab/rework';
 import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
+import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 
 function reworkReportCollabFromValues(values: Record<string, unknown>): { collabData?: Record<string, unknown> } {
   const clean = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== '' && v != null && v !== undefined));
@@ -56,7 +64,6 @@ export interface ReworkReportSubmitModalProps {
   equipment: { id: string; name: string; code?: string; assignedMilestoneIds?: string[] }[];
   processSequenceMode: ProcessSequenceMode;
   partners: Partner[];
-  boms?: BOM[];
   reworkReportCustomFields?: PlanFormFieldConfig[];
   onAddRecord: (record: ProductionOpRecord) => void;
   onUpdateRecord: (record: ProductionOpRecord) => void;
@@ -76,7 +83,6 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
   equipment,
   processSequenceMode,
   partners,
-  boms = [],
   reworkReportCustomFields = [],
   onAddRecord,
   onUpdateRecord,
@@ -91,7 +97,6 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
   const [reworkReportEquipmentId, setReworkReportEquipmentId] = useState('');
   const [reworkReportUnitPrice, setReworkReportUnitPrice] = useState<number>(0);
   const [reworkReportCustomData, setReworkReportCustomData] = useState<Record<string, unknown>>({});
-  const [reworkReportTotalWeight, setReworkReportTotalWeight] = useState<number | ''>('');
 
   const reworkReportCreateFields = useMemo(
     () => reworkReportCustomFields.filter(f => f.showInCreate),
@@ -99,29 +104,37 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
   );
   const reworkReportCustomBlock =
     reworkReportCreateFields.length > 0 ? (
-      <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
-        <div className="space-y-1">
-          <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">返工报工自定义</h4>
-          <p className="text-[11px] font-bold text-slate-500">自定义单据内容（选填，本批次报工共用）</p>
-        </div>
-        {reworkReportCreateFields.map(cf => (
-          <div key={cf.id} className="space-y-1">
-            <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
-            <PlanFormCustomFieldInput
-              cf={cf}
-              value={reworkReportCustomData[cf.id]}
-              onChange={v =>
-                setReworkReportCustomData(prev => ({
-                  ...prev,
-                  [cf.id]: v,
-                }))
+      <>
+        {reworkReportCreateFields.map(cf => {
+          const eff = effectivePlanFormFieldType(cf);
+          return (
+            <div
+              key={cf.id}
+              className={
+                eff === 'text' || eff === 'file' ? 'min-w-0 space-y-1.5 md:col-span-2' : 'min-w-0 space-y-1.5'
               }
-              dictionaries={dictionaries}
-              controlClassName={psiOrderBillFormFieldControlClass}
-            />
-          </div>
-        ))}
-      </div>
+            >
+              <label className="mb-1.5 ml-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                {cf.label}
+              </label>
+              <PlanFormCustomFieldInput
+                cf={cf}
+                value={reworkReportCustomData[cf.id]}
+                onChange={v =>
+                  setReworkReportCustomData(prev => ({
+                    ...prev,
+                    [cf.id]: v,
+                  }))
+                }
+                dictionaries={dictionaries}
+                controlClassName={
+                  eff === 'select' ? psiOrderBillCompactWarehouseSelectClass : psiOrderBillCompactLineInputClass
+                }
+              />
+            </div>
+          );
+        })}
+      </>
     ) : null;
 
   const { order, nodeId: currentNodeId, outsourcePartner } = reworkReportModal;
@@ -202,46 +215,41 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
     return reworkReportPaths[0] ?? null;
   }, [reworkReportPaths, reworkReportHasColorSize, reworkReportProduct?.variants?.length]);
 
-  /**
-   * 返工报工称重：取决于当前工序（currentNodeId）是否开启 enableWeightOnReport。
-   * 委外返工时也沿用外协收回同一套口径：整批总重量由用户录入，按各变体实际报工数量同比分摊到每条派生单据。
-   */
-  const weightReportEnabled = useMemo(
-    () => !!globalNodes.find(n => n.id === currentNodeId)?.enableWeightOnReport,
-    [globalNodes, currentNodeId],
+  const reworkUnitName = useMemo(
+    () => (reworkReportProduct?.unitId && dictionaries?.units?.find(u => u.id === reworkReportProduct.unitId)?.name) || '件',
+    [reworkReportProduct, dictionaries],
   );
-  const productsById = useMemo(() => {
-    const m = new Map<string, Product>();
-    products.forEach(p => m.set(p.id, p));
-    return m;
-  }, [products]);
-  const reworkReportBom = useMemo((): BOM | null => {
-    if (!weightReportEnabled || !reworkReportProduct) return null;
-    const nodeBoms = boms.filter(b => b.parentProductId === reworkReportProduct.id && b.nodeId === currentNodeId);
-    if (nodeBoms.length === 0) return null;
-    return nodeBoms.find(b => !b.variantId) ?? nodeBoms[0];
-  }, [weightReportEnabled, boms, reworkReportProduct, currentNodeId]);
-  const reworkReportPlannedTotalQty = useMemo(() => {
+  const reworkSummaryProductTags = useMemo(() => {
+    if (!reworkReportProduct) return [] as ReturnType<typeof getProductCategoryCustomFieldEntries>;
+    return getProductCategoryCustomFieldEntries(reworkReportProduct, reworkReportCategory, { includeFile: false });
+  }, [reworkReportProduct, reworkReportCategory]);
+
+  const reworkTotalEnteredQty = useMemo(() => {
     return reworkReportPaths.reduce((sum, p) => {
       if (reworkReportHasColorSize && reworkReportProduct?.variants?.length) {
-        const undiffKey = `${p.pathKey}__`;
-        const pu = p.pendingByVariant[''] ?? 0;
-        const onlyU = pu > 0 && Object.keys(p.pendingByVariant).every(k => k === '' || (p.pendingByVariant[k] ?? 0) <= 0);
-        if (onlyU) {
-          return sum + (reworkReportProduct.variants.reduce((vs, v) => vs + (reworkReportQuantities[`${p.pathKey}__${v.id}`] ?? 0), 0));
+        const pendingUndiff = p.pendingByVariant[''] ?? 0;
+        const onlyUndiff =
+          pendingUndiff > 0 &&
+          Object.keys(p.pendingByVariant).every(k => k === '' || (p.pendingByVariant[k] ?? 0) <= 0);
+        if (onlyUndiff) {
+          return (
+            sum +
+            reworkReportProduct.variants.reduce((s, v) => s + (reworkReportQuantities[`${p.pathKey}__${v.id}`] ?? 0), 0)
+          );
         }
-        const undiffQ = (reworkReportQuantities[undiffKey] ?? 0);
-        const variantQ = reworkReportProduct.variants.reduce((vs, v) => vs + (reworkReportQuantities[`${p.pathKey}__${v.id}`] ?? 0), 0);
+        const undiffQ = reworkReportQuantities[`${p.pathKey}__`] ?? 0;
+        const variantQ = reworkReportProduct.variants.reduce(
+          (s, v) => s + (reworkReportQuantities[`${p.pathKey}__${v.id}`] ?? 0),
+          0,
+        );
         return sum + undiffQ + variantQ;
       }
       return sum + (reworkReportQuantities[p.pathKey] ?? 0);
     }, 0);
   }, [reworkReportPaths, reworkReportQuantities, reworkReportHasColorSize, reworkReportProduct?.variants]);
-  const reworkReportWeightPreview = useMemo((): MaterialBreakdownRow[] => {
-    const w = typeof reworkReportTotalWeight === 'number' ? reworkReportTotalWeight : 0;
-    if (!weightReportEnabled || !reworkReportBom || w <= 0 || reworkReportPlannedTotalQty <= 0) return [];
-    return calcUsageByWeight(reworkReportBom, reworkReportPlannedTotalQty, w, productsById);
-  }, [weightReportEnabled, reworkReportBom, reworkReportTotalWeight, reworkReportPlannedTotalQty, productsById]);
+
+  const reworkMatrixInputClass =
+    'h-9 w-[3.25rem] shrink-0 rounded-lg border border-slate-200 bg-white px-2 text-left text-xs font-bold text-indigo-600 tabular-nums outline-none focus:ring-2 focus:ring-indigo-200';
 
   const scannedItemTokensRef = useRef<Set<string>>(new Set());
   const scannedBatchTokensRef = useRef<Set<string>>(new Set());
@@ -402,14 +410,6 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
     let appliedReportQty = 0;
     const resolveOpName = (fallback?: string) => workers?.find((w: Worker) => w.id === reworkReportWorkerId)?.name ?? fallback ?? docOperatorFallback;
     const collabExtra = reworkReportCollabFromValues(reworkReportCustomData);
-    /**
-     * 本批次总重量按"本次实际报工数量"同比分摊到每条派生的 REWORK_REPORT；
-     * 分母取提交前用预估数量算得的 plannedTotal，以保持前端预览与写入一致。
-     */
-    const totalWeightNum = typeof reworkReportTotalWeight === 'number' && reworkReportTotalWeight > 0
-      ? reworkReportTotalWeight
-      : 0;
-    const canSplitWeight = weightReportEnabled && totalWeightNum > 0 && reworkReportPlannedTotalQty > 0;
     const pushReworkReport = (qty: number, variantId: string | undefined, src: ProductionOpRecord) => {
       if (qty <= 0) return;
       if (!batchDocNo) batchDocNo = getNextReworkReportDocNo();
@@ -417,9 +417,6 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
       const ts = new Date().toLocaleString();
       const opName = isOutsourceRework ? '' : resolveOpName();
       const sid = src.id != null ? String(src.id) : 'x';
-      const weightForThis = canSplitWeight
-        ? Number(((qty / reworkReportPlannedTotalQty) * totalWeightNum).toFixed(4))
-        : undefined;
       onAddRecord({
         id: `rec-rework-report-${Date.now()}-${reportSeq++}-${sid.slice(-8)}`,
         type: 'REWORK_REPORT' as const,
@@ -438,7 +435,6 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
         unitPrice: reworkReportUnitPrice > 0 ? reworkReportUnitPrice : undefined,
         amount: reworkReportUnitPrice > 0 ? qty * reworkReportUnitPrice : undefined,
         ...(isOutsourceRework && outsourcePartner ? { partner: outsourcePartner } : {}),
-        ...(weightForThis != null ? { weight: weightForThis } : {}),
         ...collabExtra,
       });
     };
@@ -605,18 +601,24 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
           <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><FileText className="w-5 h-5 text-indigo-600" /> {reworkReportModal.nodeName} · {isOutsourceRework ? '委外返工收回' : '返工报工'}</h3>
           <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100"><X className="w-5 h-5" /></button>
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto p-6">
           {reworkReportPaths.length === 0 ? (
-            <div className="space-y-4 py-2">
+            <div className={`${psiOrderBillFormCardClass} space-y-4`}>
               <div className={psiOrderBillFormSectionStackClass}>
-                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
-                  <div className={psiOrderBillFormSectionIconIndigoClass}><FileText className="w-4 h-4" /></div>
-                  <h3 className={sectionTitleClass}>1. 基础信息</h3>
+                <div className="flex flex-wrap items-baseline gap-2.5 border-b border-slate-200 pb-2.5">
+                  <div className={`${psiOrderBillFormSectionIconIndigoClass} shrink-0 self-start`}><FileText className="w-4 h-4" /></div>
+                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <h3 className={sectionTitleClass}>1. 返工报工基本信息</h3>
+                    <span className="text-sm font-bold normal-case tracking-normal text-slate-600">工序：{reworkReportModal.nodeName}</span>
+                  </div>
                 </div>
-                <div className="space-y-4 pt-2">
+                <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass} pt-2`}>
                   {!isOutsourceRework && (
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">生产人员 <span className="text-rose-500">*</span></label>
+                    <div className="min-w-0 space-y-1.5 md:col-span-2">
+                      <label className="mb-1.5 ml-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        生产人员 <span className="text-rose-500">*</span>
+                      </label>
                       <WorkerSelector
                         options={workers.filter((w: Worker) => w.status === 'ACTIVE').map((w: Worker) => ({ id: w.id, name: w.name, sub: w.groupName, assignedMilestoneIds: w.assignedMilestoneIds }))}
                         processNodes={globalNodes}
@@ -624,16 +626,19 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
                         value={reworkReportWorkerId}
                         onChange={(id: string) => setReworkReportWorkerId(id)}
                         placeholder="选择报工人员..."
-                        variant="default"
+                        variant="form"
                         icon={UserPlus}
                       />
                     </div>
                   )}
+                  {reworkReportCustomBlock}
                   {!isOutsourceRework &&
                     equipmentFeaturesOn &&
                     globalNodes.find(n => n.id === reworkReportModal.nodeId)?.enableEquipmentOnReport && (
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">设备 <span className="text-rose-500">*</span></label>
+                    <div className="min-w-0 space-y-1.5 md:col-span-2">
+                      <label className="mb-1.5 ml-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        设备 <span className="text-rose-500">*</span>
+                      </label>
                       <EquipmentSelector
                         options={equipment.map((e: { id: string; name: string; code?: string; assignedMilestoneIds?: string[] }) => ({ id: e.id, name: e.name, sub: e.code, assignedMilestoneIds: e.assignedMilestoneIds }))}
                         processNodes={globalNodes}
@@ -641,18 +646,16 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
                         value={reworkReportEquipmentId}
                         onChange={(id: string) => setReworkReportEquipmentId(id)}
                         placeholder="选择设备..."
-                        variant="default"
+                        variant="form"
                       />
                     </div>
                   )}
-                  {reworkReportCustomBlock}
                 </div>
               </div>
               <p className="text-sm text-slate-600">
                 {productionLinkMode === 'product' ? (
                   <>
                     <span className="font-bold text-slate-800">{order.productName || '—'}</span>
-                    <span className="text-slate-400 text-xs ml-2">工单 {order.orderNumber}</span>
                   </>
                 ) : (
                   <>
@@ -674,16 +677,31 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
               </p>
             </div>
           ) : (
-            <div className={psiOrderBillFormSectionStackClass}>
-              <div className="space-y-4">
-                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
-                  <div className={psiOrderBillFormSectionIconIndigoClass}><FileText className="w-4 h-4" /></div>
-                  <h3 className={sectionTitleClass}>1. 基础信息</h3>
+            <div className={psiOrderBillFormCardClass}>
+              <div className={psiOrderBillFormSectionStackClass}>
+                <div className="flex flex-wrap items-baseline gap-2.5 border-b border-slate-200 pb-2.5">
+                  <div className={`${psiOrderBillFormSectionIconIndigoClass} shrink-0 self-start`}>
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <h3 className={sectionTitleClass}>1. 返工报工基本信息</h3>
+                    <span className="text-sm font-bold normal-case tracking-normal text-slate-600">工序：{reworkReportModal.nodeName}</span>
+                  </div>
                 </div>
-                <div className="space-y-4">
+                <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
+                  {isOutsourceRework ? (
+                    <div className="space-y-1.5 min-w-0 md:col-span-2">
+                      <label className="mb-1.5 ml-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">外协工厂</label>
+                      <div className="flex h-9 min-h-9 w-full min-w-0 items-center rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-800">
+                        {(outsourcePartner ?? '').trim() || '—'}
+                      </div>
+                    </div>
+                  ) : null}
                   {!isOutsourceRework && (
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">生产人员 <span className="text-rose-500">*</span></label>
+                    <div className="space-y-1.5 min-w-0 md:col-span-2">
+                      <label className="mb-1.5 ml-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        生产人员 <span className="text-rose-500">*</span>
+                      </label>
                       <WorkerSelector
                         options={workers.filter((w: Worker) => w.status === 'ACTIVE').map((w: Worker) => ({ id: w.id, name: w.name, sub: w.groupName, assignedMilestoneIds: w.assignedMilestoneIds }))}
                         processNodes={globalNodes}
@@ -691,345 +709,289 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
                         value={reworkReportWorkerId}
                         onChange={(id: string) => setReworkReportWorkerId(id)}
                         placeholder="选择报工人员..."
-                        variant="default"
+                        variant="form"
                         icon={UserPlus}
                       />
                     </div>
                   )}
+                  {reworkReportCustomBlock}
                   {!isOutsourceRework &&
                     equipmentFeaturesOn &&
                     globalNodes.find(n => n.id === reworkReportModal.nodeId)?.enableEquipmentOnReport && (
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">设备 <span className="text-rose-500">*</span></label>
-                      <EquipmentSelector
-                        options={equipment.map((e: { id: string; name: string; code?: string; assignedMilestoneIds?: string[] }) => ({ id: e.id, name: e.name, sub: e.code, assignedMilestoneIds: e.assignedMilestoneIds }))}
-                        processNodes={globalNodes}
-                        currentNodeId={reworkReportModal.nodeId}
-                        value={reworkReportEquipmentId}
-                        onChange={(id: string) => setReworkReportEquipmentId(id)}
-                        placeholder="选择设备..."
-                        variant="default"
-                      />
-                    </div>
-                  )}
-                  {reworkReportCustomBlock}
+                      <div className="space-y-1.5 min-w-0 md:col-span-2">
+                        <label className="mb-1.5 ml-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          设备 <span className="text-rose-500">*</span>
+                        </label>
+                        <EquipmentSelector
+                          options={equipment.map((e: { id: string; name: string; code?: string; assignedMilestoneIds?: string[] }) => ({ id: e.id, name: e.name, sub: e.code, assignedMilestoneIds: e.assignedMilestoneIds }))}
+                          processNodes={globalNodes}
+                          currentNodeId={reworkReportModal.nodeId}
+                          value={reworkReportEquipmentId}
+                          onChange={(id: string) => setReworkReportEquipmentId(id)}
+                          placeholder="选择设备..."
+                          variant="form"
+                        />
+                      </div>
+                    )}
                 </div>
               </div>
+
               <div className={psiOrderBillFormDetailSplitClass}>
-                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
-                  <div className={psiOrderBillFormSectionIconEmeraldClass}><Layers className="w-4 h-4" /></div>
-                  <h3 className={sectionTitleClass}>2. 数量明细</h3>
-                </div>
-                {reworkReportHasColorSize && reworkReportProduct?.variants?.length ? (
-                  <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-slate-400">按矩阵录入（有颜色尺码）</p>
-                ) : null}
-            <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50/40 px-4 pb-4 pt-4 space-y-4">
-              {(() => {
-                const noColorSizeMatrix = !(reworkReportHasColorSize && reworkReportProduct?.variants?.length);
-                return (
-              <div
-                className={`flex items-end gap-x-3 border-b border-slate-200/90 pb-3 sm:gap-x-4 ${
-                  noColorSizeMatrix ? 'flex-nowrap overflow-x-auto' : 'flex-wrap gap-y-3'
-                }`}
-              >
-                <div
-                  className={`flex min-w-0 flex-col gap-0.5 ${
-                    noColorSizeMatrix
-                      ? 'min-w-[8rem] max-w-[min(100%,20rem)] shrink'
-                      : 'w-full flex-1 sm:w-auto sm:max-w-[min(100%,24rem)]'
-                  }`}
-                >
-                  {noColorSizeMatrix ? (
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-wide whitespace-nowrap">产品</label>
-                  ) : null}
-                  {productionLinkMode === 'product' ? (
-                    <>
-                      <span className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{order.productName || '—'}</span>
-                      <span className="text-[10px] sm:text-[11px] font-medium text-slate-500">
-                        工单 <span className="font-bold text-slate-600 tabular-nums">{order.orderNumber}</span>
-                      </span>
-                    </>
-                  ) : (
-                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                      <span className="text-sm font-bold text-slate-900">{order.orderNumber}</span>
-                      <span className="text-sm text-slate-400">·</span>
-                      <span className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{order.productName || '—'}</span>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className={psiOrderBillFormSectionIconEmeraldClass}>
+                      <Layers className="h-4 w-4" />
                     </div>
-                  )}
-                  {isOutsourceRework && (
-                    <span className="mt-1 inline-flex w-fit items-center rounded border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-indigo-700">
-                      外协工厂: {outsourcePartner}
-                    </span>
-                  )}
-                </div>
-                {reworkSingleSimpleQuantityPath ? (
-                  <div className={`flex shrink-0 flex-col gap-0.5 ${noColorSizeMatrix ? '' : 'sm:pl-1'}`}>
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-wide whitespace-nowrap">数量</label>
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <input
-                        type="number"
-                        min={0}
-                        max={reworkSingleSimpleQuantityPath.totalPending}
-                        value={(reworkReportQuantities[reworkSingleSimpleQuantityPath.pathKey] ?? 0) === 0 ? '' : reworkReportQuantities[reworkSingleSimpleQuantityPath.pathKey]}
-                        onChange={e =>
-                          setReworkReportQuantities(prev => ({
-                            ...prev,
-                            [reworkSingleSimpleQuantityPath.pathKey]: Math.min(
-                              reworkSingleSimpleQuantityPath.totalPending,
-                              Math.max(0, Number(e.target.value) || 0),
-                            ),
-                          }))
-                        }
-                        placeholder="0"
-                        title={`最多 ${reworkSingleSimpleQuantityPath.totalPending}`}
-                        className="h-11 w-[6.5rem] shrink-0 box-border rounded-xl border border-slate-200 bg-white px-3 text-left text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 tabular-nums placeholder:text-[9px] placeholder:text-slate-400"
-                      />
-                      <span className="min-w-0 text-[10px] font-medium tabular-nums leading-none text-slate-400">
-                        最多 {reworkSingleSimpleQuantityPath.totalPending}
-                      </span>
-                    </div>
+                    <h3 className={sectionTitleClass}>2. 返工报工明细录入</h3>
                   </div>
-                ) : null}
-                <div className="flex shrink-0 flex-col gap-0.5">
-                  <label className="text-[9px] font-black text-slate-400 uppercase whitespace-nowrap tracking-wide">单价（元/件）</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={reworkReportUnitPrice || ''}
-                    onChange={e => setReworkReportUnitPrice(Number(e.target.value) || 0)}
-                    placeholder="0"
-                    className="h-11 w-[6.5rem] box-border rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 text-right tabular-nums outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div className="flex flex-col gap-0.5 shrink-0">
-                  <label className="text-[9px] font-black text-slate-400 uppercase whitespace-nowrap tracking-wide">金额（元）</label>
-                  <div className="h-11 min-w-[5rem] max-w-[6.5rem] box-border rounded-xl border border-slate-100 bg-white px-2 text-sm font-bold text-slate-700 flex items-center justify-center tabular-nums">
-                    {(() => {
-                      const totalQty = reworkReportPaths.reduce((sum, p) => {
-                        if (reworkReportHasColorSize && reworkReportProduct?.variants?.length) {
-                          const undiffQ = reworkReportQuantities[`${p.pathKey}__`] ?? 0;
-                          const variantSum = reworkReportProduct.variants.reduce(
-                            (vs, v) => vs + (reworkReportQuantities[`${p.pathKey}__${v.id}`] ?? 0),
-                            0,
-                          );
-                          return sum + undiffQ + variantSum;
-                        }
-                        return sum + (reworkReportQuantities[p.pathKey] ?? 0);
-                      }, 0);
-                      return (totalQty * (reworkReportUnitPrice || 0)).toFixed(2);
-                    })()}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase text-slate-400">扫码录入</span>
+                    <ScanInputButton onScan={handleScanPayload} hint="扫码录入" />
                   </div>
                 </div>
-                <div className={`flex flex-col gap-0.5 shrink-0 ${noColorSizeMatrix ? 'pl-1' : 'sm:ml-auto sm:pl-1'}`}>
-                  <label className="text-[9px] font-black text-slate-400 uppercase whitespace-nowrap tracking-wide">扫码累加</label>
-                  <div className="h-8 flex items-center">
-                    <ScanInputButton showCameraButton={false} onScan={handleScanPayload} hint="扫码录入" />
-                  </div>
-                </div>
-              </div>
-                );
-              })()}
-              <div className="space-y-4">
-              {reworkReportPaths.map(({ pathKey, pathLabel, totalPending, pendingByVariant }) => {
-                if (reworkReportHasColorSize && reworkReportProduct?.variants?.length) {
-                  const pendingUndiff = pendingByVariant[''] ?? 0;
-                  const onlyUndiff =
-                    pendingUndiff > 0 &&
-                    Object.keys(pendingByVariant).every(k => k === '' || (pendingByVariant[k] ?? 0) <= 0);
-                  const undiffKey = `${pathKey}__`;
-                  const undiffEntered = reworkReportQuantities[undiffKey] ?? 0;
-                  const matrixInputClass =
-                    'h-11 w-[3.25rem] shrink-0 rounded-xl border border-slate-200 bg-white px-2 text-left text-sm font-bold text-indigo-600 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200 tabular-nums';
-                  if (!dictionaries) {
-                    return (
-                      <div key={pathKey} className="space-y-2 rounded-xl border border-amber-100 bg-amber-50/90 p-4">
-                        <p className="text-sm font-bold text-slate-800">返工路径：{pathLabel}</p>
-                        <p className="text-sm font-bold text-amber-900">缺少颜色尺码字典，请先在基础资料维护后再按规格录入。</p>
-                      </div>
-                    );
-                  }
-                  if (!reworkReportMatrixProduct) return null;
-                  return (
-                    <div key={pathKey} className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4 shadow-sm">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">返工路径</p>
-                          <p className="text-sm font-bold text-slate-900">{pathLabel}</p>
+
+                <div className="space-y-3">
+                  <div className="space-y-2.5 rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 shadow-sm transition-all hover:border-indigo-100/80">
+                    <div className="flex flex-wrap items-start gap-2 sm:gap-3">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <label className={psiOrderBillCompactLineLabelClass}>报工明细</label>
+                        <div className="flex min-w-0 items-start gap-2">
+                          {reworkReportProduct?.imageUrl ? (
+                            <img
+                              src={reworkReportProduct.imageUrl}
+                              alt=""
+                              className="h-9 w-9 shrink-0 rounded-lg border border-slate-100 object-cover"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          ) : (
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
+                              <Package className="h-4 w-4" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                              <span className="font-bold text-slate-700">{order.productName || '—'}</span>
+                              {reworkReportProduct?.sku?.trim() ? (
+                                <span className="text-[9px] font-bold uppercase tracking-tight text-slate-300">{reworkReportProduct.sku.trim()}</span>
+                              ) : null}
+                            </div>
+                            {reworkSummaryProductTags.length > 0 ? (
+                              <div className="mt-1 flex flex-wrap items-center gap-1">
+                                {reworkSummaryProductTags.map(({ field, display }) => (
+                                  <span key={field.id} className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
+                                    {field.label}: {display}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
-                        <span className="shrink-0 text-[11px] font-bold text-slate-500 tabular-nums">待返工 {totalPending} 件</span>
                       </div>
-                      {onlyUndiff ? (
-                        <p className="text-[11px] font-bold leading-snug text-slate-600">
-                          此路径返工未带规格：在各尺码中分配，合计不超过 <span className="tabular-nums text-indigo-600">{pendingUndiff}</span> 件。
-                        </p>
-                      ) : null}
-                      {!onlyUndiff && pendingUndiff > 0 ? (
-                        <div className="rounded-xl border border-amber-100 bg-amber-50/80 px-3 py-3 space-y-1.5">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-600">未分规格待返工（合计）</label>
-                          <div className="flex flex-wrap items-end gap-2">
+                      <div className="flex shrink-0 flex-wrap items-start gap-2 sm:gap-3">
+                        {reworkSingleSimpleQuantityPath ? (
+                          <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                            <label className={psiOrderBillCompactLineLabelClass}>数量</label>
                             <input
                               type="number"
                               min={0}
-                              max={pendingUndiff}
-                              value={undiffEntered === 0 ? '' : undiffEntered}
-                              onChange={e => {
-                                const raw = Math.max(0, Number(e.target.value) || 0);
-                                setReworkReportQuantities(prev => ({ ...prev, [undiffKey]: Math.min(pendingUndiff, raw) }));
-                              }}
-                              className="h-11 max-w-[8rem] rounded-xl border border-amber-200/90 bg-white px-3 text-sm font-bold text-indigo-700 outline-none focus:ring-2 focus:ring-indigo-500 tabular-nums"
+                              max={reworkSingleSimpleQuantityPath.totalPending}
+                              value={
+                                (reworkReportQuantities[reworkSingleSimpleQuantityPath.pathKey] ?? 0) === 0
+                                  ? ''
+                                  : reworkReportQuantities[reworkSingleSimpleQuantityPath.pathKey]
+                              }
+                              onChange={e =>
+                                setReworkReportQuantities(prev => ({
+                                  ...prev,
+                                  [reworkSingleSimpleQuantityPath.pathKey]: Math.min(
+                                    reworkSingleSimpleQuantityPath.totalPending,
+                                    Math.max(0, Number(e.target.value) || 0),
+                                  ),
+                                }))
+                              }
                               placeholder="0"
+                              title={`最多 ${reworkSingleSimpleQuantityPath.totalPending}`}
+                              className={psiOrderBillCompactLineInputClass}
                             />
-                            <span className="pb-2 text-[10px] font-medium text-slate-500 tabular-nums">最多 {pendingUndiff}</span>
+                          </div>
+                        ) : (
+                          <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                            <label className={psiOrderBillCompactLineLabelClass}>数量</label>
+                            <div className={psiOrderBillCompactLineReadonlyClass}>
+                              {reworkTotalEnteredQty.toLocaleString()} {reworkUnitName}
+                            </div>
+                          </div>
+                        )}
+                        <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                          <label className={psiOrderBillCompactLineLabelClass}>单价 (元)</label>
+                          <input
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            value={reworkReportUnitPrice || ''}
+                            onChange={e => setReworkReportUnitPrice(Number(e.target.value) || 0)}
+                            placeholder="0"
+                            className={psiOrderBillCompactLineInputClass}
+                          />
+                        </div>
+                        <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
+                          <label className={psiOrderBillCompactLineLabelClass}>金额 (元)</label>
+                          <div className={psiOrderBillCompactLineReadonlyClass}>
+                            {(reworkTotalEnteredQty * (reworkReportUnitPrice || 0)).toFixed(2)}
                           </div>
                         </div>
-                      ) : null}
-                      <div className="rounded-xl border border-slate-100 bg-white p-3">
-                        <VariantQtyMatrixInputs
-                          product={reworkReportMatrixProduct}
-                          dictionaries={dictionaries}
-                          quantities={Object.fromEntries(
-                            reworkReportProduct.variants.map(v => [v.id, reworkReportQuantities[`${pathKey}__${v.id}`] ?? 0]),
-                          )}
-                          onVariantQtyChange={(variantId, qty) => {
-                            const raw = Math.max(0, qty);
-                            if (!onlyUndiff) {
-                              const maxV = pendingByVariant[variantId] ?? 0;
-                              setReworkReportQuantities(prev => ({ ...prev, [`${pathKey}__${variantId}`]: Math.min(maxV, raw) }));
-                              return;
-                            }
-                            setReworkReportQuantities(prev => {
-                              const sumOthers = (reworkReportProduct?.variants ?? [])
-                                .filter(x => x.id !== variantId)
-                                .reduce((s, x) => s + (prev[`${pathKey}__${x.id}`] ?? 0), 0);
-                              const cap = Math.max(0, pendingUndiff - sumOthers);
-                              return { ...prev, [`${pathKey}__${variantId}`]: Math.min(cap, raw) };
-                            });
-                          }}
-                          getCellExtras={v => {
-                            if (!onlyUndiff) {
-                              const maxV = pendingByVariant[v.id] ?? 0;
-                              return {
-                                max: maxV,
-                                disabled: maxV <= 0,
-                                placeholder: maxV <= 0 ? '—' : '0',
-                                hint: maxV > 0 ? `最多${maxV}` : undefined,
-                              };
-                            }
-                            const sumOthers = (reworkReportProduct?.variants ?? [])
-                              .filter(x => x.id !== v.id)
-                              .reduce((s, x) => s + (reworkReportQuantities[`${pathKey}__${x.id}`] ?? 0), 0);
-                            const cap = Math.max(0, pendingUndiff - sumOthers);
-                            return { max: cap, hint: `最多${cap}`, placeholder: '0' };
-                          }}
-                          inputClassName={matrixInputClass}
-                        />
                       </div>
                     </div>
-                  );
-                }
-                const totalEntered = reworkReportQuantities[pathKey] ?? 0;
-                const hideInlineQty = reworkSingleSimpleQuantityPath?.pathKey === pathKey;
-                if (hideInlineQty) return null;
-                return (
-                  <div
-                    key={pathKey}
-                    className="flex flex-col gap-3 bg-white rounded-xl p-4 border border-slate-100 sm:flex-row sm:items-end sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">返工路径</p>
-                      <p className="text-sm font-bold text-slate-900">{pathLabel}</p>
-                    </div>
-                    <div className="flex flex-col gap-1 sm:items-end">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">数量</label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min={0}
-                          max={totalPending}
-                          value={totalEntered === 0 ? '' : totalEntered}
-                          onChange={e =>
-                            setReworkReportQuantities(prev => ({
-                              ...prev,
-                              [pathKey]: Math.min(totalPending, Math.max(0, Number(e.target.value) || 0)),
-                            }))
+
+                    {reworkReportHasColorSize && reworkReportProduct?.variants?.length ? (
+                      <div className="space-y-3 border-t border-slate-100 pt-2">
+                        <p className="ml-1 text-[10px] font-black uppercase tracking-widest text-slate-400">数量明细（有颜色尺码）</p>
+                        {reworkReportPaths.map(({ pathKey, pendingByVariant }) => {
+                          const pendingUndiff = pendingByVariant[''] ?? 0;
+                          const onlyUndiff =
+                            pendingUndiff > 0 &&
+                            Object.keys(pendingByVariant).every(k => k === '' || (pendingByVariant[k] ?? 0) <= 0);
+                          const undiffKey = `${pathKey}__`;
+                          const undiffEntered = reworkReportQuantities[undiffKey] ?? 0;
+                          if (!dictionaries) {
+                            return (
+                              <div key={pathKey} className="space-y-2 rounded-lg border border-amber-100 bg-amber-50/90 p-3">
+                                <p className="text-sm font-bold text-amber-900">缺少颜色尺码字典，请先在基础资料维护后再按规格录入。</p>
+                              </div>
+                            );
                           }
-                          className="h-11 w-28 box-border rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-indigo-600 text-right tabular-nums outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400"
-                          placeholder={`最多${totalPending}`}
-                        />
-                        <span className="text-[10px] font-bold text-slate-400 shrink-0">件</span>
+                          if (!reworkReportMatrixProduct || !reworkReportProduct.variants?.length) return null;
+                          return (
+                            <div key={pathKey} className="space-y-2 rounded-lg border border-slate-100 bg-white/90 p-3">
+                              {onlyUndiff ? (
+                                <p className="text-[11px] font-bold leading-snug text-slate-600">
+                                  此路径返工未带规格：在各尺码中分配，合计不超过 <span className="tabular-nums text-indigo-600">{pendingUndiff}</span> 件。
+                                </p>
+                              ) : null}
+                              {!onlyUndiff && pendingUndiff > 0 ? (
+                                <div className="rounded-lg border border-amber-100 bg-amber-50/80 px-2.5 py-2 space-y-1.5">
+                                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-600">未分规格待返工（合计）</label>
+                                  <div className="flex flex-wrap items-end gap-2">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={pendingUndiff}
+                                      value={undiffEntered === 0 ? '' : undiffEntered}
+                                      onChange={e => {
+                                        const raw = Math.max(0, Number(e.target.value) || 0);
+                                        setReworkReportQuantities(prev => ({ ...prev, [undiffKey]: Math.min(pendingUndiff, raw) }));
+                                      }}
+                                      className={`${psiOrderBillCompactLineInputClass} max-w-[8rem] text-indigo-700`}
+                                      placeholder="0"
+                                    />
+                                    <span className="pb-1 text-[10px] font-medium text-slate-500 tabular-nums">最多 {pendingUndiff}</span>
+                                  </div>
+                                </div>
+                              ) : null}
+                              <VariantQtyMatrixInputs
+                                product={reworkReportMatrixProduct}
+                                dictionaries={dictionaries}
+                                quantities={Object.fromEntries(
+                                  reworkReportProduct.variants.map(v => [v.id, reworkReportQuantities[`${pathKey}__${v.id}`] ?? 0]),
+                                )}
+                                onVariantQtyChange={(variantId, qty) => {
+                                  const raw = Math.max(0, qty);
+                                  if (!onlyUndiff) {
+                                    const maxV = pendingByVariant[variantId] ?? 0;
+                                    setReworkReportQuantities(prev => ({ ...prev, [`${pathKey}__${variantId}`]: Math.min(maxV, raw) }));
+                                    return;
+                                  }
+                                  setReworkReportQuantities(prev => {
+                                    const sumOthers = (reworkReportProduct?.variants ?? [])
+                                      .filter(x => x.id !== variantId)
+                                      .reduce((s, x) => s + (prev[`${pathKey}__${x.id}`] ?? 0), 0);
+                                    const cap = Math.max(0, pendingUndiff - sumOthers);
+                                    return { ...prev, [`${pathKey}__${variantId}`]: Math.min(cap, raw) };
+                                  });
+                                }}
+                                getCellExtras={v => {
+                                  if (!onlyUndiff) {
+                                    const maxV = pendingByVariant[v.id] ?? 0;
+                                    return {
+                                      max: maxV,
+                                      disabled: maxV <= 0,
+                                      placeholder: maxV <= 0 ? '—' : '0',
+                                      hint: maxV > 0 ? `最多${maxV}` : undefined,
+                                    };
+                                  }
+                                  const sumOthers = (reworkReportProduct?.variants ?? [])
+                                    .filter(x => x.id !== v.id)
+                                    .reduce((s, x) => s + (reworkReportQuantities[`${pathKey}__${x.id}`] ?? 0), 0);
+                                  const cap = Math.max(0, pendingUndiff - sumOthers);
+                                  return { max: cap, hint: `最多${cap}`, placeholder: '0' };
+                                }}
+                                inputClassName={reworkMatrixInputClass}
+                              />
+                            </div>
+                          );
+                        })}
                       </div>
-                      <span className="text-[10px] font-medium text-slate-400 tabular-nums">最多 {totalPending}</span>
+                    ) : (
+                      <div className="space-y-2 border-t border-slate-100 pt-2">
+                        {reworkReportPaths.map(({ pathKey, totalPending }) => {
+                          const totalEntered = reworkReportQuantities[pathKey] ?? 0;
+                          const hideInlineQty = reworkSingleSimpleQuantityPath?.pathKey === pathKey;
+                          if (hideInlineQty) return null;
+                          return (
+                            <div
+                              key={pathKey}
+                              className="flex flex-col gap-2 rounded-lg border border-slate-100 bg-white/90 p-3 sm:flex-row sm:items-end sm:justify-end"
+                            >
+                              <div className="flex min-w-0 w-full max-w-md flex-col gap-1 sm:items-end sm:ml-auto">
+                                <label className={psiOrderBillCompactLineLabelClass}>数量</label>
+                                <div className="flex min-w-0 max-w-[14rem] items-center gap-2">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={totalPending}
+                                    value={totalEntered === 0 ? '' : totalEntered}
+                                    onChange={e =>
+                                      setReworkReportQuantities(prev => ({
+                                        ...prev,
+                                        [pathKey]: Math.min(totalPending, Math.max(0, Number(e.target.value) || 0)),
+                                      }))
+                                    }
+                                    className={`${psiOrderBillCompactLineInputClass} min-w-0 flex-1 text-indigo-600`}
+                                    placeholder="0"
+                                    title={`最多 ${totalPending}`}
+                                  />
+                                  <span className="text-[9px] font-bold tabular-nums text-slate-400">最多{totalPending}</span>
+                                  <span className="w-7 shrink-0 text-right text-[9px] font-bold text-slate-400">{reworkUnitName}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className={`${psiOrderBillCompactSummaryBarClass} flex-wrap justify-between gap-y-2 sm:justify-end`}>
+                    <div className="flex items-baseline gap-2">
+                      <span className={psiOrderBillCompactSummaryLabelClass}>本次报工合计</span>
+                      <span className={psiOrderBillCompactSummaryValueClass}>
+                        {reworkTotalEnteredQty.toLocaleString()}
+                        <span className={psiOrderBillCompactSummaryUnitClass}>{reworkUnitName}</span>
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-2 border-l border-white/25 pl-0 sm:pl-4">
+                      <span className={psiOrderBillCompactSummaryLabelClass}>金额合计</span>
+                      <span className={psiOrderBillCompactSummaryValueClass}>
+                        ¥{(reworkTotalEnteredQty * (reworkReportUnitPrice || 0)).toFixed(2)}
+                      </span>
                     </div>
                   </div>
-                );
-              })}
-              </div>
-              {weightReportEnabled && (
-                <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 space-y-2">
-                  <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                    <div className="flex items-center gap-2">
-                      <Scale className="h-4 w-4 shrink-0 text-indigo-600" />
-                      <label className="text-[11px] font-bold text-indigo-700 uppercase tracking-widest">
-                        本次交货总重量 (kg)
-                      </label>
-                    </div>
-                    <span className="text-[10px] text-indigo-500 font-medium leading-snug sm:text-right">
-                      将按 BOM 自动分摊到各子物料
-                    </span>
-                  </div>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={reworkReportTotalWeight === '' ? '' : reworkReportTotalWeight}
-                    onChange={e => {
-                      const raw = e.target.value;
-                      if (raw === '') setReworkReportTotalWeight('');
-                      else setReworkReportTotalWeight(Math.max(0, Number(raw) || 0));
-                    }}
-                    className="w-full bg-white border border-indigo-200 rounded-lg py-2 px-3 text-sm font-bold text-indigo-700 text-right outline-none focus:ring-2 focus:ring-indigo-200"
-                  />
-                  {reworkReportBom == null ? (
-                    <p className="text-[11px] font-bold text-indigo-800/90">
-                      当前产品在该工序下暂无 BOM，无法按重量分摊物料消耗。报工仍可提交，但不会生成预估消耗数据。
-                    </p>
-                  ) : reworkReportWeightPreview.length === 0 ? (
-                    <p className="text-[10px] text-indigo-600 font-medium">
-                      输入本次交货总重量后，将按 BOM 占比预估各物料的实际消耗。
-                    </p>
-                  ) : (
-                    <div className="overflow-hidden rounded-xl border border-indigo-100 bg-white">
-                      <table className="w-full text-xs">
-                        <thead className="bg-indigo-50/70">
-                          <tr className="text-left text-[10px] font-black uppercase tracking-widest text-indigo-700">
-                            <th className="px-3 py-2">物料</th>
-                            <th className="px-3 py-2 text-right">占比</th>
-                            <th className="px-3 py-2 text-right">预估消耗 (kg)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {reworkReportWeightPreview.map(row => (
-                            <tr key={row.materialProductId} className="border-t border-slate-100">
-                              <td className="px-3 py-2 font-bold text-slate-800">{row.materialName || '—'}</td>
-                              <td className="px-3 py-2 text-right font-bold text-slate-600 tabular-nums">
-                                {(row.ratio * 100).toFixed(2)}%
-                              </td>
-                              <td className="px-3 py-2 text-right font-black text-indigo-700 tabular-nums">
-                                {row.actualWeight.toFixed(4)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
                 </div>
-              )}
-            </div>
               </div>
             </div>
           )}
+          </div>
         </div>
         {reworkReportPaths.length > 0 && (
           <div className="shrink-0 border-t border-slate-100 px-6 py-4 flex gap-3 bg-white">

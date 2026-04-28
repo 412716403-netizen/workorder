@@ -199,7 +199,7 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
             </div>
             <div>
               <label className="text-[10px] font-bold text-slate-400 block mb-1">操作人</label>
-              <input type="text" value={f.operator} onChange={e => setReworkFlowFilter(prev => ({ ...prev, operator: e.target.value }))} placeholder="操作人或收回工厂" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
+              <input type="text" value={f.operator} onChange={e => setReworkFlowFilter(prev => ({ ...prev, operator: e.target.value }))} placeholder="操作人或委外工厂" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
             </div>
           </div>
           <div className="mt-2 flex items-center gap-4">
@@ -220,7 +220,6 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">报工单号</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">产品</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">工序</th>
-                    <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">收回工厂</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">数量</th>
                     {hasAnyPrice && <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">单价</th>}
                     {hasAnyPrice && <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">金额</th>}
@@ -243,9 +242,11 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
                         ? (order?.orderNumber ?? '—')
                         : `${orderNumbers[0]} 等${orderNumbers.length}单`;
                     const ops = [...new Set(groupRecs.map(x => (x.operator ?? '').trim()).filter(op => op && op !== '外协收回'))];
-                    const opLabel = ops.length === 0 ? '—' : ops.length === 1 ? ops[0]! : `${ops[0]} 等${ops.length}人`;
+                    const opPart = ops.length === 0 ? '' : ops.length === 1 ? ops[0]! : `${ops[0]} 等${ops.length}人`;
                     const factoryLabels = [...new Set(groupRecs.map(resolveReceiveFactory).filter(x => x !== '—'))];
-                    const factoryLabel = factoryLabels.length === 0 ? '—' : factoryLabels.length === 1 ? factoryLabels[0]! : factoryLabels.join('、');
+                    const outsourcePart = factoryLabels.length === 0 ? '' : factoryLabels.length === 1 ? factoryLabels[0]! : factoryLabels.join('、');
+                    const operatorColumnLabel =
+                      opPart && outsourcePart ? `${opPart} · ${outsourcePart}` : opPart || outsourcePart || '—';
                     const prices = groupRecs.map(x => x.unitPrice).filter((p): p is number => p != null && p > 0);
                     const unitLabel = prices.length === 0 ? '—' : prices.every(p => p === prices[0]) ? prices[0]!.toFixed(2) : '—';
                     const amtLabel = totalAmount > 0 ? totalAmount.toFixed(2) : '—';
@@ -266,11 +267,10 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
                         <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{getDisplayDocNo(r)}</td>
                         <td className="px-4 py-3 text-slate-800 whitespace-nowrap">{product?.name ?? r.productId ?? '—'}</td>
                         <td className="px-4 py-3 text-slate-700 whitespace-nowrap max-w-[200px] truncate" title={nodeLabel}>{nodeLabel}</td>
-                        <td className="px-4 py-3 text-slate-700 whitespace-nowrap max-w-[160px] truncate" title={factoryLabel !== '—' ? factoryLabel : undefined}>{factoryLabel}</td>
                         <td className="px-4 py-3 text-right font-bold text-indigo-600 whitespace-nowrap">{totalQty} 件</td>
                         {hasAnyPrice && <td className="px-4 py-3 text-right text-slate-700 whitespace-nowrap">{unitLabel}</td>}
                         {hasAnyPrice && <td className="px-4 py-3 text-right font-bold text-amber-600 whitespace-nowrap">{amtLabel}</td>}
-                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{opLabel}</td>
+                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap max-w-[220px] truncate" title={operatorColumnLabel !== '—' ? operatorColumnLabel : undefined}>{operatorColumnLabel}</td>
                         <td className="px-4 py-3">
                           {hasOpsPerm(tenantRole, userPermissions, 'production:rework_report_records:view') && (
                             <button type="button" onClick={() => onViewDetail(r)} className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all whitespace-nowrap shrink-0">
@@ -282,7 +282,7 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
                     );
                   })}
                   <tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold">
-                    <td className="px-4 py-3" colSpan={productionLinkMode === 'product' ? 5 : 6}></td>
+                    <td className="px-4 py-3" colSpan={productionLinkMode === 'product' ? 4 : 5}></td>
                     <td className="px-4 py-3 text-indigo-600 text-right">{totalQuantity} 件</td>
                     {hasAnyPrice && <td className="px-4 py-3"></td>}
                     {hasAnyPrice && <td className="px-4 py-3 text-amber-600 text-right">{totalAmount.toFixed(2)}</td>}

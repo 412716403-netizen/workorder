@@ -1,5 +1,6 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { X, Check, Pencil, Trash2, FileText, Layers } from 'lucide-react';
+import React, { useState, useMemo, useCallback, useContext } from 'react';
+import { createPortal } from 'react-dom';
+import { Check, Clock, User, Package, Building2 } from 'lucide-react';
 import {
   ProductionOpRecord,
   ProductionOrder,
@@ -13,27 +14,45 @@ import {
   PrintRenderContext,
 } from '../../types';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
+import { buildVariantQtyMatrixLayout } from '../../utils/variantQtyMatrix';
 import { groupProductionOpBatchByVariant, mapGroupedOpQuantitiesToRecordIds } from '../../utils/groupProductionOpBatchByVariant';
 import { hasOpsPerm } from './types';
-import { formatTimestamp, timestampFromDatetimeLocal, nowTimestamp } from '../../utils/formatTime';
-import { useConfirm } from '../../contexts/ConfirmContext';
+import { fmtDT, timestampFromDatetimeLocal, nowTimestamp } from '../../utils/formatTime';
 import WorkerSelector from '../../components/WorkerSelector';
 import EquipmentSelector from '../../components/EquipmentSelector';
-import { PlanFormCustomFieldInput, PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
 import { buildReworkReportFlowPrintContext } from '../../utils/buildReworkReportFlowPrintContext';
 import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
 import { readReworkReportCustomSnapshot, REWORK_REPORT_CUSTOM_DATA_KEY } from '../../utils/productionOpCollab/rework';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
+import { psiOrderBillFormFieldControlClass } from '../../styles/uiDensity';
+import { psiCustomFieldHasFilledDisplayValue } from '../psi-ops/psiOpsListFormatting';
+import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
+import DocPhaseModal, { DocPhaseEditToolbarPortalContext } from '../../components/DocPhaseModal';
 import {
-  sectionTitleClass,
-  psiOrderBillFormSectionStackClass,
-  psiOrderBillFormDetailSplitClass,
-  psiOrderBillFormGridGapClass,
-  psiOrderBillFormSectionIconIndigoClass,
-  psiOrderBillFormSectionIconEmeraldClass,
-  psiOrderBillFormFieldControlClass,
-} from '../../styles/uiDensity';
+  DocCustomFieldEditGrid,
+  DocCustomFieldInlineReadList,
+  DocInlineMetaRow,
+  DocSummaryCard,
+} from '../../components/doc-modal';
+
+const reworkReportCustomFieldEditControlClass =
+  'h-9 w-full max-w-md rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500';
+
+function ReworkFlowEditSavePortal({ active, onSave }: { active: boolean; onSave: () => void }) {
+  const host = useContext(DocPhaseEditToolbarPortalContext);
+  if (!active || !host) return null;
+  return createPortal(
+    <button
+      type="button"
+      onClick={onSave}
+      className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700"
+    >
+      <Check className="w-4 h-4" /> 保存
+    </button>,
+    host,
+  );
+}
 
 export interface ReworkReportFlowDetailModalProps {
   productionLinkMode: 'order' | 'product';
@@ -53,6 +72,8 @@ export interface ReworkReportFlowDetailModalProps {
   onOpenReworkFormPrintTab?: () => void;
   onUpdateRecord?: (record: ProductionOpRecord) => void;
   onDeleteRecord?: (recordId: string) => void;
+  /** 编辑补录新规格（返工报工流水 REWORK_REPORT） */
+  onAddRecord?: (record: ProductionOpRecord) => void | Promise<void>;
   onClose: () => void;
 }
 
@@ -74,10 +95,10 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
   onOpenReworkFormPrintTab,
   onUpdateRecord,
   onDeleteRecord,
+  onAddRecord,
   onClose,
 }) => {
   const equipmentFeaturesOn = useEquipmentFeaturesEffective();
-  const confirm = useConfirm();
   const r = reworkFlowDetailRecord;
   const detailBatch = r.type === 'REWORK_REPORT'
     ? (r.docNo
@@ -94,7 +115,6 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
   const [editing, setEditing] = useState<{
     form: {
       timestamp: string;
-      operator: string;
       workerId: string;
       equipmentId: string;
       reason: string;
@@ -106,6 +126,17 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
   } | null>(null);
 
   const isReportDetail = first?.type === 'REWORK_REPORT';
+  const outsourcePartnersInBatch = useMemo(() => {
+    if (!isReportDetail) return [] as string[];
+    return [...new Set(detailBatch.map(x => (x.partner ?? '').trim()).filter(Boolean))];
+  }, [isReportDetail, detailBatch]);
+  const isOutsourceReworkReport = isReportDetail && outsourcePartnersInBatch.length > 0;
+  const outsourcePartnerDisplay =
+    outsourcePartnersInBatch.length === 0
+      ? ''
+      : outsourcePartnersInBatch.length === 1
+        ? outsourcePartnersInBatch[0]!
+        : outsourcePartnersInBatch.join('、');
   const order = first ? orders.find(o => o.id === first.orderId) : undefined;
   const product = first ? products.find(p => p.id === first.productId) : undefined;
   const productCategory = product ? categories.find(c => c.id === product.categoryId) : undefined;
@@ -139,11 +170,11 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
     const q = x.quantity ?? 0;
     return up > 0 ? s + q * up : s;
   }, 0);
-  const showSpecTable =
-    hasColorSize || detailBatch.length > 1 || (() => {
-      const vids = new Set(detailBatch.map(x => x.variantId ?? ''));
-      return vids.size > 1;
-    })();
+  const detailHeaderUnitPriceText = useMemo(() => {
+    if (unitPriceLabel != null) return unitPriceLabel.toFixed(2);
+    const up = detailBatch[0]?.unitPrice;
+    return up != null && Number(up) > 0 ? Number(up).toFixed(2) : '—';
+  }, [unitPriceLabel, detailBatch]);
   const displayVariantRows = useMemo(() => {
     const grouped = groupProductionOpBatchByVariant(detailBatch, product);
     return grouped.map(g => {
@@ -177,6 +208,12 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
     () => displayVariantRows.find(r => !r.variantId) ?? null,
     [displayVariantRows],
   );
+  const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+  const matrixSummaryCustomTags = useMemo(() => {
+    if (!product) return [];
+    const cat = product.categoryId ? categoryMap.get(product.categoryId) : undefined;
+    return getProductCategoryCustomFieldEntries(product, cat ?? null, { includeFile: false, includeEmpty: false });
+  }, [product, categoryMap]);
 
   const reworkReportFieldsForDetail = useMemo(
     () => (reworkFormSettings?.reworkReportCustomFields ?? []).filter(f => f.showInDetail),
@@ -203,13 +240,81 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
     [productionLinkMode, detailBatch, records, orders, products, globalNodes, dictionaries, workers, equipment],
   );
 
-  if (!first) return null;
+  const startEdit = () => {
+    if (!onUpdateRecord || detailBatch.length === 0) return;
+    const rec = detailBatch[0];
+    let dt = new Date(rec.timestamp || undefined);
+    if (isNaN(dt.getTime())) dt = new Date();
+    const tsStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}T${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+    const snap =
+      rec.type === 'REWORK_REPORT'
+        ? { ...readReworkReportCustomSnapshot(records, rec.docNo, rec.productId) }
+        : {};
+    const grouped = groupProductionOpBatchByVariant(detailBatch, product);
+    let rowEdits = grouped.map(g => ({
+      variantId: g.variantId,
+      label: g.label,
+      quantity: g.quantity,
+      recordIds: [...g.recordIds],
+    }));
+    if (isReportDetail && hasColorSize && product && dictionaries) {
+      const layout = buildVariantQtyMatrixLayout(product, dictionaries);
+      if (layout) {
+        const undiff = grouped.find(g => !g.variantId);
+        const byVid = new Map(grouped.filter(g => g.variantId).map(g => [g.variantId, g]));
+        const next: typeof rowEdits = [];
+        if (undiff) {
+          next.push({
+            variantId: undiff.variantId,
+            label: undiff.label,
+            quantity: undiff.quantity,
+            recordIds: [...undiff.recordIds],
+          });
+        }
+        for (const cr of layout.colorRows) {
+          for (const v of cr.variantAtSize) {
+            if (!v) continue;
+            const g = byVid.get(v.id);
+            const label = (v as { skuSuffix?: string }).skuSuffix ?? v.id;
+            if (g) {
+              next.push({
+                variantId: g.variantId,
+                label: g.label,
+                quantity: g.quantity,
+                recordIds: [...g.recordIds],
+              });
+            } else {
+              next.push({ variantId: v.id, label, quantity: 0, recordIds: [] });
+            }
+          }
+        }
+        rowEdits = next;
+      }
+    }
+    setEditing({
+      firstRecord: rec,
+      form: {
+        timestamp: tsStr,
+        workerId: rec.workerId ?? '',
+        equipmentId: rec.equipmentId ?? '',
+        reason: rec.reason ?? '',
+        unitPrice: rec.unitPrice ?? 0,
+        customData: snap,
+        rowEdits,
+      },
+    });
+  };
 
-  const handleSave = () => {
+  const saveEdit = () => {
     if (!onUpdateRecord || !editing) return;
     const f = editing.form;
     const tsStr = f.timestamp ? timestampFromDatetimeLocal(f.timestamp) : nowTimestamp();
-    const opName = (workers?.find(w => w.id === f.workerId)?.name) ?? f.operator;
+    const isOutsourceSave = detailBatch.some(
+      x => x.type === 'REWORK_REPORT' && (x.partner ?? '').trim().length > 0,
+    );
+    const opName = isOutsourceSave
+      ? ''
+      : (workers?.find(w => w.id === f.workerId)?.name) ?? editing.firstRecord.operator ?? '';
     const newQtyByRecordId = mapGroupedOpQuantitiesToRecordIds(detailBatch, f.rowEdits);
     const cleanCustom = Object.fromEntries(
       Object.entries(f.customData).filter(([, v]) => v !== '' && v != null && v !== undefined),
@@ -237,13 +342,50 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
         timestamp: tsStr,
         operator: opName,
         reason: f.reason || undefined,
-        workerId: f.workerId || undefined,
-        equipmentId: f.equipmentId || undefined,
+        workerId: isOutsourceSave ? undefined : f.workerId || undefined,
+        equipmentId: isOutsourceSave ? undefined : f.equipmentId || undefined,
         unitPrice: f.unitPrice > 0 ? f.unitPrice : undefined,
         amount: f.unitPrice > 0 ? newQty * f.unitPrice : undefined,
         ...(rec.type === 'REWORK_REPORT' ? { collabData: collabMerged } : {}),
       });
     });
+    for (const row of f.rowEdits) {
+      if (row.recordIds.length > 0 || !row.variantId || row.quantity <= 0) continue;
+      const tmpl = first;
+      if (tmpl.sourceReworkId && tmpl.nodeId) {
+        const key = `${tmpl.sourceReworkId}|${tmpl.nodeId}`;
+        const cur = reworkDeltas.get(key) ?? { reworkId: tmpl.sourceReworkId, nodeId: tmpl.nodeId, delta: 0 };
+        cur.delta += row.quantity;
+        reworkDeltas.set(key, cur);
+      }
+    }
+    if (isReportDetail && onAddRecord) {
+      let seq = 0;
+      for (const row of f.rowEdits) {
+        if (row.recordIds.length > 0 || !row.variantId || row.quantity <= 0) continue;
+        const base = first;
+        void onAddRecord({
+          id: `rec-rework-report-edit-${Date.now()}-${seq++}-${row.variantId.slice(-6)}`,
+          type: 'REWORK_REPORT',
+          orderId: base.orderId,
+          productId: base.productId,
+          operator: opName,
+          timestamp: tsStr,
+          nodeId: base.nodeId,
+          sourceNodeId: base.sourceNodeId,
+          sourceReworkId: base.sourceReworkId ?? reworkOrigin?.id,
+          variantId: row.variantId,
+          quantity: row.quantity,
+          docNo: base.docNo,
+          workerId: isOutsourceSave ? undefined : f.workerId || undefined,
+          equipmentId: isOutsourceSave ? undefined : f.equipmentId || undefined,
+          unitPrice: f.unitPrice > 0 ? f.unitPrice : undefined,
+          amount: f.unitPrice > 0 ? row.quantity * f.unitPrice : undefined,
+          ...((base.partner ?? '').trim() ? { partner: base.partner } : {}),
+          collabData: { [REWORK_REPORT_CUSTOM_DATA_KEY]: cleanCustom },
+        });
+      }
+    }
     reworkDeltas.forEach(({ reworkId, nodeId, delta }) => {
       const reworkRec = records.find(r => r.id === reworkId && r.type === 'REWORK');
       if (!reworkRec) return;
@@ -259,432 +401,309 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
     onClose();
   };
 
-  const handleDelete = () => {
-    void confirm({ message: '确定要删除该返工单的所有记录吗？此操作不可恢复。', danger: true }).then((ok) => {
-      if (!ok || !onDeleteRecord) return;
-      const reworkDeltas = new Map<string, { reworkId: string; nodeId: string; delta: number }>();
-      detailBatch.forEach(rec => {
-        if (rec.sourceReworkId && rec.nodeId) {
-          const key = `${rec.sourceReworkId}|${rec.nodeId}`;
-          const cur = reworkDeltas.get(key) ?? { reworkId: rec.sourceReworkId, nodeId: rec.nodeId, delta: 0 };
-          cur.delta -= (rec.quantity ?? 0);
-          reworkDeltas.set(key, cur);
-        }
-      });
-      detailBatch.forEach(x => onDeleteRecord(x.id));
-      reworkDeltas.forEach(({ reworkId, nodeId, delta }) => {
-        const reworkRec = records.find(r => r.id === reworkId && r.type === 'REWORK');
-        if (!reworkRec || !onUpdateRecord) return;
-        const oldDone = reworkRec.reworkCompletedQuantityByNode?.[nodeId] ?? 0;
-        const newDone = Math.max(0, oldDone + delta);
-        const updCompleted = { ...(reworkRec.reworkCompletedQuantityByNode ?? {}), [nodeId]: newDone };
-        const nodes = (reworkRec.reworkNodeIds?.length ? reworkRec.reworkNodeIds : (reworkRec.nodeId ? [reworkRec.nodeId] : []));
-        const allDone = nodes.every(n => (updCompleted[n] ?? 0) >= reworkRec.quantity);
-        const wasComplete = reworkRec.status === '已完成';
-        onUpdateRecord({ ...reworkRec, reworkCompletedQuantityByNode: updCompleted, status: allDone ? '已完成' : (wasComplete ? '处理中' : reworkRec.status) });
-      });
-      onClose();
-    });
-  };
-
-  /** 无颜色尺码且仅一条明细：数量区用单行四列（产品｜数量｜单价｜金额），与进销存无规格行一致 */
-  const noMatrixSingleRowEdit =
-    editing && !hasColorSize && editing.form.rowEdits.length === 1 ? editing.form.rowEdits[0]! : null;
+  if (!first) return null;
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
-      <div className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl border border-slate-200 shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-          <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-            {productionLinkMode === 'product'
-              ? <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{product?.name ?? '—'}</span>
-              : <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{order?.orderNumber ?? '—'}</span>
-            }
-            {isReportDetail ? '返工报工流水详情' : '返工详情'}
-          </h3>
-          <div className="flex items-center gap-2">
-            {editing ? (
-              <>
-                <button type="button" onClick={() => setEditing(null)} className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">取消</button>
-                <button type="button" onClick={handleSave} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700">
-                  <Check className="w-4 h-4" /> 保存
-                </button>
-              </>
-            ) : (
-              <>
-                {isReportDetail && (
-                  <OrderCenterDetailPrintBlock
-                    printSlot={reworkFormSettings?.reworkCenterPrint?.reworkReportFlowDetail}
-                    printTemplates={printTemplates}
-                    buildContext={buildPrintContext}
-                    onAddPrintTemplate={onOpenReworkFormPrintTab}
-                    pickerSubtitle={`返工报工流水 ${first.docNo ?? '—'}`}
-                  />
-                )}
-                {onUpdateRecord && detailBatch.length > 0 && hasOpsPerm(tenantRole, userPermissions, 'production:rework_report_records:edit') && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const rec = detailBatch[0];
-                      let dt = new Date(rec.timestamp || undefined);
-                      if (isNaN(dt.getTime())) dt = new Date();
-                      const tsStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}T${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
-                      const snap =
-                        rec.type === 'REWORK_REPORT'
-                          ? { ...readReworkReportCustomSnapshot(records, rec.docNo, rec.productId) }
-                          : {};
-                      setEditing({
-                        firstRecord: rec,
-                        form: {
-                          timestamp: tsStr,
-                          operator: rec.operator ?? '',
-                          workerId: rec.workerId ?? '',
-                          equipmentId: rec.equipmentId ?? '',
-                          reason: rec.reason ?? '',
-                          unitPrice: rec.unitPrice ?? 0,
-                          customData: snap,
-                          rowEdits: groupProductionOpBatchByVariant(detailBatch, product).map(g => ({
-                            variantId: g.variantId,
-                            label: g.label,
-                            quantity: g.quantity,
-                            recordIds: [...g.recordIds],
-                          })),
-                        },
-                      });
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  >
-                    <Pencil className="w-4 h-4" /> 编辑
-                  </button>
-                )}
-                {onDeleteRecord && hasOpsPerm(tenantRole, userPermissions, 'production:rework_report_records:delete') && (
-                  <button type="button" onClick={handleDelete} className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold">
-                    <Trash2 className="w-4 h-4" /> 删除
-                  </button>
-                )}
-              </>
-            )}
-            <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
-          </div>
-        </div>
-        <div className="flex-1 overflow-auto p-4 space-y-4">
-          {hasColorSize ? <h2 className="text-xl font-bold text-slate-900">{product?.name ?? first.productId ?? '—'}</h2> : null}
+    <DocPhaseModal
+      zIndexClass="z-[90]"
+      open
+      phase={editing ? 'edit' : 'detail'}
+      editingDocNumber={first.docNo || '—'}
+      maxWidthClass="max-w-4xl"
+      detailTitle={isReportDetail ? '返工报工流水详情' : '返工详情'}
+      editTitle={isReportDetail ? '返工报工流水 · 编辑' : '返工 · 编辑'}
+      newTitle=""
+      leadingDetailActions={
+        isReportDetail ? (
+          <OrderCenterDetailPrintBlock
+            printSlot={reworkFormSettings?.reworkCenterPrint?.reworkReportFlowDetail}
+            printTemplates={printTemplates}
+            buildContext={buildPrintContext}
+            onAddPrintTemplate={onOpenReworkFormPrintTab}
+            pickerSubtitle={`返工报工流水 ${first.docNo ?? '—'}`}
+          />
+        ) : null
+      }
+      hasPerm={perm => hasOpsPerm(tenantRole, userPermissions, perm)}
+      viewPerm="production:rework_records:view"
+      editPerm="production:rework_records:edit"
+      deletePerm={onDeleteRecord ? 'production:rework_records:delete' : undefined}
+      deleteConfirmMessage="确定要删除该返工单的所有记录吗？此操作不可恢复。"
+      onDelete={onDeleteRecord ? () => {
+        const reworkDeltas = new Map<string, { reworkId: string; nodeId: string; delta: number }>();
+        detailBatch.forEach(rec => {
+          if (rec.sourceReworkId && rec.nodeId) {
+            const key = `${rec.sourceReworkId}|${rec.nodeId}`;
+            const cur = reworkDeltas.get(key) ?? { reworkId: rec.sourceReworkId, nodeId: rec.nodeId, delta: 0 };
+            cur.delta -= (rec.quantity ?? 0);
+            reworkDeltas.set(key, cur);
+          }
+        });
+        detailBatch.forEach(x => onDeleteRecord(x.id));
+        reworkDeltas.forEach(({ reworkId, nodeId, delta }) => {
+          const reworkRec = records.find(r => r.id === reworkId && r.type === 'REWORK');
+          if (!reworkRec || !onUpdateRecord) return;
+          const oldDone = reworkRec.reworkCompletedQuantityByNode?.[nodeId] ?? 0;
+          const newDone = Math.max(0, oldDone + delta);
+          const updCompleted = { ...(reworkRec.reworkCompletedQuantityByNode ?? {}), [nodeId]: newDone };
+          const nodes = (reworkRec.reworkNodeIds?.length ? reworkRec.reworkNodeIds : (reworkRec.nodeId ? [reworkRec.nodeId] : []));
+          const allDone = nodes.every(n => (updCompleted[n] ?? 0) >= reworkRec.quantity);
+          const wasComplete = reworkRec.status === '已完成';
+          onUpdateRecord({ ...reworkRec, reworkCompletedQuantityByNode: updCompleted, status: allDone ? '已完成' : (wasComplete ? '处理中' : reworkRec.status) });
+        });
+        onClose();
+      } : undefined}
+      renderDocBadge={() => (
+        productionLinkMode === 'product'
+          ? <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{product?.name ?? '—'}</span>
+          : <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{order?.orderNumber ?? '—'}</span>
+      )}
+      onClose={onClose}
+      onEnterEdit={startEdit}
+      onCancelEdit={() => setEditing(null)}
+      renderContent={() => (
+        <>
+          <ReworkFlowEditSavePortal active={!!editing} onSave={saveEdit} />
+          <div className="space-y-4 min-h-0">
           {editing ? (
-            <div className={psiOrderBillFormSectionStackClass}>
-              <div className="space-y-4">
-                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
-                  <div className={psiOrderBillFormSectionIconIndigoClass}><FileText className="w-4 h-4" /></div>
-                  <h3 className={sectionTitleClass}>1. 基础信息</h3>
-                </div>
-                <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">返工时间</label>
-                    <input
-                      type="datetime-local"
-                      value={editing.form.timestamp}
-                      onChange={e => setEditing(prev => prev ? { ...prev, form: { ...prev.form, timestamp: e.target.value } } : prev)}
-                      className={psiOrderBillFormFieldControlClass}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">操作人</label>
-                    <input
-                      type="text"
-                      value={editing.form.operator}
-                      onChange={e => setEditing(prev => prev ? { ...prev, form: { ...prev.form, operator: e.target.value } } : prev)}
-                      className={psiOrderBillFormFieldControlClass}
-                      placeholder="操作人"
-                    />
-                  </div>
-                  {workers && workers.length > 0 && (
-                    <div className="md:col-span-2 space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">报工人员</label>
-                      <WorkerSelector
-                        options={workers.filter((w: Worker) => w.status === 'ACTIVE').map((w: Worker) => ({ id: w.id, name: w.name, sub: w.groupName, assignedMilestoneIds: w.assignedMilestoneIds }))}
-                        processNodes={globalNodes}
-                        currentNodeId={first.nodeId ?? ''}
-                        value={editing.form.workerId}
-                        onChange={(id) => { const w = workers.find(wx => wx.id === id); setEditing(prev => prev ? { ...prev, form: { ...prev.form, workerId: id, operator: w?.name ?? prev.form.operator } } : prev); }}
-                        placeholder="选择报工人员..."
-                        variant="default"
-                      />
+            <>
+              <DocSummaryCard
+                main={
+                  <>
+                    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2 text-sm">
+                      {isReportDetail && first.docNo?.trim() ? (
+                        <span className="rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 font-mono text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                          {first.docNo.trim()}
+                        </span>
+                      ) : null}
+                      {productionLinkMode !== 'product' && order?.orderNumber ? (
+                        <span className="rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                          {order.orderNumber}
+                        </span>
+                      ) : null}
+                      <span className="text-slate-600 font-bold normal-case text-xs sm:text-sm">工序：{nodeNamesLabel}</span>
+                      <span className="text-slate-600 font-bold normal-case text-xs sm:text-sm">
+                        来源：
+                        {sourceNodeName ?? (first.sourceNodeId ? globalNodes.find(n => n.id === first.sourceNodeId)?.name : null) ?? '—'}
+                      </span>
                     </div>
-                  )}
-                  {equipmentFeaturesOn &&
-                    equipment &&
-                    equipment.length > 0 &&
-                    globalNodes.find(n => n.id === first.nodeId)?.enableEquipmentOnReport && (
-                    <div className="md:col-span-2 space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">设备</label>
-                      <EquipmentSelector
-                        options={equipment.map((e: { id: string; name: string; code?: string; assignedMilestoneIds?: string[] }) => ({ id: e.id, name: e.name, sub: e.code, assignedMilestoneIds: e.assignedMilestoneIds }))}
-                        processNodes={globalNodes}
-                        currentNodeId={first.nodeId ?? ''}
-                        value={editing.form.equipmentId}
-                        onChange={(id) => setEditing(prev => prev ? { ...prev, form: { ...prev.form, equipmentId: id } } : prev)}
-                        placeholder="选择设备..."
-                        variant="default"
-                      />
+                    <div className="mt-1.5 flex flex-col gap-3 text-[10px] font-bold leading-snug text-slate-500 normal-case">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <span className="inline-flex min-h-9 min-w-0 items-center gap-1.5 text-slate-400">
+                          <Clock className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                          <span className="sr-only">返工时间</span>
+                          <input
+                            type="datetime-local"
+                            value={editing.form.timestamp}
+                            onChange={e =>
+                              setEditing(prev =>
+                                prev ? { ...prev, form: { ...prev.form, timestamp: e.target.value } } : prev,
+                              )
+                            }
+                            className={`${psiOrderBillFormFieldControlClass} max-w-full sm:max-w-[14rem]`}
+                          />
+                        </span>
+                      </div>
+                      {isOutsourceReworkReport ? (
+                        <div className="min-w-0 space-y-1.5 md:max-w-md">
+                          <label className="mb-1.5 ml-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            委外工厂
+                          </label>
+                          <div className="flex h-9 min-h-9 w-full min-w-0 items-center rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-800">
+                            {outsourcePartnerDisplay || '—'}
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {workers && workers.length > 0 ? (
+                            <div className="min-w-0 space-y-1">
+                              <div className="flex items-center gap-1.5 text-slate-400">
+                                <User className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                                <span className="text-[10px] font-black uppercase tracking-widest">报工人员</span>
+                              </div>
+                              <WorkerSelector
+                                options={workers
+                                  .filter((w: Worker) => w.status === 'ACTIVE')
+                                  .map((w: Worker) => ({
+                                    id: w.id,
+                                    name: w.name,
+                                    sub: w.groupName,
+                                    assignedMilestoneIds: w.assignedMilestoneIds,
+                                  }))}
+                                processNodes={globalNodes}
+                                currentNodeId={first.nodeId ?? ''}
+                                value={editing.form.workerId}
+                                onChange={id =>
+                                  setEditing(prev => (prev ? { ...prev, form: { ...prev.form, workerId: id } } : prev))
+                                }
+                                placeholder="选择报工人员..."
+                                variant="default"
+                              />
+                            </div>
+                          ) : null}
+                          {equipmentFeaturesOn &&
+                          equipment &&
+                          equipment.length > 0 &&
+                          globalNodes.find(n => n.id === first.nodeId)?.enableEquipmentOnReport ? (
+                            <div className="min-w-0 space-y-1">
+                              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">设备</label>
+                              <EquipmentSelector
+                                options={equipment.map(
+                                  (e: { id: string; name: string; code?: string; assignedMilestoneIds?: string[] }) => ({
+                                    id: e.id,
+                                    name: e.name,
+                                    sub: e.code,
+                                    assignedMilestoneIds: e.assignedMilestoneIds,
+                                  }),
+                                )}
+                                processNodes={globalNodes}
+                                currentNodeId={first.nodeId ?? ''}
+                                value={editing.form.equipmentId}
+                                onChange={id =>
+                                  setEditing(prev => (prev ? { ...prev, form: { ...prev.form, equipmentId: id } } : prev))
+                                }
+                                placeholder="选择设备..."
+                                variant="default"
+                              />
+                            </div>
+                          ) : null}
+                        </>
+                      )}
                     </div>
-                  )}
-                  <div className="md:col-span-2 space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">原因/备注</label>
-                    <input
-                      type="text"
-                      value={editing.form.reason}
-                      onChange={e => setEditing(prev => prev ? { ...prev, form: { ...prev.form, reason: e.target.value } } : prev)}
-                      className={psiOrderBillFormFieldControlClass}
-                      placeholder="选填"
-                    />
-                  </div>
-                </div>
-              </div>
-              {isReportDetail && reworkReportFieldsForDetail.length > 0 && (
-                <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
-                  <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
-                    <div className={psiOrderBillFormSectionIconIndigoClass}><FileText className="w-4 h-4" /></div>
-                    <div className="space-y-1">
-                      <h3 className={sectionTitleClass}>3. 备注与扩展</h3>
-                      <p className="text-[11px] font-bold text-slate-500">返工报工自定义（本批次共用）</p>
-                    </div>
-                  </div>
-                  {reworkReportFieldsForDetail.map(cf => (
-                    <div key={cf.id} className="space-y-1">
-                      <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
-                      <PlanFormCustomFieldInput
-                        cf={cf}
-                        value={editing.form.customData[cf.id]}
-                        onChange={v =>
+                    {isReportDetail && reworkReportFieldsForDetail.length > 0 ? (
+                      <DocCustomFieldEditGrid
+                        fields={reworkReportFieldsForDetail}
+                        values={editing.form.customData}
+                        onChange={(fieldId, v) =>
                           setEditing(prev =>
-                            prev ? { ...prev, form: { ...prev.form, customData: { ...prev.form.customData, [cf.id]: v } } } : prev,
+                            prev
+                              ? { ...prev, form: { ...prev.form, customData: { ...prev.form.customData, [fieldId]: v } } }
+                              : prev,
                           )
                         }
-                        dictionaries={dictionaries}
-                        controlClassName={psiOrderBillFormFieldControlClass}
+                        controlClassName={reworkReportCustomFieldEditControlClass}
                       />
+                    ) : null}
+                  </>
+                }
+                side={
+                  <>
+                    <div className="min-w-[6.5rem] md:text-right">
+                      <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">合计数量</p>
+                      <p className="font-black tabular-nums text-slate-800">
+                        {editing.form.rowEdits.reduce((s, r) => s + r.quantity, 0).toLocaleString()} {unitName}
+                      </p>
                     </div>
-                  ))}
-                </div>
-              )}
-              <div className={psiOrderBillFormDetailSplitClass}>
-                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
-                  <div className={psiOrderBillFormSectionIconEmeraldClass}><Layers className="w-4 h-4" /></div>
-                  <h3 className={sectionTitleClass}>2. 数量明细</h3>
-                </div>
-                <div className="mt-3 space-y-4">
-                  {!noMatrixSingleRowEdit ? (
-                    <div className="flex flex-wrap items-end gap-4">
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">单价（元/件）</label>
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={editing.form.unitPrice || ''}
-                          onChange={e => setEditing(prev => prev ? { ...prev, form: { ...prev.form, unitPrice: Number(e.target.value) || 0 } } : prev)}
-                          placeholder="0"
-                          className="h-11 w-[6.5rem] rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 text-right outline-none focus:ring-2 focus:ring-indigo-500 tabular-nums"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">金额（元）</label>
-                        <div className="h-11 min-w-[6.5rem] rounded-xl border border-slate-100 bg-slate-50 px-3 text-sm font-bold text-slate-700 flex items-center justify-center tabular-nums">
+                    {editing.form.rowEdits.reduce((s, r) => s + r.quantity, 0) * (editing.form.unitPrice || 0) > 0 ? (
+                      <div className="min-w-[6.5rem] md:text-right">
+                        <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">金额（元）</p>
+                        <p className="font-black tabular-nums text-emerald-600">
+                          ¥
                           {(editing.form.rowEdits.reduce((s, r) => s + r.quantity, 0) * (editing.form.unitPrice || 0)).toFixed(2)}
-                        </div>
+                        </p>
                       </div>
-                    </div>
-                  ) : null}
-                  {hasColorSize && reworkFlowMatrixProduct && dictionaries ? (
-                    <div className="space-y-3">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">数量明细（有颜色尺码）</p>
-                      {editing.form.rowEdits.some(r => !r.variantId) ? (
-                        <div className="rounded-xl border border-amber-100 bg-amber-50/80 px-3 py-3 space-y-1.5">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-slate-600">未分规格</label>
-                          <div className="flex flex-wrap items-end gap-2">
-                            <input
-                              type="number"
-                              min={0}
-                              value={
-                                (editing.form.rowEdits.find(r => !r.variantId)?.quantity ?? 0) === 0
-                                  ? ''
-                                  : editing.form.rowEdits.find(r => !r.variantId)?.quantity
-                              }
-                              onChange={e => {
-                                const v = Math.max(0, Number(e.target.value) || 0);
-                                setEditing(prev =>
-                                  prev
-                                    ? {
-                                        ...prev,
-                                        form: {
-                                          ...prev.form,
-                                          rowEdits: prev.form.rowEdits.map(re =>
-                                            !re.variantId ? { ...re, quantity: v } : re,
-                                          ),
-                                        },
-                                      }
-                                    : prev,
-                                );
-                              }}
-                              className={`${psiOrderBillFormFieldControlClass} max-w-[8rem] text-indigo-600 font-bold`}
-                              placeholder="0"
-                            />
-                            <span className="pb-2 text-[10px] font-medium text-slate-500">{unitName}</span>
-                          </div>
-                        </div>
-                      ) : null}
-                      {(() => {
-                        const vars = (product?.variants ?? []).filter(v =>
-                          editing.form.rowEdits.some(r => r.variantId === v.id),
-                        );
-                        if (vars.length === 0) return null;
-                        const matrixProd = { ...product!, variants: vars, colorIds: undefined, sizeIds: undefined } as Product;
-                        return (
-                          <div className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm">
-                            <VariantQtyMatrixInputs
-                              product={matrixProd}
-                              dictionaries={dictionaries}
-                              quantities={Object.fromEntries(
-                                vars.map(v => {
-                                  const row = editing.form.rowEdits.find(r => r.variantId === v.id);
-                                  return [v.id, row?.quantity ?? 0];
-                                }),
+                    ) : null}
+                  </>
+                }
+              />
+              <div className="space-y-2">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                  {hasColorSize && reworkFlowMatrixProduct && dictionaries ? '产品明细（按规格）' : '产品明细'}
+                </p>
+                {hasColorSize && reworkFlowMatrixProduct && dictionaries ? (
+                  <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/80">
+                          <th className="py-2.5 px-3 text-left">产品 / SKU</th>
+                          <th className="py-2.5 px-3 text-right">数量</th>
+                          <th className="py-2.5 px-3 text-right whitespace-nowrap">单价（元）</th>
+                          <th className="py-2.5 px-3 text-right whitespace-nowrap">金额（元）</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        <tr>
+                          <td className="py-2.5 px-3 align-top">
+                            <div className="flex min-w-0 items-start gap-2">
+                              {product?.imageUrl ? (
+                                <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
+                                  <img
+                                    src={product.imageUrl}
+                                    alt={product?.name ?? '—'}
+                                    className="h-full w-full object-cover"
+                                    loading="lazy"
+                                    decoding="async"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
+                                  <Package className="h-4 w-4" />
+                                </div>
                               )}
-                              onVariantQtyChange={(variantId, qty) => {
-                                const next = Math.max(0, qty);
-                                setEditing(prev =>
-                                  prev
-                                    ? {
-                                        ...prev,
-                                        form: {
-                                          ...prev.form,
-                                          rowEdits: prev.form.rowEdits.map(re =>
-                                            re.variantId === variantId ? { ...re, quantity: next } : re,
-                                          ),
-                                        },
-                                      }
-                                    : prev,
-                                );
-                              }}
-                              inputClassName="h-11 w-[3.25rem] shrink-0 rounded-xl border border-slate-200 bg-white px-2 text-left text-sm font-bold text-indigo-600 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200 tabular-nums"
-                            />
-                          </div>
-                        );
-                      })()}
-                      {editing.form.unitPrice > 0 ? (
-                        <div className="rounded-xl border border-slate-100 bg-slate-50/80 overflow-hidden">
-                          <table className="w-full text-left text-sm">
-                            <thead>
-                              <tr className="border-b border-slate-200 bg-slate-50">
-                                <th className="px-3 py-2 text-[10px] font-black text-slate-500 uppercase">规格</th>
-                                <th className="px-3 py-2 text-right text-[10px] font-black text-slate-500 uppercase">金额（元）</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {editing.form.rowEdits.map(rowEdit => (
-                                <tr key={rowEdit.variantId || '_none'} className="border-b border-slate-100">
-                                  <td className="px-3 py-2 text-slate-800">{rowEdit.label}</td>
-                                  <td className="px-3 py-2 text-right font-bold text-amber-600 tabular-nums">
-                                    {(rowEdit.quantity * editing.form.unitPrice).toFixed(2)}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : null}
-                      <div className="flex justify-end rounded-xl border border-indigo-100 bg-indigo-50/80 px-3 py-2 text-sm font-bold text-indigo-700 tabular-nums">
-                        合计 {editing.form.rowEdits.reduce((s, r) => s + r.quantity, 0)} {unitName}
-                        {editing.form.unitPrice > 0 ? (
-                          <span className="ml-3 text-amber-700">
-                            · {(editing.form.rowEdits.reduce((s, r) => s + r.quantity, 0) * editing.form.unitPrice).toFixed(2)} 元
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : noMatrixSingleRowEdit ? (
-                    <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3 shadow-sm">
-                      <div className="flex flex-wrap items-end gap-3">
-                        <div className="min-w-0 flex-1 space-y-1.5">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">产品</label>
-                          <div
-                            className="flex min-h-[2.75rem] items-center rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-900 truncate"
-                            title={product?.name ?? first.productId ?? '—'}
-                          >
-                            {product?.name ?? first.productId ?? '—'}
-                          </div>
-                        </div>
-                        <div className="w-28 shrink-0 space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">数量</label>
-                          <div className="flex items-center gap-1.5">
+                              <div className="min-w-0">
+                                <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                                  <span className="font-bold text-slate-700">{product?.name ?? first.productId ?? '—'}</span>
+                                  {product?.sku?.trim() ? (
+                                    <span className="text-[9px] font-bold uppercase tracking-tight text-slate-300">
+                                      {product.sku.trim()}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                {matrixSummaryCustomTags.length > 0 ? (
+                                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                                    {matrixSummaryCustomTags.map(({ field, display }) => (
+                                      <span
+                                        key={field.id}
+                                        className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
+                                      >
+                                        {field.label}: {display}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-right align-middle font-black text-indigo-600 tabular-nums">
+                            {editing.form.rowEdits.reduce((s, r) => s + r.quantity, 0).toLocaleString()} {unitName}
+                          </td>
+                          <td className="py-2.5 px-3 text-right align-middle">
                             <input
                               type="number"
                               min={0}
-                              value={noMatrixSingleRowEdit.quantity === 0 ? '' : noMatrixSingleRowEdit.quantity}
-                              onChange={e => {
-                                const v = Math.max(0, Number(e.target.value) || 0);
+                              step={0.01}
+                              value={editing.form.unitPrice || ''}
+                              onChange={e =>
                                 setEditing(prev =>
-                                  prev
-                                    ? {
-                                        ...prev,
-                                        form: {
-                                          ...prev.form,
-                                          rowEdits: prev.form.rowEdits.map(r =>
-                                            r.variantId === noMatrixSingleRowEdit.variantId ? { ...r, quantity: v } : r,
-                                          ),
-                                        },
-                                      }
-                                    : prev,
-                                );
-                              }}
-                              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 px-3 text-sm font-bold text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500 tabular-nums"
+                                  prev ? { ...prev, form: { ...prev.form, unitPrice: Number(e.target.value) || 0 } } : prev,
+                                )
+                              }
                               placeholder="0"
+                              className="ml-auto block h-9 w-full max-w-[6.5rem] rounded-lg border border-slate-200 bg-white px-2 text-right text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 tabular-nums"
                             />
-                            <span className="shrink-0 text-[10px] font-bold text-slate-400">{unitName}</span>
-                          </div>
-                        </div>
-                        <div className="w-28 shrink-0 space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">单价（元）</label>
-                          <input
-                            type="number"
-                            min={0}
-                            step={0.01}
-                            value={editing.form.unitPrice || ''}
-                            onChange={e => setEditing(prev => prev ? { ...prev, form: { ...prev.form, unitPrice: Number(e.target.value) || 0 } } : prev)}
-                            placeholder="0"
-                            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 px-3 text-sm font-bold text-slate-800 text-right outline-none focus:ring-2 focus:ring-indigo-500 tabular-nums"
-                          />
-                        </div>
-                        <div className="w-28 shrink-0 space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">金额（元）</label>
-                          <div className="rounded-xl border border-slate-200 bg-white py-2.5 px-3 text-right text-sm font-black text-indigo-600 tabular-nums">
-                            {(noMatrixSingleRowEdit.quantity * (editing.form.unitPrice || 0)).toFixed(2)}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-slate-200 bg-slate-50/40 overflow-hidden">
-                      <table className="w-full text-left text-sm">
-                        <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200">
-                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">规格</th>
-                            <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">数量</th>
-                            {editing.form.unitPrice > 0 && (
-                              <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">金额</th>
-                            )}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {editing.form.rowEdits.map(rowEdit => (
-                            <tr key={rowEdit.variantId || '_none'} className="border-b border-slate-100">
-                              <td className="px-4 py-3 text-slate-800">{rowEdit.label}</td>
-                              <td className="px-4 py-3 text-right">
-                                <div className="flex items-center justify-end gap-1">
+                          </td>
+                          <td className="py-2.5 px-3 text-right align-middle text-sm font-black text-amber-600 tabular-nums">
+                            ¥
+                            {(editing.form.rowEdits.reduce((s, r) => s + r.quantity, 0) * (editing.form.unitPrice || 0)).toFixed(2)}
+                          </td>
+                        </tr>
+                        <tr className="bg-slate-50/70">
+                          <td
+                            colSpan={4}
+                            className="space-y-2 border-t border-slate-100 px-3 pb-3 pt-2 align-top"
+                          >
+                            {editing.form.rowEdits.some(r => !r.variantId) ? (
+                              <div className="rounded-lg border border-amber-100 bg-amber-50/80 px-2.5 py-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-600">未分规格</label>
+                                <div className="mt-1 inline-flex items-center gap-1.5">
                                   <input
                                     type="number"
                                     min={0}
-                                    value={rowEdit.quantity === 0 ? '' : rowEdit.quantity}
+                                    value={
+                                      (editing.form.rowEdits.find(r => !r.variantId)?.quantity ?? 0) === 0
+                                        ? ''
+                                        : editing.form.rowEdits.find(r => !r.variantId)?.quantity
+                                    }
                                     onChange={e => {
                                       const v = Math.max(0, Number(e.target.value) || 0);
                                       setEditing(prev =>
@@ -693,229 +712,562 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
                                               ...prev,
                                               form: {
                                                 ...prev.form,
-                                                rowEdits: prev.form.rowEdits.map(r =>
-                                                  r.variantId === rowEdit.variantId ? { ...r, quantity: v } : r,
+                                                rowEdits: prev.form.rowEdits.map(re =>
+                                                  !re.variantId ? { ...re, quantity: v } : re,
                                                 ),
                                               },
                                             }
                                           : prev,
                                       );
                                     }}
-                                    className="h-11 w-24 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-indigo-600 text-right outline-none focus:ring-2 focus:ring-indigo-500 tabular-nums"
+                                    className="h-9 w-[6.5rem] shrink-0 rounded-lg border border-slate-200 bg-white px-2 text-left text-sm font-bold text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-200 tabular-nums"
+                                    placeholder="0"
                                   />
-                                  <span className="text-[10px] font-bold text-slate-400">{unitName}</span>
+                                  <span className="shrink-0 text-xs font-medium text-slate-500">{unitName}</span>
                                 </div>
-                              </td>
-                              {editing.form.unitPrice > 0 && (
-                                <td className="px-4 py-3 font-bold text-amber-600 text-right tabular-nums">
-                                  {(rowEdit.quantity * editing.form.unitPrice).toFixed(2)}
-                                </td>
+                              </div>
+                            ) : null}
+                            {(() => {
+                              const vars = product?.variants ?? [];
+                              if (vars.length === 0) return null;
+                              const matrixProd = { ...product!, variants: vars, colorIds: undefined, sizeIds: undefined } as Product;
+                              return (
+                                <VariantQtyMatrixInputs
+                                  product={matrixProd}
+                                  dictionaries={dictionaries}
+                                  quantities={Object.fromEntries(
+                                    vars.map(v => {
+                                      const row = editing.form.rowEdits.find(r => r.variantId === v.id);
+                                      return [v.id, row?.quantity ?? 0];
+                                    }),
+                                  )}
+                                  onVariantQtyChange={(variantId, qty) => {
+                                    const next = Math.max(0, qty);
+                                    setEditing(prev =>
+                                      prev
+                                        ? {
+                                            ...prev,
+                                            form: {
+                                              ...prev.form,
+                                              rowEdits: prev.form.rowEdits.map(re =>
+                                                re.variantId === variantId ? { ...re, quantity: next } : re,
+                                              ),
+                                            },
+                                          }
+                                        : prev,
+                                    );
+                                  }}
+                                  inputClassName="h-9 w-[3.25rem] shrink-0 rounded-lg border border-slate-200 bg-white px-2 text-left text-sm font-bold text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-200 tabular-nums"
+                                />
+                              );
+                            })()}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                ) : !hasColorSize ? (
+                  <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/80">
+                          <th className="py-2.5 px-3 text-left">产品 / SKU</th>
+                          <th className="py-2.5 px-3 text-right">数量</th>
+                          <th className="py-2.5 px-3 text-right whitespace-nowrap">单价（元）</th>
+                          <th className="py-2.5 px-3 text-right whitespace-nowrap">金额（元）</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        <tr>
+                          <td className="py-2.5 px-3 align-top">
+                            <div className="flex min-w-0 items-start gap-2">
+                              {product?.imageUrl ? (
+                                <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
+                                  <img
+                                    src={product.imageUrl}
+                                    alt={product?.name ?? '—'}
+                                    className="h-full w-full object-cover"
+                                    loading="lazy"
+                                    decoding="async"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
+                                  <Package className="h-4 w-4" />
+                                </div>
                               )}
-                            </tr>
-                          ))}
+                              <div className="min-w-0">
+                                <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                                  <span className="font-bold text-slate-700">{product?.name ?? first.productId ?? '—'}</span>
+                                  {product?.sku?.trim() ? (
+                                    <span className="text-[9px] font-bold uppercase tracking-tight text-slate-300">
+                                      {product.sku.trim()}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                {matrixSummaryCustomTags.length > 0 ? (
+                                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                                    {matrixSummaryCustomTags.map(({ field, display }) => (
+                                      <span
+                                        key={field.id}
+                                        className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
+                                      >
+                                        {field.label}: {display}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
+                                {productionLinkMode !== 'product' && order?.orderNumber ? (
+                                  <p className="mt-1 text-[10px] font-medium text-slate-500">
+                                    工单 <span className="font-bold text-slate-600 tabular-nums">{order.orderNumber}</span>
+                                  </p>
+                                ) : null}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 align-middle">
+                            <div className="flex min-w-0 items-center justify-end gap-1.5 whitespace-nowrap">
+                              <input
+                                type="number"
+                                min={0}
+                                value={
+                                  editing.form.rowEdits.reduce((s, r) => s + r.quantity, 0) === 0
+                                    ? ''
+                                    : editing.form.rowEdits.reduce((s, r) => s + r.quantity, 0)
+                                }
+                                onChange={e => {
+                                  const v = Math.max(0, Number(e.target.value) || 0);
+                                  setEditing(prev => {
+                                    if (!prev) return prev;
+                                    const rows = prev.form.rowEdits;
+                                    if (rows.length === 0) return prev;
+                                    if (rows.length === 1) {
+                                      return {
+                                        ...prev,
+                                        form: {
+                                          ...prev.form,
+                                          rowEdits: [{ ...rows[0]!, quantity: v }],
+                                        },
+                                      };
+                                    }
+                                    const total = rows.reduce((s, r) => s + r.quantity, 0);
+                                    if (total <= 0) {
+                                      return {
+                                        ...prev,
+                                        form: {
+                                          ...prev.form,
+                                          rowEdits: rows.map((re, i) =>
+                                            i === 0 ? { ...re, quantity: v } : { ...re, quantity: 0 },
+                                          ),
+                                        },
+                                      };
+                                    }
+                                    let rest = v;
+                                    const next = rows.map((re, i) => {
+                                      if (i === rows.length - 1) return { ...re, quantity: Math.max(0, rest) };
+                                      const q = Math.floor((v * re.quantity) / total);
+                                      rest -= q;
+                                      return { ...re, quantity: q };
+                                    });
+                                    return { ...prev, form: { ...prev.form, rowEdits: next } };
+                                  });
+                                }}
+                                className="h-9 w-[6.5rem] shrink-0 rounded-lg border border-slate-200 bg-white px-2 text-right text-sm font-black text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500 tabular-nums"
+                                placeholder="0"
+                              />
+                              <span className="shrink-0 text-xs font-bold text-slate-500">{unitName}</span>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 align-middle">
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              value={editing.form.unitPrice || ''}
+                              onChange={e =>
+                                setEditing(prev =>
+                                  prev ? { ...prev, form: { ...prev.form, unitPrice: Number(e.target.value) || 0 } } : prev,
+                                )
+                              }
+                              placeholder="0"
+                              className="h-9 w-full min-w-[5rem] max-w-[6.5rem] rounded-lg border border-slate-200 bg-white px-2 text-right text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 tabular-nums"
+                            />
+                          </td>
+                          <td className="py-2.5 px-3 text-right align-middle text-sm font-black text-amber-600 tabular-nums">
+                            {(editing.form.rowEdits.reduce((s, r) => s + r.quantity, 0) * (editing.form.unitPrice || 0)).toFixed(2)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/80">
+                          <th className="py-2.5 px-3 text-left">规格</th>
+                          <th className="py-2.5 px-3 text-right">数量</th>
+                          <th className="py-2.5 px-3 text-right whitespace-nowrap">单价（元）</th>
+                          <th className="py-2.5 px-3 text-right whitespace-nowrap">金额（元）</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {editing.form.rowEdits.map((rowEdit, rowIdx) => (
+                          <tr key={rowEdit.variantId || '_none'} className="border-b border-slate-100">
+                            <td className="px-3 py-2.5 text-slate-800">{rowEdit.label}</td>
+                            <td className="px-3 py-2.5 text-right align-middle">
+                              <div className="inline-flex items-center justify-end gap-1.5">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={rowEdit.quantity === 0 ? '' : rowEdit.quantity}
+                                  onChange={e => {
+                                    const v = Math.max(0, Number(e.target.value) || 0);
+                                    setEditing(prev =>
+                                      prev
+                                        ? {
+                                            ...prev,
+                                            form: {
+                                              ...prev.form,
+                                              rowEdits: prev.form.rowEdits.map(r =>
+                                                r.variantId === rowEdit.variantId ? { ...r, quantity: v } : r,
+                                              ),
+                                            },
+                                          }
+                                        : prev,
+                                    );
+                                  }}
+                                  className="h-9 w-[6.5rem] shrink-0 rounded-lg border border-slate-200 bg-white px-2 text-left text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500 tabular-nums"
+                                  placeholder="0"
+                                />
+                                <span className="shrink-0 text-xs font-medium text-slate-500">{unitName}</span>
+                              </div>
+                            </td>
+                            {rowIdx === 0 ? (
+                              <td
+                                rowSpan={Math.max(1, editing.form.rowEdits.length)}
+                                className="border-b border-slate-100 px-3 py-2.5 align-top text-right"
+                              >
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={0.01}
+                                  value={editing.form.unitPrice || ''}
+                                  onChange={e =>
+                                    setEditing(prev =>
+                                      prev ? { ...prev, form: { ...prev.form, unitPrice: Number(e.target.value) || 0 } } : prev,
+                                    )
+                                  }
+                                  placeholder="0"
+                                  className="ml-auto block h-9 w-full max-w-[6.5rem] rounded-lg border border-slate-200 bg-white px-2 text-right text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 tabular-nums"
+                                />
+                              </td>
+                            ) : null}
+                            <td className="px-3 py-2.5 text-right text-xs font-bold text-amber-600 tabular-nums">
+                              {(rowEdit.quantity * (editing.form.unitPrice || 0)).toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <DocSummaryCard
+                main={
+                  <>
+                    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2 text-sm">
+                      {isReportDetail && first.docNo?.trim() ? (
+                        <span className="rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 font-mono text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                          {first.docNo.trim()}
+                        </span>
+                      ) : null}
+                      {productionLinkMode !== 'product' && order?.orderNumber ? (
+                        <span className="rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                          {order.orderNumber}
+                        </span>
+                      ) : null}
+                      <span className="text-slate-600 font-bold normal-case text-xs sm:text-sm">工序：{nodeNamesLabel}</span>
+                      <span className="text-slate-600 font-bold normal-case text-xs sm:text-sm">
+                        来源：
+                        {sourceNodeName ?? (first.sourceNodeId ? globalNodes.find(n => n.id === first.sourceNodeId)?.name : null) ?? '—'}
+                      </span>
+                    </div>
+                    <DocInlineMetaRow>
+                      {(latestBatchTimestamp || first.timestamp) ? (
+                        <span className="inline-flex min-h-4 items-center gap-1.5 text-slate-400">
+                          <Clock className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                          <span className="leading-none normal-case">时间 {fmtDT(latestBatchTimestamp ?? first.timestamp)}</span>
+                        </span>
+                      ) : null}
+                      {isOutsourceReworkReport ? (
+                        <span className="inline-flex min-h-4 items-center gap-1.5 text-slate-400">
+                          <Building2 className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                          <span className="leading-none normal-case">委外工厂: {outsourcePartnerDisplay || '—'}</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex min-h-4 items-center gap-1.5 text-slate-400">
+                          <User className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                          <span className="leading-none normal-case">经办: {operatorsLabel}</span>
+                        </span>
+                      )}
+                      {isReportDetail && (
+                        <DocCustomFieldInlineReadList
+                          fields={reworkReportFieldsForDetail}
+                          values={reworkReportCustomSnapshot}
+                          hasFilled={psiCustomFieldHasFilledDisplayValue}
+                        />
+                      )}
+                    </DocInlineMetaRow>
+                  </>
+                }
+                side={
+                  <>
+                    <div className="min-w-[6.5rem] md:text-right">
+                      <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">合计数量</p>
+                      <p className="font-black tabular-nums text-slate-800">
+                        {totalQty.toLocaleString()} {unitName}
+                      </p>
+                    </div>
+                    {batchTotalAmount > 0 ? (
+                      <div className="min-w-[6.5rem] md:text-right">
+                        <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">金额（元）</p>
+                        <p className="font-black tabular-nums text-emerald-600">¥{batchTotalAmount.toFixed(2)}</p>
+                      </div>
+                    ) : null}
+                  </>
+                }
+              />
+              {first.productId && (
+                <div className="flex-1 min-h-0 space-y-2 pb-4">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                    {hasColorSize && reworkFlowMatrixProduct && dictionaries ? '产品明细（按规格）' : '产品明细'}
+                  </p>
+                  {hasColorSize && reworkFlowMatrixProduct && dictionaries ? (
+                    <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                      <table className="w-full text-left text-sm">
+                        <thead>
+                          <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/80">
+                            <th className="py-2.5 px-3 text-left">产品 / SKU</th>
+                            <th className="py-2.5 px-3 text-right">数量</th>
+                            <th className="py-2.5 px-3 text-right whitespace-nowrap">单价（元）</th>
+                            <th className="py-2.5 px-3 text-right whitespace-nowrap">金额（元）</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          <tr>
+                            <td className="py-2.5 px-3 align-top">
+                              <div className="flex min-w-0 items-start gap-2">
+                                {product?.imageUrl ? (
+                                  <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
+                                    <img
+                                      src={product.imageUrl}
+                                      alt={product?.name ?? '—'}
+                                      className="h-full w-full object-cover"
+                                      loading="lazy"
+                                      decoding="async"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
+                                    <Package className="h-4 w-4" />
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                                    <span className="font-bold text-slate-700">{product?.name ?? first.productId ?? '—'}</span>
+                                    {product?.sku?.trim() ? (
+                                      <span className="text-[9px] font-bold uppercase tracking-tight text-slate-300">
+                                        {product.sku.trim()}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  {matrixSummaryCustomTags.length > 0 ? (
+                                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                                      {matrixSummaryCustomTags.map(({ field, display }) => (
+                                        <span
+                                          key={field.id}
+                                          className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
+                                        >
+                                          {field.label}: {display}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 text-right align-middle font-black text-indigo-600 tabular-nums">
+                              {totalQty.toLocaleString()} {unitName}
+                            </td>
+                            <td className="py-2.5 px-3 text-right align-middle text-xs font-bold tabular-nums text-slate-700">
+                              {detailHeaderUnitPriceText}
+                            </td>
+                            <td className="py-2.5 px-3 text-right align-middle text-sm font-black text-amber-600 tabular-nums">
+                              ¥{batchTotalAmount.toFixed(2)}
+                            </td>
+                          </tr>
+                          <tr className="bg-slate-50/70">
+                            <td
+                              colSpan={4}
+                              className="space-y-2 border-t border-slate-100 px-3 pb-3 pt-2 align-top"
+                            >
+                              {undiffDisplayRow ? (
+                                <div className="rounded-lg border border-amber-100 bg-amber-50/80 px-2.5 py-2">
+                                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-600">未分规格</p>
+                                  <p className="text-sm font-bold text-indigo-600 tabular-nums">
+                                    {undiffDisplayRow.quantity} {unitName}
+                                  </p>
+                                </div>
+                              ) : null}
+                              <VariantQtyMatrixInputs
+                                readOnly
+                                product={reworkFlowMatrixProduct}
+                                dictionaries={dictionaries}
+                                quantities={variantQtyFromDisplayRows}
+                              />
+                            </td>
+                          </tr>
                         </tbody>
                       </table>
                     </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className={psiOrderBillFormSectionStackClass}>
-                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
-                  <div className={psiOrderBillFormSectionIconIndigoClass}><FileText className="w-4 h-4" /></div>
-                  <h3 className={sectionTitleClass}>1. 基础信息</h3>
-                </div>
-                <div
-                  className={
-                    hasColorSize
-                      ? 'flex flex-wrap gap-4'
-                      : `grid grid-cols-2 ${psiOrderBillFormGridGapClass} rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-3 sm:grid-cols-3 sm:px-4`
-                  }
-                >
-                  {!hasColorSize && (
-                    <div className={hasColorSize ? 'bg-slate-50 rounded-xl px-4 py-2' : ''}>
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">产品</p>
-                      <p className="text-xs sm:text-sm font-bold text-slate-900 truncate" title={product?.name ?? first.productId ?? '—'}>{product?.name ?? first.productId ?? '—'}</p>
-                    </div>
-                  )}
-                  <div className={`min-w-0 max-w-full ${hasColorSize ? 'bg-slate-50 rounded-xl px-4 py-2' : ''}`}>
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">工序</p>
-                    <p className="text-xs sm:text-sm font-bold text-slate-800 break-words" title={nodeNamesLabel}>{nodeNamesLabel}</p>
-                  </div>
-                  <div className={hasColorSize ? 'bg-slate-50 rounded-xl px-4 py-2' : ''}>
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">来源工序</p>
-                    <p className="text-xs sm:text-sm font-bold text-slate-800">
-                      {sourceNodeName ?? (first.sourceNodeId ? globalNodes.find(n => n.id === first.sourceNodeId)?.name : null) ?? '—'}
-                    </p>
-                  </div>
-                  <div className={hasColorSize ? 'bg-slate-50 rounded-xl px-4 py-2' : ''}>
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">返工数量</p>
-                    <p className="text-xs sm:text-sm font-bold text-indigo-600 tabular-nums">{totalQty} {unitName}</p>
-                  </div>
-                  <div className={hasColorSize ? 'bg-slate-50 rounded-xl px-4 py-2' : ''}>
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">返工时间</p>
-                    <p className="text-xs sm:text-sm font-bold text-slate-800">{formatTimestamp(latestBatchTimestamp)}</p>
-                  </div>
-                  <div className={`min-w-0 max-w-full ${hasColorSize ? 'bg-slate-50 rounded-xl px-4 py-2' : ''}`}>
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">操作人</p>
-                    <p className="text-xs sm:text-sm font-bold text-slate-800 break-words" title={operatorsLabel}>{operatorsLabel}</p>
-                  </div>
-                  {productionLinkMode !== 'product' && order?.orderNumber && !hasColorSize ? (
-                    <div>
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">工单号</p>
-                      <p className="text-xs sm:text-sm font-bold text-slate-800 tabular-nums">{order.orderNumber}</p>
-                    </div>
-                  ) : null}
-                  {first.reason && (
-                    <div className={hasColorSize ? 'bg-slate-50 rounded-xl px-4 py-2' : 'col-span-2 sm:col-span-3'}>
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">原因/备注</p>
-                      <p className="text-xs sm:text-sm font-bold text-slate-800">{first.reason}</p>
-                    </div>
-                  )}
-                  {batchTotalAmount > 0 && (
-                    <>
-                      <div className={hasColorSize ? 'bg-slate-50 rounded-xl px-4 py-2' : ''}>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-0.5">单价（元/件）</p>
-                        <p className="text-xs sm:text-sm font-bold text-slate-800 tabular-nums">{unitPriceLabel != null ? unitPriceLabel.toFixed(2) : '—'}</p>
-                      </div>
-                      <div className={hasColorSize ? 'bg-amber-50 rounded-xl px-4 py-2' : 'rounded-lg border border-amber-100 bg-amber-50/90 px-3 py-2'}>
-                        <p className="text-[9px] font-black text-amber-600 uppercase tracking-wide mb-0.5">金额（元）</p>
-                        <p className="text-xs sm:text-sm font-bold text-amber-600 tabular-nums">{batchTotalAmount.toFixed(2)}</p>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-              {isReportDetail && reworkReportFieldsForDetail.length > 0 && (
-                <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
-                  <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
-                    <div className={psiOrderBillFormSectionIconIndigoClass}><FileText className="w-4 h-4" /></div>
-                    <div className="space-y-1">
-                      <h3 className={sectionTitleClass}>3. 备注与扩展</h3>
-                      <p className="text-[11px] font-bold text-slate-500">返工报工自定义（本批次共用）</p>
-                    </div>
-                  </div>
-                  {reworkReportFieldsForDetail.map(cf => (
-                    <div key={cf.id} className="space-y-1">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</p>
-                      <PlanFormCustomFieldReadonly cf={cf} value={reworkReportCustomSnapshot[cf.id]} />
-                    </div>
-                  ))}
-                </div>
-              )}
-              {showSpecTable && (
-                <div className={psiOrderBillFormDetailSplitClass}>
-                  <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
-                    <div className={psiOrderBillFormSectionIconEmeraldClass}><Layers className="w-4 h-4" /></div>
-                    <h3 className={sectionTitleClass}>2. 数量明细</h3>
-                  </div>
-                  {hasColorSize && reworkFlowMatrixProduct && dictionaries ? (
-                    <div className="mt-3 space-y-3">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">数量明细（有颜色尺码）</p>
-                      {undiffDisplayRow ? (
-                        <div className="rounded-xl border border-amber-100 bg-amber-50/80 px-3 py-3">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-600">未分规格</p>
-                          <p className="text-lg font-bold text-indigo-600 tabular-nums">{undiffDisplayRow.quantity} {unitName}</p>
-                        </div>
-                      ) : null}
-                      <div className="rounded-xl border border-slate-100 bg-white p-3 shadow-sm">
-                        <VariantQtyMatrixInputs
-                          readOnly
-                          product={reworkFlowMatrixProduct}
-                          dictionaries={dictionaries}
-                          quantities={variantQtyFromDisplayRows}
-                        />
-                      </div>
-                      {batchTotalAmount > 0 ? (
-                        <div className="rounded-xl border border-slate-100 bg-slate-50/80 overflow-hidden">
-                          <table className="w-full text-left text-sm">
-                            <thead>
-                              <tr className="border-b border-slate-200 bg-slate-50">
-                                <th className="px-3 py-2 text-[10px] font-black text-slate-500 uppercase">规格</th>
-                                <th className="px-3 py-2 text-right text-[10px] font-black text-slate-500 uppercase">金额（元）</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {displayVariantRows.map(vr => (
-                                <tr key={vr.variantId || '_none'} className="border-b border-slate-100">
-                                  <td className="px-3 py-2 text-slate-800">{vr.label}</td>
-                                  <td className="px-3 py-2 text-right font-bold text-amber-600 tabular-nums">
-                                    {vr.lineAmount > 0 ? vr.lineAmount.toFixed(2) : '—'}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                            <tfoot>
-                              <tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold">
-                                <td className="px-3 py-2">合计</td>
-                                <td className="px-3 py-2 text-right text-amber-700 tabular-nums">{batchTotalAmount.toFixed(2)}</td>
-                              </tr>
-                            </tfoot>
-                          </table>
-                        </div>
-                      ) : null}
-                      <div className="flex justify-end rounded-xl border border-indigo-100 bg-indigo-50/80 px-3 py-2 text-sm font-bold text-indigo-700 tabular-nums">
-                        合计 {totalQty} {unitName}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/40 overflow-hidden">
+                  ) : !hasColorSize ? (
+                    <div className="overflow-x-auto rounded-2xl border border-slate-200">
                       <table className="w-full text-left text-sm">
                         <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200">
-                            {hasColorSize ? (
-                              <>
-                                <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase">规格</th>
-                                <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">数量</th>
-                              </>
-                            ) : (
-                              <>
-                                <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase">产品</th>
-                                <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">数量</th>
-                              </>
-                            )}
-                            {batchTotalAmount > 0 && (
-                              <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">金额</th>
-                            )}
+                          <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/80">
+                            <th className="py-2.5 px-3 text-left">产品 / SKU</th>
+                            <th className="py-2.5 px-3 text-right">数量</th>
+                            <th className="py-2.5 px-3 text-right whitespace-nowrap">单价（元）</th>
+                            <th className="py-2.5 px-3 text-right whitespace-nowrap">金额（元）</th>
                           </tr>
                         </thead>
-                        <tbody>
-                          {displayVariantRows.map(vr => (
-                            <tr key={vr.variantId || '_none'} className="border-b border-slate-100">
-                              {hasColorSize ? (
-                                <td className="px-3 py-2.5 sm:px-4 text-slate-800">{vr.label}</td>
-                              ) : (
-                                <td className="px-3 py-2.5 sm:px-4 align-middle min-w-0 max-w-[14rem]">
-                                  <span className="text-sm sm:text-base font-bold text-slate-900 leading-tight block truncate" title={product?.name ?? first.productId ?? '—'}>
-                                    {product?.name ?? first.productId ?? '—'}
-                                  </span>
-                                  {productionLinkMode !== 'product' && order?.orderNumber ? (
-                                    <span className="mt-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-500 truncate">
-                                      工单 <span className="font-bold text-slate-600 tabular-nums">{order.orderNumber}</span>
-                                    </span>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          <tr>
+                            <td className="py-2.5 px-3 align-top">
+                              <div className="flex min-w-0 items-start gap-2">
+                                {product?.imageUrl ? (
+                                  <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
+                                    <img
+                                      src={product.imageUrl}
+                                      alt={product?.name ?? '—'}
+                                      className="h-full w-full object-cover"
+                                      loading="lazy"
+                                      decoding="async"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
+                                    <Package className="h-4 w-4" />
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                                    <span className="font-bold text-slate-700">{product?.name ?? first.productId ?? '—'}</span>
+                                    {product?.sku?.trim() ? (
+                                      <span className="text-[9px] font-bold uppercase tracking-tight text-slate-300">
+                                        {product.sku.trim()}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  {matrixSummaryCustomTags.length > 0 ? (
+                                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                                      {matrixSummaryCustomTags.map(({ field, display }) => (
+                                        <span
+                                          key={field.id}
+                                          className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
+                                        >
+                                          {field.label}: {display}
+                                        </span>
+                                      ))}
+                                    </div>
                                   ) : null}
-                                </td>
-                              )}
-                              <td className="px-3 py-2.5 sm:px-4 font-bold text-indigo-600 text-right tabular-nums">{vr.quantity} {unitName}</td>
-                              {batchTotalAmount > 0 && (
-                                <td className="px-3 py-2.5 sm:px-4 font-bold text-amber-600 text-right tabular-nums">
-                                  {vr.lineAmount > 0 ? vr.lineAmount.toFixed(2) : '—'}
-                                </td>
-                              )}
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold">
-                            <td className="px-3 py-2.5 sm:px-4">合计</td>
-                            <td className="px-3 py-2.5 sm:px-4 text-indigo-600 text-right tabular-nums">{totalQty} {unitName}</td>
-                            {batchTotalAmount > 0 && (
-                              <td className="px-3 py-2.5 sm:px-4 text-amber-600 text-right tabular-nums">{batchTotalAmount.toFixed(2)}</td>
-                            )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 text-right align-middle">
+                              <span className="font-black tabular-nums text-indigo-600">
+                                {totalQty.toLocaleString()} {unitName}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right align-middle text-xs font-bold tabular-nums text-slate-700">
+                              {detailHeaderUnitPriceText}
+                            </td>
+                            <td className="py-2.5 px-3 text-right align-middle text-sm font-black text-amber-600 tabular-nums">
+                              ¥{batchTotalAmount.toFixed(2)}
+                            </td>
                           </tr>
-                        </tfoot>
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                      <table className="w-full text-left text-sm">
+                        <thead>
+                          <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/80">
+                            <th className="py-2.5 px-3 text-left">产品 / SKU</th>
+                            <th className="py-2.5 px-3 text-right">数量</th>
+                            <th className="py-2.5 px-3 text-right whitespace-nowrap">单价（元）</th>
+                            <th className="py-2.5 px-3 text-right whitespace-nowrap">金额（元）</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          <tr>
+                            <td className="py-2.5 px-3 align-top">
+                              <div className="flex min-w-0 items-start gap-2">
+                                {product?.imageUrl ? (
+                                  <div className="flex h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-white">
+                                    <img
+                                      src={product.imageUrl}
+                                      alt={product?.name ?? '—'}
+                                      className="h-full w-full object-cover"
+                                      loading="lazy"
+                                      decoding="async"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-300">
+                                    <Package className="h-4 w-4" />
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                                    <span className="font-bold text-slate-700">{product?.name ?? first.productId ?? '—'}</span>
+                                    {product?.sku?.trim() ? (
+                                      <span className="text-[9px] font-bold uppercase tracking-tight text-slate-300">
+                                        {product.sku.trim()}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  {matrixSummaryCustomTags.length > 0 ? (
+                                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                                      {matrixSummaryCustomTags.map(({ field, display }) => (
+                                        <span
+                                          key={field.id}
+                                          className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
+                                        >
+                                          {field.label}: {display}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 text-right align-middle font-black text-indigo-600 tabular-nums">
+                              {totalQty.toLocaleString()} {unitName}
+                            </td>
+                            <td className="py-2.5 px-3 text-right align-middle text-xs font-bold tabular-nums text-slate-700">
+                              {detailHeaderUnitPriceText}
+                            </td>
+                            <td className="py-2.5 px-3 text-right align-middle text-sm font-black text-amber-600 tabular-nums">
+                              ¥{batchTotalAmount.toFixed(2)}
+                            </td>
+                          </tr>
+                        </tbody>
                       </table>
                     </div>
                   )}
@@ -935,9 +1287,10 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
               )}
             </>
           )}
-        </div>
-      </div>
-    </div>
+          </div>
+        </>
+      )}
+    />
   );
 };
 

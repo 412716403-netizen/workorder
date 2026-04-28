@@ -1,9 +1,12 @@
-import React, { useMemo, useState } from 'react';
-import { Check, X, Pencil, Trash2 } from 'lucide-react';
+import React, { useMemo, useState, useContext } from 'react';
+import { createPortal } from 'react-dom';
+import { Check, Clock, User } from 'lucide-react';
 import type {
   MaterialFormSettings,
   PlanListPrintSettings,
+  PrintRenderContext,
   PrintTemplate,
+  ProductionOpRecord,
   ProductionOrder,
   Product,
   Warehouse,
@@ -11,9 +14,14 @@ import type {
 } from '../../types';
 import { DEFAULT_MATERIAL_FORM_SETTINGS } from '../../types';
 import { hasOpsPerm, type StockDocDetail } from './types';
-import { useConfirm } from '../../contexts/ConfirmContext';
 import { formatLocalDateTimeZh, parseProductionOpTimestampMs } from '../../utils/localDateTime';
-import { PlanFormCustomFieldInput, PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
+import {
+  DocCustomFieldEditGrid,
+  DocCustomFieldInlineReadList,
+  DocInlineMetaRow,
+  DocSummaryCard,
+} from '../../components/doc-modal';
+import DocPhaseModal, { DocPhaseEditToolbarPortalContext } from '../../components/DocPhaseModal';
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
 import {
   buildMaterialStockDocPrintContext,
@@ -21,6 +29,28 @@ import {
   readMaterialStockCustomSnapshot,
 } from '../../utils/buildMaterialStockDocPrintContext';
 import { isOutsourceMaterialPartner, materialStockCustomDataCollabKey } from '../../utils/productionOpCollab/material';
+import { psiCustomFieldHasFilledDisplayValue } from '../psi-ops/psiOpsListFormatting';
+import { psiOrderBillFormPartnerTriggerClassCompact } from '../../styles/uiDensity';
+
+const stockDocCustomFieldEditControlClass =
+  'h-9 w-full max-w-md rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500';
+
+const stockDocWarehouseSelectClass = `${psiOrderBillFormPartnerTriggerClassCompact} rounded-lg border border-slate-200 bg-white px-2 font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500`;
+
+function StockDocEditSavePortal({ active, onSave }: { active: boolean; onSave: () => void }) {
+  const host = useContext(DocPhaseEditToolbarPortalContext);
+  if (!active || !host) return null;
+  return createPortal(
+    <button
+      type="button"
+      onClick={onSave}
+      className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700"
+    >
+      <Check className="w-4 h-4" /> 保存
+    </button>,
+    host,
+  );
+}
 
 export interface StockDocDetailModalProps {
   detail: StockDocDetail | null;
@@ -57,7 +87,6 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
   userPermissions,
   tenantRole,
 }) => {
-  const confirm = useConfirm();
   const [stockDocEditForm, setStockDocEditForm] = useState<{
     warehouseId: string;
     lines: { productId: string; quantity: number; batchNo?: string }[];
@@ -88,6 +117,11 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
   const materialCustomSnapshot = useMemo(() => {
     if (!detail) return {} as Record<string, unknown>;
     return readMaterialStockCustomSnapshot(records, detail.docNo, detail.type, detail.partner);
+  }, [detail, records]);
+
+  const docRecordsForDetail = useMemo(() => {
+    if (!detail) return [] as ProductionOpRecord[];
+    return records.filter(r => r.docNo === detail.docNo && r.type === detail.type);
   }, [detail, records]);
 
   if (!detail) return null;
@@ -128,8 +162,8 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
     const cleanCustom = Object.fromEntries(
       Object.entries(stockDocEditForm.customData).filter(([, v]) => v !== '' && v != null && v !== undefined),
     );
-    const docRecords = records.filter(r => r.docNo === stockDocDetail.docNo && r.type === stockDocDetail.type);
-    docRecords.forEach(rec => {
+    const docRecs = records.filter(r => r.docNo === stockDocDetail.docNo && r.type === stockDocDetail.type);
+    docRecs.forEach(rec => {
       const line = stockDocEditForm.lines.find(l => l.productId === rec.productId);
       if (line) {
         const prevCd = (rec as ProductionOpRecord & { collabData?: Record<string, unknown> }).collabData ?? {};
@@ -161,145 +195,160 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
 
   const printSlot: PlanListPrintSettings | undefined = materialStockDocPrintSlot(materialFormSettings, stockDocDetail);
 
+  const businessTimeDisplay = (() => {
+    const ms = parseProductionOpTimestampMs(stockDocDetail.timestamp);
+    if (ms > 0) return formatLocalDateTimeZh(new Date(ms));
+    const raw = stockDocDetail.timestamp?.trim();
+    return raw || '—';
+  })();
+
+  const operatorLabel = (() => {
+    const names = docRecordsForDetail.map(r => r.operator?.trim()).filter((v): v is string => Boolean(v));
+    const uniq = [...new Set(names)];
+    return uniq.length ? uniq.join('、') : '—';
+  })();
+
+  const totalQty = stockDocDetail.lines.reduce((s, l) => s + (l.quantity ?? 0), 0);
+  const productTitle =
+    sourceProd?.name ??
+    (order ? products.find(p => p.id === order.productId)?.name ?? order.productName ?? '—' : '—');
+  const summaryUnit = stockDocDetail.lines[0] ? getUnitName(stockDocDetail.lines[0].productId) : '件';
+
+  const deleteMsg = `确定要删除该张${isReturn ? '退料' : '领料'}单的所有记录吗？此操作不可恢复。`;
+
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={handleClose} aria-hidden />
-      <div className="relative bg-white w-full max-w-2xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
-          <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 flex-wrap">
-            {stockDocDetail.partner && (
-              <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-[10px] font-black tracking-wider">{stockDocDetail.partner}</span>
-            )}
-            <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">
-              {order
-                ? order.orderNumber
-                : sourceProd?.name ??
-                  (stockDocDetail.lines[0]
-                    ? products.find(p => p.id === stockDocDetail.lines[0].productId)?.name ?? stockDocDetail.docNo
-                    : stockDocDetail.docNo)}
+    <DocPhaseModal
+      zIndexClass="z-[90]"
+      open
+      phase={isEditing ? 'edit' : 'detail'}
+      editingDocNumber={stockDocDetail.docNo || '—'}
+      maxWidthClass="max-w-4xl"
+      detailTitle={isReturn ? '退料单详情' : '领料单详情'}
+      editTitle={isReturn ? '退料单 · 编辑' : '领料单 · 编辑'}
+      newTitle=""
+      showPrint={false}
+      onPrint={() => {}}
+      leadingDetailActions={
+        !isEditing ? (
+          <OrderCenterDetailPrintBlock
+            printSlot={printSlot}
+            printTemplates={printTemplates}
+            onAddPrintTemplate={onOpenMaterialFormPrintTab}
+            buildContext={(template: PrintTemplate): PrintRenderContext =>
+              buildMaterialStockDocPrintContext(template, {
+                detail: stockDocDetail,
+                records,
+                orders,
+                products,
+                warehouses,
+                dictionaries,
+                customSnapshot: materialCustomSnapshot,
+              })
+            }
+            pickerSubtitle={`${isReturn ? '退料' : '领料'}单 ${stockDocDetail.docNo}`}
+          />
+        ) : null
+      }
+      hasPerm={perm => hasOpsPerm(tenantRole, userPermissions, perm)}
+      viewPerm="production:material_records:view"
+      editPerm="production:material_records:edit"
+      deletePerm={onDeleteRecord ? 'production:material_records:delete' : undefined}
+      deleteConfirmMessage={onDeleteRecord ? deleteMsg : ''}
+      onDelete={
+        onDeleteRecord
+          ? async () => {
+              const docRecords = records.filter(r => r.docNo === stockDocDetail.docNo);
+              docRecords.forEach(rec => onDeleteRecord(rec.id));
+              setStockDocEditForm(null);
+              onClose();
+            }
+          : undefined
+      }
+      renderDocBadge={() => (
+        <>
+          {stockDocDetail.partner ? (
+            <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-[10px] font-black tracking-wider shrink-0">
+              {stockDocDetail.partner}
             </span>
-            {isReturn ? '退料单详情' : '领料单详情'}
-          </h3>
-          <div className="flex items-center gap-2">
-            {isEditing ? (
-              <>
-                <button type="button" onClick={cancelEdit} className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">取消</button>
-                <button type="button" onClick={saveEdit} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700">
-                  <Check className="w-4 h-4" /> 保存
-                </button>
-              </>
-            ) : (
-              <>
-                <OrderCenterDetailPrintBlock
-                  printSlot={printSlot}
-                  printTemplates={printTemplates}
-                  onAddPrintTemplate={onOpenMaterialFormPrintTab}
-                  buildContext={(template: PrintTemplate): PrintRenderContext =>
-                    buildMaterialStockDocPrintContext(template, {
-                      detail: stockDocDetail,
-                      records,
-                      orders,
-                      products,
-                      warehouses,
-                      dictionaries,
-                      customSnapshot: materialCustomSnapshot,
-                    })
-                  }
-                  pickerSubtitle={`${isReturn ? '退料' : '领料'}单 ${stockDocDetail.docNo}`}
-                />
-                {onUpdateRecord && hasOpsPerm(tenantRole, userPermissions, 'production:material_records:edit') && (
-                  <button
-                    type="button"
-                    onClick={startEdit}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  >
-                    <Pencil className="w-4 h-4" /> 编辑
-                  </button>
-                )}
-                {onDeleteRecord && hasOpsPerm(tenantRole, userPermissions, 'production:material_records:delete') && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void confirm({ message: `确定要删除该张${isReturn ? '退料' : '领料'}单的所有记录吗？此操作不可恢复。`, danger: true }).then((ok) => {
-                        if (!ok) return;
-                        const docRecords = records.filter(r => r.docNo === stockDocDetail.docNo);
-                        docRecords.forEach(rec => onDeleteRecord(rec.id));
-                        setStockDocEditForm(null);
-                        onClose();
-                      });
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold"
-                  >
-                    <Trash2 className="w-4 h-4" /> 删除
-                  </button>
-                )}
-              </>
-            )}
-            <button type="button" onClick={handleClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-        <div className="flex-1 overflow-auto p-4 space-y-4">
-          <h2 className="text-xl font-bold text-slate-900">
-            {sourceProd?.name ?? (order ? (products.find(p => p.id === order.productId)?.name ?? order.productName ?? '—') : '—')}
-          </h2>
+          ) : null}
+          <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shrink-0">
+            {order
+              ? order.orderNumber
+              : sourceProd?.name ??
+                (stockDocDetail.lines[0]
+                  ? products.find(p => p.id === stockDocDetail.lines[0].productId)?.name ?? stockDocDetail.docNo
+                  : stockDocDetail.docNo)}
+          </span>
+        </>
+      )}
+      onClose={handleClose}
+      onEnterEdit={() => {
+        if (onUpdateRecord) startEdit();
+      }}
+      onCancelEdit={cancelEdit}
+      renderContent={() => (
+        <>
+          <StockDocEditSavePortal active={isEditing} onSave={saveEdit} />
+          <div className="space-y-4 min-h-0">
           {!isEditing ? (
             <>
-              <div className="flex flex-wrap gap-4">
-                <div className="bg-slate-50 rounded-xl px-4 py-2">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">单据号</p>
-                  <p className="text-sm font-bold text-slate-800 font-mono">{stockDocDetail.docNo}</p>
-                </div>
-                <div className="bg-slate-50 rounded-xl px-4 py-2">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">类型</p>
-                  <p className="text-sm font-bold text-slate-800">{isReturn ? '退料' : '领料'}</p>
-                </div>
-                <div className="bg-slate-50 rounded-xl px-4 py-2">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">业务时间</p>
-                  <p className="text-sm font-bold text-slate-800">
-                    {(() => {
-                      const ms = parseProductionOpTimestampMs(stockDocDetail.timestamp);
-                      if (ms > 0) return formatLocalDateTimeZh(new Date(ms));
-                      const raw = stockDocDetail.timestamp?.trim();
-                      return raw || '—';
-                    })()}
-                  </p>
-                </div>
-                {warehouse && (
-                  <div className="bg-slate-50 rounded-xl px-4 py-2">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">{isReturn ? '退回仓库' : '出库仓库'}</p>
-                    <p className="text-sm font-bold text-slate-800">{warehouse.name}{warehouse.code ? ` (${warehouse.code})` : ''}</p>
-                  </div>
-                )}
-                {stockDocDetail.partner && (
-                  <div className="bg-amber-50 rounded-xl px-4 py-2">
-                    <p className="text-[10px] text-amber-500 font-bold uppercase mb-0.5">外协工厂</p>
-                    <p className="text-sm font-bold text-amber-800">{stockDocDetail.partner}</p>
-                  </div>
-                )}
-                {stockDocDetail.reason && (
-                  <div className="bg-slate-50 rounded-xl px-4 py-2">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">备注</p>
-                    <p className="text-sm font-bold text-slate-800">{stockDocDetail.reason}</p>
-                  </div>
-                )}
-                {materialCustomFieldDefsForDetail.length > 0 && (
-                  <div className="w-full rounded-2xl border border-slate-100 bg-slate-50/60 p-4 space-y-3">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500">自定义内容</h4>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {materialCustomFieldDefsForDetail.map(cf => (
-                        <div key={cf.id} className="min-w-0">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">{cf.label}</p>
-                          <PlanFormCustomFieldReadonly cf={cf} value={materialCustomSnapshot[cf.id]} />
-                        </div>
-                      ))}
+              <DocSummaryCard
+                className="mb-5"
+                main={
+                  <>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                      <span className="font-black text-slate-800">{productTitle}</span>
+                      <span className="rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 font-mono text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                        {stockDocDetail.docNo}
+                      </span>
+                      <span className="rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                        {isReturn ? '退料' : '领料'}
+                      </span>
+                      {warehouse ? (
+                        <span className="text-slate-600 font-bold normal-case text-xs sm:text-sm">
+                          {isReturn ? '退回仓库' : '出库仓库'}：{warehouse.name}
+                          {warehouse.code ? ` (${warehouse.code})` : ''}
+                        </span>
+                      ) : (
+                        <span className="text-slate-500 font-bold normal-case text-xs">仓库：—</span>
+                      )}
+                      {stockDocDetail.partner ? (
+                        <span className="font-black text-amber-800 normal-case">{stockDocDetail.partner}</span>
+                      ) : null}
                     </div>
+                    <DocInlineMetaRow>
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3 w-3 shrink-0" />
+                        <span className="normal-case">{businessTimeDisplay}</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <User className="h-3 w-3 shrink-0" />
+                        <span className="normal-case">经办: {operatorLabel}</span>
+                      </span>
+                      <DocCustomFieldInlineReadList
+                        fields={materialCustomFieldDefsForDetail}
+                        values={materialCustomSnapshot}
+                        hasFilled={psiCustomFieldHasFilledDisplayValue}
+                      />
+                    </DocInlineMetaRow>
+                    {stockDocDetail.reason?.trim() ? (
+                      <p className="text-xs font-bold text-slate-600 normal-case border-t border-slate-200/80 pt-2">
+                        备注：{stockDocDetail.reason.trim()}
+                      </p>
+                    ) : null}
+                  </>
+                }
+                side={
+                  <div className="min-w-[6.5rem] md:text-right">
+                    <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">合计数量</p>
+                    <p className="font-black tabular-nums text-slate-800">
+                      {totalQty.toLocaleString()} {summaryUnit}
+                    </p>
                   </div>
-                )}
-              </div>
-              <div className="flex-1 overflow-auto -mt-2">
-                <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                }
+              />
+              <div className="flex-1 overflow-auto">
+                <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white">
                   <table className="w-full text-left text-sm">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200">
@@ -336,53 +385,76 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
             <>
               {editForm && (
                 <>
-                  <div className="grid grid-cols-[1fr_1.5fr] gap-3">
-                    <div className="bg-slate-50 rounded-xl px-4 py-2">
-                      <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">{isReturn ? '退回仓库' : '出库仓库'}</p>
-                      <select
-                        value={editForm.warehouseId}
-                        onChange={e => setStockDocEditForm(prev => prev ? { ...prev, warehouseId: e.target.value } : null)}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-200"
-                      >
-                        {warehouses.map(w => (
-                          <option key={w.id} value={w.id}>{w.name}{w.code ? ` (${w.code})` : ''}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="bg-slate-50 rounded-xl px-4 py-2">
-                      <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">备注</p>
-                      <input
-                        type="text"
-                        value={editForm.reason}
-                        onChange={e => setStockDocEditForm(prev => prev ? { ...prev, reason: e.target.value } : null)}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-200"
-                        placeholder="选填"
-                      />
-                    </div>
-                  </div>
-                  {materialCustomFieldDefsForDetail.length > 0 ? (
-                    <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
-                      <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500">自定义内容</h4>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {materialCustomFieldDefsForDetail.map(cf => (
-                          <div key={cf.id} className="min-w-0 space-y-1">
-                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
-                            <PlanFormCustomFieldInput
-                              cf={cf}
-                              value={editForm.customData[cf.id]}
-                              onChange={v =>
-                                setStockDocEditForm(prev =>
-                                  prev ? { ...prev, customData: { ...prev.customData, [cf.id]: v } } : null,
-                                )
-                              }
-                              controlClassName="h-[44px] w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-200"
+                  <DocSummaryCard
+                    className="mb-5"
+                    main={
+                      <>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                          <span className="font-black text-slate-800">{productTitle}</span>
+                          <span className="rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 font-mono text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                            {stockDocDetail.docNo}
+                          </span>
+                          <span className="rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                            {isReturn ? '退料' : '领料'}
+                          </span>
+                          <div className="min-w-0 max-w-lg flex-1 basis-full sm:basis-auto">
+                            <label className="sr-only">{isReturn ? '退回仓库' : '出库仓库'}</label>
+                            <select
+                              value={editForm.warehouseId}
+                              onChange={e => setStockDocEditForm(prev => prev ? { ...prev, warehouseId: e.target.value } : null)}
+                              className={stockDocWarehouseSelectClass}
+                            >
+                              {warehouses.map(w => (
+                                <option key={w.id} value={w.id}>{w.name}{w.code ? ` (${w.code})` : ''}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <DocInlineMetaRow>
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3 shrink-0" />
+                            <span className="normal-case">{businessTimeDisplay}</span>
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <User className="h-3 w-3 shrink-0" />
+                            <span className="normal-case">经办: {operatorLabel}</span>
+                          </span>
+                        </DocInlineMetaRow>
+                        <div className="flex flex-col gap-3 border-t border-slate-200/80 pt-3">
+                          <div className="min-w-0 space-y-1">
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">备注</label>
+                            <input
+                              type="text"
+                              value={editForm.reason}
+                              onChange={e => setStockDocEditForm(prev => prev ? { ...prev, reason: e.target.value } : null)}
+                              className={stockDocCustomFieldEditControlClass}
+                              placeholder="选填"
                             />
                           </div>
-                        ))}
+                          <DocCustomFieldEditGrid
+                            showTopDivider={false}
+                            fields={materialCustomFieldDefsForDetail}
+                            values={editForm.customData}
+                            onChange={(fieldId, v) =>
+                              setStockDocEditForm(prev =>
+                                prev ? { ...prev, customData: { ...prev.customData, [fieldId]: v } } : null,
+                              )
+                            }
+                            controlClassName={stockDocCustomFieldEditControlClass}
+                          />
+                        </div>
+                      </>
+                    }
+                    side={
+                      <div className="min-w-[6.5rem] md:text-right">
+                        <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">合计数量</p>
+                        <p className="font-black tabular-nums text-slate-800">
+                          {editForm.lines.reduce((s, l) => s + (l.quantity ?? 0), 0).toLocaleString()} {summaryUnit}
+                        </p>
                       </div>
-                    </div>
-                  ) : null}
-                  <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                    }
+                  />
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white">
                     <table className="w-full text-left text-sm">
                       <thead>
                         <tr className="bg-slate-50 border-b border-slate-200">
@@ -429,9 +501,10 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
               )}
             </>
           )}
-        </div>
-      </div>
-    </div>
+          </div>
+        </>
+      )}
+    />
   );
 };
 

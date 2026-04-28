@@ -127,3 +127,18 @@ export type CollabAcceptTransferBody = {
   dispatchIds?: string[];
   createProduct?: CollabAcceptCreateProductPayload;
 };
+
+/**
+ * `production_op_records.collab_data` JSON 常见键（与 `utils/productionOpCollab/*` 键名一致）。
+ * 与 `Record<string, unknown>` 交叉以允许扩展字段。
+ */
+export type ProductionOpCollabData = {
+  /** 如协作回传：`collaborationReturn` */
+  source?: string;
+  stockInCustomData?: Record<string, unknown>;
+  outsourceDispatchCustomData?: Record<string, unknown>;
+  outsourceReceiveCustomData?: Record<string, unknown>;
+  reworkReportCustomData?: Record<string, unknown>;
+  defectTreatmentCustomData?: Record<string, unknown>;
+  materialStockCustomData?: Record<string, unknown>;
+} & Record<string, unknown>;

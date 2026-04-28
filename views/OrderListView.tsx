@@ -98,6 +98,7 @@ type ReportUpdateParams = {
   newOrderId?: string;
   newMilestoneId?: string;
   customData?: Record<string, any>;
+  weight?: number | null;
 };
 
 interface OrderListViewExtendedProps extends OrderListViewProps {
@@ -113,7 +114,7 @@ interface OrderListViewExtendedProps extends OrderListViewProps {
   onDeleteRecord?: (recordId: string) => void;
   productMilestoneProgresses?: ProductMilestoneProgress[];
   onReportSubmitProduct?: (productId: string, milestoneTemplateId: string, quantity: number, customData: any, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string) => void;
-  onUpdateReportProduct?: (params: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string; customData?: Record<string, any> }) => void;
+  onUpdateReportProduct?: (params: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string; customData?: Record<string, any>; weight?: number | null }) => void;
   onDeleteReportProduct?: (params: { progressId: string; reportId: string }) => void;
   onNavigateToProductEdit?: (productId: string) => void;
   userPermissions?: string[];
@@ -1455,6 +1456,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           onUpdateReportProduct={onUpdateReportProduct}
           onDeleteReportProduct={onDeleteReportProduct}
           onUpdateProduct={onUpdateProduct}
+          onReportSubmit={onReportSubmit}
+          onReportSubmitProduct={onReportSubmitProduct}
           hasOrderPerm={hasOrderPerm}
         />
       )}
