@@ -3,7 +3,7 @@ import type { Product, ProductCategory } from '../types';
 import { categoryUsesBatchManagement, normalizeBatchNo } from '../types';
 import { useWarehouseBatchOptions } from '../hooks/useBatchPicker';
 
-/** `default`：表格/弹窗内紧凑行；`formRow`：与进销存单据明细行输入框（rounded-xl + py-2.5 + text-sm）一致 */
+/** `default`：表格/弹窗内紧凑行（略小字号）；`formRow`：与单据行同高框体，批次字号为 xs */
 export type MaterialIssueBatchControlVariant = 'default' | 'formRow';
 
 export interface MaterialIssueBatchSelectProps {
@@ -25,14 +25,14 @@ export interface MaterialIssueBatchSelectProps {
 
 /** 与单行 `<input type="number">` 同高，避免原生 select 默认行高更矮/更乱 */
 const ISSUE_SELECT_DEFAULT =
-  'h-9 min-h-9 w-full box-border rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold leading-tight text-slate-800 outline-none focus:ring-2 focus:ring-indigo-200';
+  'h-9 min-h-9 w-full box-border rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-bold leading-tight text-slate-800 outline-none focus:ring-2 focus:ring-indigo-200';
 const ISSUE_SELECT_FORM_ROW =
-  'w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500';
+  'w-full h-[42px] box-border bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-bold leading-tight text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500';
 
 const RETURN_INPUT_DEFAULT =
-  'h-9 min-h-9 w-full box-border rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold leading-tight text-slate-800 outline-none focus:ring-2 focus:ring-indigo-200';
+  'h-9 min-h-9 w-full box-border rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-bold leading-tight text-slate-800 outline-none focus:ring-2 focus:ring-indigo-200';
 const RETURN_INPUT_FORM_ROW =
-  'w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500';
+  'w-full h-[42px] box-border bg-white border border-slate-200 rounded-xl px-2.5 text-xs font-bold leading-tight text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500';
 
 /**
  * 启用 `categoryUsesBatchManagement` 时渲染。

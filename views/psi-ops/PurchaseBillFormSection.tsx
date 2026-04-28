@@ -268,7 +268,14 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
       if (qty <= 0) return;
       addedCount++;
       const batchVal = selectedPOItemBatches[item.id]?.trim();
-      const { receivedQty: _rq, remainingQty: _rm, customData: _poCustom, ...poBase } = item;
+      const {
+        receivedQty: _rq,
+        remainingQty: _rm,
+        customData: _poCustom,
+        batchNo: _poBn,
+        batch: _poB,
+        ...poBase
+      } = item;
       const lineCd = lineCustomDataFor(item);
       newRecords.push({
         ...poBase,
@@ -456,7 +463,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                   <div key={line.id} className="space-y-2.5 rounded-xl border border-slate-100 bg-slate-50/50 p-2.5">
                     <div className="flex flex-wrap items-end gap-2">
                       <div className="min-w-0 flex-1 space-y-0.5">
-                        <label className={psiOrderBillCompactLineLabelClass}>目标采购品项 (支持搜索与分类筛选)</label>
+                        <label className={psiOrderBillCompactLineLabelClass}>目标采购品项</label>
                         <SearchableProductSelect
                           compact
                           options={products}
@@ -787,10 +794,28 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                                 }} className="w-20 text-right py-1.5 px-2 rounded-lg border border-slate-200 text-sm font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none" title="允许超过采购订单数量（如超收）" />
                               ) : <span className="text-slate-300">—</span>}
                             </td>
-                            <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
-                              {isChecked && hasBatch ? (
-                                <input type="text" value={selectedPOItemBatches[item.id] ?? ''} onChange={e => setSelectedPOItemBatches(prev => ({ ...prev, [item.id]: e.target.value }))} placeholder="批号" className="w-24 py-1.5 px-2 rounded-lg border border-slate-200 text-sm font-bold focus:ring-2 focus:ring-indigo-500 outline-none" />
-                              ) : <span className="text-slate-300">—</span>}
+                            <td className="px-3 py-2 text-right align-top" onClick={e => e.stopPropagation()}>
+                              {isChecked && hasBatch && product ? (
+                                <div className="ml-auto w-[7.25rem] min-w-[7rem] max-w-[10rem]">
+                                  <MaterialIssueBatchSelect
+                                    product={product}
+                                    categories={categories}
+                                    warehouseId={form.warehouseId || ''}
+                                    value={selectedPOItemBatches[item.id] ?? ''}
+                                    onChange={v =>
+                                      setSelectedPOItemBatches(prev => ({
+                                        ...prev,
+                                        [item.id]: (v && String(v).trim()) || '',
+                                      }))
+                                    }
+                                    mode="return"
+                                    hideLabel
+                                    mergeBatches={listAvailableBatches(item.productId, form.warehouseId)}
+                                  />
+                                </div>
+                              ) : (
+                                <span className="text-slate-300">—</span>
+                              )}
                             </td>
                           </tr>
                         );

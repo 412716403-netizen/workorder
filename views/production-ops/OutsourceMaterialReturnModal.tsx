@@ -286,7 +286,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
         <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4 shrink-0 bg-white">
           <div className="min-w-0 flex-1">
             <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-rose-50 text-rose-600 shrink-0">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 shrink-0">
                 <Undo2 className="w-5 h-5" />
               </span>
               物料退回
@@ -312,7 +312,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                     setMatReturnCustomValues({});
                     setLineBatchByProduct({});
                   }}
-                  className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-rose-500 outline-none bg-white"
+                  className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
                 >
                   {matReturnPartnerOptions.map(p => (
                     <option key={p} value={p}>{p}</option>
@@ -329,7 +329,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                     setMatReturnWarehouseId(e.target.value);
                     setLineBatchByProduct({});
                   }}
-                  className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-rose-500 outline-none bg-white"
+                  className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
                 >
                   {warehouses.map(w => (
                     <option key={w.id} value={w.id}>
@@ -348,7 +348,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
               value={matReturnRemark}
               onChange={e => setMatReturnRemark(e.target.value)}
               placeholder="选填"
-              className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 bg-white focus:ring-2 focus:ring-rose-500 outline-none placeholder:text-slate-400"
+              className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 bg-white focus:ring-2 focus:ring-indigo-500 outline-none placeholder:text-slate-400"
             />
           </div>
           {materialCustomFieldDefs.length > 0 ? (
@@ -362,7 +362,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                       cf={cf}
                       value={matReturnCustomValues[cf.id]}
                       onChange={v => setMatReturnCustomValues(prev => ({ ...prev, [cf.id]: v }))}
-                      controlClassName="h-[52px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-rose-500"
+                      controlClassName="h-[52px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                 ))}
@@ -372,20 +372,29 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
           {returnableMaterials.length === 0 ? (
             <p className="py-8 text-center text-slate-400 text-sm">该工厂暂无外发记录</p>
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-slate-100">
-            <table className="w-full min-w-[960px] text-left border-collapse text-sm">
+            <div className="rounded-2xl border border-slate-100 overflow-hidden">
+            <table className="w-full table-fixed border-collapse text-sm">
+              <colgroup>
+                <col style={{ width: showReturnBatchCol ? '26%' : '34%' }} />
+                <col style={{ width: '11%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '11%' }} />
+                <col style={{ width: '11%' }} />
+                {showReturnBatchCol ? <col style={{ width: '13%' }} /> : null}
+                <col style={{ width: showReturnBatchCol ? '16%' : '21%' }} />
+              </colgroup>
               <thead>
                 <tr className="bg-slate-50/90 border-b border-slate-100">
-                  <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap">物料</th>
-                  <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-right whitespace-nowrap">已外发</th>
-                  <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-right whitespace-nowrap">交货耗材</th>
-                  <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-right whitespace-nowrap">已退回</th>
-                  <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest text-right whitespace-nowrap">可退回</th>
+                  <th className="min-w-0 px-2 py-2.5 text-left text-[10px] font-black text-slate-400 tracking-widest align-bottom">物料</th>
+                  <th className="px-1 py-2.5 text-right text-[10px] font-black text-slate-400 tracking-widest align-bottom">已外发</th>
+                  <th className="px-1 py-2.5 text-right text-[10px] font-black text-slate-400 tracking-widest align-bottom leading-tight">交货耗材</th>
+                  <th className="px-1 py-2.5 text-right text-[10px] font-black text-slate-400 tracking-widest align-bottom">已退回</th>
+                  <th className="px-1 py-2.5 text-right text-[10px] font-black text-slate-400 tracking-widest align-bottom">可退回</th>
                   {showReturnBatchCol ? (
-                    <th className="px-4 py-3 text-[10px] font-black text-slate-400 tracking-widest whitespace-nowrap w-52">批次</th>
+                    <th className="min-w-0 px-1 py-2.5 text-left text-[10px] font-black text-slate-400 tracking-widest align-bottom">批次</th>
                   ) : null}
-                  <th className="min-w-[11rem] w-48 pl-2 pr-4 py-3 text-[10px] font-black text-rose-500/90 tracking-widest text-right whitespace-nowrap border-l-2 border-rose-100 bg-rose-50/50">
-                    本次退回数量
+                  <th className="min-w-0 px-2 py-2.5 text-right text-[10px] font-black text-slate-400 tracking-widest align-bottom leading-tight">
+                    本次退回
                   </th>
                 </tr>
               </thead>
@@ -395,23 +404,23 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                   const remaining = Math.max(0, Math.round((m.dispatched - m.consumed - m.returned) * 100) / 100);
                   return (
                     <tr key={m.productId} className="hover:bg-slate-50/50">
-                      <td className="px-4 py-4 align-top">
-                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                          <span className="text-sm font-bold text-slate-800">{m.name}</span>
+                      <td className="min-w-0 px-2 py-3 align-top">
+                        <div className="min-w-0 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                          <span className="text-xs font-bold text-slate-800 break-words">{m.name}</span>
                           {m.sku ? (
-                            <span className="text-xs font-bold text-slate-400 tabular-nums" title="产品编号">
+                            <span className="shrink-0 text-[10px] font-bold text-slate-400 tabular-nums" title="产品编号">
                               {m.sku}
                             </span>
                           ) : null}
                         </div>
                         {materialProductCustomTags(m.productId)}
                       </td>
-                      <td className="px-4 py-4 text-right text-sm font-bold text-indigo-600 tabular-nums">{m.dispatched}</td>
-                      <td className="px-4 py-4 text-right text-sm font-bold text-rose-600 tabular-nums">{consumedDisplay}</td>
-                      <td className="px-4 py-4 text-right text-sm font-bold text-amber-600 tabular-nums">{m.returned}</td>
-                      <td className="px-4 py-4 text-right text-sm font-black text-emerald-600 tabular-nums">{remaining}</td>
+                      <td className="px-1 py-3 text-right text-xs font-bold text-indigo-600 tabular-nums">{m.dispatched}</td>
+                      <td className="px-1 py-3 text-right text-xs font-bold text-amber-700 tabular-nums">{consumedDisplay}</td>
+                      <td className="px-1 py-3 text-right text-xs font-bold text-slate-600 tabular-nums">{m.returned}</td>
+                      <td className="px-1 py-3 text-right text-xs font-black text-emerald-600 tabular-nums">{remaining}</td>
                       {showReturnBatchCol ? (
-                        <td className="px-4 py-4 align-middle">
+                        <td className="min-w-0 px-1 py-3 align-middle">
                           <MaterialIssueBatchSelect
                             product={products.find(x => x.id === m.productId)}
                             categories={categories}
@@ -420,41 +429,38 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                             onChange={v => setLineBatchByProduct(prev => ({ ...prev, [m.productId]: v }))}
                             mode="issue"
                             hideLabel
-                            className="min-w-[170px]"
+                            className="max-w-[9.25rem] min-w-0"
+                            controlVariant="formRow"
                             mergeBatches={listAvailableBatches(m.productId, matReturnWarehouseId)}
                           />
                         </td>
                       ) : null}
-                      <td className="min-w-[11rem] w-48 pl-2 pr-4 py-4 border-l-2 border-rose-100 bg-rose-50/35 align-middle">
-                        <div className="flex justify-end">
-                          <input
-                            type="number"
-                            min={0}
-                            max={remaining}
-                            step="any"
-                            value={matReturnQty[m.productId] ?? ''}
-                            onChange={e => {
-                              const raw = e.target.value;
-                              if (raw === '') {
-                                setMatReturnQty(prev => {
-                                  const n = { ...prev };
-                                  delete n[m.productId];
-                                  return n;
-                                });
-                                return;
-                              }
-                              const n = Number(raw);
-                              if (!Number.isFinite(n) || n < 0) return;
-                              setMatReturnQty(prev => ({ ...prev, [m.productId]: Math.min(n, remaining) }));
-                            }}
-                            className="w-full min-w-[7.5rem] max-w-[10rem] min-h-[2.75rem] rounded-2xl border-2 border-rose-200 bg-white py-2.5 px-3 text-base font-black text-slate-900 text-right tabular-nums shadow-sm transition-[box-shadow,border-color] placeholder:text-rose-300/80 focus:border-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-200/90"
-                            placeholder="输入数量"
-                            aria-label={`${m.name} 本次退回数量，最多 ${remaining}`}
-                          />
-                        </div>
-                        <p className="mt-1 text-right text-[9px] font-bold text-rose-400/90 tabular-nums">
-                          最多 {remaining}
-                        </p>
+                      <td className="min-w-0 px-2 py-3 align-middle">
+                        <input
+                          type="number"
+                          min={0}
+                          max={remaining}
+                          step="any"
+                          value={matReturnQty[m.productId] ?? ''}
+                          onChange={e => {
+                            const raw = e.target.value;
+                            if (raw === '') {
+                              setMatReturnQty(prev => {
+                                const n = { ...prev };
+                                delete n[m.productId];
+                                return n;
+                              });
+                              return;
+                            }
+                            const n = Number(raw);
+                            if (!Number.isFinite(n) || n < 0) return;
+                            setMatReturnQty(prev => ({ ...prev, [m.productId]: Math.min(n, remaining) }));
+                          }}
+                          className="box-border h-[42px] w-full max-w-[11rem] rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 text-right tabular-nums outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400"
+                          placeholder="数量"
+                          title={remaining > 0 ? `最多可退 ${remaining}` : '当前可退为 0'}
+                          aria-label={`${m.name} 本次退回数量`}
+                        />
                       </td>
                     </tr>
                   );
@@ -473,7 +479,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
               type="button"
               onClick={handleMatReturnSubmit}
               disabled={!returnableMaterials.some(m => (matReturnQty[m.productId] ?? 0) > 0) || !matReturnPartner}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 transition-colors"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition-colors"
             >
               <Check className="w-4 h-4" /> 确认退回
             </button>

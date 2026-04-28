@@ -256,7 +256,7 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
               <div key={line.id} className="p-2.5 bg-slate-50/50 rounded-xl border border-slate-100 space-y-2.5">
                 <div className="flex flex-wrap items-end gap-2">
                   <div className="flex-1 min-w-[160px] space-y-0.5">
-                    <label className={psiOrderBillCompactLineLabelClass}>目标商品 (支持搜索与分类筛选)</label>
+                    <label className={psiOrderBillCompactLineLabelClass}>目标商品</label>
                     <SearchableProductSelect
                       compact
                       options={products}

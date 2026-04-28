@@ -200,7 +200,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2 space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">目标生产品项 (支持搜索与分类筛选)</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">目标生产品项</label>
                   <div className="flex items-stretch gap-4">
                     {selectedProduct && (
                       <div className="shrink-0">

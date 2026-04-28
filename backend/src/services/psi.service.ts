@@ -28,9 +28,14 @@ async function enrichPsiRecordsWithProductMeta(db: TenantPrismaClient, records: 
 
 function cleanPsi(data: Record<string, unknown>) {
   for (const k of PSI_STRIP_KEYS) delete data[k];
+  // 前端常写 `batch`；库表为 `batchNo`。若来源行已带 `batchNo: null`（仍算 in 对象），
+  // 旧逻辑会跳过复制导致用户输入的 `batch` 被删且未落库（如采购订单转采购单）。
   if ('batch' in data) {
-    if (!('batchNo' in data)) data.batchNo = data.batch;
+    const fromBatch = normalizeBatchNo(data.batch);
     delete data.batch;
+    if (fromBatch) {
+      data.batchNo = fromBatch;
+    }
   }
   const bn = normalizeBatchNo(data.batchNo);
   if (bn) data.batchNo = bn;

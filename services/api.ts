@@ -82,7 +82,14 @@ function decodeJwtExp(token: string): number | null {
   }
 }
 
-const REFRESH_MARGIN_S = 120;
+/**
+ * 距 access JWT 过期不足该秒数则先发 /auth/refresh 续期。
+ * 后端默认 JWT_EXPIRES_IN≈15m；原先 120s 窗口偏紧，网络或服务器短暂抖动时易在未续期前拿到 401 被当作掉线。
+ */
+const REFRESH_MARGIN_S = 300;
+
+const REFRESH_RETRYABLE_HTTP = new Set([502, 503, 504]);
+const REFRESH_MAX_ATTEMPTS = 3;
 
 function isAccessTokenExpiringSoon(): boolean {
   if (!memoryAccessToken) return true;
@@ -100,25 +107,44 @@ async function tryRefresh(): Promise<boolean> {
 
   refreshPromise = (async () => {
     try {
-      const res = await fetchWithTimeout(`${API_BASE}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({}),
-      });
-      if (!res.ok) {
-        console.warn('[auth] refresh failed, status', res.status);
-        return false;
+      for (let attempt = 1; attempt <= REFRESH_MAX_ATTEMPTS; attempt++) {
+        try {
+          const res = await fetchWithTimeout(`${API_BASE}/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({}),
+          });
+          if (res.status === 401 || res.status === 403) {
+            console.warn('[auth] refresh rejected', res.status);
+            return false;
+          }
+          if (!res.ok) {
+            const retryable = REFRESH_RETRYABLE_HTTP.has(res.status);
+            if (retryable && attempt < REFRESH_MAX_ATTEMPTS) {
+              await new Promise(r => setTimeout(r, 350 * attempt));
+              continue;
+            }
+            console.warn('[auth] refresh failed, status', res.status);
+            return false;
+          }
+          const data = await res.json();
+          if (data.accessToken) {
+            persistAccessToken(data.accessToken);
+            return true;
+          }
+          console.warn('[auth] refresh response missing accessToken');
+          return false;
+        } catch (e) {
+          if (attempt < REFRESH_MAX_ATTEMPTS) {
+            console.warn('[auth] refresh attempt', attempt, 'network/timeout, retrying', e);
+            await new Promise(r => setTimeout(r, 350 * attempt));
+            continue;
+          }
+          console.warn('[auth] refresh error', e);
+          return false;
+        }
       }
-      const data = await res.json();
-      if (data.accessToken) {
-        persistAccessToken(data.accessToken);
-        return true;
-      }
-      console.warn('[auth] refresh response missing accessToken');
-      return false;
-    } catch (e) {
-      console.warn('[auth] refresh error', e);
       return false;
     } finally {
       refreshPromise = null;

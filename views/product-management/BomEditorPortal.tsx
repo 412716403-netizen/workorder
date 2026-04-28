@@ -211,7 +211,7 @@ const BomEditorPortal: React.FC<BomEditorPortalProps> = ({
                 </div>
                 <div className="space-y-2 min-w-0">
                   <div>
-                    <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block tracking-widest">核心物料/组件 (支持搜索与分类筛选)</label>
+                    <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block tracking-widest">核心物料/组件</label>
                     <SearchableProductSelect
                       compact
                       categories={categories}
