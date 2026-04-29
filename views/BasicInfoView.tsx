@@ -14,7 +14,6 @@ import {
   Save,
   Tag,
   Database,
-  Shapes,
   Info,
   ListPlus,
   CheckCircle,
@@ -1144,42 +1143,31 @@ const BasicInfoView: React.FC = () => {
                       {partnerCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
-                  <div className="space-y-1 md:col-span-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单位编号（销售单 XS-0001-xxx）</label>
-                    {editingId ? (
-                      <>
-                        <input
-                          type="number"
-                          min={1}
-                          max={9999}
-                          value={editPartner.partnerListNo ?? ''}
-                          onChange={e => {
-                            const v = e.target.value;
-                            setEditPartner({
-                              ...editPartner,
-                              partnerListNo: v === '' ? undefined : Math.min(9999, Math.max(1, parseInt(v, 10) || 1)),
-                            });
-                          }}
-                          className="w-full max-w-[200px] bg-slate-50 border-none rounded-xl py-3 px-4 font-mono font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px] tabular-nums"
-                        />
-                        <p className="text-[10px] text-slate-400 font-medium mt-1 ml-1">租户内唯一；中间四位与流水共同组成单号，勿与其他单位重复</p>
-                      </>
-                    ) : (
-                      <p className="text-sm font-bold text-slate-500 py-3">保存后按创建顺序自动分配（0001 起）</p>
-                    )}
-                  </div>
+                  {editingId && (
+                    <div className="space-y-1 md:col-span-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单位编号</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={9999}
+                        value={editPartner.partnerListNo ?? ''}
+                        onChange={e => {
+                          const v = e.target.value;
+                          setEditPartner({
+                            ...editPartner,
+                            partnerListNo: v === '' ? undefined : Math.min(9999, Math.max(1, parseInt(v, 10) || 1)),
+                          });
+                        }}
+                        className="w-full max-w-[200px] bg-slate-50 border-none rounded-xl py-3 px-4 font-mono font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px] tabular-nums"
+                      />
+                      <p className="text-[10px] text-slate-400 font-medium mt-1 ml-1">租户内唯一；中间四位与流水共同组成单号，勿与其他单位重复</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* 动态渲染自定义扩展字段 */}
                 {editPartner.categoryId && (
-                  <div className="pt-8 border-t border-slate-50 space-y-6 animate-in slide-in-from-top-4">
-                    <div className="flex items-center gap-3 mb-2">
-                       <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 shadow-sm"><Shapes className="w-5 h-5" /></div>
-                       <div>
-                          <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">分类专属扩展信息</h4>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase">根据分类 [{partnerCategories.find(c=>c.id===editPartner.categoryId)?.name}] 动态加载</p>
-                       </div>
-                    </div>
+                  <div className="pt-8 border-t border-slate-50 animate-in slide-in-from-top-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50/50 p-8 rounded-[32px] border border-slate-100">
                       {(() => {
                         const cf = partnerCategories.find(c => c.id === editPartner.categoryId)?.customFields.filter(f => f.showInForm !== false) ?? [];

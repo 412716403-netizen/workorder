@@ -1,12 +1,22 @@
 import { describe, it, expect } from 'vitest';
 import {
   normalizeDecimals,
+  normalizeMaterialFormSettings,
   normalizeOutsourceFormSettings,
+  normalizeReworkFormSettings,
   normalizePurchaseOrderFormSettings,
   normalizePurchaseBillFormSettings,
   normalizeSalesOrderFormSettings,
   normalizeSalesBillFormSettings,
 } from './formSettingsDefaults';
+import {
+  BUILTIN_MATERIAL_ISSUE_PRINT_TEMPLATE_ID,
+  BUILTIN_MATERIAL_RETURN_PRINT_TEMPLATE_ID,
+  BUILTIN_OUTSOURCE_MATERIAL_ISSUE_PRINT_TEMPLATE_ID,
+  BUILTIN_OUTSOURCE_MATERIAL_RETURN_PRINT_TEMPLATE_ID,
+  BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID,
+  BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
+} from '../shared/systemPrintTemplates';
 
 describe('normalizeDecimals', () => {
   it('converts string quantity to number', () => {
@@ -58,6 +68,72 @@ describe('normalizeDecimals', () => {
     const result = normalizeDecimals(input);
     expect(result[0].name).toBe('123');
     expect(result[0].productId).toBe('456');
+  });
+});
+
+describe('normalizeMaterialFormSettings materialCenterPrint', () => {
+  it('injects default slots without auto template whitelist', () => {
+    const n = normalizeMaterialFormSettings({});
+    expect(n.materialCenterPrint?.stockOutFlowDetail?.allowedTemplateIds).toBeUndefined();
+    expect(n.materialCenterPrint?.stockReturnFlowDetail?.allowedTemplateIds).toBeUndefined();
+    expect(n.materialCenterPrint?.outsourceStockOutFlowDetail?.allowedTemplateIds).toBeUndefined();
+    expect(n.materialCenterPrint?.outsourceStockReturnFlowDetail?.allowedTemplateIds).toBeUndefined();
+    expect(n.materialCenterPrint?.stockOutFlowDetail?.showPrintButton).not.toBe(false);
+  });
+
+  it('strips code-merged material builtin ids from whitelists', () => {
+    const n = normalizeMaterialFormSettings({
+      materialCenterPrint: {
+        stockOutFlowDetail: { allowedTemplateIds: [BUILTIN_MATERIAL_ISSUE_PRINT_TEMPLATE_ID, 'tenant-a'] },
+        stockReturnFlowDetail: { allowedTemplateIds: [BUILTIN_MATERIAL_RETURN_PRINT_TEMPLATE_ID] },
+        outsourceStockOutFlowDetail: {
+          allowedTemplateIds: [BUILTIN_OUTSOURCE_MATERIAL_ISSUE_PRINT_TEMPLATE_ID, 'tenant-b'],
+        },
+        outsourceStockReturnFlowDetail: {
+          allowedTemplateIds: [BUILTIN_OUTSOURCE_MATERIAL_RETURN_PRINT_TEMPLATE_ID, 'tenant-c'],
+        },
+      },
+    });
+    expect(n.materialCenterPrint?.stockOutFlowDetail?.allowedTemplateIds).toEqual(['tenant-a']);
+    expect(n.materialCenterPrint?.stockReturnFlowDetail?.allowedTemplateIds).toBeUndefined();
+    expect(n.materialCenterPrint?.outsourceStockOutFlowDetail?.allowedTemplateIds).toEqual(['tenant-b']);
+    expect(n.materialCenterPrint?.outsourceStockReturnFlowDetail?.allowedTemplateIds).toEqual(['tenant-c']);
+  });
+
+  it('preserves tenant-only whitelist', () => {
+    const n = normalizeMaterialFormSettings({
+      materialCenterPrint: { stockOutFlowDetail: { allowedTemplateIds: ['my-template'] } },
+    });
+    expect(n.materialCenterPrint?.stockOutFlowDetail?.allowedTemplateIds).toEqual(['my-template']);
+  });
+});
+
+describe('normalizeReworkFormSettings reworkCenterPrint', () => {
+  it('injects default slots without auto template whitelist', () => {
+    const n = normalizeReworkFormSettings({});
+    expect(n.reworkCenterPrint?.defectTreatmentFlowDetail?.allowedTemplateIds).toBeUndefined();
+    expect(n.reworkCenterPrint?.reworkReportFlowDetail?.allowedTemplateIds).toBeUndefined();
+    expect(n.reworkCenterPrint?.defectTreatmentFlowDetail?.showPrintButton).not.toBe(false);
+  });
+
+  it('strips code-merged rework builtin ids from whitelists', () => {
+    const n = normalizeReworkFormSettings({
+      reworkCenterPrint: {
+        defectTreatmentFlowDetail: {
+          allowedTemplateIds: [BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID, 'tenant-x'],
+        },
+        reworkReportFlowDetail: { allowedTemplateIds: [BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID] },
+      },
+    });
+    expect(n.reworkCenterPrint?.defectTreatmentFlowDetail?.allowedTemplateIds).toEqual(['tenant-x']);
+    expect(n.reworkCenterPrint?.reworkReportFlowDetail?.allowedTemplateIds).toBeUndefined();
+  });
+
+  it('preserves tenant-only whitelist', () => {
+    const n = normalizeReworkFormSettings({
+      reworkCenterPrint: { defectTreatmentFlowDetail: { allowedTemplateIds: ['my-rework-tpl'] } },
+    });
+    expect(n.reworkCenterPrint?.defectTreatmentFlowDetail?.allowedTemplateIds).toEqual(['my-rework-tpl']);
   });
 });
 

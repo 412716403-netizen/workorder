@@ -133,8 +133,40 @@ function normalizePlanListSlot(slot: PlanListPrintSettings | undefined): PlanLis
   };
 }
 
-function defaultMaterialCenterPrintSlot(builtinTemplateId: string): PlanListPrintSettings {
-  return { showPrintButton: true, allowedTemplateIds: [builtinTemplateId] };
+/** 生产物料四类流水详情打印曾默认塞进白名单的内置模版 id；现改为仅由用户在「增加模版」中自行加入 */
+const MATERIAL_FLOW_DETAIL_BUILTIN_WHITELIST_IDS = new Set<string>([
+  BUILTIN_MATERIAL_ISSUE_PRINT_TEMPLATE_ID,
+  BUILTIN_MATERIAL_RETURN_PRINT_TEMPLATE_ID,
+  BUILTIN_OUTSOURCE_MATERIAL_ISSUE_PRINT_TEMPLATE_ID,
+  BUILTIN_OUTSOURCE_MATERIAL_RETURN_PRINT_TEMPLATE_ID,
+]);
+
+function normalizeMaterialCenterPrintDetailSlot(slot: PlanListPrintSettings | undefined): PlanListPrintSettings {
+  const normalized = slot ? normalizePlanListSlot(slot) : undefined;
+  const showPrintButton = normalized?.showPrintButton !== false;
+  const rawAllowed = normalized?.allowedTemplateIds?.filter(Boolean) ?? [];
+  const allowed = rawAllowed.filter(id => !MATERIAL_FLOW_DETAIL_BUILTIN_WHITELIST_IDS.has(String(id).trim()));
+  return {
+    showPrintButton,
+    allowedTemplateIds: allowed.length > 0 ? allowed : undefined,
+  };
+}
+
+/** 返工管理两类流水详情打印曾默认塞进白名单的内置模版 id；现改为仅由用户在「增加模版」中自行加入 */
+const REWORK_FLOW_DETAIL_BUILTIN_WHITELIST_IDS = new Set<string>([
+  BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID,
+  BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
+]);
+
+function normalizeReworkCenterPrintDetailSlot(slot: PlanListPrintSettings | undefined): PlanListPrintSettings {
+  const normalized = slot ? normalizePlanListSlot(slot) : undefined;
+  const showPrintButton = normalized?.showPrintButton !== false;
+  const rawAllowed = normalized?.allowedTemplateIds?.filter(Boolean) ?? [];
+  const allowed = rawAllowed.filter(id => !REWORK_FLOW_DETAIL_BUILTIN_WHITELIST_IDS.has(String(id).trim()));
+  return {
+    showPrintButton,
+    allowedTemplateIds: allowed.length > 0 ? allowed : undefined,
+  };
 }
 
 /** 已移除的系统外协发出模版 id；白名单中残留时归一化剔除 */
@@ -207,28 +239,20 @@ export function normalizeMaterialFormSettings(raw: MaterialFormSettings | null |
     return {
       ...base,
       materialCenterPrint: {
-        stockOutFlowDetail: defaultMaterialCenterPrintSlot(BUILTIN_MATERIAL_ISSUE_PRINT_TEMPLATE_ID),
-        stockReturnFlowDetail: defaultMaterialCenterPrintSlot(BUILTIN_MATERIAL_RETURN_PRINT_TEMPLATE_ID),
-        outsourceStockOutFlowDetail: defaultMaterialCenterPrintSlot(BUILTIN_OUTSOURCE_MATERIAL_ISSUE_PRINT_TEMPLATE_ID),
-        outsourceStockReturnFlowDetail: defaultMaterialCenterPrintSlot(BUILTIN_OUTSOURCE_MATERIAL_RETURN_PRINT_TEMPLATE_ID),
+        stockOutFlowDetail: normalizeMaterialCenterPrintDetailSlot(undefined),
+        stockReturnFlowDetail: normalizeMaterialCenterPrintDetailSlot(undefined),
+        outsourceStockOutFlowDetail: normalizeMaterialCenterPrintDetailSlot(undefined),
+        outsourceStockReturnFlowDetail: normalizeMaterialCenterPrintDetailSlot(undefined),
       },
     };
   }
   return {
     ...base,
     materialCenterPrint: {
-      stockOutFlowDetail:
-        normalizePlanListSlot(mcp.stockOutFlowDetail) ??
-        defaultMaterialCenterPrintSlot(BUILTIN_MATERIAL_ISSUE_PRINT_TEMPLATE_ID),
-      stockReturnFlowDetail:
-        normalizePlanListSlot(mcp.stockReturnFlowDetail) ??
-        defaultMaterialCenterPrintSlot(BUILTIN_MATERIAL_RETURN_PRINT_TEMPLATE_ID),
-      outsourceStockOutFlowDetail:
-        normalizePlanListSlot(mcp.outsourceStockOutFlowDetail) ??
-        defaultMaterialCenterPrintSlot(BUILTIN_OUTSOURCE_MATERIAL_ISSUE_PRINT_TEMPLATE_ID),
-      outsourceStockReturnFlowDetail:
-        normalizePlanListSlot(mcp.outsourceStockReturnFlowDetail) ??
-        defaultMaterialCenterPrintSlot(BUILTIN_OUTSOURCE_MATERIAL_RETURN_PRINT_TEMPLATE_ID),
+      stockOutFlowDetail: normalizeMaterialCenterPrintDetailSlot(mcp.stockOutFlowDetail),
+      stockReturnFlowDetail: normalizeMaterialCenterPrintDetailSlot(mcp.stockReturnFlowDetail),
+      outsourceStockOutFlowDetail: normalizeMaterialCenterPrintDetailSlot(mcp.outsourceStockOutFlowDetail),
+      outsourceStockReturnFlowDetail: normalizeMaterialCenterPrintDetailSlot(mcp.outsourceStockReturnFlowDetail),
     },
   };
 }
@@ -277,20 +301,16 @@ export function normalizeReworkFormSettings(raw: ReworkFormSettings | null | und
     return {
       ...base,
       reworkCenterPrint: {
-        defectTreatmentFlowDetail: defaultMaterialCenterPrintSlot(BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID),
-        reworkReportFlowDetail: defaultMaterialCenterPrintSlot(BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID),
+        defectTreatmentFlowDetail: normalizeReworkCenterPrintDetailSlot(undefined),
+        reworkReportFlowDetail: normalizeReworkCenterPrintDetailSlot(undefined),
       },
     };
   }
   return {
     ...base,
     reworkCenterPrint: {
-      defectTreatmentFlowDetail:
-        normalizePlanListSlot(rcp.defectTreatmentFlowDetail) ??
-        defaultMaterialCenterPrintSlot(BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID),
-      reworkReportFlowDetail:
-        normalizePlanListSlot(rcp.reworkReportFlowDetail) ??
-        defaultMaterialCenterPrintSlot(BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID),
+      defectTreatmentFlowDetail: normalizeReworkCenterPrintDetailSlot(rcp.defectTreatmentFlowDetail),
+      reworkReportFlowDetail: normalizeReworkCenterPrintDetailSlot(rcp.reworkReportFlowDetail),
     },
   };
 }
