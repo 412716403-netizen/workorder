@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Trash2 } from 'lucide-react';
 import type {
   PrintBodyElement,
@@ -14,7 +14,11 @@ import type {
   PrintTextElementConfig,
 } from '../../types';
 import type { PrintSelection } from './usePrintEditor';
-import type { PrintFieldOption } from './printFieldOptions';
+import {
+  filterPrintFieldOptionsForImageFieldPicker,
+  filterPrintFieldOptionsForTextLikeTables,
+  type PrintFieldOption,
+} from './printFieldOptions';
 import { TemplatePaperSettings } from './TemplatePaperSettings';
 import { HeaderFooterEditor } from './HeaderFooterEditor';
 import { ElementCommonProperties } from './ElementCommonProperties';
@@ -67,6 +71,15 @@ export function PropertyPanel({
   bringToFront: (id: string) => void;
   sendToBack: (id: string) => void;
 }) {
+  const fieldOptionsTextLike = useMemo(
+    () => filterPrintFieldOptionsForTextLikeTables(fieldOptions),
+    [fieldOptions],
+  );
+  const fieldOptionsImageOnly = useMemo(
+    () => filterPrintFieldOptionsForImageFieldPicker(fieldOptions),
+    [fieldOptions],
+  );
+
   if (selection.kind === 'paper') {
     return (
       <TemplatePaperSettings
@@ -89,7 +102,7 @@ export function PropertyPanel({
           config={template.header}
           onChange={onUpdateHeader}
           onDelete={onRemoveHeader}
-          fieldOptions={fieldOptions}
+          fieldOptions={fieldOptionsTextLike}
         />
       </div>
     );
@@ -102,7 +115,7 @@ export function PropertyPanel({
           config={template.footer}
           onChange={onUpdateFooter}
           onDelete={onRemoveFooter}
-          fieldOptions={fieldOptions}
+          fieldOptions={fieldOptionsTextLike}
         />
       </div>
     );
@@ -123,7 +136,7 @@ export function PropertyPanel({
   if (el.type === 'text') {
     const c = el.config as PrintTextElementConfig;
     specific = (
-      <TextPropertyEditor el={el} c={c} fieldOptions={fieldOptions} onUpdateElementConfig={onUpdateElementConfig} />
+      <TextPropertyEditor el={el} c={c} fieldOptions={fieldOptionsTextLike} onUpdateElementConfig={onUpdateElementConfig} />
     );
   } else if (el.type === 'qrcode') {
     const c = el.config as PrintQRCodeElementConfig;
@@ -138,7 +151,7 @@ export function PropertyPanel({
   } else if (el.type === 'image') {
     const c = el.config as PrintImageElementConfig;
     specific = (
-      <ImagePropertyEditor el={el} c={c} fieldOptions={fieldOptions} onUpdateElement={onUpdateElement} onUpdateElementConfig={onUpdateElementConfig} />
+      <ImagePropertyEditor el={el} c={c} fieldOptions={fieldOptionsImageOnly} onUpdateElement={onUpdateElement} onUpdateElementConfig={onUpdateElementConfig} />
     );
   } else if (el.type === 'rect') {
     const c = el.config as PrintRectElementConfig;
@@ -148,7 +161,7 @@ export function PropertyPanel({
   } else if (el.type === 'dynamicTable') {
     const c = el.config as PrintTableElementConfig;
     specific = (
-      <DynamicTableGridEditor el={el} c={c} fieldOptions={fieldOptions} onUpdateElementConfig={onUpdateElementConfig} />
+      <DynamicTableGridEditor el={el} c={c} fieldOptions={fieldOptionsTextLike} onUpdateElementConfig={onUpdateElementConfig} />
     );
   } else if (el.type === 'dynamicList') {
     const c = el.config as PrintDynamicListElementConfig;
@@ -156,7 +169,7 @@ export function PropertyPanel({
       <DynamicListPropertyEditor
         el={el}
         c={c}
-        fieldOptions={fieldOptions}
+        fieldOptions={fieldOptionsTextLike}
         templateDocumentType={template.documentType}
         onUpdateElementConfig={onUpdateElementConfig}
       />

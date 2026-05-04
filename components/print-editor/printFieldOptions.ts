@@ -4,7 +4,9 @@ import type {
   PrintDynamicListDataSource,
   PrintTemplateDocumentType,
   ProductCategory,
+  ReportFieldDefinition,
 } from '../../types';
+import { effectiveCustomDocFieldType } from '../../utils/reportCustomDocField';
 
 function financeKindCustomPrintOptions(
   financeCategories: FinanceCategory[] | undefined,
@@ -12,18 +14,19 @@ function financeKindCustomPrintOptions(
   group: '收款单' | '付款单',
 ): PrintFieldOption[] {
   if (!financeCategories?.length) return [];
-  const byId = new Map<string, { id: string; label: string }>();
+  const byId = new Map<string, ReportFieldDefinition>();
   for (const c of financeCategories) {
     if (c.kind !== kind) continue;
     for (const f of c.customFields ?? []) {
       if (!f?.id || byId.has(f.id)) continue;
-      byId.set(f.id, { id: f.id, label: f.label || f.id });
+      byId.set(f.id, f);
     }
   }
   return [...byId.values()].map(f => ({
     group,
     value: `${group}.custom.${f.id}`,
-    label: f.label,
+    label: f.label || f.id,
+    isFileOrImageField: effectiveCustomDocFieldType(f) === 'file',
   }));
 }
 
@@ -40,6 +43,7 @@ function productCategoryCustomPrintOptions(categories: ProductCategory[] | undef
         group: '产品',
         value: `产品.custom.${f.id}`,
         label: `「${cat.name}」${base}${typeHint}`,
+        isFileOrImageField: effectiveCustomDocFieldType(f) === 'file',
       });
     }
   }
@@ -50,6 +54,18 @@ export interface PrintFieldOption {
   value: string;
   label: string;
   group: string;
+  /** 主图 URL 或自定义 `file` 型（上传文件/图片）；用于打印编辑器字段列表分流 */
+  isFileOrImageField?: boolean;
+}
+
+/** 计划/工单等 PlanFormFieldConfig 自定义占位 */
+function planFormCustomPrintField(group: string, ns: string, f: PlanFormFieldConfig): PrintFieldOption {
+  return {
+    group,
+    value: `${ns}.custom.${f.id}`,
+    label: f.label,
+    isFileOrImageField: effectiveCustomDocFieldType(f) === 'file',
+  };
 }
 
 /** 插入到模板中的占位片段（含花括号） */
@@ -124,11 +140,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '计划', value: '计划.createdAt', label: '添加日期' },
   ];
   /** 与计划单「表单配置 → 自定义单据内容」一致，归入「计划」分类便于在插入字段中与标准计划字段一起选用 */
-  const planCustom: PrintFieldOption[] = planCustomFields.map(f => ({
-    group: '计划',
-    value: `计划.custom.${f.id}`,
-    label: f.label,
-  }));
+  const planCustom: PrintFieldOption[] = planCustomFields.map(f => planFormCustomPrintField('计划', '计划', f));
   const plan: PrintFieldOption[] = [...planStatic, ...planCustom];
   const order: PrintFieldOption[] = [
     { group: '工单', value: '工单.orderNumber', label: '工单编号' },
@@ -145,7 +157,7 @@ export function buildPrintFieldOptions(opts: {
   const productStatic: PrintFieldOption[] = [
     { group: '产品', value: '产品.name', label: '产品名称' },
     { group: '产品', value: '产品.sku', label: 'SKU' },
-    { group: '产品', value: '产品.imageUrl', label: '产品主图' },
+    { group: '产品', value: '产品.imageUrl', label: '产品主图', isFileOrImageField: true },
     { group: '产品', value: '产品.description', label: '描述' },
   ];
   const productCategoryCustom = productCategoryCustomPrintOptions(productCategories);
@@ -192,11 +204,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '销售单', value: '销售单.currentDebt', label: '本次应收变动' },
     { group: '销售单', value: '销售单.accumulatedDebt', label: '累计应收余额' },
   ];
-  const salesBillCustom: PrintFieldOption[] = salesBillCustomFields.map(f => ({
-    group: '销售单',
-    value: `销售单.custom.${f.id}`,
-    label: f.label,
-  }));
+  const salesBillCustom: PrintFieldOption[] = salesBillCustomFields.map(f => planFormCustomPrintField('销售单', '销售单', f));
   const salesBillBlock: PrintFieldOption[] = [...salesBillHeader, ...salesBillCustom];
   const purchaseOrderHeader: PrintFieldOption[] = [
     { group: '采购订单', value: '采购订单.docNumber', label: '单据编号' },
@@ -205,11 +213,9 @@ export function buildPrintFieldOptions(opts: {
     { group: '采购订单', value: '采购订单.docTotalQty', label: '本单总件数' },
     { group: '采购订单', value: '采购订单.docTotalAmount', label: '本单总金额' },
   ];
-  const purchaseOrderCustom: PrintFieldOption[] = purchaseOrderCustomFields.map(f => ({
-    group: '采购订单',
-    value: `采购订单.custom.${f.id}`,
-    label: f.label,
-  }));
+  const purchaseOrderCustom: PrintFieldOption[] = purchaseOrderCustomFields.map(f =>
+    planFormCustomPrintField('采购订单', '采购订单', f),
+  );
   const purchaseOrderBlock: PrintFieldOption[] = [...purchaseOrderHeader, ...purchaseOrderCustom];
   const purchaseOrderDetailRow: PrintFieldOption[] = [
     { group: '采购订单明细', value: '行.lineNo', label: '行序号' },
@@ -229,11 +235,9 @@ export function buildPrintFieldOptions(opts: {
     { group: '销售订单', value: '销售订单.docTotalQty', label: '本单总件数' },
     { group: '销售订单', value: '销售订单.docTotalAmount', label: '本单总金额' },
   ];
-  const salesOrderCustom: PrintFieldOption[] = salesOrderCustomFields.map(f => ({
-    group: '销售订单',
-    value: `销售订单.custom.${f.id}`,
-    label: f.label,
-  }));
+  const salesOrderCustom: PrintFieldOption[] = salesOrderCustomFields.map(f =>
+    planFormCustomPrintField('销售订单', '销售订单', f),
+  );
   const salesOrderBlock: PrintFieldOption[] = [...salesOrderHeader, ...salesOrderCustom];
   const salesOrderDetailRow: PrintFieldOption[] = [
     { group: '销售订单明细', value: '行.lineNo', label: '行序号' },
@@ -254,11 +258,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '采购单', value: '采购单.docTotalQty', label: '本单总件数' },
     { group: '采购单', value: '采购单.docTotalAmount', label: '本单总金额' },
   ];
-  const purchaseBillCustom: PrintFieldOption[] = purchaseBillCustomFields.map(f => ({
-    group: '采购单',
-    value: `采购单.custom.${f.id}`,
-    label: f.label,
-  }));
+  const purchaseBillCustom: PrintFieldOption[] = purchaseBillCustomFields.map(f => planFormCustomPrintField('采购单', '采购单', f));
   const purchaseBillBlock: PrintFieldOption[] = [...purchaseBillHeader, ...purchaseBillCustom];
   const receiptHeader: PrintFieldOption[] = [
     { group: '收款单', value: '收款单.docNo', label: '单据编号' },
@@ -340,11 +340,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '报工明细行', value: '行.orderNumber', label: '工单号' },
     { group: '报工明细行', value: '行.milestoneName', label: '工序' },
   ];
-  const stockInCustomOpts: PrintFieldOption[] = stockInCustomFields.map(f => ({
-    group: '入库',
-    value: `入库.custom.${f.id}`,
-    label: f.label,
-  }));
+  const stockInCustomOpts: PrintFieldOption[] = stockInCustomFields.map(f => planFormCustomPrintField('入库', '入库', f));
   const stockInHeader: PrintFieldOption[] = [
     { group: '入库', value: '入库.docNo', label: '入库单号' },
     { group: '入库', value: '入库.warehouseName', label: '入库仓库' },
@@ -360,11 +356,9 @@ export function buildPrintFieldOptions(opts: {
     { group: '入库明细行', value: '行.variantLabel', label: '规格' },
     { group: '入库明细行', value: '行.quantity', label: '数量' },
   ];
-  const materialIssueCustomOpts: PrintFieldOption[] = materialIssueCustomFields.map(f => ({
-    group: '领料发出',
-    value: `领料发出.custom.${f.id}`,
-    label: f.label,
-  }));
+  const materialIssueCustomOpts: PrintFieldOption[] = materialIssueCustomFields.map(f =>
+    planFormCustomPrintField('领料发出', '领料发出', f),
+  );
   const materialIssueHeader: PrintFieldOption[] = [
     { group: '领料发出', value: '领料发出.docNo', label: '单据号' },
     { group: '领料发出', value: '领料发出.warehouseName', label: '仓库' },
@@ -385,11 +379,9 @@ export function buildPrintFieldOptions(opts: {
     { group: '领料发出明细行', value: '行.unit', label: '单位' },
     { group: '领料发出明细行', value: '行.batchNo', label: '批次' },
   ];
-  const materialReturnCustomOpts: PrintFieldOption[] = materialReturnCustomFields.map(f => ({
-    group: '生产退料',
-    value: `生产退料.custom.${f.id}`,
-    label: f.label,
-  }));
+  const materialReturnCustomOpts: PrintFieldOption[] = materialReturnCustomFields.map(f =>
+    planFormCustomPrintField('生产退料', '生产退料', f),
+  );
   const materialReturnHeader: PrintFieldOption[] = [
     { group: '生产退料', value: '生产退料.docNo', label: '单据号' },
     { group: '生产退料', value: '生产退料.warehouseName', label: '仓库' },
@@ -410,11 +402,9 @@ export function buildPrintFieldOptions(opts: {
     { group: '生产退料明细行', value: '行.unit', label: '单位' },
     { group: '生产退料明细行', value: '行.batchNo', label: '批次' },
   ];
-  const outsourceMaterialIssueCustomOpts: PrintFieldOption[] = outsourceMaterialIssueCustomFields.map(f => ({
-    group: '外协领料发出',
-    value: `外协领料发出.custom.${f.id}`,
-    label: f.label,
-  }));
+  const outsourceMaterialIssueCustomOpts: PrintFieldOption[] = outsourceMaterialIssueCustomFields.map(f =>
+    planFormCustomPrintField('外协领料发出', '外协领料发出', f),
+  );
   const outsourceMaterialIssueHeader: PrintFieldOption[] = [
     { group: '外协领料发出', value: '外协领料发出.docNo', label: '单据号' },
     { group: '外协领料发出', value: '外协领料发出.warehouseName', label: '仓库' },
@@ -435,11 +425,9 @@ export function buildPrintFieldOptions(opts: {
     { group: '外协领料发出明细行', value: '行.unit', label: '单位' },
     { group: '外协领料发出明细行', value: '行.batchNo', label: '批次' },
   ];
-  const outsourceMaterialReturnCustomOpts: PrintFieldOption[] = outsourceMaterialReturnCustomFields.map(f => ({
-    group: '外协生产退料',
-    value: `外协生产退料.custom.${f.id}`,
-    label: f.label,
-  }));
+  const outsourceMaterialReturnCustomOpts: PrintFieldOption[] = outsourceMaterialReturnCustomFields.map(f =>
+    planFormCustomPrintField('外协生产退料', '外协生产退料', f),
+  );
   const outsourceMaterialReturnHeader: PrintFieldOption[] = [
     { group: '外协生产退料', value: '外协生产退料.docNo', label: '单据号' },
     { group: '外协生产退料', value: '外协生产退料.warehouseName', label: '仓库' },
@@ -460,11 +448,9 @@ export function buildPrintFieldOptions(opts: {
     { group: '外协生产退料明细行', value: '行.unit', label: '单位' },
     { group: '外协生产退料明细行', value: '行.batchNo', label: '批次' },
   ];
-  const outsourceDispatchCustomOpts: PrintFieldOption[] = outsourceDispatchCustomFields.map(f => ({
-    group: '外协发出',
-    value: `外协发出.custom.${f.id}`,
-    label: f.label,
-  }));
+  const outsourceDispatchCustomOpts: PrintFieldOption[] = outsourceDispatchCustomFields.map(f =>
+    planFormCustomPrintField('外协发出', '外协发出', f),
+  );
   const outsourceDispatchHeader: PrintFieldOption[] = [
     { group: '外协发出', value: '外协发出.docNo', label: '单据号' },
     { group: '外协发出', value: '外协发出.partner', label: '外协工厂' },
@@ -484,11 +470,9 @@ export function buildPrintFieldOptions(opts: {
     { group: '外协发出明细行', value: '行.quantity', label: '数量' },
     { group: '外协发出明细行', value: '行.remark', label: '行备注（来自明细 reason）' },
   ];
-  const outsourceReceiveCustomOpts: PrintFieldOption[] = outsourceReceiveCustomFields.map(f => ({
-    group: '外协收回',
-    value: `外协收回.custom.${f.id}`,
-    label: f.label,
-  }));
+  const outsourceReceiveCustomOpts: PrintFieldOption[] = outsourceReceiveCustomFields.map(f =>
+    planFormCustomPrintField('外协收回', '外协收回', f),
+  );
   const outsourceReceiveHeader: PrintFieldOption[] = [
     { group: '外协收回', value: '外协收回.docNo', label: '单据号' },
     { group: '外协收回', value: '外协收回.partner', label: '外协工厂' },
@@ -510,11 +494,9 @@ export function buildPrintFieldOptions(opts: {
     { group: '外协收回明细行', value: '行.unitPrice', label: '单价（元）' },
     { group: '外协收回明细行', value: '行.amount', label: '金额（元）' },
   ];
-  const defectTreatmentCustomOpts: PrintFieldOption[] = defectTreatmentCustomFields.map(f => ({
-    group: '处理不良',
-    value: `处理不良.custom.${f.id}`,
-    label: f.label,
-  }));
+  const defectTreatmentCustomOpts: PrintFieldOption[] = defectTreatmentCustomFields.map(f =>
+    planFormCustomPrintField('处理不良', '处理不良', f),
+  );
   const defectTreatmentHeader: PrintFieldOption[] = [
     { group: '处理不良', value: '处理不良.docNo', label: '单据号' },
     { group: '处理不良', value: '处理不良.typeLabel', label: '类型（返工/报损）' },
@@ -536,11 +518,9 @@ export function buildPrintFieldOptions(opts: {
     { group: '处理不良明细行', value: '行.variantLabel', label: '规格' },
     { group: '处理不良明细行', value: '行.quantity', label: '数量' },
   ];
-  const reworkReportCustomOpts: PrintFieldOption[] = reworkReportCustomFields.map(f => ({
-    group: '返工报工',
-    value: `返工报工.custom.${f.id}`,
-    label: f.label,
-  }));
+  const reworkReportCustomOpts: PrintFieldOption[] = reworkReportCustomFields.map(f =>
+    planFormCustomPrintField('返工报工', '返工报工', f),
+  );
   const reworkReportHeader: PrintFieldOption[] = [
     { group: '返工报工', value: '返工报工.docNo', label: '单据号' },
     { group: '返工报工', value: '返工报工.nodeNames', label: '工序名称' },
@@ -617,6 +597,16 @@ export function buildPrintFieldOptions(opts: {
     ...receiptBlock,
     ...paymentBlock,
   ];
+}
+
+/** 文本、页眉、页脚、静态表格、动态列表：排除产品主图与 file 型自定义占位 */
+export function filterPrintFieldOptionsForTextLikeTables(options: PrintFieldOption[]): PrintFieldOption[] {
+  return options.filter(o => !o.isFileOrImageField);
+}
+
+/** 图片组件「字段」来源：仅主图与 file 型自定义 */
+export function filterPrintFieldOptionsForImageFieldPicker(options: PrintFieldOption[]): PrintFieldOption[] {
+  return options.filter(o => o.isFileOrImageField === true);
 }
 
 /**
