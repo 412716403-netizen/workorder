@@ -801,9 +801,13 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const onDeleteProdRecord = useCallback(async (id: string) => {
-    try { await api.production.delete(id); setProdRecords(prev => prev.filter(x => x.id !== id)); }
-    catch (err: any) { toast.error(err.message || '删除记录失败'); }
-  }, []);
+    try {
+      await api.production.delete(id);
+      setProdRecords(prev => prev.filter(x => x.id !== id));
+      // 外协收回等删除时后端会回写工单里程碑 / 产品进度报工，需与 onAddProdRecord 一样刷新订单与 PMP
+      void Promise.allSettled([refreshOrders(), refreshPMP()]);
+    } catch (err: any) { toast.error(err.message || '删除记录失败'); }
+  }, [refreshOrders, refreshPMP]);
 
   // ── PSI record handlers ──
   const onAddPSIRecord = useCallback(async (record: any) => {

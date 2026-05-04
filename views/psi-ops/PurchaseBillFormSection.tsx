@@ -33,6 +33,7 @@ import {
 import { PsiListPrintPicker } from '../../components/psi/PsiListPrintPicker';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { localTodayYmd, localCalendarYmdStartToIso } from '../../utils/localDateTime';
+import { parsePsiNonVariantQuantityInput } from '../../utils/psiQtyInput';
 import {
   sectionTitleClass,
   psiOrderBillFormShellClass,
@@ -525,7 +526,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                           <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
                             <label className={psiOrderBillCompactLineLabelClass}>数量</label>
                             <div className="flex h-9 min-h-9 items-stretch gap-1">
-                              <input type="number" min={0} value={line.quantity || ''} onChange={e => onUpdateItem(line.id, { quantity: parseInt(e.target.value) || 0 })} className={`${psiOrderBillCompactLineInputClass} min-w-0 flex-1`} placeholder="0" />
+                              <input type="number" min={0} step={0.01} value={line.quantity || ''} onChange={e => onUpdateItem(line.id, { quantity: parsePsiNonVariantQuantityInput(e.target.value) })} className={`${psiOrderBillCompactLineInputClass} min-w-0 flex-1`} placeholder="0" />
                               <span className="flex shrink-0 items-center text-[9px] font-bold text-slate-400">{line.productId ? getUnitName(line.productId) : '—'}</span>
                             </div>
                           </div>
@@ -787,10 +788,11 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                             <td className="px-3 py-2 text-right"><span className="text-sm font-black text-indigo-600">{item.remainingQty}</span></td>
                             <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
                               {isChecked ? (
-                                <input type="number" min={0} value={qty} onChange={e => {
-                                  const v = parseFloat(e.target.value);
-                                  const val = Number.isFinite(v) ? Math.max(0, v) : 0;
-                                  setSelectedPOItemQuantities(prev => ({ ...prev, [item.id]: val }));
+                                <input type="number" min={0} step={0.01} value={qty} onChange={e => {
+                                  setSelectedPOItemQuantities(prev => ({
+                                    ...prev,
+                                    [item.id]: parsePsiNonVariantQuantityInput(e.target.value),
+                                  }));
                                 }} className="w-20 text-right py-1.5 px-2 rounded-lg border border-slate-200 text-sm font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none" title="允许超过采购订单数量（如超收）" />
                               ) : <span className="text-slate-300">—</span>}
                             </td>

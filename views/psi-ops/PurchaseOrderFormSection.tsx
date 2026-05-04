@@ -15,6 +15,7 @@ import { SearchableProductSelect } from '../../components/SearchableProductSelec
 import { SupplierSelect } from '../../components/SupplierSelect';
 import { Product, ProductCategory, Partner, PartnerCategory, AppDictionaries } from '../../types';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
+import { parsePsiNonVariantQuantityInput } from '../../utils/psiQtyInput';
 import {
   sectionTitleClass,
   psiOrderBillFormShellClass,
@@ -292,7 +293,7 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
                       <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
                         <label className={psiOrderBillCompactLineLabelClass}>数量</label>
                         <div className="flex h-9 min-h-9 items-stretch gap-1">
-                          <input type="number" min={0} value={line.quantity || ''} onChange={e => onUpdateItem(line.id, { quantity: parseInt(e.target.value) || 0 })} className={`${psiOrderBillCompactLineInputClass} min-w-0 flex-1`} placeholder="0" />
+                          <input type="number" min={0} step={0.01} value={line.quantity || ''} onChange={e => onUpdateItem(line.id, { quantity: parsePsiNonVariantQuantityInput(e.target.value) })} className={`${psiOrderBillCompactLineInputClass} min-w-0 flex-1`} placeholder="0" />
                           <span className="flex shrink-0 items-center text-[9px] font-bold text-slate-400">{line.productId ? getUnitName(line.productId) : '—'}</span>
                         </div>
                       </div>

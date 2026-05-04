@@ -649,7 +649,7 @@ export interface OutsourceFormSettings {
    * 为 true 时，外协列表加工厂旁的文档图标打开「加工厂往来数量明细」弹窗；为 false 或未设置时打开外协流水并带筛选。
    */
   showPartnerFlowDetailOnList?: boolean;
-  /** 为 true 时，外协发出新增/详情/编辑显示交货日期，加工厂往来明细表增加交货日期列（`collabData.outsourceDispatchDeliveryDate`）。 */
+  /** 为 true 时，外协发出新增/详情/编辑显示交货日期，加工厂往来明细表增加交货日期列；入口在表单配置「列表显示」（`collabData.outsourceDispatchDeliveryDate`）。 */
   showOutsourceDispatchDeliveryDate?: boolean;
 }
 

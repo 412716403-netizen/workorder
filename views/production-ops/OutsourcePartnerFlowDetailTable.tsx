@@ -9,7 +9,7 @@ export interface OutsourcePartnerFlowDetailTableProps {
   dictionaries?: AppDictionaries;
   /** 本弹窗维度是否曾有任何往来单（用于区分「无数据」与「筛选无匹配」） */
   hasAnyDoc: boolean;
-  /** 与表单配置「外协发出显示交货日期」一致时在「单据类型」后展示列 */
+  /** 与表单配置「列表显示」中的「外协发出显示交货日期」一致时在「单据类型」后展示列 */
   showDeliveryDateColumn?: boolean;
   docRows: PartnerFlowDocRow[];
   variantColumnIds: string[];

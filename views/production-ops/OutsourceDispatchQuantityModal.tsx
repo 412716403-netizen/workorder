@@ -75,7 +75,7 @@ export interface OutsourceDispatchQuantityModalProps {
   dispatchCustomFieldDefs?: PlanFormFieldConfig[];
   dispatchCustomValues?: Record<string, unknown>;
   setDispatchCustomValues?: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
-  /** 与表单配置「外协发出显示交货日期」联动 */
+  /** 与表单配置「列表显示」中的「外协发出显示交货日期」联动 */
   showDispatchDeliveryDate?: boolean;
   dispatchDeliveryDate?: string;
   setDispatchDeliveryDate?: React.Dispatch<React.SetStateAction<string>>;

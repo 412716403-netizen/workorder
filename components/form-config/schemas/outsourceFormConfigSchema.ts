@@ -6,7 +6,7 @@ import type { FormConfigSchema } from '../formConfigSchema';
 export const outsourceFormConfigSchema: FormConfigSchema<OutsourceFormSettings> = {
   title: '外协管理表单配置',
   subtitle: {
-    list: '以下选项影响外协列表中「加工厂往来」区域的展示方式。',
+    list: '以下选项影响外协列表、加工厂往来区域及外协发出交货日期的展示方式。',
   },
   settingsKey: 'outsourceFormSettings',
   defaultValue: DEFAULT_OUTSOURCE_FORM_SETTINGS,
@@ -16,15 +16,6 @@ export const outsourceFormConfigSchema: FormConfigSchema<OutsourceFormSettings> 
       id: 'fields',
       label: '字段配置',
       sections: [
-        {
-          kind: 'toggle',
-          id: 'showOutsourceDispatchDeliveryDate',
-          label: '外协发出显示交货日期',
-          description:
-            '勾选后，外协发出新增/详情/编辑页显示交货日期（与自定义单据内容同区）；加工厂往来数量明细在「单据类型」后增加交货日期列。',
-          path: 'showOutsourceDispatchDeliveryDate',
-          defaultChecked: false,
-        },
         {
           kind: 'customFieldsTable',
           id: 'outsourceDispatchCustomFields',
@@ -79,6 +70,15 @@ export const outsourceFormConfigSchema: FormConfigSchema<OutsourceFormSettings> 
       id: 'list',
       label: '列表显示',
       sections: [
+        {
+          kind: 'toggle',
+          id: 'showOutsourceDispatchDeliveryDate',
+          label: '外协发出显示交货日期',
+          description:
+            '勾选后，外协发出新增/详情/编辑页显示交货日期（与自定义单据内容同区）；加工厂往来数量明细在「单据类型」后增加交货日期列。',
+          path: 'showOutsourceDispatchDeliveryDate',
+          defaultChecked: false,
+        },
         {
           kind: 'toggle',
           id: 'showPartnerFlowDetailOnList',
