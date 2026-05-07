@@ -85,6 +85,27 @@ export interface OutsourceDispatchQuantityModalProps {
   embedded?: boolean;
 }
 
+function buildMatrixProductByVariantSubset(product: Product, variants: ProductVariant[]): Product {
+  const subsetSizeIds = Array.from(new Set(variants.map(v => v.sizeId).filter((id): id is string => !!id)));
+  const subsetColorIds = Array.from(new Set(variants.map(v => v.colorId).filter((id): id is string => !!id)));
+  const productSizeOrder = product.sizeIds ?? [];
+  const productColorOrder = product.colorIds ?? [];
+  const orderedSizeIds = [
+    ...productSizeOrder.filter(id => subsetSizeIds.includes(id)),
+    ...subsetSizeIds.filter(id => !productSizeOrder.includes(id)),
+  ];
+  const orderedColorIds = [
+    ...productColorOrder.filter(id => subsetColorIds.includes(id)),
+    ...subsetColorIds.filter(id => !productColorOrder.includes(id)),
+  ];
+  return {
+    ...product,
+    variants,
+    colorIds: orderedColorIds.length > 0 ? orderedColorIds : undefined,
+    sizeIds: orderedSizeIds.length > 0 ? orderedSizeIds : undefined,
+  };
+}
+
 /** 与各输入旁「最多」一致：单格填该上限；多规格共享可委外池时按余量依次填满（与录入区校验一致） */
 function buildDefaultDispatchQuantities(
   productionLinkMode: 'order' | 'product',
@@ -553,7 +574,7 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
               };
               const matrixProductOrder =
                 product && dictionaries
-                  ? ({ ...product, variants: variantsInOrder, colorIds: undefined, sizeIds: undefined } as Product)
+                  ? buildMatrixProductByVariantSubset(product, variantsInOrder)
                   : null;
               const unitLabelOrder = getUnitName(row.productId);
               const productCustomTagsOrder =
@@ -673,7 +694,7 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
               };
               const matrixProductBlock =
                 product && dictionaries
-                  ? ({ ...product, variants: variantsInProductBlock, colorIds: undefined, sizeIds: undefined } as Product)
+                  ? buildMatrixProductByVariantSubset(product, variantsInProductBlock)
                   : null;
               const unitLabelPb = getUnitName(row.productId);
               const productCustomTagsPb =

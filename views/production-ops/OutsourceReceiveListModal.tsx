@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ArrowDownToLine, X, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Product, Partner } from '../../types';
+import { outsourceReceiveBaseKey } from './outsourceReceiveKeys';
 
 export interface ReceiveRow {
   orderId?: string;
@@ -203,8 +204,7 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
                 </tr>
               ) : (
                 filteredRows.map(row => {
-                  const isOrderScope = row.orderId != null;
-                  const key = isOrderScope ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}|${row.partner}`;
+                  const key = outsourceReceiveBaseKey(row);
                   const checked = receiveSelectedKeys.has(key);
                   const toggleRow = () => {
                     setReceiveSelectedKeys(prev => {
@@ -216,7 +216,7 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
                       if (next.size > 0) {
                         const firstKey = next.values().next().value;
                         const firstRow = outsourceReceiveRows.find(
-                          r => (r.orderId != null ? `${r.orderId}|${r.nodeId}` : `${r.productId}|${r.nodeId}|${r.partner}`) === firstKey,
+                          r => outsourceReceiveBaseKey(r) === firstKey,
                         );
                         const selectedPartner = firstRow?.partner ?? '';
                         if (selectedPartner !== (row.partner ?? '')) {

@@ -88,6 +88,8 @@ export function buildPrintFieldOptions(opts: {
   outsourceMaterialReturnCustomFields?: PlanFormFieldConfig[];
   /** 外协发出自定义；{{外协发出.custom.<id>}} */
   outsourceDispatchCustomFields?: PlanFormFieldConfig[];
+  /** 与表单配置「列表显示-外协发出显示交货日期」联动；为 true 时开放 {{外协发出.deliveryDate}} */
+  showOutsourceDispatchDeliveryDate?: boolean;
   /** 外协收回自定义；{{外协收回.custom.<id>}} */
   outsourceReceiveCustomFields?: PlanFormFieldConfig[];
   /** 返工管理：处理不良自定义；{{处理不良.custom.<id>}} */
@@ -114,6 +116,7 @@ export function buildPrintFieldOptions(opts: {
   const outsourceMaterialIssueCustomFields = opts.outsourceMaterialIssueCustomFields ?? [];
   const outsourceMaterialReturnCustomFields = opts.outsourceMaterialReturnCustomFields ?? [];
   const outsourceDispatchCustomFields = opts.outsourceDispatchCustomFields ?? [];
+  const showOutsourceDispatchDeliveryDate = opts.showOutsourceDispatchDeliveryDate === true;
   const outsourceReceiveCustomFields = opts.outsourceReceiveCustomFields ?? [];
   const defectTreatmentCustomFields = opts.defectTreatmentCustomFields ?? [];
   const reworkReportCustomFields = opts.reworkReportCustomFields ?? [];
@@ -456,6 +459,9 @@ export function buildPrintFieldOptions(opts: {
     { group: '外协发出', value: '外协发出.partner', label: '外协工厂' },
     { group: '外协发出', value: '外协发出.operator', label: '经办人' },
     { group: '外协发出', value: '外协发出.timestamp', label: '业务时间' },
+    ...(showOutsourceDispatchDeliveryDate
+      ? [{ group: '外协发出', value: '外协发出.deliveryDate', label: '交货日期' } as const]
+      : []),
     { group: '外协发出', value: '外协发出.reason', label: '备注' },
     { group: '外协发出', value: '外协发出.totalQty', label: '合计数量' },
     ...outsourceDispatchCustomOpts,

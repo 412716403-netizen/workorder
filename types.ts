@@ -1051,6 +1051,8 @@ export interface StockInPrintContext {
   warehouseName?: string;
   operator?: string;
   timestamp?: string;
+  /** 外协发出可选：交货日期（YYYY-MM-DD） */
+  deliveryDate?: string;
   productName?: string;
   orderNumber?: string;
   totalQty?: string | number;

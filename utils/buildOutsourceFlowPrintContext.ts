@@ -10,7 +10,11 @@ import type {
 } from '../types';
 import { buildMatrixJsonAndTotalQtyFromVariantLine } from './buildSalesBillPrintContext';
 import { formatLocalDateTimeZh, parseProductionOpTimestampMs } from './localDateTime';
-import { OUTSOURCE_DISPATCH_CUSTOM_DATA_KEY, OUTSOURCE_RECEIVE_CUSTOM_DATA_KEY } from './productionOpCollab/outsource';
+import {
+  OUTSOURCE_DISPATCH_CUSTOM_DATA_KEY,
+  OUTSOURCE_DISPATCH_DELIVERY_DATE_KEY,
+  OUTSOURCE_RECEIVE_CUSTOM_DATA_KEY,
+} from './productionOpCollab/outsource';
 import { COLOR_SIZE_MATRIX_JSON_KEY } from './colorSizeMatrixPrint';
 
 const EMPTY_DICTIONARIES: AppDictionaries = { colors: [], sizes: [], units: [] };
@@ -59,6 +63,11 @@ export function buildOutsourceFlowPrintContext(opts: {
   const raw = first.collabData?.[dataKey];
   const custom =
     typeof raw === 'object' && raw != null && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {};
+  const dispatchDeliveryDateRaw =
+    typeof first.collabData?.[OUTSOURCE_DISPATCH_DELIVERY_DATE_KEY] === 'string'
+      ? first.collabData[OUTSOURCE_DISPATCH_DELIVERY_DATE_KEY]
+      : '';
+  const dispatchDeliveryDate = dispatchDeliveryDateRaw.trim();
 
   const byGroup = new Map<string, ProductionOpRecord[]>();
   for (const r of docRecords) {
@@ -130,6 +139,7 @@ export function buildOutsourceFlowPrintContext(opts: {
     partner,
     operator,
     timestamp: tsDisplay,
+    deliveryDate: !isReceiveDoc && dispatchDeliveryDate ? dispatchDeliveryDate : undefined,
     reason,
     totalQty,
     custom,

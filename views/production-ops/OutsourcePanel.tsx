@@ -62,6 +62,13 @@ import OutsourceDispatchListModal from './OutsourceDispatchListModal';
 import OutsourceDispatchQuantityModal from './OutsourceDispatchQuantityModal';
 import OutsourceReceiveListModal from './OutsourceReceiveListModal';
 import OutsourceReceiveQuantityModal from './OutsourceReceiveQuantityModal';
+import {
+  RECEIVE_VARIANT_SEP,
+  outsourceReceiveBaseKey,
+  outsourceReceiveOrderAggKey,
+  outsourceReceiveProductAggKey,
+  resolveOutsourceReceiveEntry,
+} from './outsourceReceiveKeys';
 import OutsourceFlowListModal, { type OutsourceFlowOpenSeed } from './OutsourceFlowListModal';
 import OutsourcePartnerFlowDetailModal from './OutsourcePartnerFlowDetailModal';
 import OutsourceFlowDocumentDetailModal from './OutsourceFlowDocumentDetailModal';
@@ -348,8 +355,11 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
    * 待收回清单：跨模式全收（方案 A）。
    *
    * 行的"维度"由发出单原始 `orderId` 决定，与当前 `productionLinkMode` **无关**。
-   * - 工单级（`orderId` 非空）：聚合 key 为 `orderId|nodeId`
-   * - 产品级（`orderId` 空）：聚合 key 为 `productId|nodeId|partner`
+   * - 工单级（`orderId` 非空）：聚合 key = `orderId|nodeId|partner`
+   * - 产品级（`orderId` 空）：聚合 key = `productId|nodeId|partner`
+   *
+   * 工单级聚合**必须**包含 partner，否则同一工单同一工序发给多个加工厂时
+   * 会被合并成一行（数量相加、partner 只取首个），造成"分户"丢失（历史 bug）。
    *
    * 这样模式切换后，历史发出单仍能在任一模式下被看到、被收回；
    * 收回写入仍按发出单原模式分流（`handleReceiveFormSubmit` 内按 `row.orderId == null` 决定），
@@ -361,18 +371,19 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
 
     outsourceRecords.forEach(r => {
       if (!r.nodeId) return;
+      const partner = r.partner ?? '';
       if (r.orderId) {
-        const k = `O|${r.orderId}|${r.nodeId}`;
+        const k = outsourceReceiveOrderAggKey(r.orderId, r.nodeId, partner);
         if (!byKey[k]) {
           const order = idx.ordersById.get(r.orderId);
           if (!order) return;
-          byKey[k] = { scope: 'order', orderId: r.orderId, productId: order.productId, nodeId: r.nodeId, partner: r.partner ?? '', dispatched: 0, received: 0 };
+          byKey[k] = { scope: 'order', orderId: r.orderId, productId: order.productId, nodeId: r.nodeId, partner, dispatched: 0, received: 0 };
         }
         if (r.status === '加工中') byKey[k].dispatched += r.quantity;
         else if (r.status === '已收回') byKey[k].received += r.quantity;
       } else if (r.productId) {
-        const k = `P|${r.productId}|${r.nodeId}|${r.partner ?? ''}`;
-        if (!byKey[k]) byKey[k] = { scope: 'product', productId: r.productId, nodeId: r.nodeId, partner: r.partner ?? '', dispatched: 0, received: 0 };
+        const k = outsourceReceiveProductAggKey(r.productId, r.nodeId, partner);
+        if (!byKey[k]) byKey[k] = { scope: 'product', productId: r.productId, nodeId: r.nodeId, partner, dispatched: 0, received: 0 };
         if (r.status === '加工中') byKey[k].dispatched += r.quantity;
         else if (r.status === '已收回') byKey[k].received += r.quantity;
       }
@@ -453,9 +464,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
       const next = { ...prev };
       let changed = false;
       for (const row of outsourceReceiveRows) {
-        const baseKey = row.orderId != null
-          ? `${row.orderId}|${row.nodeId}`
-          : `${row.productId}|${row.nodeId}|${row.partner ?? ''}`;
+        const baseKey = outsourceReceiveBaseKey(row);
         if (!receiveSelectedKeys.has(baseKey)) continue;
         const existing = next[baseKey];
         if (existing != null && existing > 0) continue;
@@ -807,46 +816,14 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
     setReceiveQty(0);
   };
 
-  const RECEIVE_VARIANT_SEP = '__v__';
-  const productReceiveRowKey = (r: { productId: string; nodeId: string; partner?: string }) =>
-    `${r.productId}|${r.nodeId}|${r.partner ?? ''}`;
-
   /**
    * 解析 receiveFormQuantities 的 entry key，返回命中的 row 与 scope。
-   * 与当前 productionLinkMode 无关，仅按 row 自身 `orderId` 决定 scope（方案 A）。
-   *
-   * key 形态：
-   * - product 无变体：`productId|nodeId|partner`
-   * - product 变体：`productId|nodeId|partner${RECEIVE_VARIANT_SEP}variantId`
-   * - order 无变体：`orderId|nodeId`
-   * - order 变体：`orderId|nodeId|variantId`
-   *
-   * 3 段 key 的歧义：先按 product baseKey 命中尝试，否则按 order 解析。
+   * 详细 key 形态见 `outsourceReceiveKeys.ts`。
    */
-  const resolveReceiveEntry = (
-    key: string,
-  ): {
-    row: typeof outsourceReceiveRows[number];
-    isProductScope: boolean;
-    baseKey: string;
-    variantId?: string;
-  } | null => {
-    if (key.includes(RECEIVE_VARIANT_SEP)) {
-      const [baseK, variantId] = key.split(RECEIVE_VARIANT_SEP);
-      const row = outsourceReceiveRows.find(r => r.orderId == null && productReceiveRowKey(r) === baseK);
-      if (row) return { row, isProductScope: true, baseKey: baseK!, variantId };
-      return null;
-    }
-    const productRow = outsourceReceiveRows.find(r => r.orderId == null && productReceiveRowKey(r) === key);
-    if (productRow) return { row: productRow, isProductScope: true, baseKey: key };
-    const parts = key.split('|');
-    const orderId = parts[0];
-    const nodeId = parts[1];
-    const variantId = parts[2];
-    const orderRow = outsourceReceiveRows.find(r => r.orderId === orderId && r.nodeId === nodeId);
-    if (orderRow) return { row: orderRow, isProductScope: false, baseKey: `${orderId}|${nodeId}`, variantId };
-    return null;
-  };
+  const resolveReceiveEntry = (key: string) =>
+    resolveOutsourceReceiveEntry(key, outsourceReceiveRows) as
+      | { row: typeof outsourceReceiveRows[number]; isProductScope: boolean; baseKey: string; variantId?: string }
+      | null;
 
   const handleReceiveFormSubmit = () => {
     const entries = (Object.entries(receiveFormQuantities) as [string, number][]).filter(([, qty]) => qty > 0);
@@ -894,7 +871,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
             toast.error(`本次收回数量不能大于该规格待收数量（最多${maxQ}）。`);
             return;
           }
-        } else if (key === productReceiveRowKey(row)) {
+        } else if (key === outsourceReceiveBaseKey(row)) {
           const maxAgg = hasVariantDispatch ? pendingNoVar : row.pending;
           if (qty > maxAgg) {
             toast.error(`本次收回数量不能大于待收数量（最多${maxAgg}）。`);
@@ -904,9 +881,11 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
       } else {
         const nodeId = row.nodeId;
         const orderId = row.orderId!;
+        const rowPartner = row.partner ?? '';
         if (variantId !== undefined) {
-          const dispatchRecords = records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && !r.sourceReworkId && r.orderId === orderId && r.nodeId === nodeId);
-          const receiveRecords = records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && !r.sourceReworkId && r.orderId === orderId && r.nodeId === nodeId);
+          /** 工单级单一加工厂：必须按 partner 过滤，否则同一工单同一工序多厂家会互相串用配额 */
+          const dispatchRecords = records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && !r.sourceReworkId && r.orderId === orderId && r.nodeId === nodeId && (r.partner ?? '') === rowPartner);
+          const receiveRecords = records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && !r.sourceReworkId && r.orderId === orderId && r.nodeId === nodeId && (r.partner ?? '') === rowPartner);
           const dispatched = dispatchRecords.filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + r.quantity, 0);
           const received = receiveRecords.filter(r => (r.variantId || '') === variantId).reduce((s, r) => s + r.quantity, 0);
           const maxQty = Math.max(0, dispatched - received);
@@ -924,7 +903,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
     }
     const timestamp = new Date().toLocaleString();
     const firstKey = receiveSelectedKeys.values().next().value;
-    const firstRow = firstKey ? outsourceReceiveRows.find(r => (r.orderId != null ? `${r.orderId}|${r.nodeId}` : `${r.productId}|${r.nodeId}|${r.partner}`) === firstKey) : null;
+    const firstRow = firstKey ? outsourceReceiveRows.find(r => outsourceReceiveBaseKey(r) === firstKey) : null;
     const partnerName = firstRow?.partner ?? '';
     const receiveDocNo = getNextReceiveDocNo(partnerName);
     const receiveCollab = outsourceCustomCollabPart(receiveCustomValues, 'receive');

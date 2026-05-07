@@ -262,8 +262,14 @@
 
 `views/production-ops/OutsourcePanel.tsx` 的待收回清单（`outsourceReceiveRows`）以及收货录入弹窗（`OutsourceReceiveQuantityModal`）已脱离当前 `productionLinkMode`，改为按发出单原始 `orderId` 决定**行的"维度"**：
 
-- `orderId` 非空：**工单级**，按 `orderId|nodeId` 聚合；收回写回 `Milestone` + `MilestoneReport`
+- `orderId` 非空：**工单级**，按 `orderId|nodeId|partner` 聚合；收回写回 `Milestone` + `MilestoneReport`
 - `orderId` 为空：**产品级**，按 `productId|nodeId|partner` 聚合；收回写回 `ProductMilestoneProgress` + `ProductProgressReport`
+
+工单级聚合**必须**包含 `partner`：同一工单同一工序若发给多个加工厂，待收回清单需要"分户"展示，
+否则会被合并为一行（数量相加、partner 取首条）造成误收。key 形态、解析与集中实现见
+`views/production-ops/outsourceReceiveKeys.ts`，三个调用方（`OutsourcePanel` /
+`OutsourceReceiveListModal` / `OutsourceReceiveQuantityModal`）必须复用同一组工具，
+禁止再手写 `${orderId}|${nodeId}` 旧形态。
 
 UI 在「待收回清单」和「收货录入」两处都增加「维度」徽标（工单级 / 产品级），用户可在任一模式下看到并收回所有未完成发出单，避免模式切换造成的"数据黑洞"。  
 "发出维度 = 收回维度"是核心不变量：工单级发出 → 工单级收回写回工单进度；产品级发出 → 产品级收回写回 PMP。

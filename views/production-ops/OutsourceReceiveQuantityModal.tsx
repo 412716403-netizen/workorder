@@ -19,6 +19,7 @@ import type {
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
+import { RECEIVE_VARIANT_SEP, outsourceReceiveBaseKey } from './outsourceReceiveKeys';
 import { calcUsageByWeight } from '../../utils/bomMaterialUsageByWeight';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
@@ -57,8 +58,6 @@ export interface ReceiveRow {
   pending: number;
 }
 
-const RECEIVE_VARIANT_SEP = '__v__';
-
 export interface OutsourceReceiveQuantityModalProps {
   productionLinkMode: 'order' | 'product';
   outsourceReceiveRows: ReceiveRow[];
@@ -90,6 +89,27 @@ export interface OutsourceReceiveQuantityModalProps {
   onClose: () => void;
   /** 嵌入 `DocPhaseModal` 时由外层提供遮罩与标题 */
   embedded?: boolean;
+}
+
+function buildMatrixProductByVariantSubset(product: Product, variants: ProductVariant[]): Product {
+  const subsetSizeIds = Array.from(new Set(variants.map(v => v.sizeId).filter((id): id is string => !!id)));
+  const subsetColorIds = Array.from(new Set(variants.map(v => v.colorId).filter((id): id is string => !!id)));
+  const productSizeOrder = product.sizeIds ?? [];
+  const productColorOrder = product.colorIds ?? [];
+  const orderedSizeIds = [
+    ...productSizeOrder.filter(id => subsetSizeIds.includes(id)),
+    ...subsetSizeIds.filter(id => !productSizeOrder.includes(id)),
+  ];
+  const orderedColorIds = [
+    ...productColorOrder.filter(id => subsetColorIds.includes(id)),
+    ...subsetColorIds.filter(id => !productColorOrder.includes(id)),
+  ];
+  return {
+    ...product,
+    variants,
+    colorIds: orderedColorIds.length > 0 ? orderedColorIds : undefined,
+    sizeIds: orderedSizeIds.length > 0 ? orderedSizeIds : undefined,
+  };
 }
 
 const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps> = ({
@@ -124,11 +144,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
 
   const visibleRows = useMemo(
     () =>
-      outsourceReceiveRows.filter((row) =>
-        receiveSelectedKeys.has(
-          row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}|${row.partner}`,
-        ),
-      ),
+      outsourceReceiveRows.filter((row) => receiveSelectedKeys.has(outsourceReceiveBaseKey(row))),
     [outsourceReceiveRows, receiveSelectedKeys],
   );
 
@@ -144,7 +160,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
     let totalAmt = 0;
     const unitLabels: string[] = [];
     for (const row of visibleRows) {
-      const baseKey = row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}|${row.partner}`;
+      const baseKey = outsourceReceiveBaseKey(row);
       const pRow = products.find(pr => pr.id === row.productId);
       const uRow = (dictionaries?.units ?? []).find(x => x.id === pRow?.unitId);
       unitLabels.push(uRow?.name ?? 'PCS');
@@ -220,7 +236,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
           toast.error('此码对应产品不在本次收货列表中');
           return;
         }
-        const baseKey = row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}|${row.partner}`;
+        const baseKey = outsourceReceiveBaseKey(row);
         const product = products.find((p) => p.id === row.productId);
         const category = categories.find((c) => c.id === product?.categoryId);
         const hasColorSizeMatrix = productHasColorSizeMatrix(product, category);
@@ -302,9 +318,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                       {(() => {
                         const firstKey = receiveSelectedKeys.values().next().value;
                         if (!firstKey) return '—';
-                        const r0 = outsourceReceiveRows.find(r =>
-                          (r.orderId != null ? `${r.orderId}|${r.nodeId}` : `${r.productId}|${r.nodeId}|${r.partner}`) === firstKey,
-                        );
+                        const r0 = outsourceReceiveRows.find(r => outsourceReceiveBaseKey(r) === firstKey);
                         return r0?.partner || '—';
                       })()}
                     </div>
@@ -345,7 +359,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                 </div>
                 <div className="space-y-3">
           {visibleRows.map(row => {
-            const receiveRowKey = row.orderId != null ? `${row.orderId}|${row.nodeId}` : `${row.productId}|${row.nodeId}|${row.partner}`;
+            const receiveRowKey = outsourceReceiveBaseKey(row);
             const order = row.orderId != null ? orders.find(o => o.id === row.orderId) : undefined;
             const product = products.find(p => p.id === row.productId);
             const category = categories.find(c => c.id === product?.categoryId);
@@ -362,13 +376,18 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
             const variantsInOrder =
               hasColorSizeOrderRecv && product?.variants ? [...(product.variants as ProductVariant[])] : [];
             const aggregateOrderReceive = hasColorSizeOrderRecv && variantsInOrder.length > 0 && !orderRecvHasSpecBreakdown;
-            /** 跨模式全收：按 row.orderId 决定取 product 维度还是 order 维度的发出/收回记录 */
+            /**
+             * 跨模式全收：按 row.orderId 决定取 product 维度还是 order 维度的发出/收回记录。
+             * 工单级也按 partner 过滤——`outsourceReceiveRows` 已按 partner 拆分独立行，
+             * 同工单同工序多加工厂时，每行的发出/收回必须各自隔离统计。
+             */
+            const rowPartner = row.partner ?? '';
             const dispatchRecords = row.orderId == null
-              ? records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && !r.sourceReworkId && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId && (r.partner ?? '') === (row.partner ?? ''))
-              : records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && !r.sourceReworkId && r.orderId === row.orderId && r.nodeId === row.nodeId);
+              ? records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && !r.sourceReworkId && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId && (r.partner ?? '') === rowPartner)
+              : records.filter(r => r.type === 'OUTSOURCE' && r.status === '加工中' && !r.sourceReworkId && r.orderId === row.orderId && r.nodeId === row.nodeId && (r.partner ?? '') === rowPartner);
             const receiveRecords = row.orderId == null
-              ? records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && !r.sourceReworkId && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId && (r.partner ?? '') === (row.partner ?? ''))
-              : records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && !r.sourceReworkId && r.orderId === row.orderId && r.nodeId === row.nodeId);
+              ? records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && !r.sourceReworkId && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId && (r.partner ?? '') === rowPartner)
+              : records.filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && !r.sourceReworkId && r.orderId === row.orderId && r.nodeId === row.nodeId && (r.partner ?? '') === rowPartner);
             const sumOtherVariantQtyRecvOrder = (currentId: string) =>
               variantsInOrder.reduce(
                 (s, v) => (v.id === currentId ? s : s + (receiveFormQuantities[`${baseKey}|${v.id}`] ?? 0)),
@@ -504,7 +523,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
             if (isProductBlockRecv && variantsInProductBlockRecv.length > 0 && (hasVariantProductDispatchesRecv || aggregateProductReceive)) {
               const matrixProductRecvPb =
                 product && dictionaries
-                  ? ({ ...product, variants: variantsInProductBlockRecv, colorIds: undefined, sizeIds: undefined } as Product)
+                  ? buildMatrixProductByVariantSubset(product, variantsInProductBlockRecv)
                   : null;
               const rowTotalPb = variantsInProductBlockRecv.reduce((s, v) => s + (receiveFormQuantities[`${baseKey}${RECEIVE_VARIANT_SEP}${v.id}`] ?? 0), 0) + (pendingNoVarRecv > 0 && !aggregateProductReceive ? receiveFormQuantities[baseKey] ?? 0 : 0);
               const rowUnitPb = receiveFormUnitPrices[baseKey] ?? 0;
@@ -636,7 +655,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
             if (variantsInOrder.length > 0) {
               const matrixProductRecvOrder =
                 product && dictionaries
-                  ? ({ ...product, variants: variantsInOrder, colorIds: undefined, sizeIds: undefined } as Product)
+                  ? buildMatrixProductByVariantSubset(product, variantsInOrder)
                   : null;
               const rowTotalQty = variantsInOrder.reduce((s, v) => s + (receiveFormQuantities[`${baseKey}|${v.id}`] ?? 0), 0);
               const rowUnitPrice = receiveFormUnitPrices[baseKey] ?? 0;
