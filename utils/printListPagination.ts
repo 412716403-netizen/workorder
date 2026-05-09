@@ -41,7 +41,7 @@ export function getDynamicListRowsPerPage(
   if (!hasMatrix || !printListRows?.length) {
     return Math.max(1, Math.floor(avail / rowH));
   }
-  const maxSlots = Math.max(1, ...printListRows.map(matrixVisualSubRowCountForRow));
+  const maxSlots = Math.max(1, ...printListRows.map(r => matrixVisualSubRowCountForRow(r, cfg)));
   return Math.max(1, Math.floor(avail / (rowH * maxSlots)));
 }
 

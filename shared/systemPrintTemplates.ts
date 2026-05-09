@@ -13,6 +13,7 @@
  * - `builtin-outsource-material-return-v1`：统一下发「外协生产退料单」详情打印（占位符 `外协生产退料.*`）。
  * - `builtin-rework-defect-treatment-v1`：统一下发「处理不良单」返工管理详情打印（占位符 `处理不良.*`，版式参考外协发出）。
  * - `builtin-rework-report-flow-v1`：统一下发「返工报工单」详情打印（占位符 `返工报工.*`，含工序列与颜色尺码矩阵）。
+ * - `builtin-plan-list-v1`：统一下发「计划单」列表打印（A4；含颜色尺码矩阵与颜色×工序物料矩阵列）。
  * 以上合并进各租户 `printTemplates`；持久化写入时剔除，避免与代码副本重复落库。
  */
 
@@ -51,6 +52,9 @@ export const BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID = 'builtin-rework
 /** 返工管理：返工报工流水详情打印 */
 export const BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID = 'builtin-rework-report-flow-v1' as const;
 
+/** 计划单列表打印：统一下发模版 id */
+export const BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID = 'builtin-plan-list-v1' as const;
+
 /** 由代码合并、不应写入租户 `printTemplates` 持久化的内置 id */
 const MERGED_CODE_PRINT_TEMPLATE_IDS = new Set<string>([
   BUILTIN_OUTSOURCE_DISPATCH_PRINT_TEMPLATE_ID,
@@ -65,6 +69,7 @@ const MERGED_CODE_PRINT_TEMPLATE_IDS = new Set<string>([
   BUILTIN_OUTSOURCE_MATERIAL_RETURN_PRINT_TEMPLATE_ID,
   BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID,
   BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
+  BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID,
 ]);
 
 /** 锁定：租户不可删、编辑器走「系统模版」只读/复制为自有流程 */
@@ -81,6 +86,7 @@ export const SYSTEM_LOCKED_PRINT_TEMPLATE_IDS = [
   BUILTIN_OUTSOURCE_MATERIAL_RETURN_PRINT_TEMPLATE_ID,
   BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID,
   BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
+  BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID,
 ] as const;
 
 const LOCKED_SET = new Set<string>(SYSTEM_LOCKED_PRINT_TEMPLATE_IDS);
@@ -1469,6 +1475,150 @@ const BUILTIN_REWORK_REPORT_FLOW_V1: Record<string, unknown> = {
   updatedAt: '2026-04-28T12:30:00.000Z',
 };
 
+/** 计划单列表：标题/元信息 + 颜色尺码矩阵与颜色×工序物料矩阵（与用户自建「计划单打印」副本对齐） */
+const BUILTIN_PLAN_LIST_V1: Record<string, unknown> = {
+  id: BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID,
+  name: '计划单打印',
+  isSystemTemplate: true,
+  documentType: 'plan',
+  printTemplateManageScope: 'planList',
+  paperSize: { widthMm: 210, heightMm: 297 },
+  paperMarginsMm: { top: 2, left: 2, right: 2, bottom: 2 },
+  paperBackgroundColor: '#FFFFFF',
+  elements: [
+    {
+      x: 0,
+      y: 2.3,
+      id: 'el-builtin-plan-list-title',
+      type: 'text',
+      width: 204.9,
+      config: {
+        color: '#111827',
+        content: '{{租户.name}}生产计划单',
+        textAlign: 'center',
+        fontSizePt: 20,
+        fontWeight: 'bold',
+      },
+      height: 12.9,
+      zIndex: 1,
+    },
+    {
+      x: 131,
+      y: 20.7,
+      id: 'el-builtin-plan-list-meta',
+      type: 'text',
+      width: 75,
+      config: {
+        color: '#111827',
+        content: '计划单时间：{{计划.createdAt}}\n计划单号：{{计划.planNumber}}\n客户：{{计划.customer}}',
+        textAlign: 'right',
+        fontSizePt: 10,
+        fontWeight: 'normal',
+      },
+      height: 16.6,
+      zIndex: 2,
+    },
+    {
+      x: 1.9,
+      y: 22.9,
+      id: 'el-builtin-plan-list-product',
+      type: 'text',
+      width: 60,
+      config: {
+        color: '#111827',
+        content: '产品名称：{{产品.name}}\n产品编号：{{产品.sku}}',
+        textAlign: 'left',
+        fontSizePt: 10,
+        fontWeight: 'normal',
+      },
+      height: 10,
+      zIndex: 3,
+    },
+    {
+      x: 4.3,
+      y: 78.1,
+      id: 'el-builtin-plan-list-color-material',
+      type: 'dynamicList',
+      width: 201.6,
+      config: {
+        columns: [
+          {
+            id: 'el-builtin-plan-list-cm-col',
+            color: '#000000',
+            cellKind: 'colorMaterialMatrix',
+            textAlign: 'center',
+            headerLabel: '',
+            contentTemplate: '{{产品.imageUrl}}',
+            matrixColorHeader: '颜色',
+            matrixSizeGroupTitle: '工序物料',
+          },
+        ],
+        fontSizePt: 10,
+        showHeader: true,
+        showSerial: false,
+        borderColor: '#000000',
+        borderStyle: 'solid',
+        dataColumnCount: 1,
+        headerFontSizePt: 12,
+        serialHeaderLabel: '序号',
+        dataColumnWidthsMm: [0],
+        headerBackgroundColor: '#f1f5f9',
+      },
+      height: 79.2,
+      zIndex: 5,
+    },
+    {
+      x: 3.4,
+      y: 34.2,
+      id: 'el-builtin-plan-list-main-table',
+      type: 'dynamicList',
+      width: 202.1,
+      config: {
+        columns: [
+          {
+            id: 'el-builtin-plan-list-col-img',
+            color: '#000000',
+            textAlign: 'center',
+            headerLabel: '列1',
+            contentTemplate: '{{产品.imageUrl}}',
+          },
+          {
+            id: 'el-builtin-plan-list-col-matrix',
+            color: '#000000',
+            cellKind: 'colorSizeMatrix',
+            textAlign: 'center',
+            headerLabel: '',
+            contentTemplate: '{{计划.totalQuantity}}',
+            matrixColorHeader: '颜色',
+            matrixSizeGroupTitle: '尺码数量',
+          },
+          {
+            id: 'el-builtin-plan-list-col-qty',
+            color: '#000000',
+            textAlign: 'center',
+            headerLabel: '数量',
+            contentTemplate: '{{计划.totalQuantity}}',
+          },
+        ],
+        fontSizePt: 10,
+        showHeader: true,
+        showSerial: false,
+        borderColor: '#000000',
+        borderStyle: 'solid',
+        dataColumnCount: 3,
+        headerFontSizePt: 12,
+        serialHeaderLabel: '序号',
+        dataColumnWidthsMm: [0, 0, 0],
+        headerBackgroundColor: '#f1f5f9',
+      },
+      height: 41.5,
+      zIndex: 7,
+    },
+  ],
+  createdAt: '2026-05-09T05:06:01.346Z',
+  updatedAt: '2026-05-09T09:25:22.098Z',
+};
+
 export function listSystemPrintTemplateRecordsForMerge(): Record<string, unknown>[] {
   return [
     BUILTIN_OUTSOURCE_DISPATCH_V2,
@@ -1483,6 +1633,7 @@ export function listSystemPrintTemplateRecordsForMerge(): Record<string, unknown
     BUILTIN_OUTSOURCE_MATERIAL_RETURN_V1,
     BUILTIN_REWORK_DEFECT_TREATMENT_V1,
     BUILTIN_REWORK_REPORT_FLOW_V1,
+    BUILTIN_PLAN_LIST_V1,
   ];
 }
 

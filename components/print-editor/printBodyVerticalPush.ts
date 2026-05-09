@@ -33,7 +33,7 @@ export function estimateDynamicListOverflowMm(
   const hasMatrix = dynamicListHasMatrixColumn(cfg);
   const slotTotal =
     hasMatrix && rows.length > 0
-      ? rows.reduce((s, r) => s + matrixVisualSubRowCountForRow(r), 0)
+      ? rows.reduce((s, r) => s + matrixVisualSubRowCountForRow(r, cfg), 0)
       : rowCount;
   const needMm = headerMm + slotTotal * rowH;
   return Math.max(0, needMm - el.height);

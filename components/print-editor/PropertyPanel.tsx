@@ -79,6 +79,10 @@ export function PropertyPanel({
     () => filterPrintFieldOptionsForImageFieldPicker(fieldOptions),
     [fieldOptions],
   );
+  const fieldOptionsTableCell = useMemo(
+    () => [...fieldOptionsTextLike, ...fieldOptionsImageOnly],
+    [fieldOptionsTextLike, fieldOptionsImageOnly],
+  );
 
   if (selection.kind === 'paper') {
     return (
@@ -161,7 +165,7 @@ export function PropertyPanel({
   } else if (el.type === 'dynamicTable') {
     const c = el.config as PrintTableElementConfig;
     specific = (
-      <DynamicTableGridEditor el={el} c={c} fieldOptions={fieldOptionsTextLike} onUpdateElementConfig={onUpdateElementConfig} />
+      <DynamicTableGridEditor el={el} c={c} fieldOptions={fieldOptionsTableCell} onUpdateElementConfig={onUpdateElementConfig} />
     );
   } else if (el.type === 'dynamicList') {
     const c = el.config as PrintDynamicListElementConfig;
@@ -169,7 +173,7 @@ export function PropertyPanel({
       <DynamicListPropertyEditor
         el={el}
         c={c}
-        fieldOptions={fieldOptionsTextLike}
+        fieldOptions={fieldOptionsTableCell}
         templateDocumentType={template.documentType}
         onUpdateElementConfig={onUpdateElementConfig}
       />

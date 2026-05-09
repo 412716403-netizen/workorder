@@ -65,6 +65,7 @@ function planField(plan: PlanOrder, key: string, _ctx: PrintRenderContext): unkn
     case 'planNumber': return plan.planNumber;
     case 'customer': return plan.customer;
     case 'startDate': return formatPrintCalendarDate(plan.startDate);
+    case 'dueDate': return formatPrintCalendarDate(plan.dueDate);
     case 'priority': return PRIORITY_LABEL[plan.priority] ?? plan.priority;
     case 'status': return PLAN_STATUS_LABEL[plan.status] ?? plan.status;
     case 'totalQuantity': {

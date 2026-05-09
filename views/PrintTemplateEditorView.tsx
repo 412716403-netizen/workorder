@@ -4,13 +4,21 @@ import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, useDrop
 import { toast } from 'sonner';
 import { ArrowLeft, Eye, Minus, Plus, Printer, Save } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useMasterData, useConfigData, useOrdersData, useFinanceData, useAppActions } from '../contexts/AppDataContext';
+import {
+  useMasterData,
+  useConfigData,
+  useOrdersData,
+  useFinanceData,
+  useAppActions,
+  useDataLoading,
+} from '../contexts/AppDataContext';
 import type {
   PrintBodyElement,
   PrintBodyElementType,
   PrintImageElementConfig,
   PrintLineElementConfig,
   PrintRenderContext,
+  PrintTemplate,
 } from '../types';
 import { isPlanPrintTemplateManageScope, isSystemLockedPrintTemplateId } from '../types';
 import { createBlankCustomTemplate, duplicatePrintTemplate } from '../utils/printTemplateDefaults';
@@ -27,6 +35,12 @@ import {
   type PrintPreviewPsiCustomSamples,
 } from '../utils/printPreviewSampleContext';
 import { defaultPrintTemplateFieldsForManageScope } from '../utils/printTemplateManageScope';
+import {
+  clearPrintTemplateEditorBootstrap,
+  takePrintTemplateEditorBootstrap,
+  stashPrintTemplateForEditorBootstrap,
+} from '../utils/printTemplateBootstrap';
+import * as api from '../services/api';
 
 function CanvasDropZone({
   children,
@@ -73,8 +87,15 @@ export default function PrintTemplateEditorView() {
   } = useConfigData();
   const { orders, plans } = useOrdersData();
   const { financeCategories } = useFinanceData();
-  const { onUpdatePrintTemplates } = useAppActions();
+  const { onUpdatePrintTemplates, refreshPrintTemplates } = useAppActions();
+  const dataLoading = useDataLoading();
   const { tenantCtx } = useAuth();
+  const refreshAttemptedForRouteRef = useRef<string | null>(null);
+  const loadFailToastRouteRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    loadFailToastRouteRef.current = null;
+  }, [routeId]);
 
   const editor = usePrintEditor(createBlankCustomTemplate());
 
@@ -105,6 +126,7 @@ export default function PrintTemplateEditorView() {
 
   useEffect(() => {
     if (!routeId || routeId === 'new') {
+      refreshAttemptedForRouteRef.current = null;
       const blank = createBlankCustomTemplate();
       const raw = searchParams.get('manageScope');
       if (raw && isPlanPrintTemplateManageScope(raw)) {
@@ -113,9 +135,37 @@ export default function PrintTemplateEditorView() {
       setTemplate(blank);
       return;
     }
-    const t = printTemplates.find(x => x.id === routeId);
-    if (t) setTemplate({ ...t });
-  }, [routeId, printTemplates, setTemplate, searchParams]);
+
+    const fromList = printTemplates.find(x => x.id === routeId);
+    if (fromList) {
+      refreshAttemptedForRouteRef.current = null;
+      loadFailToastRouteRef.current = null;
+      clearPrintTemplateEditorBootstrap(routeId);
+      setTemplate(JSON.parse(JSON.stringify(fromList)) as PrintTemplate);
+      return;
+    }
+
+    const fromBootstrap = takePrintTemplateEditorBootstrap(routeId);
+    if (fromBootstrap) {
+      refreshAttemptedForRouteRef.current = null;
+      loadFailToastRouteRef.current = null;
+      setTemplate(JSON.parse(JSON.stringify(fromBootstrap)) as PrintTemplate);
+      return;
+    }
+
+    if (dataLoading) return;
+
+    if (refreshAttemptedForRouteRef.current !== routeId) {
+      refreshAttemptedForRouteRef.current = routeId;
+      void refreshPrintTemplates();
+      return;
+    }
+
+    if (loadFailToastRouteRef.current !== routeId) {
+      loadFailToastRouteRef.current = routeId;
+      toast.error('无法加载该打印模版，请关闭后从列表重新打开');
+    }
+  }, [routeId, printTemplates, dataLoading, setTemplate, searchParams, refreshPrintTemplates]);
 
   const selectedElement = useMemo(
     () => (selection.kind === 'element' ? template.elements.find(e => e.id === selection.id) ?? null : null),
@@ -186,6 +236,7 @@ export default function PrintTemplateEditorView() {
     () =>
       buildPrintFieldOptions({
         planCustomFields: planFormSettings.customFields,
+        showPlanDeliveryDate: planFormSettings.listDisplay?.showDeliveryDate === true,
         stockInCustomFields: orderFormSettings.stockInCustomFields,
         materialIssueCustomFields: materialFormSettings.materialIssueCustomFields,
         materialReturnCustomFields: materialFormSettings.materialReturnCustomFields,
@@ -205,6 +256,7 @@ export default function PrintTemplateEditorView() {
       }),
     [
       planFormSettings.customFields,
+      planFormSettings.listDisplay?.showDeliveryDate,
       orderFormSettings.stockInCustomFields,
       materialFormSettings.materialIssueCustomFields,
       materialFormSettings.materialReturnCustomFields,
@@ -421,17 +473,32 @@ export default function PrintTemplateEditorView() {
       return;
     }
     try {
-      const others = printTemplates.filter(t => t.id !== template.id);
+      let mergedFromServer = printTemplates;
+      try {
+        const cfg = await api.settings.getConfig();
+        if (Array.isArray(cfg.printTemplates)) mergedFromServer = cfg.printTemplates as PrintTemplate[];
+      } catch {
+        /* 使用上下文列表兜底，避免无法拉取配置时用空数组覆盖库内其它模版 */
+      }
+      const others = mergedFromServer.filter(t => t.id !== template.id);
       const rawMs = searchParams.get('manageScope');
-      let toSave = { ...template, updatedAt: new Date().toISOString() };
-      if (rawMs && isPlanPrintTemplateManageScope(rawMs) && toSave.printTemplateManageScope == null) {
-        toSave = { ...toSave, printTemplateManageScope: rawMs };
+      let toSave: PrintTemplate = { ...template, updatedAt: new Date().toISOString() };
+      if (rawMs && isPlanPrintTemplateManageScope(rawMs)) {
+        const defs = defaultPrintTemplateFieldsForManageScope(rawMs);
+        if (toSave.documentType == null) {
+          toSave = { ...toSave, documentType: defs.documentType };
+        }
+        if (toSave.printTemplateManageScope == null) {
+          toSave = { ...toSave, printTemplateManageScope: defs.printTemplateManageScope };
+        }
       }
       await onUpdatePrintTemplates([...others, toSave]);
       setTemplate({ ...toSave });
       toast.success('模板已保存');
       if (routeId === 'new') {
-        navigate(`/print-editor/${template.id}`, { replace: true });
+        stashPrintTemplateForEditorBootstrap(toSave);
+        const qs = searchParams.toString();
+        navigate(`/print-editor/${template.id}${qs ? `?${qs}` : ''}`, { replace: true });
       }
     } catch {
       toast.error('保存失败');
@@ -452,11 +519,20 @@ export default function PrintTemplateEditorView() {
 
   const duplicateSystemTemplateAsOwn = useCallback(async () => {
     const dup = duplicatePrintTemplate(template);
-    const userOnly = printTemplates.filter(t => !isSystemLockedPrintTemplateId(t.id));
+    stashPrintTemplateForEditorBootstrap(dup);
+    let mergedFromServer = printTemplates;
+    try {
+      const cfg = await api.settings.getConfig();
+      if (Array.isArray(cfg.printTemplates)) mergedFromServer = cfg.printTemplates as PrintTemplate[];
+    } catch {
+      /* 兜底 */
+    }
+    const userOnly = mergedFromServer.filter(t => !isSystemLockedPrintTemplateId(t.id));
     await onUpdatePrintTemplates([...userOnly, dup]);
     toast.success('已复制为自有模版');
-    navigate(`/print-editor/${dup.id}`);
-  }, [template, printTemplates, onUpdatePrintTemplates, navigate]);
+    const qs = searchParams.toString();
+    navigate(`/print-editor/${dup.id}${qs ? `?${qs}` : ''}`);
+  }, [template, printTemplates, onUpdatePrintTemplates, navigate, searchParams]);
 
   if (systemLocked && routeId !== 'new') {
     return (

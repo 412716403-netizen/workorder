@@ -26,8 +26,10 @@ import {
   elementHeightGrowMm,
 } from './printBodyVerticalPush';
 import { DynamicListMatrixTable } from './DynamicListMatrixTable';
+import { DynamicListColorMaterialMatrixTable } from './DynamicListColorMaterialMatrixTable';
 import { padDynamicListDataColumns } from '../../utils/dynamicListMatrix';
 import { serializeColorSizeMatrixPayload } from '../../utils/colorSizeMatrixPrint';
+import { serializeColorMaterialMatrixPayload } from '../../utils/colorMaterialMatrixPrint';
 
 /** 编辑器内动态列表含「颜色尺码数量」列且无 printListRows 时的预览数据 */
 const EDITOR_DYNAMIC_LIST_MATRIX_PREVIEW: PrintListRow[] = [
@@ -58,6 +60,48 @@ const EDITOR_DYNAMIC_LIST_MATRIX_PREVIEW: PrintListRow[] = [
       colorRows: [
         { colorName: '米白色', quantities: [50] },
         { colorName: '大红', quantities: [50] },
+      ],
+    }),
+  },
+];
+
+/** 编辑器内动态列表含「颜色物料数量」列且无 printListRows 时的预览数据 */
+const EDITOR_DYNAMIC_LIST_COLOR_MATERIAL_PREVIEW: PrintListRow[] = [
+  {
+    sku: '示例货号',
+    productName: '示例名称',
+    qty: 200,
+    unitPrice: '0',
+    amount: '0',
+    remark: '',
+    colorMaterialMatrixJson: serializeColorMaterialMatrixPayload({
+      nodeBlocks: [
+        {
+          nodeName: '织造',
+          colorRows: [
+            {
+              colorName: '黑',
+              materials: [
+                { name: '全毛黑色', ratio: '25' },
+                { name: '全毛白色', ratio: '5' },
+              ],
+            },
+            {
+              colorName: '白',
+              materials: [
+                { name: '全毛白色', ratio: '25' },
+                { name: '全毛黑色', ratio: '5' },
+              ],
+            },
+          ],
+        },
+        {
+          nodeName: '染色',
+          colorRows: [
+            { colorName: '黑', materials: [{ name: '染料A', ratio: '1' }] },
+            { colorName: '白', materials: [{ name: '染料B', ratio: '1.2' }] },
+          ],
+        },
       ],
     }),
   },
@@ -375,6 +419,7 @@ function BodyElementView({
           const key = `${r}-${col}`;
           const raw = c.cells[key] ?? '';
           const text = resolvePrintPlaceholders(raw, ctx);
+          const showImage = isLikelyPrintImageUrl(text);
           const ta = c.cellTextAlign?.[key] ?? 'center';
           const jc = ta === 'left' ? 'flex-start' : ta === 'right' ? 'flex-end' : 'center';
           const cellColor = c.cellColors?.[key] ?? '#000000';
@@ -393,9 +438,23 @@ function BodyElementView({
                 color: cellColor,
                 fontSize: `${fpt}pt`,
                 fontWeight: fw,
+                overflow: 'hidden',
               }}
             >
-              {renderPrintResolvedContent(text)}
+              {showImage ? (
+                <img
+                  src={text}
+                  alt=""
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    display: 'block',
+                  }}
+                />
+              ) : (
+                renderPrintResolvedContent(text)
+              )}
             </div>,
           );
         }
@@ -423,7 +482,10 @@ function BodyElementView({
     case 'dynamicList': {
       const cfg = el.config as import('../../types').PrintDynamicListElementConfig;
       const padded = padDynamicListDataColumns(cfg);
-      const matrixIdx = padded.findIndex(c => c.cellKind === 'colorSizeMatrix');
+      const matrixIdx = padded.findIndex(
+        c => c.cellKind === 'colorSizeMatrix' || c.cellKind === 'colorMaterialMatrix',
+      );
+      const matrixKind = matrixIdx >= 0 ? padded[matrixIdx]?.cellKind : undefined;
       const totalCols = (cfg.showSerial ? 1 : 0) + padded.length;
       const useListChunk = listPageChunk != null && !!ctx.printListRows?.length;
       const matrixListRows: PrintListRow[] = useListChunk
@@ -431,7 +493,9 @@ function BodyElementView({
         : ctx.printListRows && ctx.printListRows.length > 0
           ? ctx.printListRows
           : editorMode
-            ? EDITOR_DYNAMIC_LIST_MATRIX_PREVIEW
+            ? matrixKind === 'colorMaterialMatrix'
+              ? EDITOR_DYNAMIC_LIST_COLOR_MATERIAL_PREVIEW
+              : EDITOR_DYNAMIC_LIST_MATRIX_PREVIEW
             : [];
       const matrixSerialStart = useListChunk ? listPageChunk!.serialStart : 1;
 
@@ -457,7 +521,9 @@ function BodyElementView({
               onPointerDown={e => editorMode?.onElementPointerDown?.(el, e)}
             >
               <span className="px-1 text-center text-[7pt] font-bold text-slate-400">
-                当前无 printListRows；请传入明细行数据以预览颜色尺码数量列表
+                {matrixKind === 'colorMaterialMatrix'
+                  ? '当前无 printListRows；请传入明细行数据以预览颜色物料数量列表'
+                  : '当前无 printListRows；请传入明细行数据以预览颜色尺码数量列表'}
               </span>
             </div>
           );
@@ -480,14 +546,25 @@ function BodyElementView({
             onPointerDown={e => editorMode?.onElementPointerDown?.(el, e)}
           >
             <div className={`flex min-h-0 flex-1 flex-col ${editorMode ? 'overflow-auto' : heightGrowMm > 0 ? 'overflow-visible' : 'overflow-hidden'}`}>
-              <DynamicListMatrixTable
-                cfg={cfg}
-                ctx={ctx}
-                padded={padded}
-                matrixIdx={matrixIdx}
-                listRows={matrixListRows}
-                serialStart={matrixSerialStart}
-              />
+              {matrixKind === 'colorMaterialMatrix' ? (
+                <DynamicListColorMaterialMatrixTable
+                  cfg={cfg}
+                  ctx={ctx}
+                  padded={padded}
+                  matrixIdx={matrixIdx}
+                  listRows={matrixListRows}
+                  serialStart={matrixSerialStart}
+                />
+              ) : (
+                <DynamicListMatrixTable
+                  cfg={cfg}
+                  ctx={ctx}
+                  padded={padded}
+                  matrixIdx={matrixIdx}
+                  listRows={matrixListRows}
+                  serialStart={matrixSerialStart}
+                />
+              )}
             </div>
           </div>
         );
@@ -599,8 +676,10 @@ function BodyElementView({
           ) : null}
           {padded.map(col => {
             const text = resolvePrintPlaceholders(col.contentTemplate, rowCtx);
+            const showImage = isLikelyPrintImageUrl(text);
             const bpt = col.fontSizePt ?? cfg.fontSizePt ?? 8;
             const bw = col.fontWeight === 'bold' ? 700 : 400;
+            const rowHeightMm = cfg.bodyRowHeightMm != null && cfg.bodyRowHeightMm > 0 ? cfg.bodyRowHeightMm : 6;
             return (
               <div
                 key={`b-${col.id}`}
@@ -614,9 +693,19 @@ function BodyElementView({
                 }}
                 title={text.length > 120 ? `${text.slice(0, 120)}…` : text}
               >
-                <span className="min-w-0 w-full break-words" style={{ textAlign: col.textAlign ?? 'left' }}>
-                  {renderPrintResolvedContent(text)}
-                </span>
+                {showImage ? (
+                  <div className="h-full w-full flex items-center justify-center overflow-hidden">
+                    <img
+                      src={text}
+                      alt=""
+                      style={{ maxWidth: '100%', maxHeight: `${rowHeightMm}mm`, width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }}
+                    />
+                  </div>
+                ) : (
+                  <span className="min-w-0 w-full break-words" style={{ textAlign: col.textAlign ?? 'left' }}>
+                    {renderPrintResolvedContent(text)}
+                  </span>
+                )}
               </div>
             );
           })}

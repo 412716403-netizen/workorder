@@ -57,7 +57,7 @@ import PlanDetailPanel from './plan-order-list/PlanDetailPanel';
 import { PlanPrintTemplateManageDialog } from '../components/plan-print/PlanPrintTemplateManageDialog';
 import { plans as plansApi } from '../services/api';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import { formatPlanOrderCreatedAtForList } from '../utils/localDateTime';
+import { formatPlanOrderCreatedAtForList, toLocalDateYmd } from '../utils/localDateTime';
 import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
 
 interface PlanOrderListViewProps {
@@ -552,6 +552,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                               {createdListLabel}
                             </span>
                           )}
+                          {planFormSettings.listDisplay?.showDeliveryDate === true && plan.dueDate && (
+                            <span className="flex items-center gap-1 shrink-0" title="交货日期">
+                              <Clock className="w-3 h-3 shrink-0" />
+                              交货 {toLocalDateYmd(plan.dueDate) || String(plan.dueDate).slice(0, 10)}
+                            </span>
+                          )}
                           {customListFields.map(cf =>
                             renderPlanListCustomFieldValue(cf, plan, setImagePreviewUrl, setFilePreviewUrl, setFilePreviewType),
                           )}
@@ -636,6 +642,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                     <span className="flex items-center gap-1 shrink-0" title="单据创建时间">
                                       <CalendarClock className="w-3 h-3 shrink-0" />
                                       {createdListLabel}
+                                    </span>
+                                  )}
+                                  {planFormSettings.listDisplay?.showDeliveryDate === true && plan.dueDate && (
+                                    <span className="flex items-center gap-1 shrink-0" title="交货日期">
+                                      <Clock className="w-3 h-3 shrink-0" />
+                                      交货 {toLocalDateYmd(plan.dueDate) || String(plan.dueDate).slice(0, 10)}
                                     </span>
                                   )}
                                   {customListFields.map(cf =>
@@ -728,6 +740,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                   <span className="flex items-center gap-1 shrink-0" title="单据创建时间">
                                     <CalendarClock className="w-3 h-3 shrink-0" />
                                     {createdListLabel}
+                                  </span>
+                                )}
+                                {planFormSettings.listDisplay?.showDeliveryDate === true && plan.dueDate && (
+                                  <span className="flex items-center gap-1 shrink-0" title="交货日期">
+                                    <Clock className="w-3 h-3 shrink-0" />
+                                    交货 {toLocalDateYmd(plan.dueDate) || String(plan.dueDate).slice(0, 10)}
                                   </span>
                                 )}
                                 {customListFields.map(cf =>
@@ -853,7 +871,11 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
 
         const handlePickListTemplate = (t: PrintTemplate) => {
           const prod = products.find(p => p.id === pickerPlan.productId);
-          const printListRows = buildPlanPrintListRows(pickerPlan, prod, dictionaries);
+          const printListRows = buildPlanPrintListRows(pickerPlan, prod, dictionaries, {
+            globalNodes,
+            boms,
+            products,
+          });
           setPlanListPrintRun({
             template: t,
             plan: { ...pickerPlan, _printListRows: printListRows } as PlanOrder,

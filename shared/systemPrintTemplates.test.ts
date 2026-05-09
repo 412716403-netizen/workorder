@@ -12,6 +12,7 @@ import {
   BUILTIN_OUTSOURCE_MATERIAL_RETURN_PRINT_TEMPLATE_ID,
   BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID,
   BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
+  BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID,
   mergePrintTemplatesForTenantConfig,
   stripSystemPrintTemplatesForPersistence,
 } from './systemPrintTemplates';
@@ -34,6 +35,7 @@ describe('mergePrintTemplatesForTenantConfig', () => {
     expect(ids).toContain(BUILTIN_OUTSOURCE_MATERIAL_RETURN_PRINT_TEMPLATE_ID);
     expect(ids).toContain(BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID);
     expect(ids).toContain(BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID);
+    expect(ids).toContain(BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID);
     expect(ids).toContain('tenant-a');
   });
 
@@ -70,6 +72,7 @@ describe('stripSystemPrintTemplatesForPersistence', () => {
       { id: BUILTIN_OUTSOURCE_MATERIAL_RETURN_PRINT_TEMPLATE_ID, name: '外协退', paperSize: { widthMm: 241, heightMm: 140 }, elements: [], createdAt: '', updatedAt: '' },
       { id: BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID, name: '不良', paperSize: { widthMm: 241, heightMm: 140 }, elements: [], createdAt: '', updatedAt: '' },
       { id: BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID, name: '报工', paperSize: { widthMm: 241, heightMm: 140 }, elements: [], createdAt: '', updatedAt: '' },
+      { id: BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID, name: '计划单', paperSize: { widthMm: 210, heightMm: 297 }, elements: [], createdAt: '', updatedAt: '' },
       { id: 'x', name: 'x', paperSize: { widthMm: 210, heightMm: 297 }, elements: [], createdAt: '', updatedAt: '' },
     ]);
     expect(stripped.map(x => (x as { id: string }).id)).toEqual(['x']);

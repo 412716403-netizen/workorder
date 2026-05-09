@@ -139,6 +139,8 @@ function DynamicListPropertyEditorInner({
   const columns = c.columns ?? [];
   const safeIdx = columns.length ? Math.min(colIdx, columns.length - 1) : 0;
   const active = columns[safeIdx];
+  const activeIsMatrixColumn =
+    active.cellKind === 'colorSizeMatrix' || active.cellKind === 'colorMaterialMatrix';
 
   const syncColumnCount = (n: number) => {
     const cfg = cRef.current;
@@ -380,8 +382,9 @@ function DynamicListPropertyEditorInner({
       </Labeled>
       <p className="text-[10px] font-black uppercase text-slate-400">列配置</p>
       <p className="text-[10px] leading-relaxed text-slate-400">
-        每表仅允许一列为「颜色尺码数量」：在下方「列类型」中选矩阵时会自动取消其它列的矩阵类型。矩阵数据来自打印上下文的{' '}
-        <code className="rounded bg-slate-100 px-0.5">colorSizeMatrixJson</code>。
+        每表仅允许一列为矩阵列（颜色尺码数量或颜色物料数量）：下方「列类型」中选矩阵时会自动取消其它列的矩阵类型。数据分别来自{' '}
+        <code className="rounded bg-slate-100 px-0.5">colorSizeMatrixJson</code>（尺码矩阵）与计划单{' '}
+        <code className="rounded bg-slate-100 px-0.5">colorMaterialMatrixJson</code>（按工序节点的物料矩阵）。
       </p>
       <Labeled label="当前列">
         <select
@@ -398,22 +401,46 @@ function DynamicListPropertyEditorInner({
       </Labeled>
       <Labeled label="列类型">
         <select
-          value={active.cellKind === 'colorSizeMatrix' ? 'colorSizeMatrix' : 'text'}
+          value={
+            active.cellKind === 'colorMaterialMatrix'
+              ? 'colorMaterialMatrix'
+              : active.cellKind === 'colorSizeMatrix'
+                ? 'colorSizeMatrix'
+                : 'text'
+          }
           onChange={e => {
             const v = e.target.value;
+            const clearOtherMatrix = (col: PrintDynamicListColumn, i: number) =>
+              i === safeIdx
+                ? col
+                : col.cellKind === 'colorSizeMatrix' || col.cellKind === 'colorMaterialMatrix'
+                  ? { ...col, cellKind: undefined }
+                  : col;
+
             if (v === 'colorSizeMatrix') {
               const next = columns.map((col, i) =>
                 i === safeIdx
                   ? {
-                      ...col,
+                      ...clearOtherMatrix(col, i),
                       cellKind: 'colorSizeMatrix' as const,
                       matrixColorHeader: col.matrixColorHeader ?? '颜色',
-                      matrixSizeGroupTitle: col.matrixSizeGroupTitle ?? '尺码数量',
+                      matrixSizeGroupTitle: '尺码数量',
                       textAlign: 'center' as const,
                     }
-                  : col.cellKind === 'colorSizeMatrix'
-                    ? { ...col, cellKind: undefined }
-                    : col,
+                  : clearOtherMatrix(col, i),
+              );
+              onUpdateElementConfig(el.id, { ...cRef.current, columns: next });
+            } else if (v === 'colorMaterialMatrix') {
+              const next = columns.map((col, i) =>
+                i === safeIdx
+                  ? {
+                      ...clearOtherMatrix(col, i),
+                      cellKind: 'colorMaterialMatrix' as const,
+                      matrixColorHeader: col.matrixColorHeader ?? '颜色',
+                      matrixSizeGroupTitle: '工序物料',
+                      textAlign: 'center' as const,
+                    }
+                  : clearOtherMatrix(col, i),
               );
               onUpdateElementConfig(el.id, { ...cRef.current, columns: next });
             } else {
@@ -424,6 +451,7 @@ function DynamicListPropertyEditorInner({
         >
           <option value="text">普通列</option>
           <option value="colorSizeMatrix">颜色尺码数量</option>
+          {listSrc === 'plan' ? <option value="colorMaterialMatrix">颜色物料数量</option> : null}
         </select>
       </Labeled>
       <Labeled label="列名（表头）">
@@ -434,7 +462,7 @@ function DynamicListPropertyEditorInner({
           className="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs font-bold"
         />
       </Labeled>
-      {active.cellKind === 'colorSizeMatrix' ? (
+      {activeIsMatrixColumn ? (
         <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50/80 p-2">
           <Labeled label="矩阵表头：颜色">
             <input
@@ -444,10 +472,19 @@ function DynamicListPropertyEditorInner({
               className="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs font-bold"
             />
           </Labeled>
-          <Labeled label="矩阵表头：尺码数量（跨多尺码列）">
+          <Labeled
+            label={
+              active.cellKind === 'colorMaterialMatrix'
+                ? '矩阵表头：工序物料（跨多物料列）'
+                : '矩阵表头：尺码数量（跨多尺码列）'
+            }
+          >
             <input
               type="text"
-              value={active.matrixSizeGroupTitle ?? '尺码数量'}
+              value={
+                active.matrixSizeGroupTitle ??
+                (active.cellKind === 'colorMaterialMatrix' ? '工序物料' : '尺码数量')
+              }
               onChange={e => patchColumn(safeIdx, { matrixSizeGroupTitle: e.target.value })}
               className="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs font-bold"
             />
@@ -460,10 +497,10 @@ function DynamicListPropertyEditorInner({
             value={active.contentTemplate}
             onChange={e => patchColumn(safeIdx, { contentTemplate: e.target.value })}
             rows={3}
-            disabled={active.cellKind === 'colorSizeMatrix'}
+            disabled={activeIsMatrixColumn}
             className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs disabled:cursor-not-allowed disabled:bg-slate-100"
           />
-          {active.cellKind === 'colorSizeMatrix' ? null : (
+          {activeIsMatrixColumn ? null : (
             <FieldPicker
               options={listFieldOptions}
               onPick={ph => patchColumn(safeIdx, { contentTemplate: active.contentTemplate + ph })}
@@ -471,7 +508,7 @@ function DynamicListPropertyEditorInner({
           )}
         </div>
       </Labeled>
-      {active.cellKind === 'colorSizeMatrix' ? (
+      {activeIsMatrixColumn ? (
         <p className="text-[10px] leading-relaxed text-slate-400">矩阵列内容由行数据 JSON 渲染，无需填写「内容」。</p>
       ) : null}
       <Labeled label="对齐方式">

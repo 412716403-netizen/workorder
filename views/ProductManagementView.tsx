@@ -121,6 +121,18 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     });
   };
 
+  const productSortTimeMs = (p: Product): number => {
+    const withMeta = p as Product & { createdAt?: string; updatedAt?: string };
+    const ts = Date.parse(withMeta.createdAt ?? withMeta.updatedAt ?? '');
+    if (Number.isFinite(ts) && ts > 0) return ts;
+    const m = /^p-(\d+)-/.exec(p.id ?? '');
+    if (m) {
+      const idTs = Number(m[1]);
+      if (Number.isFinite(idTs) && idTs > 0) return idTs;
+    }
+    return 0;
+  };
+
   const filteredProducts = useMemo(() => {
     const inCategory =
       activeCategoryFilter === PRODUCT_ARCHIVE_ALL
@@ -136,7 +148,11 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
             const d = (p.description ?? '').toLowerCase();
             return n.includes(q) || s.includes(q) || d.includes(q);
           });
-    return searched.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id));
+    return [...searched].sort((a, b) => {
+      const t = productSortTimeMs(b) - productSortTimeMs(a);
+      if (t !== 0) return t;
+      return b.id.localeCompare(a.id, 'zh-CN');
+    });
   }, [products, activeCategoryFilter, debouncedProductSearch]);
 
   const productsInActiveCategoryCount = useMemo(() => {

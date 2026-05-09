@@ -16,6 +16,8 @@ interface FlowSummaryRow {
   totalQuantity: number;
   milestoneStr: string;
   typeStr: string;
+  /** 工单模式下由工单 due_date 格式化 */
+  dueDateDisplay?: string;
 }
 
 /** 从外协主列表卡片打开流水时预填筛选；为 null 时表示从工具栏打开，清空筛选 */
@@ -28,6 +30,8 @@ export type OutsourceFlowOpenSeed = {
 
 export interface OutsourceFlowListModalProps {
   productionLinkMode: 'order' | 'product';
+  /** 工单模式且计划配置开启「显示交货日期」时展示交货日期列 */
+  showOrderDueDateColumn?: boolean;
   outsourceFlowSummaryRows: FlowSummaryRow[];
   globalNodes: GlobalNodeTemplate[];
   userPermissions?: string[];
@@ -42,6 +46,7 @@ export interface OutsourceFlowListModalProps {
 
 const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
   productionLinkMode,
+  showOrderDueDateColumn = false,
   outsourceFlowSummaryRows,
   globalNodes,
   userPermissions,
@@ -51,6 +56,8 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
   flowOpenSeed = null,
   flowOpenNonce = 0,
 }) => {
+  const summaryColSpan =
+    productionLinkMode === 'product' ? 8 : showOrderDueDateColumn ? 10 : 9;
   const [flowFilterDateFrom, setFlowFilterDateFrom] = useState('');
   const [flowFilterDateTo, setFlowFilterDateTo] = useState('');
   const [flowFilterType, setFlowFilterType] = useState<'all' | '发出' | '收回'>('all');
@@ -211,6 +218,9 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">类型</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">外协工厂</th>
                     {productionLinkMode !== 'product' && <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">工单号</th>}
+                    {productionLinkMode !== 'product' && showOrderDueDateColumn && (
+                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">交货日期</th>
+                    )}
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">产品</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">工序</th>
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">数量</th>
@@ -234,6 +244,9 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
                         </td>
                         <td className="px-4 py-3 font-bold text-slate-800">{row.partner}</td>
                         {productionLinkMode !== 'product' && <td className="px-4 py-3 text-[10px] font-black text-indigo-600 uppercase">{row.orderNumber}</td>}
+                        {productionLinkMode !== 'product' && showOrderDueDateColumn && (
+                          <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{row.dueDateDisplay ?? '—'}</td>
+                        )}
                         <td className="px-4 py-3 font-bold text-slate-800">{row.productName}</td>
                         <td className="px-4 py-3 font-bold text-slate-700">{row.milestoneStr}</td>
                         <td className="px-4 py-3 text-right font-black text-indigo-600">{row.totalQuantity}</td>
@@ -248,7 +261,7 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
                     );
                   })}
                   <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold">
-                    <td className="px-4 py-3" colSpan={productionLinkMode === 'product' ? 8 : 9}>
+                    <td className="px-4 py-3" colSpan={summaryColSpan}>
                       <span className="text-[10px] text-slate-500 uppercase mr-3">合计</span>
                       <span className="text-xs text-indigo-600">发出 {outsourceFlowTotalDispatch} 件</span>
                       <span className="text-slate-300 mx-2">|</span>

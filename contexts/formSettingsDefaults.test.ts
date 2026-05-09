@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   normalizeDecimals,
+  normalizePlanFormSettings,
   normalizeMaterialFormSettings,
   normalizeOutsourceFormSettings,
   normalizeReworkFormSettings,
@@ -17,6 +18,25 @@ import {
   BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID,
   BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
 } from '../shared/systemPrintTemplates';
+
+describe('normalizePlanFormSettings listDisplay', () => {
+  it('defaults showDeliveryDate to false when unset', () => {
+    const n = normalizePlanFormSettings({});
+    expect(n.listDisplay?.showDeliveryDate).toBe(false);
+  });
+
+  it('preserves showDeliveryDate true when set', () => {
+    const n = normalizePlanFormSettings({ listDisplay: { showDeliveryDate: true } });
+    expect(n.listDisplay?.showDeliveryDate).toBe(true);
+  });
+
+  it('strips legacy standard field id dueDate from normalized standardFields', () => {
+    const n = normalizePlanFormSettings({
+      standardFields: [{ id: 'dueDate', label: '旧交期', showInList: true, showInCreate: false, showInDetail: true }],
+    });
+    expect(n.standardFields.some(f => f.id === 'dueDate')).toBe(false);
+  });
+});
 
 describe('normalizeDecimals', () => {
   it('converts string quantity to number', () => {

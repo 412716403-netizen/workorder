@@ -21,6 +21,7 @@ import type {
   ReworkFormSettings,
   PrintTemplate,
   PsiRecord,
+  PlanFormSettings,
 } from '../types';
 import { DEFAULT_OUTSOURCE_FORM_SETTINGS } from '../types';
 import StockMaterialPanel from './production-ops/StockMaterialPanel';
@@ -65,6 +66,8 @@ interface ProductionMgmtOpsViewProps {
   tenantRole?: string;
   /** 生产物料领退料弹窗内合并本地进销存批次余量（可选） */
   psiRecords?: PsiRecord[];
+  /** 计划单列表显示（外协流水「交货日期」列等） */
+  planFormSettings?: PlanFormSettings;
 }
 
 const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
@@ -103,6 +106,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
   userPermissions,
   tenantRole,
   psiRecords = [],
+  planFormSettings,
 }) => {
   const panelProps = {
     productionLinkMode,
@@ -148,6 +152,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
       <OutsourcePanel
         {...panelProps}
         plans={plans}
+        planFormSettings={planFormSettings}
         materialFormSettings={materialFormSettings}
         outsourceFormSettings={outsourceFormSettings}
         onUpdateOutsourceFormSettings={onUpdateOutsourceFormSettings}

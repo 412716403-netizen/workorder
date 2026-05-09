@@ -138,6 +138,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
   const [selectedPOOrderNums, setSelectedPOOrderNums] = useState<string[]>([]);
   const [selectedPOItemIds, setSelectedPOItemIds] = useState<string[]>([]);
   const [selectedPOItemQuantities, setSelectedPOItemQuantities] = useState<Record<string, number>>({});
+  const [selectedPOItemPurchasePrices, setSelectedPOItemPurchasePrices] = useState<Record<string, number>>({});
   const [selectedPOItemBatches, setSelectedPOItemBatches] = useState<Record<string, string>>({});
   /** 来源订单卡片区：单号/供应商/行内品名 SKU */
   const [fromOrderPODocSearch, setFromOrderPODocSearch] = useState('');
@@ -278,8 +279,10 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
         ...poBase
       } = item;
       const lineCd = lineCustomDataFor(item);
+      const unitPurchasePrice = Number(selectedPOItemPurchasePrices[item.id] ?? item.purchasePrice ?? 0);
       newRecords.push({
         ...poBase,
+        purchasePrice: unitPurchasePrice,
         id: `psi-pb-${baseId}-${idx}`,
         type: 'PURCHASE_BILL',
         docNumber: pbDocNumber,
@@ -696,6 +699,11 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                                   vis.forEach(i => { delete n[i.id]; });
                                   return n;
                                 });
+                                setSelectedPOItemPurchasePrices(prev => {
+                                  const n = { ...prev };
+                                  vis.forEach(i => { delete n[i.id]; });
+                                  return n;
+                                });
                               } else {
                                 setSelectedPOItemIds(prev => {
                                   const s = new Set(prev);
@@ -705,6 +713,13 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                                 setSelectedPOItemQuantities(prev => {
                                   const next = { ...prev };
                                   vis.forEach(i => { next[i.id] = i.remainingQty; });
+                                  return next;
+                                });
+                                setSelectedPOItemPurchasePrices(prev => {
+                                  const next = { ...prev };
+                                  vis.forEach(i => {
+                                    if (next[i.id] === undefined) next[i.id] = Number(i.purchasePrice ?? 0);
+                                  });
                                   return next;
                                 });
                               }
@@ -750,9 +765,14 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                             setSelectedPOItemIds(prev => prev.filter(id => id !== item.id));
                             setSelectedPOItemQuantities(prev => { const n = { ...prev }; delete n[item.id]; return n; });
                             setSelectedPOItemBatches(prev => { const n = { ...prev }; delete n[item.id]; return n; });
+                            setSelectedPOItemPurchasePrices(prev => { const n = { ...prev }; delete n[item.id]; return n; });
                           } else {
                             setSelectedPOItemIds(prev => [...prev, item.id]);
                             setSelectedPOItemQuantities(prev => ({ ...prev, [item.id]: item.remainingQty }));
+                            setSelectedPOItemPurchasePrices(prev => ({
+                              ...prev,
+                              [item.id]: prev[item.id] ?? Number(item.purchasePrice ?? 0),
+                            }));
                           }
                         };
                         return (
@@ -783,7 +803,32 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                                 </span>
                               </td>
                             )}
-                            <td className="px-3 py-2 text-right"><span className="text-xs font-bold text-slate-500">¥{(item.purchasePrice ?? 0).toFixed(2)}</span></td>
+                            <td className="px-3 py-2 text-right align-middle" onClick={e => e.stopPropagation()}>
+                              {isChecked ? (
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={0.01}
+                                  value={
+                                    selectedPOItemPurchasePrices[item.id] !== undefined
+                                      ? selectedPOItemPurchasePrices[item.id]
+                                      : (item.purchasePrice ?? '')
+                                  }
+                                  onChange={e => {
+                                    const raw = e.target.value;
+                                    const v = raw === '' ? 0 : parseFloat(raw);
+                                    setSelectedPOItemPurchasePrices(prev => ({
+                                      ...prev,
+                                      [item.id]: Number.isFinite(v) ? v : 0,
+                                    }));
+                                  }}
+                                  className="ml-auto block w-24 rounded-lg border border-slate-200 py-1.5 px-2 text-right text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                                  title="可修改本次入库单价（默认取订单行单价）"
+                                />
+                              ) : (
+                                <span className="text-xs font-bold text-slate-500">¥{(Number(item.purchasePrice) || 0).toFixed(2)}</span>
+                              )}
+                            </td>
                             <td className="px-3 py-2 text-right"><span className="text-sm font-bold text-slate-600">{formatQtyDisplay(item.quantity)} {item.productId ? getUnitName(item.productId) : 'PCS'}</span></td>
                             <td className="px-3 py-2 text-right"><span className="text-xs font-bold text-slate-400">{item.receivedQty}</span></td>
                             <td className="px-3 py-2 text-right"><span className="text-sm font-black text-indigo-600">{item.remainingQty}</span></td>

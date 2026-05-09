@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
 import type { PrintDynamicListColumn, PrintDynamicListElementConfig, PrintListRow, PrintRenderContext } from '../../types';
-import { fmtMatrixCellQtyLocal, parseColorSizeMatrixFromRow } from '../../utils/colorSizeMatrixPrint';
+import type { ColorMaterialMatrixMaterialCell } from '../../utils/colorMaterialMatrixPrint';
+import { parseColorMaterialMatrixFromRow } from '../../utils/colorMaterialMatrixPrint';
 import { isLikelyPrintImageUrl, resolvePrintPlaceholders } from '../../utils/printResolve';
-import { matrixKForPrintRow, matrixVisualSubRowCountForRow, sizeHeadCellLabel } from '../../utils/dynamicListMatrix';
+import { matrixKForPrintRow, matrixVisualSubRowCountForRow } from '../../utils/dynamicListMatrix';
 import { DYNAMIC_LIST_DEFAULT_BODY_ROW_MM } from '../../utils/printListPagination';
 
 const BORDER_THIN = '0.25mm';
@@ -16,6 +17,10 @@ type Props = {
   listRows: PrintListRow[];
   serialStart: number;
 };
+
+type SegNode = { kind: 'node'; nodeName: string };
+type SegPair = { kind: 'pair'; colorName: string; materials: ColorMaterialMatrixMaterialCell[] };
+type Seg = SegNode | SegPair;
 
 function renderCellContent(text: string, maxHeightMm: number): React.ReactNode {
   if (isLikelyPrintImageUrl(text)) {
@@ -32,6 +37,22 @@ function renderCellContent(text: string, maxHeightMm: number): React.ReactNode {
   return text || '\u00a0';
 }
 
+function segmentsForMaterialMatrix(row: PrintListRow): Seg[] {
+  const p = parseColorMaterialMatrixFromRow(row);
+  const out: Seg[] = [];
+  if (!p || p.nodeBlocks.length === 0) {
+    out.push({ kind: 'pair', colorName: '—', materials: [] });
+    return out;
+  }
+  for (const b of p.nodeBlocks) {
+    out.push({ kind: 'node', nodeName: b.nodeName });
+    for (const cr of b.colorRows) {
+      out.push({ kind: 'pair', colorName: cr.colorName, materials: cr.materials });
+    }
+  }
+  return out;
+}
+
 function mmAt(cfg: PrintDynamicListElementConfig, paddedIndex: number): number | undefined {
   const raw = cfg.dataColumnWidthsMm?.[paddedIndex];
   if (raw == null || raw === '') return undefined;
@@ -40,7 +61,7 @@ function mmAt(cfg: PrintDynamicListElementConfig, paddedIndex: number): number |
   return n;
 }
 
-export function DynamicListMatrixTable({ cfg, ctx, padded, matrixIdx, listRows, serialStart }: Props) {
+export function DynamicListColorMaterialMatrixTable({ cfg, ctx, padded, matrixIdx, listRows, serialStart }: Props) {
   const mcol = padded[matrixIdx];
   const bStyle = cfg.borderStyle === 'none' ? 'none' : cfg.borderStyle;
   const bColor = cfg.borderColor;
@@ -144,7 +165,6 @@ export function DynamicListMatrixTable({ cfg, ctx, padded, matrixIdx, listRows, 
     wordBreak: 'break-all' as const,
   });
 
-  /** 与 tdBody 一致，保留列配置的 textAlign（勿再强制居中，否则普通列对齐无效） */
   const tdMerged = (col: PrintDynamicListColumn, extra?: React.CSSProperties): React.CSSProperties => ({
     ...tdBody(col, extra),
   });
@@ -177,11 +197,7 @@ export function DynamicListMatrixTable({ cfg, ctx, padded, matrixIdx, listRows, 
       {showHeader ? (
         <thead>
           <tr style={headerTrStyle}>
-            {showSerial ? (
-              <th style={serialThStyle}>
-                {cfg.serialHeaderLabel || '序号'}
-              </th>
-            ) : null}
+            {showSerial ? <th style={serialThStyle}>{cfg.serialHeaderLabel || '序号'}</th> : null}
             {padded.slice(0, matrixIdx).map(col => (
               <th key={col.id} style={thStyle(col)}>
                 {col.headerLabel}
@@ -189,7 +205,7 @@ export function DynamicListMatrixTable({ cfg, ctx, padded, matrixIdx, listRows, 
             ))}
             <th style={thStyle(mcol)}>{mcol.matrixColorHeader ?? '颜色'}</th>
             <th colSpan={maxK} style={thStyle(mcol)}>
-              {mcol.matrixSizeGroupTitle ?? '尺码数量'}
+              {mcol.matrixSizeGroupTitle ?? '工序物料'}
             </th>
             {padded.slice(matrixIdx + 1).map(col => (
               <th key={col.id} style={thStyle(col)}>
@@ -203,75 +219,128 @@ export function DynamicListMatrixTable({ cfg, ctx, padded, matrixIdx, listRows, 
         {listRows.map((row, ri) => {
           const rowCtx: PrintRenderContext = { ...ctx, listRow: row };
           const curSerial = serialStart + ri;
-          const p = parseColorSizeMatrixFromRow(row);
-          const K = matrixKForPrintRow(row, cfg);
-          const colorRows =
-            p && p.colorRows.length > 0 ? p.colorRows : [{ colorName: '', quantities: [] as number[] }];
+          const segments = segmentsForMaterialMatrix(row);
           const totalSubRows = matrixVisualSubRowCountForRow(row, cfg);
+          const K = matrixKForPrintRow(row, cfg);
           const productTop = ri > 0;
           const topExtra: React.CSSProperties | undefined =
             productTop && bStyle !== 'none'
               ? { borderTop: `${BORDER_THICK} ${bStyle} ${bColor}` }
               : undefined;
 
+          let rowOrdinal = 0;
+          const bodyRows: React.ReactNode[] = [];
+
+          for (let si = 0; si < segments.length; si++) {
+            const seg = segments[si]!;
+            const isFirstRowOfProduct = rowOrdinal === 0;
+
+            if (seg.kind === 'node') {
+              bodyRows.push(
+                <tr key={`${ri}-${rowOrdinal}-node`} style={bodyTrStyle}>
+                  {showSerial && isFirstRowOfProduct ? (
+                    <td rowSpan={totalSubRows} style={serialTdStyle(topExtra)}>
+                      {curSerial}
+                    </td>
+                  ) : null}
+                  {padded.slice(0, matrixIdx).map(col => {
+                    if (!isFirstRowOfProduct) return null;
+                    const text = resolvePrintPlaceholders(col.contentTemplate, rowCtx);
+                    return (
+                      <td key={col.id} rowSpan={totalSubRows} style={tdMerged(col, topExtra)}>
+                        {renderCellContent(text, rowHeightMm * totalSubRows)}
+                      </td>
+                    );
+                  })}
+                  <td style={tdBody(mcol, isFirstRowOfProduct ? topExtra : undefined)}>{'\u00a0'}</td>
+                  <td
+                    colSpan={maxK}
+                    style={tdBody(mcol, {
+                      ...(isFirstRowOfProduct ? topExtra : undefined),
+                      textAlign: 'center',
+                      fontWeight: 600,
+                    })}
+                  >
+                    {seg.nodeName.trim() || '\u00a0'}
+                  </td>
+                  {padded.slice(matrixIdx + 1).map(col => {
+                    if (!isFirstRowOfProduct) return null;
+                    const text = resolvePrintPlaceholders(col.contentTemplate, rowCtx);
+                    return (
+                      <td key={col.id} rowSpan={totalSubRows} style={tdMerged(col, topExtra)}>
+                        {renderCellContent(text, rowHeightMm * totalSubRows)}
+                      </td>
+                    );
+                  })}
+                </tr>,
+              );
+              rowOrdinal += 1;
+              continue;
+            }
+
+            const namesTop = isFirstRowOfProduct ? topExtra : undefined;
+            bodyRows.push(
+              <tr key={`${ri}-${rowOrdinal}-pair-a`} style={bodyTrStyle}>
+                {showSerial && isFirstRowOfProduct ? (
+                  <td rowSpan={totalSubRows} style={serialTdStyle(topExtra)}>
+                    {curSerial}
+                  </td>
+                ) : null}
+                {padded.slice(0, matrixIdx).map(col => {
+                  if (!isFirstRowOfProduct) return null;
+                  const text = resolvePrintPlaceholders(col.contentTemplate, rowCtx);
+                  return (
+                    <td key={col.id} rowSpan={totalSubRows} style={tdMerged(col, topExtra)}>
+                      {renderCellContent(text, rowHeightMm * totalSubRows)}
+                    </td>
+                  );
+                })}
+                <td rowSpan={2} style={tdBody(mcol, namesTop)}>
+                  {seg.colorName || '\u00a0'}
+                </td>
+                {Array.from({ length: maxK }, (_, qi) => {
+                  const m = qi < seg.materials.length ? seg.materials[qi] : undefined;
+                  const inK = qi < K;
+                  const txt = inK && m?.name != null && String(m.name).trim() !== '' ? String(m.name) : '';
+                  return (
+                    <td key={`nm-${qi}`} style={tdBody(mcol, namesTop)}>
+                      {txt || '\u00a0'}
+                    </td>
+                  );
+                })}
+                {padded.slice(matrixIdx + 1).map(col => {
+                  if (!isFirstRowOfProduct) return null;
+                  const text = resolvePrintPlaceholders(col.contentTemplate, rowCtx);
+                  return (
+                    <td key={col.id} rowSpan={totalSubRows} style={tdMerged(col, topExtra)}>
+                      {text || '\u00a0'}
+                    </td>
+                  );
+                })}
+              </tr>,
+            );
+            rowOrdinal += 1;
+
+            bodyRows.push(
+              <tr key={`${ri}-${rowOrdinal}-pair-b`} style={bodyTrStyle}>
+                {Array.from({ length: maxK }, (_, qi) => {
+                  const m = qi < seg.materials.length ? seg.materials[qi] : undefined;
+                  const inK = qi < K;
+                  const txt = inK && m?.ratio != null && String(m.ratio).trim() !== '' ? String(m.ratio) : '';
+                  return (
+                    <td key={`rt-${qi}`} style={tdBody(mcol)}>
+                      {txt || '\u00a0'}
+                    </td>
+                  );
+                })}
+              </tr>,
+            );
+            rowOrdinal += 1;
+          }
+
           return (
             <React.Fragment key={ri}>
-              {Array.from({ length: totalSubRows }, (_, sj) => {
-                const isSizeRow = sj === 0;
-                const colorIdx = sj - 1;
-                const cr = !isSizeRow ? colorRows[colorIdx] ?? { colorName: '', quantities: [] } : null;
-
-                return (
-                  <tr key={`${ri}-${sj}`} style={bodyTrStyle}>
-                    {showSerial && isSizeRow ? (
-                      <td rowSpan={totalSubRows} style={serialTdStyle(topExtra)}>
-                        {curSerial}
-                      </td>
-                    ) : null}
-                    {padded.slice(0, matrixIdx).map(col => {
-                      if (!isSizeRow) return null;
-                      const text = resolvePrintPlaceholders(col.contentTemplate, rowCtx);
-                      return (
-                        <td key={col.id} rowSpan={totalSubRows} style={tdMerged(col, topExtra)}>
-                          {renderCellContent(text, rowHeightMm * totalSubRows)}
-                        </td>
-                      );
-                    })}
-                    {isSizeRow ? (
-                      <>
-                        <td style={tdBody(mcol, topExtra)}>{'\u00a0'}</td>
-                        {Array.from({ length: maxK }, (_, qi) => (
-                          <td key={`sh-${qi}`} style={tdBody(mcol, topExtra)}>
-                            {p ? sizeHeadCellLabel(p, qi, K, maxK) : '\u00a0'}
-                          </td>
-                        ))}
-                      </>
-                    ) : (
-                      <>
-                        <td style={tdBody(mcol)}>{cr?.colorName || '\u00a0'}</td>
-                        {Array.from({ length: maxK }, (_, qi) => {
-                          const q = cr && qi < cr.quantities.length ? cr.quantities[qi] ?? 0 : 0;
-                          const inK = qi < K;
-                          return (
-                            <td key={`q-${qi}`} style={tdBody(mcol)}>
-                              {inK ? fmtMatrixCellQtyLocal(q) : '\u00a0'}
-                            </td>
-                          );
-                        })}
-                      </>
-                    )}
-                    {padded.slice(matrixIdx + 1).map(col => {
-                      if (!isSizeRow) return null;
-                      const text = resolvePrintPlaceholders(col.contentTemplate, rowCtx);
-                      return (
-                        <td key={col.id} rowSpan={totalSubRows} style={tdMerged(col, topExtra)}>
-                          {renderCellContent(text, rowHeightMm * totalSubRows)}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
+              {bodyRows}
             </React.Fragment>
           );
         })}

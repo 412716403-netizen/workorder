@@ -8,6 +8,7 @@ import {
   Product,
   GlobalNodeTemplate,
   OrderFormSettings,
+  PlanFormSettings,
   PlanOrder,
   PrintTemplate,
   ProductCategory,
@@ -73,6 +74,8 @@ interface OrderListViewProps {
   partners: Partner[];
   boms: BOM[];
   globalNodes: GlobalNodeTemplate[];
+  /** 计划单列表显示配置；用于工单模式下「交期」列是否与「显示交货日期」联动 */
+  planFormSettings?: PlanFormSettings;
   orderFormSettings: OrderFormSettings;
   printTemplates: PrintTemplate[];
   onUpdatePrintTemplates: (list: PrintTemplate[]) => void | Promise<void>;
@@ -137,6 +140,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   partners,
   boms,
   globalNodes,
+  planFormSettings,
   orderFormSettings,
   printTemplates,
   onUpdatePrintTemplates,
@@ -766,13 +770,23 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                             ))}
                         </div>
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
-                          {showInList('customer') && productionLinkMode !== 'product' && order.customer && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {order.customer}</span>}
-                          <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 总数: {orderTotalQty}</span>
-                          {showInList('dueDate') && order.dueDate && (
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" /> 交期: {toLocalDateYmd(order.dueDate) || order.dueDate}
-                            </span>
-                          )}
+                          {productionLinkMode !== 'product' &&
+                            (order.customer ?? '').trim() !== '' &&
+                            (planFormSettings?.standardFields?.find(f => f.id === 'customer')?.showInList ?? true) && (
+                              <span className="flex items-center gap-1">
+                                <User className="w-3 h-3" /> {order.customer}
+                              </span>
+                            )}
+                          <span className="inline-flex items-center gap-2 flex-wrap">
+                            <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 总数: {orderTotalQty}</span>
+                            {productionLinkMode !== 'product' &&
+                              planFormSettings?.listDisplay?.showDeliveryDate === true &&
+                              order.dueDate && (
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3 h-3" /> 交货日期: {toLocalDateYmd(order.dueDate) || order.dueDate}
+                              </span>
+                            )}
+                          </span>
                           {showInList('startDate') && order.startDate && (
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3" /> 开始: {toLocalDateYmd(order.startDate) || order.startDate}
@@ -1348,7 +1362,15 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
               </button>
             </div>
             <div className="flex-1 overflow-auto p-4">
-              <OrderFlowView orders={orders} products={products} embedded productionLinkMode={productionLinkMode} initialProductId={orderFlowProductId} onOpenOrderDetail={(id) => openOrderDetail(id, true)} />
+              <OrderFlowView
+                orders={orders}
+                products={products}
+                embedded
+                productionLinkMode={productionLinkMode}
+                planFormSettings={planFormSettings}
+                initialProductId={orderFlowProductId}
+                onOpenOrderDetail={(id) => openOrderDetail(id, true)}
+              />
             </div>
           </div>
         </div>

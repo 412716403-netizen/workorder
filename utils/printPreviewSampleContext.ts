@@ -12,6 +12,10 @@ import type {
   VirtualBatchPrintRow,
 } from '../types';
 import { COLOR_SIZE_MATRIX_JSON_KEY, matrixGroupToColorSizePayload, serializeColorSizeMatrixPayload } from './colorSizeMatrixPrint';
+import {
+  COLOR_MATERIAL_MATRIX_JSON_KEY,
+  serializeColorMaterialMatrixPayload,
+} from './colorMaterialMatrixPrint';
 import { formatBatchSerialLabel } from './serialLabels';
 import { amountToChineseRmbUppercase } from './numberToChineseRmb';
 
@@ -167,6 +171,60 @@ function sampleOutsourceDispatchPrintListRowsWithMatrix(): PrintListRow[] {
     remark: '',
     [COLOR_SIZE_MATRIX_JSON_KEY]: serializeColorSizeMatrixPayload(matrixGroupToColorSizePayload(g)),
   }));
+}
+
+/** 计划单列表打印预览：与真实 `buildPlanPrintListRows` 一致，每行同时带颜色尺码矩阵与颜色×工序物料矩阵 JSON */
+function samplePlanPrintListRowsWithMatrix(): PrintListRow[] {
+  const colorSizeJson = serializeColorSizeMatrixPayload({
+    sizes: ['XL', 'xs'],
+    colorRows: [
+      { colorName: '大红', quantities: [50, 50] },
+      { colorName: '颜色2', quantities: [50, 50] },
+    ],
+  });
+  const colorMaterialJson = serializeColorMaterialMatrixPayload({
+    nodeBlocks: [
+      {
+        nodeName: '织造',
+        colorRows: [
+          {
+            colorName: '黑',
+            materials: [
+              { name: '全毛黑色', ratio: '25' },
+              { name: '全毛白色', ratio: '5' },
+            ],
+          },
+          {
+            colorName: '白',
+            materials: [
+              { name: '全毛白色', ratio: '25' },
+              { name: '全毛黑色', ratio: '5' },
+            ],
+          },
+        ],
+      },
+      {
+        nodeName: '染色',
+        colorRows: [
+          { colorName: '黑', materials: [{ name: '染料A', ratio: '1' }] },
+          { colorName: '白', materials: [{ name: '染料B', ratio: '1.2' }] },
+        ],
+      },
+    ],
+  });
+  return [
+    {
+      lineNo: 1,
+      sku: '示例货号',
+      productName: '示例产品',
+      qty: 300,
+      unitPrice: '0',
+      amount: '0',
+      remark: '',
+      [COLOR_SIZE_MATRIX_JSON_KEY]: colorSizeJson,
+      [COLOR_MATERIAL_MATRIX_JSON_KEY]: colorMaterialJson,
+    },
+  ];
 }
 
 const SAMPLE_MATERIAL_ISSUE_PRINT: MaterialFlowPrintContext = {
@@ -460,6 +518,15 @@ export function augmentPrintPreviewContext(
       },
       printListRows: sampleOutsourceDispatchPrintListRowsWithMatrix(),
     };
+  }
+  if (dt === 'plan' && (!next.printListRows || next.printListRows.length === 0)) {
+    next = {
+      ...next,
+      printListRows: samplePlanPrintListRowsWithMatrix(),
+    };
+  }
+  if ((dt === 'plan' || dt === 'all') && next.plan && !String(next.plan.dueDate ?? '').trim()) {
+    next = { ...next, plan: { ...next.plan, dueDate: '2026-04-17' } };
   }
   if (previewShouldInjectSampleVirtualBatch(template) && next.virtualBatch == null) {
     next = { ...next, virtualBatch: buildSampleVirtualBatchPrintRow(next) };

@@ -136,7 +136,7 @@ interface PlanOrder {
   productId: string;
   items: PlanItem[];  // { variantId?, quantity }
   startDate: string;
-  dueDate: string;
+  dueDate?: string;  // 计划交货日期；列表/录入由 planFormSettings.listDisplay.showDeliveryDate 控制
   status: PlanStatus;
   customer: string;
   priority: 'High' | 'Medium' | 'Low';

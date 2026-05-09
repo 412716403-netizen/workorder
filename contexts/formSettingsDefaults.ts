@@ -81,6 +81,7 @@ export const DEFAULT_PLAN_FORM_SETTINGS: PlanFormSettings = {
     { id: 'createdAt', label: '创建时间', showInList: true, showInCreate: false, showInDetail: true },
   ],
   customFields: [],
+  listDisplay: { showDeliveryDate: false },
   listPrint: { showPrintButton: true },
 };
 
@@ -110,6 +111,9 @@ export function normalizePlanFormSettings(raw: PlanFormSettings | null | undefin
     ...s,
     standardFields: mergePlanStandardFields(s.standardFields).filter(f => f.id !== 'dueDate'),
     customFields: normalizePlanFormFieldConfigArray(s.customFields),
+    listDisplay: {
+      showDeliveryDate: s.listDisplay?.showDeliveryDate === true,
+    },
     listPrint: {
       showPrintButton: s.listPrint?.showPrintButton !== false,
       allowedTemplateIds: allowedList.length > 0 ? allowedList : undefined,

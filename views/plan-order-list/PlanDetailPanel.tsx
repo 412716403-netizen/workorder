@@ -200,9 +200,10 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   const [tempPlanInfo, setTempPlanInfo] = useState<{
     customer: string;
     createdAt: string;
+    dueDate: string;
     items: PlanItem[];
     customData?: Record<string, any>;
-  }>({ customer: '', createdAt: '', items: [] });
+  }>({ customer: '', createdAt: '', dueDate: '', items: [] });
 
   const [isSaving, setIsSaving] = useState(false);
   const [tempNodeRates, setTempNodeRates] = useState<Record<string, number>>({});
@@ -591,6 +592,9 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
       setTempPlanInfo({
         customer: viewPlan.customer,
         createdAt: createdDate,
+        dueDate: viewPlan.dueDate
+          ? toLocalDateYmd(viewPlan.dueDate) || String(viewPlan.dueDate).trim().slice(0, 10)
+          : '',
         items: JSON.parse(JSON.stringify(viewPlan.items || [])),
         customData: viewPlan.customData ? { ...viewPlan.customData } : {}
       });
@@ -635,6 +639,9 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
         assignments: tempAssignments,
         customer: tempPlanInfo.customer,
         createdAt: tempPlanInfo.createdAt,
+        ...(planFormSettings.listDisplay?.showDeliveryDate
+          ? { dueDate: tempPlanInfo.dueDate.trim() ? tempPlanInfo.dueDate.trim() : undefined }
+          : {}),
         items: tempPlanInfo.items,
         customData: tempPlanInfo.customData
       });
@@ -1050,6 +1057,17 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                       </div>
                     </div>
                   )}
+                  {planFormSettings.listDisplay?.showDeliveryDate === true && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">交货日期</label>
+                      <input
+                        type="date"
+                        value={tempPlanInfo.dueDate}
+                        onChange={e => setTempPlanInfo({ ...tempPlanInfo, dueDate: e.target.value })}
+                        className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none border border-slate-100"
+                      />
+                    </div>
+                  )}
                   {planFormSettings.standardFields.find(f => f.id === 'customer')?.showInDetail !== false && productionLinkMode !== 'product' && (
                     <div className="md:col-span-2 space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">计划客户（合作单位）</label>
@@ -1117,7 +1135,6 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                 </div>
                 <div className="space-y-4">
                    {productNodes.map((node, idx) => {
-                     const eligibleWorkers = workers.filter(w => w.assignedMilestoneIds?.includes(node.id));
                      const isAssigned = (tempAssignments[node.id] as NodeAssignment)?.workerIds?.length > 0;
                      const enableWorker =
                       equipmentFeaturesOn && isWorkerAssignmentEnabled(node);
@@ -1130,10 +1147,6 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-[11px] font-black shadow-inner ${isAssigned ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>{idx + 1}</div>
                              <div>
                                <h4 className="text-sm font-black text-slate-800">{node.name}</h4>
-                               <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">
-                                 {node.hasBOM ? '需配置BOM' : '标准工序'}
-                                 {canAssign ? (enableWorker && enableEquipment ? ' · 工人/设备派工' : enableWorker ? ' · 工人派工' : ' · 设备派工') : ' · 不派工'}
-                               </p>
                           </div>
                           </div>
                           <div className="flex-1 flex flex-col md:flex-row md:items-center gap-4 justify-between">

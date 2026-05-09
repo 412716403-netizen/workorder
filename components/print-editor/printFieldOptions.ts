@@ -90,6 +90,8 @@ export function buildPrintFieldOptions(opts: {
   outsourceDispatchCustomFields?: PlanFormFieldConfig[];
   /** 与表单配置「列表显示-外协发出显示交货日期」联动；为 true 时开放 {{外协发出.deliveryDate}} */
   showOutsourceDispatchDeliveryDate?: boolean;
+  /** 与计划单表单配置「列表显示-显示交货日期」联动；为 true 时开放 {{计划.dueDate}} */
+  showPlanDeliveryDate?: boolean;
   /** 外协收回自定义；{{外协收回.custom.<id>}} */
   outsourceReceiveCustomFields?: PlanFormFieldConfig[];
   /** 返工管理：处理不良自定义；{{处理不良.custom.<id>}} */
@@ -117,6 +119,7 @@ export function buildPrintFieldOptions(opts: {
   const outsourceMaterialReturnCustomFields = opts.outsourceMaterialReturnCustomFields ?? [];
   const outsourceDispatchCustomFields = opts.outsourceDispatchCustomFields ?? [];
   const showOutsourceDispatchDeliveryDate = opts.showOutsourceDispatchDeliveryDate === true;
+  const showPlanDeliveryDate = opts.showPlanDeliveryDate === true;
   const outsourceReceiveCustomFields = opts.outsourceReceiveCustomFields ?? [];
   const defectTreatmentCustomFields = opts.defectTreatmentCustomFields ?? [];
   const reworkReportCustomFields = opts.reworkReportCustomFields ?? [];
@@ -137,6 +140,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '计划', value: '计划.planNumber', label: '计划单号' },
     { group: '计划', value: '计划.customer', label: '客户' },
     { group: '计划', value: '计划.startDate', label: '开始日期' },
+    ...(showPlanDeliveryDate ? [{ group: '计划' as const, value: '计划.dueDate', label: '交货日期' }] : []),
     { group: '计划', value: '计划.priority', label: '优先级' },
     { group: '计划', value: '计划.status', label: '计划状态' },
     { group: '计划', value: '计划.totalQuantity', label: '计划总数量' },

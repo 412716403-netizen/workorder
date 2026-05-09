@@ -55,13 +55,7 @@ export function ComponentLibrary({ onPick }: { onPick?: (t: PaletteDropType) => 
             <DraggableChip paletteType="rect" label="矩形" icon={Square} onPick={onPick} />
             <DraggableChip paletteType="image" label="图片" icon={Image} onPick={onPick} />
             <DraggableChip paletteType="dynamicTable" label="静态表格" icon={Table2} onPick={onPick} />
-            <DraggableChip
-              paletteType="dynamicList"
-              label="动态列表"
-              description="可自动分页；列类型可选颜色尺码数量（矩阵）"
-              icon={ListOrdered}
-              onPick={onPick}
-            />
+            <DraggableChip paletteType="dynamicList" label="动态列表" icon={ListOrdered} onPick={onPick} />
           </div>
         </div>
         <div>

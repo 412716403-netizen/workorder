@@ -95,6 +95,10 @@ PrintRenderContext.virtualBatch
 
 实现入口：`utils/buildSalesBillPrintContext.ts`（`buildSalesBillPrintListRowsByProductLine`、`buildMatrixJsonAndTotalQtyFromVariantLine`）、`utils/variantMatrixPrintRows.ts` 及各 `utils/build*PrintContext.ts`。
 
+### 3.4.1 计划单动态列表「颜色物料数量」与 `colorMaterialMatrixJson`
+
+列类型为「颜色物料数量」仅在 **计划单**模版编辑器中出现选项；明细行由 `utils/buildPlanPrintListRows.ts`（传入 `globalNodes`、`boms`、`products`）在每条 `printListRows` 上附带 `colorMaterialMatrixJson`。载荷为按 **生产路线顺序** 的 `nodeBlocks[]`：每块含 `nodeName`（工序节点标题行），下列计划中涉及的每种成品颜色两行——物料名称行与配比/用量行。渲染组件：`components/print-editor/DynamicListColorMaterialMatrixTable.tsx`。分页与列表垂直推挤与尺码矩阵共用 `matrixVisualSubRowCountForRow(row, cfg)`，以便模版切换矩阵类型时使用对应 JSON。
+
 ### 3.5 动态列表下方元素的垂直推挤
 
 当列表实际内容高度超过画布上为该组件设定的高度时，**页眉 / 页脚不动**；**body 内**位于该动态列表**下方**（按 `y` 自上而下）的文本、线、图等元素会整体下移，下移量等于「内容所需高度 − 组件框高」，使模板里预留的相对间距在打印时仍成立。列表本身通过 `heightGrowMm` 增高以免裁切。
@@ -124,6 +128,7 @@ PrintRenderContext.virtualBatch
 `utils/printResolve.ts` 会把占位符解析到这些字段上，例如：
 
 - `{{计划.planNumber}}`
+- `{{计划.dueDate}}`（计划交货日期；打印编辑器「插入字段」是否在「计划」分组中显示该项，与计划表单配置「列表显示 → 显示交货日期」开关一致）
 - `{{工单.orderNumber}}`
 - `{{产品.name}}`
 - `{{系统.pageCurrent}}`

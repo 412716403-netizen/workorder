@@ -29,6 +29,7 @@ import type {
   ProcessSequenceMode,
   ProductMilestoneProgress,
   PsiRecord,
+  PlanFormSettings,
 } from '../../types';
 import { DEFAULT_MATERIAL_FORM_SETTINGS, DEFAULT_OUTSOURCE_FORM_SETTINGS } from '../../types';
 import { PanelProps, hasOpsPerm, OutsourceModalType } from './types';
@@ -89,8 +90,9 @@ import OutsourceFormConfigModal from './OutsourceFormConfigModal';
 import type { PartnerFlowDetailSeed } from '../../utils/outsourcePartnerFlowDetail';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import { toLocalDateYmd } from '../../utils/localDateTime';
 
-const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
+const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planFormSettings?: PlanFormSettings }> = ({
   productionLinkMode,
   productMilestoneProgresses,
   records,
@@ -113,6 +115,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
   userPermissions,
   tenantRole,
   plans = [],
+  planFormSettings,
   outsourceFormSettings = DEFAULT_OUTSOURCE_FORM_SETTINGS,
   onUpdateOutsourceFormSettings,
   printTemplates = [],
@@ -680,7 +683,11 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
         const hasDispatch = row.records.some(r => r.status !== '已收回');
         const hasReceive = row.records.some(r => r.status === '已收回');
         const typeStr = hasDispatch && hasReceive ? '发出、收回' : hasDispatch ? '发出' : '收回';
-        return { ...row, records: sorted, dateStr, partner, totalQuantity, milestoneStr, typeStr };
+        const ord = idx.ordersById.get(row.orderId);
+        const dueDateDisplay = ord?.dueDate
+          ? toLocalDateYmd(ord.dueDate) || String(ord.dueDate).trim().slice(0, 10)
+          : '—';
+        return { ...row, records: sorted, dateStr, partner, totalQuantity, milestoneStr, typeStr, dueDateDisplay };
       })
       .sort((a, b) => {
         const ta = flowRecordsEarliestMs(a.records);
@@ -689,6 +696,9 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
         return (a.docNo || '').localeCompare(b.docNo || '');
       });
   }, [productionLinkMode, records, orders, products, globalNodes, productMilestoneProgresses, idx]);
+
+  const showOrderDueDateColumn =
+    productionLinkMode !== 'product' && planFormSettings?.listDisplay?.showDeliveryDate === true;
 
   const getNextOutsourceDocNo = (partnerName: string): string =>
     nextOutsourceDocNumber('dispatch', partners, records, '', partnerName.trim());
@@ -1106,8 +1116,11 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
                       <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                         {productionLinkMode !== 'product' && order?.customer && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {order.customer}</span>}
                         {productionLinkMode !== 'product' && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 总数: {orderTotalQty}</span>}
-                        {order?.dueDate && <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> 交期: {(order.dueDate || '').trim().slice(0, 10)}</span>}
-                        {order?.startDate && <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> 开始: {(order.startDate || '').trim().slice(0, 10)}</span>}
+                        {showOrderDueDateColumn && order?.dueDate && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> 交期: {(order.dueDate || '').trim().slice(0, 10)}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1450,6 +1463,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[] }> = ({
       {outsourceModal === 'flow' && (
         <OutsourceFlowListModal
           productionLinkMode={productionLinkMode}
+          showOrderDueDateColumn={showOrderDueDateColumn}
           outsourceFlowSummaryRows={outsourceFlowSummaryRows}
           globalNodes={globalNodes}
           userPermissions={userPermissions}

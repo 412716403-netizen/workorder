@@ -6,6 +6,7 @@ import type { PlanOrder, PlanPrintTemplateManageScope, PrintTemplate, Production
 import { isSystemLockedPrintTemplateId } from '../types';
 import { PrintPaper } from './print-editor/PrintPaper';
 import { duplicatePrintTemplate } from '../utils/printTemplateDefaults';
+import { stashPrintTemplateForEditorBootstrap } from '../utils/printTemplateBootstrap';
 import { augmentPrintPreviewContext } from '../utils/printPreviewSampleContext';
 
 /** 预览区 scale（相对纸张原始 CSS 尺寸），默认 100%，最大可放大到 200% */
@@ -255,7 +256,12 @@ export const PrintTemplateManager: React.FC<PrintTemplateManagerProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => selectedId && openEditor(selectedId, manageScope)}
+                onClick={() => {
+                  if (!selectedId) return;
+                  const t = printTemplates.find(x => x.id === selectedId);
+                  if (t) stashPrintTemplateForEditorBootstrap(t);
+                  openEditor(selectedId, manageScope);
+                }}
                 disabled={selected ? isSystemLockedPrintTemplateId(selected.id) : false}
                 className="rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-[11px] font-bold text-indigo-700 hover:bg-indigo-50 disabled:pointer-events-none disabled:opacity-40"
               >

@@ -47,6 +47,7 @@ export {
   BUILTIN_OUTSOURCE_MATERIAL_RETURN_PRINT_TEMPLATE_ID,
   BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID,
   BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
+  BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID,
   isCodeMergedPrintTemplateId,
   isSystemLockedPrintTemplateId,
   SYSTEM_LOCKED_PRINT_TEMPLATE_IDS,
@@ -436,6 +437,8 @@ export interface PlanOrder {
   productId: string;
   items: PlanItem[];
   startDate: string;
+  /** 交货日期（YYYY-MM-DD 或 ISO 日期），对应库表 `due_date` */
+  dueDate?: string;
   status: PlanStatus;
   customer: string;
   priority: 'High' | 'Medium' | 'Low';
@@ -483,10 +486,18 @@ export interface PlanLabelPrintSettings {
   showPlanDetailTraceSection?: boolean;
 }
 
+/** 计划单列表显示相关开关（与「字段配置」标准字段分离） */
+export interface PlanListDisplaySettings {
+  /** 为 true 时：计划新建/详情/列表显示交货日期；打印可选「计划.dueDate」；工单中心与外协流水列表在工单模式下显示交期列 */
+  showDeliveryDate?: boolean;
+}
+
 /** 计划单表单配置：列表/新增/详情页显示哪些字段，及自定义项 */
 export interface PlanFormSettings {
   standardFields: PlanFormFieldConfig[];
   customFields: PlanFormFieldConfig[];
+  /** 列表展示类开关（客户、交货日期等） */
+  listDisplay?: PlanListDisplaySettings;
   /** 列表打印入口与模板范围 */
   listPrint?: PlanListPrintSettings;
   /** 标签打印模版白名单 */
@@ -775,13 +786,13 @@ export type PrintDynamicListDataSource =
   | 'purchaseBill'
   | 'salesOrder';
 
-/** 动态列表列类型；`colorSizeMatrix` 为颜色×尺码数量矩阵（整表切换为 HTML 表格布局） */
-export type PrintDynamicListColumnKind = 'text' | 'colorSizeMatrix';
+/** 动态列表列类型；矩阵列为 HTML 表格布局（整张动态列表切换渲染） */
+export type PrintDynamicListColumnKind = 'text' | 'colorSizeMatrix' | 'colorMaterialMatrix';
 
 export interface PrintDynamicListColumn {
   id: string;
   headerLabel: string;
-  /** 单元格占位，如 {{工单.orderNumber}}；矩阵列通常留空，由 colorSizeMatrixJson 驱动 */
+  /** 单元格占位，如 {{工单.orderNumber}}；矩阵列通常留空，由 colorSizeMatrixJson / colorMaterialMatrixJson 驱动 */
   contentTemplate: string;
   textAlign: 'left' | 'center' | 'right';
   color: string;
@@ -789,7 +800,7 @@ export interface PrintDynamicListColumn {
   cellKind?: PrintDynamicListColumnKind;
   /** 矩阵列：表头「颜色」文案 */
   matrixColorHeader?: string;
-  /** 矩阵列：表头「尺码数量」跨多尺码列时的组标题 */
+  /** 矩阵列：表头组标题（颜色尺码列为「尺码数量」；颜色物料列为「工序物料」） */
   matrixSizeGroupTitle?: string;
   /** 数据行字号 pt；未设置则用组件级 fontSizePt */
   fontSizePt?: number;

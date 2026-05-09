@@ -296,7 +296,8 @@ const ProductionManagementView: React.FC = () => {
             dictionaries={dictionaries}
             partners={partners}
             boms={boms}
-            globalNodes={globalNodes} 
+            globalNodes={globalNodes}
+            planFormSettings={planFormSettings}
             orderFormSettings={orderFormSettings}
             printTemplates={printTemplates}
             onUpdatePrintTemplates={onUpdatePrintTemplates}
@@ -364,6 +365,7 @@ const ProductionManagementView: React.FC = () => {
             userPermissions={userPermissions}
             tenantRole={tenantRole}
             psiRecords={psiRecords}
+            planFormSettings={planFormSettings}
           />
           </Suspense>
         )}

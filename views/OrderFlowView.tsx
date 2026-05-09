@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ScrollText, FileText, Package, Search } from 'lucide-react';
-import { ProductionOrder, Product, OrderStatus } from '../types';
+import { ProductionOrder, Product, OrderStatus, PlanFormSettings } from '../types';
 import { STATUS_COLORS, ORDER_STATUS_MAP } from '../constants';
 import { formatOrderFlowPlacedDisplay, localTodayYmd, toLocalDateYmd, YMD_ONLY } from '../utils/localDateTime';
 
@@ -64,11 +64,22 @@ interface OrderFlowViewProps {
   initialProductId?: string | null;
   /** 点击详情时打开弹窗，不传则无详情入口 */
   onOpenOrderDetail?: (orderId: string) => void;
+  /** 与计划单表单「列表显示 · 显示交货日期」联动 */
+  planFormSettings?: PlanFormSettings;
 }
 
-const OrderFlowView: React.FC<OrderFlowViewProps> = ({ orders, products, embedded, productionLinkMode, initialProductId, onOpenOrderDetail }) => {
+const OrderFlowView: React.FC<OrderFlowViewProps> = ({
+  orders,
+  products,
+  embedded,
+  productionLinkMode,
+  initialProductId,
+  onOpenOrderDetail,
+  planFormSettings,
+}) => {
   const showStatus = productionLinkMode !== 'product';
-  const showDueDate = productionLinkMode !== 'product';
+  const showDueDate =
+    productionLinkMode !== 'product' && planFormSettings?.listDisplay?.showDeliveryDate === true;
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [productSearch, setProductSearch] = useState('');
 

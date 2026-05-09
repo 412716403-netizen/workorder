@@ -4,6 +4,7 @@ globs:
   - utils/build*PrintContext.ts
   - utils/*PrintShared.ts
   - utils/colorSizeMatrixPrint.ts
+  - utils/colorMaterialMatrixPrint.ts
   - utils/buildPlanPrintListRows.ts
   - views/**/*PrintOverlays.tsx
 ---

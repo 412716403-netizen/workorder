@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { useAsyncSubmitLock } from '../../hooks/useAsyncSubmitLock';
 import {
+  CalendarClock,
   FileText,
   Layers,
   Package,
@@ -64,6 +65,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
     categoryId: string;
     productId: string;
     customer: string;
+    dueDate: string;
     variantQuantities: Record<string, number>;
     singleQuantity: number;
     customData: Record<string, any>;
@@ -71,6 +73,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
     categoryId: '',
     productId: '',
     customer: '',
+    dueDate: '',
     variantQuantities: {},
     singleQuantity: 0,
     customData: {},
@@ -127,6 +130,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
     }
     if (items.length === 0) return;
 
+    const dueTrim = String(form.dueDate ?? '').trim();
     const newPlan: PlanOrder = {
       id: `plan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       planNumber: getNextPlanNumber(),
@@ -139,6 +143,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
       assignments: {},
       customData: Object.keys(form.customData || {}).length ? form.customData : undefined,
       createdAt: localTodayYmd(),
+      ...(dueTrim ? { dueDate: dueTrim } : {}),
     };
 
     const ok = await createLock.run(async () => {
@@ -147,7 +152,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
     });
     if (!ok) return;
     onClose();
-    setForm({ categoryId: '', productId: '', customer: '', variantQuantities: {}, singleQuantity: 0, customData: {} });
+    setForm({ categoryId: '', productId: '', customer: '', dueDate: '', variantQuantities: {}, singleQuantity: 0, customData: {} });
   };
 
   if (!open) return null;
@@ -233,6 +238,19 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
                       value={form.customer}
                       onChange={customerName => setForm({ ...form, customer: customerName })}
                       placeholder="搜索并选择合作单位..."
+                    />
+                  </div>
+                )}
+                {planFormSettings.listDisplay?.showDeliveryDate === true && (
+                  <div className="space-y-1">
+                    <label className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">
+                      <CalendarClock className="h-3 w-3" /> 交货日期
+                    </label>
+                    <input
+                      type="date"
+                      value={form.dueDate}
+                      onChange={e => setForm({ ...form, dueDate: e.target.value })}
+                      className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]"
                     />
                   </div>
                 )}
