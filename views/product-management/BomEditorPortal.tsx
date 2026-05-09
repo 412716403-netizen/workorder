@@ -117,6 +117,19 @@ const BomEditorPortal: React.FC<BomEditorPortalProps> = ({
   const colorName = activeVariant?.colorId ? (dictionaries.colors.find(c => c.id === activeVariant.colorId)?.name ?? '') : '';
   const sizeName = activeVariant?.sizeId ? (dictionaries.sizes.find(s => s.id === activeVariant.sizeId)?.name ?? '') : '';
   const colorSizeLabel = isSingleSku ? '单 SKU（通用）' : [colorName, sizeName].filter(Boolean).join(' / ');
+  const formatVariantOptionLabel = (variant: ProductVariant): string => {
+    const suffix = (variant.skuSuffix ?? '').trim();
+    if (suffix) return suffix;
+    const color = variant.colorId
+      ? (dictionaries.colors.find(c => c.id === variant.colorId)?.name ?? variant.colorId)
+      : '';
+    const size = variant.sizeId
+      ? (dictionaries.sizes.find(s => s.id === variant.sizeId)?.name ?? variant.sizeId)
+      : '';
+    const combined = [color, size].filter(Boolean).join(' / ').trim();
+    if (combined) return combined;
+    return variant.id;
+  };
   const bomMaterialStats = workingBOM.items.reduce(
     (acc, it) => {
       if (!it.productId?.trim()) return acc;
@@ -171,7 +184,7 @@ const BomEditorPortal: React.FC<BomEditorPortalProps> = ({
               {copyBOMDropdownOpen && createPortal(
                 <div data-portal-copy-bom className="bg-white rounded-2xl border border-slate-200 shadow-2xl p-2 max-h-48 overflow-y-auto custom-scrollbar" style={copyBOMDropdownStyle}>
                   {availableBOMSources.map(srcV => (
-                    <button key={srcV.id} type="button" onClick={() => { onCopyBOMFrom(srcV.id); setCopyBOMDropdownOpen(false); }} className="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-sm font-semibold text-slate-700">{srcV.skuSuffix}</button>
+                    <button key={srcV.id} type="button" onClick={() => { onCopyBOMFrom(srcV.id); setCopyBOMDropdownOpen(false); }} className="w-full text-left px-3 py-2 hover:bg-indigo-50 rounded-lg text-xs font-bold text-slate-700">{formatVariantOptionLabel(srcV)}</button>
                   ))}
                   {availableBOMSources.length === 0 && <p className="text-[10px] text-slate-300 p-4 italic text-center">暂无可复用的配置</p>}
                 </div>,

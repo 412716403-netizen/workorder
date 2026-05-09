@@ -497,6 +497,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                             onChange={v => onUpdateItem(line.id, { batch: (v && String(v).trim()) || undefined })}
                             mode="return"
                             hideLabel
+                            returnPlaceholder="留空 = 无批号"
                             mergeBatches={listAvailableBatches(line.productId, form.warehouseId)}
                           />
                         </div>
@@ -812,6 +813,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                                     }
                                     mode="return"
                                     hideLabel
+                                    returnPlaceholder="留空 = 无批号"
                                     mergeBatches={listAvailableBatches(item.productId, form.warehouseId)}
                                   />
                                 </div>

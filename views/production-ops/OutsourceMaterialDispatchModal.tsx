@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Package, X, ArrowUpFromLine } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
@@ -26,6 +26,7 @@ import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpC
 import { writeWarehousePreference, WAREHOUSE_DOC_KIND } from '../../utils/warehouseDocPreference';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { usePsiStockIndex } from '../../hooks/usePsiStockIndex';
+import { psiOrderBillCompactLineInputClass } from '../../styles/uiDensity';
 
 /**
  * 子工单等：外协记录上的 variantId 常为父成品规格，与本产品 BOM 规格对不上。
@@ -162,6 +163,18 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
   useEffect(() => {
     setLineBatchByProduct({});
   }, [matDispatchPartner, matDispatchWarehouseId]);
+
+  /**
+   * 自动切换出库仓库：
+   * 当前仓库对所有「批次管理」BOM 物料覆盖为 0、但其他仓库有批次时，自动切到覆盖最多的仓库。
+   * 仅在弹窗首次打开（按 order/product 维度）后处理一次；用户手动改过仓库后不再触发。
+   */
+  const autoPickedWarehouseRef = useRef(false);
+  const userChangedWarehouseRef = useRef(false);
+  useEffect(() => {
+    autoPickedWarehouseRef.current = false;
+    userChangedWarehouseRef.current = false;
+  }, [matDispatchOrderId, matDispatchProductId]);
   const isProductMode = productionLinkMode === 'product';
   const targetOrder = !isProductMode && matDispatchOrderId ? orders.find(o => o.id === matDispatchOrderId) : undefined;
   const targetProductId = isProductMode ? matDispatchProductId : targetOrder?.productId;
@@ -272,6 +285,41 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
   const showDispatchBatchCol = bomMaterials.some(m => {
     const p = products.find(x => x.id === m.productId);
     return categoryUsesBatchManagement(categoryById.get(p?.categoryId ?? ''));
+  });
+  /**
+   * 首次打开时若当前出库仓库对所有「批次管理」BOM 物料的批次覆盖为 0，
+   * 自动切到覆盖最多的仓库（多仓时常见：成品仓里没有原料批次，物料仓才有）。
+   * 用户手动切过仓库后不再覆盖；同一弹窗仅生效一次（按 order/product 维度重置）。
+   */
+  useEffect(() => {
+    if (autoPickedWarehouseRef.current) return;
+    if (userChangedWarehouseRef.current) return;
+    if (warehouses.length <= 1) return;
+    if (bomMaterials.length === 0) return;
+    const batchManaged = bomMaterials.filter(m => {
+      const p = products.find(x => x.id === m.productId);
+      return categoryUsesBatchManagement(categoryById.get(p?.categoryId ?? ''));
+    });
+    if (batchManaged.length === 0) {
+      autoPickedWarehouseRef.current = true;
+      return;
+    }
+    const coverages = warehouses.map(wh => ({
+      id: wh.id,
+      coverage: batchManaged.filter(m => listAvailableBatches(m.productId, wh.id).length > 0).length,
+    }));
+    const total = coverages.reduce((s, x) => s + x.coverage, 0);
+    if (total === 0) return;
+    const current = coverages.find(x => x.id === matDispatchWarehouseId)?.coverage ?? 0;
+    if (current > 0) {
+      autoPickedWarehouseRef.current = true;
+      return;
+    }
+    const best = coverages.reduce((a, b) => (b.coverage > a.coverage ? b : a));
+    if (best.coverage > 0 && best.id !== matDispatchWarehouseId) {
+      autoPickedWarehouseRef.current = true;
+      setMatDispatchWarehouseId(best.id);
+    }
   });
   /**
    * 已发进度：当前所选外协工厂的「外协领料发出」合计 − 同工厂「外协生产退料」退回（与物料退回弹窗口径一致）。
@@ -460,7 +508,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
             <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">外协工厂</label>
               {matDispatchPartnerOptions.length <= 1 ? (
-                <div className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 bg-white">{matDispatchPartnerOptions[0] ?? '—'}</div>
+                <div className={`${psiOrderBillCompactLineInputClass} flex items-center bg-white`}>{matDispatchPartnerOptions[0] ?? '—'}</div>
               ) : (
                 <select
                   value={matDispatchPartner}
@@ -469,7 +517,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
                     setMatDispatchCustomValues({});
                     setLineBatchByProduct({});
                   }}
-                  className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                  className={`${psiOrderBillCompactLineInputClass} cursor-pointer bg-white`}
                 >
                   {matDispatchPartnerOptions.map(p => (
                     <option key={p} value={p}>{p}</option>
@@ -483,10 +531,11 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
                 <select
                   value={matDispatchWarehouseId}
                   onChange={e => {
+                    userChangedWarehouseRef.current = true;
                     setMatDispatchWarehouseId(e.target.value);
                     setLineBatchByProduct({});
                   }}
-                  className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                  className={`${psiOrderBillCompactLineInputClass} cursor-pointer bg-white`}
                 >
                   {warehouses.map(w => (
                     <option key={w.id} value={w.id}>{w.name}{w.code ? ` (${w.code})` : ''}</option>
@@ -502,7 +551,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
               value={matDispatchRemark}
               onChange={e => setMatDispatchRemark(e.target.value)}
               placeholder="选填"
-              className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 bg-white focus:ring-2 focus:ring-indigo-500 outline-none placeholder:text-slate-400"
+              className={`${psiOrderBillCompactLineInputClass} bg-white placeholder:text-slate-400`}
             />
           </div>
           {materialCustomFieldDefs.length > 0 ? (
@@ -516,7 +565,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
                       cf={cf}
                       value={matDispatchCustomValues[cf.id]}
                       onChange={v => setMatDispatchCustomValues(prev => ({ ...prev, [cf.id]: v }))}
-                      controlClassName="h-[52px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                      controlClassName={`${psiOrderBillCompactLineInputClass} bg-white`}
                     />
                   </div>
                 ))}
@@ -612,7 +661,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
                           step={1}
                           value={matDispatchQty[m.productId] ?? ''}
                           onChange={e => setMatDispatchQty(prev => ({ ...prev, [m.productId]: Number(e.target.value) || 0 }))}
-                          className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 px-3 text-base font-black text-slate-800 text-right tabular-nums focus:ring-2 focus:ring-indigo-500 outline-none"
+                          className={`${psiOrderBillCompactLineInputClass} text-right tabular-nums bg-white`}
                           placeholder="0"
                         />
                       </td>

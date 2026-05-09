@@ -12,7 +12,7 @@ import type {
   Warehouse,
   AppDictionaries,
 } from '../../types';
-import { DEFAULT_MATERIAL_FORM_SETTINGS } from '../../types';
+import { BATCH_NO_UNTAGGED, DEFAULT_MATERIAL_FORM_SETTINGS } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { hasOpsPerm, type StockDocDetail } from './types';
 import { formatLocalDateTimeZh, parseProductionOpTimestampMs } from '../../utils/localDateTime';
@@ -371,7 +371,7 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
                             <td className="px-4 py-3 font-medium text-slate-800">{prod?.name ?? productId}</td>
                             {showBatchColumn ? (
                               <td className="px-4 py-3 text-sm font-mono font-bold text-slate-700">
-                                {batchNo?.trim() || '—'}
+                                {batchNo?.trim() || BATCH_NO_UNTAGGED}
                               </td>
                             ) : null}
                             <td className="px-4 py-3 font-bold text-indigo-600 text-right">{quantity}</td>
@@ -476,7 +476,7 @@ const StockDocDetailModal: React.FC<StockDocDetailModalProps> = ({
                             <tr key={productId} className="border-b border-slate-100">
                               <td className="px-4 py-3 font-medium text-slate-800">{prod?.name ?? productId}</td>
                               {showBatchColumn ? (
-                                <td className="px-4 py-3 text-xs font-mono text-slate-500">{batchNo?.trim() || '—'}</td>
+                                <td className="px-4 py-3 text-xs font-mono text-slate-500">{batchNo?.trim() || BATCH_NO_UNTAGGED}</td>
                               ) : null}
                               <td className="px-4 py-3 text-right">
                                 <input

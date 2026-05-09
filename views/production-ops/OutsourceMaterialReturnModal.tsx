@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Undo2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
@@ -12,7 +12,7 @@ import type {
   MaterialFormSettings,
   PsiRecord,
 } from '../../types';
-import { DEFAULT_MATERIAL_FORM_SETTINGS, categoryUsesBatchManagement } from '../../types';
+import { BATCH_NO_UNTAGGED, DEFAULT_MATERIAL_FORM_SETTINGS, categoryUsesBatchManagement } from '../../types';
 import { clampBatchNoInput } from '../../hooks/useBatchPicker';
 import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
 import { toLocalCompactYmd } from '../../utils/localDateTime';
@@ -23,6 +23,7 @@ import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpC
 import { writeWarehousePreference, WAREHOUSE_DOC_KIND } from '../../utils/warehouseDocPreference';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { usePsiStockIndex } from '../../hooks/usePsiStockIndex';
+import { psiOrderBillCompactLineInputClass } from '../../styles/uiDensity';
 
 export interface OutsourceMaterialReturnModalProps {
   productionLinkMode: 'order' | 'product';
@@ -110,6 +111,19 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
   useEffect(() => {
     setLineBatchByProduct({});
   }, [matReturnPartner, matReturnWarehouseId]);
+
+  /**
+   * 自动校正退回仓库：
+   * 1) 优先回到该工厂历史外发使用最多的仓库（与原外发仓库一致，便于批次回库）；
+   * 2) 否则若当前仓库对所有「批次管理」可退物料覆盖为 0、其它仓库有批次，则切到覆盖最多的仓库。
+   * 仅在弹窗首次打开（按 order/product 维度）后处理一次；用户手动改过仓库后不再触发。
+   */
+  const autoPickedWarehouseRef = useRef(false);
+  const userChangedWarehouseRef = useRef(false);
+  useEffect(() => {
+    autoPickedWarehouseRef.current = false;
+    userChangedWarehouseRef.current = false;
+  }, [matReturnOrderId, matReturnProductId]);
   const isProductMode = productionLinkMode === 'product';
   const targetOrder = !isProductMode && matReturnOrderId ? orders.find(o => o.id === matReturnOrderId) : undefined;
   const targetProductId = isProductMode ? matReturnProductId : targetOrder?.productId;
@@ -117,6 +131,21 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
   const dispatchedByPartnerMat = new Map<string, number>();
   const returnedByPartnerMat = new Map<string, number>();
   const matInfoMap = new Map<string, { name: string; sku: string }>();
+  /**
+   * 「已发批次」：按物料汇总该工厂历史 STOCK_OUT 流水的批号集合（NULL/空 → 哨兵字符串 BATCH_NO_UNTAGGED）。
+   * 退料下拉只信任这个数据源，**不**受当前仓库余量约束——加工厂把全部已发料退回时，仓库可能为零。
+   */
+  const dispatchedBatchesByMat = new Map<string, Set<string>>();
+  const collectDispatchedBatch = (r: ProductionOpRecord) => {
+    const key = r.productId;
+    const bn = (r.batchNo ?? '').trim() || BATCH_NO_UNTAGGED;
+    let set = dispatchedBatchesByMat.get(key);
+    if (!set) {
+      set = new Set<string>();
+      dispatchedBatchesByMat.set(key, set);
+    }
+    set.add(bn);
+  };
   const filterForCard = (r: ProductionOpRecord) => {
     if (isProductMode) {
       return r.sourceProductId === targetProductId || (!r.orderId && !r.sourceProductId && r.productId);
@@ -126,6 +155,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
   records.filter(r => r.type === 'STOCK_OUT' && !!r.partner && r.partner === matReturnPartner && filterForCard(r)).forEach(r => {
     const key = r.productId;
     dispatchedByPartnerMat.set(key, (dispatchedByPartnerMat.get(key) ?? 0) + r.quantity);
+    collectDispatchedBatch(r);
     if (!matInfoMap.has(key)) {
       const mp = products.find(px => px.id === key);
       matInfoMap.set(key, { name: mp?.name ?? '未知物料', sku: mp?.sku ?? '' });
@@ -136,6 +166,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
     records.filter(r => r.type === 'STOCK_OUT' && !!r.partner && r.partner === matReturnPartner && r.orderId && relatedOrderIds.has(r.orderId)).forEach(r => {
       const key = r.productId;
       dispatchedByPartnerMat.set(key, (dispatchedByPartnerMat.get(key) ?? 0) + r.quantity);
+      collectDispatchedBatch(r);
       if (!matInfoMap.has(key)) {
         const mp = products.find(px => px.id === key);
         matInfoMap.set(key, { name: mp?.name ?? '未知物料', sku: mp?.sku ?? '' });
@@ -209,6 +240,63 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
   const showReturnBatchCol = returnableMaterials.some(m => {
     const p = products.find(x => x.id === m.productId);
     return categoryUsesBatchManagement(categoryById.get(p?.categoryId ?? ''));
+  });
+  useEffect(() => {
+    if (autoPickedWarehouseRef.current) return;
+    if (userChangedWarehouseRef.current) return;
+    if (warehouses.length <= 1) return;
+    if (returnableMaterials.length === 0) return;
+    const tally = new Map<string, number>();
+    const accum = (r: ProductionOpRecord) => {
+      if (r.warehouseId) tally.set(r.warehouseId, (tally.get(r.warehouseId) ?? 0) + 1);
+    };
+    records.filter(r => r.type === 'STOCK_OUT' && !!r.partner && r.partner === matReturnPartner && filterForCard(r)).forEach(accum);
+    if (isProductMode) {
+      const relatedOrderIds = new Set(orders.filter(o => o.productId === targetProductId).map(o => o.id));
+      records.filter(r => r.type === 'STOCK_OUT' && !!r.partner && r.partner === matReturnPartner && r.orderId && relatedOrderIds.has(r.orderId)).forEach(accum);
+    }
+    const validIds = new Set(warehouses.map(w => w.id));
+    let bestDispatchId = '';
+    let bestDispatchCount = -1;
+    tally.forEach((count, id) => {
+      if (validIds.has(id) && count > bestDispatchCount) {
+        bestDispatchId = id;
+        bestDispatchCount = count;
+      }
+    });
+    if (matReturnWarehouseId && tally.has(matReturnWarehouseId)) {
+      autoPickedWarehouseRef.current = true;
+      return;
+    }
+    if (bestDispatchId) {
+      autoPickedWarehouseRef.current = true;
+      if (bestDispatchId !== matReturnWarehouseId) setMatReturnWarehouseId(bestDispatchId);
+      return;
+    }
+    const batchManaged = returnableMaterials.filter(m => {
+      const p = products.find(x => x.id === m.productId);
+      return categoryUsesBatchManagement(categoryById.get(p?.categoryId ?? ''));
+    });
+    if (batchManaged.length === 0) {
+      autoPickedWarehouseRef.current = true;
+      return;
+    }
+    const coverages = warehouses.map(wh => ({
+      id: wh.id,
+      coverage: batchManaged.filter(m => listAvailableBatches(m.productId, wh.id).length > 0).length,
+    }));
+    const total = coverages.reduce((s, x) => s + x.coverage, 0);
+    if (total === 0) return;
+    const current = coverages.find(x => x.id === matReturnWarehouseId)?.coverage ?? 0;
+    if (current > 0) {
+      autoPickedWarehouseRef.current = true;
+      return;
+    }
+    const best = coverages.reduce((a, b) => (b.coverage > a.coverage ? b : a));
+    if (best.coverage > 0 && best.id !== matReturnWarehouseId) {
+      autoPickedWarehouseRef.current = true;
+      setMatReturnWarehouseId(best.id);
+    }
   });
   const getNextWtDocNo = () => {
     const prefix = 'WT';
@@ -302,7 +390,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
             <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">外协工厂</label>
               {matReturnPartnerOptions.length <= 1 ? (
-                <div className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 bg-white">{matReturnPartnerOptions[0] ?? '—'}</div>
+                <div className={`${psiOrderBillCompactLineInputClass} flex items-center bg-white`}>{matReturnPartnerOptions[0] ?? '—'}</div>
               ) : (
                 <select
                   value={matReturnPartner}
@@ -312,7 +400,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                     setMatReturnCustomValues({});
                     setLineBatchByProduct({});
                   }}
-                  className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                  className={`${psiOrderBillCompactLineInputClass} cursor-pointer bg-white`}
                 >
                   {matReturnPartnerOptions.map(p => (
                     <option key={p} value={p}>{p}</option>
@@ -326,10 +414,11 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                 <select
                   value={matReturnWarehouseId}
                   onChange={e => {
+                    userChangedWarehouseRef.current = true;
                     setMatReturnWarehouseId(e.target.value);
                     setLineBatchByProduct({});
                   }}
-                  className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
+                  className={`${psiOrderBillCompactLineInputClass} cursor-pointer bg-white`}
                 >
                   {warehouses.map(w => (
                     <option key={w.id} value={w.id}>
@@ -348,7 +437,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
               value={matReturnRemark}
               onChange={e => setMatReturnRemark(e.target.value)}
               placeholder="选填"
-              className="w-full rounded-xl border border-slate-200 py-2.5 px-3 text-sm font-bold text-slate-800 bg-white focus:ring-2 focus:ring-indigo-500 outline-none placeholder:text-slate-400"
+              className={`${psiOrderBillCompactLineInputClass} bg-white placeholder:text-slate-400`}
             />
           </div>
           {materialCustomFieldDefs.length > 0 ? (
@@ -362,7 +451,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                       cf={cf}
                       value={matReturnCustomValues[cf.id]}
                       onChange={v => setMatReturnCustomValues(prev => ({ ...prev, [cf.id]: v }))}
-                      controlClassName="h-[52px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                      controlClassName={`${psiOrderBillCompactLineInputClass} bg-white`}
                     />
                   </div>
                 ))}
@@ -421,6 +510,8 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                       <td className="px-1 py-3 text-right text-xs font-black text-emerald-600 tabular-nums">{remaining}</td>
                       {showReturnBatchCol ? (
                         <td className="min-w-0 px-1 py-3 align-middle">
+                          {/* 退料批次源固定为「该工厂已发批次」清单：含哨兵 "无批号"、不显示仓库余量。
+                              避免「仓库已清零→无法退回」的死循环，并与外协实际作业批号一致。 */}
                           <MaterialIssueBatchSelect
                             product={products.find(x => x.id === m.productId)}
                             categories={categories}
@@ -430,8 +521,8 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                             mode="issue"
                             hideLabel
                             className="max-w-[9.25rem] min-w-0"
-                            controlVariant="formRow"
-                            mergeBatches={listAvailableBatches(m.productId, matReturnWarehouseId)}
+                            dispatchedBatchOptions={Array.from(dispatchedBatchesByMat.get(m.productId) ?? [])}
+                            hideStockHint
                           />
                         </td>
                       ) : null}
@@ -456,7 +547,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
                             if (!Number.isFinite(n) || n < 0) return;
                             setMatReturnQty(prev => ({ ...prev, [m.productId]: Math.min(n, remaining) }));
                           }}
-                          className="box-border h-[42px] w-full max-w-[11rem] rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 text-right tabular-nums outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400"
+                          className={`${psiOrderBillCompactLineInputClass} w-full max-w-[11rem] bg-white text-right tabular-nums placeholder:text-slate-400`}
                           placeholder="数量"
                           title={remaining > 0 ? `最多可退 ${remaining}` : '当前可退为 0'}
                           aria-label={`${m.name} 本次退回数量`}

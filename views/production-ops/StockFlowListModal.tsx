@@ -13,6 +13,18 @@ import { hasOpsPerm, type StockDocDetail } from './types';
 import { formatLocalDateTimeZh, parseProductionOpTimestampMs, toLocalDateYmdFromProductionTimestamp } from '../../utils/localDateTime';
 import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 
+type StockFlowBizType =
+  | 'all'
+  | 'ISSUE_INTERNAL'
+  | 'RETURN_INTERNAL'
+  | 'ISSUE_OUTSOURCE'
+  | 'RETURN_OUTSOURCE';
+
+function getStockFlowBizType(r: ProductionOpRecord): Exclude<StockFlowBizType, 'all'> {
+  if (r.type === 'STOCK_OUT') return r.partner ? 'ISSUE_OUTSOURCE' : 'ISSUE_INTERNAL';
+  return r.partner ? 'RETURN_OUTSOURCE' : 'RETURN_INTERNAL';
+}
+
 export interface StockFlowListModalProps {
   visible: boolean;
   onClose: () => void;
@@ -36,7 +48,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
   userPermissions,
   tenantRole,
 }) => {
-  const [stockFlowFilterType, setStockFlowFilterType] = useState<'all' | 'STOCK_OUT' | 'STOCK_RETURN'>('all');
+  const [stockFlowFilterType, setStockFlowFilterType] = useState<StockFlowBizType>('all');
   const [stockFlowFilterOrderKeyword, setStockFlowFilterOrderKeyword] = useState('');
   const [stockFlowFilterProductKeyword, setStockFlowFilterProductKeyword] = useState('');
   const [stockFlowFilterDocNo, setStockFlowFilterDocNo] = useState('');
@@ -63,7 +75,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
 
   const { filteredStockFlowRecords, totalIssueQty, totalReturnQty, countIssue, countReturn } = useMemo(() => {
     let list = stockFlowRecords;
-    if (stockFlowFilterType !== 'all') list = list.filter(r => r.type === stockFlowFilterType);
+    if (stockFlowFilterType !== 'all') list = list.filter(r => getStockFlowBizType(r) === stockFlowFilterType);
     if (stockFlowFilterOrderKeyword.trim()) {
       const kw = stockFlowFilterOrderKeyword.trim().toLowerCase();
       if (productionLinkMode === 'product') {
@@ -182,12 +194,14 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
               <label className="text-[10px] font-bold text-slate-400 block mb-1">类型</label>
               <select
                 value={stockFlowFilterType}
-                onChange={e => setStockFlowFilterType(e.target.value as 'all' | 'STOCK_OUT' | 'STOCK_RETURN')}
+                onChange={e => setStockFlowFilterType(e.target.value as StockFlowBizType)}
                 className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200 bg-white"
               >
                 <option value="all">全部</option>
-                <option value="STOCK_OUT">领料</option>
-                <option value="STOCK_RETURN">退料</option>
+                <option value="ISSUE_INTERNAL">领料发出</option>
+                <option value="RETURN_INTERNAL">生产退料</option>
+                <option value="ISSUE_OUTSOURCE">外协领料发出</option>
+                <option value="RETURN_OUTSOURCE">外协生产退料</option>
               </select>
             </div>
             {productionLinkMode !== 'product' ? (
@@ -274,8 +288,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
                     const matProduct = products.find(p => p.id === rec.productId);
                     const sourceProd = rec.sourceProductId ? products.find(p => p.id === rec.sourceProductId) : null;
                     const isReturn = rec.type === 'STOCK_RETURN';
-                    const isCollabReturn = rec.type === 'STOCK_OUT' && rec.operator === '协作回传出库';
-                    const isOutsourceDispatch = rec.type === 'STOCK_OUT' && !!rec.partner && !isCollabReturn;
+                    const isOutsourceDispatch = rec.type === 'STOCK_OUT' && !!rec.partner;
                     const isOutsourceReturn = rec.type === 'STOCK_RETURN' && !!rec.partner;
                     const docNo = rec.docNo ?? '';
                     const openDetail = () => {
@@ -289,14 +302,26 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
                         : rec.orderId
                           ? order?.orderNumber ?? '—'
                           : matProduct?.name ?? '—';
-                    const typeLabel = isCollabReturn ? '协作回传' : isOutsourceReturn ? '外退' : isReturn ? '退料' : isOutsourceDispatch ? '外发' : '领料';
-                    const typeClass = isCollabReturn ? 'bg-emerald-100 text-emerald-800' : isOutsourceReturn ? 'bg-orange-100 text-orange-800' : isReturn ? 'bg-amber-100 text-amber-800' : isOutsourceDispatch ? 'bg-teal-100 text-teal-800' : 'bg-indigo-100 text-indigo-800';
+                    const typeLabel = isOutsourceReturn
+                      ? '外协生产退料'
+                      : isReturn
+                        ? '生产退料'
+                        : isOutsourceDispatch
+                          ? '外协领料发出'
+                          : '领料发出';
+                    const typeClass = isOutsourceReturn
+                      ? 'bg-orange-100 text-orange-800'
+                      : isReturn
+                        ? 'bg-amber-100 text-amber-800'
+                        : isOutsourceDispatch
+                          ? 'bg-teal-100 text-teal-800'
+                          : 'bg-indigo-100 text-indigo-800';
                     return (
                       <tr key={rec.id} className="border-b border-slate-100 hover:bg-slate-50/50">
                         <td className="px-4 py-3 text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">{rec.docNo ?? '—'}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${typeClass}`}>
-                            {isCollabReturn ? <Truck className="w-3 h-3" /> : isOutsourceReturn ? <Undo2 className="w-3 h-3" /> : isReturn ? <Undo2 className="w-3 h-3" /> : isOutsourceDispatch ? <Truck className="w-3 h-3" /> : <ArrowUpFromLine className="w-3 h-3" />}
+                            {isOutsourceReturn ? <Undo2 className="w-3 h-3" /> : isReturn ? <Undo2 className="w-3 h-3" /> : isOutsourceDispatch ? <Truck className="w-3 h-3" /> : <ArrowUpFromLine className="w-3 h-3" />}
                             {typeLabel}
                           </span>
                         </td>

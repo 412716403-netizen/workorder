@@ -10,6 +10,7 @@ import type {
   Product,
   Warehouse,
 } from '../types';
+import { BATCH_NO_UNTAGGED } from '../shared/types';
 import { buildMatrixJsonAndTotalQtyFromVariantLine } from './buildSalesBillPrintContext';
 import { COLOR_SIZE_MATRIX_JSON_KEY } from './colorSizeMatrixPrint';
 import { formatLocalDateTimeZh, parseProductionOpTimestampMs } from './localDateTime';
@@ -68,7 +69,7 @@ function buildMaterialStockMatrixPrintRows(
       sku: p?.sku ?? '',
       quantity: qty,
       unit: getUnitName(l.productId),
-      batchNo: l.batchNo?.trim() ? l.batchNo : '—',
+      batchNo: l.batchNo?.trim() ? l.batchNo : BATCH_NO_UNTAGGED,
       ...(matrixSlice ? { [COLOR_SIZE_MATRIX_JSON_KEY]: matrixSlice.colorSizeMatrixJson } : {}),
     };
   });
@@ -183,7 +184,7 @@ export function buildMaterialStockDocPrintContext(
       sku: p?.sku ?? '',
       quantity: l.quantity,
       unit: getUnitName(l.productId),
-      batchNo: l.batchNo?.trim() ? l.batchNo : '—',
+      batchNo: l.batchNo?.trim() ? l.batchNo : BATCH_NO_UNTAGGED,
     };
   });
   const matrixRows = buildMaterialStockMatrixPrintRows(

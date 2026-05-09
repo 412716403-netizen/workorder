@@ -9,6 +9,7 @@ import { useAppActionsOptional } from '../contexts/AppDataContext';
 import { hasSubPermission } from '../utils/hasSubPermission';
 import { effectiveCustomDocFieldType, formatReportCustomDataForList } from '../utils/reportCustomDocField';
 import { getSupplierCategoryId } from '../utils/resolvePartnerCategoryId';
+import { psiOrderBillCompactLineInputClass, psiOrderBillCompactLineLabelClass } from '../styles/uiDensity';
 
 /**
  * 合作单位选择：与 SearchableProductSelect 一致使用 Portal + fixed，避免在滚动/弹窗内被裁切。
@@ -404,18 +405,18 @@ export function SearchablePartnerSelect({
               aria-modal="true"
               aria-labelledby="partner-quick-create-title"
             >
-              <h4 id="partner-quick-create-title" className="text-base font-black text-slate-900">
+              <h4 id="partner-quick-create-title" className="text-sm font-black text-slate-900">
                 快捷新建合作单位
               </h4>
-              <p className="mt-1 text-xs font-medium text-slate-500">
+              <p className="mt-1 text-[10px] font-bold text-slate-500">
                 与「基础信息 → 合作单位」使用相同接口创建；保存后将出现在列表中并自动选中。
               </p>
               <div className="mt-4 space-y-3">
                 <div>
-                  <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">单位名称</label>
+                  <label className={`${psiOrderBillCompactLineLabelClass} mb-1.5`}>单位名称</label>
                   <input
                     type="text"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                    className={psiOrderBillCompactLineInputClass}
                     placeholder="请输入单位名称"
                     value={quickName}
                     onChange={e => setQuickName(e.target.value)}
@@ -423,9 +424,9 @@ export function SearchablePartnerSelect({
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">合作单位分类</label>
+                  <label className={`${psiOrderBillCompactLineLabelClass} mb-1.5`}>合作单位分类</label>
                   <select
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                    className={`${psiOrderBillCompactLineInputClass} cursor-pointer`}
                     value={quickFormCategoryId}
                     onChange={e => setQuickFormCategoryId(e.target.value)}
                   >
@@ -443,7 +444,7 @@ export function SearchablePartnerSelect({
                   type="button"
                   disabled={quickSubmitting}
                   onClick={() => !quickSubmitting && setQuickCreateOpen(false)}
-                  className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  className="h-9 min-h-9 rounded-xl border border-slate-200 bg-white px-5 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                 >
                   取消
                 </button>
@@ -481,7 +482,7 @@ export function SearchablePartnerSelect({
                       setQuickSubmitting(false);
                     }
                   }}
-                  className="rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-black text-white shadow-lg hover:bg-indigo-700 disabled:opacity-50"
+                  className="h-9 min-h-9 rounded-xl bg-indigo-600 px-6 text-xs font-black text-white shadow-lg hover:bg-indigo-700 disabled:opacity-50"
                 >
                   {quickSubmitting ? '保存中…' : '保存并选用'}
                 </button>

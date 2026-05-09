@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Clock, Package, User } from 'lucide-react';
 import type { AppDictionaries, PlanFormFieldConfig, Product, ProductCategory, ProductVariant, PsiRecord, Warehouse } from '../../types';
-import { PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER } from '../../types';
+import { BATCH_NO_UNTAGGED, PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER } from '../../types';
 import { formatPsiDocListTime } from '../../utils/flowDocSort';
 import { aggregatePurchaseBillRelatedProductListText, formatPsiDocNumForList, psiCustomFieldHasFilledDisplayValue } from './psiOpsListFormatting';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
@@ -427,7 +427,7 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
 
                     {showBillBatchColumn && (
                       <td className="py-2.5 px-3 text-center text-xs font-bold text-slate-600 break-all">
-                        {String((first.batchNo ?? (first as { batch?: string }).batch) ?? '').trim() || '—'}
+                        {String((first.batchNo ?? (first as { batch?: string }).batch) ?? '').trim() || BATCH_NO_UNTAGGED}
                       </td>
                     )}
 

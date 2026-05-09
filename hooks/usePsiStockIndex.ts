@@ -1,5 +1,6 @@
 import { useMemo, useCallback } from 'react';
 import { recordDocLineTimeMs } from '../utils/flowDocSort';
+import { BATCH_NO_UNTAGGED, normalizeBatchNo } from '../shared/types';
 
 type WhBucket = {
   psiIn: number; psiOut: number;
@@ -28,9 +29,10 @@ type BatchBucket = {
   stocktakeAdj: number;
 };
 
+/** 与 `psi.service.addBatchAgg` 对齐：null/undefined/空串 → 哨兵 {@link BATCH_NO_UNTAGGED}（"无批号"），让其同样进入按批次桶。 */
 function lineBatchNo(r: { batchNo?: string | null; batch?: string | null }): string {
   const raw = r.batchNo ?? r.batch;
-  return typeof raw === 'string' ? raw.trim() : '';
+  return normalizeBatchNo(raw) ?? BATCH_NO_UNTAGGED;
 }
 
 function buildStockIndex(recordsList: any[], prodRecords: any[]) {
@@ -213,6 +215,7 @@ export function usePsiStockIndex(recordsList: any[], prodRecords: any[]) {
   }, [stockIndex, getStockVariant]);
 
   const getBatchStock = useCallback((pId: string, whId: string | undefined, batchNo: string) => {
+    // 哨兵 BATCH_NO_UNTAGGED 也是合法批号；只过滤未提供仓库 / 显式空字符串这种边界。
     if (!whId || !batchNo) return 0;
     const b = stockIndex.batchMap.get(`${pId}::${whId}::${batchNo}`);
     if (!b) return 0;
@@ -221,6 +224,10 @@ export function usePsiStockIndex(recordsList: any[], prodRecords: any[]) {
     return Math.max(0, ins - outs + b.stocktakeAdj);
   }, [stockIndex]);
 
+  /**
+   * 与 `psi.service.getStockBatches` 对齐：哨兵 BATCH_NO_UNTAGGED（"无批号"）也作为合法 batchNo 返回，
+   * 让"采购入库未填批号 / 历史空批号"的物料同样能在领料/退料下拉中被选择。
+   */
   const listAvailableBatches = useCallback((pId: string, whId: string | undefined) => {
     if (!whId) return [];
     const prefix = `${pId}::${whId}::`;

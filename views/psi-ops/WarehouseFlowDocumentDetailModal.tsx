@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { X, ScrollText } from 'lucide-react';
 import { Product, Warehouse, ProductCategory, AppDictionaries, ProductVariant } from '../../types';
+import { BATCH_NO_UNTAGGED } from '../../types';
 import { formatPsiDocBusinessDateListZh } from '../../utils/flowDocSort';
 
 const formatFlowDateTime = (ts: string) => {
@@ -230,7 +231,7 @@ const WarehouseFlowDocumentDetailModal: React.FC<WarehouseFlowDocumentDetailModa
               <tbody>
                 {detailLines.map((line, idx) => {
                   const price = line.purchasePrice ?? line.salesPrice ?? 0;
-                  const batchCell = (line as { batchNo?: string }).batchNo?.trim() || '—';
+                  const batchCell = (line as { batchNo?: string }).batchNo?.trim() || BATCH_NO_UNTAGGED;
                   return (
                     <tr key={`${line.productId}-${line.variantId ?? ''}-${(line as { batchNo?: string }).batchNo ?? ''}-${idx}`} className="border-b border-slate-100">
                       <td className="px-4 py-3"><span className="font-bold text-slate-800">{line.productName}</span> <span className="text-slate-400 text-[10px]">{line.productSku}</span></td>

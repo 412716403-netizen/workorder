@@ -23,6 +23,7 @@ export type SupplierSelectProps = Omit<BaseProps, 'placeholder'> & {
 export function SupplierSelect({
   options,
   categories = [],
+  allowQuickCreate = true,
   quickCreateCategoryId,
   placeholder,
   compact = true,
@@ -35,6 +36,7 @@ export function SupplierSelect({
     <SearchablePartnerSelect
       options={options}
       categories={categories}
+      allowQuickCreate={allowQuickCreate}
       quickCreateCategoryId={quickCreateCategoryId ?? supplierCategoryId}
       placeholder={placeholder ?? '选择供应商…'}
       compact={compact}

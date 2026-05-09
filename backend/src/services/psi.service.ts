@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import type { TenantPrismaClient } from '../lib/prisma.js';
-import { normalizeBatchNo } from '../../../shared/types.js';
+import { normalizeBatchNo, BATCH_NO_UNTAGGED } from '../../../shared/types.js';
 import { genId } from '../utils/genId.js';
 import { withSerializableRetry } from '../utils/withSerializableRetry.js';
 import { sanitizeUpdate, sanitizeCreate, normalizeDates } from '../utils/request.js';
@@ -38,7 +38,8 @@ function cleanPsi(data: Record<string, unknown>) {
     }
   }
   const bn = normalizeBatchNo(data.batchNo);
-  if (bn) data.batchNo = bn;
+  // 哨兵字符串「无批号」视同未填：DB 一律存 NULL，避免与真实业务批号混淆。
+  if (bn && bn !== BATCH_NO_UNTAGGED) data.batchNo = bn;
   else delete data.batchNo;
   return data;
 }
@@ -229,8 +230,8 @@ type BatchAggRow = { batchNo: string | null; _sum: { quantity?: unknown; diffQua
 
 function addBatchAgg(map: Map<string, number>, rows: BatchAggRow[], sign: 1 | -1, field: 'quantity' | 'diffQuantity') {
   for (const r of rows) {
-    const key = normalizeBatchNo(r.batchNo);
-    if (!key) continue;
+    // NULL/空 → 哨兵字符串 BATCH_NO_UNTAGGED，与"已填批号"一并参与按批次汇总。
+    const key = normalizeBatchNo(r.batchNo) ?? BATCH_NO_UNTAGGED;
     const raw = field === 'quantity' ? r._sum?.quantity : r._sum?.diffQuantity;
     const q = Number(raw ?? 0) || 0;
     if (!q) continue;
@@ -245,8 +246,8 @@ function addProdOpRowsToMap(
   sign: 1 | -1,
 ) {
   for (const r of rows) {
-    const bn = normalizeBatchNo(r.batchNo);
-    if (!bn) continue;
+    // NULL/空 → 哨兵字符串 BATCH_NO_UNTAGGED，让"未填批号"的生产流水也被纳入按批次余量。
+    const bn = normalizeBatchNo(r.batchNo) ?? BATCH_NO_UNTAGGED;
     const q = Number(r.quantity ?? 0) || 0;
     if (!q) continue;
     map.set(bn, (map.get(bn) || 0) + sign * q);
@@ -254,7 +255,9 @@ function addProdOpRowsToMap(
 }
 
 /**
- * 按「产品 + 仓库 + 批次号」汇总可用库存（与前端 `usePsiStockIndex` 中批次桶语义对齐，仅统计 `batchNo` 非空的流水）。
+ * 按「产品 + 仓库 + 批次号」汇总可用库存（与前端 `usePsiStockIndex` 中批次桶语义对齐）。
+ * 为支持「未填批号」（如采购入库未输入批号、历史数据空）的物料同样能在领料/退料下拉中被选择，
+ * 这里**不再**过滤 `batchNo IS NULL`：所有 NULL/空批号的流水都归一为哨兵 {@link BATCH_NO_UNTAGGED}。
  * `excludeProductionOpRecordId`：更新领料单某行时排除自身，避免把当前行已扣数量算进可用量。
  */
 export async function getStockBatches(
@@ -273,41 +276,40 @@ export async function getStockBatches(
         where: {
           productId,
           warehouseId,
-          batchNo: { not: null },
           type: { in: ['PURCHASE_BILL', 'STOCK_IN'] },
         },
         _sum: { quantity: true },
       }),
       db.psiRecord.groupBy({
         by: ['batchNo'],
-        where: { productId, warehouseId, batchNo: { not: null }, type: 'SALES_BILL' },
+        where: { productId, warehouseId, type: 'SALES_BILL' },
         _sum: { quantity: true },
       }),
       db.psiRecord.groupBy({
         by: ['batchNo'],
-        where: { productId, toWarehouseId: warehouseId, batchNo: { not: null }, type: 'TRANSFER' },
+        where: { productId, toWarehouseId: warehouseId, type: 'TRANSFER' },
         _sum: { quantity: true },
       }),
       db.psiRecord.groupBy({
         by: ['batchNo'],
-        where: { productId, fromWarehouseId: warehouseId, batchNo: { not: null }, type: 'TRANSFER' },
+        where: { productId, fromWarehouseId: warehouseId, type: 'TRANSFER' },
         _sum: { quantity: true },
       }),
       db.psiRecord.groupBy({
         by: ['batchNo'],
-        where: { productId, warehouseId, batchNo: { not: null }, type: 'STOCKTAKE' },
+        where: { productId, warehouseId, type: 'STOCKTAKE' },
         _sum: { diffQuantity: true },
       }),
       db.productionOpRecord.findMany({
-        where: { productId, warehouseId, batchNo: { not: null }, type: 'STOCK_IN', ...prodEx },
+        where: { productId, warehouseId, type: 'STOCK_IN', ...prodEx },
         select: { batchNo: true, quantity: true },
       }),
       db.productionOpRecord.findMany({
-        where: { productId, warehouseId, batchNo: { not: null }, type: 'STOCK_RETURN', ...prodEx },
+        where: { productId, warehouseId, type: 'STOCK_RETURN', ...prodEx },
         select: { batchNo: true, quantity: true },
       }),
       db.productionOpRecord.findMany({
-        where: { productId, warehouseId, batchNo: { not: null }, type: 'STOCK_OUT', ...prodEx },
+        where: { productId, warehouseId, type: 'STOCK_OUT', ...prodEx },
         select: { batchNo: true, quantity: true },
       }),
     ]);

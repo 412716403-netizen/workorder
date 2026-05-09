@@ -62,7 +62,18 @@
 
 **颜色尺码 ↔ 批次互斥**：同一分类不可同时启用 `hasColorSize` 与 `hasBatchManagement`（设置页互斥 + 后端 `settings` 校验）。
 
-**库存口径**：`batchNo` 有值的流水进入「产品 + 仓库 + 批号」分桶；历史无批次的生产/PSI 行仍计入产品级总库存，与批次桶并存。服务端对 `STOCK_OUT`（本厂领料与外协物料发出）在分类启用批次时校验批号必填且 `(productId, warehouseId, batchNo)` 可用量 ≥ 本次数量；前端下拉与 `GET /psi/stock/batches` 一致。工单中心领料下拉在 API 结果基础上与前端 PSI 快照按批号合并余量（取较大值），减轻「刚保存尚未刷新接口」时的空列表。
+**库存口径**：`batchNo` 有值的流水进入「产品 + 仓库 + 批号」分桶；历史无批次的生产/PSI 行仍计入产品级总库存，**同时**也会被归一到「无批号」哨兵桶后参与按批次结存（详见下文「无批号哨兵」）。服务端对 `STOCK_OUT`（本厂领料与外协物料发出）在分类启用批次时校验批号必填且 `(productId, warehouseId, batchNo)` 可用量 ≥ 本次数量；前端下拉与 `GET /psi/stock/batches` 一致。工单中心领料下拉在 API 结果基础上与前端 PSI 快照按批号合并余量（取较大值），减轻「刚保存尚未刷新接口」时的空列表。
+
+**无批号哨兵 (`BATCH_NO_UNTAGGED = '无批号'`)**：批次类分类下仍会出现「采购入库未输入批号」「历史空批号流水」等情况——此时数据库 `batch_no` 字段为 `NULL`，但 UI / API / 打印需要把它作为一条**可选批次**展示与流转。约定如下：
+
+- **DB 真源仍是 `NULL`**：不需要数据迁移；`shared/types.ts` 导出的常量 `BATCH_NO_UNTAGGED` 仅用于 UI / API / 打印的展示与等价匹配。
+- **写入路径**：`backend/src/services/psi.service.cleanPsi` 把 `BATCH_NO_UNTAGGED` 视同未填、字段最终落 `NULL`；`productionStockBatchWriteValidation` 对 `STOCK_OUT` / `STOCK_RETURN` 接受哨兵字符串通过必填校验，库存可用量按 NULL 桶结存判断后落 `NULL`。**真正的空字符串 / 漏传字段仍按"漏填批号"拒绝**（语义清晰：只有显式选了"无批号"才放行）。
+- **读取路径**：`getStockBatches` 不再过滤 `batchNo IS NULL`，所有 NULL 流水按 `BATCH_NO_UNTAGGED` 哨兵桶聚合并与真实批号一并返回；前端 `usePsiStockIndex` 的 `lineBatchNo` 与 `listAvailableBatches` 与之对齐，"无批号" 同样进入领料/退料/调拨/销售出库下拉。
+- **采购入库 UI**：批次输入框 `placeholder = "留空 = 无批号"`（不预填），让"采购到货时还没贴批号"成为合法默认；保存后对应 PSI 行 `batch_no = NULL`，但库存与下拉均以"无批号"展示。
+- **打印 / 详情列表**：`buildSalesBillPrintListRows`、`buildPurchaseBillPrintListRows`、`buildMaterialStockDocPrintContext`、采购/销售/外协物料/仓库流水**单据详情**等展示位，统一把 NULL/空批号渲染为 `BATCH_NO_UNTAGGED`，避免空白列。
+- **业务批号禁用**：真实业务批号不要使用字符串字面量 "无批号"，否则会被当作未填、自动归一为 `NULL`。
+
+**外协物料退回的批次清单（特例）**：退料界面的批次下拉**不**走"当前仓库可用余量"，而是按该工厂历史 `STOCK_OUT` 流水里出现过的批号汇总（NULL/空批号统一归一为 `BATCH_NO_UNTAGGED`），并**不**显示余量后缀——避免「物料全部发出后仓库清零导致退不回来」的死循环。后端落库仍走 `validateStockReturnBatchOnWrite`，哨兵字符串通过校验后 `batch_no` 仍写 `NULL`。
 
 **调拨 (`TRANSFER`)**：分类启用批次时，调出仓须选择批号，数量不得超过该批在调出仓的可用结存；调入/调出两条 PSI 行均写入同一 `batchNo`。
 

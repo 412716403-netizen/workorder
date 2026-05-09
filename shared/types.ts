@@ -62,6 +62,15 @@ export type LegacyCustomDocFieldType = CustomDocFieldType | 'number' | 'boolean'
 export const BATCH_FIELD_MAX_LEN = 100;
 
 /**
+ * 「无批号」哨兵字符串：仅用于 UI / API / 打印展示与等价匹配。
+ * - DB 字段 `batch_no` 仍以 `NULL` 表示"无批号"，无需迁移历史数据。
+ * - 写入路径：`cleanPsi` 与批次校验把哨兵视同未填，最终写入 `NULL`。
+ * - 读取路径：`getStockBatches` 与 `usePsiStockIndex` 把 `NULL` 归一为该哨兵后再返回。
+ * 真实业务批号请避免使用该字面量，以免被自动归一为"未填"。
+ */
+export const BATCH_NO_UNTAGGED = '无批号';
+
+/**
  * 批次号写入/聚合键统一归一：trim、空串视为未填、超长截断至 {@link BATCH_FIELD_MAX_LEN}。
  * 前后端与 Prisma 写入应共用，避免「同批号不同写法」在 Map 中分裂。
  */
@@ -70,6 +79,25 @@ export function normalizeBatchNo(input: unknown): string | undefined {
   const s = String(input).trim();
   if (s === '') return undefined;
   return s.length > BATCH_FIELD_MAX_LEN ? s.slice(0, BATCH_FIELD_MAX_LEN) : s;
+}
+
+/** 判断是否为"无批号"：null / undefined / 空串 / 仅空白 / 哨兵字符串 都算。 */
+export function isUntaggedBatch(input: unknown): boolean {
+  if (input == null) return true;
+  const s = String(input).trim();
+  return s === '' || s === BATCH_NO_UNTAGGED;
+}
+
+/** 把任意输入归一为「展示用批号」：未填 / 哨兵 → {@link BATCH_NO_UNTAGGED}；否则返回归一后的批号字符串。 */
+export function batchNoForDisplay(input: unknown): string {
+  if (isUntaggedBatch(input)) return BATCH_NO_UNTAGGED;
+  return normalizeBatchNo(input) ?? BATCH_NO_UNTAGGED;
+}
+
+/** 把展示批号转为写入 DB 的批号：哨兵 / 未填 → undefined（落 NULL）；否则返回归一字符串。 */
+export function batchNoForWrite(input: unknown): string | undefined {
+  if (isUntaggedBatch(input)) return undefined;
+  return normalizeBatchNo(input);
 }
 
 /**

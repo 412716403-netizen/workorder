@@ -17,6 +17,7 @@ import {
   matrixGroupToColorSizePayload,
   serializeColorSizeMatrixPayload,
 } from './colorSizeMatrixPrint';
+import { BATCH_NO_UNTAGGED } from '../shared/types';
 import { localCalendarYmdStartToIso } from './localDateTime';
 import { sortedVariantColorEntries } from './sortVariantsByProduct';
 import { computePartnerReceivableBeforeDoc } from './partnerReceivableLedger';
@@ -37,7 +38,10 @@ export type SalesBillLineInput = {
 
 function lineBatchForPrint(line: SalesBillLineInput): string {
   const raw = line.batchNo ?? line.batch;
-  return typeof raw === 'string' && raw.trim() !== '' ? raw.trim() : '';
+  // 与 BATCH_NO_UNTAGGED 对齐：空批号统一渲染为"无批号"，避免打印列出现空白。
+  if (typeof raw !== 'string') return BATCH_NO_UNTAGGED;
+  const trimmed = raw.trim();
+  return trimmed === '' ? BATCH_NO_UNTAGGED : trimmed;
 }
 
 function formatYmdChinese(ymd: string): string {
