@@ -875,6 +875,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
             globalNodes,
             boms,
             products,
+            categories,
           });
           setPlanListPrintRun({
             template: t,

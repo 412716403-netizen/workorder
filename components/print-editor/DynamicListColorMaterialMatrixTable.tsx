@@ -302,9 +302,22 @@ export function DynamicListColorMaterialMatrixTable({ cfg, ctx, padded, matrixId
                   const m = qi < seg.materials.length ? seg.materials[qi] : undefined;
                   const inK = qi < K;
                   const txt = inK && m?.name != null && String(m.name).trim() !== '' ? String(m.name) : '';
+                  const formExtra =
+                    inK && m?.productFormSummary != null && String(m.productFormSummary).trim() !== ''
+                      ? String(m.productFormSummary).trim()
+                      : '';
                   return (
                     <td key={`nm-${qi}`} style={tdBody(mcol, namesTop)}>
-                      {txt || '\u00a0'}
+                      {formExtra ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2mm', lineHeight: 1.15 }}>
+                          <span>{txt || '\u00a0'}</span>
+                          <span style={{ fontSize: `${Math.max(6, (mcol.fontSizePt ?? bodyPt) * 0.82)}pt`, color: '#64748b', fontWeight: 400 }}>
+                            {formExtra}
+                          </span>
+                        </div>
+                      ) : (
+                        (txt || '\u00a0')
+                      )}
                     </td>
                   );
                 })}

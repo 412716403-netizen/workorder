@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AppDictionaries, BOM, GlobalNodeTemplate, PlanOrder, Product } from '../types';
+import type { AppDictionaries, BOM, GlobalNodeTemplate, PlanOrder, Product, ProductCategory } from '../types';
 import {
   buildPlanPrintListRows,
   buildColorMaterialMatrixPayloadForPlan,
@@ -172,6 +172,119 @@ describe('buildPlanPrintListRows', () => {
       ['175', '35'],
     ]);
     expect(parsed?.nodeBlocks[1]?.colorRows.map(r => r.materials.map(m => m.ratio))).toEqual([['10'], ['7']]);
+  });
+
+  it('colorMaterialMatrixJson 物料格附带分类表单摘要 productFormSummary（与用料清单标签一致）', () => {
+    const catYarn: ProductCategory = {
+      id: 'cat-yarn',
+      name: '纱线',
+      color: '#64748b',
+      hasProcess: false,
+      hasSalesPrice: false,
+      hasPurchasePrice: false,
+      hasColorSize: false,
+      customFields: [{ id: 'f-comp', label: '成分', type: 'text', showInForm: true }],
+    };
+
+    const matBlack: Product = {
+      id: 'mat-black',
+      sku: 'MB',
+      name: '全毛黑色',
+      categoryId: 'cat-yarn',
+      categoryCustomData: { 'f-comp': '羊毛' },
+      colorIds: [],
+      sizeIds: [],
+      variants: [],
+      milestoneNodeIds: [],
+    };
+
+    const matWhite: Product = {
+      id: 'mat-white',
+      sku: 'MW',
+      name: '全毛白色',
+      colorIds: [],
+      sizeIds: [],
+      variants: [],
+      milestoneNodeIds: [],
+      categoryCustomData: {},
+    };
+
+    const product: Product = {
+      id: 'prod1',
+      sku: 'SKU1',
+      name: '毛衣',
+      colorIds: ['c-black', 'c-white'],
+      sizeIds: ['s-m'],
+      variants: [
+        {
+          id: 'v-black-m',
+          colorId: 'c-black',
+          sizeId: 's-m',
+          skuSuffix: '',
+          nodeBoms: { 'node-knit': 'bom-k-black' },
+        },
+        {
+          id: 'v-white-m',
+          colorId: 'c-white',
+          sizeId: 's-m',
+          skuSuffix: '',
+          nodeBoms: { 'node-knit': 'bom-k-white' },
+        },
+      ],
+      milestoneNodeIds: ['node-knit'],
+      categoryCustomData: {},
+    };
+
+    const boms: BOM[] = [
+      {
+        id: 'bom-k-black',
+        name: 'B',
+        parentProductId: 'prod1',
+        variantId: 'v-black-m',
+        nodeId: 'node-knit',
+        version: '1',
+        items: [{ productId: 'mat-black', quantity: 1 }],
+      },
+      {
+        id: 'bom-k-white',
+        name: 'W',
+        parentProductId: 'prod1',
+        variantId: 'v-white-m',
+        nodeId: 'node-knit',
+        version: '1',
+        items: [{ productId: 'mat-white', quantity: 1 }],
+      },
+    ];
+
+    const globalNodes: GlobalNodeTemplate[] = [{ id: 'node-knit', name: '织造', hasBOM: true, reportTemplate: [] }];
+
+    const plan: PlanOrder = {
+      id: 'p1',
+      planNumber: 'PL-1',
+      productId: 'prod1',
+      items: [
+        { variantId: 'v-black-m', quantity: 10 },
+        { variantId: 'v-white-m', quantity: 5 },
+      ],
+      startDate: '2026-01-01',
+      status: 'PLANNING',
+      customer: '',
+      priority: 'Medium',
+    };
+
+    const rows = buildPlanPrintListRows(plan, product, dictionaries, {
+      globalNodes,
+      boms,
+      products: [product, matBlack, matWhite],
+      categories: [catYarn],
+    });
+
+    const parsed = parseColorMaterialMatrixFromRow(rows[0]);
+    const blackRow = parsed?.nodeBlocks[0]?.colorRows.find(r => r.colorName === '黑');
+    expect(blackRow?.materials[0]?.name).toBe('全毛黑色');
+    expect(blackRow?.materials[0]?.productFormSummary).toBe('成分: 羊毛');
+    const whiteRow = parsed?.nodeBlocks[0]?.colorRows.find(r => r.colorName === '白');
+    expect(whiteRow?.materials[0]?.productFormSummary).toBeUndefined();
   });
 });
 

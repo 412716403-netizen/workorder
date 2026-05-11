@@ -6,6 +6,8 @@ export const COLOR_MATERIAL_MATRIX_JSON_KEY = 'colorMaterialMatrixJson' as const
 export type ColorMaterialMatrixMaterialCell = {
   name: string;
   ratio: string;
+  /** 产品分类「表单中显示」的自定义项摘要（与用料清单物料名称下标签一致），如「纱支: 48Nm · 成分: 羊毛」 */
+  productFormSummary?: string;
 };
 
 export type ColorMaterialMatrixColorRow = {
@@ -57,6 +59,7 @@ export function parseColorMaterialMatrixFromRow(row: PrintListRow): ColorMateria
                 continue;
               }
               const mm = m as { name?: unknown; ratio?: unknown };
+              const mmx = mm as { productFormSummary?: unknown };
               materials.push({
                 name: mm.name == null ? '' : String(mm.name),
                 ratio:
@@ -65,6 +68,9 @@ export function parseColorMaterialMatrixFromRow(row: PrintListRow): ColorMateria
                     : typeof mm.ratio === 'number'
                       ? String(mm.ratio)
                       : String(mm.ratio),
+                ...(mmx.productFormSummary != null && String(mmx.productFormSummary).trim() !== ''
+                  ? { productFormSummary: String(mmx.productFormSummary) }
+                  : {}),
               });
             }
           }

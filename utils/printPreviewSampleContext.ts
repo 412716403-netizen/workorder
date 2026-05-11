@@ -190,7 +190,7 @@ function samplePlanPrintListRowsWithMatrix(): PrintListRow[] {
           {
             colorName: '黑',
             materials: [
-              { name: '全毛黑色', ratio: '25' },
+              { name: '全毛黑色', ratio: '25', productFormSummary: '成分: 羊毛 · 等级: A' },
               { name: '全毛白色', ratio: '5' },
             ],
           },

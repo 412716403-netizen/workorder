@@ -6,8 +6,10 @@ import type {
   PlanOrder,
   PrintListRow,
   Product,
+  ProductCategory,
   ProductVariant,
 } from '../types';
+import { getProductCategoryCustomFieldEntries } from './reportCustomDocField';
 import { bomHasConfiguredItems } from './bomEffective';
 import { buildSalesBillPrintListRowsByProductLine, type SalesBillLineInput } from './buildSalesBillPrintContext';
 import {
@@ -71,12 +73,22 @@ function buildMaterialsFromBom(
   bom: BOM,
   materialProducts: Map<string, Product>,
   planQtyMultiplier: number,
+  categoryById: Map<string, ProductCategory>,
 ): ColorMaterialMatrixColorRow['materials'] {
   const out: ColorMaterialMatrixColorRow['materials'] = [];
   for (const it of bom.items ?? []) {
     if (!(it.productId ?? '').trim()) continue;
-    const name = materialProducts.get(it.productId)?.name ?? '';
-    out.push({ name, ratio: bomQuantityDisplay(it, planQtyMultiplier) });
+    const mat = materialProducts.get(it.productId);
+    const name = mat?.name ?? '';
+    const cat = mat?.categoryId ? categoryById.get(mat.categoryId) : undefined;
+    const tags = getProductCategoryCustomFieldEntries(mat ?? null, cat ?? null, { includeFile: false });
+    const productFormSummary =
+      tags.length > 0 ? tags.map(t => `${t.field.label}: ${t.display}`).join(' · ') : undefined;
+    out.push({
+      name,
+      ratio: bomQuantityDisplay(it, planQtyMultiplier),
+      ...(productFormSummary ? { productFormSummary } : {}),
+    });
   }
   return out;
 }
@@ -91,8 +103,10 @@ export function buildColorMaterialMatrixPayloadForPlan(opts: {
   products: Product[];
   hasVariantQty: boolean;
   qtyNoVariant: number;
+  categories?: ProductCategory[];
 }): ColorMaterialMatrixPayload {
   const { plan, product, dictionaries, globalNodes, boms, products, hasVariantQty, qtyNoVariant } = opts;
+  const categoryById = new Map((opts.categories ?? []).map(c => [c.id, c]));
 
   const materialProducts = new Map(products.map(p => [p.id, p]));
 
@@ -139,7 +153,7 @@ export function buildColorMaterialMatrixPayloadForPlan(opts: {
       if (!repVid) continue;
       const bom = resolveBomForVariantNode(product, repVid, nodeId, boms);
       const colorPlanQty = plannedQtyByGroup.get(gk) ?? 0;
-      const materials = bom ? buildMaterialsFromBom(bom, materialProducts, colorPlanQty) : [];
+      const materials = bom ? buildMaterialsFromBom(bom, materialProducts, colorPlanQty, categoryById) : [];
       if (materials.length > 0) anyConfigured = true;
       const colorName =
         gk === 'sku:single' ? '—' : colorDisplayName(gk, repVid, product, dictionaries);
@@ -166,6 +180,7 @@ export function buildPlanPrintListRows(
     globalNodes?: GlobalNodeTemplate[];
     boms?: BOM[];
     products?: Product[];
+    categories?: ProductCategory[];
   },
 ): PrintListRow[] {
   if (!plan?.productId || !product) return [];
@@ -200,6 +215,7 @@ export function buildPlanPrintListRows(
   const gn = opts.globalNodes ?? [];
   const bm = opts.boms ?? [];
   const pr = opts.products ?? [];
+  const cats = opts.categories ?? [];
 
   const payload = buildColorMaterialMatrixPayloadForPlan({
     plan,
@@ -210,6 +226,7 @@ export function buildPlanPrintListRows(
     products: pr.length > 0 ? pr : [product],
     hasVariantQty,
     qtyNoVariant,
+    categories: cats,
   });
 
   const json = serializeColorMaterialMatrixPayload(payload);
