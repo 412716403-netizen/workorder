@@ -33,12 +33,12 @@ fi
 npm run build
 
 echo "==> 重启 API 服务"
-if systemctl list-unit-files smarttrack-api.service 2>/dev/null | grep -q smarttrack-api; then
-  systemctl restart smarttrack-api
+if sudo systemctl list-unit-files smarttrack-api.service 2>/dev/null | grep -q smarttrack-api; then
+  sudo systemctl restart smarttrack-api
   sleep 1
   curl -sS "http://127.0.0.1:${PORT:-3001}/api/health" || true
   echo ""
-  systemctl is-active smarttrack-api && echo "smarttrack-api: 运行中" || echo "WARN: smarttrack-api 未处于 active，请执行: systemctl status smarttrack-api"
+  sudo systemctl is-active smarttrack-api && echo "smarttrack-api: 运行中" || echo "WARN: smarttrack-api 未处于 active，请执行: systemctl status smarttrack-api"
 else
   echo "WARN: 未检测到 systemd 单元 smarttrack-api，请手动启动后端（例如 node backend/dist/index.js 或 pm2）"
 fi
