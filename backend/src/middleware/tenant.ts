@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { hasSubPermission } from '../types/index.js';
+import { hasSubPermission, isTenantElevatedRole } from '../types/index.js';
 
 /**
  * 权限中间件分层（约定）：
@@ -27,7 +27,7 @@ export function requireTenant(req: Request, res: Response, next: NextFunction) {
 export function requirePermission(module: string) {
   return (req: Request, res: Response, next: NextFunction) => {
     const { tenantRole, permissions } = req.user || {};
-    if (tenantRole === 'owner') return next();
+    if (isTenantElevatedRole(tenantRole)) return next();
     if (permissions?.includes(module) || permissions?.some(p => p.startsWith(`${module}:`))) {
       return next();
     }
@@ -44,7 +44,7 @@ export function requirePermission(module: string) {
 export function requireSubPermission(required: string) {
   return (req: Request, res: Response, next: NextFunction) => {
     const { tenantRole, permissions } = req.user || {};
-    if (tenantRole === 'owner') return next();
+    if (isTenantElevatedRole(tenantRole)) return next();
 
     const userPerms = permissions || [];
 

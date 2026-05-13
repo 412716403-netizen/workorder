@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import * as api from '../services/api';
 import { clearTokens, refreshSessionSilently } from '../services/api';
 import type { TenantInfo } from '../services/api';
+import { isTenantElevatedRole } from '../utils/hasModulePerm';
 
 export type TenantContext = {
   tenantId: string;
@@ -78,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (mod: string) => {
       if (!tenantCtx) return false;
       return (
-        tenantCtx.tenantRole === 'owner' ||
+        isTenantElevatedRole(tenantCtx.tenantRole) ||
         tenantCtx.permissions.includes(mod) ||
         tenantCtx.permissions.some(p => p.startsWith(`${mod}:`))
       );

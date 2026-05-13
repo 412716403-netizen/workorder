@@ -6,6 +6,14 @@ import type { JwtPayload } from '../types/index.js';
 import { ALL_PERMISSIONS } from '../types/index.js';
 import { prisma } from '../lib/prisma.js';
 import { hashToken } from '../utils/cookies.js';
+import {
+  getRedis,
+  redisDel,
+  redisGetJson,
+  redisSetJson,
+  redisSetNxEx,
+  redisTtl,
+} from '../lib/redis.js';
 
 async function assertTenantActive(tenantId: string) {
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { status: true, expiresAt: true } });
@@ -41,15 +49,33 @@ function resolveMemberPermissions(membership: {
   roleId?: string | null;
   customRole?: { permissions: unknown } | null;
 }): string[] {
-  if (membership.role === 'owner') return [...ALL_PERMISSIONS];
+  if (membership.role === 'owner' || membership.role === 'admin') return [...ALL_PERMISSIONS];
   if (membership.roleId && membership.customRole) {
     const rolePerms = membership.customRole.permissions;
-    return Array.isArray(rolePerms) ? rolePerms as string[] : [];
+    const fromRole = Array.isArray(rolePerms) ? (rolePerms as string[]) : [];
+    if (fromRole.length > 0) return fromRole;
+    const fromMembership = Array.isArray(membership.permissions) ? (membership.permissions as string[]) : [];
+    return fromMembership.length > 0 ? fromMembership : [];
   }
   return Array.isArray(membership.permissions) ? membership.permissions as string[] : [];
 }
 
-async function buildTenantPayload(userId: string, tenantId?: string) {
+type TenantPayloadResult = {
+  tenantId: string | undefined;
+  tenantRole: string | undefined;
+  permissions: string[] | undefined;
+  tenants: Array<{
+    id: string;
+    name: string;
+    role: string;
+    permissions: string[];
+    status: string;
+    expiresAt: string | null;
+    equipmentFeaturesEnabled: boolean;
+  }>;
+};
+
+async function loadTenantPayloadFromDb(userId: string, tenantId?: string): Promise<TenantPayloadResult> {
   const memberships = await prisma.tenantMembership.findMany({
     where: { userId },
     include: {
@@ -88,6 +114,89 @@ async function buildTenantPayload(userId: string, tenantId?: string) {
   }
 
   return { tenantId: undefined, tenantRole: undefined, permissions: undefined, tenants };
+}
+
+/**
+ * Phase 3.E follow-up：
+ * - TTL 从 30s 收紧到 5s。原 30s 在管理员"立即踢人 / 立即收回权限"场景下窗口太大；
+ *   5s 已能保护 99% 的请求避开 DB（typical 用户操作间隔 > 1s），又把权限变更生效
+ *   延迟控制在用户体感不到的范围。
+ * - 配合 `invalidateAuthTenantCache(userId)`：roles/tenants/admin 等会修改有效权限的
+ *   入口在写操作完成后调用，立即让缓存失效，最坏情况是 5s + 当前 in-flight 请求。
+ */
+const AUTH_TENANT_CACHE_TTL_S = 5;
+
+function tenantCacheKey(userId: string, tenantId?: string): string {
+  return `cache:auth:tenant-payload:${userId}:${tenantId ?? '_'}`;
+}
+
+async function buildTenantPayload(userId: string, tenantId?: string): Promise<TenantPayloadResult> {
+  const cacheKey = tenantCacheKey(userId, tenantId);
+  if (getRedis()) {
+    const hit = await redisGetJson<TenantPayloadResult>(cacheKey);
+    if (hit) return hit;
+  }
+  const fresh = await loadTenantPayloadFromDb(userId, tenantId);
+  if (getRedis()) {
+    await redisSetJson(cacheKey, fresh, AUTH_TENANT_CACHE_TTL_S);
+  }
+  return fresh;
+}
+
+/**
+ * 主动失效一个用户在指定租户的缓存 payload。
+ * - `tenantId` 省略时失效该用户**所有**租户上下文（用 KEYS+DEL 实现，量很小）。
+ * - 在 roles/tenants/adminUsers 等会改变用户权限的写入路径里调用，
+ *   避免 5s TTL 期内用户拿到旧权限。
+ */
+export async function invalidateAuthTenantCache(userId: string, tenantId?: string): Promise<void> {
+  if (!getRedis()) return;
+  if (tenantId) {
+    await redisDel(tenantCacheKey(userId, tenantId));
+    return;
+  }
+  // 多租户场景下兜底清掉同 userId 的所有 payload key。
+  const r = getRedis();
+  if (!r) return;
+  try {
+    const pattern = `cache:auth:tenant-payload:${userId}:*`;
+    const keys = await r.keys(pattern);
+    if (keys.length > 0) await redisDel(...keys);
+  } catch (e) {
+    console.warn('[auth] invalidateAuthTenantCache failed:', e);
+  }
+}
+
+/**
+ * 主动失效"某租户下所有成员"的 payload 缓存。
+ * 用于角色权限变更、批量调整成员配置等会影响多个成员的场景。
+ *
+ * 实现说明：key 结构为 `cache:auth:tenant-payload:<userId>:<tenantId>`，没有反向索引，
+ * 这里用 SCAN（cursor-based、非阻塞）扫一遍 `:${tenantId}` 后缀的 key 集中删除。
+ * 单租户成员 100~1000 量级时延迟可忽略；无 Redis 时直接返回。
+ */
+export async function invalidateAuthCacheForTenant(tenantId: string): Promise<void> {
+  const r = getRedis();
+  if (!r) return;
+  const suffix = `:${tenantId}`;
+  const matchPattern = `cache:auth:tenant-payload:*${suffix}`;
+  try {
+    let cursor = '0';
+    const toDel: string[] = [];
+    do {
+      const [next, keys] = (await r.scan(cursor, 'MATCH', matchPattern, 'COUNT', 200)) as [
+        string,
+        string[],
+      ];
+      cursor = next;
+      for (const k of keys) {
+        if (k.endsWith(suffix)) toDel.push(k);
+      }
+    } while (cursor !== '0');
+    if (toDel.length > 0) await redisDel(...toDel);
+  } catch (e) {
+    console.warn('[auth] invalidateAuthCacheForTenant failed:', e);
+  }
 }
 
 export async function registerByPhone(phone: string, password: string, displayName?: string) {
@@ -421,40 +530,73 @@ export async function updateProfile(
 }
 
 type CodeEntry = { code: string; exp: number };
+/** 无 REDIS_URL 或 Redis 不可用时回退；PM2 多 worker 时须配置 Redis */
 const phoneChangeCodes = new Map<string, CodeEntry>();
 const phoneChangeSendCooldown = new Map<string, number>();
 
 const PHONE_CHG_COOLDOWN_MS = 60_000;
 const PHONE_CHG_CODE_TTL_MS = 300_000;
+const PHONE_CODE_REDIS_SEC = Math.ceil(PHONE_CHG_CODE_TTL_MS / 1000);
+const PHONE_COOLDOWN_REDIS_SEC = Math.ceil(PHONE_CHG_COOLDOWN_MS / 1000);
 
 function random6(): string {
   return String(100000 + Math.floor(Math.random() * 900000));
 }
 
-function putPhoneChangeCode(key: string): string {
+function codeRedisKey(logicalKey: string): string {
+  return `phone:change:code:${logicalKey}`;
+}
+
+function cooldownRedisKey(logicalKey: string): string {
+  return `phone:change:cooldown:${logicalKey}`;
+}
+
+async function putPhoneChangeCode(logicalKey: string): Promise<string> {
   const code = random6();
-  phoneChangeCodes.set(key, { code, exp: Date.now() + PHONE_CHG_CODE_TTL_MS });
+  if (getRedis()) {
+    await redisSetJson(codeRedisKey(logicalKey), { code }, PHONE_CODE_REDIS_SEC);
+    return code;
+  }
+  phoneChangeCodes.set(logicalKey, { code, exp: Date.now() + PHONE_CHG_CODE_TTL_MS });
   return code;
 }
 
-function consumePhoneChangeCode(key: string, input: string): boolean {
-  const v = phoneChangeCodes.get(key);
+async function consumePhoneChangeCode(logicalKey: string, input: string): Promise<boolean> {
+  const trimmed = input.trim();
+  if (getRedis()) {
+    const rkey = codeRedisKey(logicalKey);
+    const v = await redisGetJson<{ code: string }>(rkey);
+    if (!v || v.code !== trimmed) return false;
+    await redisDel(rkey);
+    return true;
+  }
+  const v = phoneChangeCodes.get(logicalKey);
   if (!v || Date.now() > v.exp) {
-    phoneChangeCodes.delete(key);
+    phoneChangeCodes.delete(logicalKey);
     return false;
   }
-  if (v.code !== input.trim()) return false;
-  phoneChangeCodes.delete(key);
+  if (v.code !== trimmed) return false;
+  phoneChangeCodes.delete(logicalKey);
   return true;
 }
 
-function assertSendCooldown(key: string) {
-  const last = phoneChangeSendCooldown.get(key) ?? 0;
+async function assertSendCooldown(logicalKey: string): Promise<void> {
+  const rkey = cooldownRedisKey(logicalKey);
+  if (getRedis()) {
+    const nx = await redisSetNxEx(rkey, PHONE_COOLDOWN_REDIS_SEC);
+    if (nx === 'ok') return;
+    if (nx === 'exists') {
+      const ttl = await redisTtl(rkey);
+      const sec = ttl > 0 ? ttl : 1;
+      throw new AppError(429, `请 ${sec} 秒后再获取验证码`);
+    }
+  }
+  const last = phoneChangeSendCooldown.get(logicalKey) ?? 0;
   if (Date.now() - last < PHONE_CHG_COOLDOWN_MS) {
     const sec = Math.ceil((PHONE_CHG_COOLDOWN_MS - (Date.now() - last)) / 1000);
     throw new AppError(429, `请 ${sec} 秒后再获取验证码`);
   }
-  phoneChangeSendCooldown.set(key, Date.now());
+  phoneChangeSendCooldown.set(logicalKey, Date.now());
 }
 
 const isDevSms = () => process.env.NODE_ENV !== 'production';
@@ -466,8 +608,8 @@ export async function phoneChangeSendCodeOld(userId: string, oldPhone: string) {
   const o = oldPhone.trim();
   if (!CN_PHONE_RE.test(o)) throw new AppError(400, '请输入正确的11位原手机号');
   if (user.username !== o) throw new AppError(400, '与原绑定手机号不一致');
-  assertSendCooldown(`send:old:${userId}`);
-  const code = putPhoneChangeCode(`old:${userId}`);
+  await assertSendCooldown(`send:old:${userId}`);
+  const code = await putPhoneChangeCode(`old:${userId}`);
   const out: { message: string; devCode?: string } = {
     message: '验证码已发送（生产环境将发送至原手机号）',
   };
@@ -480,7 +622,7 @@ export async function phoneChangeVerifyOldCode(userId: string, oldPhone: string,
   if (!user) throw new AppError(404, '用户不存在');
   const o = oldPhone.trim();
   if (!CN_PHONE_RE.test(o) || user.username !== o) throw new AppError(400, '原手机号不正确');
-  if (!consumePhoneChangeCode(`old:${userId}`, code)) {
+  if (!(await consumePhoneChangeCode(`old:${userId}`, code))) {
     throw new AppError(400, '验证码错误或已过期，请重新获取');
   }
   const phaseToken = jwt.sign(
@@ -510,8 +652,8 @@ export async function phoneChangeSendCodeNew(userId: string, phaseToken: string,
   if (p === user.username) throw new AppError(400, '新手机号与当前相同');
   const taken = await prisma.user.findUnique({ where: { username: p } });
   if (taken) throw new AppError(409, '该手机号已被使用');
-  assertSendCooldown(`send:new:${userId}:${p}`);
-  const code = putPhoneChangeCode(`new:${userId}:${p}`);
+  await assertSendCooldown(`send:new:${userId}:${p}`);
+  const code = await putPhoneChangeCode(`new:${userId}:${p}`);
   const out: { message: string; devCode?: string } = {
     message: '验证码已发送（生产环境将发送至新手机号）',
   };
@@ -528,7 +670,7 @@ export async function phoneChangeComplete(
   decodePhaseToken(userId, phaseToken);
   const p = newPhone.trim();
   if (!CN_PHONE_RE.test(p)) throw new AppError(400, '请输入正确的新手机号');
-  if (!consumePhoneChangeCode(`new:${userId}:${p}`, code)) {
+  if (!(await consumePhoneChangeCode(`new:${userId}:${p}`, code))) {
     throw new AppError(400, '验证码错误或已过期，请重新获取');
   }
   const user = await prisma.user.findUnique({ where: { id: userId } });

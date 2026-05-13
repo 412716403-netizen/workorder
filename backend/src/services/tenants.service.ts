@@ -21,12 +21,41 @@ export async function createTenant(userId: string, body: { name: string; logo?: 
   };
 }
 
-export async function listTenants(userId: string) {
-  const memberships = await prisma.tenantMembership.findMany({
-    where: { userId },
-    include: { tenant: true, customRole: { select: { permissions: true } } },
-  });
-  return memberships.map((m) => {
+export async function listTenants(userId: string, opts: { all?: boolean; page?: number; pageSize?: number } = {}) {
+  const include = { tenant: true, customRole: { select: { permissions: true } } };
+
+  if (opts.all) {
+    const memberships = await prisma.tenantMembership.findMany({
+      where: { userId },
+      include,
+    });
+    return memberships.map((m) => {
+      let perms: unknown = m.permissions;
+      if (m.role === 'owner') { perms = [...ALL_PERMISSIONS]; }
+      else if (m.roleId && m.customRole) { perms = Array.isArray(m.customRole.permissions) ? m.customRole.permissions : []; }
+      return {
+        id: m.tenant.id, name: m.tenant.name, logo: m.tenant.logo,
+        inviteCode: m.tenant.inviteCode, status: m.tenant.status,
+        expiresAt: m.tenant.expiresAt?.toISOString() ?? null,
+        role: m.role, permissions: perms, joinedAt: m.createdAt,
+        equipmentFeaturesEnabled: m.tenant.equipmentModuleEnabled !== false,
+      };
+    });
+  }
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [memberships, total] = await Promise.all([
+    prisma.tenantMembership.findMany({
+      where: { userId },
+      include,
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.tenantMembership.count({ where: { userId } }),
+  ]);
+  const data = memberships.map((m) => {
     let perms: unknown = m.permissions;
     if (m.role === 'owner') { perms = [...ALL_PERMISSIONS]; }
     else if (m.roleId && m.customRole) { perms = Array.isArray(m.customRole.permissions) ? m.customRole.permissions : []; }
@@ -38,6 +67,7 @@ export async function listTenants(userId: string) {
       equipmentFeaturesEnabled: m.tenant.equipmentModuleEnabled !== false,
     };
   });
+  return { data, total, page, pageSize };
 }
 
 export async function getTenant(userId: string, tenantId: string) {
@@ -239,10 +269,13 @@ function resolveMemberPerms(m: {
   role: string; permissions: unknown; roleId?: string | null;
   customRole?: { permissions: unknown } | null;
 }): string[] {
-  if (m.role === 'owner') return [...ALL_PERMISSIONS];
+  if (m.role === 'owner' || m.role === 'admin') return [...ALL_PERMISSIONS];
   if (m.roleId && m.customRole) {
     const rp = m.customRole.permissions;
-    return Array.isArray(rp) ? rp as string[] : [];
+    const fromRole = Array.isArray(rp) ? (rp as string[]) : [];
+    if (fromRole.length > 0) return fromRole;
+    const fromMem = Array.isArray(m.permissions) ? (m.permissions as string[]) : [];
+    return fromMem.length > 0 ? fromMem : [];
   }
   return Array.isArray(m.permissions) ? m.permissions as string[] : [];
 }

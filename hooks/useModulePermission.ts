@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useEffect } from 'react';
+import { isTenantElevatedRole } from '../utils/hasModulePerm';
 
 interface UseModulePermissionOptions {
   tenantRole?: string;
@@ -10,7 +11,7 @@ interface UseModulePermissionOptions {
  * Centralised permission check for module-level views.
  *
  * Logic (first match wins):
- *  1. tenant owner  → allow
+ *  1. tenant owner 或租户管理员（`admin`）→ allow
  *  2. empty / missing permission list → allow (backward compat: unset = full access)
  *  3. module-level wildcard (e.g. `production` in list) AND no fine-grained
  *     sub-keys (e.g. no `production:*`) → allow everything in that module
@@ -18,10 +19,10 @@ interface UseModulePermissionOptions {
  *  5. prefix match (`permKey:` is a prefix of some entry) → allow
  */
 export function useModulePermission({ tenantRole, userPermissions, moduleName }: UseModulePermissionOptions) {
-  const isOwner = tenantRole === 'owner';
+  const isFullAccess = isTenantElevatedRole(tenantRole);
 
   const hasPerm = useCallback((permKey: string): boolean => {
-    if (isOwner) return true;
+    if (isFullAccess) return true;
     if (!userPermissions || userPermissions.length === 0) return true;
     if (moduleName) {
       const hasModule = userPermissions.includes(moduleName);
@@ -31,9 +32,9 @@ export function useModulePermission({ tenantRole, userPermissions, moduleName }:
     if (userPermissions.includes(permKey)) return true;
     if (userPermissions.some(p => p.startsWith(`${permKey}:`))) return true;
     return false;
-  }, [isOwner, userPermissions, moduleName]);
+  }, [isFullAccess, userPermissions, moduleName]);
 
-  return { isOwner, hasPerm };
+  return { isOwner: isFullAccess, hasPerm };
 }
 
 interface TabItem {

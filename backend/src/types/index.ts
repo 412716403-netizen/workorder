@@ -46,6 +46,11 @@ export const ALL_PERMISSIONS = [
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];
 
+/** 企业成员 `tenant_memberships.role`：拥有者与租户管理员（admin）视为满权 */
+export function isTenantElevatedRole(role: string | undefined): boolean {
+  return role === 'owner' || role === 'admin';
+}
+
 export const SETTINGS_SUB_MODULES = {
   categories:            { label: '产品分类管理',   actions: ['view', 'create', 'edit', 'delete'] as const },
   partner_categories:    { label: '合作单位分类',   actions: ['view', 'create', 'edit', 'delete'] as const },

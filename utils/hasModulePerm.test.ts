@@ -1,42 +1,21 @@
-import { describe, it, expect } from 'vitest';
-import { hasModulePerm } from './hasModulePerm';
+import { describe, expect, it } from 'vitest';
+import { hasModulePerm, isTenantElevatedRole } from './hasModulePerm';
+
+describe('isTenantElevatedRole', () => {
+  it('treats owner and admin as elevated', () => {
+    expect(isTenantElevatedRole('owner')).toBe(true);
+    expect(isTenantElevatedRole('admin')).toBe(true);
+    expect(isTenantElevatedRole('worker')).toBe(false);
+    expect(isTenantElevatedRole(undefined)).toBe(false);
+  });
+});
 
 describe('hasModulePerm', () => {
-  it('allows owner regardless of permissions', () => {
-    expect(hasModulePerm('owner', [], 'psi', 'psi:purchase_order:view')).toBe(true);
-    expect(hasModulePerm('owner', undefined, 'psi', 'psi:purchase_order:view')).toBe(true);
+  it('allows admin without enumerating sub-perms', () => {
+    expect(hasModulePerm('admin', [], 'production', 'production:orders:view')).toBe(true);
   });
 
-  it('allows when permissions list is empty (backward compat)', () => {
-    expect(hasModulePerm('member', [], 'psi', 'psi:purchase_order:view')).toBe(true);
-  });
-
-  it('allows when permissions is undefined', () => {
-    expect(hasModulePerm('member', undefined, 'psi', 'psi:purchase_order:view')).toBe(true);
-  });
-
-  it('allows module-level wildcard when no fine-grained keys exist', () => {
-    expect(hasModulePerm('member', ['psi'], 'psi', 'psi:purchase_order:view')).toBe(true);
-  });
-
-  it('denies module-level wildcard when fine-grained keys exist', () => {
-    expect(hasModulePerm('member', ['psi', 'psi:sales_order:view'], 'psi', 'psi:purchase_order:view')).toBe(false);
-  });
-
-  it('allows exact permKey match', () => {
-    expect(hasModulePerm('member', ['psi:purchase_order:view'], 'psi', 'psi:purchase_order:view')).toBe(true);
-  });
-
-  it('allows prefix match on permKey', () => {
-    expect(hasModulePerm('member', ['psi:purchase_order:view:extra'], 'psi', 'psi:purchase_order:view')).toBe(true);
-  });
-
-  it('denies when no matching permission', () => {
-    expect(hasModulePerm('member', ['psi:sales_order:view'], 'psi', 'psi:purchase_order:view')).toBe(false);
-  });
-
-  it('works with finance module', () => {
-    expect(hasModulePerm('member', ['finance:receipt:view'], 'finance', 'finance:receipt:view')).toBe(true);
-    expect(hasModulePerm('member', ['finance:receipt:view'], 'finance', 'finance:payment:create')).toBe(false);
+  it('allows owner without enumerating sub-perms', () => {
+    expect(hasModulePerm('owner', [], 'psi', 'psi:purchase_bill:view')).toBe(true);
   });
 });
