@@ -5,7 +5,6 @@ import {
   Layers,
   Clock,
   ArrowRightCircle,
-  AlertCircle,
   Save,
   FileText,
   Info,
@@ -54,11 +53,12 @@ import {
   PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER,
 } from '../../types';
 import { itemCodesApi, psi } from '../../services/api';
+import { useQuery } from '@tanstack/react-query';
 import { CustomerSelect } from '../../components/CustomerSelect';
 import { SearchableMultiSelectWithProcessTabs } from '../../components/SearchableMultiSelect';
 import { formatPlanOrderCreatedAtForList, localTodayYmd, planIdToLocalYmd, toLocalDateYmd } from '../../utils/localDateTime';
-import { nextPsiDocNumber } from '../../utils/partnerDocNumber';
-import { getLastPurchaseUnitPrice } from '../../utils/psiPartnerProductLastPrice';
+// Phase 3.D follow-up：`nextPsiDocNumber` / `getLastPurchaseUnitPrice` 不再依赖前端全量扫表，
+// 改为调后端 `psi.nextDocNumber` / `psi.lastPurchasePrices`。
 import { PlanPrintTemplateManageDialog } from '../../components/plan-print/PlanPrintTemplateManageDialog';
 import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
 import { isEquipmentAssignmentEnabled, isWorkerAssignmentEnabled } from '../../utils/nodeAssignmentFlags';
@@ -69,6 +69,7 @@ import PlanPoSupplierAssignModal, {
   type PlanPoSupplierAssignRow,
   type PlanPoSupplierOverride,
 } from './PlanPoSupplierAssignModal';
+import { outlineToolbarButtonClass, primaryToolbarButtonClass } from '../../styles/uiDensity';
 
 function formatPlanCreatedDateList(created: string | undefined | null): string {
   if (!created) return '';
@@ -128,13 +129,14 @@ export interface PlanDetailPanelProps {
   boms: BOM[];
   partners: Partner[];
   partnerCategories: PartnerCategory[];
-  psiRecords?: any[];
   planFormSettings: PlanFormSettings;
   orders?: ProductionOrder[];
   productionLinkMode?: 'order' | 'product';
 
   // Callbacks
   onUpdatePlan?: (planId: string, updates: Partial<PlanOrder>) => void;
+  /** 计划交期变更时同步更新关联工单 `dueDate`（需工单编辑权限） */
+  onUpdateOrder?: (orderId: string, updates: Partial<ProductionOrder>) => void | Promise<void>;
   onDeletePlan?: (planId: string) => void;
   onConvertToOrder: (planId: string) => void;
   onUpdateProduct: (product: Product) => Promise<Product | null>;
@@ -169,11 +171,11 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   boms,
   partners,
   partnerCategories = [],
-  psiRecords = [],
   planFormSettings,
   orders = [],
   productionLinkMode = 'order',
   onUpdatePlan,
+  onUpdateOrder,
   onDeletePlan,
   onConvertToOrder,
   onUpdateProduct,
@@ -240,6 +242,12 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   // --- Derived data ---
   const viewPlan = plans.find(p => p.id === planId);
   const viewProduct = products.find(p => p.id === viewPlan?.productId);
+  /** 已下达工单：计划行已转 CONVERTED，或已有 planOrderId 指向本计划的工单 */
+  const planWorkOrdersDispatched = useMemo(() => {
+    if (!viewPlan) return false;
+    if (viewPlan.status === PlanStatus.CONVERTED) return true;
+    return orders.some(o => o.planOrderId === viewPlan.id);
+  }, [viewPlan, orders]);
   const parentPlan = viewPlan?.parentPlanId ? plans.find(p => p.id === viewPlan.parentPlanId) : null;
   const effectivePlanForMaterial = parentPlan || viewPlan;
 
@@ -278,6 +286,34 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     return nums;
   }, [viewPlan, plans]);
 
+  /**
+   * Phase 3.D follow-up：替代 `AppDataContext.psiRecords` 全量扫描。
+   * 调 `GET /api/psi/plan-related?planId=...&planNumbers=...` 后端按 customData.sourcePlanId /
+   * customData.sourcePlanNumber / note "计划单[..]" 一次性筛出本计划相关的 PO + 关联 PB。
+   * 返回数据用于：`materialIdsWithPO` / `relatedPOsByMaterial` / `receivedByOrderLine`。
+   *
+   * 当 mutation（新建 / 删除 PO/PB）发生时，外部调用方可通过 `queryClient.invalidateQueries({ queryKey: ['plan.relatedPsi'] })`
+   * 触发本地刷新；本组件落库 PO 后会主动 refetch。
+   */
+  const planRelatedPsiQuery = useQuery({
+    queryKey: ['plan.relatedPsi', planId, planNumbersForPO.join(',')],
+    queryFn: () => psi.planRelated({ planId, planNumbers: planNumbersForPO }),
+    enabled: Boolean(planId) && (planNumbersForPO.length > 0 || Boolean(planId)),
+    staleTime: 15_000,
+  });
+  const planRelatedPurchaseOrders = useMemo<any[]>(
+    () => (planRelatedPsiQuery.isSuccess && Array.isArray(planRelatedPsiQuery.data?.purchaseOrders)
+      ? (planRelatedPsiQuery.data!.purchaseOrders as any[])
+      : []),
+    [planRelatedPsiQuery.isSuccess, planRelatedPsiQuery.data],
+  );
+  const planRelatedPurchaseBills = useMemo<any[]>(
+    () => (planRelatedPsiQuery.isSuccess && Array.isArray(planRelatedPsiQuery.data?.purchaseBills)
+      ? (planRelatedPsiQuery.data!.purchaseBills as any[])
+      : []),
+    [planRelatedPsiQuery.isSuccess, planRelatedPsiQuery.data],
+  );
+
   const getUnitName = (productId: string) => {
     const p = products.find(x => x.id === productId);
     const u = (dictionaries.units ?? []).find(x => x.id === p?.unitId);
@@ -306,43 +342,46 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     }
   }, []);
 
+  // 切计划单或本计划相关 PSI 更新时重新拉服务端库存（取代旧的 [psiRecords?.length] 副作用）
   useEffect(() => {
     void loadServerStock();
-  }, [planId, psiRecords?.length, loadServerStock]);
+  }, [planId, planRelatedPsiQuery.dataUpdatedAt, loadServerStock]);
 
   const stockReady = serverStockStatus === 'ready';
   const getServerStockQty = (materialId: string): number | null =>
     stockReady ? (serverStockMap[materialId] ?? 0) : null;
 
   const materialIdsWithPO = useMemo(() => {
-    if (!planNumbersForPO.length || !psiRecords?.length || !viewPlan) return new Set<string>();
+    if (!planNumbersForPO.length || !viewPlan || !planRelatedPurchaseOrders.length) return new Set<string>();
     const ids = new Set<string>();
-    psiRecords.forEach((r: any) => {
+    planRelatedPurchaseOrders.forEach((r: any) => {
       if (!purchaseOrderRecordMatchesPlanPanel(r, planNumbersForPO, viewPlan)) return;
       ids.add(r.productId);
     });
     return ids;
-  }, [planNumbersForPO, psiRecords, viewPlan]);
+  }, [planNumbersForPO, planRelatedPurchaseOrders, viewPlan]);
 
   const relatedPOsByMaterial = useMemo(() => {
-    if (!planNumbersForPO.length || !psiRecords?.length || !viewPlan) return {} as Record<string, any[]>;
+    if (!planNumbersForPO.length || !viewPlan || !planRelatedPurchaseOrders.length) return {} as Record<string, any[]>;
     const map: Record<string, any[]> = {};
-    psiRecords.forEach((r: any) => {
+    planRelatedPurchaseOrders.forEach((r: any) => {
       if (!purchaseOrderRecordMatchesPlanPanel(r, planNumbersForPO, viewPlan)) return;
       if (!map[r.productId]) map[r.productId] = [];
       map[r.productId].push(r);
     });
     return map;
-  }, [planNumbersForPO, psiRecords, viewPlan]);
+  }, [planNumbersForPO, planRelatedPurchaseOrders, viewPlan]);
 
   const receivedByOrderLine = useMemo(() => {
     const map: Record<string, number> = {};
-    (psiRecords || []).filter((r: any) => r.type === 'PURCHASE_BILL' && r.sourceOrderNumber && r.sourceLineId).forEach((r: any) => {
-      const key = `${r.sourceOrderNumber}::${r.sourceLineId}`;
-      map[key] = (map[key] ?? 0) + (r.quantity ?? 0);
-    });
+    planRelatedPurchaseBills
+      .filter((r: any) => r.type === 'PURCHASE_BILL' && r.sourceOrderNumber && r.sourceLineId)
+      .forEach((r: any) => {
+        const key = `${r.sourceOrderNumber}::${r.sourceLineId}`;
+        map[key] = (map[key] ?? 0) + (r.quantity ?? 0);
+      });
     return map;
-  }, [psiRecords]);
+  }, [planRelatedPurchaseBills]);
 
   const getInboundProgress = (materialId: string): { received: number; ordered: number } | null => {
     const list = relatedPOsByMaterial[materialId];
@@ -525,6 +564,9 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     return !existing;
   });
 
+  const canUseSubPlanActions = Boolean(onCreateSubPlan || onCreateSubPlans);
+  const showCreateSubPlanButton = canUseSubPlanActions && hasProducibleNeedingSubPlan;
+
   const hasSubBom = (materialId: string) => boms.some(b => b.parentProductId === materialId);
   const leafMaterials = (materialRequirements as any[]).filter((m: any) => !hasSubBom(m.materialId));
   const leafWithShortage = leafMaterials.filter((m: any) => m.shortage > 0);
@@ -532,10 +574,27 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   const hasExistingPOs = Object.keys(relatedPOsByMaterial).length > 0;
   const canGeneratePO = leafWithShortage.length > 0 && allPlannedFilled && proposedOrders.length === 0 && !hasExistingPOs;
 
+  /**
+   * Phase 3.D follow-up：构建建议采购单。
+   * - 单号生成从前端扫表改为后端 `psi.nextDocNumber`（每个 supplier 一次）。
+   * - 单价上次取价从前端扫表改为后端 `psi.lastPurchasePrices`（批量一次）。
+   * 入参不变；改造为 async，调用方需 await。
+   */
   const buildProposedOrdersFromLeaves = useCallback(
-    (overrides: Record<string, PlanPoSupplierOverride>) => {
+    async (overrides: Record<string, PlanPoSupplierOverride>) => {
       const groupedMap: Record<string, ProposedOrder> = {};
       const backfill = new Set<string>();
+
+      // 1) 先把每个 leaf 解析到 supplier；并收集要批量查上次单价的 pairs
+      type StagedItem = {
+        supplierId: string;
+        supplierName: string;
+        item: any;
+        index: number;
+        qtyRounded: number;
+      };
+      const staged: StagedItem[] = [];
+      const pricePairs: Array<{ partnerId: string; partnerName: string; productId: string }> = [];
 
       leafWithShortage.forEach((item: any, index: number) => {
         const materialProduct = products.find(p => p.id === item.materialId);
@@ -546,34 +605,82 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
         const supplier = supplierIdResolved ? partners.find(p => p.id === supplierIdResolved) : undefined;
         if (!supplier) return;
 
-        if (!groupedMap[supplier.id]) {
-          const orderNumber = nextPsiDocNumber('PO', 'PURCHASE_ORDER', partners, psiRecords || [], supplier.id, supplier.name);
-          groupedMap[supplier.id] = { orderNumber, partnerId: supplier.id, partnerName: supplier.name, items: [] };
-        }
         const qtyRounded = Math.round(Number(item.plannedQty ?? item.shortage) * 100) / 100;
-        const prod = products.find(p => p.id === item.materialId);
-        const lastPrice = getLastPurchaseUnitPrice(psiRecords, {
-          partnerId: supplier.id,
-          partnerName: supplier.name,
-          productId: item.materialId,
-        });
-        const purchasePrice = lastPrice ?? prod?.purchasePrice ?? 0;
-        groupedMap[supplier.id].items.push({
-          id: `item-${Date.now()}-${item.materialId}-${index}`,
-          productId: item.materialId,
-          materialName: item.materialName,
-          materialSku: item.materialSku,
-          quantity: qtyRounded,
-          suggestedQty: qtyRounded,
-          nodeName: item.nodeName,
-          purchasePrice,
-        });
+        staged.push({ supplierId: supplier.id, supplierName: supplier.name, item, index, qtyRounded });
+        pricePairs.push({ partnerId: supplier.id, partnerName: supplier.name, productId: item.materialId });
       });
 
       poSupplierBackfillMaterialIdsRef.current = backfill;
+
+      if (staged.length === 0) {
+        setProposedOrders([]);
+        return;
+      }
+
+      // 2) 批量查上次采购单价
+      let priceMap: Map<string, number | null>;
+      try {
+        const prices = await psi.lastPurchasePrices(pricePairs);
+        priceMap = new Map<string, number | null>();
+        pricePairs.forEach((p, i) => {
+          priceMap.set(`${p.partnerId}|${p.productId}`, prices[i]?.price ?? null);
+        });
+      } catch {
+        priceMap = new Map();
+      }
+
+      // 3) 每个独立 supplier 分一次后端取号
+      const uniqueSuppliers = Array.from(
+        new Map(staged.map(s => [s.supplierId, { id: s.supplierId, name: s.supplierName }])).values(),
+      );
+      const supplierDocMap = new Map<string, string>();
+      try {
+        const docs = await Promise.all(
+          uniqueSuppliers.map(s =>
+            psi.nextDocNumber({
+              prefix: 'PO',
+              psiType: 'PURCHASE_ORDER',
+              partnerId: s.id,
+              partnerName: s.name,
+            }),
+          ),
+        );
+        uniqueSuppliers.forEach((s, i) => supplierDocMap.set(s.id, docs[i]?.docNumber ?? ''));
+      } catch (e) {
+        // 取号失败时退回最简形态（缺合作单位 segment 时后端会返回 0000），不阻断本地预览
+        // eslint-disable-next-line no-console
+        console.warn('[PlanDetailPanel] nextDocNumber batch failed', e);
+      }
+
+      // 4) 组装 proposedOrders
+      for (const s of staged) {
+        if (!groupedMap[s.supplierId]) {
+          const orderNumber = supplierDocMap.get(s.supplierId) || `PO-0000-001`;
+          groupedMap[s.supplierId] = {
+            orderNumber,
+            partnerId: s.supplierId,
+            partnerName: s.supplierName,
+            items: [],
+          };
+        }
+        const prod = products.find(p => p.id === s.item.materialId);
+        const lastPrice = priceMap.get(`${s.supplierId}|${s.item.materialId}`) ?? null;
+        const purchasePrice = lastPrice ?? prod?.purchasePrice ?? 0;
+        groupedMap[s.supplierId].items.push({
+          id: `item-${Date.now()}-${s.item.materialId}-${s.index}`,
+          productId: s.item.materialId,
+          materialName: s.item.materialName,
+          materialSku: s.item.materialSku,
+          quantity: s.qtyRounded,
+          suggestedQty: s.qtyRounded,
+          nodeName: s.item.nodeName,
+          purchasePrice,
+        });
+      }
+
       setProposedOrders(Object.values(groupedMap));
     },
-    [leafWithShortage, products, partners, psiRecords],
+    [leafWithShortage, products, partners],
   );
 
   // --- Effects ---
@@ -632,31 +739,51 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   }, [probePlanActiveItemCodes]);
 
   // --- Callbacks ---
-  const handleUpdateDetail = () => {
-    if (planId) {
-      setIsSaving(true);
-      onUpdatePlan?.(planId, {
+  const handleUpdateDetail = async () => {
+    if (!planId || !viewPlan) return;
+    setIsSaving(true);
+    try {
+      const showDelivery = planFormSettings.listDisplay?.showDeliveryDate === true;
+      const nextDueStr = tempPlanInfo.dueDate.trim() ? tempPlanInfo.dueDate.trim() : undefined;
+      const prevDueNorm = viewPlan.dueDate
+        ? toLocalDateYmd(viewPlan.dueDate) || String(viewPlan.dueDate).trim().slice(0, 10)
+        : '';
+      const nextDueNorm = nextDueStr ?? '';
+      const dueChanged = showDelivery && nextDueNorm !== prevDueNorm;
+
+      const planPayload: Partial<PlanOrder> = {
         assignments: tempAssignments,
         customer: tempPlanInfo.customer,
         createdAt: tempPlanInfo.createdAt,
-        ...(planFormSettings.listDisplay?.showDeliveryDate
-          ? { dueDate: tempPlanInfo.dueDate.trim() ? tempPlanInfo.dueDate.trim() : undefined }
-          : {}),
-        items: tempPlanInfo.items,
-        customData: tempPlanInfo.customData
-      });
+        ...(showDelivery ? { dueDate: nextDueStr } : {}),
+        ...(!planWorkOrdersDispatched ? { items: tempPlanInfo.items } : {}),
+        customData: tempPlanInfo.customData,
+      };
+
+      await onUpdatePlan?.(planId, planPayload);
+
+      if (dueChanged && onUpdateOrder) {
+        const linkedOrders =
+          !viewPlan.parentPlanId
+            ? orders.filter(o => o.sourcePlanId === viewPlan.id)
+            : orders.filter(o => o.planOrderId === viewPlan.id);
+        const uniqById = [...new Map(linkedOrders.map(o => [o.id, o])).values()];
+        await Promise.allSettled(
+          uniqById.map(o => Promise.resolve(onUpdateOrder(o.id, { dueDate: nextDueStr }))),
+        );
+      }
+
       if (viewProduct) {
         const mergedRates: Record<string, number> = { ...(viewProduct.nodeRates || {}) };
         Object.entries(tempNodeRates).forEach(([nodeId, rate]) => {
           const numericRate = typeof rate === 'number' ? rate : parseFloat(String(rate));
           mergedRates[nodeId] = isNaN(numericRate) ? 0 : numericRate;
         });
-        onUpdateProduct({ ...viewProduct, nodeRates: mergedRates });
+        await onUpdateProduct({ ...viewProduct, nodeRates: mergedRates });
       }
-      setTimeout(() => {
-        setIsSaving(false);
-        onClose();
-      }, 300);
+      onClose();
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -672,6 +799,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   };
 
   const updateDetailItemQty = (variantId: string | undefined, val: string) => {
+    if (planWorkOrdersDispatched) return;
     const qty = parseInt(val) || 0;
     setTempPlanInfo(prev => {
       const newItems = prev.items.map(item => {
@@ -775,11 +903,11 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
       return;
     }
 
-    buildProposedOrdersFromLeaves({});
+    void buildProposedOrdersFromLeaves({});
   };
 
   const handleSupplierAssignConfirm = (overrides: Record<string, PlanPoSupplierOverride>) => {
-    buildProposedOrdersFromLeaves(overrides);
+    void buildProposedOrdersFromLeaves(overrides);
     setSupplierAssignModalOpen(false);
     setSupplierAssignRows([]);
   };
@@ -794,36 +922,64 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     setIsProcessingPO(true);
 
     try {
-        const existingDocNumbers = new Set(
-          (psiRecords || []).filter((r: any) => r.type === 'PURCHASE_ORDER' && r.docNumber).map((r: any) => r.docNumber)
+        /**
+         * Phase 3.D follow-up：
+         * - 不再扫 `psiRecords` 全表去重；按 supplier 一次性向后端 `psi.nextDocNumber` 取号。
+         *   即便 proposedOrders 中 orderNumber 与最新历史冲突，也由后端"查 MAX(seq)+1"重新给。
+         * - lastPrice 也走后端 `psi.lastPurchasePrices` 批量查；UI 上已经手填的 `item.purchasePrice` 仍优先生效。
+         */
+        const supplierDocMap = new Map<string, string>();
+        const uniqueSuppliers = Array.from(
+          new Map<string, { id: string; name: string }>(
+            proposedOrders.map(o => [o.partnerId, { id: o.partnerId, name: o.partnerName }] as [string, { id: string; name: string }]),
+          ).values(),
         );
-        const getNextPoDocForPartner = (partnerId: string, partnerName: string) => {
-          const extra: Array<{ type: string; partnerId?: string; partner?: string; docNumber?: string }> = [];
-          let cand = nextPsiDocNumber('PO', 'PURCHASE_ORDER', partners, [...(psiRecords || []), ...extra], partnerId, partnerName);
-          while (existingDocNumbers.has(cand)) {
-            extra.push({ type: 'PURCHASE_ORDER', partnerId, partner: partnerName, docNumber: cand });
-            cand = nextPsiDocNumber('PO', 'PURCHASE_ORDER', partners, [...(psiRecords || []), ...extra], partnerId, partnerName);
+        try {
+          const docs = await Promise.all(
+            uniqueSuppliers.map(s =>
+              psi.nextDocNumber({
+                prefix: 'PO',
+                psiType: 'PURCHASE_ORDER',
+                partnerId: s.id,
+                partnerName: s.name,
+              }),
+            ),
+          );
+          uniqueSuppliers.forEach((s, i) => supplierDocMap.set(s.id, docs[i]?.docNumber ?? ''));
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('[PlanDetailPanel] handleConfirmAndSaveOrders: nextDocNumber failed', e);
+        }
+
+        // 批量预查"上次单价"，用于未在 UI 手填的行兜底
+        const pricePairs: Array<{ partnerId: string; partnerName: string; productId: string }> = [];
+        for (const order of proposedOrders) {
+          for (const item of order.items) {
+            if (item.purchasePrice != null && Number.isFinite(Number(item.purchasePrice))) continue;
+            pricePairs.push({ partnerId: order.partnerId, partnerName: order.partnerName, productId: item.productId });
           }
-          existingDocNumbers.add(cand);
-          return cand;
-        };
+        }
+        const lastPriceMap = new Map<string, number | null>();
+        if (pricePairs.length) {
+          try {
+            const prices = await psi.lastPurchasePrices(pricePairs);
+            pricePairs.forEach((p, i) => {
+              lastPriceMap.set(`${p.partnerId}|${p.productId}`, prices[i]?.price ?? null);
+            });
+          } catch {
+            // 失败时下游回退到 product.purchasePrice
+          }
+        }
 
         const allRecs: any[] = [];
         const baseId = Date.now();
         proposedOrders.forEach((order, oi) => {
-            const docNum = existingDocNumbers.has(order.orderNumber)
-              ? getNextPoDocForPartner(order.partnerId, order.partnerName)
-              : order.orderNumber;
-            existingDocNumbers.add(docNum);
+            const docNum = supplierDocMap.get(order.partnerId) || order.orderNumber;
             order.items.forEach((item, ii) => {
                 const qty = item.quantity ?? 0;
                 if (qty <= 0) return;
                 const prod = products.find(p => p.id === item.productId);
-                const lastPrice = getLastPurchaseUnitPrice(psiRecords, {
-                  partnerId: order.partnerId,
-                  partnerName: order.partnerName,
-                  productId: item.productId,
-                });
+                const lastPrice = lastPriceMap.get(`${order.partnerId}|${item.productId}`) ?? null;
                 const purchasePrice =
                   item.purchasePrice != null && Number.isFinite(Number(item.purchasePrice))
                     ? Number(item.purchasePrice)
@@ -1019,9 +1175,11 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
             <button type="button" onClick={() => sectionProcessRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/80 transition-colors">
               工序任务
             </button>
-            <button type="button" onClick={() => sectionMaterialRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/80 transition-colors">
-              生产用料
-            </button>
+            {!planWorkOrdersDispatched && (
+              <button type="button" onClick={() => sectionMaterialRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/80 transition-colors">
+                生产用料
+              </button>
+            )}
             {showPlanDetailTraceSection && (
               <button type="button" onClick={() => sectionTraceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/80 transition-colors">
                 <span className="inline-flex items-center gap-1"><QrCode className="w-3.5 h-3.5" />追溯码</span>
@@ -1104,7 +1262,9 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
              <div ref={sectionQtyRef} className="space-y-4 scroll-mt-4">
                 <div className="flex items-center gap-3 border-b border-slate-100 pb-4 ml-2">
                   <Layers className="w-5 h-5 text-indigo-600" />
-                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">2. 生产数量明细录入 (可编辑)</h3>
+                  <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">
+                    2. 生产数量明细录入 {planWorkOrdersDispatched ? '(已下达工单，不可改)' : '(可编辑)'}
+                  </h3>
                 </div>
                 <div className="bg-white p-8 rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
                   {tempPlanInfo.items && tempPlanInfo.items.length > 0 && tempPlanInfo.items[0].variantId && viewProduct ? (
@@ -1117,18 +1277,25 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                             .map(i => [i.variantId, Number(i.quantity) || 0]),
                         )}
                         onVariantQtyChange={(variantId, qty) => updateDetailItemQty(variantId, String(qty))}
+                        readOnly={planWorkOrdersDispatched}
                       />
                   ) : (
                       <div className="max-w-xs space-y-2">
                            <label className="text-[10px] font-black text-slate-400 uppercase">总量 ({getUnitName(viewPlan.productId)})</label>
-                           <input type="number" value={tempPlanInfo.items?.[0]?.quantity || 0} onChange={e => updateDetailItemQty(undefined, e.target.value)} className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-2xl font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                           <input
+                             type="number"
+                             disabled={planWorkOrdersDispatched}
+                             value={tempPlanInfo.items?.[0]?.quantity || 0}
+                             onChange={e => updateDetailItemQty(undefined, e.target.value)}
+                             className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 text-2xl font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-70 disabled:cursor-not-allowed"
+                           />
                       </div>
                   )}
                 </div>
              </div>
 
              {/* 3. 工序任务 */}
-             <div ref={sectionProcessRef} className="space-y-4 scroll-mt-4">
+             <div ref={sectionProcessRef} className={`space-y-4 scroll-mt-4${planWorkOrdersDispatched ? ' pb-20' : ''}`}>
                 <div className="flex items-center gap-3 border-b border-slate-100 pb-4 ml-2">
                   <Users className="w-5 h-5 text-indigo-600" />
                   <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">3. 工序任务</h3>
@@ -1209,7 +1376,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                 </div>
              </div>
 
-             {/* 4. 计划生产用料清单 (BOM 汇总) */}
+             {/* 4. 计划生产用料清单 (BOM 汇总) — 已下达工单后隐藏 */}
+             {!planWorkOrdersDispatched && (
              <div ref={sectionMaterialRef} className="space-y-4 pb-20 scroll-mt-4">
                 <div className="flex flex-col gap-4 ml-2">
                    <div className="flex items-center justify-between flex-wrap gap-4">
@@ -1218,12 +1386,10 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                       <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">4. 计划生产用料清单 (BOM 汇总)</h3>
                    </div>
                       <div className="flex items-center gap-2">
-                         {onCreateSubPlan && (
+                         {showCreateSubPlanButton && (
                            <button
                              onClick={handleCreateSubPlansFromPlannedQty}
-                             disabled={!hasProducibleNeedingSubPlan}
-                             className="bg-amber-500 text-white px-5 py-2 rounded-xl text-xs font-bold hover:bg-amber-600 transition-all flex items-center gap-2 disabled:opacity-50"
-                             title={!hasProducibleNeedingSubPlan ? '可生产物料均已生成计划单，或请先填写计划用量' : undefined}
+                             className="bg-amber-500 text-white px-5 py-2 rounded-xl text-xs font-bold hover:bg-amber-600 transition-all flex items-center gap-2"
                            >
                              <Plus className="w-3.5 h-3.5" />
                              创建子工单
@@ -1264,7 +1430,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                   </button>
                                 </div>
                                 <span className="text-[8px] font-semibold text-slate-400 normal-case tracking-normal leading-tight">
-                                  服务端汇总
+                                  仓库汇总
                                 </span>
                               </div>
                             </th>
@@ -1620,12 +1786,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                 </table>
                              </div>
 
-                             <div className="mt-6 pt-6 border-t border-slate-50 flex items-center justify-between">
-                                <div className="flex items-center gap-4 text-[10px] font-bold text-amber-500">
-                                   <AlertCircle className="w-3.5 h-3.5" />
-                                   <span>请确认各明细项数量是否满足最小包装量</span>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-4 justify-end">
+                             <div className="mt-6 pt-6 border-t border-slate-50 flex flex-wrap items-center gap-4 justify-end">
                                    <div className="flex items-center gap-2">
                                       <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">单据预估总量：</span>
                                       <span className="text-lg font-black text-slate-900">{Number(order.items.reduce((s, i) => s + (i.quantity ?? 0), 0)).toFixed(2)} {getUnitName(viewPlan.productId)}</span>
@@ -1639,7 +1800,6 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                       </span>
                                       <span className="text-[10px] font-bold text-slate-400">元</span>
                                    </div>
-                                </div>
                              </div>
                           </div>
                         ))}
@@ -1647,6 +1807,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                   </div>
                 )}
              </div>
+             )}
 
             {/* 5. 追溯码 */}
             {showPlanDetailTraceSection && (
@@ -1670,52 +1831,109 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
 
           </div>
 
-          <div className="px-10 py-6 bg-white/80 backdrop-blur-lg border-t border-slate-100 flex justify-between items-center sticky bottom-0">
-             <div className="flex flex-col">
-                <p className="text-xs font-bold text-slate-500">当前操作：<span className="text-indigo-600 font-black">计划资料整体更新</span></p>
-                <p className="text-[10px] text-slate-400 mt-1 italic font-medium">※ 点击保存将同步更新客户、交期、规格数量及派发方案。</p>
+          <div className="px-6 sm:px-10 py-4 sm:py-5 bg-white/90 backdrop-blur-md border-t border-slate-100 shadow-[0_-6px_28px_-10px_rgba(15,23,42,0.08)] flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between sticky bottom-0 z-10">
+             <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-slate-500">
+                  当前操作：<span className="text-indigo-600 font-black">计划资料整体更新</span>
+                  {planWorkOrdersDispatched && (
+                    <span className="ml-2 inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
+                      已下达工单
+                    </span>
+                  )}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed font-medium">
+                  {planWorkOrdersDispatched
+                    ? '※ 生产数量与 BOM 汇总已锁定。保存将更新客户、交期、工序派发等；交期会同步到关联工单（工单中心 / 外协等）。'
+                    : '※ 点击保存将同步更新客户、交期、规格数量及派发方案。'}
+                </p>
              </div>
-             <div className="flex items-center gap-4">
-               <button onClick={onClose} className="px-8 py-3 text-sm font-black text-slate-400 hover:text-slate-800 transition-colors uppercase">放弃修改</button>
-               {onDeletePlan && (
+             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:shrink-0">
+               <div className="flex flex-wrap items-center justify-end gap-2">
                  <button
-                   onClick={() => {
-                     void confirm({ message: '确定要删除该计划单吗？', danger: true }).then((ok) => {
-                       if (!ok) return;
-                       onDeletePlan(viewPlan.id);
-                       onClose();
-                     });
-                   }}
-                   className="px-6 py-3 text-sm font-black text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-2xl border border-rose-200 flex items-center gap-2"
+                   type="button"
+                   onClick={onClose}
+                   className={`${outlineToolbarButtonClass} font-black text-slate-600`}
                  >
-                   <Trash2 className="w-4 h-4" /> 删除
+                   放弃修改
                  </button>
-               )}
-               {viewPlan.status !== PlanStatus.CONVERTED && !viewPlan.parentPlanId && (
-                 <>
-                   {(parentToSubPlans.get(viewPlan.id)?.length ?? 0) === 0 && (
-                     <button onClick={() => { onRequestSplit(viewPlan); onClose(); }} className="px-6 py-3 text-sm font-black text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-2xl border border-amber-200 flex items-center gap-2">
-                       <Split className="w-4 h-4" /> 拆分计划
-                     </button>
-                   )}
-                   <button onClick={() => { onConvertToOrder(viewPlan.id); onClose(); }} className="px-6 py-3 text-sm font-black text-white bg-slate-900 hover:bg-black rounded-2xl flex items-center gap-2">
-                     <ArrowRightCircle className="w-4 h-4" /> 下达工单
+                 {onDeletePlan && (
+                   <button
+                     type="button"
+                     onClick={() => {
+                       void confirm({
+                         message: planWorkOrdersDispatched
+                           ? '该计划已下达工单，删除可能影响追溯。确定要删除该计划单吗？'
+                           : '确定要删除该计划单吗？',
+                         danger: true,
+                       }).then((ok) => {
+                         if (!ok) return;
+                         onDeletePlan(viewPlan.id);
+                         onClose();
+                       });
+                     }}
+                     className={
+                       planWorkOrdersDispatched
+                         ? `${outlineToolbarButtonClass} border-rose-200/80 text-rose-600 hover:bg-rose-50/90 font-black`
+                         : 'px-4 py-2 text-sm font-black text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 flex items-center gap-2 active:scale-[0.98] transition-all'
+                     }
+                   >
+                     <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+                     删除
                    </button>
-                 </>
-               )}
-               {viewPlan.status === PlanStatus.CONVERTED && !viewPlan.parentPlanId && hasUnconvertedSubPlans(viewPlan.id) && (
-                 <button onClick={() => { onConvertToOrder(viewPlan.id); onClose(); }} className="px-6 py-3 text-sm font-black text-white bg-amber-500 hover:bg-amber-600 rounded-2xl flex items-center gap-2">
-                   <ArrowRightCircle className="w-4 h-4" /> 补充下达子工单
+                 )}
+               </div>
+
+               <div className="hidden sm:block h-8 w-px shrink-0 self-center bg-slate-200/90" aria-hidden />
+
+               <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
+                 {viewPlan.status !== PlanStatus.CONVERTED && !viewPlan.parentPlanId && (
+                   <>
+                     {(parentToSubPlans.get(viewPlan.id)?.length ?? 0) === 0 && (
+                       <button
+                         type="button"
+                         onClick={() => {
+                           onRequestSplit(viewPlan);
+                           onClose();
+                         }}
+                         className="px-4 py-2 text-sm font-black text-amber-800 bg-amber-50 hover:bg-amber-100 rounded-xl border border-amber-200/90 flex items-center gap-2 active:scale-[0.98] transition-all"
+                       >
+                         <Split className="w-4 h-4" /> 拆分计划
+                       </button>
+                     )}
+                     <button
+                       type="button"
+                       onClick={() => {
+                         onConvertToOrder(viewPlan.id);
+                         onClose();
+                       }}
+                       className="px-4 py-2 text-sm font-black text-white bg-slate-900 hover:bg-black rounded-xl flex items-center gap-2 shadow-md active:scale-[0.98] transition-all"
+                     >
+                       <ArrowRightCircle className="w-4 h-4" /> 下达工单
+                     </button>
+                   </>
+                 )}
+                 {viewPlan.status === PlanStatus.CONVERTED && !viewPlan.parentPlanId && hasUnconvertedSubPlans(viewPlan.id) && (
+                   <button
+                     type="button"
+                     onClick={() => {
+                       onConvertToOrder(viewPlan.id);
+                       onClose();
+                     }}
+                     className="px-4 py-2 text-sm font-black text-white bg-amber-500 hover:bg-amber-600 rounded-xl flex items-center gap-2 shadow-md active:scale-[0.98] transition-all"
+                   >
+                     <ArrowRightCircle className="w-4 h-4" /> 补充下达子工单
+                   </button>
+                 )}
+                 <button
+                   type="button"
+                   onClick={() => void handleUpdateDetail()}
+                   disabled={isSaving}
+                   className={`${primaryToolbarButtonClass} rounded-xl px-6 sm:px-8 py-2.5 font-black text-sm shadow-md shadow-indigo-100/90 disabled:opacity-50 disabled:pointer-events-none`}
+                 >
+                   {isSaving ? <Clock className="h-4 w-4 animate-spin shrink-0" aria-hidden /> : <Save className="h-4 w-4 shrink-0" aria-hidden />}
+                   {planWorkOrdersDispatched ? '保存更新' : '保存并更新计划内容'}
                  </button>
-               )}
-               <button
-                  onClick={handleUpdateDetail}
-                  disabled={isSaving}
-                  className="bg-indigo-600 text-white px-12 py-3.5 rounded-2xl font-black text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all flex items-center gap-2"
-               >
-                 {isSaving ? <Clock className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                 保存并更新计划内容
-               </button>
+               </div>
              </div>
           </div>
         </div>

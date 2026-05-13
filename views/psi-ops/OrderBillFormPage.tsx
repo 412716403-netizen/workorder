@@ -322,6 +322,11 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
     variantQuantities?: Record<string, number>;
     batch?: string;
     relatedProductId?: string;
+    /** 引用采购订单行时存在；编辑保存必须带回，否则与订单的入库关联会断 */
+    sourceOrderNumber?: string;
+    sourceLineId?: string;
+    /** 行备注（如「由订单[…]转化」）；编辑时从首条明细带出 */
+    lineNote?: string;
   }[]>(() => {
     if (formType !== 'PURCHASE_BILL' || !editingDocNumber) return [];
     const existing = recordsList.filter((r: any) => r.type === 'PURCHASE_BILL' && r.docNumber === editingDocNumber);
@@ -334,6 +339,14 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
     });
     return Object.entries(lineMap).map(([lgId, recs]) => {
       const first = recs[0];
+      let sourceOrderNumber: string | undefined;
+      let sourceLineId: string | undefined;
+      for (const r of recs as { sourceOrderNumber?: unknown; sourceLineId?: unknown }[]) {
+        const son = r.sourceOrderNumber != null && String(r.sourceOrderNumber).trim() !== '' ? String(r.sourceOrderNumber).trim() : '';
+        const sl = r.sourceLineId != null && String(r.sourceLineId).trim() !== '' ? String(r.sourceLineId).trim() : '';
+        if (son) sourceOrderNumber = son;
+        if (sl) sourceLineId = sl;
+      }
       const hasVar = recs.some((r: any) => r.variantId);
       const vq: Record<string, number> = {};
       if (hasVar) recs.forEach((r: any) => { if (r.variantId) vq[r.variantId] = (vq[r.variantId] ?? 0) + (Number(r.quantity) || 0); });
@@ -343,6 +356,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         firstCd && typeof firstCd === 'object' && !Array.isArray(firstCd)
           ? String((firstCd as Record<string, unknown>).relatedProductId ?? '').trim()
           : '';
+      const lineNote = first.note != null && first.note !== '' ? String(first.note) : '';
       return {
         id: lgId,
         productId: first.productId,
@@ -351,6 +365,8 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         variantQuantities: hasVar ? vq : undefined,
         batch: first.batchNo ?? first.batch,
         ...(lineRel ? { relatedProductId: lineRel } : {}),
+        ...(sourceOrderNumber && sourceLineId ? { sourceOrderNumber, sourceLineId } : {}),
+        ...(lineNote ? { lineNote } : {}),
       };
     });
   });
@@ -664,6 +680,9 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       variantQuantities?: Record<string, number>;
       batch?: string;
       relatedProductId?: string;
+      sourceOrderNumber?: string;
+      sourceLineId?: string;
+      lineNote?: string;
     }>,
   ) => {
     setPurchaseBillItems(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i));
@@ -871,6 +890,29 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         if (typeof ca === 'string' && ca.includes('T')) return ca;
         return localCalendarYmdStartToIso(toLocalDateYmd(ca) || localTodayYmd());
       })();
+      const pbNoteForLine = (item: (typeof purchaseBillItems)[number]): string => {
+        const kept = item.lineNote != null && String(item.lineNote).trim() !== '' ? String(item.lineNote).trim() : '';
+        if (kept) return kept;
+        if (item.sourceOrderNumber && item.sourceLineId) {
+          return `由订单[${item.sourceOrderNumber}]商品明细转化`;
+        }
+        return '';
+      };
+      const pbSourceLinkForLine = (
+        item: (typeof purchaseBillItems)[number],
+      ): { sourceOrderNumber: string; sourceLineId: string } | Record<string, never> => {
+        const son = item.sourceOrderNumber != null && String(item.sourceOrderNumber).trim() !== '' ? String(item.sourceOrderNumber).trim() : '';
+        const sl = item.sourceLineId != null && String(item.sourceLineId).trim() !== '' ? String(item.sourceLineId).trim() : '';
+        if (son && sl) return { sourceOrderNumber: son, sourceLineId: sl };
+        return {};
+      };
+      /** 与「引用采购订单生成」入库一致，便于列表「经办」栏展示来源提示 */
+      const pbOperatorForLine = (item: (typeof purchaseBillItems)[number]): string => {
+        if (item.sourceOrderNumber && item.sourceLineId) {
+          return `${docOperator}(订单转化)`;
+        }
+        return docOperator;
+      };
       const newRecords: any[] = [];
       let pbIdx = 0;
       purchaseBillItems.forEach((item) => {
@@ -894,10 +936,11 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
               purchasePrice: price,
               amount: qty * price,
               warehouseId: form.warehouseId,
-              note: '',
-              operator: docOperator,
+              note: pbNoteForLine(item),
+              operator: pbOperatorForLine(item),
               lineGroupId: item.id,
               createdAt: pbCreatedAtIso,
+              ...pbSourceLinkForLine(item),
               ...(lineCustom ? { customData: lineCustom } : {}),
               ...(item.batch != null && item.batch !== '' && { batch: item.batch })
             });
@@ -916,10 +959,11 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
             purchasePrice: price,
             amount: item.quantity! * price,
             warehouseId: form.warehouseId,
-            note: '',
-            operator: docOperator,
+            note: pbNoteForLine(item),
+            operator: pbOperatorForLine(item),
             lineGroupId: item.id,
             createdAt: pbCreatedAtIso,
+            ...pbSourceLinkForLine(item),
             ...(lineCustom ? { customData: lineCustom } : {}),
             ...(item.batch != null && item.batch !== '' && { batch: item.batch })
           });

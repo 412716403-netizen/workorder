@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
-import { usePsiStockIndex } from '../../hooks/usePsiStockIndex';
+import { useStockSnapshot } from '../../hooks/useStockSnapshot';
 import {
   Plus,
   ArrowLeft,
@@ -70,6 +70,10 @@ export interface PurchaseBillLineItem {
   batch?: string;
   /** 行级 `customData.relatedProductId`：本行采购物料主要服务的成品 */
   relatedProductId?: string;
+  /** 引用采购订单行（与后端 `PsiRecord` 一致） */
+  sourceOrderNumber?: string;
+  sourceLineId?: string;
+  lineNote?: string;
 }
 
 interface PurchaseBillFormSectionProps {
@@ -77,7 +81,17 @@ interface PurchaseBillFormSectionProps {
   setForm: (form: any) => void;
   purchaseBillItems: PurchaseBillLineItem[];
   onAddItem: () => void;
-  onUpdateItem: (id: string, updates: Partial<{ productId: string; quantity?: number; purchasePrice: number; variantQuantities?: Record<string, number>; batch?: string; relatedProductId?: string }>) => void;
+  onUpdateItem: (id: string, updates: Partial<{
+    productId: string;
+    quantity?: number;
+    purchasePrice: number;
+    variantQuantities?: Record<string, number>;
+    batch?: string;
+    relatedProductId?: string;
+    sourceOrderNumber?: string;
+    sourceLineId?: string;
+    lineNote?: string;
+  }>) => void;
   onUpdateVariantQty: (lineId: string, variantId: string, qty: number) => void;
   onRemoveItem: (id: string) => void;
   onResetItems: () => void;
@@ -132,7 +146,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
   const { currentUser } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
   const confirm = useConfirm();
-  const { listAvailableBatches } = usePsiStockIndex(recordsList ?? [], []);
+  const { listAvailableBatches } = useStockSnapshot();
 
   const [creationMethod, setCreationMethod] = useState<'MANUAL' | 'FROM_ORDER'>('MANUAL');
   const [selectedPOOrderNums, setSelectedPOOrderNums] = useState<string[]>([]);
@@ -142,8 +156,6 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
   const [selectedPOItemBatches, setSelectedPOItemBatches] = useState<Record<string, string>>({});
   /** 来源订单卡片区：单号/供应商/行内品名 SKU */
   const [fromOrderPODocSearch, setFromOrderPODocSearch] = useState('');
-  /** 待入库明细分组：品名/编号/SKU/单号 */
-  const [fromOrderLineSearch, setFromOrderLineSearch] = useState('');
 
   const allPOByGroups = useMemo(() => {
     const filtered = recordsList.filter(r => r.type === 'PURCHASE_ORDER');
@@ -200,20 +212,14 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
     return items;
   }, [selectedPOOrderNums, allPOByGroups, receivedByOrderLine]);
 
-  const displayAvailableLineItems = useMemo(() => {
-    const q = fromOrderLineSearch.trim().toLowerCase();
-    if (!q) return availableItemsFromSelectedPOs;
-    return availableItemsFromSelectedPOs.filter((item) => {
-      const p = productMapPSI.get(item.productId);
-      const parts = [
-        item.docNumber,
-        formatPsiDocNumForList(String(item.docNumber || '')),
-        p?.name,
-        p?.sku,
-      ];
-      return parts.filter(Boolean).join('\0').toLowerCase().includes(q);
+  /** 选中订单的待入库明细中是否有任一商品启用批次管理；否则不展示「批次」列 */
+  const showFromOrderBatchColumn = useMemo(() => {
+    return availableItemsFromSelectedPOs.some((item) => {
+      const p = item.productId ? productMapPSI.get(String(item.productId)) : undefined;
+      const cat = p ? categoryMapPSI.get(p.categoryId) : undefined;
+      return categoryUsesBatchManagement(cat);
     });
-  }, [availableItemsFromSelectedPOs, fromOrderLineSearch, productMapPSI]);
+  }, [availableItemsFromSelectedPOs, productMapPSI, categoryMapPSI]);
 
   const firstSelectedPOItem = useMemo(
     () => availableItemsFromSelectedPOs.find(i => selectedPOItemIds.includes(i.id)),
@@ -662,30 +668,31 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
 
             {selectedPOOrderNums.length > 0 && (
               <div className="space-y-3 pt-3 border-t border-slate-100">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 shrink-0">
-                    <ListFilter className="w-4 h-4" /> 2. 勾选并填写本次入库数量 (支持部分到货)
+                <div className="min-w-0 space-y-1">
+                  <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                      <ListFilter className="h-4 w-4" />
+                    </span>
+                    <span className="leading-snug">
+                      2. 勾选明细并填写入库
+                      <span className="ml-1.5 font-semibold normal-case text-slate-400">（支持部分到货）</span>
+                    </span>
                   </h4>
-                  <div className="relative w-full sm:max-w-sm">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                    <input
-                      type="search"
-                      value={fromOrderLineSearch}
-                      onChange={e => setFromOrderLineSearch(e.target.value)}
-                      placeholder="搜索品名、编号、SKU 或单号…"
-                      className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-800 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
+                  <p className="pl-10 text-[11px] font-medium leading-relaxed text-slate-500 sm:max-w-xl">
+                    单击行可勾选；已选行可改采购价、本次数量
+                    {showFromOrderBatchColumn ? '；需批次时请填写批号（可留空）。' : '。'}
+                  </p>
                 </div>
-                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                  <table className="w-full text-left">
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ring-1 ring-slate-900/[0.02]">
+                  <div className="max-h-[min(28rem,70vh)] overflow-y-auto overflow-x-hidden overscroll-y-contain">
+                    <table className="w-full border-separate border-spacing-0 text-left text-sm">
                     <thead>
-                      <tr className="bg-slate-50/80 border-b border-slate-100">
-                        <th className="px-3 py-2 w-10 text-center">
+                      <tr className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50/95 backdrop-blur-sm">
+                        <th className="w-8 shrink-0 px-1.5 py-2.5 text-center">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              const vis = displayAvailableLineItems;
+                              const vis = availableItemsFromSelectedPOs;
                               const allVisSelected = vis.length > 0 && vis.every(i => selectedPOItemIds.includes(i.id));
                               if (allVisSelected) {
                                 setSelectedPOItemIds(prev => prev.filter(id => !vis.some(v => v.id === id)));
@@ -725,41 +732,71 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                               }
                             }}
                             className="text-slate-400 hover:text-indigo-600"
-                            title="按当前筛选项全选/取消"
+                            title="全选 / 取消全选"
                           >
-                            {displayAvailableLineItems.length > 0 && displayAvailableLineItems.every(i => selectedPOItemIds.includes(i.id)) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                            {availableItemsFromSelectedPOs.length > 0 && availableItemsFromSelectedPOs.every(i => selectedPOItemIds.includes(i.id)) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                           </button>
                         </th>
-                        <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">源订单 / 商品</th>
+                        <th className="min-w-0 px-2 py-2.5 text-left align-bottom text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          源订单 / 商品
+                        </th>
                         {formSettings.relatedProductEnabled && (
-                          <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest min-w-[6rem]">关联成品</th>
+                          <th className="min-w-0 px-1.5 py-2.5 text-left align-bottom text-[10px] font-black uppercase tracking-wider text-slate-500">
+                            关联成品
+                          </th>
                         )}
-                        <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">采购价</th>
-                        <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">订单数量</th>
-                        <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">已收</th>
-                        <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">待收</th>
-                        <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">本次入库数量</th>
-                        <th className="px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">批次</th>
+                        <th
+                          className="w-14 shrink-0 px-1 py-2.5 text-right align-bottom text-[10px] font-black uppercase tracking-wider text-slate-500"
+                          title="采购单价（元）"
+                        >
+                          单价
+                        </th>
+                        <th className="w-[4.25rem] shrink-0 px-1 py-2.5 text-right align-bottom text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          订单量
+                        </th>
+                        <th className="w-11 shrink-0 px-0.5 py-2.5 text-right align-bottom text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          已收
+                        </th>
+                        <th className="w-11 shrink-0 px-0.5 py-2.5 text-right align-bottom text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          待收
+                        </th>
+                        <th
+                          className="w-[4.25rem] shrink-0 px-1 py-2.5 text-right align-bottom text-[10px] font-black uppercase tracking-wider text-slate-500"
+                          title="本次入库数量"
+                        >
+                          本次入库
+                        </th>
+                        {showFromOrderBatchColumn && (
+                          <th className="w-[5.5rem] shrink-0 px-1 py-2.5 text-right align-bottom text-[10px] font-black uppercase tracking-wider text-slate-500">
+                            批次
+                          </th>
+                        )}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {displayAvailableLineItems.length === 0 && availableItemsFromSelectedPOs.length > 0 && (
-                        <tr>
-                          <td
-                            colSpan={formSettings.relatedProductEnabled ? 9 : 8}
-                            className="px-3 py-8 text-center text-slate-400 text-sm"
-                          >
-                            无匹配明细，请调整搜索关键词
-                          </td>
-                        </tr>
-                      )}
-                      {displayAvailableLineItems.map((item) => {
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {availableItemsFromSelectedPOs.map((item) => {
                         const relFromPo = readPoLineRelatedId(item);
                         const product = productMapPSI.get(item.productId);
                         const prodCategory = product && categoryMapPSI.get(product.categoryId);
                         const hasBatch = categoryUsesBatchManagement(prodCategory);
                         const isChecked = selectedPOItemIds.includes(item.id);
                         const qty = selectedPOItemQuantities[item.id] ?? item.remainingQty;
+                        const unit = item.productId ? getUnitName(item.productId) : 'PCS';
+                        const skuLine = [
+                          product?.sku ? `SKU ${product.sku}` : '',
+                          item.variantId && product?.variants
+                            ? (() => {
+                                const v = product.variants.find((x: ProductVariant) => x.id === item.variantId);
+                                if (!v) return '';
+                                const c = dictionaries.colors.find(x => x.id === v.colorId)?.name;
+                                const s = dictionaries.sizes.find(x => x.id === v.sizeId)?.name;
+                                return (c || s) ? [c, s].filter(Boolean).join(' / ') : '';
+                              })()
+                            : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' · ');
+                        const productTitle = [product?.name, skuLine].filter(Boolean).join('\n');
                         const handleToggle = () => {
                           if (isChecked) {
                             setSelectedPOItemIds(prev => prev.filter(id => id !== item.id));
@@ -776,34 +813,43 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                           }
                         };
                         return (
-                          <tr key={item.id} onClick={() => handleToggle()} className={`cursor-pointer transition-colors ${isChecked ? 'bg-indigo-50/30' : 'hover:bg-slate-50/50'}`}>
-                            <td className="px-3 py-2 text-center">
-                              {isChecked ? <CheckSquare className="w-4 h-4 text-indigo-600" /> : <Square className="w-4 h-4 text-slate-300" />}
+                          <tr
+                            key={item.id}
+                            onClick={() => handleToggle()}
+                            className={`transition-colors ${isChecked ? 'bg-indigo-50/60 hover:bg-indigo-50/80' : 'hover:bg-slate-50/80'} cursor-pointer`}
+                          >
+                            <td className="px-1.5 py-2.5 text-center align-middle">
+                              {isChecked ? <CheckSquare className="mx-auto h-4 w-4 text-indigo-600" /> : <Square className="mx-auto h-4 w-4 text-slate-300" />}
                             </td>
-                            <td className="px-3 py-2">
-                              <div className="flex flex-col">
-                                <span className="text-[9px] font-black text-slate-300 uppercase">{item.docNumber}</span>
-                                <span className="text-xs font-bold text-slate-700">{product?.name}</span>
-                                <span className="text-[8px] text-slate-400 uppercase tracking-tighter">
-                                  SKU: {product?.sku}
-                                  {item.variantId && product?.variants && (() => {
-                                    const v = product.variants.find((x: ProductVariant) => x.id === item.variantId);
-                                    if (!v) return '';
-                                    const c = dictionaries.colors.find(x => x.id === v.colorId)?.name;
-                                    const s = dictionaries.sizes.find(x => x.id === v.sizeId)?.name;
-                                    return (c || s) ? ` · ${[c, s].filter(Boolean).join(' / ')}` : '';
-                                  })()}
-                                </span>
+                            <td className="min-w-0 px-2 py-2.5 align-top">
+                              <div className="min-w-0 space-y-0.5">
+                                <p className="truncate text-[10px] font-semibold tabular-nums tracking-tight text-slate-400">
+                                  {item.docNumber}
+                                </p>
+                                <p className="truncate text-xs font-semibold text-slate-800" title={productTitle || undefined}>
+                                  {product?.name ?? '—'}
+                                </p>
+                                {skuLine ? (
+                                  <p className="line-clamp-2 text-[10px] leading-snug text-slate-500" title={skuLine}>
+                                    {skuLine}
+                                  </p>
+                                ) : null}
                               </div>
                             </td>
                             {formSettings.relatedProductEnabled && (
-                              <td className="px-3 py-2 align-top max-w-[10rem]" onClick={e => e.stopPropagation()}>
-                                <span className="text-[10px] font-bold text-slate-600 leading-snug">
+                              <td className="min-w-0 px-1.5 py-2.5 align-top" onClick={e => e.stopPropagation()}>
+                                <span
+                                  className="line-clamp-3 block text-[10px] font-semibold leading-snug text-slate-600"
+                                  title={relFromPo ? formatRelatedProductLine(relFromPo) : undefined}
+                                >
                                   {relFromPo ? formatRelatedProductLine(relFromPo) : '—'}
                                 </span>
                               </td>
                             )}
-                            <td className="px-3 py-2 text-right align-middle" onClick={e => e.stopPropagation()}>
+                            <td
+                              className="min-w-0 px-1 py-2.5 text-right align-middle tabular-nums"
+                              onClick={e => e.stopPropagation()}
+                            >
                               {isChecked ? (
                                 <input
                                   type="number"
@@ -822,50 +868,72 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                                       [item.id]: Number.isFinite(v) ? v : 0,
                                     }));
                                   }}
-                                  className="ml-auto block w-24 rounded-lg border border-slate-200 py-1.5 px-2 text-right text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                                  className={`${psiOrderBillCompactLineInputClass} mx-auto block w-full max-w-[4.25rem] text-right tabular-nums`}
                                   title="可修改本次入库单价（默认取订单行单价）"
                                 />
                               ) : (
-                                <span className="text-xs font-bold text-slate-500">¥{(Number(item.purchasePrice) || 0).toFixed(2)}</span>
+                                <span className="text-xs font-semibold text-slate-600">¥{(Number(item.purchasePrice) || 0).toFixed(2)}</span>
                               )}
                             </td>
-                            <td className="px-3 py-2 text-right"><span className="text-sm font-bold text-slate-600">{formatQtyDisplay(item.quantity)} {item.productId ? getUnitName(item.productId) : 'PCS'}</span></td>
-                            <td className="px-3 py-2 text-right"><span className="text-xs font-bold text-slate-400">{item.receivedQty}</span></td>
-                            <td className="px-3 py-2 text-right"><span className="text-sm font-black text-indigo-600">{item.remainingQty}</span></td>
-                            <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
-                              {isChecked ? (
-                                <input type="number" min={0} step={0.01} value={qty} onChange={e => {
-                                  setSelectedPOItemQuantities(prev => ({
-                                    ...prev,
-                                    [item.id]: parsePsiNonVariantQuantityInput(e.target.value),
-                                  }));
-                                }} className="w-20 text-right py-1.5 px-2 rounded-lg border border-slate-200 text-sm font-black text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none" title="允许超过采购订单数量（如超收）" />
-                              ) : <span className="text-slate-300">—</span>}
+                            <td className="min-w-0 px-1 py-2.5 text-right align-middle">
+                              <span className="block truncate text-xs font-semibold tabular-nums text-slate-700">
+                                {formatQtyDisplay(item.quantity)}
+                                <span className="ml-0.5 text-[10px] font-bold text-slate-400">{unit}</span>
+                              </span>
                             </td>
-                            <td className="px-3 py-2 text-right align-top" onClick={e => e.stopPropagation()}>
-                              {isChecked && hasBatch && product ? (
-                                <div className="ml-auto w-[7.25rem] min-w-[7rem] max-w-[10rem]">
-                                  <MaterialIssueBatchSelect
-                                    product={product}
-                                    categories={categories}
-                                    warehouseId={form.warehouseId || ''}
-                                    value={selectedPOItemBatches[item.id] ?? ''}
-                                    onChange={v =>
-                                      setSelectedPOItemBatches(prev => ({
-                                        ...prev,
-                                        [item.id]: (v && String(v).trim()) || '',
-                                      }))
-                                    }
-                                    mode="return"
-                                    hideLabel
-                                    returnPlaceholder="留空 = 无批号"
-                                    mergeBatches={listAvailableBatches(item.productId, form.warehouseId)}
-                                  />
-                                </div>
+                            <td className="min-w-0 px-0.5 py-2.5 text-right align-middle">
+                              <span className="text-xs font-semibold tabular-nums text-slate-400">{item.receivedQty}</span>
+                            </td>
+                            <td className="min-w-0 px-0.5 py-2.5 text-right align-middle">
+                              <span className="text-sm font-bold tabular-nums text-indigo-600">{item.remainingQty}</span>
+                            </td>
+                            <td className="min-w-0 px-1 py-2.5 text-right align-middle" onClick={e => e.stopPropagation()}>
+                              {isChecked ? (
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={0.01}
+                                  value={qty}
+                                  onChange={e => {
+                                    setSelectedPOItemQuantities(prev => ({
+                                      ...prev,
+                                      [item.id]: parsePsiNonVariantQuantityInput(e.target.value),
+                                    }));
+                                  }}
+                                  className={`${psiOrderBillCompactLineInputClass} mx-auto block w-full max-w-[4.25rem] text-right tabular-nums font-bold !text-indigo-600`}
+                                  title="允许超过采购订单数量（如超收）"
+                                />
                               ) : (
                                 <span className="text-slate-300">—</span>
                               )}
                             </td>
+                            {showFromOrderBatchColumn && (
+                              <td className="w-[5.5rem] max-w-[5.5rem] shrink-0 px-1 py-2 text-right align-middle" onClick={e => e.stopPropagation()}>
+                                {isChecked && hasBatch && product ? (
+                                  <div className="ml-auto w-full max-w-[5.25rem]" title="可手输批号，留空表示无批号">
+                                    <MaterialIssueBatchSelect
+                                      product={product}
+                                      categories={categories}
+                                      warehouseId={form.warehouseId || ''}
+                                      value={selectedPOItemBatches[item.id] ?? ''}
+                                      onChange={v =>
+                                        setSelectedPOItemBatches(prev => ({
+                                          ...prev,
+                                          [item.id]: (v && String(v).trim()) || '',
+                                        }))
+                                      }
+                                      mode="return"
+                                      hideLabel
+                                      className="!space-y-0"
+                                      returnPlaceholder="批号"
+                                      mergeBatches={listAvailableBatches(item.productId, form.warehouseId)}
+                                    />
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-300">—</span>
+                                )}
+                              </td>
+                            )}
                           </tr>
                         );
                       })}
@@ -873,7 +941,6 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                   </table>
                 </div>
               </div>
-            )}
 
             {selectedPOItemIds.length > 0 && (
               <div className="space-y-3 pt-3 border-t border-slate-100">
@@ -914,6 +981,9 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                 </div>
               </div>
             )}
+              </div>
+            )}
+
           </div>
         )}
       </div>

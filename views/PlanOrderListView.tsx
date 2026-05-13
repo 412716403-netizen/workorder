@@ -72,7 +72,6 @@ interface PlanOrderListViewProps {
   boms: BOM[];
   partners: Partner[]; 
   partnerCategories: PartnerCategory[];
-  psiRecords?: any[];
   planFormSettings: PlanFormSettings;
   onUpdatePlanFormSettings: (settings: PlanFormSettings) => void;
   printTemplates: PrintTemplate[];
@@ -86,7 +85,9 @@ interface PlanOrderListViewProps {
   onConvertToOrder: (planId: string) => void;
   onDeletePlan?: (planId: string) => void;
   onUpdateProduct: (product: Product) => Promise<Product | null>;
-  onUpdatePlan?: (planId: string, updates: Partial<PlanOrder>) => void;
+  onUpdatePlan?: (planId: string, updates: Partial<PlanOrder>) => void | Promise<void>;
+  /** 计划交期变更时同步关联工单（需工单编辑权限） */
+  onUpdateOrder?: (orderId: string, updates: Partial<ProductionOrder>) => void | Promise<void>;
   onAddPSIRecord?: (record: any) => void;
   onAddPSIRecordBatch?: (records: any[]) => Promise<void>;
   onCreateSubPlan?: (params: { productId: string; quantity: number; planId: string; bomNodeId: string }) => void;
@@ -178,7 +179,7 @@ function renderPlanListCustomFieldValue(
   );
 }
 
-const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMode = 'order', plans, products, categories, dictionaries, workers, equipment, globalNodes, boms, partners, partnerCategories = [], psiRecords = [], planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orders = [], onCreatePlan, onSplitPlan, onConvertToOrder, onDeletePlan, onUpdateProduct, onUpdatePlan, onAddPSIRecord, onAddPSIRecordBatch, onCreateSubPlan, onCreateSubPlans }) => {
+const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMode = 'order', plans, products, categories, dictionaries, workers, equipment, globalNodes, boms, partners, partnerCategories = [], planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orders = [], onCreatePlan, onSplitPlan, onConvertToOrder, onDeletePlan, onUpdateProduct, onUpdatePlan, onUpdateOrder, onAddPSIRecord, onAddPSIRecordBatch, onCreateSubPlan, onCreateSubPlans }) => {
   const [showModal, setShowModal] = useState(false);
   const [viewDetailPlanId, setViewDetailPlanId] = useState<string | null>(null);
   const [viewProductId, setViewProductId] = useState<string | null>(null);
@@ -215,8 +216,10 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
       if (searchTerm) params.search = searchTerm;
       const result = await plansApi.listPaginated(params);
       if (gen !== planFetchGen.current) return;
-      setFetchedPlans(result.data as PlanOrder[]);
-      setTotalPlans(result.total);
+      const data = Array.isArray(result) ? (result as unknown as PlanOrder[]) : ((result?.data ?? []) as PlanOrder[]);
+      const total = Array.isArray(result) ? data.length : (result?.total ?? 0);
+      setFetchedPlans(data);
+      setTotalPlans(total);
     } catch (e) {
       console.error('Failed to fetch paginated plans', e);
     }
@@ -831,11 +834,11 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
           boms={boms}
           partners={partners}
           partnerCategories={partnerCategories}
-          psiRecords={psiRecords}
           planFormSettings={planFormSettings}
           orders={orders}
           productionLinkMode={productionLinkMode}
           onUpdatePlan={onUpdatePlan}
+          onUpdateOrder={onUpdateOrder}
           onDeletePlan={onDeletePlan}
           onConvertToOrder={onConvertToOrder}
           onUpdateProduct={onUpdateProduct}

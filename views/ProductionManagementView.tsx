@@ -33,7 +33,7 @@ import {
 import { useModulePermission, usePermFilteredTabs } from '../hooks/useModulePermission';
 import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useMasterData, useConfigData, useOrdersData, usePsiData, useAppActions } from '../contexts/AppDataContext';
+import { useMasterData, useConfigData, useOrdersData, useAppActions } from '../contexts/AppDataContext';
 
 type MainTab = 'plans' | 'orders' | ProdOpType;
 
@@ -41,11 +41,17 @@ const ProductionManagementView: React.FC = () => {
   const m = useMasterData();
   const c = useConfigData();
   const o = useOrdersData();
-  const { psiRecords } = usePsiData();
   const a = useAppActions();
   const { tenantCtx } = useAuth();
 
+  const [activeTab, setActiveTab] = useState<MainTab>('plans');
+
   useEffect(() => { void a.ensureDeferredLoaded(); }, [a.ensureDeferredLoaded]);
+  // Phase 3.C/3.D follow-up：
+  // 1) 工单中心 tab: OrderListView 内部 useQuery 按 orderIds/productIds 窄拉所需 prod 记录
+  // 2) 物料/外协/返工 tab: ProductionMgmtOpsView 内部 useQuery 按 tab 的 type 集合窄拉
+  // 3) PSI 业务页：usePsiOpsRecordsList 按 tab type 窄拉
+  // 因此本视图不再在挂载/切 tab 时触发 a.refreshProdRecords / a.refreshPsiRecords 全量拉取。
 
   const productionLinkMode = c.productionLinkMode;
   const processSequenceMode = c.processSequenceMode;
@@ -57,7 +63,6 @@ const ProductionManagementView: React.FC = () => {
   const dictionaries = m.dictionaries;
   const workers = m.workers;
   const equipment = m.equipment;
-  const prodRecords = o.prodRecords;
   const warehouses = m.warehouses;
   const globalNodes = m.globalNodes;
   const boms = m.boms;
@@ -123,8 +128,6 @@ const ProductionManagementView: React.FC = () => {
       'rework_form_config',
     ],
   }), []);
-
-  const [activeTab, setActiveTab] = useState<MainTab>('plans');
 
   /** 关闭工单详情时清除 location.state 中的 detailOrderId，避免切到其他 tab 再回工单中心时弹窗再次打开 */
   const clearDetailOrderIdFromState = () => {
@@ -258,7 +261,6 @@ const ProductionManagementView: React.FC = () => {
             boms={boms}
             partners={partners}
             partnerCategories={partnerCategories}
-            psiRecords={psiRecords}
             planFormSettings={planFormSettings}
             onUpdatePlanFormSettings={onUpdatePlanFormSettings}
             printTemplates={printTemplates}
@@ -268,6 +270,7 @@ const ProductionManagementView: React.FC = () => {
             onCreatePlan={hasProdPerm('production:plans:create') ? onCreatePlan : undefined as any}
             onUpdateProduct={onUpdateProduct}
             onUpdatePlan={hasProdPerm('production:plans:edit') ? onUpdatePlan : undefined}
+            onUpdateOrder={hasProdPerm('production:orders:edit') ? onUpdateOrder : undefined}
             onSplitPlan={hasProdPerm('production:plans:edit') ? onSplitPlan : (() => {})}
             onConvertToOrder={hasProdPerm('production:plans:edit') ? onConvertToOrder : (() => {})}
             onDeletePlan={hasProdPerm('production:plans:delete') ? onDeletePlan : undefined}
@@ -302,8 +305,6 @@ const ProductionManagementView: React.FC = () => {
             printTemplates={printTemplates}
             onUpdatePrintTemplates={onUpdatePrintTemplates}
             onRefreshPrintTemplates={onRefreshPrintTemplates}
-            prodRecords={prodRecords}
-            psiRecords={psiRecords}
             warehouses={warehouses}
             onUpdateOrderFormSettings={onUpdateOrderFormSettings}
             onReportSubmit={onReportSubmit}
@@ -333,7 +334,6 @@ const ProductionManagementView: React.FC = () => {
             productionLinkMode={productionLinkMode}
             productMilestoneProgresses={productMilestoneProgresses}
             plans={plans}
-            records={prodRecords} 
             orders={orders} 
             products={products} 
             warehouses={warehouses}
@@ -364,7 +364,6 @@ const ProductionManagementView: React.FC = () => {
             onUpdateReworkFormSettings={onUpdateReworkFormSettings}
             userPermissions={userPermissions}
             tenantRole={tenantRole}
-            psiRecords={psiRecords}
             planFormSettings={planFormSettings}
           />
           </Suspense>
