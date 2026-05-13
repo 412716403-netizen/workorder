@@ -17,6 +17,7 @@ export {
   categoryUsesBatchManagement,
   normalizeCollabSpecLabel,
   COLLAB_ACCEPT_CATEGORY_DECISION,
+  COLLAB_DISPATCH_AMENDMENT_PENDING_B_REVIEW,
   type CollabAcceptCategoryDecision,
   type CollabAcceptCreateProductPayload,
   type CollabAcceptTransferBody,
@@ -526,6 +527,7 @@ export interface PurchaseOrderFormSettings {
   /**
    * 为 true 时，采购订单在列表、新建/编辑、详情中展示「关联产品」（值存首行 `customData.relatedProductId`）。
    * 与 `standardFields` 中的 `relatedProduct` 互斥：归一化时会迁移旧配置并剔除该伪标准字段。
+   * 在「进销存 → 采购订单 → 表单配置」中，该开关位于 **列表显示** 页签（与「只显示未交清」并列），数据仍存本字段。
    */
   relatedProductEnabled?: boolean;
 }

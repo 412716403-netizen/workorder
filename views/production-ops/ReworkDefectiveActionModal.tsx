@@ -65,7 +65,7 @@ export interface ReworkDefectiveActionModalProps {
   onAddRecord: (record: ProductionOpRecord) => void;
   onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
   getNextReworkDocNo: () => string;
-  getNextOutsourceReworkDocNo: (partnerName: string) => string;
+  getNextOutsourceReworkDocNo: (partnerName: string) => string | Promise<string>;
   onClose: () => void;
   defectTreatmentCustomFields?: PlanFormFieldConfig[];
 }
@@ -347,7 +347,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
     const timestamp = new Date().toLocaleString();
     const sourceNodeId = reworkActionRow.nodeId;
     const reworkDocNo = getNextReworkDocNo();
-    const outsourceDocNo = getNextOutsourceReworkDocNo(partnerName);
+    const outsourceDocNo = await getNextOutsourceReworkDocNo(partnerName);
     const seqPath = reworkActionProduct?.milestoneNodeIds ?? [];
     const sortedPath =
       reworkActionNodeIds.length > 0

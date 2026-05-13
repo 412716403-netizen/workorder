@@ -8,7 +8,7 @@ import type { FormConfigSchema } from '../formConfigSchema';
 export const purchaseOrderFormConfigSchema: FormConfigSchema<PurchaseOrderFormSettings> = {
   title: '采购订单表单配置',
   subtitle: {
-    listDisplay: '以下选项作用于采购订单列表的默认筛选与展示。',
+    listDisplay: '以下选项作用于采购订单列表的筛选、展示与关联信息。',
   },
   settingsKey: 'purchaseOrderFormSettings',
   defaultValue: DEFAULT_PURCHASE_ORDER_FORM_SETTINGS,
@@ -18,15 +18,6 @@ export const purchaseOrderFormConfigSchema: FormConfigSchema<PurchaseOrderFormSe
       id: 'fields',
       label: '字段配置',
       sections: [
-        {
-          kind: 'toggle',
-          id: 'relatedProductEnabled',
-          label: '关联产品',
-          description:
-            '开启后，可在列表、新建/编辑与详情中填写「关联产品」，用于说明本单采购物料主要服务于哪个成品（与下方明细「采购品项」不同）；关闭后整单不显示该字段。列表搜索可按关联产品的名称与编号匹配。',
-          path: 'relatedProductEnabled',
-          defaultChecked: false,
-        },
         {
           kind: 'customFieldsTable',
           id: 'customFields',
@@ -47,6 +38,15 @@ export const purchaseOrderFormConfigSchema: FormConfigSchema<PurchaseOrderFormSe
           description:
             '开启时，列表默认仅展示尚未全部到货或结清的订单；关闭则不在此项上过滤。仍可在列表页使用其它筛选条件。',
           path: 'listDisplay.onlyShowUnsettled',
+          defaultChecked: false,
+        },
+        {
+          kind: 'toggle',
+          id: 'relatedProductEnabled',
+          label: '关联产品',
+          description:
+            '开启后，可在列表、新建/编辑与详情中填写「关联产品」，用于说明本单采购物料主要服务于哪个成品（与明细「采购品项」不同）；关闭后整单不显示该字段。列表搜索可按关联产品的名称与编号匹配。',
+          path: 'relatedProductEnabled',
           defaultChecked: false,
         },
       ],

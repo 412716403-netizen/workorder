@@ -2,17 +2,41 @@ import { getTenantPrisma } from '../lib/prisma.js';
 import { str, optStr } from '../utils/request.js';
 import * as financeService from '../services/finance.service.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
+import { listQueryFromRequest, warnListAllFromRequest } from '../utils/listQuery.js';
 
-export const listRecords = asyncHandler(async (req, res) => {
-  const db = getTenantPrisma(req.tenantId!);
-  const page = req.query.page ? Number(req.query.page) : undefined;
-  const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
-  res.json(await financeService.listRecords(db, {
+function parseFinanceFilter(req: { query: Record<string, unknown> }) {
+  return {
     type: optStr(req.query.type),
     status: optStr(req.query.status),
     categoryId: optStr(req.query.categoryId),
+    partner: optStr(req.query.partner),
+    operator: optStr(req.query.operator),
+    workerId: optStr(req.query.workerId),
+    productId: optStr(req.query.productId),
+    startDate: optStr(req.query.startDate),
+    endDate: optStr(req.query.endDate),
+    search: optStr(req.query.search),
+  };
+}
+
+export const listRecords = asyncHandler(async (req, res) => {
+  const db = getTenantPrisma(req.tenantId!);
+  const { all, page, pageSize } = listQueryFromRequest(req);
+  if (all) warnListAllFromRequest('finance.listRecords', req);
+  res.json(await financeService.listRecords(db, {
+    ...parseFinanceFilter(req),
+    all,
     page,
     pageSize,
+  }));
+});
+
+export const summary = asyncHandler(async (req, res) => {
+  const db = getTenantPrisma(req.tenantId!);
+  const topPartners = req.query.topPartners ? Number(req.query.topPartners) : undefined;
+  res.json(await financeService.summarize(db, {
+    ...parseFinanceFilter(req),
+    topPartners,
   }));
 });
 
@@ -37,4 +61,27 @@ export const updateRecord = asyncHandler(async (req, res) => {
 export const deleteRecord = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
   res.json(await financeService.deleteRecord(db, str(req.params.id)));
+});
+
+/** Phase 3.D follow-up：销售单打印「上次结余」窄查端点 */
+export const partnerReceivable = asyncHandler(async (req, res) => {
+  const partnerName = optStr(req.query.partnerName) ?? '';
+  const partnerId = optStr(req.query.partnerId);
+  const before = optStr(req.query.before);
+  if (!before) {
+    res.status(400).json({ error: '缺少 before（ISO 时间）' });
+    return;
+  }
+  if (!partnerName && !partnerId) {
+    res.json({ previousBalance: 0, anchorTimeMs: Date.parse(before) || Date.now() });
+    return;
+  }
+  res.json(
+    await financeService.getPartnerReceivableBefore(getTenantPrisma(req.tenantId!), {
+      partnerName,
+      partnerId,
+      before,
+      excludeSalesBillDocNumber: optStr(req.query.excludeSalesBillDocNumber),
+    }),
+  );
 });

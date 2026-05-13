@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Clock, Search, Building2, User, FileText, Sliders, Printer } from 'lucide-react';
+import * as api from '../services/api';
 import {
   FinanceRecord,
   FinanceOpType,
@@ -16,13 +18,11 @@ import {
   FINANCE_DOC_NO_PREFIX,
   ProductMilestoneProgress,
   PlanOrder,
-  PsiRecord,
   PrintTemplate,
   ReceiptFormSettings,
   PaymentFormSettings,
 } from '../types';
 import { PartnerSelect } from '../components/PartnerSelect';
-import type { ProductionOpRecord } from '../types';
 import {
   formConfigToolbarButtonClass,
   moduleHeaderRowClass,
@@ -54,10 +54,6 @@ interface FinanceOpsViewProps {
   records: FinanceRecord[];
   /** 全部收付款记录，用于按类型+日期生成单据编号 */
   allRecords: FinanceRecord[];
-  /** 进销存记录（采购单、销售单等），用于合作单位对账汇总 */
-  psiRecords?: PsiRecord[];
-  /** 生产操作记录（外协收回等），用于合作单位对账汇总 */
-  prodRecords?: ProductionOpRecord[];
   /** 关联产品模式下报工写入此处，报工结算需与工单 milestones.reports 一并汇总 */
   productMilestoneProgresses?: ProductMilestoneProgress[];
   onAddRecord: (record: FinanceRecord) => void;
@@ -101,8 +97,6 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
   orders,
   records,
   allRecords,
-  psiRecords = [],
-  prodRecords = [],
   productMilestoneProgresses = [],
   onAddRecord,
   onUpdateRecord,
@@ -140,28 +134,97 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
   const [form, setForm] = useState(emptyForm);
   const [detailRecord, setDetailRecord] = useState<DetailTarget | null>(null);
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
+  /** 编辑现有记录时把详情快照存下来，避免依赖 allRecords 全量 */
+  const [editingRecordSnapshot, setEditingRecordSnapshot] = useState<FinanceRecord | null>(null);
 
   useEffect(() => {
     setShowModal(false);
     setDetailRecord(null);
     setEditingRecordId(null);
+    setEditingRecordSnapshot(null);
   }, [type]);
   const [financeListSearch, setFinanceListSearch] = useState('');
   const debouncedFinanceListSearch = useDebouncedValue(financeListSearch, 300);
 
-  /** 参照报工单：前缀 + yyyyMMdd + '-' + 4位序号，按同类型当日已有记录数+1 */
+  /**
+   * Phase 3.A：非对账模式下不再依赖 `AppDataContext.financeRecords` 全量。
+   * 直接走后端分页 + 搜索；翻页/搜索只刷当前页。对账模式仍由 hook 内 react-query 处理。
+   */
+  const FIN_PAGE_SIZE = 20;
+  const [finPage, setFinPage] = useState(1);
+  const qc = useQueryClient();
+  const listSearchTrim = debouncedFinanceListSearch.trim();
+  const listEnabled = type !== 'RECONCILIATION';
+  const listQuery = useQuery({
+    queryKey: ['finance', 'list', type, listSearchTrim, finPage, FIN_PAGE_SIZE],
+    queryFn: () =>
+      api.finance.listPage({
+        type,
+        ...(listSearchTrim ? { search: listSearchTrim } : {}),
+        page: finPage,
+        pageSize: FIN_PAGE_SIZE,
+      }),
+    enabled: listEnabled,
+    staleTime: 15_000,
+    placeholderData: prev => prev,
+  });
+  const pagedDisplayRecords = useMemo<FinanceRecord[]>(
+    () => (listQuery.data?.data as FinanceRecord[] | undefined) ?? [],
+    [listQuery.data],
+  );
+  const finTotal = listQuery.data?.total ?? 0;
+  const finTotalPages = Math.max(1, Math.ceil(finTotal / FIN_PAGE_SIZE));
+  const invalidateFinanceList = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['finance', 'list'] });
+    qc.invalidateQueries({ queryKey: ['finance', 'today-count'] });
+  }, [qc]);
+
+  /** 今日同 type 笔数：用于"新增"时预生成单号；用 startDate/endDate 收窄 + pageSize=1 仅取 total */
+  const todayBounds = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const start = `${y}-${m}-${d}T00:00:00.000`;
+    const end = `${y}-${m}-${d}T23:59:59.999`;
+    return { ymd: `${y}${m}${d}`, start, end };
+  }, []);
+  const todayCountQuery = useQuery({
+    queryKey: ['finance', 'today-count', type, todayBounds.ymd],
+    queryFn: () =>
+      api.finance.listPage({
+        type,
+        startDate: todayBounds.start,
+        endDate: todayBounds.end,
+        page: 1,
+        pageSize: 1,
+      }),
+    enabled: listEnabled,
+    staleTime: 30_000,
+  });
+
+  /** Phase 3.A：mutation 完成后失效列表 + today-count；保持原有 onAddRecord/onUpdate/onDelete 写入 context 行为 */
+  const handleDeleteRecord = useCallback(
+    (id: string) => {
+      if (!onDeleteRecord) return;
+      const ret = onDeleteRecord(id) as unknown;
+      Promise.resolve(ret).finally(invalidateFinanceList);
+    },
+    [onDeleteRecord, invalidateFinanceList],
+  );
+
+  /**
+   * 参照报工单：前缀 + yyyyMMdd + '-' + 4位序号，按同类型当日已有记录数+1。
+   *
+   * Phase 3.A：序号来源由"前端 allRecords 全量遍历"切换为后端 today-count 接口（pageSize=1 仅取 total）；
+   * 仅用于前端预览，后端 createRecord 仍会自己调 `generateDocNo` 落库，避免竞态。
+   */
   const getNextDocNo = useCallback(() => {
     const todayStr = toLocalCompactYmd(new Date());
-    const keys = new Set<string>();
-    allRecords.filter(r => r.type === type).forEach(r => {
-      const ds = toLocalCompactYmd(r.timestamp);
-      if (!ds || ds !== todayStr) return;
-      keys.add(r.docNo || r.id);
-    });
-    const seq = keys.size + 1;
+    const seq = (todayCountQuery.data?.total ?? 0) + 1;
     const seqStr = String(seq).padStart(4, '0');
     return `${FINANCE_DOC_NO_PREFIX[type]}${todayStr}-${seqStr}`;
-  }, [allRecords, type]);
+  }, [todayCountQuery.data?.total, type]);
 
   const bizConfig: Record<FinanceOpType, any> = {
     'RECEIPT': { label: '收款单', sub: '登记从客户处收到的款项', partnerLabel: '缴款客户' },
@@ -191,9 +254,6 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
   const recon = useFinanceReconciliation({
     type,
     records,
-    allRecords,
-    psiRecords: psiRecords ?? [],
-    prodRecords: prodRecords ?? [],
     partners,
     orders,
     productMilestoneProgresses: productMilestoneProgresses ?? [],
@@ -263,11 +323,12 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
       paymentAccount: rec.paymentAccount || '',
       customData: rec.customData ? { ...rec.customData } : {},
     });
+    setEditingRecordSnapshot(rec);
   }, []);
 
   const handleSave = () => {
     if (editingRecordId) {
-      const existing = allRecords.find(r => r.id === editingRecordId);
+      const existing = editingRecordSnapshot ?? allRecords.find(r => r.id === editingRecordId);
       if (existing && onUpdateRecord) {
         const updated: FinanceRecord = {
           ...existing,
@@ -282,10 +343,12 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
           customData: Object.keys(form.customData).length ? { ...form.customData } : undefined,
         };
         onUpdateRecord(updated);
+        invalidateFinanceList();
       }
       setShowModal(false);
       setForm(emptyForm);
       setEditingRecordId(null);
+      setEditingRecordSnapshot(null);
       return;
     }
     const newRec: FinanceRecord = {
@@ -308,6 +371,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
       if (Object.keys(form.customData).length) newRec.customData = { ...form.customData };
     }
     onAddRecord(newRec);
+    invalidateFinanceList();
     setShowModal(false);
     setForm(emptyForm);
   };
@@ -317,15 +381,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
   const canSaveOther = form.amount > 0 && form.partner.trim() !== '';
   const canSave = isReceiptOrPayment ? canSaveReceiptPayment : canSaveOther;
 
-  const FIN_PAGE_SIZE = 20;
-  const [finPage, setFinPage] = useState(1);
-
   useEffect(() => { setFinPage(1); }, [type, debouncedFinanceListSearch, reconciliationSubTab, reconQueryPartnerId, reconQueryWorkerId]);
-  const finTotalPages = Math.max(1, Math.ceil(tableSourceRecords.length / FIN_PAGE_SIZE));
-  const pagedDisplayRecords = useMemo(
-    () => tableSourceRecords.slice((finPage - 1) * FIN_PAGE_SIZE, finPage * FIN_PAGE_SIZE),
-    [tableSourceRecords, finPage],
-  );
 
   if (!canView) {
     return (
@@ -528,13 +584,13 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
                         ? '请选择合作单位后点击查询'
                         : '请选择工人后点击查询'
                       : '该条件下暂无对账单据'
-                    : records.length === 0
-                      ? '暂无该模块财务记录'
+                    : listQuery.isLoading
+                      ? '加载中…'
                       : '暂无该模块财务记录';
                 if (type === 'RECONCILIATION' && reconHasFilter) {
                   if (isPartnerRecon && partnerReconList.length > 0 && partnerReconWithBalance.length === 0 && qFin) emptyMsg = '无匹配项，请调整搜索关键词';
                   else if (isSettlementRecon && settlementReconList.length > 0 && settlementReconWithBalance.length === 0 && qFin) emptyMsg = '无匹配项，请调整搜索关键词';
-                } else if (type !== 'RECONCILIATION' && records.length > 0 && tableSourceRecords.length === 0 && qFin) {
+                } else if (type !== 'RECONCILIATION' && !listQuery.isLoading && finTotal === 0 && qFin) {
                   emptyMsg = '无匹配项，请调整搜索关键词';
                 }
                 if (listLength === 0) {
@@ -707,7 +763,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
           </table>
           {finTotalPages > 1 && type !== 'RECONCILIATION' && (
             <div className="flex items-center justify-center gap-3 py-4">
-              <span className="text-xs text-slate-400">共 {tableSourceRecords.length} 条，第 {finPage} / {finTotalPages} 页</span>
+              <span className="text-xs text-slate-400">共 {finTotal} 条，第 {finPage} / {finTotalPages} 页</span>
               <button type="button" disabled={finPage <= 1} onClick={() => setFinPage(p => p - 1)} className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed">上一页</button>
               <button type="button" disabled={finPage >= finTotalPages} onClick={() => setFinPage(p => p + 1)} className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed">下一页</button>
             </div>
@@ -723,7 +779,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
         setShowModal={setShowModal}
         setDetailRecord={setDetailRecord}
         onUpdateRecord={onUpdateRecord}
-        onDeleteRecord={onDeleteRecord}
+        onDeleteRecord={onDeleteRecord ? handleDeleteRecord : undefined}
         canEdit={canEdit}
         canDelete={canDelete}
         confirm={confirm}
@@ -737,8 +793,6 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
         globalNodes={globalNodes}
         dictionaries={dictionaries}
         categories={categories}
-        psiRecords={psiRecords}
-        prodRecords={prodRecords}
         financeCatMap={financeCatMap}
         bizConfig={bizConfig}
         current={current}
@@ -751,6 +805,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
           setShowModal(false);
           setForm(emptyForm);
           setEditingRecordId(null);
+          setEditingRecordSnapshot(null);
         }}
         editingRecordId={editingRecordId}
         current={current}
@@ -808,7 +863,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
           listPrintSlot={listPrintSlot}
           printTemplates={printTemplates}
           resolveDocItems={recId => {
-            const hit = records.find(r => r.id === recId);
+            const hit = pagedDisplayRecords.find(r => r.id === recId) ?? records.find(r => r.id === recId);
             return hit ? [hit] : [];
           }}
           buildContext={(_t, { docItems }) => {
@@ -834,7 +889,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
             });
           }}
           pickerSubtitle={recId => {
-            const r = records.find(x => x.id === recId);
+            const r = pagedDisplayRecords.find(x => x.id === recId) ?? records.find(x => x.id === recId);
             return `${current.label} ${r?.docNo || r?.id || recId}`;
           }}
           onAddPrintTemplate={

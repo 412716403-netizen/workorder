@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchProductionByFilter, getTodayRangeIso, nextOutsourceDocNumberResolved } from './sharedFlowListHelpers';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -43,6 +45,11 @@ import {
   pageTitleClass,
 } from '../../styles/uiDensity';
 import { productGroupMaxReportableSum, combinedCompletedAtTemplate } from '../../utils/productReportAggregates';
+import { productHasColorSizeMatrix } from '../../utils/productColorSize';
+import {
+  productOutsourceDispatchUsesAggregateVariantPool,
+  sumOutsourceableByVariantProductMatrix,
+} from '../../utils/outsourceDispatchVariantCaps';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import {
   milestoneIndexInOrder,
@@ -56,7 +63,6 @@ import {
   buildOutsourceReceiveLastPriceIndex,
   lookupOutsourceReceiveLastPrice,
 } from '../../utils/outsourceReceiveLastUnitPrice';
-import { nextOutsourceDocNumber } from '../../utils/partnerDocNumber';
 import OutsourceMaterialDispatchModal from './OutsourceMaterialDispatchModal';
 import OutsourceMaterialReturnModal from './OutsourceMaterialReturnModal';
 import OutsourceDispatchListModal from './OutsourceDispatchListModal';
@@ -77,7 +83,10 @@ import DocPhaseModal from '../../components/DocPhaseModal';
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
 import { buildOutsourceFlowPrintContext } from '../../utils/buildOutsourceFlowPrintContext';
 import type { PrintRenderContext, PrintTemplate } from '../../types';
-import OutsourceCollabSyncModal from './OutsourceCollabSyncModal';
+import OutsourceCollabSyncModal, {
+  type CollabOutsourceRouteRow,
+  type OutsourceCollabSyncConfirmPayload,
+} from './OutsourceCollabSyncModal';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   readWarehousePreference,
@@ -95,7 +104,7 @@ import { toLocalDateYmd } from '../../utils/localDateTime';
 const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planFormSettings?: PlanFormSettings }> = ({
   productionLinkMode,
   productMilestoneProgresses,
-  records,
+  records: legacyRecords,
   orders,
   products,
   warehouses,
@@ -128,17 +137,107 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   const docOperator = currentOperatorDisplayName(currentUser);
   const canViewMainList = hasOpsPerm(tenantRole, userPermissions, 'production:outsource_list:allow');
 
+  /**
+   * Phase 3.E：OutsourcePanel 自取数据。
+   * 主查询：types=OUTSOURCE + 当前活动工单 ids（外协未收回的全集业务上是有限的）。
+   * 次查询：types=OUTSOURCE 今日窄拉（确保今日新增的状态变化即时可见）。
+   * 物料：types=STOCK_OUT,STOCK_RETURN + activeOrderIds（外协物料退回/选项用）。
+   * 不良/返工：types=REWORK,REWORK_REPORT + activeOrderIds（不良工件反查口径）。
+   * 合并去重后输出 records，覆盖 props.records。
+   */
+  const activeOrderIdsCsv = useMemo(
+    () => orders.map(o => o.id).filter(Boolean).join(','),
+    [orders],
+  );
+  /** 关联产品模式领退料 sourceProductId 兜底（写入时 orderId=null） */
+  const activeSourceProductIdsCsv = useMemo(() => {
+    const set = new Set<string>();
+    for (const o of orders) if (o.productId) set.add(o.productId);
+    return Array.from(set).join(',');
+  }, [orders]);
+  /**
+   * 关联产品模式外协主数据：后端对 OUTSOURCE 的 productIds 分支要求 orderId=null；
+   * 若主查询只带 orderIds，会漏掉「纯产品维度」写入的历史外协，主页聚合只剩少量产品。
+   */
+  const activeProductIdsCsv = useMemo(
+    () => products.map(p => p.id).filter(Boolean).join(','),
+    [products],
+  );
+  const todayRangeRef = useMemo(() => getTodayRangeIso(), []);
+  const outsourceMainQuery = useQuery({
+    queryKey: ['outsourcePanel.outsource.byOrders', productionLinkMode, activeOrderIdsCsv, activeProductIdsCsv],
+    queryFn: () =>
+      fetchProductionByFilter({
+        type: 'OUTSOURCE',
+        orderIds: activeOrderIdsCsv || undefined,
+        ...(productionLinkMode === 'product' && activeProductIdsCsv
+          ? { productIds: activeProductIdsCsv }
+          : {}),
+      }),
+    enabled:
+      productionLinkMode === 'product'
+        ? activeOrderIdsCsv.length > 0 || activeProductIdsCsv.length > 0
+        : activeOrderIdsCsv.length > 0,
+    staleTime: 15_000,
+  });
+  const outsourceTodayQuery = useQuery({
+    queryKey: ['outsourcePanel.outsource.today', todayRangeRef.from, todayRangeRef.to],
+    queryFn: () =>
+      fetchProductionByFilter({
+        type: 'OUTSOURCE',
+        startDate: todayRangeRef.from,
+        endDate: todayRangeRef.to,
+      }),
+    staleTime: 15_000,
+  });
+  const stockByOrderQuery = useQuery({
+    queryKey: ['outsourcePanel.stock.byOrders', activeOrderIdsCsv, activeSourceProductIdsCsv],
+    queryFn: () =>
+      fetchProductionByFilter({
+        types: 'STOCK_OUT,STOCK_RETURN',
+        orderIds: activeOrderIdsCsv || undefined,
+        sourceProductIds: activeSourceProductIdsCsv || undefined,
+      }),
+    enabled: activeOrderIdsCsv.length > 0 || activeSourceProductIdsCsv.length > 0,
+    staleTime: 15_000,
+  });
+  const reworkByOrderQuery = useQuery({
+    queryKey: ['outsourcePanel.rework.byOrders', activeOrderIdsCsv],
+    queryFn: () =>
+      fetchProductionByFilter({
+        types: 'REWORK,REWORK_REPORT',
+        orderIds: activeOrderIdsCsv || undefined,
+      }),
+    enabled: activeOrderIdsCsv.length > 0,
+    staleTime: 15_000,
+  });
+  const records = useMemo<ProductionOpRecord[]>(() => {
+    const seen = new Set<string>();
+    const out: ProductionOpRecord[] = [];
+    const pushAll = (arr: ProductionOpRecord[] | undefined) => {
+      if (!arr) return;
+      for (const r of arr) {
+        if (r?.id && !seen.has(r.id)) {
+          seen.add(r.id);
+          out.push(r);
+        }
+      }
+    };
+    pushAll(outsourceMainQuery.data);
+    pushAll(outsourceTodayQuery.data);
+    pushAll(stockByOrderQuery.data);
+    pushAll(reworkByOrderQuery.data);
+    if (out.length === 0 && legacyRecords && legacyRecords.length > 0) return legacyRecords;
+    return out;
+  }, [outsourceMainQuery.data, outsourceTodayQuery.data, stockByOrderQuery.data, reworkByOrderQuery.data, legacyRecords]);
+
   const [outsourceModal, setOutsourceModal] = useState<OutsourceModalType | null>(null);
   const [dispatchPartnerName, setDispatchPartnerName] = useState('');
   const [dispatchSelectedKeys, setDispatchSelectedKeys] = useState<Set<string>>(new Set());
   const [dispatchFormModalOpen, setDispatchFormModalOpen] = useState(false);
   const [dispatchFormQuantities, setDispatchFormQuantities] = useState<Record<string, number>>({});
-  const [collabSyncConfirm, setCollabSyncConfirm] = useState<{
-    partnerName: string;
-    collaborationTenantId: string;
-    recordIds: string[];
-  } | null>(null);
-  const [collabRoutes, setCollabRoutes] = useState<any[]>([]);
+  const [collabSyncConfirm, setCollabSyncConfirm] = useState<OutsourceCollabSyncConfirmPayload | null>(null);
+  const [collabRoutes, setCollabRoutes] = useState<CollabOutsourceRouteRow[]>([]);
 
   const [receiveSelectedKeys, setReceiveSelectedKeys] = useState<Set<string>>(new Set());
   const [receiveFormModalOpen, setReceiveFormModalOpen] = useState(false);
@@ -149,6 +248,11 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   const [receiveModal, setReceiveModal] = useState<{ orderId?: string; nodeId: string; productId: string; orderNumber?: string; productName: string; milestoneName: string; partner: string; pendingQty: number } | null>(null);
   const [receiveQty, setReceiveQty] = useState(0);
   const [flowDetailKey, setFlowDetailKey] = useState<string | null>(null);
+  /**
+   * 流水弹窗按日期窗口窄拉 records，详情打开时把这条 docNo 的原始 records 一并存下来，
+   * 避免 panel 自身 records 没覆盖到该日期范围时详情打不开。
+   */
+  const [flowDetailExtraRecords, setFlowDetailExtraRecords] = useState<ProductionOpRecord[] | null>(null);
   const [flowDocPhase, setFlowDocPhase] = useState<'detail' | 'edit'>('detail');
   const [flowOpenSeed, setFlowOpenSeed] = useState<OutsourceFlowOpenSeed>(null);
   const [flowOpenNonce, setFlowOpenNonce] = useState(0);
@@ -184,6 +288,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
     if (dispatchFormModalOpen) {
       setDispatchCustomValues({});
       setDispatchDeliveryDate('');
+      setDispatchPartnerName('');
     }
   }, [dispatchFormModalOpen]);
   useEffect(() => {
@@ -213,9 +318,26 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   );
 
   const flowDetailRecordsForPrint = useMemo(
-    () => (flowDetailKey ? records.filter(r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey) : []),
-    [records, flowDetailKey],
+    () => {
+      if (!flowDetailKey) return [];
+      const fromPanel = records.filter(r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey);
+      if (fromPanel.length > 0) return fromPanel;
+      // 兜底：流水弹窗按日期窄拉时附带的 records
+      return (flowDetailExtraRecords ?? []).filter(r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey);
+    },
+    [records, flowDetailKey, flowDetailExtraRecords],
   );
+  /** 详情弹窗内 docRecords 需与打印兜底一致：合并流水弹窗附带的同单号行，避免正文为空 */
+  const recordsForFlowDetailModal = useMemo(() => {
+    if (!flowDetailKey) return records;
+    const extraMatch = (flowDetailExtraRecords ?? []).filter(
+      r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey,
+    );
+    if (extraMatch.length === 0) return records;
+    const byId = new Map<string, ProductionOpRecord>(records.map(r => [r.id, r]));
+    for (const r of extraMatch) byId.set(r.id, r);
+    return Array.from(byId.values());
+  }, [records, flowDetailKey, flowDetailExtraRecords]);
   const flowDetailPrintIsReceive = flowDetailRecordsForPrint[0]?.status === '已收回';
   const flowDetailPrintSlot = flowDetailPrintIsReceive
     ? outsourceFormSettings.outsourceCenterPrint?.receiveFlowDetail
@@ -270,7 +392,33 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           const reportedQty = combinedCompletedAtTemplate(blockOrders, productMilestoneProgresses || [], productId, nodeId);
           const key = `${productId}|${nodeId}`;
           const dispatchedQty = Math.max(0, (dispatchedByKey[key] ?? 0) - (receivedByKey[key] ?? 0));
-          const availableQty = Math.max(0, maxReportable - reportedQty - dispatchedQty);
+          let availableQty = Math.max(0, maxReportable - reportedQty - dispatchedQty);
+          const category = categories.find(c => c.id === product.categoryId);
+          if (
+            availableQty > 0 &&
+            productHasColorSizeMatrix(product, category) &&
+            !productOutsourceDispatchUsesAggregateVariantPool(
+              blockOrders,
+              productMilestoneProgresses || [],
+              productId,
+              nodeId,
+              product,
+            )
+          ) {
+            const capSum = sumOutsourceableByVariantProductMatrix(
+              records,
+              product,
+              nodeId,
+              blockOrders,
+              productMilestoneProgresses,
+              (processSequenceMode ?? 'free') as ProcessSequenceMode,
+              getDr,
+              orders,
+            );
+            if (Number.isFinite(capSum)) {
+              availableQty = Math.min(availableQty, capSum);
+            }
+          }
           if (availableQty <= 0) return;
           rows.push({
             productId,
@@ -598,114 +746,11 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
     });
   }, [outsourceStatsByOrder, debouncedOutsourceSearch, productionLinkMode, idx]);
 
-  const outsourceFlowSummaryRows = useMemo(() => {
-    const isProductMode = productionLinkMode === 'product';
-    // 外协流水汇总：产品模式下全收（无论 r.orderId 是否为空），让切到产品模式后历史 order 模式流水也可见。
-    const outsourceList = records.filter(r => r.type === 'OUTSOURCE' && !r.sourceReworkId);
-
-    if (isProductMode) {
-      const key = (docNo: string, productId: string) => `${docNo}|${productId}`;
-      const byKey = new Map<string, { docNo: string; productId: string; productName: string; records: ProductionOpRecord[] }>();
-      outsourceList.forEach(rec => {
-        const docNo = rec.docNo ?? '—';
-        const pid = rec.productId || '';
-        const product = idx.productsById.get(pid);
-        const k = key(docNo, pid);
-        if (!byKey.has(k)) {
-          byKey.set(k, { docNo, productId: pid, productName: product?.name ?? '—', records: [] });
-        }
-        byKey.get(k)!.records.push(rec);
-      });
-      return Array.from(byKey.values())
-        .map(row => {
-          const sorted = [...row.records].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
-          const earliest = sorted.reduce((best, cur) => {
-            const tb = new Date(best.timestamp).getTime();
-            const tc = new Date(cur.timestamp).getTime();
-            if (Number.isNaN(tb)) return cur;
-            if (Number.isNaN(tc)) return best;
-            return tc < tb ? cur : best;
-          }, sorted[0]);
-          const dateStr = earliest?.timestamp ? (() => { try { const d = new Date(earliest.timestamp); return isNaN(d.getTime()) ? earliest.timestamp : d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); } catch { return earliest.timestamp; } })() : '—';
-          const partner = row.records[0]?.partner ?? '—';
-          const totalQuantity = row.records.reduce((s, r) => s + r.quantity, 0);
-          const nodeNames = [...new Set(row.records.map(r => r.nodeId).filter(Boolean))].map(nid => idx.nodesById.get(nid)?.name ?? nid);
-          const milestoneStr = nodeNames.length ? nodeNames.join('、') : '—';
-          const hasDispatch = row.records.some(r => r.status !== '已收回');
-          const hasReceive = row.records.some(r => r.status === '已收回');
-          const typeStr = hasDispatch && hasReceive ? '发出、收回' : hasDispatch ? '发出' : '收回';
-          return { ...row, orderId: '', orderNumber: '', records: sorted, dateStr, partner, totalQuantity, milestoneStr, typeStr };
-        })
-        .sort((a, b) => {
-          const ta = flowRecordsEarliestMs(a.records);
-          const tb = flowRecordsEarliestMs(b.records);
-          if (tb !== ta) return tb - ta;
-          return (a.docNo || '').localeCompare(b.docNo || '');
-        });
-    }
-
-    const key = (docNo: string, orderId: string, productId: string) => `${docNo}|${orderId}|${productId}`;
-    const byKey = new Map<string, { docNo: string; orderId: string; orderNumber: string; productId: string; productName: string; records: ProductionOpRecord[] }>();
-    outsourceList.forEach(rec => {
-      const docNo = rec.docNo ?? '—';
-      const oid = rec.orderId || '';
-      const pid = rec.productId || '';
-      const order = idx.ordersById.get(oid);
-      const product = idx.productsById.get(pid);
-      const k = key(docNo, oid, pid);
-      if (!byKey.has(k)) {
-        byKey.set(k, {
-          docNo,
-          orderId: oid,
-          orderNumber: order?.orderNumber ?? (oid ? oid : (product?.name ?? '—')),
-          productId: pid,
-          productName: product?.name ?? '—',
-          records: []
-        });
-      }
-      byKey.get(k)!.records.push(rec);
-    });
-    return Array.from(byKey.values())
-      .map(row => {
-        const sorted = [...row.records].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
-        const earliest = sorted.reduce((best, cur) => {
-          const tb = new Date(best.timestamp).getTime();
-          const tc = new Date(cur.timestamp).getTime();
-          if (Number.isNaN(tb)) return cur;
-          if (Number.isNaN(tc)) return best;
-          return tc < tb ? cur : best;
-        }, sorted[0]);
-        const dateStr = earliest?.timestamp ? (() => { try { const d = new Date(earliest.timestamp); return isNaN(d.getTime()) ? earliest.timestamp : d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); } catch { return earliest.timestamp; } })() : '—';
-        const partner = row.records[0]?.partner ?? '—';
-        const totalQuantity = row.records.reduce((s, r) => s + r.quantity, 0);
-        const nodeNames = [...new Set(row.records.map(r => r.nodeId).filter(Boolean))].map(nid => idx.nodesById.get(nid)?.name ?? nid);
-        const milestoneStr = nodeNames.length ? nodeNames.join('、') : '—';
-        const hasDispatch = row.records.some(r => r.status !== '已收回');
-        const hasReceive = row.records.some(r => r.status === '已收回');
-        const typeStr = hasDispatch && hasReceive ? '发出、收回' : hasDispatch ? '发出' : '收回';
-        const ord = idx.ordersById.get(row.orderId);
-        const dueDateDisplay = ord?.dueDate
-          ? toLocalDateYmd(ord.dueDate) || String(ord.dueDate).trim().slice(0, 10)
-          : '—';
-        return { ...row, records: sorted, dateStr, partner, totalQuantity, milestoneStr, typeStr, dueDateDisplay };
-      })
-      .sort((a, b) => {
-        const ta = flowRecordsEarliestMs(a.records);
-        const tb = flowRecordsEarliestMs(b.records);
-        if (tb !== ta) return tb - ta;
-        return (a.docNo || '').localeCompare(b.docNo || '');
-      });
-  }, [productionLinkMode, records, orders, products, globalNodes, productMilestoneProgresses, idx]);
+  // Phase 3.E：outsourceFlowSummaryRows 已搬入 OutsourceFlowListModal 内部，
+  // 由弹窗自身按日期窗口窄拉 records + 现场聚合；panel 不再预算这份数据。
 
   const showOrderDueDateColumn =
     productionLinkMode !== 'product' && planFormSettings?.listDisplay?.showDeliveryDate === true;
-
-  const getNextOutsourceDocNo = (partnerName: string): string =>
-    nextOutsourceDocNumber('dispatch', partners, records, '', partnerName.trim());
-
-  const getNextReceiveDocNo = (partnerName: string): string =>
-    nextOutsourceDocNumber('receive', partners, records, '', partnerName.trim());
-
 
   const handleDispatchFormSubmit = async () => {
     const partnerName = (dispatchPartnerName || '').trim();
@@ -718,7 +763,13 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       toast.warning('请至少填写一项委外数量。');
       return;
     }
-    const docNo = getNextOutsourceDocNo(partnerName);
+    let docNo: string;
+    try {
+      docNo = await nextOutsourceDocNumberResolved('dispatch', partners, records, '', partnerName);
+    } catch (e) {
+      toast.error(`生成外协发出单号失败：${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
     const timestamp = new Date().toLocaleString();
     const isProductMode = productionLinkMode === 'product';
     const dispatchCollab = buildOutsourceDispatchCollabSnapshot(
@@ -787,22 +838,38 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
     setDispatchSelectedKeys(new Set());
 
     if (collabTenantId) {
+      const productIds = Array.from(
+        new Set(batch.map(r => (r.productId ?? '').trim()).filter(Boolean)),
+      );
       setCollabSyncConfirm({
         partnerName,
         collaborationTenantId: collabTenantId,
         recordIds: batch.map(r => r.id),
+        productIds,
       });
       api.collaboration.listOutsourceRoutes().then(setCollabRoutes).catch(() => setCollabRoutes([]));
     }
   };
 
-  const handleOutsourceReceiveSubmit = () => {
+  const handleOutsourceReceiveSubmit = async () => {
     if (!receiveModal || receiveQty <= 0) return;
     if (receiveQty > receiveModal.pendingQty) {
       toast.error(`本次收回数量不能大于待收回数量（${receiveModal.pendingQty}）。`);
       return;
     }
-    const receiveDocNo = getNextReceiveDocNo(receiveModal.partner);
+    let receiveDocNo: string;
+    try {
+      receiveDocNo = await nextOutsourceDocNumberResolved(
+        'receive',
+        partners,
+        records,
+        '',
+        receiveModal.partner,
+      );
+    } catch (e) {
+      toast.error(`生成外协收回单号失败：${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
     const lineCollab = outsourceCustomCollabPart(receiveLineCustomValues, 'receive');
     const receiveRec: ProductionOpRecord = {
       id: `rec-${Date.now()}-recv-${Math.random().toString(36).slice(2, 8)}`,
@@ -835,7 +902,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       | { row: typeof outsourceReceiveRows[number]; isProductScope: boolean; baseKey: string; variantId?: string }
       | null;
 
-  const handleReceiveFormSubmit = () => {
+  const handleReceiveFormSubmit = async () => {
     const entries = (Object.entries(receiveFormQuantities) as [string, number][]).filter(([, qty]) => qty > 0);
     if (entries.length === 0) {
       toast.warning('请至少填写一项收回数量。');
@@ -915,7 +982,13 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
     const firstKey = receiveSelectedKeys.values().next().value;
     const firstRow = firstKey ? outsourceReceiveRows.find(r => outsourceReceiveBaseKey(r) === firstKey) : null;
     const partnerName = firstRow?.partner ?? '';
-    const receiveDocNo = getNextReceiveDocNo(partnerName);
+    let receiveDocNo: string;
+    try {
+      receiveDocNo = await nextOutsourceDocNumberResolved('receive', partners, records, '', partnerName);
+    } catch (e) {
+      toast.error(`生成外协收回单号失败：${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
     const receiveCollab = outsourceCustomCollabPart(receiveCustomValues, 'receive');
     for (const [key, qty] of entries) {
       const resolved = resolveReceiveEntry(key);
@@ -1464,16 +1537,21 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
         <OutsourceFlowListModal
           productionLinkMode={productionLinkMode}
           showOrderDueDateColumn={showOrderDueDateColumn}
-          outsourceFlowSummaryRows={outsourceFlowSummaryRows}
+          orders={orders}
+          products={products}
           globalNodes={globalNodes}
           userPermissions={userPermissions}
           tenantRole={tenantRole}
-          setFlowDetailKey={setFlowDetailKey}
+          onOpenDetail={(docNo, recs) => {
+            setFlowDetailExtraRecords(recs);
+            setFlowDetailKey(docNo);
+          }}
           flowOpenSeed={flowOpenSeed}
           flowOpenNonce={flowOpenNonce}
           onClose={() => {
             setOutsourceModal(null);
             setFlowDetailKey(null);
+            setFlowDetailExtraRecords(null);
             setFlowOpenSeed(null);
             setPartnerQtyDetailSeed(null);
           }}
@@ -1543,6 +1621,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           onClose={() => {
             setFlowDetailKey(null);
             setFlowDocPhase('detail');
+            setFlowDetailExtraRecords(null);
           }}
           onEnterEdit={() => setFlowDocPhase('edit')}
           onCancelEdit={() => setFlowDocPhase('detail')}
@@ -1553,7 +1632,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
               onPhaseDetail={() => setFlowDocPhase('detail')}
               productionLinkMode={productionLinkMode}
               flowDetailKey={flowDetailKey}
-              records={records}
+              records={recordsForFlowDetailModal}
               orders={orders}
               products={products}
               categories={categories}
@@ -1576,6 +1655,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
               onClose={() => {
                 setFlowDetailKey(null);
                 setFlowDocPhase('detail');
+                setFlowDetailExtraRecords(null);
               }}
             />
           )}
@@ -1625,6 +1705,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
 
       {collabSyncConfirm && (
         <OutsourceCollabSyncModal
+          tenantId={tenantCtx?.tenantId}
           collabSyncConfirm={collabSyncConfirm}
           collabRoutes={collabRoutes}
           onClose={() => setCollabSyncConfirm(null)}

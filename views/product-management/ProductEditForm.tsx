@@ -33,10 +33,11 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, BOMItem, AppDictionaries, ProductVariant, DictionaryItem, Partner } from '../../types';
-import { sortedVariantColorEntries } from '../../utils/sortVariantsByProduct';
+import { sortedVariantColorEntries, sortVariantsByColorThenSize } from '../../utils/sortVariantsByProduct';
 import { productColorSizeEnabled } from '../../utils/productColorSize';
 import { bomHasConfiguredItems } from '../../utils/bomEffective';
 import { isProductBlockedAsBomMaterial } from '../../utils/productBomMaterial';
+import { productMatchesSearchQuery } from '../../utils/productSearchMatch';
 import {
   getFileExtFromDataUrl,
   parseRouteReportFileUrls,
@@ -80,6 +81,79 @@ function resolveProductSkuForSave(p: Product, catalog: Product[]): Product {
 
 function resolveDefaultPartnerCategoryId(categories: PartnerCategory[]): string {
   return categories.find(c => c.name.includes('供应商'))?.id ?? categories[0]?.id ?? '';
+}
+
+const LAST_UNIT_BY_CATEGORY_LS_PREFIX = 'stpro:lastUnitByProductCategory:v1';
+
+function lastUnitByCategoryStorageKey(tenantId: string | null | undefined): string {
+  const tid = tenantId && String(tenantId).trim() ? String(tenantId).trim() : '_';
+  return `${LAST_UNIT_BY_CATEGORY_LS_PREFIX}:${tid}`;
+}
+
+function readLastUnitByCategoryMap(tenantId: string | null | undefined): Record<string, string> {
+  if (typeof localStorage === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(lastUnitByCategoryStorageKey(tenantId));
+    if (!raw) return {};
+    const o = JSON.parse(raw) as unknown;
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return {};
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(o as Record<string, unknown>)) {
+      if (typeof v === 'string' && v.trim()) out[k] = v.trim();
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function writeLastUnitForCategory(
+  tenantId: string | null | undefined,
+  categoryId: string,
+  unitId: string,
+): void {
+  if (typeof localStorage === 'undefined') return;
+  const cid = categoryId.trim();
+  const uid = unitId.trim();
+  if (!cid || !uid) return;
+  try {
+    const key = lastUnitByCategoryStorageKey(tenantId);
+    const map = readLastUnitByCategoryMap(tenantId);
+    map[cid] = uid;
+    localStorage.setItem(key, JSON.stringify(map));
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+/** 新建产品选分类时：本机该分类上次选的单位 → 否则同分类已有产品中最近更新的单位 */
+function resolveDefaultUnitForNewProductCategory(
+  tenantId: string | null | undefined,
+  categoryId: string,
+  productsCatalog: Product[],
+  unitIdsInDictionary: Set<string>,
+): string | undefined {
+  const cid = categoryId.trim();
+  if (!cid || unitIdsInDictionary.size === 0) return undefined;
+
+  const fromPrefs = readLastUnitByCategoryMap(tenantId)[cid];
+  if (fromPrefs && unitIdsInDictionary.has(fromPrefs)) return fromPrefs;
+
+  type PWithTs = Product & { updatedAt?: string };
+  let bestUnit: string | undefined;
+  let bestTs = -1;
+  for (const p of productsCatalog as PWithTs[]) {
+    if (p.categoryId !== cid) continue;
+    const u = (p.unitId ?? '').trim();
+    if (!u || !unitIdsInDictionary.has(u)) continue;
+    const t = typeof p.updatedAt === 'string' && p.updatedAt ? Date.parse(p.updatedAt) : 0;
+    const score = Number.isFinite(t) ? t : 0;
+    if (score >= bestTs) {
+      bestTs = score;
+      bestUnit = u;
+    }
+  }
+  return bestUnit;
 }
 
 function normalizeRouteReportValuesFromApi(raw: unknown): Record<string, Record<string, string>> {
@@ -152,8 +226,12 @@ const SpecSelectorModal = ({
   stackZClass?: string;
 }) => {
   const [search, setSearch] = useState('');
-  const filteredItems = items.filter(item => item.name.toLowerCase().includes(search.toLowerCase()));
-  const exactMatch = items.find(item => item.name === search);
+  const filteredItems = items.filter(item => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return item.name.toLowerCase().includes(q) || (item.value ?? '').toLowerCase().includes(q);
+  });
+  const exactMatch = items.find(item => item.name === search.trim());
   if (!isOpen) return null;
 
   return (
@@ -186,18 +264,18 @@ const SpecSelectorModal = ({
               <input 
                 autoFocus
                 type="text" 
-                placeholder={`搜索${type === 'color' ? '颜色' : '尺码'}...`}
+                placeholder={type === 'color' ? '搜索名称或色值…' : '搜索名称或编码…'}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 pl-12 pr-4 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
               />
             </div>
-            {search && !exactMatch && (
+            {search.trim() && !exactMatch && (
               <button 
-                onClick={() => { onAddNew(search); setSearch(''); }}
+                onClick={() => { onAddNew(search.trim()); setSearch(''); }}
                 className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl text-xs font-bold hover:bg-black transition-all shadow-lg"
               >
-                <Plus className="w-4 h-4" /> 新增 "{search}"
+                <Plus className="w-4 h-4" /> 新增 "{search.trim()}"
               </button>
             )}
           </div>
@@ -290,14 +368,14 @@ const BomBatchAddPanel = ({
   const filtered = useMemo(() => {
     return pool
       .filter(p => {
-        const q = search.trim().toLowerCase();
-        const matchesSearch =
-          !q || p.name.toLowerCase().includes(q) || (p.sku && p.sku.toLowerCase().includes(q));
+        const q = search.trim();
+        const cat = categories.find(c => c.id === p.categoryId) ?? null;
+        const matchesSearch = productMatchesSearchQuery(p, cat, q);
         const matchesCategory = activeTab === 'all' || p.categoryId === activeTab;
         return matchesSearch && matchesCategory;
       })
       .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id));
-  }, [pool, search, activeTab]);
+  }, [pool, search, activeTab, categories]);
 
   const tabBtnCls = (active: boolean) =>
     `px-2 py-1 rounded-md text-[9px] font-black uppercase transition-all whitespace-nowrap shrink-0 ${active ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`;
@@ -373,7 +451,7 @@ const BomBatchAddPanel = ({
         <input
           type="text"
           className="w-full bg-white border border-slate-200 rounded-lg py-2 pl-9 pr-3 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500"
-          placeholder="名称或 SKU 筛选…"
+          placeholder="名称、SKU 或自定义内容筛选…"
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
@@ -522,6 +600,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   onProductPersisted,
 }) => {
   const confirm = useConfirm();
+  const auth = useAuthOptional();
   /** 嵌在「新增产品」全屏弹窗（z=10800）内时，子层须更高，避免颜色/尺码等二级弹窗被挡住 */
   const nestedOverlayZ = embeddedInQuickCreateModal ? 'z-[11200]' : 'z-[10250]';
   const [workingProduct, setWorkingProduct] = useState<Product>(() => JSON.parse(JSON.stringify(initialProduct)));
@@ -624,7 +703,6 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   }, [copyBOMDropdownOpen]);
 
   const activeCategory = categories.find(c => c.id === workingProduct.categoryId);
-  const auth = useAuthOptional();
   const canQuickAddSupplier = useMemo(() => {
     const tctx = auth?.tenantCtx;
     if (!tctx) return false;
@@ -634,6 +712,47 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
       hasSubPermission(tctx.permissions, 'basic:partners:create')
     );
   }, [auth]);
+
+  /** 保存成功后与「新建时选手动单位」均写入，供下次同分类新建默认带出 */
+  const persistLastUnitPreference = useCallback(
+    (categoryId: string | undefined, unitId: string | undefined) => {
+      const cid = (categoryId ?? '').trim();
+      const uid = (unitId ?? '').trim();
+      if (!cid || !uid) return;
+      writeLastUnitForCategory(auth?.tenantCtx?.tenantId, cid, uid);
+    },
+    [auth?.tenantCtx?.tenantId],
+  );
+
+  /** 新建：打开表单时已有分类但尚未选单位（如从模板带入）时补默认单位 */
+  useEffect(() => {
+    if (isPersistedProduct) return;
+    const cid = (workingProduct.categoryId ?? '').trim();
+    if (!cid) return;
+    if ((workingProduct.unitId ?? '').trim()) return;
+    const units = dictionaries.units ?? [];
+    const unitIds = new Set(units.map(u => u.id));
+    if (unitIds.size === 0) return;
+    const preferred = resolveDefaultUnitForNewProductCategory(
+      auth?.tenantCtx?.tenantId,
+      cid,
+      products,
+      unitIds,
+    );
+    if (!preferred) return;
+    setWorkingProduct(wp => {
+      if ((wp.categoryId ?? '').trim() !== cid) return wp;
+      if ((wp.unitId ?? '').trim()) return wp;
+      return { ...wp, unitId: preferred };
+    });
+  }, [
+    isPersistedProduct,
+    workingProduct.categoryId,
+    workingProduct.unitId,
+    products,
+    dictionaries.units,
+    auth?.tenantCtx?.tenantId,
+  ]);
 
   const generateVariants = (colorIds: string[], sizeIds: string[], existingVariants: ProductVariant[]): ProductVariant[] => {
     if (colorIds.length === 0 && sizeIds.length === 0) return [];
@@ -739,6 +858,9 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
     const existing = units.find(u => u.name === name);
     if (existing) {
       setWorkingProduct({ ...workingProduct, unitId: existing.id });
+      if (!isPersistedProduct) {
+        persistLastUnitPreference(workingProduct.categoryId, existing.id);
+      }
       toast.info('该单位已存在，已为您选中');
       setQuickAddUnitOpen(false);
       setQuickAddUnitName('');
@@ -750,6 +872,9 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
       const created = await api.dictionaries.create({ type: 'unit', name, value: name }) as DictionaryItem;
       await onRefreshDictionaries();
       setWorkingProduct({ ...workingProduct, unitId: created.id });
+      if (!isPersistedProduct) {
+        persistLastUnitPreference(workingProduct.categoryId, created.id);
+      }
       toast.success('已添加产品单位');
       setQuickAddUnitOpen(false);
       setQuickAddUnitName('');
@@ -817,6 +942,11 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
       toast.error('产品编号在租户内已存在，请更换');
       return false;
     }
+    const categoryId = (p.categoryId ?? '').trim();
+    if (!categoryId) {
+      toast.error('没有选择产品类型，请去系统设置中添加产品分类');
+      return false;
+    }
     return true;
   };
 
@@ -844,6 +974,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
     try {
       const saved = await onUpdateProduct(toSave);
       if (saved) {
+        persistLastUnitPreference(saved.categoryId, saved.unitId);
         onProductPersisted?.(saved);
         onBack();
         setRouteReportDisplayFieldValues({});
@@ -956,6 +1087,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
         purchasePrice: resolved.purchasePrice ?? 0,
       });
       if (!savedProduct) return;
+      persistLastUnitPreference(savedProduct.categoryId, savedProduct.unitId);
       for (const it of workingBOM.items) {
         const pid = it.productId?.trim();
         if (!pid) continue;
@@ -1036,10 +1168,23 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   const singleSkuNodeBOMs: Record<string, string> = Object.fromEntries(
     boms.filter(b => b.parentProductId === workingProduct.id && b.variantId === singleSkuVariantId && b.nodeId && bomHasConfiguredItems(b)).map(b => [b.nodeId!, b.id])
   );
-  const availableBOMSources = workingProduct.variants.filter(srcV => {
-    if (!activeVariantIdForBOM || !activeNodeIdForBOM) return false;
-    return srcV.id !== activeVariantIdForBOM && boms.some(b => b.variantId === srcV.id && b.nodeId === activeNodeIdForBOM && bomHasConfiguredItems(b));
-  });
+  const availableBOMSources = useMemo(() => {
+    const filtered = workingProduct.variants.filter(srcV => {
+      if (!activeVariantIdForBOM || !activeNodeIdForBOM) return false;
+      return (
+        srcV.id !== activeVariantIdForBOM &&
+        boms.some(b => b.variantId === srcV.id && b.nodeId === activeNodeIdForBOM && bomHasConfiguredItems(b))
+      );
+    });
+    return sortVariantsByColorThenSize(filtered, workingProduct.colorIds, workingProduct.sizeIds);
+  }, [
+    workingProduct.variants,
+    workingProduct.colorIds,
+    workingProduct.sizeIds,
+    activeVariantIdForBOM,
+    activeNodeIdForBOM,
+    boms,
+  ]);
 
   return (
       <div className={`max-w-5xl mx-auto space-y-4 animate-in fade-in slide-in-from-bottom-4 ${embeddedInQuickCreateModal ? 'pb-8' : 'pb-32'}`}>
@@ -1315,7 +1460,22 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                     <button
                       key={cat.id}
                       type="button"
-                      onClick={() => setWorkingProduct({ ...workingProduct, categoryId: cat.id })}
+                      onClick={() => {
+                        setWorkingProduct(wp => {
+                          const next: Product = { ...wp, categoryId: cat.id };
+                          if (!isPersistedProduct) {
+                            const unitIds = new Set((dictionaries.units ?? []).map(u => u.id));
+                            const preferred = resolveDefaultUnitForNewProductCategory(
+                              auth?.tenantCtx?.tenantId,
+                              cat.id,
+                              products,
+                              unitIds,
+                            );
+                            next.unitId = preferred ?? undefined;
+                          }
+                          return next;
+                        });
+                      }}
                       className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all border ${
                         active
                           ? 'bg-indigo-600 text-white shadow-sm border-indigo-600 hover:bg-indigo-700 hover:border-indigo-700'
@@ -1347,7 +1507,13 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
               <div className="flex gap-2 items-stretch">
                 <select
                   value={workingProduct.unitId ?? ''}
-                  onChange={e => setWorkingProduct({ ...workingProduct, unitId: e.target.value || undefined })}
+                  onChange={e => {
+                    const unitId = e.target.value || undefined;
+                    setWorkingProduct({ ...workingProduct, unitId });
+                    if (!isPersistedProduct) {
+                      persistLastUnitPreference(workingProduct.categoryId, unitId);
+                    }
+                  }}
                   className="flex-1 min-w-0 bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
                 >
                   <option value="">请选择单位</option>
@@ -1715,12 +1881,12 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                                     <span className="text-slate-400 font-normal">{field.type === 'file' ? '文件/PDF' : '文本'}</span>
                                   </label>
                                   {field.type !== 'file' && (
-                                    <textarea
+                                    <input
+                                      type="text"
                                       value={val}
                                       onChange={e => setVal(e.target.value)}
                                       placeholder={field.placeholder || '工艺说明、注意事项等'}
-                                      rows={3}
-                                      className="route-report-control w-full box-border bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none resize-y min-h-[4rem]"
+                                      className="route-report-control w-full box-border bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
                                     />
                                   )}
                                   {field.type === 'file' && (() => {

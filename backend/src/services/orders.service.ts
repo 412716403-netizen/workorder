@@ -11,6 +11,7 @@ export async function listOrders(
   opts: {
     status?: string; productId?: string; parentOrderId?: string;
     search?: string; page?: number; pageSize?: number; lite?: boolean;
+    all?: boolean;
   },
 ) {
   const where: Record<string, unknown> = {};
@@ -35,14 +36,17 @@ export async function listOrders(
       };
   const orderBy: any = [{ createdAt: 'desc' }, { id: 'asc' }];
 
-  if (opts.page != null && opts.pageSize != null) {
-    const [data, total] = await Promise.all([
-      db.productionOrder.findMany({ where, include, orderBy, skip: (opts.page - 1) * opts.pageSize, take: opts.pageSize }),
-      db.productionOrder.count({ where }),
-    ]);
-    return { data, total, page: opts.page, pageSize: opts.pageSize };
+  if (opts.all) {
+    return db.productionOrder.findMany({ where, include, orderBy });
   }
-  return db.productionOrder.findMany({ where, include, orderBy });
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [data, total] = await Promise.all([
+    db.productionOrder.findMany({ where, include, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    db.productionOrder.count({ where }),
+  ]);
+  return { data, total, page, pageSize };
 }
 
 export async function getOrder(db: TenantPrismaClient, id: string) {
@@ -109,6 +113,207 @@ export async function deleteOrder(db: TenantPrismaClient, orderId: string) {
 
   await db.productionOrder.delete({ where: { id: orderId } });
   return { message: '已删除' };
+}
+
+// ── report history（报工流水：按日期窗口扁平返回 milestone.reports + pmp.reports）──
+
+export interface ListReportHistoryOpts {
+  startDate?: string;
+  endDate?: string;
+  orderIds?: string[];
+  productIds?: string[];
+  search?: string;
+  productionLinkMode?: 'order' | 'product';
+}
+
+export async function listReportHistory(
+  db: TenantPrismaClient,
+  opts: ListReportHistoryOpts,
+) {
+  const range: { gte?: Date; lt?: Date } = {};
+  if (opts.startDate) {
+    const d = new Date(opts.startDate);
+    if (!Number.isNaN(d.getTime())) range.gte = d;
+  }
+  if (opts.endDate) {
+    const d = new Date(opts.endDate);
+    if (!Number.isNaN(d.getTime())) range.lt = d;
+  }
+
+  const orderWhere: Record<string, unknown> = {};
+  if (range.gte || range.lt) orderWhere.timestamp = range;
+  if (opts.orderIds && opts.orderIds.length > 0) {
+    orderWhere.milestone = { productionOrderId: { in: opts.orderIds } };
+  }
+
+  const orderReportsRaw = await db.milestoneReport.findMany({
+    where: orderWhere,
+    orderBy: [{ timestamp: 'desc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      milestoneId: true,
+      timestamp: true,
+      operator: true,
+      quantity: true,
+      defectiveQuantity: true,
+      equipmentId: true,
+      variantId: true,
+      reportBatchId: true,
+      reportNo: true,
+      customData: true,
+      notes: true,
+      rate: true,
+      workerId: true,
+      weight: true,
+      materialBreakdown: true,
+      createdAt: true,
+      milestone: {
+        select: {
+          id: true,
+          name: true,
+          templateId: true,
+          productionOrderId: true,
+          productionOrder: {
+            select: {
+              id: true,
+              orderNumber: true,
+              productId: true,
+              productName: true,
+              sku: true,
+              customer: true,
+              dueDate: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const orderReports = orderReportsRaw.map((r) => ({
+    source: 'order' as const,
+    reportId: r.id,
+    timestamp: r.timestamp,
+    operator: r.operator,
+    quantity: r.quantity,
+    defectiveQuantity: r.defectiveQuantity,
+    equipmentId: r.equipmentId,
+    variantId: r.variantId,
+    reportBatchId: r.reportBatchId,
+    reportNo: r.reportNo,
+    customData: r.customData,
+    notes: r.notes,
+    rate: r.rate,
+    workerId: r.workerId,
+    weight: r.weight,
+    materialBreakdown: r.materialBreakdown,
+    createdAt: r.createdAt,
+    milestoneId: r.milestone.id,
+    milestoneName: r.milestone.name,
+    templateId: r.milestone.templateId,
+    orderId: r.milestone.productionOrder.id,
+    orderNumber: r.milestone.productionOrder.orderNumber,
+    productId: r.milestone.productionOrder.productId,
+    productName: r.milestone.productionOrder.productName,
+    sku: r.milestone.productionOrder.sku,
+    customer: r.milestone.productionOrder.customer,
+    dueDate: r.milestone.productionOrder.dueDate,
+  }));
+
+  // 关联产品模式下，额外返回 PMP.reports；非该模式时跳过以节省查询
+  let productReports: Array<Record<string, unknown>> = [];
+  if (opts.productionLinkMode === 'product') {
+    const pmpReportWhere: Record<string, unknown> = {};
+    if (range.gte || range.lt) pmpReportWhere.timestamp = range;
+    if (opts.productIds && opts.productIds.length > 0) {
+      pmpReportWhere.progress = { productId: { in: opts.productIds } };
+    }
+    const pmpReportsRaw = await db.productProgressReport.findMany({
+      where: pmpReportWhere,
+      orderBy: [{ timestamp: 'desc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        progressId: true,
+        timestamp: true,
+        operator: true,
+        quantity: true,
+        defectiveQuantity: true,
+        equipmentId: true,
+        variantId: true,
+        reportBatchId: true,
+        reportNo: true,
+        customData: true,
+        notes: true,
+        rate: true,
+        workerId: true,
+        weight: true,
+        materialBreakdown: true,
+        createdAt: true,
+        progress: {
+          select: {
+            id: true,
+            productId: true,
+            milestoneTemplateId: true,
+            variantId: true,
+          },
+        },
+      },
+    });
+    const productIdsForName = [...new Set(pmpReportsRaw.map((r) => r.progress.productId))];
+    const productNameMap = new Map<string, { name: string | null; sku: string | null }>();
+    if (productIdsForName.length > 0) {
+      const products = await db.product.findMany({
+        where: { id: { in: productIdsForName } },
+        select: { id: true, name: true, sku: true },
+      });
+      for (const p of products) productNameMap.set(p.id, { name: p.name ?? null, sku: p.sku ?? null });
+    }
+    productReports = pmpReportsRaw.map((r) => {
+      const meta = productNameMap.get(r.progress.productId);
+      return {
+        source: 'pmp' as const,
+        reportId: r.id,
+        timestamp: r.timestamp,
+        operator: r.operator,
+        quantity: r.quantity,
+        defectiveQuantity: r.defectiveQuantity,
+        equipmentId: r.equipmentId,
+        variantId: r.variantId,
+        reportBatchId: r.reportBatchId,
+        reportNo: r.reportNo,
+        customData: r.customData,
+        notes: r.notes,
+        rate: r.rate,
+        workerId: r.workerId,
+        weight: r.weight,
+        materialBreakdown: r.materialBreakdown,
+        createdAt: r.createdAt,
+        progressId: r.progress.id,
+        productId: r.progress.productId,
+        productName: meta?.name ?? null,
+        sku: meta?.sku ?? null,
+        templateId: r.progress.milestoneTemplateId,
+      };
+    });
+  }
+
+  // 服务端 search 模糊（同时覆盖两路结果的 docNo/operator/orderNumber/productName/reportNo）
+  if (opts.search) {
+    const kw = opts.search.toLowerCase();
+    const match = (s: unknown) => typeof s === 'string' && s.toLowerCase().includes(kw);
+    const filterFn = (row: Record<string, unknown>) =>
+      match(row.reportNo) ||
+      match(row.operator) ||
+      match(row.orderNumber) ||
+      match(row.productName) ||
+      match(row.sku) ||
+      match(row.notes);
+    return {
+      orderReports: orderReports.filter(filterFn as never),
+      productReports: productReports.filter(filterFn as never),
+    };
+  }
+
+  return { orderReports, productReports };
 }
 
 // ── milestone reports ──
@@ -399,11 +604,24 @@ async function enforceReportQuantity(
 
 // ── product progress ──
 
-export async function listProductProgress(db: TenantPrismaClient) {
-  return db.productMilestoneProgress.findMany({
-    include: { reports: { orderBy: { timestamp: 'desc' } } },
-    orderBy: { updatedAt: 'desc' },
-  });
+export async function listProductProgress(
+  db: TenantPrismaClient,
+  opts: { all?: boolean; page?: number; pageSize?: number },
+) {
+  const include = { reports: { orderBy: { timestamp: 'desc' as const } } };
+  const orderBy = { updatedAt: 'desc' as const };
+
+  if (opts.all) {
+    return db.productMilestoneProgress.findMany({ include, orderBy });
+  }
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [data, total] = await Promise.all([
+    db.productMilestoneProgress.findMany({ include, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    db.productMilestoneProgress.count({}),
+  ]);
+  return { data, total, page, pageSize };
 }
 
 async function recalcProgressCompleted(progressId: string) {

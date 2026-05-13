@@ -3,6 +3,7 @@ import { flowRecordsEarliestMs } from './flowDocSort';
 import { formatLocalDateTimeZh } from './localDateTime';
 import { productHasColorSizeMatrix } from './productColorSize';
 import { OUTSOURCE_DISPATCH_DELIVERY_DATE_KEY } from './productionOpCollab/outsource';
+import { sortVariantsByColorThenSize } from './sortVariantsByProduct';
 
 /** 加工厂往来数量明细弹窗：当前卡片的产品/工单、工序、加工厂上下文 */
 export interface PartnerFlowDetailSeed {
@@ -184,8 +185,40 @@ export function computeDispatchReceiveRemaining(filtered: ProductionOpRecord[]):
 }
 
 /**
- * 与详情弹窗一致：工单行上出现的规格优先，否则流水里出现的规格，否则产品全部规格。
+ * 与详情弹窗一致：列出的规格 id 集合仍按「工单行 → 流水出现 → 产品全部」决定，
+ * 列顺序按产品 colorIds / sizeIds 做「同色相邻、尺码与产品矩阵一致」。
  */
+export function orderedVariantColumnIds(
+  product: Product | undefined,
+  category: ProductCategory | undefined,
+  order: ProductionOrder | undefined,
+  variantQtyMaps: Record<string, number>[],
+): string[] {
+  if (!productHasColorSizeMatrix(product, category)) return [];
+  const allProductVariants = product?.variants ?? [];
+  const unionKeys = new Set<string>();
+  for (const m of variantQtyMaps) {
+    Object.keys(m).forEach(k => {
+      if (k) unionKeys.add(k);
+    });
+  }
+  const variantIdsInOrder = new Set((order?.items ?? []).map(i => i.variantId).filter(Boolean) as string[]);
+
+  let variantsForSort: typeof allProductVariants;
+  if (unionKeys.size > 0) {
+    variantsForSort = allProductVariants.filter(v => unionKeys.has(v.id));
+  } else if (variantIdsInOrder.size > 0) {
+    variantsForSort = allProductVariants.filter(v => variantIdsInOrder.has(v.id));
+  } else {
+    variantsForSort = [...allProductVariants];
+  }
+
+  const sorted = sortVariantsByColorThenSize(variantsForSort, product?.colorIds, product?.sizeIds);
+  const ordered = sorted.map(v => v.id);
+  const extra = [...unionKeys].filter(id => !ordered.includes(id)).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+  return [...ordered, ...extra];
+}
+
 /** 与当前详情单同一 partner，且 (orderId, productId, nodeId) 落在本单出现过的组合上的全部外协流水（用于累计发出/收回/剩余）。 */
 export function filterOutsourceRecordsMatchingDocScope(
   allRecords: ProductionOpRecord[],
@@ -206,29 +239,4 @@ export function filterOutsourceRecordsMatchingDocScope(
     const k = `${r.orderId ?? ''}\u0000${r.productId ?? ''}\u0000${r.nodeId ?? ''}`;
     return keys.has(k);
   });
-}
-
-export function orderedVariantColumnIds(
-  product: Product | undefined,
-  category: ProductCategory | undefined,
-  order: ProductionOrder | undefined,
-  variantQtyMaps: Record<string, number>[],
-): string[] {
-  if (!productHasColorSizeMatrix(product, category)) return [];
-  const allProductVariants = product?.variants ?? [];
-  const unionKeys = new Set<string>();
-  for (const m of variantQtyMaps) {
-    Object.keys(m).forEach(k => {
-      if (k) unionKeys.add(k);
-    });
-  }
-  const variantIdsInOrder = new Set((order?.items ?? []).map(i => i.variantId).filter(Boolean) as string[]);
-  let variantsForDetail = allProductVariants.filter(v => variantIdsInOrder.has(v.id));
-  if (variantsForDetail.length === 0 && unionKeys.size > 0) {
-    variantsForDetail = allProductVariants.filter(v => unionKeys.has(v.id));
-  }
-  if (variantsForDetail.length === 0) variantsForDetail = [...allProductVariants];
-  const ordered = variantsForDetail.map(v => v.id);
-  const extra = [...unionKeys].filter(id => !ordered.includes(id)).sort();
-  return [...ordered, ...extra];
 }

@@ -20,11 +20,13 @@ import {
   ProductMilestoneProgress,
   ProcessSequenceMode,
   Warehouse,
-  PsiRecord,
 } from '../types';
 import PlanProductDetail from './plan-order-list/PlanProductDetail';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import { orders as ordersApi } from '../services/api';
+import { useQuery } from '@tanstack/react-query';
+import { fetchProductionByFilter } from './production-ops/sharedFlowListHelpers';
+import { orders as ordersApi, production as productionApi } from '../services/api';
+import { normalizeDecimals } from '../contexts/formSettingsDefaults';
 import OrderDetailModal from './OrderDetailModal';
 import OrderFlowView from './OrderFlowView';
 import PendingStockPanel from './order-list/PendingStockPanel';
@@ -80,9 +82,6 @@ interface OrderListViewProps {
   printTemplates: PrintTemplate[];
   onUpdatePrintTemplates: (list: PrintTemplate[]) => void | Promise<void>;
   onRefreshPrintTemplates?: () => void | Promise<void>;
-  prodRecords?: ProductionOpRecord[];
-  /** 领料批次下拉与本地 PSI 合并用 */
-  psiRecords?: PsiRecord[];
   warehouses?: Warehouse[];
   onUpdateOrderFormSettings: (settings: OrderFormSettings) => void;
   onReportSubmit?: (orderId: string, milestoneId: string, quantity: number, customData: any, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string) => void;
@@ -145,8 +144,6 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   printTemplates,
   onUpdatePrintTemplates,
   onRefreshPrintTemplates,
-  prodRecords = [],
-  psiRecords = [],
   warehouses = [],
   onUpdateOrderFormSettings,
   onReportSubmit,
@@ -230,8 +227,10 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
       if (searchTerm) params.search = searchTerm;
       const result = await ordersApi.listPaginated(params);
       if (gen !== fetchGenRef.current) return;
-      setFetchedOrders(result.data as ProductionOrder[]);
-      setTotalOrders(result.total);
+      const data = Array.isArray(result) ? (result as unknown as ProductionOrder[]) : ((result?.data ?? []) as ProductionOrder[]);
+      const total = Array.isArray(result) ? data.length : (result?.total ?? 0);
+      setFetchedOrders(data);
+      setTotalOrders(total);
     } catch (e) {
       console.error('Failed to fetch paginated orders', e);
     }
@@ -250,6 +249,70 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     const byId = new Map(orders.map(o => [o.id, o]));
     return fetchedOrders.map(o => byId.get(o.id) ?? o);
   }, [fetchedOrders, orders, debouncedSearch, currentPage]);
+
+  /** 工单中心：按当前列表涉及工单 + 产品窄拉生产流水（避免父级全量 refreshProdRecords） */
+  const ORDER_CENTER_PRODUCTION_TYPES = 'REWORK,OUTSOURCE,REWORK_REPORT,STOCK_IN';
+  const narrowOrderIdsForProd = useMemo(() => {
+    const ids = new Set<string>();
+    for (const o of displayOrders) {
+      ids.add(o.id);
+      if (o.parentOrderId) ids.add(o.parentOrderId);
+    }
+    for (const o of displayOrders) {
+      for (const c of orders) {
+        if (c.parentOrderId === o.id) ids.add(c.id);
+      }
+    }
+    return [...ids];
+  }, [displayOrders, orders]);
+
+  const narrowProductIdsForProd = useMemo(() => {
+    const s = new Set<string>();
+    displayOrders.forEach(o => {
+      if (o.productId) s.add(o.productId);
+    });
+    return [...s];
+  }, [displayOrders]);
+
+  const orderCenterProdQuery = useQuery({
+    queryKey: [
+      'orderCenterProdNarrow',
+      ORDER_CENTER_PRODUCTION_TYPES,
+      narrowOrderIdsForProd.join('\n'),
+      narrowProductIdsForProd.join('\n'),
+      orders.length,
+    ],
+    enabled: narrowOrderIdsForProd.length > 0 || narrowProductIdsForProd.length > 0,
+    queryFn: async (): Promise<ProductionOpRecord[]> => {
+      const acc: ProductionOpRecord[] = [];
+      let page = 1;
+      const pageSize = 200;
+      for (;;) {
+        const params: Record<string, string> = {
+          page: String(page),
+          pageSize: String(pageSize),
+          types: ORDER_CENTER_PRODUCTION_TYPES,
+        };
+        if (narrowOrderIdsForProd.length) params.orderIds = narrowOrderIdsForProd.join(',');
+        if (narrowProductIdsForProd.length) params.productIds = narrowProductIdsForProd.join(',');
+        const res = await productionApi.listPage(params);
+        const chunk = Array.isArray(res) ? (res as ProductionOpRecord[]) : ((res?.data ?? []) as ProductionOpRecord[]);
+        acc.push(...chunk);
+        const total = Array.isArray(res) ? chunk.length : (res?.total ?? 0);
+        if (chunk.length < pageSize || acc.length >= total) break;
+        page += 1;
+        if (page > 40) break;
+      }
+      return normalizeDecimals(acc);
+    },
+    staleTime: 15_000,
+  });
+
+  const effectiveProdRecords = useMemo((): ProductionOpRecord[] => {
+    if (!orderCenterProdQuery.isSuccess) return [];
+    return orderCenterProdQuery.data ?? [];
+  }, [orderCenterProdQuery.isSuccess, orderCenterProdQuery.data]);
+
   const totalPages = Math.max(1, Math.ceil(totalOrders / PAGE_SIZE));
   type OrderReportRow = {
     order: ProductionOrder;
@@ -336,9 +399,9 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   /** 按单 + 目标工序聚合返工统计（工单中心返工详情弹窗用）；顺序模式下 pendingQty = 按路径上道完成后的可报数 */
   const reworkStatsByOrderId = useMemo(() => {
     if (productionLinkMode !== 'order') return new Map<string, { nodeId: string; nodeName: string; totalQty: number; completedQty: number; pendingQty: number }[]>();
-    const reworkRecords = prodRecords.filter(r => r.type === 'REWORK');
+    const reworkRecords = effectiveProdRecords.filter(r => r.type === 'REWORK');
     const result = new Map<string, { nodeId: string; nodeName: string; totalQty: number; completedQty: number; pendingQty: number }[]>();
-    orders.forEach(order => {
+    displayOrders.forEach(order => {
       const byNode = new Map<string, { totalQty: number; completedQty: number; pendingSeq: number }>();
       reworkRecords.forEach(r => {
         if (r.orderId !== order.id) return;
@@ -370,7 +433,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
       if (list.length > 0) result.set(order.id, list);
     });
     return result;
-  }, [productionLinkMode, prodRecords, orders, globalNodes, processSequenceMode]);
+  }, [productionLinkMode, effectiveProdRecords, displayOrders, globalNodes, processSequenceMode]);
 
   const showInList = (id: string) => orderFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
 
@@ -412,7 +475,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
    */
   const outsourceNetByOrderTpl = useMemo(() => {
     const m = new Map<string, number>();
-    (prodRecords ?? [])
+    (effectiveProdRecords ?? [])
       .filter(r => r.type === 'OUTSOURCE' && !r.sourceReworkId && r.orderId && r.nodeId)
       .forEach(r => {
         const k = `${r.orderId}|${r.nodeId}`;
@@ -422,11 +485,11 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
       });
     for (const [k, v] of m) m.set(k, Math.max(0, v));
     return m;
-  }, [prodRecords]);
+  }, [effectiveProdRecords]);
 
   const outsourceNetByProductTpl = useMemo(() => {
     const m = new Map<string, number>();
-    (prodRecords ?? [])
+    (effectiveProdRecords ?? [])
       .filter(r => r.type === 'OUTSOURCE' && !r.sourceReworkId && !r.orderId && r.productId && r.nodeId)
       .forEach(r => {
         const k = `${r.productId}|${r.nodeId}`;
@@ -436,7 +499,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
       });
     for (const [k, v] of m) m.set(k, Math.max(0, v));
     return m;
-  }, [prodRecords]);
+  }, [effectiveProdRecords]);
 
   /** 父子工单映射：父工单 id → 子工单列表 */
   const parentToSubOrders = useMemo(() => {
@@ -563,21 +626,56 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     pendingByVariant: Record<string, number>;
     productTotalStockIn?: number;
   };
+  /**
+   * 角标和弹窗内笔数共用同一口径：
+   * - orders 用全量（不收窄到 displayOrders）；
+   * - STOCK_IN 也用按 panel 内 orderIds + productIds 自取的"全量 STOCK_IN"
+   *   （不依赖 `effectiveProdRecords` — 它按 `displayOrders` 收窄，跨页 / 跨搜索后会把
+   *   不在当前列表页的工单的"已入库"算成 0，导致 pending 永远扣不下来、角标和弹窗对不上）。
+   *
+   * 该 query 与 `PendingStockPanel.pendingStockInQuery` 同前缀 `pendingStockPanel.stockIn`，
+   * 写入后 `invalidateAllProdRecords` 会一并刷新。
+   */
+  const allOrderIdsForPending = useMemo(
+    () => orders.map(o => o.id).filter(Boolean).join(','),
+    [orders],
+  );
+  const allProductIdsForPending = useMemo(() => {
+    const s = new Set<string>();
+    for (const o of orders) if (o.productId) s.add(o.productId);
+    return [...s].join(',');
+  }, [orders]);
+  const pendingStockInQuery = useQuery({
+    queryKey: ['pendingStockPanel.stockIn', allOrderIdsForPending, allProductIdsForPending],
+    queryFn: () =>
+      fetchProductionByFilter({
+        type: 'STOCK_IN',
+        orderIds: allOrderIdsForPending || undefined,
+        productIds: allProductIdsForPending || undefined,
+      }),
+    enabled: allOrderIdsForPending.length > 0 || allProductIdsForPending.length > 0,
+    staleTime: 15_000,
+  });
+  const pendingStockSourceRecords = useMemo<ProductionOpRecord[]>(() => {
+    const local = pendingStockInQuery.data;
+    if (Array.isArray(local) && local.length > 0) return local;
+    return effectiveProdRecords ?? [];
+  }, [pendingStockInQuery.data, effectiveProdRecords]);
   const pendingStockOrders = useMemo(
     (): PendingStockItem[] =>
-      computePendingStockOrders(orders, prodRecords || [], {
+      computePendingStockOrders(orders, pendingStockSourceRecords, {
         productionLinkMode,
         productMilestoneProgresses,
       }),
-    [orders, prodRecords, productionLinkMode, productMilestoneProgresses],
+    [orders, pendingStockSourceRecords, productionLinkMode, productMilestoneProgresses],
   );
 
   /** 待入库清单弹窗 & 选择入库表单 */
   const [showPendingStockModal, setShowPendingStockModal] = useState(false);
 
   const defectiveAndReworkByOrderMilestone = useMemo(
-    () => buildDefectiveReworkByOrderMilestone(orders, prodRecords),
-    [orders, prodRecords]
+    () => buildDefectiveReworkByOrderMilestone(displayOrders, effectiveProdRecords),
+    [displayOrders, effectiveProdRecords]
   );
 
   const getDefectiveRework = (orderId: string, templateId: string) => defectiveAndReworkByOrderMilestone.get(`${orderId}|${templateId}`) ?? { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> };
@@ -688,12 +786,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
             className={outlineToolbarButtonClass}
           >
             <ArrowDownToLine className="w-4 h-4 shrink-0" />
-            待入库清单
-            {pendingStockOrders.length > 0 && (
-              <span className="ml-0.5 min-w-[18px] h-[18px] rounded-full bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center">
-                {pendingStockOrders.length}
-              </span>
-            )}
+            待入库清单{pendingStockOrders.length > 0 ? `（${pendingStockOrders.length}）` : ''}
           </button>
           )}
           </div>
@@ -1412,7 +1505,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           productionLinkMode={productionLinkMode}
           orders={orders}
           productMilestoneProgresses={productMilestoneProgresses}
-          prodRecords={prodRecords}
+          prodRecords={effectiveProdRecords}
           boms={boms}
         />
       )}
@@ -1426,7 +1519,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         dictionaries={dictionaries}
         productionLinkMode={productionLinkMode}
         productMilestoneProgresses={productMilestoneProgresses}
-        prodRecords={prodRecords}
+        prodRecords={effectiveProdRecords}
         onOpenBatchDetail={(batch) => setReportDetailBatch(batch)}
       />
 
@@ -1438,7 +1531,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         products={products}
         categories={categories}
         globalNodes={globalNodes}
-        prodRecords={prodRecords}
+        prodRecords={effectiveProdRecords}
         warehouses={warehouses}
         dictionaries={dictionaries}
         boms={boms}
@@ -1466,7 +1559,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           dictionaries={dictionaries}
           globalNodes={globalNodes}
           workers={workers}
-          prodRecords={prodRecords}
+          prodRecords={effectiveProdRecords}
           productMilestoneProgresses={productMilestoneProgresses}
           processSequenceMode={processSequenceMode}
           productionLinkMode={productionLinkMode}
@@ -1489,7 +1582,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         onClose={closeOrderDetail}
         orders={orders}
         products={products}
-        prodRecords={prodRecords}
+        prodRecords={effectiveProdRecords}
         dictionaries={dictionaries}
         categories={categories}
         orderFormSettings={orderFormSettings}
@@ -1543,7 +1636,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           products={products}
           globalNodes={globalNodes}
           dictionaries={dictionaries}
-          prodRecords={prodRecords}
+          prodRecords={effectiveProdRecords}
           reworkStatsByOrderId={reworkStatsByOrderId}
         />
       )}
@@ -1556,7 +1649,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           products={products}
           globalNodes={globalNodes}
           dictionaries={dictionaries}
-          prodRecords={prodRecords}
+          prodRecords={effectiveProdRecords}
           productMilestoneProgresses={productMilestoneProgresses}
           reworkRemainingAtNode={reworkRemainingAtNode}
         />
@@ -1572,8 +1665,6 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           warehouses={warehouses}
           globalNodes={globalNodes}
           dictionaries={dictionaries}
-          prodRecords={prodRecords}
-          psiRecords={psiRecords}
           productionLinkMode={productionLinkMode}
           onAddRecord={onAddRecord}
           onAddRecordBatch={onAddRecordBatch}

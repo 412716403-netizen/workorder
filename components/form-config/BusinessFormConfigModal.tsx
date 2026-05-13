@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { X, Sliders, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import type { PlanFormFieldConfig } from '../../types';
@@ -56,7 +56,8 @@ function resolveSubtitle(
  * 取代原先 9 个几乎一致的 *FormConfigModal 文件。
  *
  * 能力：
- * - draft 生命周期：open 打开时 clone 一份 initialValue；关闭后清空
+ * - draft 生命周期：仅在弹窗从关闭→打开时 clone 一份 initialValue；**打开期间**父级若刷新
+ *   `initialValue` 引用（如全局配置重拉）**不会**重置 draft，避免打印白名单 / 嵌套弹窗合并结果在点「保存配置」前被冲掉
  * - tabs 切换 + `onActivate` 钩子（典型：切到 print tab 触发模板刷新）
  * - section 分派：customFieldsTable / standardFieldsList / printWhitelist / toggle / customSlot
  * - 内置 PlanPrintTemplateManageDialog 挂载：scope 由 printWhitelist 卡片触发；section.hideOptionalTemplateList 时可隐藏「可选模版」芯片区
@@ -83,6 +84,7 @@ export function BusinessFormConfigModal<TSettings extends Record<string, unknown
   const [tabId, setTabId] = useState<string>(() => defaultTabId ?? schema.tabs[0]?.id ?? '');
   const [activePrintSection, setActivePrintSection] = useState<FormConfigPrintWhitelistSection | null>(null);
   const [saving, setSaving] = useState(false);
+  const wasOpenRef = useRef(false);
 
   const hasAnyPrintWhitelist = useMemo(
     () => schema.tabs.some(t => t.sections.some(s => s.kind === 'printWhitelist')),
@@ -92,18 +94,19 @@ export function BusinessFormConfigModal<TSettings extends Record<string, unknown
   useRefreshPrintTemplatesOnWindowFocus(open && hasAnyPrintWhitelist, onRefreshPrintTemplates);
 
   useEffect(() => {
-    if (open) {
+    if (open && !wasOpenRef.current) {
       setDraftState(JSON.parse(JSON.stringify(initialValue)) as TSettings);
       const tabIds = new Set(schema.tabs.map(t => t.id));
       const fallback = schema.tabs[0]?.id ?? '';
       const want = defaultTabId ?? fallback;
       setTabId(tabIds.has(want) ? want : fallback);
       setSaving(false);
-    } else {
+    } else if (!open && wasOpenRef.current) {
       setDraftState(null);
       setActivePrintSection(null);
       setSaving(false);
     }
+    wasOpenRef.current = open;
   }, [open, initialValue, defaultTabId, schema]);
 
   const buildCtx = useCallback(

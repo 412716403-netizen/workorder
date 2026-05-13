@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './AuthContext';
 import * as api from '../services/api';
 import type {
@@ -32,7 +33,6 @@ import type {
   MaterialFormSettings,
   OutsourceFormSettings,
   ReworkFormSettings,
-  PsiRecord,
   Partner,
   Worker,
   Equipment,
@@ -91,9 +91,6 @@ export interface AppDataContextValue {
   products: Product[];
   orders: ProductionOrder[];
   plans: PlanOrder[];
-  psiRecords: PsiRecord[];
-  financeRecords: FinanceRecord[];
-  prodRecords: ProductionOpRecord[];
   categories: ProductCategory[];
   partnerCategories: PartnerCategory[];
   dictionaries: AppDictionaries;
@@ -166,8 +163,8 @@ export interface AppDataContextValue {
   onUpdateOrder: (orderId: string, updates: Partial<ProductionOrder>) => Promise<void>;
   onDeleteOrder: (orderId: string) => Promise<void>;
   // Production records
-  onAddProdRecord: (record: ProductionOpRecord) => Promise<void>;
-  onAddProdRecordBatch: (records: ProductionOpRecord[]) => Promise<void>;
+  onAddProdRecord: (record: ProductionOpRecord) => Promise<ProductionOpRecord | null>;
+  onAddProdRecordBatch: (records: ProductionOpRecord[]) => Promise<ProductionOpRecord[]>;
   onUpdateProdRecord: (r: ProductionOpRecord) => Promise<void>;
   onDeleteProdRecord: (id: string) => Promise<void>;
   // PSI records
@@ -192,16 +189,15 @@ export interface AppDataContextValue {
   refreshFinanceAccountTypes: () => Promise<void>;
   refreshProducts: () => Promise<void>;
   refreshOrders: () => Promise<void>;
-  refreshProdRecords: () => Promise<void>;
   refreshPMP: () => Promise<void>;
   /** 从服务端重新拉取打印模板（多标签页保存后另一页可即时同步） */
   refreshPrintTemplates: () => Promise<void>;
-  /** 按需加载重数据（orders/plans/prodRecords/psiRecords/financeRecords），首次调用触发加载，后续调用无操作 */
+  /** 按需加载重数据（orders/plans 等）；财务/PSI/生产流水由各业务页调用 refresh* 拉取，不再在首包全量加载 */
   ensureDeferredLoaded: () => Promise<void>;
 }
 
 export type AppDataState = Pick<AppDataContextValue,
-  'dataLoading' | 'products' | 'orders' | 'plans' | 'psiRecords' | 'financeRecords' | 'prodRecords' |
+  'dataLoading' | 'products' | 'orders' | 'plans' |
   'categories' | 'partnerCategories' | 'dictionaries' | 'globalNodes' | 'boms' |
   'partners' | 'workers' | 'equipment' | 'warehouses' |
   'financeCategories' | 'financeAccountTypes' |
@@ -250,15 +246,20 @@ export interface OrdersState {
   orders: ProductionOrder[];
   plans: PlanOrder[];
   productMilestoneProgresses: ProductMilestoneProgress[];
-  prodRecords: ProductionOpRecord[];
 }
 
+/**
+ * Phase 3.D follow-up：`psiRecords` 已从全局 context 中删除。
+ * 各模块按需 `react-query` 窄拉，详见 `docs/10-capacity-and-scaling.md`。
+ * 该接口保留为占位，避免历史调用方 `usePsiData()` 直接编译失败；后续清理后可删除整个 hook。
+ */
 export interface PsiState {
-  psiRecords: PsiRecord[];
+  /** @deprecated context 已不再维护 psi 全量；调用方应改用 `useQuery + api.psi.*` 按 filter 窄拉 */
+  _empty?: never;
 }
 
 export interface FinanceState {
-  financeRecords: FinanceRecord[];
+  /** 保留 financeCategories / financeAccountTypes 是因为它们是字典数据，量级远小于流水记录 */
   financeCategories: FinanceCategory[];
   financeAccountTypes: FinanceAccountType[];
 }
@@ -275,15 +276,102 @@ const ActionsCtx = createContext<AppDataActions | null>(null);
 
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const { currentUser, tenantCtx } = useAuth();
+  const qc = useQueryClient();
+  /**
+   * Phase 3.D follow-up + Phase 3.E：context 不再持有 prodRecords / psiRecords / financeRecords 全量数组；
+   * 全局写入动作完成后通过 invalidate 触发 react-query 自动重拉，替代旧的 setProdRecords/setPsiRecords 等。
+   *
+   * 涉及的 prod 相关 queryKey 前缀（用 predicate 批量匹配，新增 queryKey 不易漏）：
+   * - orderCenterProdNarrow / prodMgmtOpsView.records
+   * - collabInbox.prodRecords
+   * - warehousePanel.prodStockRecords（WarehousePanel；旧版误写为 psiOps.warehouseStockProd 已修复）
+   * - stockPanel.* / outsourcePanel.* / reworkPanel.*（Phase 3.E 各 panel 自取的 query 前缀）
+   * - flow.stock / flow.stockIn / flow.outsource / flow.reworkReport / flow.defect / flow.warehouse.prod / flow.reportHistory（Phase 3.E 流水弹窗）
+   * - finance-detail prod 子分支
+   */
+  /**
+   * Phase 3.E follow-up：从「硬编码 matchSet 枚举」改成「prefix 匹配」。
+   *
+   * 旧版：每新增一个消费生产流水的 react-query 都得回来注册 queryKey 前缀，
+   * 否则写入后该 query 不会被 invalidate（如 `recon-prod` 系列就漏注册过）。
+   *
+   * 新策略：匹配以下 prefix 之一的 queryKey[0]：
+   * - `orderCenterProdNarrow` / `prodMgmtOpsView.` / `collabInbox.prod`
+   * - `warehousePanel.prod` / `stockPanel.` / `outsourcePanel.` / `reworkPanel.`
+   * - `flow.stock` / `flow.stockIn` / `flow.outsource` / `flow.reworkReport`
+   *   / `flow.defect` / `flow.warehouse.prod` / `flow.reportHistory`
+   * - `materialIssueStockProd` / `materialIssueTodayStockOut`
+   * - `pendingStockPanel.stockIn`
+   * - `recon` 下生产相关分支：queryKey 为 `['recon','prod', ...]`
+   * 以及 finance-detail 的 prod 子分支。
+   *
+   * 这样后续新增 panel 只要 queryKey 落到上述 prefix 之内即可自动被失效，
+   * 不再依赖手动注册。
+   */
+  const invalidateAllProdRecords = useCallback(() => {
+    const PROD_KEY_PREFIXES = [
+      'orderCenterProdNarrow',
+      'prodMgmtOpsView.',
+      'collabInbox.prod',
+      'warehousePanel.prod',
+      'stockPanel.',
+      'outsourcePanel.',
+      'reworkPanel.',
+      'flow.stock',
+      'flow.outsource',
+      'flow.reworkReport',
+      'flow.defect',
+      'flow.warehouse.prod',
+      'flow.reportHistory',
+      'materialIssueStockProd',
+      'materialIssueTodayStockOut',
+      'pendingStockPanel.stockIn',
+    ];
+    qc.invalidateQueries({
+      predicate: (q) => {
+        const k = Array.isArray(q.queryKey) ? q.queryKey[0] : undefined;
+        if (typeof k !== 'string') return false;
+        // recon-prod：['recon','prod',...] 是 useFinanceReconciliation 的生产对账分支
+        if (k === 'recon' && Array.isArray(q.queryKey) && q.queryKey[1] === 'prod') return true;
+        return PROD_KEY_PREFIXES.some((p) => k === p || k.startsWith(`${p}`));
+      },
+    });
+    qc.invalidateQueries({ queryKey: ['finance-detail', 'prod'] });
+  }, [qc]);
+  const invalidateAllPsiRecords = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['psiOpsRecords'] });
+    qc.invalidateQueries({ queryKey: ['planRelatedPsi'] });
+    qc.invalidateQueries({ queryKey: ['finance-detail', 'psi'] });
+    qc.invalidateQueries({
+      predicate: (q) => {
+        const k = Array.isArray(q.queryKey) ? q.queryKey[0] : undefined;
+        if (typeof k !== 'string') return false;
+        // WarehouseFlowModal 内部四并发 PSI 类型 query 前缀
+        if (k.startsWith('flow.warehouse.psi.')) return true;
+        // recon 下 PSI 对账分支：['recon','psi',...]
+        if (k === 'recon' && Array.isArray(q.queryKey) && q.queryKey[1] === 'psi') return true;
+        return false;
+      },
+    });
+  }, [qc]);
+  const invalidateAllFinanceRecords = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['finance', 'list'] });
+    qc.invalidateQueries({ queryKey: ['finance', 'today-count'] });
+    qc.invalidateQueries({ queryKey: ['useFinanceReconciliation'] });
+    // recon 下 finance 对账分支：['recon','finance',...]
+    qc.invalidateQueries({
+      predicate: (q) => {
+        const k = Array.isArray(q.queryKey) ? q.queryKey[0] : undefined;
+        return k === 'recon' && Array.isArray(q.queryKey) && q.queryKey[1] === 'finance';
+      },
+    });
+  }, [qc]);
 
   // ── State ──
   const [dataLoading, setDataLoading] = useState(true);
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [plans, setPlans] = useState<PlanOrder[]>([]);
-  const [psiRecords, setPsiRecords] = useState<PsiRecord[]>([]);
-  const [financeRecords, setFinanceRecords] = useState<FinanceRecord[]>([]);
-  const [prodRecords, setProdRecords] = useState<ProductionOpRecord[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [partnerCategories, setPartnerCategories] = useState<PartnerCategory[]>([]);
   const [dictionaries, setDictionaries] = useState<AppDictionaries>(EMPTY_DICTIONARIES);
@@ -331,9 +419,6 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     setProducts([]);
     setOrders([]);
     setPlans([]);
-    setPsiRecords([]);
-    setFinanceRecords([]);
-    setProdRecords([]);
     setCategories([]);
     setPartnerCategories([]);
     setDictionaries(EMPTY_DICTIONARIES);
@@ -422,9 +507,6 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         setPlans,
         setOrders,
         setProductMilestoneProgresses,
-        setProdRecords,
-        setPsiRecords,
-        setFinanceRecords,
       });
     } catch (err) {
       console.error('延后数据加载失败', err);
@@ -443,24 +525,13 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const refreshProducts = useCallback(async () => { setProducts(normalizeDecimals(await api.products.list() as Product[])); markFetched('products'); }, []);
   const refreshBoms = useCallback(async () => setBoms(normalizeDecimals(await api.boms.list() as BOM[])), []);
-  /** 生产记录列表接口始终返回全量；mergeById 无法剔除服务端已删行，会导致编辑协作回传等删旧建新后界面仍显示旧数量 */
-  const refreshProdRecords = useCallback(async () => {
-    const data = normalizeDecimals(await api.production.list() as ProductionOpRecord[]);
-    setProdRecords(data);
-    markFetched('prodRecords');
-  }, []);
-  /** 进销存列表接口当前始终返回全量；mergeById 无法剔除服务端已删行，替换单据（删旧建新）后若再 merge 会残留旧行，列表合计与编辑首行数量会不一致 */
-  const refreshPsiRecords = useCallback(async () => {
-    const data = normalizeDecimals(await api.psi.list() as any[]);
-    setPsiRecords(data);
-    markFetched('psiRecords');
-  }, []);
-  const refreshFinanceRecords = useCallback(async () => {
-    const ts = lastFetchTs.current['financeRecords'];
-    const data = normalizeDecimals(await api.finance.list(ts ? { updatedAfter: ts } : undefined) as FinanceRecord[]);
-    setFinanceRecords(prev => ts ? mergeById(prev, data) : data);
-    markFetched('financeRecords');
-  }, []);
+  /**
+   * Phase 3.D follow-up：`refreshProdRecords / refreshPsiRecords / refreshFinanceRecords`
+   * 三个全量 refresh 已删除。新代码请：
+   * - 工单中心 / 物料 / 外协 / 返工 → `useQuery + api.production.listPage` 按 orderIds/productIds/types 窄拉
+   * - PSI 业务页 → `usePsiOpsRecordsList` / `api.psi.listPaginated`
+   * - 财务列表 / 对账 → FinanceOpsView 内部 react-query；销售单打印走 `api.finance.partnerReceivable`
+   */
   const refreshPMP = useCallback(async () => setProductMilestoneProgresses(normalizeDecimals(await api.orders.listProductProgress() as ProductMilestoneProgress[])), []);
   const refreshCategories = useCallback(
     async () => setCategories(normalizeProductCategoriesFromApi(await api.settings.categories.list() as ProductCategory[])),
@@ -680,6 +751,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, [refreshPlans]);
 
   // ── Order / report handlers ──
+  // Phase 3.D follow-up：报工成功后不再 `refreshProdRecords()` 全表刷新；
+  //   `OrderListView` / `ProductionMgmtOpsView` 在挂载时按当前 tab 的 type 集合 react-query 窄拉，
+  //   `react-query` 的 mutate / refetchOnFocus 由各组件自行接管。
   const onReportSubmit = useCallback(async (oId: string, mId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number) => {
     try {
       const operatorName = workerId ? (workers.find((w: any) => w.id === workerId)?.name ?? '未知') : currentOperatorDisplayName(currentUser);
@@ -693,9 +767,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       });
       const updated = await api.orders.get(oId) as ProductionOrder;
       setOrders(prev => prev.map(o => o.id === oId ? norm1(updated) : o));
-      void refreshProdRecords();
+      invalidateAllProdRecords();
     } catch (err: any) { toast.error(err.message || '报工失败'); }
-  }, [workers, currentUser, orders, products, refreshProdRecords]);
+  }, [workers, currentUser, orders, products, invalidateAllProdRecords]);
 
   const onReportSubmitProduct = useCallback(async (productId: string, milestoneTemplateId: string, qty: number, data: Record<string, any> | null, vId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number) => {
     try {
@@ -708,9 +782,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         weight,
       });
       await refreshPMP();
-      void refreshProdRecords();
+      invalidateAllProdRecords();
     } catch (err: any) { toast.error(err.message || '报工失败'); }
-  }, [workers, currentUser, products, refreshPMP, refreshProdRecords]);
+  }, [workers, currentUser, products, refreshPMP, invalidateAllProdRecords]);
 
   const onUpdateReport = useCallback(async ({ orderId, milestoneId, reportId, quantity, defectiveQuantity, timestamp, operator, newMilestoneId, customData, weight }: { orderId: string; milestoneId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneId?: string; customData?: Record<string, unknown>; weight?: number | null }) => {
     try {
@@ -776,96 +850,123 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ── Production record handlers ──
-  const onAddProdRecord = useCallback(async (record: ProductionOpRecord) => {
+  /**
+   * Phase 3.D follow-up：context 已不再维护 `prodRecords` 全量数组；
+   * 写入后通过 `react-query` invalidate 让消费方自己重拉。
+   */
+  const onAddProdRecord = useCallback(async (record: ProductionOpRecord): Promise<ProductionOpRecord | null> => {
     try {
-      const created = await api.production.create(record) as ProductionOpRecord;
-      setProdRecords(prev => [...prev, norm1(created)]);
+      const created = (await api.production.create(record)) as ProductionOpRecord;
+      invalidateAllProdRecords();
       void Promise.allSettled([refreshOrders(), refreshPMP()]);
-    } catch (err: any) { toast.error(err.message || '添加记录失败'); }
-  }, [refreshOrders, refreshPMP]);
+      return created ?? null;
+    } catch (err: any) {
+      toast.error(err.message || '添加记录失败');
+      return null;
+    }
+  }, [refreshOrders, refreshPMP, invalidateAllProdRecords]);
 
-  const onAddProdRecordBatch = useCallback(async (records: ProductionOpRecord[]) => {
+  const onAddProdRecordBatch = useCallback(async (records: ProductionOpRecord[]): Promise<ProductionOpRecord[]> => {
     try {
-      const created: ProductionOpRecord[] = [];
-      for (const record of records) created.push(await api.production.create(record) as ProductionOpRecord);
-      setProdRecords(prev => [...prev, ...normalizeDecimals(created)]);
+      /**
+       * 改走后端批量端点：同 type 且全部缺省 docNo 时由服务端共享分配一个 docNo，
+       * 替代旧版"前端基于 stale 缓存自算 + 客户端塞 docNo + 逐条 create"——后者
+       * 在两次批量入库间隔很短时会让两张单串成同一个 RK 编号。
+       *
+       * Phase 3.E follow-up：返回后端创建后的记录数组（含服务端分配的 docNo），
+       * 让 view 层（StockMaterialPanel 等）可以在弹窗里展示真实单号，
+       * 而不需要再各自维护一份客户端 docNo 生成逻辑。
+       */
+      const created = (await api.production.createBatch(records)) as ProductionOpRecord[] | null | undefined;
+      invalidateAllProdRecords();
       void Promise.allSettled([refreshOrders(), refreshPMP()]);
-    } catch (err: any) { toast.error(err.message || '批量添加记录失败'); }
-  }, [refreshOrders, refreshPMP]);
+      return Array.isArray(created) ? created : [];
+    } catch (err: any) {
+      toast.error(err.message || '批量添加记录失败');
+      return [];
+    }
+  }, [refreshOrders, refreshPMP, invalidateAllProdRecords]);
 
   const onUpdateProdRecord = useCallback(async (r: ProductionOpRecord) => {
     try {
-      const updated = await api.production.update(r.id, r) as ProductionOpRecord;
-      setProdRecords(prev => prev.map(x => x.id === r.id ? norm1(updated) : x));
+      await api.production.update(r.id, r);
+      invalidateAllProdRecords();
     } catch (err: any) { toast.error(err.message || '更新记录失败'); }
-  }, []);
+  }, [invalidateAllProdRecords]);
 
   const onDeleteProdRecord = useCallback(async (id: string) => {
     try {
       await api.production.delete(id);
-      setProdRecords(prev => prev.filter(x => x.id !== id));
+      invalidateAllProdRecords();
       // 外协收回等删除时后端会回写工单里程碑 / 产品进度报工，需与 onAddProdRecord 一样刷新订单与 PMP
       void Promise.allSettled([refreshOrders(), refreshPMP()]);
     } catch (err: any) { toast.error(err.message || '删除记录失败'); }
-  }, [refreshOrders, refreshPMP]);
+  }, [refreshOrders, refreshPMP, invalidateAllProdRecords]);
 
   // ── PSI record handlers ──
+  // Phase 3.D follow-up：不再维护 context 的 psiRecords 全量；调用方应在写入后用
+  // `queryClient.invalidateQueries({ queryKey: ['psi.*'] })` 触发自身 react-query 重拉。
   const onAddPSIRecord = useCallback(async (record: any) => {
     try {
-      const created = await api.psi.create(record);
-      setPsiRecords(prev => [...prev, ...normalizeDecimals([created])]);
+      await api.psi.create(record);
+      invalidateAllPsiRecords();
     } catch (err: any) {
       toast.error(err.message || '添加记录失败');
       throw err;
     }
-  }, []);
+  }, [invalidateAllPsiRecords]);
 
   const onAddPSIRecordBatch = useCallback(async (records: any[]) => {
     try {
       await api.psi.createBatch(records);
-      await refreshPsiRecords();
+      invalidateAllPsiRecords();
     } catch (err: any) {
       toast.error(err.message || '批量添加记录失败');
       throw err;
     }
-  }, [refreshPsiRecords]);
+  }, [invalidateAllPsiRecords]);
 
   const onReplacePSIRecords = useCallback(async (type: string, docNumber: string, newRecords: any[]) => {
     try {
-      const deleteIds = psiRecords.filter(r => r.type === type && r.docNumber === docNumber).map(r => r.id);
+      // 旧实现先在前端遍历 psiRecords 拿 id 列表再 replace；现改为按 type+docNumber 拉一次窄查询
+      const list = await api.psi.list({ type, docNumber } as Record<string, string>) as any[];
+      const deleteIds = (Array.isArray(list) ? list : []).map(r => r.id).filter(Boolean);
       await api.psi.replace(deleteIds, newRecords);
-      await refreshPsiRecords();
+      invalidateAllPsiRecords();
     } catch (err: any) { toast.error(err.message || '替换记录失败'); }
-  }, [psiRecords, refreshPsiRecords]);
+  }, [invalidateAllPsiRecords]);
 
   const onDeletePSIRecords = useCallback(async (type: string, docNumber: string) => {
     try {
-      const ids = psiRecords.filter(r => r.type === type && r.docNumber === docNumber).map(r => r.id);
+      const list = await api.psi.list({ type, docNumber } as Record<string, string>) as any[];
+      const ids = (Array.isArray(list) ? list : []).map(r => r.id).filter(Boolean);
       if (ids.length) await api.psi.deleteBatch(ids);
-      const idSet = new Set(ids);
-      setPsiRecords(prev => prev.filter(r => !idSet.has(r.id)));
+      invalidateAllPsiRecords();
     } catch (err: any) { toast.error(err.message || '删除记录失败'); }
-  }, [psiRecords]);
+  }, [invalidateAllPsiRecords]);
 
   // ── Finance record handlers ──
+  // Phase 3.D follow-up：同样不再维护 context.financeRecords；FinanceOpsView 内部 react-query 列表会在 mutation 后自行 invalidate。
   const onAddFinanceRecord = useCallback(async (r: FinanceRecord) => {
     try {
-      const created = await api.finance.create(r) as FinanceRecord;
-      setFinanceRecords(prev => [...prev, norm1(created)]);
+      await api.finance.create(r);
+      invalidateAllFinanceRecords();
     } catch (err: any) { toast.error(err.message || '添加记录失败'); }
-  }, []);
+  }, [invalidateAllFinanceRecords]);
 
   const onUpdateFinanceRecord = useCallback(async (r: FinanceRecord) => {
     try {
-      const updated = await api.finance.update(r.id, r) as FinanceRecord;
-      setFinanceRecords(prev => prev.map(x => x.id === r.id ? norm1(updated) : x));
+      await api.finance.update(r.id, r);
+      invalidateAllFinanceRecords();
     } catch (err: any) { toast.error(err.message || '更新记录失败'); }
-  }, []);
+  }, [invalidateAllFinanceRecords]);
 
   const onDeleteFinanceRecord = useCallback(async (id: string) => {
-    try { await api.finance.delete(id); setFinanceRecords(prev => prev.filter(x => x.id !== id)); }
-    catch (err: any) { toast.error(err.message || '删除记录失败'); }
-  }, []);
+    try {
+      await api.finance.delete(id);
+      invalidateAllFinanceRecords();
+    } catch (err: any) { toast.error(err.message || '删除记录失败'); }
+  }, [invalidateAllFinanceRecords]);
 
   // ── Domain-specific memoized values ──
 
@@ -882,14 +983,14 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }), [productionLinkMode, processSequenceMode, allowExceedMaxReportQty, planFormSettings, orderFormSettings, purchaseOrderFormSettings, salesOrderFormSettings, purchaseBillFormSettings, salesBillFormSettings, receiptFormSettings, paymentFormSettings, materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates]);
 
   const ordersValue: OrdersState = useMemo(() => ({
-    orders, plans, productMilestoneProgresses, prodRecords,
-  }), [orders, plans, productMilestoneProgresses, prodRecords]);
+    orders, plans, productMilestoneProgresses,
+  }), [orders, plans, productMilestoneProgresses]);
 
-  const psiValue: PsiState = useMemo(() => ({ psiRecords }), [psiRecords]);
+  const psiValue: PsiState = useMemo(() => ({}), []);
 
   const financeValue: FinanceState = useMemo(() => ({
-    financeRecords, financeCategories, financeAccountTypes,
-  }), [financeRecords, financeCategories, financeAccountTypes]);
+    financeCategories, financeAccountTypes,
+  }), [financeCategories, financeAccountTypes]);
 
   const actionsValue: AppDataActions = useMemo(() => ({
     onUpdateProductionLinkMode, onUpdateProcessSequenceMode, onUpdateAllowExceedMaxReportQty,
@@ -910,7 +1011,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     refreshDictionaries, refreshWorkers, refreshEquipment, refreshPartners,
     refreshPartnerCategories, refreshCategories, refreshGlobalNodes, refreshWarehouses,
     refreshFinanceCategories, refreshFinanceAccountTypes,
-    refreshProducts, refreshOrders, refreshProdRecords, refreshPMP,
+    refreshProducts, refreshOrders, refreshPMP,
     refreshPrintTemplates,
     ensureDeferredLoaded,
   }), [
@@ -932,7 +1033,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     refreshDictionaries, refreshWorkers, refreshEquipment, refreshPartners,
     refreshPartnerCategories, refreshCategories, refreshGlobalNodes, refreshWarehouses,
     refreshFinanceCategories, refreshFinanceAccountTypes,
-    refreshProducts, refreshOrders, refreshProdRecords, refreshPMP,
+    refreshProducts, refreshOrders, refreshPMP,
     refreshPrintTemplates,
     ensureDeferredLoaded,
   ]);

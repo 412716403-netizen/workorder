@@ -21,6 +21,7 @@ const CollaborationInboxView = lazyWithReloadOnChunkError(() => import('./views/
 const PrintTemplateEditorView = lazyWithReloadOnChunkError(() => import('./views/PrintTemplateEditorView'));
 const TraceView = lazyWithReloadOnChunkError(() => import('./views/TraceView'));
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppDataProvider, useDataLoading } from './contexts/AppDataContext';
 import { useCollabPendingIndicator } from './hooks/useCollabPendingIndicator';
@@ -40,13 +41,21 @@ function PrintEditorRoute() {
   return <PrintTemplateEditorView key={id ?? 'new'} />;
 }
 
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { staleTime: 30_000, retry: 1, refetchOnWindowFocus: false },
+  },
+});
+
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AuthRouter />
-      </AuthProvider>
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <AuthProvider>
+          <AuthRouter />
+        </AuthProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }
 

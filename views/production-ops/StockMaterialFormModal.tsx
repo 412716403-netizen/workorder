@@ -32,8 +32,7 @@ export interface StockMaterialFormModalProps {
   productionLinkMode: 'order' | 'product';
   materialFormSettings?: MaterialFormSettings;
   categories?: ProductCategory[];
-  onAddRecord: (record: ProductionOpRecord) => void;
-  getNextStockDocNo: (type: 'STOCK_OUT' | 'STOCK_RETURN') => string;
+  onAddRecord: (record: ProductionOpRecord) => void | Promise<ProductionOpRecord | null | void>;
 }
 
 const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
@@ -47,7 +46,6 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
   materialFormSettings = DEFAULT_MATERIAL_FORM_SETTINGS,
   categories = [],
   onAddRecord,
-  getNextStockDocNo,
 }) => {
   const { currentUser, tenantCtx, userId } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
@@ -133,12 +131,12 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
         return;
       }
     }
-    const docNo = getNextStockDocNo(recordType);
     const collabExtra = buildMaterialStockCustomCollabPayload(
       customValues,
       recordType,
       form.partner?.trim() || undefined,
     );
+    // docNo 不再前端自算，统一由后端在事务+advisory lock 下分配。
     const newRecord: ProductionOpRecord = {
       id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       type: recordType,
@@ -151,13 +149,12 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
       timestamp: new Date().toLocaleString(),
       status: '已完成',
       warehouseId: form.warehouseId || undefined,
-      docNo,
       ...(batchEnabled && clampBatchNoInput(form.batchNo)
         ? { batchNo: clampBatchNoInput(form.batchNo) }
         : {}),
       ...collabExtra,
     };
-    onAddRecord(newRecord);
+    await onAddRecord(newRecord);
     const kind =
       stockModalMode === 'stock_return'
         ? WAREHOUSE_DOC_KIND.PROD_STOCK_MATERIAL_FORM_IN

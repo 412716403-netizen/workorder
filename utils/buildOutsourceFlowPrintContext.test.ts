@@ -138,4 +138,56 @@ describe('buildOutsourceFlowPrintContext', () => {
     });
     expect(ctx.printListRows?.[0]?.remark).toBe('加急');
   });
+
+  it('resolves product from record.productId before order.productId so print matches document lines', () => {
+    const productOnLine: Product = {
+      id: 'prod-line',
+      sku: 'SKU-LINE',
+      name: '行上产品',
+      colorIds: ['c1'],
+      sizeIds: ['s1'],
+      variants: [{ id: 'v1', colorId: 'c1', sizeId: 's1', skuSuffix: '' }],
+      milestoneNodeIds: ['n1'],
+    };
+    const order: ProductionOrder = {
+      id: 'o1',
+      orderNumber: 'WO-1',
+      productId: 'prod-order',
+      productName: '工单头产品',
+      sku: 'SKU-ORDER',
+      items: [],
+      customer: '',
+      startDate: '',
+      dueDate: '',
+      status: 'PRODUCING',
+      milestones: [],
+      priority: 'Medium',
+    };
+    const recs: ProductionOpRecord[] = [
+      {
+        id: 'r1',
+        type: 'OUTSOURCE',
+        productId: 'prod-line',
+        orderId: 'o1',
+        nodeId: 'n1',
+        variantId: 'v1',
+        quantity: 2,
+        operator: 'a',
+        timestamp: '2026-01-01T00:00:00',
+        docNo: 'WX-1',
+        partner: '工厂',
+        status: '加工中',
+      },
+    ];
+    const ctx = buildOutsourceFlowPrintContext({
+      docRecords: recs,
+      isReceiveDoc: false,
+      orders: [order],
+      products: [productOnLine],
+      globalNodes: [{ id: 'n1', name: '横机', reportTemplate: [] }],
+      dictionaries: dict,
+    });
+    expect(ctx.printListRows?.[0]?.productName).toBe('行上产品');
+    expect(ctx.printListRows?.[0]?.sku).toBe('SKU-LINE');
+  });
 });

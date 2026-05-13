@@ -61,7 +61,8 @@ import { buildPurchaseOrderPrintContextFromPsiDoc } from '../utils/buildPurchase
 import { buildPurchaseBillPrintContextFromPsiDoc } from '../utils/buildPurchaseBillPrintContext';
 import { buildSalesOrderPrintContextFromPsiDoc } from '../utils/buildSalesOrderPrintContext';
 import { buildSalesBillPrintContextFromPsiDoc } from '../utils/buildSalesBillPrintContext';
-import { useConfigData, useAppActions, useFinanceData } from '../contexts/AppDataContext';
+import { useConfigData, useAppActions } from '../contexts/AppDataContext';
+import * as apiNs from '../services/api';
 import {
   flowRecordsEarliestMs,
   formatPsiDocListTime,
@@ -74,7 +75,8 @@ import { effectivePlanFormFieldType } from '../utils/planFormCustomField';
 import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
 import { toLocalDateYmd, formatCustomFieldDatetimeForPrint } from '../utils/localDateTime';
 import { hasModulePerm } from '../utils/hasModulePerm';
-import { usePsiStockIndex } from '../hooks/usePsiStockIndex';
+import { useStockSnapshot } from '../hooks/useStockSnapshot';
+import { usePsiOpsRecordsList } from '../hooks/usePsiOpsRecordsList';
 import { productHasColorSizeMatrix } from '../utils/productColorSize';
 
 import {
@@ -105,6 +107,9 @@ import {
   WAREHOUSE_DOC_KIND,
 } from '../utils/warehouseDocPreference';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+
+/** 避免 `records ?? []` 每次渲染新引用导致 react-query / useMemo 无意义抖动 */
+const EMPTY_PSI_CTX: unknown[] = [];
 
 interface PSIOpsViewProps {
   type: string;
@@ -165,10 +170,11 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
   const _isOwner = tenantRole === 'owner';
   const hasPsiPerm = (perm: string) => hasModulePerm(tenantRole, userPermissions, 'psi', perm);
   const ordersList = orders ?? [];
-  const recordsList = records ?? [];
+  const recordsList = usePsiOpsRecordsList(type, records == null ? EMPTY_PSI_CTX : records) as any[];
   const { printTemplates } = useConfigData();
   const { refreshPrintTemplates, onUpdatePrintTemplates } = useAppActions();
-  const { financeRecords } = useFinanceData();
+  // Phase 3.D follow-up：financeRecords 旧用作销售单打印应收 ledger 兜底；现已改异步调
+  // `api.finance.partnerReceivable`，故不再从 context 读取全量财务记录。
   const safePurchaseOrderFormSettings = useMemo(
     (): PurchaseOrderFormSettings => ({
       standardFields: purchaseOrderFormSettings?.standardFields ?? [],
@@ -292,7 +298,12 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
   /** 与 flowDocSort.recordDocLineTimeMs 一致，用于库存流水等排序 */
   const parseRecordTime = useCallback((r: any): number => recordDocLineTimeMs(r), []);
 
-  const { getStock, getStockVariant, getNullVariantProdStock, getStocktakeAdjust, getVariantDisplayQty } = usePsiStockIndex(recordsList, prodRecords);
+  /**
+   * Phase 3.B：库存索引切换到后端 stock-snapshot（react-query）。业务列表由
+   * `usePsiOpsRecordsList` 按 tab `type` 分页拉取，不再依赖全量 `AppDataContext.psiRecords`。
+   * byVariant.displayQty 已在后端做好「最近一次盘点 + 之后增减」。
+   */
+  const { getStock, getStockVariant, getNullVariantProdStock, getStocktakeAdjust, getVariantDisplayQty } = useStockSnapshot();
   const generateSBDocNumberForPartner = (partnerId: string, partnerName: string): string =>
     nextSalesBillDocNumber(partners, recordsList, partnerId, partnerName);
   const allPOByGroups = useMemo(() => {
@@ -1848,18 +1859,47 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           resolveDocItems={docNumber =>
             recordsList.filter((r: any) => r.type === 'SALES_BILL' && r.docNumber === docNumber)
           }
-          buildContext={(_t, { docNumber, docItems }) =>
-            buildSalesBillPrintContextFromPsiDoc({
+          /**
+           * Phase 3.D follow-up：销售单打印「上次结余」改为 await 后端 `api.finance.partnerReceivable`，
+           * 而不是把 context 的 psi/finance/prod 三个全量数组喂给 builder。
+           * anchorTime 取本单第一条 line 的最早时间（与原 `flowRecordsEarliestMs` 同义）。
+           */
+          buildContext={async (_t, { docNumber, docItems }) => {
+            const main = (docItems[0] ?? {}) as any;
+            const partnerName = String(main.partner ?? '').trim();
+            const partnerId = main.partnerId ? String(main.partnerId).trim() : '';
+            // 用 line 的最早 createdAt（DB 中销售单同 docNumber 多行 createdAt 同源）作为锚点
+            const candidates: number[] = [];
+            for (const r of docItems as any[]) {
+              const ts = r?.createdAt ? Date.parse(String(r.createdAt)) : NaN;
+              if (Number.isFinite(ts)) candidates.push(ts);
+            }
+            const anchorMs = candidates.length ? Math.min(...candidates) : Date.now();
+            const beforeIso = new Date(anchorMs).toISOString();
+            let previousBalance = 0;
+            if (partnerName || partnerId) {
+              try {
+                const res = await apiNs.finance.partnerReceivable({
+                  partnerName,
+                  partnerId: partnerId || undefined,
+                  before: beforeIso,
+                  excludeSalesBillDocNumber: docNumber,
+                });
+                previousBalance = res?.previousBalance ?? 0;
+              } catch (e) {
+                // eslint-disable-next-line no-console
+                console.warn('[PSIOpsView] partnerReceivable failed', e);
+              }
+            }
+            return buildSalesBillPrintContextFromPsiDoc({
               docNumber,
               docItems,
               productMap: productMapPSI,
               warehouseMap: warehouseMapPSI,
               dictionaries,
-              psiRecords: recordsList,
-              financeRecords,
-              prodRecords,
-            })
-          }
+              preBalance: { previousBalance },
+            });
+          }}
           pickerSubtitle={docNumber =>
             `销售单 ${docNumber.startsWith('UNGROUPED-') ? '独立单据' : docNumber}`
           }

@@ -123,6 +123,11 @@ router.put('/subcontract-dispatches/:id/payload', ctrl.updateDispatchPayload);
 router.post('/subcontract-dispatches/:id/amend', ctrl.amendDispatch);
 router.patch('/subcontract-dispatches/:id/confirm-amendment', ctrl.confirmDispatchAmendment);
 router.patch('/subcontract-dispatches/:id/reject-amendment', ctrl.rejectDispatchAmendment);
+router.patch(
+  '/subcontract-dispatches/:id/ack-payload-refresh',
+  requireSubPermission('collaboration:subcontract-dispatches:edit'),
+  ctrl.ackDispatchPayloadRefresh,
+);
 
 // Return 编辑同步
 router.put('/subcontract-returns/:id/payload', ctrl.updateReturnPayload);

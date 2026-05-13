@@ -2,15 +2,17 @@ import { getTenantPrisma } from '../lib/prisma.js';
 import { str, optStr } from '../utils/request.js';
 import * as planService from '../services/plans.service.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
+import { listQueryFromRequest, warnListAllFromRequest } from '../utils/listQuery.js';
 
 export const listPlans = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
-  const page = req.query.page ? Number(req.query.page) : undefined;
-  const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
+  const { all, page, pageSize } = listQueryFromRequest(req);
+  if (all) warnListAllFromRequest('plans.listPlans', req);
   const result = await planService.listPlans(db, {
     status: optStr(req.query.status),
     productId: optStr(req.query.productId),
     search: optStr(req.query.search),
+    all,
     page,
     pageSize,
   });

@@ -15,6 +15,8 @@ import { pageSubtitleClass, pageTitleClass } from '../styles/uiDensity';
 import ProductEditForm from './product-management/ProductEditForm';
 import { bomHasConfiguredItems } from '../utils/bomEffective';
 import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
+import { productMatchesSearchQuery } from '../utils/productSearchMatch';
+import { compareProductsArchiveOrder } from '../utils/productSort';
 
 const PRODUCT_ARCHIVE_ALL = '__all__';
 
@@ -121,18 +123,6 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     });
   };
 
-  const productSortTimeMs = (p: Product): number => {
-    const withMeta = p as Product & { createdAt?: string; updatedAt?: string };
-    const ts = Date.parse(withMeta.createdAt ?? withMeta.updatedAt ?? '');
-    if (Number.isFinite(ts) && ts > 0) return ts;
-    const m = /^p-(\d+)-/.exec(p.id ?? '');
-    if (m) {
-      const idTs = Number(m[1]);
-      if (Number.isFinite(idTs) && idTs > 0) return idTs;
-    }
-    return 0;
-  };
-
   const filteredProducts = useMemo(() => {
     const inCategory =
       activeCategoryFilter === PRODUCT_ARCHIVE_ALL
@@ -143,16 +133,10 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
       !q
         ? inCategory
         : inCategory.filter(p => {
-            const n = (p.name ?? '').toLowerCase();
-            const s = (p.sku ?? '').toLowerCase();
-            const d = (p.description ?? '').toLowerCase();
-            return n.includes(q) || s.includes(q) || d.includes(q);
+            const cat = categoryMapPM.get(p.categoryId ?? '') ?? null;
+            return productMatchesSearchQuery(p, cat, q);
           });
-    return [...searched].sort((a, b) => {
-      const t = productSortTimeMs(b) - productSortTimeMs(a);
-      if (t !== 0) return t;
-      return b.id.localeCompare(a.id, 'zh-CN');
-    });
+    return [...searched].sort(compareProductsArchiveOrder);
   }, [products, activeCategoryFilter, debouncedProductSearch]);
 
   const productsInActiveCategoryCount = useMemo(() => {
@@ -235,7 +219,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
           <div className="relative w-full sm:max-w-sm sm:shrink-0">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input type="search" value={productArchiveSearch} onChange={e => setProductArchiveSearch(e.target.value)}
-              placeholder="搜索名称、产品编号、备注…"
+              placeholder="搜索名称、编号、备注或分类自定义内容…"
               className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-10 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-300 outline-none shadow-sm"
               aria-label="搜索产品" />
             {productArchiveSearch.trim() !== '' && (

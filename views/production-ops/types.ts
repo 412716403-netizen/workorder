@@ -56,14 +56,23 @@ export type ReworkPendingRow = {
 export interface PanelProps {
   productionLinkMode: 'order' | 'product';
   productMilestoneProgresses: ProductMilestoneProgress[];
-  records: ProductionOpRecord[];
+  /**
+   * Phase 3.E：各 panel 现在按业务条件（活动工单 ids / status）窄拉自己的 records，
+   * 不再依赖 ProductionMgmtOpsView 的 12000 上限全量。保留 prop 作为兜底/兼容。
+   */
+  records?: ProductionOpRecord[];
   orders: ProductionOrder[];
   products: Product[];
   warehouses: Warehouse[];
   boms: BOM[];
   dictionaries?: AppDictionaries;
-  onAddRecord: (record: ProductionOpRecord) => void;
-  onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
+  /**
+   * Phase 3.E follow-up：从 fire-and-forget 改为返回服务端创建后的记录（含 docNo）。
+   * 调用方可拿到真实 docNo，避免在 view 层重复实现 docNo 生成逻辑。
+   * 兼容写法：返回 `void` 时调用方自己回退到拉刷新。
+   */
+  onAddRecord: (record: ProductionOpRecord) => void | Promise<ProductionOpRecord | null | void>;
+  onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<ProductionOpRecord[] | void>;
   onUpdateRecord?: (record: ProductionOpRecord) => void;
   onDeleteRecord?: (recordId: string) => void;
   globalNodes: GlobalNodeTemplate[];

@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchProductionByFilter, nextOutsourceDocNumberResolved } from './sharedFlowListHelpers';
 import {
   Plus,
   Clock,
@@ -44,7 +46,6 @@ import ReworkReportFlowDetailModal from './ReworkReportFlowDetailModal';
 import ReworkDefectiveActionModal from './ReworkDefectiveActionModal';
 import ReworkReportSubmitModal from './ReworkReportSubmitModal';
 import ReworkFormConfigModal from './ReworkFormConfigModal';
-import { nextOutsourceDocNumber } from '../../utils/partnerDocNumber';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { orderBelongsToProductInList } from '../../utils/reworkMergeBucketOrderId';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
@@ -71,7 +72,7 @@ function resolveReworkOutsourcePartner(r: ProductionOpRecord, partnerMap: Map<st
 const ReworkPanel: React.FC<PanelProps> = ({
   productionLinkMode = 'order',
   productMilestoneProgresses = [],
-  records,
+  records: legacyRecords,
   orders,
   products,
   warehouses = [],
@@ -100,6 +101,29 @@ const ReworkPanel: React.FC<PanelProps> = ({
 }) => {
   const rfSettings = reworkFormSettings ?? DEFAULT_REWORK_FORM_SETTINGS;
   const canViewMainList = hasOpsPerm(tenantRole, userPermissions, 'production:rework_list:allow');
+
+  /**
+   * Phase 3.E：ReworkPanel 自取数据，types=REWORK,REWORK_REPORT,SCRAP,OUTSOURCE + activeOrderIds 窄拉，
+   * 不再依赖 ProductionMgmtOpsView 的 12000 上限全量。OUTSOURCE 仅用于反查 sourceReworkId 的外协工厂。
+   */
+  const activeOrderIdsCsv = useMemo(
+    () => orders.map(o => o.id).filter(Boolean).join(','),
+    [orders],
+  );
+  const reworkPanelQuery = useQuery({
+    queryKey: ['reworkPanel.records', activeOrderIdsCsv],
+    queryFn: () =>
+      fetchProductionByFilter({
+        types: 'REWORK,REWORK_REPORT,SCRAP,OUTSOURCE',
+        orderIds: activeOrderIdsCsv || undefined,
+      }),
+    enabled: activeOrderIdsCsv.length > 0,
+    staleTime: 15_000,
+  });
+  const records = useMemo<ProductionOpRecord[]>(() => {
+    if (reworkPanelQuery.data && reworkPanelQuery.data.length > 0) return reworkPanelQuery.data;
+    return legacyRecords ?? [];
+  }, [reworkPanelQuery.data, legacyRecords]);
 
   /** 返工管理：待处理不良弹窗 */
   const [reworkPendingModalOpen, setReworkPendingModalOpen] = useState(false);
@@ -448,8 +472,8 @@ const ReworkPanel: React.FC<PanelProps> = ({
     return `FG${todayStr}-${String(next).padStart(4, '0')}`;
   };
 
-  const getNextOutsourceReworkDocNo = (partnerName: string): string =>
-    nextOutsourceDocNumber('dispatch', partners, records, '', partnerName.trim());
+  const getNextOutsourceReworkDocNo = async (partnerName: string): Promise<string> =>
+    nextOutsourceDocNumberResolved('dispatch', partners, records, '', partnerName.trim());
 
   /** 返工管理：工单模式=主/子分组；关联产品模式=仅按产品一条（工序汇总） */
   const reworkListBlocks = useMemo(() => {
@@ -954,7 +978,6 @@ const ReworkPanel: React.FC<PanelProps> = ({
       {defectFlowModalOpen && (
         <DefectTreatmentFlowListModal
           productionLinkMode={productionLinkMode}
-          records={records}
           orders={orders}
           products={products}
           globalNodes={globalNodes}
@@ -994,7 +1017,6 @@ const ReworkPanel: React.FC<PanelProps> = ({
       {reworkFlowModalOpen && (
         <ReworkReportFlowListModal
           productionLinkMode={productionLinkMode}
-          records={records}
           orders={orders}
           products={products}
           globalNodes={globalNodes}

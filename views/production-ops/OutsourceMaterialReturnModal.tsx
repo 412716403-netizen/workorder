@@ -22,7 +22,7 @@ import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldCo
 import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpCollab/material';
 import { writeWarehousePreference, WAREHOUSE_DOC_KIND } from '../../utils/warehouseDocPreference';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
-import { usePsiStockIndex } from '../../hooks/usePsiStockIndex';
+import { useStockSnapshot } from '../../hooks/useStockSnapshot';
 import { psiOrderBillCompactLineInputClass } from '../../styles/uiDensity';
 
 export interface OutsourceMaterialReturnModalProps {
@@ -82,7 +82,7 @@ const OutsourceMaterialReturnModal: React.FC<OutsourceMaterialReturnModalProps> 
   const [matReturnCustomValues, setMatReturnCustomValues] = useState<Record<string, unknown>>({});
   const [lineBatchByProduct, setLineBatchByProduct] = useState<Record<string, string>>({});
   const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
-  const { listAvailableBatches } = usePsiStockIndex(psiRecords, records);
+  const { listAvailableBatches } = useStockSnapshot({ enabled: !!(matReturnOrderId || matReturnProductId) });
   const productById = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const materialProductCustomTags = (productId: string) => {
     const p = productById.get(productId);

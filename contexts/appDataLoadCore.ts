@@ -22,7 +22,6 @@ import type {
   Product,
   ProductCategory,
   ProductionLinkMode,
-  ProductionOpRecord,
   ProductionOrder,
   PlanOrder,
   ProductMilestoneProgress,
@@ -33,8 +32,6 @@ import type {
   SalesBillFormSettings,
   SalesOrderFormSettings,
   PaymentFormSettings,
-  FinanceRecord,
-  PsiRecord,
   Warehouse,
   Worker,
   Equipment,
@@ -223,9 +220,6 @@ export interface AppDataDeferredLoadSetters {
   setPlans: Dispatch<SetStateAction<PlanOrder[]>>;
   setOrders: Dispatch<SetStateAction<ProductionOrder[]>>;
   setProductMilestoneProgresses: Dispatch<SetStateAction<ProductMilestoneProgress[]>>;
-  setProdRecords: Dispatch<SetStateAction<ProductionOpRecord[]>>;
-  setPsiRecords: Dispatch<SetStateAction<PsiRecord[]>>;
-  setFinanceRecords: Dispatch<SetStateAction<FinanceRecord[]>>;
 }
 
 export async function executeAppDataDeferredLoad(
@@ -241,18 +235,9 @@ export async function executeAppDataDeferredLoad(
   if (settledVal(metaResults, 1)) s.setOrders(normalizeDecimals(settledVal<ProductionOrder[]>(metaResults, 1)!));
   if (settledVal(metaResults, 2)) s.setProductMilestoneProgresses(normalizeDecimals(settledVal<ProductMilestoneProgress[]>(metaResults, 2)!));
 
-  const heavyResults = await Promise.allSettled([
-    api.production.list(),
-    api.psi.list(),
-    api.finance.list(),
-  ]);
-  if (settledVal(heavyResults, 0)) s.setProdRecords(normalizeDecimals(settledVal<ProductionOpRecord[]>(heavyResults, 0)!));
-  if (settledVal(heavyResults, 1)) s.setPsiRecords(normalizeDecimals(settledVal<PsiRecord[]>(heavyResults, 1)!));
-  if (settledVal(heavyResults, 2)) s.setFinanceRecords(normalizeDecimals(settledVal<FinanceRecord[]>(heavyResults, 2)!));
-
-  const allFailed = [...metaResults, ...heavyResults].filter(r => r.status === 'rejected');
+  const allFailed = metaResults.filter(r => r.status === 'rejected');
   if (allFailed.length) console.warn(`延后数据加载: ${allFailed.length} 个请求失败`, allFailed.map(r => (r as PromiseRejectedResult).reason?.message));
 
   const now = new Date().toISOString();
-  ['orders', 'products', 'plans', 'prodRecords', 'psiRecords', 'financeRecords'].forEach(k => { lastFetchTs.current[k] = now; });
+  ['orders', 'products', 'plans', 'productMilestoneProgresses'].forEach(k => { lastFetchTs.current[k] = now; });
 }

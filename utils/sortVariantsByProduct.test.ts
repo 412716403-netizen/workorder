@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sortedVariantColorEntries, sortedColorEntries } from './sortVariantsByProduct';
+import { sortedVariantColorEntries, sortedColorEntries, sortVariantsByColorThenSize } from './sortVariantsByProduct';
 import type { ProductVariant } from '../types';
 
 const mkVariant = (colorId: string, sizeId: string): ProductVariant => ({
@@ -50,5 +50,19 @@ describe('sortedColorEntries', () => {
     const result = sortedColorEntries(grouped, ['known']);
     expect(result[0][0]).toBe('known');
     expect(result[1][0]).toBe('unknown');
+  });
+});
+
+describe('sortVariantsByColorThenSize', () => {
+  it('sorts by colorIds then sizeIds', () => {
+    const variants: ProductVariant[] = [
+      mkVariant('grey', 'L'),
+      mkVariant('white', 'M'),
+      mkVariant('grey', 'S'),
+      mkVariant('grey', 'M'),
+      mkVariant('white', 'L'),
+    ];
+    const out = sortVariantsByColorThenSize(variants, ['white', 'grey'], ['S', 'M', 'L']);
+    expect(out.map(v => `${v.colorId}/${v.sizeId}`)).toEqual(['white/M', 'white/L', 'grey/S', 'grey/M', 'grey/L']);
   });
 });

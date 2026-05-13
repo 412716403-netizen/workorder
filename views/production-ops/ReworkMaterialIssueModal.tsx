@@ -15,8 +15,7 @@ import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { clampBatchNoInput } from '../../hooks/useBatchPicker';
 import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
-import { usePsiStockIndex } from '../../hooks/usePsiStockIndex';
-import { toLocalCompactYmd } from '../../utils/localDateTime';
+import { useStockSnapshot } from '../../hooks/useStockSnapshot';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import {
@@ -64,7 +63,7 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
   const reworkIssueOpenKeyRef = useRef<string | null>(null);
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
-  const { listAvailableBatches } = usePsiStockIndex(psiRecords, records);
+  const { listAvailableBatches } = useStockSnapshot({ enabled: !!reworkMaterialOrderId });
 
   useEffect(() => {
     if (!reworkMaterialOrderId) {
@@ -127,16 +126,7 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
   }
   matMap.forEach((v, productId) => { bomMaterials.push({ productId, ...v, nodeNames: Array.from(v.nodeNames) }); });
 
-  const getNextStockDocNoLocal = () => {
-    const prefix = 'LL';
-    const todayStr = toLocalCompactYmd(new Date());
-    const pattern = `${prefix}${todayStr}-`;
-    const existing = records.filter(r => r.type === 'STOCK_OUT' && r.docNo && r.docNo.startsWith(pattern));
-    const seqs = existing.map(r => parseInt((r.docNo ?? '').slice(pattern.length), 10)).filter(n => !isNaN(n));
-    const maxSeq = seqs.length ? Math.max(...seqs) : 0;
-    return `${prefix}${todayStr}-${String(maxSeq + 1).padStart(4, '0')}`;
-  };
-
+  // docNo 不再前端自算：返工领料的 LL 单号统一由后端 createRecordBatch 在事务+advisory lock 下分配。
   const showBatchCol = bomMaterials.some(m => {
     const p = productMap.get(m.productId);
     return categoryUsesBatchManagement(categoryById.get(p?.categoryId ?? ''));
@@ -170,7 +160,6 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
         }
       }
     }
-    const docNo = getNextStockDocNoLocal();
     const batch: ProductionOpRecord[] = toIssue.map(m => {
       const p = productMap.get(m.productId);
       const c = categoryById.get(p?.categoryId ?? '');
@@ -185,7 +174,7 @@ const ReworkMaterialIssueModal: React.FC<ReworkMaterialIssueModalProps> = ({
         timestamp: new Date().toLocaleString(),
         status: '已完成',
         warehouseId: warehouseId || undefined,
-        docNo,
+        // docNo 留空，由后端统一分配
         reason: '来自于返工',
         ...(bn ? { batchNo: bn } : {}),
       } as ProductionOpRecord;

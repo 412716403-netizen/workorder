@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type {
   AppDictionaries,
   FinanceCategory,
@@ -14,6 +15,26 @@ import type {
   Worker,
 } from '../types';
 import { toLocalDateYmd } from '../utils/localDateTime';
+import { fetchAllPages, type PaginatedLike } from '../utils/fetchAllPages';
+import * as api from '../services/api';
+
+/**
+ * Phase 3.A：对账场景按 partner/worker + 日期范围窄拉后端数据，避免依赖
+ * `AppDataContext` 中的全量 `psiRecords / prodRecords / financeRecords`。
+ * 旧 props 保留作为兜底（短期向后兼容），后续可整体移除。
+ *
+ * Phase 3.E follow-up：所有对账 query 改为"客户端循环分页拉完"，
+ * 避免旧版单页 500 条截断让大合作单位/工人的金额合计偏少（且 UI 无任何提示）。
+ */
+const RECON_STALE_MS = 30_000;
+const RECON_PAGE_SIZE = 500;
+
+function unwrapList<T>(resp: T[] | PaginatedLike<T> | null | undefined, fallback: T[]): T[] {
+  if (!resp) return fallback;
+  if (Array.isArray(resp)) return resp;
+  if (Array.isArray(resp.data)) return resp.data;
+  return fallback;
+}
 
 /** 合作单位对账：统一展示行（采购单/销售单/外协收回/收款单/付款单） */
 export type PartnerReconRow =
@@ -30,9 +51,6 @@ export type SettlementReconRow =
 export interface UseFinanceReconciliationParams {
   type: FinanceOpType;
   records: FinanceRecord[];
-  allRecords: FinanceRecord[];
-  psiRecords: PsiRecord[];
-  prodRecords: ProductionOpRecord[];
   partners: Partner[];
   orders: ProductionOrder[];
   productMilestoneProgresses: ProductMilestoneProgress[];
@@ -44,13 +62,16 @@ export interface UseFinanceReconciliationParams {
   debouncedFinanceListSearch: string;
 }
 
+/**
+ * Phase 3.D follow-up：删除 props 兜底分支
+ *  - 不再接收 `allRecords / psiRecords / prodRecords` 三大全量数组；
+ *  - 对账模式下统一以 `partnerPsiQuery / partnerProdQuery / partnerFinanceQuery / workerFinanceQuery / workerReworkProdQuery`
+ *    的 react-query 结果为唯一数据源；非对账 tab（RECEIPT/PAYMENT）的列表展示与搜索由 `records` 提供。
+ */
 export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
   const {
     type,
     records,
-    allRecords,
-    psiRecords,
-    prodRecords,
     partners,
     orders,
     productMilestoneProgresses,
@@ -76,6 +97,138 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
   const reconQueryDateFromT = reconQueryDateFrom.trim();
   const reconQueryDateToT = reconQueryDateTo.trim();
 
+  const isReconcilePartner = type === 'RECONCILIATION' && reconciliationSubTab === 'partner' && !!reconQueryPartnerId;
+  const isReconcileWorker = type === 'RECONCILIATION' && reconciliationSubTab === 'settlement' && !!reconQueryWorkerId;
+  const partnerName = useMemo(
+    () => partners.find(part => part.id === reconQueryPartnerId)?.name ?? '',
+    [partners, reconQueryPartnerId],
+  );
+  const dateRangeQs = useMemo(() => {
+    const out: { startDate?: string; endDate?: string } = {};
+    if (reconQueryDateFromT) out.startDate = `${reconQueryDateFromT}T00:00:00.000Z`;
+    if (reconQueryDateToT) out.endDate = `${reconQueryDateToT}T23:59:59.999Z`;
+    return out;
+  }, [reconQueryDateFromT, reconQueryDateToT]);
+
+  /** 按合作单位拉财务流水（收/付款），只取该 partner + 日期范围。fetch-all-pages 兜底，不截断。 */
+  const partnerFinanceQuery = useQuery({
+    queryKey: ['recon', 'finance', 'partner', reconQueryPartnerId, dateRangeQs.startDate ?? '', dateRangeQs.endDate ?? ''],
+    queryFn: () =>
+      fetchAllPages<FinanceRecord>(page =>
+        api.finance.listPage({
+          partner: partnerName,
+          ...dateRangeQs,
+          page,
+          pageSize: RECON_PAGE_SIZE,
+        }) as unknown as Promise<PaginatedLike<FinanceRecord>>,
+      ),
+    enabled: isReconcilePartner,
+    staleTime: RECON_STALE_MS,
+  });
+
+  /** 按合作单位拉 PSI（采购/销售单），后端目前只支持 partnerId 过滤，日期在前端筛 */
+  const partnerPsiQuery = useQuery({
+    queryKey: ['recon', 'psi', 'partner', reconQueryPartnerId],
+    queryFn: () =>
+      fetchAllPages<PsiRecord>(page =>
+        api.psi.list({ partnerId: reconQueryPartnerId, page, pageSize: RECON_PAGE_SIZE }) as Promise<
+          PsiRecord[] | PaginatedLike<PsiRecord>
+        >,
+      ),
+    enabled: isReconcilePartner,
+    staleTime: RECON_STALE_MS,
+  });
+
+  /** 按合作单位拉生产报工外协收回，partner 走 contains 匹配 */
+  const partnerProdQuery = useQuery({
+    queryKey: ['recon', 'prod', 'partner', partnerName, dateRangeQs.startDate ?? '', dateRangeQs.endDate ?? ''],
+    queryFn: () =>
+      fetchAllPages<ProductionOpRecord>(page =>
+        api.production.listPage({
+          partner: partnerName,
+          type: 'OUTSOURCE',
+          status: '已收回',
+          ...dateRangeQs,
+          page,
+          pageSize: RECON_PAGE_SIZE,
+        }) as unknown as Promise<PaginatedLike<ProductionOpRecord>>,
+      ),
+    enabled: isReconcilePartner && !!partnerName,
+    staleTime: RECON_STALE_MS,
+  });
+
+  /** 按工人拉财务流水（收/付款），用于报工结算对账 */
+  const workerFinanceQuery = useQuery({
+    queryKey: ['recon', 'finance', 'worker', reconQueryWorkerId, dateRangeQs.startDate ?? '', dateRangeQs.endDate ?? ''],
+    queryFn: () =>
+      fetchAllPages<FinanceRecord>(page =>
+        api.finance.listPage({
+          workerId: reconQueryWorkerId,
+          ...dateRangeQs,
+          page,
+          pageSize: RECON_PAGE_SIZE,
+        }) as Promise<PaginatedLike<FinanceRecord>>,
+      ),
+    enabled: isReconcileWorker,
+    staleTime: RECON_STALE_MS,
+  });
+
+  /** 按工人拉返工报工流水 */
+  const workerReworkProdQuery = useQuery({
+    queryKey: ['recon', 'prod', 'worker', reconQueryWorkerId, dateRangeQs.startDate ?? '', dateRangeQs.endDate ?? ''],
+    queryFn: () =>
+      fetchAllPages<ProductionOpRecord>(page =>
+        api.production.listPage({
+          workerId: reconQueryWorkerId,
+          type: 'REWORK_REPORT',
+          ...dateRangeQs,
+          page,
+          pageSize: RECON_PAGE_SIZE,
+        }) as Promise<PaginatedLike<ProductionOpRecord>>,
+      ),
+    enabled: isReconcileWorker,
+    staleTime: RECON_STALE_MS,
+  });
+
+  /**
+   * Phase 3.D follow-up：统一以 react-query 窄拉数据为唯一来源；不再降级到 props 全量。
+   * - 对账模式（isReconcile*）但查询尚未返回时取空数组——UI 会显示 reconLoading；
+   * - 非对账模式（RECEIPT/PAYMENT）下不应该读取以下变量（partnerRecon/settlementRecon 已 guard 过）。
+   */
+  const effectivePsiRecords = useMemo<PsiRecord[]>(() => {
+    if (!isReconcilePartner) return [];
+    if (partnerPsiQuery.data == null) return [];
+    return unwrapList<PsiRecord>(partnerPsiQuery.data, []);
+  }, [isReconcilePartner, partnerPsiQuery.data]);
+
+  const effectivePartnerProdRecords = useMemo<ProductionOpRecord[]>(() => {
+    if (!isReconcilePartner) return [];
+    if (partnerProdQuery.data == null) return [];
+    return unwrapList<ProductionOpRecord>(partnerProdQuery.data, []);
+  }, [isReconcilePartner, partnerProdQuery.data]);
+
+  const effectivePartnerFinanceRecords = useMemo<FinanceRecord[]>(() => {
+    if (!isReconcilePartner) return [];
+    if (partnerFinanceQuery.data == null) return [];
+    return unwrapList<FinanceRecord>(partnerFinanceQuery.data, []);
+  }, [isReconcilePartner, partnerFinanceQuery.data]);
+
+  const effectiveWorkerProdRecords = useMemo<ProductionOpRecord[]>(() => {
+    if (!isReconcileWorker) return [];
+    if (workerReworkProdQuery.data == null) return [];
+    return unwrapList<ProductionOpRecord>(workerReworkProdQuery.data, []);
+  }, [isReconcileWorker, workerReworkProdQuery.data]);
+
+  const effectiveWorkerFinanceRecords = useMemo<FinanceRecord[]>(() => {
+    if (!isReconcileWorker) return [];
+    if (workerFinanceQuery.data == null) return [];
+    return unwrapList<FinanceRecord>(workerFinanceQuery.data, []);
+  }, [isReconcileWorker, workerFinanceQuery.data]);
+
+  const reconLoading =
+    (isReconcilePartner && (partnerFinanceQuery.isLoading || partnerPsiQuery.isLoading || partnerProdQuery.isLoading)) ||
+    (isReconcileWorker && (workerFinanceQuery.isLoading || workerReworkProdQuery.isLoading));
+
   const inFinanceDateRangeQuery = useCallback((ts: string, from: string, to: string) => {
     const d = toLocalDateYmd(ts);
     if (!d) return false;
@@ -86,13 +239,12 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
 
   const partnerReconList = useMemo((): PartnerReconRow[] => {
     if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'partner' || !reconQueryPartnerId) return [];
-    const partnerName = partners.find(part => part.id === reconQueryPartnerId)?.name ?? '';
     const from = reconQueryDateFromT;
     const to = reconQueryDateToT;
     const rows: PartnerReconRow[] = [];
     const psiTypes = ['PURCHASE_BILL', 'SALES_BILL'] as const;
     const psiLabel: Record<string, string> = { PURCHASE_BILL: '采购单', SALES_BILL: '销售单' };
-    const psiFiltered = psiRecords.filter(
+    const psiFiltered = effectivePsiRecords.filter(
       (r) => psiTypes.includes(r.type as (typeof psiTypes)[number]) && (r.partner === partnerName || r.partnerId === reconQueryPartnerId),
     );
     const psiByDoc = new Map<string, { type: string; timestamp: string; partner: string; amount: number; operator?: string; note?: string }>();
@@ -112,7 +264,7 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
       rows.push({ source: 'psi', docType, docNo, timestamp: v.timestamp, partner: v.partner, amount: v.amount, operator: v.operator, note: v.note });
     });
     const prodByDoc = new Map<string, { status: string; timestamp: string; partner: string; amount: number; operator?: string; count: number }>();
-    prodRecords.filter(rec => rec.type === 'OUTSOURCE' && rec.status === '已收回' && rec.partner === partnerName).forEach(rec => {
+    effectivePartnerProdRecords.filter(rec => rec.type === 'OUTSOURCE' && rec.status === '已收回' && rec.partner === partnerName).forEach(rec => {
       const d = rec.timestamp ? toLocalDateYmd(rec.timestamp) : '';
       if (from && d < from) return;
       if (to && d > to) return;
@@ -126,7 +278,7 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
       rows.push({ source: 'psi', docType: '外协收回', docNo, timestamp: v.timestamp, partner: v.partner, amount: v.amount, operator: v.operator });
     });
     const finByDoc = new Map<string, { rec: FinanceRecord; amount: number; count: number }>();
-    allRecords.filter(rec => (rec.type === 'RECEIPT' || rec.type === 'PAYMENT') && rec.partner === partnerName && inFinanceDateRangeQuery(rec.timestamp, from, to)).forEach(rec => {
+    effectivePartnerFinanceRecords.filter(rec => (rec.type === 'RECEIPT' || rec.type === 'PAYMENT') && rec.partner === partnerName && inFinanceDateRangeQuery(rec.timestamp, from, to)).forEach(rec => {
       const docKey = rec.docNo || rec.id;
       const cur = finByDoc.get(docKey);
       if (!cur) finByDoc.set(docKey, { rec: { ...rec }, amount: rec.amount, count: 1 });
@@ -141,7 +293,11 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
       return new Date(ta).getTime() - new Date(tb).getTime();
     });
     return rows;
-  }, [type, reconciliationSubTab, reconQueryPartnerId, reconQueryDateFromT, reconQueryDateToT, partners, psiRecords, prodRecords, allRecords, inFinanceDateRangeQuery]);
+  }, [
+    type, reconciliationSubTab, reconQueryPartnerId, reconQueryDateFromT, reconQueryDateToT,
+    partnerName, effectivePsiRecords, effectivePartnerProdRecords, effectivePartnerFinanceRecords,
+    inFinanceDateRangeQuery,
+  ]);
 
   const settlementReconList = useMemo((): SettlementReconRow[] => {
     if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'settlement' || !reconQueryWorkerId) return [];
@@ -223,13 +379,13 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
     workReportGroups.forEach((v, reportNo) => {
       rows.push({ source: 'work_report', reportNo: reportNo || '—', timestamp: v.timestamp, workerId: v.workerId, workerName: v.workerName, amount: v.amount, items: v.items });
     });
-    prodRecords.filter(r => r.type === 'REWORK_REPORT' && r.workerId === reconQueryWorkerId).forEach(rec => {
+    effectiveWorkerProdRecords.filter(r => r.type === 'REWORK_REPORT' && r.workerId === reconQueryWorkerId).forEach(rec => {
       const d = rec.timestamp ? toLocalDateYmd(rec.timestamp) : '';
       if (from && d < from) return;
       if (to && d > to) return;
       rows.push({ source: 'rework_report', rec });
     });
-    allRecords.filter(rec => (rec.type === 'RECEIPT' || rec.type === 'PAYMENT') && rec.workerId === reconQueryWorkerId && inFinanceDateRangeQuery(rec.timestamp, from, to)).forEach(rec => {
+    effectiveWorkerFinanceRecords.filter(rec => (rec.type === 'RECEIPT' || rec.type === 'PAYMENT') && rec.workerId === reconQueryWorkerId && inFinanceDateRangeQuery(rec.timestamp, from, to)).forEach(rec => {
       rows.push({ source: 'settlement_finance', rec });
     });
     rows.sort((a, b) => {
@@ -238,7 +394,12 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
       return new Date(ta).getTime() - new Date(tb).getTime();
     });
     return rows;
-  }, [type, reconciliationSubTab, reconQueryWorkerId, reconQueryDateFromT, reconQueryDateToT, orders, productMilestoneProgresses, productMap, workerMap, prodRecords, allRecords, inFinanceDateRangeQuery, globalNodes, dictionaries]);
+  }, [
+    type, reconciliationSubTab, reconQueryWorkerId, reconQueryDateFromT, reconQueryDateToT,
+    orders, productMilestoneProgresses, productMap, workerMap,
+    effectiveWorkerProdRecords, effectiveWorkerFinanceRecords,
+    inFinanceDateRangeQuery, globalNodes, dictionaries,
+  ]);
 
   const partnerReconListFiltered = useMemo(() => {
     const q = debouncedFinanceListSearch.trim().toLowerCase();
@@ -286,13 +447,13 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
     if (!reconQueryWorkerId) return [];
     const from = reconQueryDateFromT;
     const to = reconQueryDateToT;
-    return allRecords.filter(rec => {
+    return effectiveWorkerFinanceRecords.filter(rec => {
       if (!rec.workerId) return false;
       if (!inFinanceDateRangeQuery(rec.timestamp, from, to)) return false;
       if (rec.workerId !== reconQueryWorkerId) return false;
       return true;
     });
-  }, [type, records, allRecords, reconciliationSubTab, reconQueryDateFromT, reconQueryDateToT, reconQueryWorkerId, inFinanceDateRangeQuery]);
+  }, [type, records, effectiveWorkerFinanceRecords, reconciliationSubTab, reconQueryDateFromT, reconQueryDateToT, reconQueryWorkerId, inFinanceDateRangeQuery]);
 
   const tableSourceRecords = useMemo(() => {
     if (type === 'RECONCILIATION') return displayRecords;
@@ -383,5 +544,7 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
     settlementReconWithBalance,
     displayRecords,
     tableSourceRecords,
+    /** Phase 3.A：对账 react-query 正在窄拉时 true，方便 UI 显示 loading 状态 */
+    reconLoading,
   };
 }

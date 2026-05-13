@@ -80,11 +80,14 @@ export interface PsiListPrintControllerProps<TDoc> {
    * 放在组件内而不是由外部传 docItems，避免外部在每次渲染时重算列表并持续持有。
    */
   resolveDocItems: (docNumber: string) => TDoc[];
-  /** 基于行数据与选中模版构造打印上下文 */
+  /**
+   * 基于行数据与选中模版构造打印上下文。
+   * Phase 3.D follow-up：允许返回 Promise，便于销售单打印先 await `api.finance.partnerReceivable` 拿到 preBalance 再组装上下文。
+   */
   buildContext: (
     template: PrintTemplate,
     payload: { docNumber: string; docItems: TDoc[] },
-  ) => PrintRenderContext;
+  ) => PrintRenderContext | Promise<PrintRenderContext>;
   /** 选模版弹窗副标题：通常根据单号拼成「采购订单 xxx」「独立单据」等 */
   pickerSubtitle: (docNumber: string) => string;
   /**
@@ -169,10 +172,11 @@ function PsiListPrintControllerInner<TDoc>(
   }, []);
 
   const handlePick = useCallback(
-    (t: PrintTemplate) => {
+    async (t: PrintTemplate) => {
       if (!pickerDocNum) return;
       const docItems = resolveDocItems(pickerDocNum);
-      const ctx = buildContext(t, { docNumber: pickerDocNum, docItems });
+      const maybe = buildContext(t, { docNumber: pickerDocNum, docItems });
+      const ctx = await Promise.resolve(maybe);
       setPrintRun({ template: t, ctx });
       closePicker();
     },
@@ -244,7 +248,7 @@ function PsiListPrintControllerInner<TDoc>(
                         </div>
                         <button
                           type="button"
-                          onClick={() => handlePick(t)}
+                          onClick={() => { void handlePick(t); }}
                           className="flex shrink-0 items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700"
                         >
                           <Printer className="h-3.5 w-3.5" />

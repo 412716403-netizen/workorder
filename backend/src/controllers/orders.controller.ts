@@ -2,17 +2,19 @@ import { getTenantPrisma } from '../lib/prisma.js';
 import { str, optStr } from '../utils/request.js';
 import * as ordersService from '../services/orders.service.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
+import { listQueryFromRequest, warnListAllFromRequest } from '../utils/listQuery.js';
 
 export const listOrders = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
-  const page = req.query.page ? Number(req.query.page) : undefined;
-  const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
+  const { all, page, pageSize } = listQueryFromRequest(req);
+  if (all) warnListAllFromRequest('orders.listOrders', req);
   res.json(await ordersService.listOrders(db, {
     status: optStr(req.query.status),
     productId: optStr(req.query.productId),
     parentOrderId: optStr(req.query.parentOrderId),
     search: optStr(req.query.search),
     lite: req.query.lite === 'true',
+    all,
     page,
     pageSize,
   }));
@@ -51,9 +53,30 @@ export const getReportable = asyncHandler(async (req, res) => {
   res.json(await ordersService.getReportable(db, str(req.params.id)));
 });
 
+export const listReportHistory = asyncHandler(async (req, res) => {
+  const db = getTenantPrisma(req.tenantId!);
+  const orderIdsCsv = optStr(req.query.orderIds);
+  const productIdsCsv = optStr(req.query.productIds);
+  const modeRaw = optStr(req.query.productionLinkMode);
+  const productionLinkMode =
+    modeRaw === 'product' || modeRaw === 'order' ? modeRaw : undefined;
+  res.json(
+    await ordersService.listReportHistory(db, {
+      startDate: optStr(req.query.startDate),
+      endDate: optStr(req.query.endDate),
+      orderIds: orderIdsCsv ? orderIdsCsv.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+      productIds: productIdsCsv ? productIdsCsv.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+      search: optStr(req.query.search),
+      productionLinkMode,
+    }),
+  );
+});
+
 export const listProductProgress = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
-  res.json(await ordersService.listProductProgress(db));
+  const { all, page, pageSize } = listQueryFromRequest(req);
+  if (all) warnListAllFromRequest('orders.listProductProgress', req);
+  res.json(await ordersService.listProductProgress(db, { all, page, pageSize }));
 });
 
 export const createProductReport = asyncHandler(async (req, res) => {

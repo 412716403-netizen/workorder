@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../controllers/orders.controller.js';
 import { validate } from '../middleware/validate.js';
+import { requireSubPermission } from '../middleware/tenant.js';
 
 const router = Router();
 
@@ -61,21 +62,77 @@ const updateProductReportSchema = z.object({
   timestamp: z.string().optional(),
 }).passthrough();
 
-router.get('/', ctrl.listOrders);
+/**
+ * Phase 3.E follow-up：工单 / 订单报工路由收紧到细粒度。
+ * 持有顶级 `production` 模块码的用户通过 `hasSubPermission` fallback 自动覆盖，
+ * 不会引起现有用户被拒。但能让前端按钮级（仅查看 / 可改 / 可删）真正落到后端拦截。
+ */
+router.get('/', requireSubPermission('production:orders:view'), ctrl.listOrders);
 
-router.get('/product-progress', ctrl.listProductProgress);
-router.post('/product-progress/report', validate(createProductReportSchema), ctrl.createProductReport);
-router.put('/product-progress/report/:reportId', validate(updateProductReportSchema), ctrl.updateProductReport);
-router.delete('/product-progress/report/:reportId', ctrl.deleteProductReport);
+router.get(
+  '/report-history',
+  requireSubPermission('production:orders_report_records:view'),
+  ctrl.listReportHistory,
+);
 
-router.get('/:id', ctrl.getOrder);
-router.put('/:id', validate(updateOrderSchema), ctrl.updateOrder);
-router.delete('/:id', ctrl.deleteOrder);
+router.get(
+  '/product-progress',
+  requireSubPermission('production:orders:view'),
+  ctrl.listProductProgress,
+);
+router.post(
+  '/product-progress/report',
+  requireSubPermission('production:orders:edit'),
+  validate(createProductReportSchema),
+  ctrl.createProductReport,
+);
+router.put(
+  '/product-progress/report/:reportId',
+  requireSubPermission('production:orders:edit'),
+  validate(updateProductReportSchema),
+  ctrl.updateProductReport,
+);
+router.delete(
+  '/product-progress/report/:reportId',
+  requireSubPermission('production:orders:edit'),
+  ctrl.deleteProductReport,
+);
 
-router.post('/:id/milestones/:milestoneId/reports', validate(createReportSchema), ctrl.createReport);
-router.put('/:id/milestones/:milestoneId/reports/:reportId', validate(updateReportSchema), ctrl.updateReport);
-router.delete('/:id/milestones/:milestoneId/reports/:reportId', ctrl.deleteReport);
+router.get('/:id', requireSubPermission('production:orders:view'), ctrl.getOrder);
+router.put(
+  '/:id',
+  requireSubPermission('production:orders:edit'),
+  validate(updateOrderSchema),
+  ctrl.updateOrder,
+);
+router.delete(
+  '/:id',
+  requireSubPermission('production:orders:delete'),
+  ctrl.deleteOrder,
+);
 
-router.get('/:id/reportable', ctrl.getReportable);
+router.post(
+  '/:id/milestones/:milestoneId/reports',
+  requireSubPermission('production:orders:edit'),
+  validate(createReportSchema),
+  ctrl.createReport,
+);
+router.put(
+  '/:id/milestones/:milestoneId/reports/:reportId',
+  requireSubPermission('production:orders:edit'),
+  validate(updateReportSchema),
+  ctrl.updateReport,
+);
+router.delete(
+  '/:id/milestones/:milestoneId/reports/:reportId',
+  requireSubPermission('production:orders:edit'),
+  ctrl.deleteReport,
+);
+
+router.get(
+  '/:id/reportable',
+  requireSubPermission('production:orders:view'),
+  ctrl.getReportable,
+);
 
 export default router;

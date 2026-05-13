@@ -15,6 +15,7 @@ export {
   categoryUsesBatchManagement,
   normalizeCollabSpecLabel,
   COLLAB_ACCEPT_CATEGORY_DECISION,
+  COLLAB_DISPATCH_AMENDMENT_PENDING_B_REVIEW,
   type CollabAcceptCategoryDecision,
   type CollabAcceptCreateProductPayload,
   type CollabAcceptTransferBody,

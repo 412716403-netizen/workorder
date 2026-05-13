@@ -1,21 +1,40 @@
+import type { DictionaryItem } from '@prisma/client';
 import type { TenantPrismaClient } from '../lib/prisma.js';
 import { genId } from '../utils/genId.js';
 import { sanitizeUpdate, sanitizeCreate } from '../utils/request.js';
+import { getRedis, redisDel, redisGetJson, redisSetJson } from '../lib/redis.js';
+
+function dictionaryCacheKey(tenantId: string): string {
+  return `cache:masterData:dictionaries:${tenantId}`;
+}
+
+async function invalidateDictionaryCache(tenantId: string): Promise<void> {
+  if (getRedis()) await redisDel(dictionaryCacheKey(tenantId));
+}
 
 // ── 合作单位 ──
 
 export async function listPartners(
   db: TenantPrismaClient,
-  opts: { categoryId?: string; search?: string },
+  opts: { categoryId?: string; search?: string; all?: boolean; page?: number; pageSize?: number },
 ) {
   const where: Record<string, unknown> = {};
   if (opts.categoryId) where.categoryId = opts.categoryId;
   if (opts.search) where.name = { contains: opts.search, mode: 'insensitive' };
-  return db.partner.findMany({
-    where,
-    include: { category: true },
-    orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-  });
+  const include = { category: true };
+  const orderBy: any = [{ createdAt: 'desc' }, { id: 'asc' }];
+
+  if (opts.all) {
+    return db.partner.findMany({ where, include, orderBy });
+  }
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [data, total] = await Promise.all([
+    db.partner.findMany({ where, include, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    db.partner.count({ where }),
+  ]);
+  return { data, total, page, pageSize };
 }
 
 export async function createPartner(
@@ -47,12 +66,24 @@ export async function deletePartner(db: TenantPrismaClient, id: string) {
 
 export async function listWorkers(
   db: TenantPrismaClient,
-  opts: { status?: string; search?: string },
+  opts: { status?: string; search?: string; all?: boolean; page?: number; pageSize?: number },
 ) {
   const where: Record<string, unknown> = {};
   if (opts.status) where.status = opts.status;
   if (opts.search) where.name = { contains: opts.search, mode: 'insensitive' };
-  return db.worker.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] });
+  const orderBy: any = [{ createdAt: 'desc' }, { id: 'asc' }];
+
+  if (opts.all) {
+    return db.worker.findMany({ where, orderBy });
+  }
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [data, total] = await Promise.all([
+    db.worker.findMany({ where, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    db.worker.count({ where }),
+  ]);
+  return { data, total, page, pageSize };
 }
 
 export async function createWorker(
@@ -81,11 +112,23 @@ export async function deleteWorker(db: TenantPrismaClient, id: string) {
 
 export async function listEquipment(
   db: TenantPrismaClient,
-  opts: { search?: string },
+  opts: { search?: string; all?: boolean; page?: number; pageSize?: number },
 ) {
   const where: Record<string, unknown> = {};
   if (opts.search) where.name = { contains: opts.search, mode: 'insensitive' };
-  return db.equipment.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] });
+  const orderBy: any = [{ createdAt: 'desc' }, { id: 'asc' }];
+
+  if (opts.all) {
+    return db.equipment.findMany({ where, orderBy });
+  }
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [data, total] = await Promise.all([
+    db.equipment.findMany({ where, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    db.equipment.count({ where }),
+  ]);
+  return { data, total, page, pageSize };
 }
 
 export async function createEquipment(
@@ -112,19 +155,35 @@ export async function deleteEquipment(db: TenantPrismaClient, id: string) {
 
 // ── 数据字典 ──
 
-export async function listDictionaries(db: TenantPrismaClient) {
+export type DictionaryListResult = {
+  colors: DictionaryItem[];
+  sizes: DictionaryItem[];
+  units: DictionaryItem[];
+};
+
+export async function listDictionaries(db: TenantPrismaClient, tenantId: string): Promise<DictionaryListResult> {
+  if (getRedis()) {
+    const hit = await redisGetJson<DictionaryListResult>(dictionaryCacheKey(tenantId));
+    if (hit) return hit;
+  }
+
   const items = await db.dictionaryItem.findMany({
     orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
   });
-  return {
+  const out: DictionaryListResult = {
     colors: items.filter((i) => i.type === 'color'),
     sizes: items.filter((i) => i.type === 'size'),
     units: items.filter((i) => i.type === 'unit'),
   };
+  if (getRedis()) {
+    await redisSetJson(dictionaryCacheKey(tenantId), out, 60);
+  }
+  return out;
 }
 
 export async function createDictionaryItem(
   db: TenantPrismaClient,
+  tenantId: string,
   body: Record<string, unknown>,
 ) {
   const data = sanitizeCreate(body);
@@ -135,11 +194,14 @@ export async function createDictionaryItem(
     _max: { sortOrder: true },
   });
   data.sortOrder = (maxRow._max.sortOrder ?? -1) + 1;
-  return db.dictionaryItem.create({ data: data as any });
+  const created = await db.dictionaryItem.create({ data: data as any });
+  await invalidateDictionaryCache(tenantId);
+  return created;
 }
 
 export async function updateDictionaryItem(
   db: TenantPrismaClient,
+  tenantId: string,
   id: string,
   body: Record<string, unknown>,
 ) {
@@ -160,16 +222,19 @@ export async function updateDictionaryItem(
   if (dup) return { _validationError: `该类型下已存在「${nextName}」` };
 
   const nextValue = value !== undefined ? value : existing.value;
-  return db.dictionaryItem.update({
+  const updated = await db.dictionaryItem.update({
     where: { id },
     data: {
       ...(name !== undefined ? { name: nextName } : {}),
       ...(value !== undefined ? { value: nextValue } : {}),
     },
   });
+  await invalidateDictionaryCache(tenantId);
+  return updated;
 }
 
-export async function deleteDictionaryItem(db: TenantPrismaClient, id: string) {
+export async function deleteDictionaryItem(db: TenantPrismaClient, tenantId: string, id: string) {
   await db.dictionaryItem.delete({ where: { id } });
+  await invalidateDictionaryCache(tenantId);
   return { message: '已删除' };
 }

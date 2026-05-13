@@ -200,6 +200,18 @@
 - 想弄清为什么还有 `localStorage`：读 `07-auth-tenant-session.md`
 - 想梳理打印、标签、单品码、批次码：读 `08-printing-and-label-flow.md`
 
+## 7.1 容量与扩展（运维向）
+
+- 路线图与 Phase 说明、PM2/Redis、列表分页与前端兼容策略见 **`docs/10-capacity-and-scaling.md`**。
+- 后端列表接口默认分页；旧客户端通过 `?all=true` 拉全量时打 `[list:all]` 告警日志。
+- **Phase 3.E（已完成）流水弹窗默认当天 + 删 12000 上限**：
+  - `ProductionMgmtOpsView` 不再 `fetchAllProductionByTypes`（旧 12000 客户端硬上限已移除），`StockMaterialPanel / OutsourcePanel / ReworkPanel` 各自按 `activeOrderIds / 今日窗口` 多条 `useQuery` 窄拉。
+  - 7 个流水弹窗（领退料 / 外协 / 返工报工 / 不良品处理 / 仓库 / 报工流水 / 生产入库流水）内部独立 `useQuery`，默认 `dateFrom = dateTo = today`，无上限分页。
+  - 新 queryKey 前缀：`stockPanel.* / outsourcePanel.* / reworkPanel.records / flow.stock / flow.stockIn / flow.outsource / flow.reworkReport / flow.defect / flow.warehouse.psi.* / flow.warehouse.prod / flow.reportHistory`。
+  - 新后端接口：`psi.listRecords` 加 `startDate/endDate/search/types`；新增 `GET /api/orders/report-history`。
+  - `PendingStockPanel` 内嵌的「生产入库流水」与 `OrderListView.orderCenterProdQuery` 脱钩，绕过其 40 页/8000 条客户端硬上限；主面板「待入库清单」跨日累计逻辑仍沿用 props.prodRecords。
+  - `AppDataContext.invalidateAll{Prod,Psi}Records` 改 predicate 风格批量匹配 queryKey 前缀，修复旧 `psiOps.warehouseStockProd` 与实际 key 不一致的 invalidate bug。
+
 ## 8. 本文件的边界
 
 本文件关注的是“当前架构与迁移阶段”，不负责：

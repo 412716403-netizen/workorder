@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import type { Prisma } from '@prisma/client';
 import { AppError } from '../middleware/errorHandler.js';
 import { prisma } from '../lib/prisma.js';
 
@@ -29,16 +30,39 @@ async function otherAdminCount(excludeUserId: string) {
   });
 }
 
-export async function listAdminUsers() {
-  const rows = await prisma.user.findMany({
-    where: { OR: [{ isEnterprise: true }, { role: 'admin' }] },
-    select: userPublicSelect,
-    orderBy: [{ role: 'desc' }, { createdAt: 'asc' }],
-  });
-  return rows.map((u) => ({
+export async function listAdminUsers(opts: { all?: boolean; page?: number; pageSize?: number } = {}) {
+  const where: Prisma.UserWhereInput = { OR: [{ isEnterprise: true }, { role: 'admin' }] };
+  const orderBy = [{ role: 'desc' as const }, { createdAt: 'asc' as const }];
+
+  if (opts.all) {
+    const rows = await prisma.user.findMany({
+      where,
+      select: userPublicSelect,
+      orderBy,
+    });
+    return rows.map((u) => ({
+      ...u,
+      accountExpiresAt: u.accountExpiresAt?.toISOString() ?? null,
+    }));
+  }
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [rows, total] = await Promise.all([
+    prisma.user.findMany({
+      where,
+      select: userPublicSelect,
+      orderBy,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.user.count({ where }),
+  ]);
+  const data = rows.map((u) => ({
     ...u,
     accountExpiresAt: u.accountExpiresAt?.toISOString() ?? null,
   }));
+  return { data, total, page, pageSize };
 }
 
 export async function createAdminUser(data: {

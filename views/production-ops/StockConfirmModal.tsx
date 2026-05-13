@@ -14,7 +14,7 @@ import { categoryUsesBatchManagement } from '../../types';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
-import { usePsiStockIndex } from '../../hooks/usePsiStockIndex';
+import { useStockSnapshot } from '../../hooks/useStockSnapshot';
 
 export interface StockConfirmModalProps {
   visible: boolean;
@@ -47,6 +47,11 @@ export interface StockConfirmModalProps {
   psiRecords?: PsiRecord[];
   /** 生产报工/领退料记录，与 psi 一起建库存索引 */
   prodRecords?: ProductionOpRecord[];
+  /**
+   * 生产退料：物料 id → 该合作单位/本厂在本单或本产品下「已发领料」出现过的批号（与仓库余量脱钩）。
+   * 与 `OutsourceMaterialReturnModal` 的 `dispatchedBatchesByMat` 口径一致；未传时退料仍按仓库可选批次。
+   */
+  returnDispatchedBatchesByProduct?: Record<string, string[]>;
 }
 
 const StockConfirmModal: React.FC<StockConfirmModalProps> = ({
@@ -76,10 +81,11 @@ const StockConfirmModal: React.FC<StockConfirmModalProps> = ({
   onLineBatchChange,
   psiRecords = [],
   prodRecords = [],
+  returnDispatchedBatchesByProduct,
 }) => {
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
-  const { listAvailableBatches } = usePsiStockIndex(psiRecords, prodRecords);
+  const { listAvailableBatches } = useStockSnapshot({ enabled: visible });
 
   if (!visible || (!stockSelectOrderId && !stockSelectSourceProductId) || !stockSelectMode) return null;
 
@@ -234,6 +240,11 @@ const StockConfirmModal: React.FC<StockConfirmModalProps> = ({
               <tbody className="divide-y divide-slate-50">
                 {selectedList.map(pid => {
                   const prod = products.find(p => p.id === pid);
+                  const useReturnDispatched =
+                    isReturn && returnDispatchedBatchesByProduct !== undefined;
+                  const returnDispatchedForPid = useReturnDispatched
+                    ? (returnDispatchedBatchesByProduct[pid] ?? [])
+                    : undefined;
                   return (
                     <tr key={pid} className="hover:bg-slate-50/50">
                       <td className="px-4 py-4 align-top">
@@ -258,7 +269,11 @@ const StockConfirmModal: React.FC<StockConfirmModalProps> = ({
                             mode="issue"
                             hideLabel
                             className="min-w-[170px]"
-                            mergeBatches={listAvailableBatches(pid, stockConfirmWarehouseId)}
+                            mergeBatches={
+                              useReturnDispatched ? undefined : listAvailableBatches(pid, stockConfirmWarehouseId)
+                            }
+                            dispatchedBatchOptions={useReturnDispatched ? returnDispatchedForPid : undefined}
+                            hideStockHint={useReturnDispatched}
                           />
                         </td>
                       ) : null}

@@ -2,11 +2,15 @@ import { getTenantPrisma } from '../lib/prisma.js';
 import { str, optStr } from '../utils/request.js';
 import * as productsService from '../services/products.service.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
+import { listQueryFromRequest, warnListAllFromRequest } from '../utils/listQuery.js';
 
 export const listProducts = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
+  const { all, page, pageSize } = listQueryFromRequest(req);
+  if (all) warnListAllFromRequest('products.listProducts', req);
   res.json(await productsService.listProducts(db, {
     categoryId: optStr(req.query.categoryId), search: optStr(req.query.search),
+    all, page, pageSize,
   }));
 });
 
@@ -35,7 +39,10 @@ export const syncVariants = asyncHandler(async (req, res) => {
 });
 
 export const listBoms = asyncHandler(async (req, res) => {
-  res.json(await productsService.listBoms(getTenantPrisma(req.tenantId!), { parentProductId: optStr(req.query.parentProductId) }));
+  const db = getTenantPrisma(req.tenantId!);
+  const { all, page, pageSize } = listQueryFromRequest(req);
+  if (all) warnListAllFromRequest('products.listBoms', req);
+  res.json(await productsService.listBoms(db, { parentProductId: optStr(req.query.parentProductId), all, page, pageSize }));
 });
 
 export const getBom = asyncHandler(async (req, res) => {

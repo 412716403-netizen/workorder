@@ -89,7 +89,22 @@ function decodeJwtExp(token: string): number | null {
 const REFRESH_MARGIN_S = 300;
 
 const REFRESH_RETRYABLE_HTTP = new Set([502, 503, 504]);
-const REFRESH_MAX_ATTEMPTS = 3;
+/**
+ * dev 期 tsx watch 重启后端一般要 10~25s 才重新监听 3001，期间所有 /api/* 都是
+ * ECONNREFUSED；旧逻辑 3 次 × 350ms 共 ~1s 就放弃，把这种瞬时网络错当成 refresh 真失败，
+ * 进而把用户踢回登录页（典型「保存后端代码就掉线」的现象）。
+ * 这里把重试拉到 ~30s 总窗口，并保留指数 backoff，足以覆盖后端热重启。
+ */
+const REFRESH_MAX_ATTEMPTS = 8;
+const REFRESH_BACKOFF_MS = [500, 1000, 2000, 3000, 4000, 5000, 6000];
+
+/**
+ * `tryRefresh` 的结果：
+ * - `ok`：拿到新的 access token；
+ * - `rejected`：服务器明确拒绝（401/403/refresh 缺失等），登录态真的失效；
+ * - `network_fail`：网络抖动/后端短暂不可用/超时——**不应该**被解释为登录态失效。
+ */
+type RefreshResult = 'ok' | 'rejected' | 'network_fail';
 
 function isAccessTokenExpiringSoon(): boolean {
   if (!memoryAccessToken) return true;
@@ -100,9 +115,9 @@ function isAccessTokenExpiringSoon(): boolean {
 
 /* ── Token refresh ── */
 
-let refreshPromise: Promise<boolean> | null = null;
+let refreshPromise: Promise<RefreshResult> | null = null;
 
-async function tryRefresh(): Promise<boolean> {
+async function tryRefreshDetailed(): Promise<RefreshResult> {
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = (async () => {
@@ -117,41 +132,45 @@ async function tryRefresh(): Promise<boolean> {
           });
           if (res.status === 401 || res.status === 403) {
             console.warn('[auth] refresh rejected', res.status);
-            return false;
+            return 'rejected';
           }
           if (!res.ok) {
             const retryable = REFRESH_RETRYABLE_HTTP.has(res.status);
             if (retryable && attempt < REFRESH_MAX_ATTEMPTS) {
-              await new Promise(r => setTimeout(r, 350 * attempt));
+              await new Promise(r => setTimeout(r, REFRESH_BACKOFF_MS[Math.min(attempt - 1, REFRESH_BACKOFF_MS.length - 1)]));
               continue;
             }
             console.warn('[auth] refresh failed, status', res.status);
-            return false;
+            return retryable ? 'network_fail' : 'rejected';
           }
           const data = await res.json();
           if (data.accessToken) {
             persistAccessToken(data.accessToken);
-            return true;
+            return 'ok';
           }
           console.warn('[auth] refresh response missing accessToken');
-          return false;
+          return 'rejected';
         } catch (e) {
           if (attempt < REFRESH_MAX_ATTEMPTS) {
             console.warn('[auth] refresh attempt', attempt, 'network/timeout, retrying', e);
-            await new Promise(r => setTimeout(r, 350 * attempt));
+            await new Promise(r => setTimeout(r, REFRESH_BACKOFF_MS[Math.min(attempt - 1, REFRESH_BACKOFF_MS.length - 1)]));
             continue;
           }
-          console.warn('[auth] refresh error', e);
-          return false;
+          console.warn('[auth] refresh error (network)', e);
+          return 'network_fail';
         }
       }
-      return false;
+      return 'network_fail';
     } finally {
       refreshPromise = null;
     }
   })();
 
   return refreshPromise;
+}
+
+async function tryRefresh(): Promise<boolean> {
+  return (await tryRefreshDetailed()) === 'ok';
 }
 
 /** 依赖 httpOnly refresh Cookie 换新 access（与 401 触发的刷新共用去重逻辑）。用于长时间空闲、切回页签后避免首请求失败。 */
@@ -185,8 +204,8 @@ async function request<T = unknown>(path: string, options: RequestInit = {}): Pr
 
   /* 仅 401 触发换票：403 多为权限/业务（如无权、企业到期），不应与「登录态失效」混同 */
   if (res.status === 401) {
-    const refreshed = await tryRefresh();
-    if (refreshed) {
+    const refreshResult = await tryRefreshDetailed();
+    if (refreshResult === 'ok') {
       if (memoryAccessToken) {
         headers['Authorization'] = `Bearer ${memoryAccessToken}`;
       }
@@ -196,14 +215,22 @@ async function request<T = unknown>(path: string, options: RequestInit = {}): Pr
         credentials: 'include',
         cache: options.cache ?? 'no-store',
       });
-    } else if (localStorage.getItem('isLoggedIn')) {
-      console.warn('[auth] refresh failed after 401 — logging out');
+    } else if (refreshResult === 'rejected' && localStorage.getItem('isLoggedIn')) {
+      /**
+       * 仅当服务器**明确**拒绝（401/403/缺 refresh）时才登出。
+       * 网络失败（dev 期 tsx 热重启 / 网络抖动）保持登录态、抛错让上层提示重试即可，
+       * 不再因为后端短暂不可用就把用户踢回登录页。
+       */
+      console.warn('[auth] refresh rejected after 401 — logging out');
       clearTokens();
       localStorage.removeItem('currentUser');
       localStorage.removeItem('tenantCtx');
       localStorage.removeItem('userTenants');
       window.location.replace('/');
       return new Promise<T>(() => {});
+    } else if (refreshResult === 'network_fail') {
+      console.warn('[auth] refresh network failure on 401 — keep session, surface error');
+      throw new Error('网络连接暂不可用，请稍后重试（后端可能正在重启或网络抖动）');
     }
   }
 
@@ -362,7 +389,7 @@ export type AdminUserRow = {
 };
 
 export const adminUsers = {
-  list: () => request<AdminUserRow[]>('/admin/users'),
+  list: () => request<AdminUserRow[]>('/admin/users?all=true'),
   create: (data: {
     username: string;
     password: string;
@@ -406,8 +433,9 @@ export type AdminTenantRow = {
 
 export const adminTenants = {
   list: (params?: { status?: string }) => {
-    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : '';
-    return request<AdminTenantRow[]>(`/admin/tenants${qs}`);
+    const p: Record<string, string> = { all: 'true' };
+    if (params?.status) p.status = params.status;
+    return request<AdminTenantRow[]>(`/admin/tenants?${new URLSearchParams(p).toString()}`);
   },
   update: (
     id: string,
@@ -448,7 +476,18 @@ function buildQs(params?: PaginationParams | Record<string, string>): string {
 function crud<T = unknown>(base: string) {
   return {
     list: (params?: PaginationParams | Record<string, string>) => {
-      return request<T[]>(`${base}${buildQs(params)}`);
+      const mergedEntries: Record<string, string> = {
+        all: 'true',
+        ...(params
+          ? Object.fromEntries(
+              Object.entries(params)
+                .filter(([, v]) => v != null && v !== '')
+                .map(([k, v]) => [k, String(v)]),
+            )
+          : {}),
+      };
+      const qs = new URLSearchParams(mergedEntries).toString();
+      return request<T[]>(`${base}?${qs}`);
     },
     get: (id: string) => request<T>(`${base}/${id}`),
     create: (data: Partial<T>) => request<T>(base, { method: 'POST', body: JSON.stringify(data) }),
@@ -476,7 +515,7 @@ export const partners = crud('/master/partners');
 export const workers = crud('/master/workers');
 export const equipment = crud('/master/equipment');
 export const dictionaries = {
-  list: () => request<{ colors: unknown[]; sizes: unknown[]; units: unknown[] }>('/master/dictionaries'),
+  list: () => request<{ colors: unknown[]; sizes: unknown[]; units: unknown[] }>('/master/dictionaries?all=true'),
   create: (data: unknown) => request('/master/dictionaries', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: string, data: unknown) =>
     request(`/master/dictionaries/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -494,7 +533,7 @@ export const products = {
 };
 export const boms = {
   list: (params?: Record<string, string>) => {
-    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    const qs = buildQs({ all: 'true', ...(params ?? {}) });
     return request(`/products/boms/all${qs}`);
   },
   get: (id: string) => request(`/products/boms/${id}`),
@@ -506,6 +545,7 @@ export const boms = {
 // ── Plans ──
 export const plans = {
   ...crud('/plans'),
+  /** 分页接口，必须返回 { data, total, page, pageSize }；不要叠 all=true，否则后端走全量分支返回数组导致 .data undefined */
   listPaginated: (params: PaginationParams | Record<string, string>) =>
     request<PaginatedResponse<any>>(`/plans${buildQs(params)}`),
   split: (id: string, data: unknown) => request(`/plans/${id}/split`, { method: 'POST', body: JSON.stringify(data) }),
@@ -517,6 +557,7 @@ export const plans = {
 // ── Orders ──
 export const orders = {
   ...crud('/orders'),
+  /** 分页接口，必须返回 { data, total, page, pageSize }；不要叠 all=true */
   listPaginated: (params: PaginationParams | Record<string, string>) =>
     request<PaginatedResponse<any>>(`/orders${buildQs(params)}`),
   createReport: (orderId: string, milestoneId: string, data: unknown) =>
@@ -532,22 +573,90 @@ export const orders = {
     request(`/orders/product-progress/report/${reportId}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteProductReport: (reportId: string) =>
     request(`/orders/product-progress/report/${reportId}`, { method: 'DELETE' }),
-  listProductProgress: () => request<unknown[]>('/orders/product-progress'),
+  listProductProgress: () => request<unknown[]>('/orders/product-progress?all=true'),
+  /** Phase 3.E：报工流水弹窗按日期窗口窄拉，避免遍历全部工单内嵌 reports */
+  listReportHistory: (params: {
+    startDate?: string;
+    endDate?: string;
+    orderIds?: string;
+    productIds?: string;
+    search?: string;
+    productionLinkMode?: 'order' | 'product';
+  }) =>
+    request<{ orderReports: any[]; productReports: any[] }>(`/orders/report-history${buildQs(params)}`),
 };
 
 // ── Production ──
+export interface ProductionFilter {
+  type?: string;
+  /** Phase 3.C：多 type 窄拉，前端按 tab 用 ['STOCK_OUT','STOCK_RETURN'] 等，逗号传给后端 */
+  types?: string;
+  orderId?: string;
+  /** 逗号分隔多 id，与 productIds 组合时后端按 OR 作用域过滤 */
+  orderIds?: string;
+  productId?: string;
+  productIds?: string;
+  /** 关联产品模式领退料按"成品" sourceProductId 收口（逗号分隔，与 orderIds / productIds OR 作用域） */
+  sourceProductIds?: string;
+  workerId?: string;
+  partner?: string;
+  status?: string;
+  docNo?: string;
+  startDate?: string;
+  endDate?: string;
+  search?: string;
+}
+
+export interface ProductionSummary {
+  byType: Array<{ type: string; quantity: number; weight: number; count: number }>;
+  byStatus: Array<{ type: string; status: string | null; count: number }>;
+  byWorker: Array<{ workerId: string | null; quantity: number; weight: number; count: number }>;
+  byPartner: Array<{ partner: string | null; quantity: number; weight: number; count: number }>;
+}
+
 export const production = {
   ...crud('/production/records'),
+  /**
+   * 批量写入；后端会在"全部记录同 type、全部缺省 docNo、且 OUTSOURCE 时 partner 一致"的情况下，
+   * **共享分配**一个 docNo 给整批；其它情况退化为逐条 createRecord 的语义。
+   * 用此接口避免前端基于 stale 缓存自算 docNo 造成的串号 / 加合（典型："两次批量入库共用 RK20260512-0004"）。
+   */
+  createBatch: (records: unknown[]) =>
+    request<unknown[]>('/production/records/batch', { method: 'POST', body: JSON.stringify({ records }) }),
+  /** 分页接口，必须返回 { data, total, page, pageSize }；不要叠 all=true */
   listPaginated: (params: PaginationParams | Record<string, string>) =>
     request<PaginatedResponse<any>>(`/production/records${buildQs(params)}`),
+  /** Phase 3.C：分页友好的列表接口，新视图应优先使用，不再拉全量 */
+  listPage: (params: PaginationParams & ProductionFilter & Record<string, string | number | undefined> = {}) =>
+    request<PaginatedResponse<any>>(`/production/records${buildQs(params)}`),
+  /** Phase 3.C：后端聚合接口，看板/报表类视图直接消费聚合结果 */
+  summary: (params: ProductionFilter & { topWorkers?: number; topPartners?: number } = {}) =>
+    request<ProductionSummary>(`/production/summary${buildQs(params as Record<string, string | number | undefined>)}`),
   getDefectiveRework: () => request('/production/defective-rework'),
 };
 
 // ── PSI ──
+export interface StockSnapshotBucket {
+  productId: string;
+  warehouseId: string;
+  variantId?: string;
+  batchNo?: string;
+  psiIn: number;
+  psiOut: number;
+  transferIn: number;
+  transferOut: number;
+  /** Phase 3.B：仅 byVariant 桶有；若变体下存在盘点记录，等价于前端 getVariantDisplayQty 结果 */
+  displayQty?: number;
+  prodIn: number;
+  prodOut: number;
+  stocktakeAdj: number;
+}
+
 export const psi = {
   list: (params?: PaginationParams | Record<string, string>) => {
-    return request(`/psi/records${buildQs(params)}`);
+    return request(`/psi/records${buildQs({ all: 'true', ...(params ?? {}) })}`);
   },
+  /** 分页接口，必须返回 { data, total, page, pageSize }；不要叠 all=true */
   listPaginated: (params: PaginationParams | Record<string, string>) =>
     request<PaginatedResponse<any>>(`/psi/records${buildQs(params)}`),
   create: (data: unknown) => request('/psi/records', { method: 'POST', body: JSON.stringify(data) }),
@@ -557,6 +666,13 @@ export const psi = {
     request('/psi/records/replace', { method: 'PUT', body: JSON.stringify({ deleteIds, newRecords }) }),
   delete: (id: string) => request(`/psi/records/${id}`, { method: 'DELETE' }),
   deleteBatch: (ids: string[]) => request('/psi/records', { method: 'DELETE', body: JSON.stringify({ ids }) }),
+  /** Phase 3.B：库存快照，替代前端 usePsiStockIndex 全量遍历；支持按 productId/warehouseId 缩窄。 */
+  getStockSnapshot: (params?: { productId?: string; warehouseId?: string }) =>
+    request<{
+      byWarehouse: StockSnapshotBucket[];
+      byVariant: StockSnapshotBucket[];
+      byBatch: StockSnapshotBucket[];
+    }>(`/psi/stock-snapshot${buildQs(params as Record<string, string | number | undefined> | undefined)}`),
   getStock: (params?: Record<string, string>) => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
     return request(`/psi/stock${qs}`);
@@ -566,13 +682,99 @@ export const psi = {
     const qs = '?' + new URLSearchParams(params).toString();
     return request<Array<{ batchNo: string; stock: number }>>(`/psi/stock/batches${qs}`);
   },
+  /**
+   * Phase 3.D follow-up：计划详情面板"计划相关 PSI"窄查接口。
+   * 返回：{ purchaseOrders: PSI[], purchaseBills: PSI[] }——前端按需自己算 receivedByOrderLine。
+   */
+  planRelated: (params: { planId: string; planNumbers?: string[] }) =>
+    request<{ purchaseOrders: any[]; purchaseBills: any[] }>(
+      `/psi/plan-related${buildQs({
+        planId: params.planId,
+        planNumbers: (params.planNumbers ?? []).join(','),
+      })}`,
+    ),
+  /**
+   * Phase 3.D follow-up：按合作单位预生成 PSI 单号。
+   * - prefix 必填；psiType 必填（PURCHASE_ORDER / PURCHASE_BILL / SALES_ORDER / SALES_BILL）。
+   * - 后端会按 (partnerId 或 partnerName) 精确匹配；legacyPrefixes 可叠加旧前缀（如 SB → XS 改前缀场景）。
+   */
+  nextDocNumber: (params: {
+    prefix: string;
+    psiType: string;
+    partnerId?: string;
+    partnerName?: string;
+    legacyPrefixes?: string[];
+  }) =>
+    request<{ docNumber: string; segment: string; seq: number }>(
+      `/psi/next-doc-number${buildQs({
+        prefix: params.prefix,
+        psiType: params.psiType,
+        partnerId: params.partnerId,
+        partnerName: params.partnerName,
+        legacyPrefixes: (params.legacyPrefixes ?? []).join(','),
+      })}`,
+    ),
+  /** Phase 3.D follow-up：批量 (partner, product) → 上次采购单价 */
+  lastPurchasePrices: (items: Array<{ partnerId?: string; partnerName?: string; productId: string }>) =>
+    request<Array<{ price: number | null }>>(`/psi/last-purchase-prices`, {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    }),
 };
 
 // ── Finance ──
+export interface FinanceFilter {
+  type?: string;
+  status?: string;
+  categoryId?: string;
+  partner?: string;
+  partnerId?: string;
+  operator?: string;
+  workerId?: string;
+  productId?: string;
+  startDate?: string;
+  endDate?: string;
+  search?: string;
+}
+
+export interface FinanceSummary {
+  byType: Array<{ type: string; amount: number; count: number }>;
+  byStatus: Array<{ type: string; status: string; amount: number; count: number }>;
+  byCategory: Array<{ categoryId: string | null; amount: number; count: number }>;
+  topPartners: Array<{ partner: string | null; amount: number }>;
+}
+
 export const finance = {
   ...crud('/finance/records'),
+  /** Phase 3.A：分页 + 过滤接口，新业务页应优先用这个，避免一次拉全量 */
+  listPage: (params: PaginationParams & FinanceFilter & Record<string, string | number | undefined> = {}) =>
+    request<PaginatedResponse<any>>(`/finance/records${buildQs(params)}`),
+  /** 兼容老叫法，与 listPage 等价；保持向后兼容期不删除 */
   listPaginated: (params: PaginationParams | Record<string, string>) =>
     request<PaginatedResponse<any>>(`/finance/records${buildQs(params)}`),
+  /** Phase 3.A：后端聚合接口，对账类视图改用此接口，不再前端遍历全量 */
+  summary: (params: FinanceFilter & { topPartners?: number } = {}) =>
+    request<FinanceSummary>(`/finance/summary${buildQs(params as Record<string, string | number | undefined>)}`),
+  /**
+   * Phase 3.D follow-up：销售单打印「上次结余」窄查接口。
+   * - partnerName 为必填（财务记录按 name 精确匹配；后端 PSI 也按 (partnerId or partnerName) OR 匹配）。
+   * - before：ISO 时间字符串，截止时刻；返回严格早于此时刻的应收余额。
+   * - excludeSalesBillDocNumber：编辑销售单时排除自身。
+   */
+  partnerReceivable: (params: {
+    partnerName: string;
+    partnerId?: string;
+    before: string;
+    excludeSalesBillDocNumber?: string;
+  }) =>
+    request<{ previousBalance: number; anchorTimeMs: number }>(
+      `/finance/partner-receivable${buildQs({
+        partnerName: params.partnerName,
+        partnerId: params.partnerId,
+        before: params.before,
+        excludeSalesBillDocNumber: params.excludeSalesBillDocNumber,
+      })}`,
+    ),
 };
 
 // ── Roles ──
@@ -589,7 +791,7 @@ export type RoleRow = {
 };
 
 export const roles = {
-  list: () => request<RoleRow[]>('/roles'),
+  list: () => request<RoleRow[]>('/roles?all=true'),
   create: (data: { name: string; description?: string; permissions: string[] }) =>
     request<RoleRow>('/roles', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: string, data: { name?: string; description?: string; permissions?: string[] }) =>
@@ -599,7 +801,7 @@ export const roles = {
 
 // ── Tenants ──
 export const tenants = {
-  list: () => request<Array<{ id: string; name: string; logo?: string; inviteCode: string; status?: string; expiresAt?: string | null; role: string; permissions: unknown; joinedAt: string }>>('/tenants'),
+  list: () => request<Array<{ id: string; name: string; logo?: string; inviteCode: string; status?: string; expiresAt?: string | null; role: string; permissions: unknown; joinedAt: string }>>('/tenants?all=true'),
   create: (data: { name: string; logo?: string }) =>
     request<{ tenant: { id: string; name: string; status: string }; message: string }>('/tenants', { method: 'POST', body: JSON.stringify(data) }),
   select: async (id: string) => {
@@ -646,7 +848,7 @@ export const collaboration = {
   createCollaboration: (data: { inviteCode: string }) =>
     request<any>('/collaboration/collaborations', { method: 'POST', body: JSON.stringify(data) }),
   listCollaborations: () =>
-    request<any[]>('/collaboration/collaborations'),
+    request<any[]>('/collaboration/collaborations?all=true'),
   /** 单方解除企业协作（后端对双方租户同时清理绑定） */
   revokeCollaboration: (collaborationId: string) =>
     request<{ success: boolean; alreadyRevoked?: boolean }>(`/collaboration/collaborations/${collaborationId}`, {
@@ -659,7 +861,8 @@ export const collaboration = {
       { method: 'POST', body: JSON.stringify(data) },
     ),
   listTransfers: (params?: Record<string, string>) => {
-    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    const merged = { all: 'true', ...(params ?? {}) };
+    const qs = '?' + new URLSearchParams(merged).toString();
     return request<any[]>(`/collaboration/subcontract-transfers${qs}`);
   },
   getTransfer: (id: string) =>
@@ -696,6 +899,8 @@ export const collaboration = {
     request<any>(`/collaboration/subcontract-dispatches/${id}/confirm-amendment`, { method: 'PATCH' }),
   rejectDispatchAmendment: (id: string) =>
     request<any>(`/collaboration/subcontract-dispatches/${id}/reject-amendment`, { method: 'PATCH' }),
+  ackDispatchPayloadRefresh: (id: string) =>
+    request<any>(`/collaboration/subcontract-dispatches/${id}/ack-payload-refresh`, { method: 'PATCH' }),
 
   // Return 编辑同步
   updateReturnPayload: (id: string, data: { items: any[]; note?: string; warehouseId?: string }) =>
@@ -708,7 +913,7 @@ export const collaboration = {
     request<any>(`/collaboration/subcontract-returns/${id}/reject-amendment`, { method: 'PATCH' }),
 
   listOutsourceRoutes: () =>
-    request<any[]>('/collaboration/outsource-routes'),
+    request<any[]>('/collaboration/outsource-routes?all=true'),
   createOutsourceRoute: (data: { name: string; steps: any[] }) =>
     request<any>('/collaboration/outsource-routes', { method: 'POST', body: JSON.stringify(data) }),
   updateOutsourceRoute: (id: string, data: { name?: string; steps?: any[] }) =>
@@ -717,8 +922,9 @@ export const collaboration = {
     request(`/collaboration/outsource-routes/${id}`, { method: 'DELETE' }),
 
   listProductMaps: (collaborationId?: string) => {
-    const qs = collaborationId ? `?collaborationId=${collaborationId}` : '';
-    return request<any[]>(`/collaboration/collaboration-product-maps${qs}`);
+    const qs = new URLSearchParams({ all: 'true' });
+    if (collaborationId) qs.set('collaborationId', collaborationId);
+    return request<any[]>(`/collaboration/collaboration-product-maps?${qs.toString()}`);
   },
   updateProductMap: (id: string, data: any) =>
     request<any>(`/collaboration/collaboration-product-maps/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -744,6 +950,7 @@ export const itemCodesApi = {
     pageSize?: number;
   }) => {
     const qs = new URLSearchParams();
+    qs.set('all', 'true');
     if (params.planOrderId) qs.set('planOrderId', params.planOrderId);
     if (params.variantId) qs.set('variantId', params.variantId);
     if (params.batchId) qs.set('batchId', params.batchId);
@@ -821,6 +1028,7 @@ export const planVirtualBatchesApi = {
 
   list: (params: { planOrderId?: string; page?: number; pageSize?: number }) => {
     const qs = new URLSearchParams();
+    qs.set('all', 'true');
     if (params.planOrderId) qs.set('planOrderId', params.planOrderId);
     if (params.page != null) qs.set('page', String(params.page));
     if (params.pageSize != null) qs.set('pageSize', String(params.pageSize));

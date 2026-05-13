@@ -80,7 +80,7 @@ const OrderFlowView: React.FC<OrderFlowViewProps> = ({
   const showStatus = productionLinkMode !== 'product';
   const showDueDate =
     productionLinkMode !== 'product' && planFormSettings?.listDisplay?.showDeliveryDate === true;
-  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  const [dateFilter, setDateFilter] = useState<DateFilter>('today');
   const [productSearch, setProductSearch] = useState('');
 
   React.useEffect(() => {

@@ -33,8 +33,9 @@ export async function listItemCodes(
     variantId?: string;
     batchId?: string;
     status?: string;
-    page: number;
-    pageSize: number;
+    all?: boolean;
+    page?: number;
+    pageSize?: number;
   },
 ) {
   const where: Record<string, unknown> = {};
@@ -42,16 +43,33 @@ export async function listItemCodes(
   if (opts.variantId) where.variantId = opts.variantId === '__null__' ? null : opts.variantId;
   if (opts.batchId) where.batchId = opts.batchId;
   if (opts.status) where.status = opts.status;
+  const orderBy = { serialNo: 'asc' as const };
 
-  const [items, total] = await Promise.all([
-    db.itemCode.findMany({
-      where,
-      orderBy: { serialNo: 'asc' },
-      skip: (opts.page - 1) * opts.pageSize,
-      take: opts.pageSize,
-    }),
-    db.itemCode.count({ where }),
-  ]);
+  let items: Awaited<ReturnType<typeof db.itemCode.findMany>>;
+  let total: number;
+  let page: number;
+  let pageSize: number;
+
+  if (opts.all) {
+    total = await db.itemCode.count({ where });
+    items = await db.itemCode.findMany({ where, orderBy });
+    page = 1;
+    pageSize = total;
+  } else {
+    page = Math.max(1, opts.page ?? 1);
+    pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+    const r = await Promise.all([
+      db.itemCode.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      db.itemCode.count({ where }),
+    ]);
+    items = r[0];
+    total = r[1];
+  }
 
   const batchIds = [...new Set(items.map((i) => i.batchId).filter(Boolean))] as string[];
   let batchMap = new Map<string, { id: string; sequenceNo: number }>();
@@ -68,7 +86,7 @@ export async function listItemCodes(
     batch: row.batchId ? batchMap.get(row.batchId) ?? null : null,
   }));
 
-  return { items: itemsOut, total, page: opts.page, pageSize: opts.pageSize };
+  return { items: itemsOut, total, page, pageSize };
 }
 
 async function findItemCodeByScanToken(scanToken: string) {

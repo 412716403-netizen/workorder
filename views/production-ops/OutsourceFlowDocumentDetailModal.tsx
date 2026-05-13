@@ -41,6 +41,7 @@ import {
   lookupOutsourceReceiveLastPrice,
 } from '../../utils/outsourceReceiveLastUnitPrice';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
+import { sortVariantsByColorThenSize } from '../../utils/sortVariantsByProduct';
 import { DocPhaseEditToolbarPortalContext } from '../../components/DocPhaseModal';
 
 export interface OutsourceFlowDocumentDetailModalProps {
@@ -438,7 +439,9 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   });
   const detailLines = Array.from(byOrderNode.entries()).map(([key, recs]) => {
     const order = recs[0].orderId ? orders.find(o => o.id === recs[0].orderId) : undefined;
-    const product = products.find(p => p.id === (order?.productId ?? recs[0].productId));
+    /** 以单据行上的 productId 为准，再回退工单，避免工单与行不一致时名称/SKU/矩阵与实发规格错位 */
+    const lineProductId = recs[0].productId ?? order?.productId;
+    const product = lineProductId ? products.find(p => p.id === lineProductId) : undefined;
     const nodeName = recs[0].nodeId ? (globalNodes.find(n => n.id === recs[0].nodeId)?.name ?? recs[0].nodeId) : '—';
     const variantQty: Record<string, number> = {};
     recs.forEach(r => { const v = r.variantId || ''; if (!variantQty[v]) variantQty[v] = 0; variantQty[v] += r.quantity; });
@@ -753,11 +756,16 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
               const allProductVariants = (product?.variants as ProductVariant[]) ?? [];
               let variantsForDetail: ProductVariant[] = [];
               if (matrixEnabled && allProductVariants.length > 0) {
-                variantsForDetail = [...allProductVariants];
+                variantsForDetail = sortVariantsByColorThenSize(
+                  [...allProductVariants],
+                  product.colorIds,
+                  product.sizeIds,
+                );
               }
               const showVariantQtyGrid = matrixEnabled && variantsForDetail.length > 0;
               if (showVariantQtyGrid && product && dictionaries) {
-                const matrixFlowProduct = { ...product, variants: variantsForDetail, colorIds: undefined, sizeIds: undefined } as Product;
+                /** 保留 colorIds/sizeIds，矩阵列/行顺序与产品档案、外协录入弹窗一致 */
+                const matrixFlowProduct = { ...product, variants: variantsForDetail } as Product;
                 const qtyRecord = Object.fromEntries(
                   variantsForDetail.map(v => {
                     const qtyKey = `${key}|${v.id}`;

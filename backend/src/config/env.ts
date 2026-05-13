@@ -20,4 +20,9 @@ export const env = {
   },
   /** JSON 请求体上限（产品图、分类附件等常为 Base64，易较大）；Nginx 需同步调大 client_max_body_size */
   get JSON_BODY_LIMIT() { return process.env.JSON_BODY_LIMIT || '50mb'; },
+  /** 可选；未设置时 Redis 相关能力降级（如手机号验证码仍用进程内 Map，仅适合单 worker） */
+  get REDIS_URL(): string | undefined {
+    const v = process.env.REDIS_URL?.trim();
+    return v || undefined;
+  },
 };

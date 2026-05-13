@@ -6,6 +6,38 @@ import { genId } from '../utils/genId.js';
 import { isProductBlockedAsBomMaterialDb } from '../utils/productBomMaterial.js';
 import { sanitizeUpdate, sanitizeCreate, sanitizeItems } from '../utils/request.js';
 
+/** 产品保存时未选分类或分类无效（与前端「业务分类」一致） */
+const MSG_PRODUCT_CATEGORY_REQUIRED =
+  '没有选择产品类型，请去系统设置中添加产品分类';
+
+async function assertProductCategoryIdForWrite(
+  db: TenantPrismaClient,
+  data: Record<string, unknown>,
+  mode: 'create' | 'update',
+): Promise<void> {
+  if (mode === 'create') {
+    const raw = data.categoryId;
+    const s = raw === undefined || raw === null ? '' : String(raw).trim();
+    if (!s) throw new AppError(400, MSG_PRODUCT_CATEGORY_REQUIRED);
+    const category = await db.productCategory.findFirst({ where: { id: s } });
+    if (!category) throw new AppError(400, MSG_PRODUCT_CATEGORY_REQUIRED);
+    data.categoryId = s;
+    return;
+  }
+  if (!('categoryId' in data)) return;
+  const v = data.categoryId;
+  if (v === undefined) return;
+  if (v === null) {
+    data.categoryId = null;
+    return;
+  }
+  const s = String(v).trim();
+  if (!s) throw new AppError(400, MSG_PRODUCT_CATEGORY_REQUIRED);
+  const category = await db.productCategory.findFirst({ where: { id: s } });
+  if (!category) throw new AppError(400, MSG_PRODUCT_CATEGORY_REQUIRED);
+  data.categoryId = s;
+}
+
 // ── JSON field coercion ──
 
 const PRODUCT_JSON_FIELDS = [
@@ -51,16 +83,25 @@ function normalizeProductNameSku(
 
 export async function listProducts(
   db: TenantPrismaClient,
-  opts: { categoryId?: string; search?: string },
+  opts: { categoryId?: string; search?: string; all?: boolean; page?: number; pageSize?: number },
 ) {
   const where: Record<string, unknown> = {};
   if (opts.categoryId) where.categoryId = opts.categoryId;
   if (opts.search) where.name = { contains: opts.search, mode: 'insensitive' };
-  return db.product.findMany({
-    where,
-    include: { category: true, variants: { orderBy: { id: 'asc' } } },
-    orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-  });
+  const include = { category: true, variants: { orderBy: { id: 'asc' as const } } };
+  const orderBy: any = [{ createdAt: 'desc' }, { id: 'asc' }];
+
+  if (opts.all) {
+    return db.product.findMany({ where, include, orderBy });
+  }
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [data, total] = await Promise.all([
+    db.product.findMany({ where, include, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    db.product.count({ where }),
+  ]);
+  return { data, total, page, pageSize };
 }
 
 export async function getProduct(db: TenantPrismaClient, id: string) {
@@ -88,6 +129,8 @@ export async function createProduct(
   data.sku = sku;
   coerceProductJsonFields(data);
   omitUndefinedValues(data);
+
+  await assertProductCategoryIdForWrite(db, data, 'create');
 
   const dupSku = await basePrisma.product.findFirst({ where: { tenantId, sku } });
   if (dupSku) throw new AppError(409, '产品编号已存在');
@@ -125,6 +168,8 @@ export async function updateProduct(
   data.sku = sku;
   coerceProductJsonFields(data);
   omitUndefinedValues(data);
+
+  await assertProductCategoryIdForWrite(db, data, 'update');
 
   const dupSku = await basePrisma.product.findFirst({ where: { tenantId, sku, id: { not: productId } } });
   if (dupSku) throw new AppError(409, '产品编号已存在');
@@ -259,14 +304,26 @@ async function assertBomItemsNotColorSizeProducts(
   }
 }
 
-export async function listBoms(db: TenantPrismaClient, opts: { parentProductId?: string }) {
+export async function listBoms(
+  db: TenantPrismaClient,
+  opts: { parentProductId?: string; all?: boolean; page?: number; pageSize?: number },
+) {
   const where: Record<string, unknown> = {};
   if (opts.parentProductId) where.parentProductId = opts.parentProductId;
-  return db.bom.findMany({
-    where,
-    include: { items: { orderBy: { sortOrder: 'asc' } } },
-    orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-  });
+  const include = { items: { orderBy: { sortOrder: 'asc' as const } } };
+  const orderBy: any = [{ createdAt: 'desc' }, { id: 'asc' }];
+
+  if (opts.all) {
+    return db.bom.findMany({ where, include, orderBy });
+  }
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [data, total] = await Promise.all([
+    db.bom.findMany({ where, include, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    db.bom.count({ where }),
+  ]);
+  return { data, total, page, pageSize };
 }
 
 export async function getBom(db: TenantPrismaClient, id: string) {

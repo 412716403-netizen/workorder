@@ -1,6 +1,7 @@
 import { str, optStr } from '../utils/request.js';
 import * as collabService from '../services/collaboration.service.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
+import { listQueryFromRequest, warnListAllFromRequest } from '../utils/listQuery.js';
 
 export const createCollaboration = asyncHandler(async (req, res) => {
   const result = await collabService.createCollaboration(req.tenantId!, req.user?.userId, req.body.inviteCode);
@@ -8,7 +9,9 @@ export const createCollaboration = asyncHandler(async (req, res) => {
 });
 
 export const listCollaborations = asyncHandler(async (req, res) => {
-  res.json(await collabService.listCollaborations(req.tenantId!));
+  const { all, page, pageSize } = listQueryFromRequest(req);
+  if (all) warnListAllFromRequest('collaboration.listCollaborations', req);
+  res.json(await collabService.listCollaborations(req.tenantId!, { all, page, pageSize }));
 });
 
 export const revokeCollaboration = asyncHandler(async (req, res) => {
@@ -16,7 +19,9 @@ export const revokeCollaboration = asyncHandler(async (req, res) => {
 });
 
 export const listOutsourceRoutes = asyncHandler(async (req, res) => {
-  res.json(await collabService.listOutsourceRoutes(req.tenantId!));
+  const { all, page, pageSize } = listQueryFromRequest(req);
+  if (all) warnListAllFromRequest('collaboration.listOutsourceRoutes', req);
+  res.json(await collabService.listOutsourceRoutes(req.tenantId!, { all, page, pageSize }));
 });
 
 export const createOutsourceRoute = asyncHandler(async (req, res) => {
@@ -36,8 +41,11 @@ export const syncDispatch = asyncHandler(async (req, res) => {
 });
 
 export const listTransfers = asyncHandler(async (req, res) => {
+  const { all, page, pageSize } = listQueryFromRequest(req);
+  if (all) warnListAllFromRequest('collaboration.listTransfers', req);
   res.json(await collabService.listTransfers(req.tenantId!, {
     role: optStr(req.query.role), status: optStr(req.query.status),
+    all, page, pageSize,
   }));
 });
 
@@ -66,7 +74,9 @@ export const confirmForward = asyncHandler(async (req, res) => {
 });
 
 export const listProductMaps = asyncHandler(async (req, res) => {
-  res.json(await collabService.listProductMaps(req.tenantId!, optStr(req.query.collaborationId)));
+  const { all, page, pageSize } = listQueryFromRequest(req);
+  if (all) warnListAllFromRequest('collaboration.listProductMaps', req);
+  res.json(await collabService.listProductMaps(req.tenantId!, optStr(req.query.collaborationId), { all, page, pageSize }));
 });
 
 export const updateProductMap = asyncHandler(async (req, res) => {
@@ -111,6 +121,10 @@ export const confirmDispatchAmendment = asyncHandler(async (req, res) => {
 
 export const rejectDispatchAmendment = asyncHandler(async (req, res) => {
   res.json(await collabService.rejectDispatchAmendment(req.tenantId!, str(req.params.id)));
+});
+
+export const ackDispatchPayloadRefresh = asyncHandler(async (req, res) => {
+  res.json(await collabService.ackDispatchPayloadRefresh(req.tenantId!, str(req.params.id)));
 });
 
 export const updateReturnPayload = asyncHandler(async (req, res) => {

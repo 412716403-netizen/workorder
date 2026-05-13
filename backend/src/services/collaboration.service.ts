@@ -11,7 +11,12 @@ import { nextOutsourceDocNoForPartner } from '../utils/partnerDocNumberServer.js
 import { applyOutsourceProgress } from './production.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { assertCategoryBatchColorMutex, assertCategoryColorSizeUpgradeAllowed } from '../utils/categoryMutex.js';
-import { normalizeCollabSpecLabel, type CollabAcceptCreateProductPayload, type CollabAcceptTransferBody } from '../../../shared/types.js';
+import {
+  COLLAB_DISPATCH_AMENDMENT_PENDING_B_REVIEW,
+  normalizeCollabSpecLabel,
+  type CollabAcceptCreateProductPayload,
+  type CollabAcceptTransferBody,
+} from '../../../shared/types.js';
 
 // ── helpers ──
 
@@ -585,23 +590,40 @@ export async function createCollaboration(tenantId: string, userId: string | und
   return basePrisma.tenantCollaboration.create({ data: { tenantAId: a, tenantBId: b, status: 'ACTIVE', invitedByUserId: userId } });
 }
 
-export async function listCollaborations(tenantId: string) {
-  const rows = await basePrisma.tenantCollaboration.findMany({
-    where: {
-      status: 'ACTIVE',
-      OR: [{ tenantAId: tenantId }, { tenantBId: tenantId }],
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-  const tenantIds = new Set<string>();
-  for (const r of rows) { tenantIds.add(r.tenantAId); tenantIds.add(r.tenantBId); }
-  tenantIds.delete(tenantId);
-  const tenants = await basePrisma.tenant.findMany({ where: { id: { in: [...tenantIds] } }, select: { id: true, name: true } });
-  const tenantMap = Object.fromEntries(tenants.map(t => [t.id, t.name]));
-  return rows.map(r => {
-    const otherId = r.tenantAId === tenantId ? r.tenantBId : r.tenantAId;
-    return { ...r, otherTenantId: otherId, otherTenantName: tenantMap[otherId] ?? '未知' };
-  });
+export async function listCollaborations(
+  tenantId: string,
+  opts: { all?: boolean; page?: number; pageSize?: number } = {},
+) {
+  const where = {
+    status: 'ACTIVE' as const,
+    OR: [{ tenantAId: tenantId }, { tenantBId: tenantId }],
+  };
+  const orderBy = { createdAt: 'desc' as const };
+
+  const mapRows = async (rows: Awaited<ReturnType<typeof basePrisma.tenantCollaboration.findMany>>) => {
+    const tenantIds = new Set<string>();
+    for (const r of rows) { tenantIds.add(r.tenantAId); tenantIds.add(r.tenantBId); }
+    tenantIds.delete(tenantId);
+    const tenants = await basePrisma.tenant.findMany({ where: { id: { in: [...tenantIds] } }, select: { id: true, name: true } });
+    const tenantMap = Object.fromEntries(tenants.map(t => [t.id, t.name]));
+    return rows.map(r => {
+      const otherId = r.tenantAId === tenantId ? r.tenantBId : r.tenantAId;
+      return { ...r, otherTenantId: otherId, otherTenantName: tenantMap[otherId] ?? '未知' };
+    });
+  };
+
+  if (opts.all) {
+    const rows = await basePrisma.tenantCollaboration.findMany({ where, orderBy });
+    return mapRows(rows);
+  }
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [rows, total] = await Promise.all([
+    basePrisma.tenantCollaboration.findMany({ where, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    basePrisma.tenantCollaboration.count({ where }),
+  ]);
+  return { data: await mapRows(rows), total, page, pageSize };
 }
 
 /**
@@ -639,8 +661,24 @@ export async function revokeCollaboration(tenantId: string, collaborationId: str
   return { success: true as const };
 }
 
-export async function listOutsourceRoutes(tenantId: string) {
-  return basePrisma.outsourceRoute.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' } });
+export async function listOutsourceRoutes(
+  tenantId: string,
+  opts: { all?: boolean; page?: number; pageSize?: number } = {},
+) {
+  const where = { tenantId };
+  const orderBy = { createdAt: 'desc' as const };
+
+  if (opts.all) {
+    return basePrisma.outsourceRoute.findMany({ where, orderBy });
+  }
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [data, total] = await Promise.all([
+    basePrisma.outsourceRoute.findMany({ where, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    basePrisma.outsourceRoute.count({ where }),
+  ]);
+  return { data, total, page, pageSize };
 }
 
 export async function createOutsourceRoute(tenantId: string, body: { name: string; steps: any[] }) {
@@ -718,7 +756,10 @@ export async function syncDispatch(tenantId: string, body: { recordIds: string[]
   return { dispatches };
 }
 
-export async function listTransfers(tenantId: string, opts: { role?: string; status?: string }) {
+export async function listTransfers(
+  tenantId: string,
+  opts: { role?: string; status?: string; all?: boolean; page?: number; pageSize?: number },
+) {
   /**
    * 链式场景下，子 transfer 的 senderTenantId 为 origin（甲方），receiverTenantId 为下一站（丙方）；
    * 「上一站接收方（乙方/转发方）」在本表两字段都不是 tenantId，否则单靠 sender/receiver 过滤会丢失子 transfer，
@@ -742,7 +783,18 @@ export async function listTransfers(tenantId: string, opts: { role?: string; sta
     where.OR = or;
   }
   if (opts.status) where.status = opts.status;
-  const transfers = await basePrisma.interTenantSubcontractTransfer.findMany({ where, include: { dispatches: { orderBy: { createdAt: 'asc' } }, returns: { orderBy: { createdAt: 'asc' } } }, orderBy: { createdAt: 'desc' } });
+  const total = await basePrisma.interTenantSubcontractTransfer.count({ where });
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const transfers = opts.all
+    ? await basePrisma.interTenantSubcontractTransfer.findMany({ where, include: { dispatches: { orderBy: { createdAt: 'asc' } }, returns: { orderBy: { createdAt: 'asc' } } }, orderBy: { createdAt: 'desc' } })
+    : await basePrisma.interTenantSubcontractTransfer.findMany({
+      where,
+      include: { dispatches: { orderBy: { createdAt: 'asc' } }, returns: { orderBy: { createdAt: 'asc' } } },
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    });
   const peerIds = new Set<string>();
   for (const t of transfers) {
     if (t.senderTenantId !== tenantId) peerIds.add(t.senderTenantId);
@@ -793,7 +845,9 @@ export async function listTransfers(tenantId: string, opts: { role?: string; sta
   }
   for (const list of nonChainGroup.values()) out.push(mergeTransferGroup(list));
   out.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  return out.map(t => sanitizeCollabTransferForViewer(tenantId, t));
+  const mapped = out.map(t => sanitizeCollabTransferForViewer(tenantId, t));
+  if (opts.all) return mapped;
+  return { data: mapped, total, page, pageSize };
 }
 
 export async function getTransfer(tenantId: string, id: string) {
@@ -1129,7 +1183,7 @@ export async function acceptTransfer(tenantId: string, transferId: string, body:
       for (const d of toAccept) {
         await tx.subcontractCollaborationDispatch.update({
           where: { id: d.id },
-          data: { status: 'ACCEPTED', receiverProductionOrderId: existingOrderId },
+          data: { status: 'ACCEPTED', receiverProductionOrderId: existingOrderId, amendmentStatus: null },
         });
       }
     } else {
@@ -1153,7 +1207,7 @@ export async function acceptTransfer(tenantId: string, transferId: string, body:
         await createOrderItemsWithSource(tx, orderId, tenantId, finalProductId, items, d.id);
         await tx.subcontractCollaborationDispatch.update({
           where: { id: d.id },
-          data: { status: 'ACCEPTED', receiverProductionOrderId: orderId },
+          data: { status: 'ACCEPTED', receiverProductionOrderId: orderId, amendmentStatus: null },
         });
         createdOrders.push(orderId);
       }
@@ -1485,11 +1539,27 @@ export async function confirmForward(tenantId: string, transferId: string) {
   return { success: true, receiveDocNo, dispatchDocNo };
 }
 
-export async function listProductMaps(tenantId: string, collaborationId?: string) {
+export async function listProductMaps(
+  tenantId: string,
+  collaborationId: string | undefined,
+  opts: { all?: boolean; page?: number; pageSize?: number } = {},
+) {
   const where: any = {};
   if (collaborationId) where.collaborationId = collaborationId;
   else { const collabs = await basePrisma.tenantCollaboration.findMany({ where: { OR: [{ tenantAId: tenantId }, { tenantBId: tenantId }], status: 'ACTIVE' }, select: { id: true } }); where.collaborationId = { in: collabs.map(c => c.id) }; }
-  return basePrisma.collaborationProductMap.findMany({ where, orderBy: { createdAt: 'desc' } });
+  const orderBy = { createdAt: 'desc' as const };
+
+  if (opts.all) {
+    return basePrisma.collaborationProductMap.findMany({ where, orderBy });
+  }
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [data, total] = await Promise.all([
+    basePrisma.collaborationProductMap.findMany({ where, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    basePrisma.collaborationProductMap.count({ where }),
+  ]);
+  return { data, total, page, pageSize };
 }
 
 export async function updateProductMap(tenantId: string, id: string, body: { receiverProductId?: string; senderProductName?: string }) {
@@ -1512,7 +1582,10 @@ export async function withdrawDispatch(tenantId: string, dispatchId: string) {
   if (!dispatch) throw new AppError(404, 'Dispatch 不存在');
   assertTenantIs(tenantId, dispatch.transfer.senderTenantId);
   if (dispatch.status !== 'PENDING') throw new AppError(400, '仅待接受状态的发出可以撤回');
-  await basePrisma.subcontractCollaborationDispatch.update({ where: { id: dispatchId }, data: { status: 'WITHDRAWN' } });
+  await basePrisma.subcontractCollaborationDispatch.update({
+    where: { id: dispatchId },
+    data: { status: 'WITHDRAWN', amendmentStatus: null },
+  });
   const senderRecordIds = jsonToStringIds(dispatch.senderDispatchRecordIds);
   if (senderRecordIds.length > 0) await basePrisma.productionOpRecord.updateMany({ where: { id: { in: senderRecordIds } }, data: { collabData: Prisma.DbNull } });
   const remaining = await basePrisma.subcontractCollaborationDispatch.count({ where: { transferId: dispatch.transferId, status: { notIn: ['WITHDRAWN'] } } });
@@ -1600,11 +1673,33 @@ export async function updateDispatchPayload(tenantId: string, dispatchId: string
 
   await basePrisma.subcontractCollaborationDispatch.update({
     where: { id: dispatchId },
-    data: { payload: payload as Prisma.InputJsonValue, senderDispatchRecordIds: body.recordIds },
+    data: {
+      payload: payload as Prisma.InputJsonValue,
+      senderDispatchRecordIds: body.recordIds,
+      amendmentStatus: COLLAB_DISPATCH_AMENDMENT_PENDING_B_REVIEW,
+    },
   });
   for (const r of records) {
     await basePrisma.productionOpRecord.update({ where: { id: r.id }, data: { collabData: { transferId: dispatch.transferId, dispatchId } } });
   }
+  return { success: true };
+}
+
+export async function ackDispatchPayloadRefresh(tenantId: string, dispatchId: string) {
+  const dispatch = await basePrisma.subcontractCollaborationDispatch.findUnique({
+    where: { id: dispatchId },
+    include: { transfer: true },
+  });
+  if (!dispatch) throw new AppError(404, 'Dispatch 不存在');
+  assertTenantIs(tenantId, dispatch.transfer.receiverTenantId);
+  if (dispatch.status !== 'PENDING') throw new AppError(400, '仅待接受状态的发出可确认明细更新');
+  if (dispatch.amendmentStatus !== COLLAB_DISPATCH_AMENDMENT_PENDING_B_REVIEW) {
+    throw new AppError(400, '当前没有待确认的明细更新');
+  }
+  await basePrisma.subcontractCollaborationDispatch.update({
+    where: { id: dispatchId },
+    data: { amendmentStatus: null },
+  });
   return { success: true };
 }
 

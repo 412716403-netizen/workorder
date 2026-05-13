@@ -29,7 +29,7 @@ async function getAllDescendantPlans(planId: string, tenantId: string, depth = 0
 
 export async function listPlans(
   db: TenantPrismaClient,
-  opts: { status?: string; productId?: string; search?: string; page?: number; pageSize?: number },
+  opts: { status?: string; productId?: string; search?: string; all?: boolean; page?: number; pageSize?: number },
 ) {
   const where: Record<string, unknown> = {};
   if (opts.status) where.status = opts.status;
@@ -44,14 +44,17 @@ export async function listPlans(
   const include = { items: true, childPlans: { include: { items: true } } };
   const orderBy: any = [{ createdAt: 'desc' }, { id: 'asc' }];
 
-  if (opts.page != null && opts.pageSize != null) {
-    const [data, total] = await Promise.all([
-      db.planOrder.findMany({ where, include, orderBy, skip: (opts.page - 1) * opts.pageSize, take: opts.pageSize }),
-      db.planOrder.count({ where }),
-    ]);
-    return { data, total, page: opts.page, pageSize: opts.pageSize };
+  if (opts.all) {
+    return db.planOrder.findMany({ where, include, orderBy });
   }
-  return db.planOrder.findMany({ where, include, orderBy });
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [data, total] = await Promise.all([
+    db.planOrder.findMany({ where, include, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    db.planOrder.count({ where }),
+  ]);
+  return { data, total, page, pageSize };
 }
 
 export async function getPlan(db: TenantPrismaClient, planId: string) {

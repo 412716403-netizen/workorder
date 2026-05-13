@@ -192,11 +192,9 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
     });
   }, [detailBatch, product]);
 
+  /** 保留 colorIds/sizeIds，矩阵列顺序与产品信息、buildVariantQtyMatrixLayout 一致 */
   const reworkFlowMatrixProduct = useMemo(
-    () =>
-      product && product.variants?.length
-        ? ({ ...product, colorIds: undefined, sizeIds: undefined } as Product)
-        : null,
+    () => (product && product.variants?.length ? product : null),
     [product],
   );
   const variantQtyFromDisplayRows = useMemo(() => {
@@ -733,7 +731,7 @@ const ReworkReportFlowDetailModal: React.FC<ReworkReportFlowDetailModalProps> = 
                             {(() => {
                               const vars = product?.variants ?? [];
                               if (vars.length === 0) return null;
-                              const matrixProd = { ...product!, variants: vars, colorIds: undefined, sizeIds: undefined } as Product;
+                              const matrixProd = { ...product!, variants: vars } as Product;
                               return (
                                 <VariantQtyMatrixInputs
                                   product={matrixProd}

@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { Product } from '../../types';
+import { fetchProductionByFilter, getTodayRangeIso } from './sharedFlowListHelpers';
 import {
   ArrowUpFromLine,
   Undo2,
@@ -25,235 +27,23 @@ import type {
 } from '../../types';
 import { DEFAULT_MATERIAL_PANEL_SETTINGS, DEFAULT_MATERIAL_FORM_SETTINGS } from '../../types';
 import { PanelProps, hasOpsPerm, getOrderFamilyIds, type StockDocDetail } from './types';
-import { toLocalCompactYmd } from '../../utils/localDateTime';
 import { orderCreatedMs } from '../../utils/orderCenterSort';
 import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpCollab/material';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
-import { categoryUsesBatchManagement } from '../../types';
+import { categoryUsesBatchManagement, BATCH_NO_UNTAGGED } from '../../types';
 import { clampBatchNoInput } from '../../hooks/useBatchPicker';
 import * as api from '../../services/api';
 import { toast } from 'sonner';
 
-type MatRow = { productId: string; issue: number; returnQty: number; theoryCost: number };
-
-/** 领料、退料、报工理论耗材（与表格同精度）均为 0 时视为无展示价值的占位行 */
-function filterMaterialRowsWithActivity(materials: MatRow[]): MatRow[] {
-  return materials.filter(m => {
-    if (m.issue !== 0 || m.returnQty !== 0) return true;
-    const th = Math.round(Number(m.theoryCost) * 100) / 100;
-    return th !== 0;
-  });
-}
-
-/** 与表格「按关键词筛物料行」逻辑一致（供列表过滤与 useCallback 共用） */
-function displayMaterialsForKeyword(
-  materials: MatRow[],
-  materialKw: string,
-  productsById: Map<string, Product>,
-): MatRow[] {
-  const kw = materialKw.trim().toLowerCase();
-  if (!kw) return materials;
-  const hit = materials.filter(m => {
-    const p = productsById.get(m.productId);
-    return (p?.name ?? '').toLowerCase().includes(kw) || (p?.sku ?? '').toLowerCase().includes(kw);
-  });
-  return hit.length > 0 ? hit : materials;
-}
-
-function visibleMaterialRowsForList(
-  materials: MatRow[],
-  materialKw: string,
-  productsById: Map<string, Product>,
-): MatRow[] {
-  return filterMaterialRowsWithActivity(displayMaterialsForKeyword(materials, materialKw, productsById));
-}
-
-/** Resolve BOM items for a specific product + nodeId (+ optional variantId).
- *  Shared between partnerMaterialGroups and potentially other BOM-aware logic. */
-function resolveBomItems(
-  productsById: Map<string, Product>,
-  bomsById: Map<string, import('../../types').BOM>,
-  bomsByParentProduct: Map<string, import('../../types').BOM[]>,
-  productId: string,
-  nodeId: string,
-  variantId?: string,
-): { productId: string; quantity: number }[] {
-  const product = productsById.get(productId);
-  if (!product) return [];
-  const items: { productId: string; quantity: number }[] = [];
-  const variants = product.variants ?? [];
-
-  if (variantId && variants.length > 0) {
-    const v = variants.find(vv => vv.id === variantId);
-    if (v?.nodeBoms) {
-      const bomId = (v.nodeBoms as Record<string, string>)[nodeId];
-      if (bomId) {
-        const bom = bomsById.get(bomId);
-        if (bom) { bom.items.forEach(bi => items.push({ productId: bi.productId, quantity: Number(bi.quantity) })); return items; }
-      }
-    }
-    (bomsByParentProduct.get(product.id) ?? [])
-      .filter(b => b.nodeId === nodeId && b.variantId === variantId)
-      .forEach(bom => bom.items.forEach(bi => items.push({ productId: bi.productId, quantity: Number(bi.quantity) })));
-    if (items.length > 0) return items;
-  }
-
-  (bomsByParentProduct.get(product.id) ?? [])
-    .filter(b => b.nodeId === nodeId)
-    .forEach(bom => bom.items.forEach(bi => items.push({ productId: bi.productId, quantity: Number(bi.quantity) })));
-  return items;
-}
-
-/**
- * 若 report / OUTSOURCE 记录里带有按重量拆分的 materialBreakdown 快照，
- * 则直接把各子物料 actualWeight 计入 addToTheory，并返回 true（表示已替代 BOM×件数 口径）。
- */
-function applyMaterialBreakdown(
-  source: { materialBreakdown?: MaterialBreakdownRow[] | unknown } | null | undefined,
-  addToTheory: (productId: string, amount: number) => void,
-): boolean {
-  const raw = source ? (source as { materialBreakdown?: unknown }).materialBreakdown : null;
-  const mb = Array.isArray(raw) ? (raw as MaterialBreakdownRow[]) : null;
-  if (!mb || mb.length === 0) return false;
-  for (const row of mb) {
-    const pid = row?.materialProductId;
-    const amt = Number(row?.actualWeight);
-    if (!pid || !Number.isFinite(amt) || amt <= 0) continue;
-    addToTheory(pid, amt);
-  }
-  return true;
-}
-
-/** Reusable material stats table used in all 4 layout branches */
-const MaterialStatsTable: React.FC<{
-  materials: MatRow[];
-  selecting: boolean;
-  compact?: boolean;
-  selectedIds: Set<string>;
-  onSelectAll: (ids: Set<string>) => void;
-  onToggleSelect: (productId: string) => void;
-  productsById: Map<string, Product>;
-  categoryMap: Map<string, { id: string; customFields: import('../../types').ReportFieldDefinition[] }>;
-  emptyMessage?: string;
-}> = ({ materials, selecting, compact, selectedIds, onSelectAll, onToggleSelect, productsById, categoryMap, emptyMessage = '暂无物料' }) => {
-  const cols = selecting ? 7 : 6;
-  const px = compact ? 'px-2.5' : 'px-6';
-  const py = compact ? 'py-1.5' : 'py-2.5';
-  const thTrack = compact ? 'tracking-wider' : 'tracking-widest';
-  const thBase = `${compact ? '' : px} ${py} text-[10px] font-black text-slate-400 uppercase ${thTrack}`;
-  return (
-    <div className={compact ? 'overflow-x-auto min-w-0 pr-4 sm:pr-5' : 'overflow-x-auto'}>
-      <table className={compact ? 'w-full min-w-[680px] table-fixed border-collapse text-left' : 'w-full text-left border-collapse'}>
-        {compact && (
-          <colgroup>
-            {selecting ? <col className="w-[5%]" /> : null}
-            <col className={selecting ? 'w-[10%]' : 'w-[15%]'} />
-            <col className="w-[17%]" /><col className="w-[17%]" /><col className="w-[17%]" /><col className="w-[17%]" /><col className="w-[17%]" />
-          </colgroup>
-        )}
-        <thead>
-          <tr className="bg-slate-50/80">
-            {selecting && (
-              <th className={compact ? 'px-2 py-2 align-middle w-10' : 'px-4 py-3 w-12'}>
-                <input type="checkbox" checked={materials.length > 0 && materials.every(m => selectedIds.has(m.productId))} onChange={e => { if (e.target.checked) onSelectAll(new Set(materials.map(m => m.productId))); else onSelectAll(new Set()); }} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-              </th>
-            )}
-            <th className={compact ? `pl-4 pr-1 ${py} ${thBase} text-left align-middle` : `${thBase}`}>{compact ? '物料' : '物料信息'}</th>
-            <th className={compact ? `pl-2 pr-2 ${py} ${thBase} text-right align-middle whitespace-nowrap tabular-nums` : `${thBase} text-center`}>{compact ? '领料(+)' : '生产领料(+)'}</th>
-            <th className={compact ? `${px} ${py} ${thBase} text-right align-middle whitespace-nowrap tabular-nums` : `${thBase} text-center`}>{compact ? '退料(-)' : '生产退料(-)'}</th>
-            <th className={compact ? `${px} ${py} ${thBase} text-right align-middle whitespace-nowrap tabular-nums` : `${thBase} text-center`}>净领用</th>
-            <th className={compact ? `${px} ${py} ${thBase} text-right align-middle whitespace-nowrap` : `${thBase} text-center`}>报工耗材<span className="text-slate-300 font-normal">(理论)</span></th>
-            <th className={compact ? `pl-2 pr-6 ${py} ${thBase} text-right align-middle whitespace-nowrap tabular-nums` : `${thBase} text-center`}>{compact ? '结余' : '当前结余'}</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-50">
-          {materials.length === 0 ? (
-            <tr><td colSpan={cols} className={compact ? 'px-4 py-6 text-center text-slate-400 text-sm' : 'px-6 py-8 text-center text-slate-400 text-sm'}>{emptyMessage}</td></tr>
-          ) : materials.map(({ productId, issue, returnQty, theoryCost }) => {
-            const prod = productsById.get(productId);
-            const customTags = getProductCategoryCustomFieldEntries(
-              prod,
-              prod ? categoryMap.get(prod.categoryId) : undefined,
-              { includeFile: false },
-            );
-            const net = issue - returnQty;
-            const balance = Math.round((net - theoryCost) * 100) / 100;
-            return (
-              <tr
-                key={productId}
-                className={`hover:bg-slate-50/50 transition-colors${selecting ? ' cursor-pointer' : ''}`}
-                onClick={selecting ? () => onToggleSelect(productId) : undefined}
-              >
-                {selecting && (
-                  <td
-                    className={compact ? 'px-2 py-2 align-middle w-10' : 'px-4 py-3'}
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <input type="checkbox" checked={selectedIds.has(productId)} onChange={() => onToggleSelect(productId)} className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" />
-                  </td>
-                )}
-                <td className={compact ? `pl-4 pr-1 ${py} align-middle min-w-0` : `${px} ${py}`}>
-                  {compact ? (
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-bold text-slate-800" title={prod?.name}>
-                        {prod?.name ?? '未知物料'}
-                        {prod?.sku ? <span className="ml-2 text-[10px] font-medium text-slate-400">{prod.sku}</span> : null}
-                      </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-1">
-                        {customTags.map(({ field, display }) => (
-                          <span
-                            key={field.id}
-                            className="rounded bg-slate-50 px-1 py-px text-[8px] font-bold text-slate-500"
-                          >
-                            {field.label}: {display}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-800">
-                        {prod?.name ?? '未知物料'}
-                        {prod?.sku ? <span className="ml-2 text-[10px] font-medium text-slate-400">{prod.sku}</span> : null}
-                      </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-1">
-                        {customTags.map(({ field, display }) => (
-                          <span
-                            key={field.id}
-                            className="rounded bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"
-                          >
-                            {field.label}: {display}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </td>
-                {compact ? (
-                  <>
-                    <td className={`pl-2 pr-2 ${py} text-right align-middle tabular-nums`}><span className="text-sm font-bold text-indigo-600">{issue}</span></td>
-                    <td className={`${px} ${py} text-right align-middle tabular-nums`}><span className="text-sm font-bold text-rose-600">{returnQty}</span></td>
-                    <td className={`${px} ${py} text-right align-middle tabular-nums`}><span className="text-sm font-bold text-slate-800">{net}</span></td>
-                    <td className={`${px} ${py} text-right align-middle tabular-nums`}><span className="text-sm font-bold text-amber-600">{Math.round(theoryCost * 100) / 100}</span></td>
-                    <td className={`pl-2 pr-6 ${py} text-right align-middle tabular-nums`}><span className={`text-sm font-bold ${balance >= 0 ? 'text-slate-800' : 'text-rose-600'}`}>{balance}</span></td>
-                  </>
-                ) : (
-                  <>
-                    <td className={`${px} ${py} text-center`}><span className="text-sm font-bold text-indigo-600 inline-flex items-center gap-0.5">{issue} <ArrowUpFromLine className="w-3.5 h-3.5 opacity-70" /></span></td>
-                    <td className={`${px} ${py} text-center`}><span className="text-sm font-bold text-rose-600 inline-flex items-center gap-0.5">{returnQty} <Undo2 className="w-3.5 h-3.5 opacity-70" /></span></td>
-                    <td className={`${px} ${py} text-center`}><span className="text-sm font-bold text-slate-800">{net}</span></td>
-                    <td className={`${px} ${py} text-center`}><span className="text-sm font-bold text-amber-600">{Math.round(theoryCost * 100) / 100}</span></td>
-                    <td className={`${px} ${py} text-center`}><span className={`text-sm font-bold ${balance >= 0 ? 'text-slate-800' : 'text-rose-600'}`}>{balance}</span></td>
-                  </>
-                )}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-};
+import {
+  filterMaterialRowsWithActivity,
+  displayMaterialsForKeyword,
+  visibleMaterialRowsForList,
+  resolveBomItems,
+  applyMaterialBreakdown,
+  type MatRow,
+} from './stockMaterialPanelHelpers';
+import { MaterialStatsTable } from './MaterialStatsTable';
 
 interface StockMaterialPanelProps extends PanelProps {
   /** 与进销存快照合并批次选项（领料确认弹窗） */
@@ -292,13 +82,14 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   productionLinkMode,
   productMilestoneProgresses,
   plans = [],
-  records,
+  records: legacyRecords,
   orders,
   products,
   categories,
   warehouses,
   boms,
   dictionaries,
+  globalNodes,
   onAddRecord,
   onAddRecordBatch,
   onUpdateRecord,
@@ -315,6 +106,63 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   psiRecords = [],
 }) => {
   const { tenantCtx, userId } = useAuth();
+
+  /**
+   * Phase 3.E：StockMaterialPanel 自取数据，按当前 tab 的活动工单 ids 收窄拉取 STOCK_OUT / STOCK_RETURN / OUTSOURCE。
+   * 不再消费上游 ProductionMgmtOpsView 的 12000 上限全量。`legacyRecords` 仅做加载未完成时的兜底。
+   *
+   * 关联产品模式补丁：领退料写入时 `orderId=null` + `sourceProductId=成品 id`，仅按 orderIds
+   * 窄拉会漏掉这些记录（"净已领 0" bug）。同时按 `sourceProductIds=活动工单的 productId 集合` 取并集。
+   */
+  const activeOrderIdsCsv = useMemo(
+    () => orders.map(o => o.id).filter(Boolean).join(','),
+    [orders],
+  );
+  const activeSourceProductIdsCsv = useMemo(() => {
+    const set = new Set<string>();
+    for (const o of orders) if (o.productId) set.add(o.productId);
+    return Array.from(set).join(',');
+  }, [orders]);
+  const stockPanelQuery = useQuery({
+    queryKey: ['stockPanel.records', activeOrderIdsCsv, activeSourceProductIdsCsv],
+    queryFn: () =>
+      fetchProductionByFilter({
+        types: 'STOCK_OUT,STOCK_RETURN,OUTSOURCE',
+        orderIds: activeOrderIdsCsv || undefined,
+        /**
+         * 关联产品模式整件外发：OUTSOURCE 记录 `orderId=null` + 无 `sourceProductId`，
+         * 仅靠 `orderIds` / `sourceProductIds` 命中不到，必须叠加 `productIds` 才能取回，
+         * 否则"按加工厂展示"分桶里的外协理论耗材会全部为 0。
+         */
+        productIds: activeSourceProductIdsCsv || undefined,
+        sourceProductIds: activeSourceProductIdsCsv || undefined,
+      }),
+    enabled: activeOrderIdsCsv.length > 0 || activeSourceProductIdsCsv.length > 0,
+    staleTime: 15_000,
+  });
+  /**
+   * 取号用：仅拉今日 STOCK_OUT，避免按 orderIds 全量拉时跨日复杂；按日期收窄一页足够。
+   */
+  const todayRangeRef = useMemo(() => getTodayRangeIso(), []);
+  const todayStockOutQuery = useQuery({
+    queryKey: ['stockPanel.todayStockOut', todayRangeRef.from, todayRangeRef.to],
+    queryFn: () =>
+      fetchProductionByFilter({
+        types: 'STOCK_OUT',
+        startDate: todayRangeRef.from,
+        endDate: todayRangeRef.to,
+      }),
+    staleTime: 15_000,
+  });
+  const records = useMemo<ProductionOpRecord[]>(() => {
+    const main = stockPanelQuery.data ?? legacyRecords ?? [];
+    const today = todayStockOutQuery.data ?? [];
+    if (today.length === 0) return main;
+    const seen = new Set(main.map(r => r.id));
+    const merged = [...main];
+    for (const r of today) if (!seen.has(r.id)) merged.push(r);
+    return merged;
+  }, [stockPanelQuery.data, legacyRecords, todayStockOutQuery.data]);
   const canViewMainList = hasOpsPerm(tenantRole, userPermissions, 'production:material_list:allow');
   const toggleSelect = (productId: string) => setStockSelectedIds(prev => { const next = new Set(prev); if (next.has(productId)) next.delete(productId); else next.add(productId); return next; });
 
@@ -345,6 +193,17 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
 
   const idx = useDataIndexes(orders, products, boms, [] /* no globalNodes needed */, productMilestoneProgresses);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+  /**
+   * 工序当前是否开启"称重报工"。报工/外协收回记录里的 materialBreakdown 是写入时按工序当时配置固化的快照，
+   * 工序后续改回"非称重"会让这份快照变得不准（同物料数量却显示极小的实际重量），所以面板按当前开关决定是否信任快照。
+   */
+  const nodeWeightEnabledMap = useMemo(() => {
+    const m = new Map<string, boolean>();
+    (globalNodes ?? []).forEach(n => {
+      if (n?.id) m.set(n.id, !!n.enableWeightOnReport);
+    });
+    return m;
+  }, [globalNodes]);
   const renderProductCustomTags = useCallback((product: Product | undefined) => {
     if (!product) return null;
     return getProductCategoryCustomFieldEntries(product, categoryMap.get(product.categoryId), {
@@ -405,9 +264,10 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         const variantCompletedMap = new Map<string, number>();
         let totalCompleted = 0;
         if (bestMs) {
+          const bestMsWeightOn = !!nodeWeightEnabledMap.get(bestMs.templateId);
           (bestMs.reports || []).forEach(r => {
             // 开启称重报工的工序：优先按 materialBreakdown 快照回填实际重量，跳过 BOM×件数 口径
-            if (applyMaterialBreakdown(r, addMaterialTheory)) return;
+            if (applyMaterialBreakdown(r, addMaterialTheory, bestMsWeightOn)) return;
             const qty = Number(r.quantity);
             totalCompleted += qty;
             const vid = r.variantId ?? '';
@@ -475,7 +335,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
       result.set(parent.id, Array.from(prodMap.entries()).map(([productId, v]) => ({ productId, ...v })));
     });
     return result;
-  }, [records, orders, boms, products, idx]);
+  }, [records, orders, boms, products, idx, nodeWeightEnabledMap]);
 
   /** 关联产品模式：按成品聚合物料（多工单同产品合并一行卡片） */
   const productMaterialStatsByProduct = useMemo(() => {
@@ -533,58 +393,68 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         });
       }
       const prodMap = new Map<string, { issue: number; returnQty: number; theoryCost: number }>();
-      const addTheory2 = (bi: { productId: string; quantity: number }, qty: number) => {
-        const theory = Number(bi.quantity) * qty;
-        if (!prodMap.has(bi.productId)) prodMap.set(bi.productId, { issue: 0, returnQty: 0, theoryCost: 0 });
-        prodMap.get(bi.productId)!.theoryCost += theory;
-      };
-      // 基于报工流水（PMP reports + 工单 milestone reports）计算完成量，包含工单报工 + 外协收回
       const fpProduct = productsById.get(fpId);
-      const fpVariants = fpProduct?.variants ?? [];
-      const variantCompletedMap2 = new Map<string, number>();
-      let totalCompleted2 = 0;
-      let usedPmp = false;
 
       const addMaterialTheory2 = (productId: string, amount: number) => {
         if (!prodMap.has(productId)) prodMap.set(productId, { issue: 0, returnQty: 0, theoryCost: 0 });
         prodMap.get(productId)!.theoryCost += amount;
       };
+      const applyBomForNode = (nodeId: string, variantId: string, qty: number) => {
+        if (!fpProduct || qty <= 0 || !nodeId) return false;
+        const bomItems = resolveBomItems(productsById, bomsById, bomsByParentProduct, fpId, nodeId, variantId || undefined);
+        if (bomItems.length === 0) return false;
+        for (const bi of bomItems) addMaterialTheory2(bi.productId, Number(bi.quantity) * qty);
+        return true;
+      };
 
-      // 优先使用 PMP reports（关联产品模式的权威数据源，含工单报工 + 外协收回）
+      /**
+       * 关键修复：把报工流水按 (milestoneTemplateId, variantId) 分桶，每桶用自己工序的 BOM 折算；
+       * 未配 BOM 的工序（验布/缝合等）天然不会被串成横机 BOM 的物料消耗。
+       * 旧实现把所有工序 reports 累加到 variantCompletedMap，再一把扣到 BOM 上，造成本厂理论 ~N 倍膨胀。
+       */
+      let usedPmp = false;
       if (productMilestoneProgresses.length > 0) {
         const pmpForProduct = productMilestoneProgresses.filter(p => p.productId === fpId);
-        pmpForProduct.forEach(p => {
-          (p.reports ?? []).forEach(r => {
-            // 开启称重报工的工序：优先按 materialBreakdown 快照回填实际重量
-            if (applyMaterialBreakdown(r, addMaterialTheory2)) {
+        for (const p of pmpForProduct) {
+          const nodeId = p.milestoneTemplateId;
+          const nodeWeightOn = !!nodeWeightEnabledMap.get(nodeId);
+          const byVid = new Map<string, number>();
+          for (const r of p.reports ?? []) {
+            if (applyMaterialBreakdown(r, addMaterialTheory2, nodeWeightOn)) {
               usedPmp = true;
-              return;
+              continue;
             }
-            const qty = Number(r.quantity);
-            totalCompleted2 += qty;
+            const qty = Number(r.quantity) || 0;
+            if (qty <= 0) continue;
             const vid = r.variantId ?? p.variantId ?? '';
-            if (vid) variantCompletedMap2.set(vid, (variantCompletedMap2.get(vid) ?? 0) + qty);
-          });
-        });
-        if (totalCompleted2 > 0) usedPmp = true;
+            byVid.set(vid, (byVid.get(vid) ?? 0) + qty);
+          }
+          for (const [vid, qty] of byVid.entries()) {
+            if (applyBomForNode(nodeId, vid, qty)) usedPmp = true;
+          }
+        }
       }
 
-      // PMP 无数据时回退到工单 milestone reports（有主工单用整棵工单树；仅子工单产品则只统计该产品自身工单，避免把父成品报工计入中间料）
+      /**
+       * PMP 无数据时回退到工单 milestone reports：与 PMP 同口径——按 (milestone.templateId, variantId) 分桶、
+       * 各自匹配 BOM；不再"一把扣到 best milestone × 全部 BOM"。
+       */
       if (!usedPmp) {
         const accumulateMilestoneForOrder = (ord: ProductionOrder) => {
-          const bestMsIdx = ord.milestones.reduce((bi, ms, i) => ms.completedQuantity > (ord.milestones[bi]?.completedQuantity ?? 0) ? i : bi, 0);
-          const bestMs = ord.milestones[bestMsIdx];
-          if (bestMs) {
-            (bestMs.reports || []).forEach(r => {
-              if (applyMaterialBreakdown(r, addMaterialTheory2)) return;
-              const qty = Number(r.quantity);
-              totalCompleted2 += qty;
+          for (const ms of ord.milestones) {
+            if (!ms?.templateId) continue;
+            const msWeightOn = !!nodeWeightEnabledMap.get(ms.templateId);
+            const byVid = new Map<string, number>();
+            for (const r of ms.reports ?? []) {
+              if (applyMaterialBreakdown(r, addMaterialTheory2, msWeightOn)) continue;
+              const qty = Number(r.quantity) || 0;
+              if (qty <= 0) continue;
               const vid = r.variantId ?? '';
-              if (vid) variantCompletedMap2.set(vid, (variantCompletedMap2.get(vid) ?? 0) + qty);
-            });
-          } else {
-            const msMax = ord.milestones.reduce((max, ms) => Math.max(max, ms.completedQuantity), 0);
-            totalCompleted2 += msMax;
+              byVid.set(vid, (byVid.get(vid) ?? 0) + qty);
+            }
+            for (const [vid, qty] of byVid.entries()) {
+              applyBomForNode(ms.templateId, vid, qty);
+            }
           }
         };
         if (roots.length > 0) {
@@ -594,53 +464,6 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
           });
         } else {
           ordersForThisProduct.forEach(accumulateMilestoneForOrder);
-        }
-      }
-
-      // BOM 理论耗材 = 报工流水完成量 × 单位 BOM 用量
-      if (totalCompleted2 > 0 && fpProduct) {
-        const hasPmpQtyForAnyFpVariant = fpVariants.some(v => (variantCompletedMap2.get(v.id) ?? 0) > 0);
-        if (fpVariants.length > 0 && variantCompletedMap2.size > 0 && hasPmpQtyForAnyFpVariant) {
-          fpVariants.forEach(v => {
-            const vCompleted = variantCompletedMap2.get(v.id) ?? 0;
-            if (vCompleted <= 0) return;
-            const seenBomIds = new Set<string>();
-            if (v.nodeBoms && Object.keys(v.nodeBoms).length > 0) {
-              (Object.values(v.nodeBoms) as string[]).forEach(bomId => {
-                if (seenBomIds.has(bomId)) return;
-                seenBomIds.add(bomId);
-                const bom = bomsById.get(bomId);
-                bom?.items.forEach(bi => addTheory2(bi, vCompleted));
-              });
-            } else {
-              (bomsByParentProduct.get(fpProduct.id) ?? []).filter(b => b.variantId === v.id && b.nodeId).forEach(bom => {
-                if (seenBomIds.has(bom.id)) return;
-                seenBomIds.add(bom.id);
-                bom.items.forEach(bi => addTheory2(bi, vCompleted));
-              });
-            }
-          });
-        } else {
-          const bomItems: { productId: string; quantity: number }[] = [];
-          if (fpVariants.length > 0) {
-            fpVariants.forEach(v => {
-              if (v.nodeBoms) {
-                const seenBomIds = new Set<string>();
-                (Object.values(v.nodeBoms) as string[]).forEach(bomId => {
-                  if (seenBomIds.has(bomId)) return;
-                  seenBomIds.add(bomId);
-                  const bom = bomsById.get(bomId);
-                  bom?.items.forEach(bi => bomItems.push({ productId: bi.productId, quantity: Number(bi.quantity) }));
-                });
-              }
-            });
-          }
-          if (bomItems.length === 0) {
-            (bomsByParentProduct.get(fpProduct.id) ?? []).filter(b => b.nodeId).forEach(bom => {
-              bom.items.forEach(bi => bomItems.push({ productId: bi.productId, quantity: Number(bi.quantity) }));
-            });
-          }
-          bomItems.forEach(bi => addTheory2(bi, totalCompleted2));
         }
       }
 
@@ -657,7 +480,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
       result.set(fpId, Array.from(prodMap.entries()).map(([productId, v]) => ({ productId, ...v })));
     }
     return result;
-  }, [productionLinkMode, records, orders, boms, products, productMilestoneProgresses, idx]);
+  }, [productionLinkMode, records, orders, boms, products, productMilestoneProgresses, idx, nodeWeightEnabledMap]);
 
   /** 开启「按委外加工厂展示」时：按 partner 拆分领退 + 理论耗材 */
   const partnerMaterialGroups = useMemo(() => {
@@ -747,8 +570,11 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         const internal = ensure(INTERNAL_KEY, scopeKey!, pid);
         internal.theoryCost = Math.max(0, internal.theoryCost - amt);
       };
-      // 外协收回若带有 materialBreakdown 快照（工序开启称重），直接按实际重量计入加工厂分桶
-      if (!applyMaterialBreakdown(r, applyPartnerTheory)) {
+      // 外协收回：仅当该工序当前开启称重 + 记录里存有 materialBreakdown 快照时，才按实际重量计入加工厂分桶；
+      // 否则一律走 "本工序 BOM × 件数"。若该工序在本产品上根本没配 BOM（典型如套口/裁剪等只是工序流转），
+      // 既不动本厂理论也不进加工厂桶——避免无关加工厂被错误带出现在物料面板里。
+      const nodeWeightOn = !!nodeWeightEnabledMap.get(r.nodeId);
+      if (!applyMaterialBreakdown(r, applyPartnerTheory, nodeWeightOn)) {
         const bomItems = resolveBomItems(productsById, bomsById, bomsByParentProduct, productForBom, r.nodeId, r.variantId);
         for (const bi of bomItems) {
           applyPartnerTheory(bi.productId, Number(bi.quantity) * r.quantity);
@@ -771,7 +597,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
       }
       return { partnerKey: pk, partnerLabel: pk === INTERNAL_KEY ? '本厂' : pk, data };
     });
-  }, [materialPanelSettings.groupByOutsourcePartner, records, orders, productionLinkMode, idx, parentMaterialStats, productMaterialStatsByProduct]);
+  }, [materialPanelSettings.groupByOutsourcePartner, records, orders, productionLinkMode, idx, parentMaterialStats, productMaterialStatsByProduct, nodeWeightEnabledMap]);
 
   const materialKw = debouncedMaterialSearch.trim().toLowerCase();
 
@@ -892,16 +718,13 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
     [materialKw, idx.productsById],
   );
 
-  /** 领料/退料单据号：领料 LLyyyyMMdd-0001，退料 TLyyyyMMdd-0001，当日同类型顺序递增 */
-  const getNextStockDocNo = (type: 'STOCK_OUT' | 'STOCK_RETURN') => {
-    const prefix = type === 'STOCK_OUT' ? 'LL' : 'TL';
-    const todayStr = toLocalCompactYmd(new Date());
-    const pattern = `${prefix}${todayStr}-`;
-    const existing = records.filter(r => r.type === type && r.docNo && r.docNo.startsWith(pattern));
-    const seqs = existing.map(r => parseInt(r.docNo!.slice(pattern.length), 10)).filter(n => !isNaN(n));
-    const maxSeq = seqs.length ? Math.max(...seqs) : 0;
-    return `${prefix}${todayStr}-${String(maxSeq + 1).padStart(4, '0')}`;
-  };
+  /**
+   * Phase 3.E follow-up：领料/退料的 docNo 不再前端自算。
+   *
+   * 历史实现按 `records` 缓存 max+1，但 `records` 现在是按 panel 窄拉的子集，
+   * 跨 panel / 跨 tab 的并发领料会重号；PM2 cluster 上线后多副本也会重号。
+   * 现在统一交给后端 `POST /production/records/batch` 在事务 + advisory lock 下分配。
+   */
 
   const handleStockConfirmSubmit = async () => {
     if (!stockSelectMode) return;
@@ -937,7 +760,6 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         }
       }
     }
-    const docNo = getNextStockDocNo(recordType);
     const timestamp = new Date().toLocaleString();
     const partnerForRecord = stockSelectPartner && stockSelectPartner !== '__internal__' ? stockSelectPartner : undefined;
     const srcPid = stockSelectSourceProductId;
@@ -946,92 +768,76 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
       recordType,
       partnerForRecord,
     );
+
+    /**
+     * 提交不再带 docNo，统一由后端 createRecordBatch 在事务 + advisory lock 下分配；
+     * onAddRecordBatch 返回服务端创建后的记录数组，前端从中读出真实 docNo
+     * 用于打开 stockDocDetail 弹窗。
+     */
+    const buildBatch = (orderIdForRow: string | undefined): ProductionOpRecord[] =>
+      toSubmit.map(pid => {
+        const p = idx.productsById.get(pid);
+        const c = categoryMap.get(p?.categoryId ?? '');
+        const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(stockConfirmBatches[pid] ?? '') : '';
+        return {
+          id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: recordType,
+          orderId: orderIdForRow,
+          ...(srcPid ? { sourceProductId: srcPid } : {}),
+          productId: pid,
+          quantity: stockConfirmQuantities[pid],
+          reason: stockConfirmReason || undefined,
+          timestamp,
+          status: '已完成',
+          warehouseId: stockConfirmWarehouseId || undefined,
+          partner: partnerForRecord,
+          ...(bn ? { batchNo: bn } : {}),
+          ...collabExtra,
+        } as ProductionOpRecord;
+      });
+
+    const submitAndResolveDocNo = async (batch: ProductionOpRecord[]): Promise<string> => {
+      if (onAddRecordBatch && batch.length > 1) {
+        const created = await onAddRecordBatch(batch);
+        const first = Array.isArray(created) ? created[0] : null;
+        return (first?.docNo ?? '') as string;
+      }
+      let resolved = '';
+      for (const rec of batch) {
+        const r = await onAddRecord(rec);
+        if (!resolved && r && typeof r === 'object' && 'docNo' in r) {
+          resolved = ((r as ProductionOpRecord).docNo ?? '') as string;
+        }
+      }
+      return resolved;
+    };
+
+    const buildDetail = (orderIdForDetail: string): import('./types').StockDocDetail => ({
+      docNo: '',
+      type: recordType,
+      orderId: orderIdForDetail,
+      ...(srcPid ? { sourceProductId: srcPid } : {}),
+      timestamp,
+      warehouseId: stockConfirmWarehouseId || '',
+      lines: toSubmit.map(pid => {
+        const p = idx.productsById.get(pid);
+        const c = categoryMap.get(p?.categoryId ?? '');
+        const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(stockConfirmBatches[pid] ?? '') : '';
+        return { productId: pid, quantity: stockConfirmQuantities[pid], ...(bn ? { batchNo: bn } : {}) };
+      }),
+      reason: stockConfirmReason || undefined,
+      operator: '',
+      partner: partnerForRecord,
+    });
+
     if (srcPid) {
-      const batch: ProductionOpRecord[] = toSubmit.map(pid => {
-        const p = idx.productsById.get(pid);
-        const c = categoryMap.get(p?.categoryId ?? '');
-        const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(stockConfirmBatches[pid] ?? '') : '';
-        return {
-          id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          type: recordType,
-          orderId: undefined,
-          sourceProductId: srcPid,
-          productId: pid,
-          quantity: stockConfirmQuantities[pid],
-          reason: stockConfirmReason || undefined,
-          timestamp,
-          status: '已完成',
-          warehouseId: stockConfirmWarehouseId || undefined,
-          partner: partnerForRecord,
-          docNo,
-          ...(bn ? { batchNo: bn } : {}),
-          ...collabExtra,
-        } as ProductionOpRecord;
-      });
-      if (onAddRecordBatch && batch.length > 1) {
-        await onAddRecordBatch(batch);
-      } else {
-        for (const rec of batch) await onAddRecord(rec);
-      }
-      setStockDocDetail({
-        docNo,
-        type: recordType,
-        orderId: '',
-        sourceProductId: srcPid,
-        timestamp,
-        warehouseId: stockConfirmWarehouseId || '',
-        lines: toSubmit.map(pid => {
-          const p = idx.productsById.get(pid);
-          const c = categoryMap.get(p?.categoryId ?? '');
-          const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(stockConfirmBatches[pid] ?? '') : '';
-          return { productId: pid, quantity: stockConfirmQuantities[pid], ...(bn ? { batchNo: bn } : {}) };
-        }),
-        reason: stockConfirmReason || undefined,
-        operator: '',
-        partner: partnerForRecord,
-      });
+      const batch = buildBatch(undefined);
+      const docNo = await submitAndResolveDocNo(batch);
+      setStockDocDetail({ ...buildDetail(''), docNo });
     } else if (stockSelectOrderId) {
-      const batch: ProductionOpRecord[] = toSubmit.map(pid => {
-        const p = idx.productsById.get(pid);
-        const c = categoryMap.get(p?.categoryId ?? '');
-        const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(stockConfirmBatches[pid] ?? '') : '';
-        return {
-          id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          type: recordType,
-          orderId: stockSelectOrderId,
-          productId: pid,
-          quantity: stockConfirmQuantities[pid],
-          reason: stockConfirmReason || undefined,
-          timestamp,
-          status: '已完成',
-          warehouseId: stockConfirmWarehouseId || undefined,
-          partner: partnerForRecord,
-          docNo,
-          ...(bn ? { batchNo: bn } : {}),
-          ...collabExtra,
-        } as ProductionOpRecord;
-      });
-      if (onAddRecordBatch && batch.length > 1) {
-        await onAddRecordBatch(batch);
-      } else {
-        for (const rec of batch) await onAddRecord(rec);
-      }
-      setStockDocDetail({
-        docNo,
-        type: recordType,
-        orderId: stockSelectOrderId,
-        timestamp,
-        warehouseId: stockConfirmWarehouseId || '',
-        lines: toSubmit.map(pid => {
-          const p = idx.productsById.get(pid);
-          const c = categoryMap.get(p?.categoryId ?? '');
-          const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(stockConfirmBatches[pid] ?? '') : '';
-          return { productId: pid, quantity: stockConfirmQuantities[pid], ...(bn ? { batchNo: bn } : {}) };
-        }),
-        reason: stockConfirmReason || undefined,
-        operator: '',
-        partner: partnerForRecord,
-      });
+      const batch = buildBatch(stockSelectOrderId);
+      const docNo = await submitAndResolveDocNo(batch);
+      setStockDocDetail({ ...buildDetail(stockSelectOrderId), docNo });
     } else return;
     if (widForPref) {
       writeWarehousePreference(
@@ -1071,6 +877,59 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
     materialFormSettings.materialReturnCustomFields,
     materialFormSettings.outsourceMaterialIssueCustomFields,
     materialFormSettings.outsourceMaterialReturnCustomFields,
+  ]);
+
+  /**
+   * 生产退料批次选项：与 `OutsourceMaterialReturnModal` 一致，按「该合作单位/本厂 + 本工单族或本产品」下
+   * 历史领料发出（STOCK_OUT）出现过的批号汇总；**不**按当前仓库 PSI 余量过滤（加工厂可整批退回时仓库可能为零）。
+   */
+  const stockReturnDispatchedBatchesByProduct = useMemo(() => {
+    if (stockSelectMode !== 'stock_return') return undefined;
+    const INTERNAL = '__internal__';
+    const pkRaw = stockSelectPartner ?? INTERNAL;
+    const partnerMatch = (r: ProductionOpRecord) => {
+      const rp = (r.partner ?? '').trim();
+      if (!pkRaw || pkRaw === INTERNAL) return !rp;
+      return rp === pkRaw;
+    };
+    const byMat = new Map<string, Set<string>>();
+    const addBatch = (r: ProductionOpRecord) => {
+      const pid = r.productId;
+      if (!pid) return;
+      const bn = (r.batchNo ?? '').trim() || BATCH_NO_UNTAGGED;
+      if (!byMat.has(pid)) byMat.set(pid, new Set());
+      byMat.get(pid)!.add(bn);
+    };
+    for (const r of records) {
+      if (r.type !== 'STOCK_OUT' || !partnerMatch(r)) continue;
+      let inScope = false;
+      if (stockSelectSourceProductId) {
+        const target = stockSelectSourceProductId;
+        if (r.sourceProductId === target) inScope = true;
+        else if (r.orderId) {
+          const related = new Set(orders.filter(o => o.productId === target).map(o => o.id));
+          if (related.has(r.orderId)) inScope = true;
+        }
+      } else if (stockSelectOrderId) {
+        const fam = new Set(getOrderFamilyIds(orders, stockSelectOrderId, idx.childrenByParentId));
+        if (r.orderId && fam.has(r.orderId)) inScope = true;
+      }
+      if (!inScope) continue;
+      addBatch(r);
+    }
+    const out: Record<string, string[]> = {};
+    for (const [pid, set] of byMat) {
+      out[pid] = Array.from(set).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+    }
+    return out;
+  }, [
+    stockSelectMode,
+    stockSelectPartner,
+    stockSelectOrderId,
+    stockSelectSourceProductId,
+    records,
+    orders,
+    idx.childrenByParentId,
   ]);
 
   return (
@@ -1516,6 +1375,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         onLineBatchChange={(pid, bn) => setStockConfirmBatches(prev => ({ ...prev, [pid]: bn }))}
         psiRecords={psiRecords}
         prodRecords={records}
+        returnDispatchedBatchesByProduct={stockSelectMode === 'stock_return' ? stockReturnDispatchedBatchesByProduct : undefined}
       />
 
       <StockDocDetailModal
@@ -1546,7 +1406,6 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
       <StockFlowListModal
         visible={showStockFlowModal}
         onClose={() => setShowStockFlowModal(false)}
-        records={records}
         orders={orders}
         products={products}
         productionLinkMode={productionLinkMode}
@@ -1566,7 +1425,6 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         materialFormSettings={materialFormSettings}
         categories={categories}
         onAddRecord={onAddRecord}
-        getNextStockDocNo={getNextStockDocNo}
       />
 
       {showConfigModal && onUpdateMaterialPanelSettings && onUpdateMaterialFormSettings && (

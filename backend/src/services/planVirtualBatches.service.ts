@@ -113,23 +113,37 @@ async function createLinkedItemCodesForBatch(
 
 export async function listBatches(
   db: TenantPrismaClient,
-  opts: { planOrderId?: string; page?: number; pageSize?: number },
+  opts: { planOrderId?: string; all?: boolean; page?: number; pageSize?: number },
 ) {
-  const page = Math.max(1, opts.page ?? 1);
-  const pageSize = Math.min(500, Math.max(1, opts.pageSize ?? 15));
-
   const where: Record<string, unknown> = {};
   if (opts.planOrderId) where.planOrderId = opts.planOrderId;
+  const orderBy: any = [{ sequenceNo: 'desc' }, { createdAt: 'desc' }];
 
-  const [raw, total] = await Promise.all([
-    db.planVirtualBatch.findMany({
-      where,
-      orderBy: [{ sequenceNo: 'desc' }, { createdAt: 'desc' }],
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
-    db.planVirtualBatch.count({ where }),
-  ]);
+  let raw: Awaited<ReturnType<typeof db.planVirtualBatch.findMany>>;
+  let total: number;
+  let page: number;
+  let pageSize: number;
+
+  if (opts.all) {
+    total = await db.planVirtualBatch.count({ where });
+    raw = await db.planVirtualBatch.findMany({ where, orderBy });
+    page = 1;
+    pageSize = total;
+  } else {
+    page = Math.max(1, opts.page ?? 1);
+    pageSize = Math.min(200, Math.max(1, opts.pageSize ?? 15));
+    const r = await Promise.all([
+      db.planVirtualBatch.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      db.planVirtualBatch.count({ where }),
+    ]);
+    raw = r[0];
+    total = r[1];
+  }
 
   const batchIds = raw.map((b) => b.id);
   let countByBatch = new Map<string, number>();

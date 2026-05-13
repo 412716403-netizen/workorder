@@ -4,6 +4,13 @@ import { Boxes, Copy, ListChecks, Plus, Trash2, X } from 'lucide-react';
 import { BOM, BOMItem, GlobalNodeTemplate, Product, ProductCategory, ProductVariant, AppDictionaries } from '../../types';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 
+/** 用量数字展示：去掉 JS 浮点尾数（如 0.32+0.1 → 0.42000000000000004） */
+function formatBomQuantityDisplay(n: number): string {
+  if (!Number.isFinite(n)) return '0';
+  const s = n.toFixed(6).replace(/\.?0+$/, '');
+  return s === '' ? '0' : s;
+}
+
 export interface BomEditorPortalState {
   workingBOM: BOM | null;
   setWorkingBOM: React.Dispatch<React.SetStateAction<BOM | null>>;
@@ -200,7 +207,7 @@ const BomEditorPortal: React.FC<BomEditorPortalProps> = ({
             <span className="text-[11px] font-black text-indigo-800">物料汇总</span>
             <span className="text-[11px] font-bold text-indigo-600">
               已选 <span className="tabular-nums">{bomMaterialStats.kinds}</span> 种 · 用量合计{' '}
-              <span className="tabular-nums">{bomMaterialStats.totalQty}</span>
+              <span className="tabular-nums">{formatBomQuantityDisplay(bomMaterialStats.totalQty)}</span>
             </span>
           </div>
           {workingBOM.items.map((item, idx) => {

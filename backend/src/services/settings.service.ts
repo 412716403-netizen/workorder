@@ -9,6 +9,9 @@ import {
   stripSystemPrintTemplatesForPersistence,
 } from '../../../shared/systemPrintTemplates.js';
 import { z } from 'zod';
+import { getRedis, redisDel, redisGetJson, redisSetJson } from '../lib/redis.js';
+
+const tenantConfigCacheKey = (tenantId: string) => `cache:settings:config:${tenantId}`;
 
 /** 与 `shared/types` 中 CustomDocFieldType 一致；写入设置 JSON 时拒绝 number/boolean 等脏类型 */
 const reportFieldDefRowZ = z
@@ -35,10 +38,20 @@ function maybeParseReportFields(data: Record<string, unknown>, key: string) {
 
 // ── 产品分类 ──
 
-export async function listCategories(db: TenantPrismaClient) {
-  return db.productCategory.findMany({
-    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-  });
+export async function listCategories(db: TenantPrismaClient, opts: { all?: boolean; page?: number; pageSize?: number }) {
+  const orderBy: any = [{ sortOrder: 'asc' }, { createdAt: 'asc' }];
+
+  if (opts.all) {
+    return db.productCategory.findMany({ orderBy });
+  }
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [data, total] = await Promise.all([
+    db.productCategory.findMany({ orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    db.productCategory.count({}),
+  ]);
+  return { data, total, page, pageSize };
 }
 
 export async function createCategory(
@@ -83,8 +96,20 @@ export async function deleteCategory(db: TenantPrismaClient, id: string) {
 
 // ── 合作单位分类 ──
 
-export async function listPartnerCategories(db: TenantPrismaClient) {
-  return db.partnerCategory.findMany({ orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
+export async function listPartnerCategories(db: TenantPrismaClient, opts: { all?: boolean; page?: number; pageSize?: number }) {
+  const orderBy: any = [{ createdAt: 'asc' }, { id: 'asc' }];
+
+  if (opts.all) {
+    return db.partnerCategory.findMany({ orderBy });
+  }
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [data, total] = await Promise.all([
+    db.partnerCategory.findMany({ orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    db.partnerCategory.count({}),
+  ]);
+  return { data, total, page, pageSize };
 }
 
 export async function createPartnerCategory(
@@ -121,14 +146,28 @@ function normalizeNodeData(raw: Record<string, unknown>) {
   return data;
 }
 
-export async function listNodes(db: TenantPrismaClient) {
-  const rows = await db.globalNodeTemplate.findMany({
-    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-  });
-  return rows.map((r) => {
+export async function listNodes(db: TenantPrismaClient, opts: { all?: boolean; page?: number; pageSize?: number }) {
+  const orderBy: any = [{ sortOrder: 'asc' }, { createdAt: 'asc' }];
+
+  if (opts.all) {
+    const rows = await db.globalNodeTemplate.findMany({ orderBy });
+    return rows.map((r) => {
+      const { hasBom, ...rest } = r as Record<string, unknown>;
+      return { ...rest, hasBOM: hasBom };
+    });
+  }
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [rows, total] = await Promise.all([
+    db.globalNodeTemplate.findMany({ orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    db.globalNodeTemplate.count({}),
+  ]);
+  const data = rows.map((r) => {
     const { hasBom, ...rest } = r as Record<string, unknown>;
     return { ...rest, hasBOM: hasBom };
   });
+  return { data, total, page, pageSize };
 }
 
 export async function createNode(
@@ -163,8 +202,20 @@ export async function deleteNode(db: TenantPrismaClient, id: string) {
 
 // ── 仓库 ──
 
-export async function listWarehouses(db: TenantPrismaClient) {
-  return db.warehouse.findMany({ orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
+export async function listWarehouses(db: TenantPrismaClient, opts: { all?: boolean; page?: number; pageSize?: number }) {
+  const orderBy: any = [{ createdAt: 'asc' }, { id: 'asc' }];
+
+  if (opts.all) {
+    return db.warehouse.findMany({ orderBy });
+  }
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [data, total] = await Promise.all([
+    db.warehouse.findMany({ orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    db.warehouse.count({}),
+  ]);
+  return { data, total, page, pageSize };
 }
 
 export async function createWarehouse(
@@ -191,8 +242,20 @@ export async function deleteWarehouse(db: TenantPrismaClient, id: string) {
 
 // ── 收付款类型 ──
 
-export async function listFinanceCategories(db: TenantPrismaClient) {
-  return db.financeCategory.findMany({ orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
+export async function listFinanceCategories(db: TenantPrismaClient, opts: { all?: boolean; page?: number; pageSize?: number }) {
+  const orderBy: any = [{ createdAt: 'asc' }, { id: 'asc' }];
+
+  if (opts.all) {
+    return db.financeCategory.findMany({ orderBy });
+  }
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [data, total] = await Promise.all([
+    db.financeCategory.findMany({ orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    db.financeCategory.count({}),
+  ]);
+  return { data, total, page, pageSize };
 }
 
 export async function createFinanceCategory(
@@ -222,8 +285,20 @@ export async function deleteFinanceCategory(db: TenantPrismaClient, id: string) 
 
 // ── 收支账户类型 ──
 
-export async function listFinanceAccountTypes(db: TenantPrismaClient) {
-  return db.financeAccountType.findMany({ orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
+export async function listFinanceAccountTypes(db: TenantPrismaClient, opts: { all?: boolean; page?: number; pageSize?: number }) {
+  const orderBy: any = [{ createdAt: 'asc' }, { id: 'asc' }];
+
+  if (opts.all) {
+    return db.financeAccountType.findMany({ orderBy });
+  }
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [data, total] = await Promise.all([
+    db.financeAccountType.findMany({ orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    db.financeAccountType.count({}),
+  ]);
+  return { data, total, page, pageSize };
 }
 
 export async function createFinanceAccountType(
@@ -251,14 +326,25 @@ export async function deleteFinanceAccountType(db: TenantPrismaClient, id: strin
 // ── 系统配置 ──
 
 export async function getConfig(tenantId: string) {
+  if (getRedis()) {
+    const hit = await redisGetJson<Record<string, unknown>>(tenantConfigCacheKey(tenantId));
+    if (hit) return hit;
+  }
+
   const settings = await basePrisma.systemSetting.findMany({ where: { tenantId } });
   const config: Record<string, unknown> = {};
   for (const s of settings) config[s.key] = s.value;
   config.printTemplates = mergePrintTemplatesForTenantConfig(config.printTemplates);
+  if (getRedis()) {
+    await redisSetJson(tenantConfigCacheKey(tenantId), config, 60);
+  }
   return config;
 }
 
 export async function updateConfig(tenantId: string, key: string, value: unknown) {
+  if (getRedis()) {
+    await redisDel(tenantConfigCacheKey(tenantId));
+  }
   let nextValue = value;
   if (key === 'printTemplates') {
     nextValue = stripSystemPrintTemplatesForPersistence(value);

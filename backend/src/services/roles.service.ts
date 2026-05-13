@@ -2,11 +2,24 @@ import type { TenantPrismaClient } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { genId } from '../utils/genId.js';
 
-export async function listRoles(db: TenantPrismaClient) {
-  return db.role.findMany({
-    orderBy: { createdAt: 'asc' },
-    include: { _count: { select: { members: true } } },
-  });
+export async function listRoles(
+  db: TenantPrismaClient,
+  opts: { all?: boolean; page?: number; pageSize?: number },
+) {
+  const include = { _count: { select: { members: true } } };
+  const orderBy = { createdAt: 'asc' as const };
+
+  if (opts.all) {
+    return db.role.findMany({ orderBy, include });
+  }
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [data, total] = await Promise.all([
+    db.role.findMany({ orderBy, include, skip: (page - 1) * pageSize, take: pageSize }),
+    db.role.count({}),
+  ]);
+  return { data, total, page, pageSize };
 }
 
 export async function createRole(

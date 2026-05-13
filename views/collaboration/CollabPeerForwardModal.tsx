@@ -117,7 +117,7 @@ const CollabPeerForwardModal: React.FC<CollabPeerForwardModalProps> = ({
             transfer: t,
             nextStepKey: getNextForwardStepKey(t),
             nextStepLabel,
-            selected: true,
+            selected: false,
             expanded: true,
             rows: rows.map(r => ({ ...r, qty: String(r.maxReturnable) })),
             note: '',

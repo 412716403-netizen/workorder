@@ -1567,14 +1567,6 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                   ? reportDetailBatch.first.milestone.name
                   : reportDetailBatch.milestoneName;
                 const tid = reportDetailBatch.source === 'order' ? reportDetailBatch.first.milestone.templateId : reportDetailBatch.milestoneTemplateId;
-                const effectiveRemainingView =
-                  reportDetailBatch.source === 'order'
-                    ? [...new Set(reportDetailBatch.rows.map(r => r.order.id))].reduce((sum, oid) => {
-                        const o = resolveOrderById(oid);
-                        if (!o) return sum;
-                        return sum + orderEffectiveRemainingAtTemplate(o, tid, processSequenceMode, getDefectiveRework, prodRecords);
-                      }, 0)
-                    : null;
                 const ms =
                   reportDetailBatch.source === 'order'
                     ? reportDetailBatch.first.order.milestones?.find(m => m.templateId === tid)
@@ -1616,11 +1608,6 @@ const ReportBatchDetailModal: React.FC<ReportBatchDetailModalProps> = ({
                             <User className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
                             <span className="normal-case">经办: {reportDetailBatch.first.report.operator || '—'}</span>
                           </span>
-                          {reportDetailBatch.source === 'order' ? (
-                            <span className="inline-flex min-h-4 items-center normal-case text-indigo-600">
-                              本工序还可报（合计）{effectiveRemainingView ?? 0} {unitName}
-                            </span>
-                          ) : null}
                           {entries.map(e => (
                             <span
                               key={e.fieldId}

@@ -1,14 +1,21 @@
 import React, { useState, useMemo } from 'react';
-import { History, X, Filter, FileText } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { History, X, Filter, FileText, Loader2 } from 'lucide-react';
 import { ProductionOpRecord, ProductionOrder, Product, GlobalNodeTemplate } from '../../types';
 import { hasOpsPerm } from './types';
 import { formatTimestamp } from '../../utils/formatTime';
 import { toLocalCompactYmd, toLocalDateYmd } from '../../utils/localDateTime';
 import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
+import {
+  fetchProductionByFilter,
+  dateInputToIsoStart,
+  dateInputToIsoEndExclusive,
+  getTodayRangeIso,
+  isoToDateInput,
+} from './sharedFlowListHelpers';
 
 export interface ReworkReportFlowListModalProps {
   productionLinkMode: 'order' | 'product';
-  records: ProductionOpRecord[];
   orders: ProductionOrder[];
   products: Product[];
   globalNodes: GlobalNodeTemplate[];
@@ -20,7 +27,6 @@ export interface ReworkReportFlowListModalProps {
 
 const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
   productionLinkMode,
-  records,
   orders,
   products,
   globalNodes,
@@ -29,7 +35,24 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
   onClose,
   onViewDetail,
 }) => {
-  const [reworkFlowFilter, setReworkFlowFilter] = useState<{ dateFrom: string; dateTo: string; orderNumber: string; productId: string; nodeName: string; operator: string; reportNo: string }>({ dateFrom: '', dateTo: '', orderNumber: '', productId: '', nodeName: '', operator: '', reportNo: '' });
+  const todayDate = useMemo(() => isoToDateInput(getTodayRangeIso().from), []);
+  const [reworkFlowFilter, setReworkFlowFilter] = useState<{ dateFrom: string; dateTo: string; orderNumber: string; productId: string; nodeName: string; operator: string; reportNo: string }>({ dateFrom: todayDate, dateTo: todayDate, orderNumber: '', productId: '', nodeName: '', operator: '', reportNo: '' });
+
+  /**
+   * 按日期窗口窄拉 REWORK_REPORT + REWORK；REWORK 用于 sourceReworkId 反查外协工厂展示。
+   * 服务端按 timestamp 过滤，前端 useMemo 维持原有 filter / sort / group 行为。
+   */
+  const flowQuery = useQuery({
+    queryKey: ['flow.reworkReport', reworkFlowFilter.dateFrom, reworkFlowFilter.dateTo],
+    queryFn: () =>
+      fetchProductionByFilter({
+        types: 'REWORK_REPORT,REWORK',
+        startDate: dateInputToIsoStart(reworkFlowFilter.dateFrom),
+        endDate: dateInputToIsoEndExclusive(reworkFlowFilter.dateTo),
+      }),
+    staleTime: 15_000,
+  });
+  const records = flowQuery.data ?? [];
 
   const reworkRecords = useMemo(() => (records || []).filter((r): r is ProductionOpRecord => r.type === 'REWORK_REPORT'), [records]);
 
@@ -203,12 +226,17 @@ const ReworkReportFlowListModal: React.FC<ReworkReportFlowListModalProps> = ({
             </div>
           </div>
           <div className="mt-2 flex items-center gap-4">
-            <button type="button" onClick={() => setReworkFlowFilter({ dateFrom: '', dateTo: '', orderNumber: '', productId: '', nodeName: '', operator: '', reportNo: '' })} className="text-xs font-bold text-slate-500 hover:text-slate-700">清空筛选</button>
+            <button type="button" onClick={() => setReworkFlowFilter({ dateFrom: todayDate, dateTo: todayDate, orderNumber: '', productId: '', nodeName: '', operator: '', reportNo: '' })} className="text-xs font-bold text-slate-500 hover:text-slate-700">重置为当天</button>
             <span className="text-xs text-slate-400">共 {groupedRows.length} 条（已合并同单号同产品）</span>
+            {flowQuery.isFetching && (
+              <span className="text-xs text-indigo-500 inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />加载中</span>
+            )}
           </div>
         </div>
         <div className="flex-1 overflow-auto p-4">
-          {groupedRows.length === 0 ? (
+          {flowQuery.isLoading ? (
+            <p className="text-slate-500 text-center py-12">加载中…</p>
+          ) : groupedRows.length === 0 ? (
             <p className="text-slate-500 text-center py-12">暂无返工报工流水</p>
           ) : (
             <div className="border border-slate-200 rounded-2xl overflow-hidden">

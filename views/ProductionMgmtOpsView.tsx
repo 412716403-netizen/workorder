@@ -28,11 +28,17 @@ import StockMaterialPanel from './production-ops/StockMaterialPanel';
 import OutsourcePanel from './production-ops/OutsourcePanel';
 import ReworkPanel from './production-ops/ReworkPanel';
 
+/**
+ * Phase 3.E：本组件不再为各 panel 预拉 records（旧版会有 60 页 / 12000 条客户端硬上限）。
+ * 各 panel 现在按业务条件（活动工单 ids / status / 今日窗口）独立 useQuery 窄拉自己需要的数据。
+ * 这里只做路由 + props 分发。
+ */
 interface ProductionMgmtOpsViewProps {
   productionLinkMode?: 'order' | 'product';
   productMilestoneProgresses?: ProductMilestoneProgress[];
   plans?: PlanOrder[];
-  records: ProductionOpRecord[];
+  /** 已废弃：各 panel 自取；仅用于极少数老调用方兜底，本组件不再消费 */
+  records?: ProductionOpRecord[];
   orders: ProductionOrder[];
   products: Product[];
   warehouses?: Warehouse[];
@@ -74,7 +80,6 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
   productionLinkMode = 'order',
   productMilestoneProgresses = [],
   plans = [],
-  records,
   orders,
   products,
   warehouses = [],
@@ -111,7 +116,6 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
   const panelProps = {
     productionLinkMode,
     productMilestoneProgresses,
-    records,
     orders,
     products,
     warehouses,

@@ -38,6 +38,10 @@ export function pmpCompletedAtTemplateVariant(
  * 同一产品 + 工序模板下，PMP（产品关联报工）与 工单里程碑（关联工单报工 / 外协收回计入）的「完成量」合并汇总。
  * 关联产品模式下，一次报工会写入 PMP；但外协收回且带 orderId 时会累加到工单里程碑的 completedQuantity——
  * 这两条路径互不覆盖，任何一处只看 PMP 或只看里程碑都会漏报。本函数将两路完成量求和。
+ *
+ * 实现上等于 {@link combinedCompletedByVariantAtTemplate} 各规格数量之和，与
+ * `variantMaxGoodProductMode` / 外协录入弹窗「最多」使用的按规格口径一致；
+ * 避免里程碑上 aggregate `completedQuantity` 与 `reports` 明细不一致时出现待发清单与录入页数量差。
  */
 export function combinedCompletedAtTemplate(
   blockOrders: ProductionOrder[],
@@ -45,14 +49,8 @@ export function combinedCompletedAtTemplate(
   productId: string,
   templateId: string,
 ): number {
-  const pmpTotal = pmp
-    .filter(p => p.productId === productId && p.milestoneTemplateId === templateId)
-    .reduce((s, p) => s + (p.completedQuantity ?? 0), 0);
-  const mileTotal = blockOrders.reduce((s, o) => {
-    const m = o.milestones.find(x => x.templateId === templateId);
-    return s + (m?.completedQuantity ?? 0);
-  }, 0);
-  return pmpTotal + mileTotal;
+  const byVariant = combinedCompletedByVariantAtTemplate(blockOrders, pmp, productId, templateId);
+  return Object.values(byVariant).reduce((s, n) => s + n, 0);
 }
 
 /** 同 {@link combinedCompletedAtTemplate}，但按规格（variantId）拆分结果。 */
@@ -202,7 +200,7 @@ export function productGroupMaxReportableSum(
 
 /**
  * PMP + 里程碑双通道：某规格在某工序的合并完成量。
- * 与 {@link combinedCompletedByVariantAtTemplate} 逻辑一致，但只算单个 variantId，避免全量遍历。
+ * 与 {@link combinedCompletedByVariantAtTemplate} 单键结果一致，供 `variantMaxGoodProductMode` 使用。
  */
 function combinedCompletedAtTemplateVariant(
   blockOrders: ProductionOrder[],
@@ -212,27 +210,8 @@ function combinedCompletedAtTemplateVariant(
   variantId: string,
 ): number {
   const vid = variantId || '';
-  const pmpVal = pmpCompletedAtTemplateVariant(pmp, productId, templateId, variantId);
-  let mileVal = 0;
-  for (const o of blockOrders) {
-    const m = o.milestones.find(x => x.templateId === templateId);
-    if (!m) continue;
-    const reps = m.reports;
-    if (reps && reps.length > 0) {
-      mileVal += reps
-        .filter(r => ((r as any).variantId ?? '') === vid)
-        .reduce((s, r) => s + (Number(r.quantity) || 0), 0);
-    } else {
-      const total = m.completedQuantity ?? 0;
-      if (total <= 0) continue;
-      const totalQty = o.items.reduce((s, i) => s + i.quantity, 0);
-      if (totalQty <= 0) { if (vid === '') mileVal += total; continue; }
-      const matched = o.items.filter(i => (i.variantId ?? '') === vid);
-      const matchedQty = matched.reduce((s, i) => s + i.quantity, 0);
-      mileVal += Math.round((total * matchedQty) / totalQty);
-    }
-  }
-  return pmpVal + mileVal;
+  const byVariant = combinedCompletedByVariantAtTemplate(blockOrders, pmp, productId, templateId);
+  return byVariant[vid] ?? 0;
 }
 
 /** 颜色尺码：本规格在本工序「还可报良品」上限 = 可报最多(规格) - 本工序该规格已报良品 + 返工（规格）；顺序模式下可报基数 = 上一道该规格的合并完成量（PMP + 里程碑） */

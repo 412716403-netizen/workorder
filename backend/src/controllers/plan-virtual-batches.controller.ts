@@ -3,6 +3,7 @@ import { str, optStr } from '../utils/request.js';
 import * as batchService from '../services/planVirtualBatches.service.js';
 import * as itemCodeService from '../services/itemCodes.service.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
+import { listQueryFromRequest, warnListAllFromRequest } from '../utils/listQuery.js';
 
 function parseWithItemCodes(body: unknown): boolean {
   const b = body as Record<string, unknown> | null;
@@ -51,10 +52,13 @@ export const bulkSplitAllVariants = asyncHandler(async (req, res) => {
 
 export const list = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
+  const { all, page, pageSize } = listQueryFromRequest(req);
+  if (all) warnListAllFromRequest('planVirtualBatches.list', req);
   const result = await batchService.listBatches(db, {
     planOrderId: optStr(req.query.planOrderId),
-    page: Math.max(1, parseInt(String(req.query.page ?? '1'), 10)),
-    pageSize: Math.min(500, Math.max(1, parseInt(String(req.query.pageSize ?? '15'), 10))),
+    all,
+    page,
+    pageSize,
   });
   res.json(result);
 });

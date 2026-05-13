@@ -447,7 +447,7 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
                       value={dispatchPartnerName}
                       onChange={name => setDispatchPartnerName(name)}
                       placeholder="搜索并选择外协工厂..."
-                      triggerClassName={`${psiOrderBillFormPartnerTriggerClassCompact} rounded-lg border border-slate-200 bg-white`}
+                      triggerClassName={`${psiOrderBillFormPartnerTriggerClassCompact} box-border w-full rounded-lg !bg-white border border-slate-200 shadow-sm hover:border-slate-300`}
                     />
                   </div>
                   {showDispatchDeliveryDate && setDispatchDeliveryDate ? (

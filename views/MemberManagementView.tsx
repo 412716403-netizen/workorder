@@ -14,6 +14,7 @@ import RoleEditModal from './member-management/RoleEditModal';
 import MilestoneAssignModal from './member-management/MilestoneAssignModal';
 import { moduleHeaderRowClass } from '../styles/uiDensity';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { useRolesQuery, useInvalidateRoles } from '../hooks/useRolesQuery';
 
 interface MemberManagementViewProps {
   tenantId: string;
@@ -31,7 +32,11 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
   const [tenantInfo, setTenantInfo] = useState<{ inviteCode: string; name: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [rolesList, setRolesList] = useState<RoleRow[]>([]);
+  const canManage = tenantRole === 'owner' || tenantRole === 'admin';
+
+  const rolesQuery = useRolesQuery(canManage);
+  const rolesList = rolesQuery.data ?? [];
+  const invalidateRoles = useInvalidateRoles();
   const [roleModalOpen, setRoleModalOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<RoleRow | null>(null);
 
@@ -39,8 +44,6 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
   const [milestoneEditMember, setMilestoneEditMember] = useState<Member | null>(null);
   const [memberListSearch, setMemberListSearch] = useState('');
   const debouncedMemberListSearch = useDebouncedValue(memberListSearch, 300);
-
-  const canManage = tenantRole === 'owner' || tenantRole === 'admin';
 
   useEffect(() => {
     if (tab !== 'members') setMemberListSearch('');
@@ -66,13 +69,11 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
         api.tenants.getMembers(tenantId),
         canManage ? api.tenants.getApplications(tenantId) : Promise.resolve([]),
         api.tenants.get(tenantId),
-        canManage ? api.roles.list() : Promise.resolve([]),
       ]);
       const val = (i: number) => results[i].status === 'fulfilled' ? (results[i] as PromiseFulfilledResult<any>).value : undefined;
       if (val(0)) setMembers(val(0));
       if (val(1)) setApplications(val(1).filter((x: Application) => x.status === 'PENDING'));
       if (val(2)) setTenantInfo(val(2));
-      if (val(3)) setRolesList(val(3));
     } catch (err: any) { toast.error(err.message || '加载失败'); }
     finally { setLoading(false); }
   }, [tenantId, canManage]);
@@ -132,6 +133,7 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
     try {
       await api.roles.delete(role.id);
       toast.success('角色已删除');
+      invalidateRoles();
       await loadData();
     } catch (err: any) { toast.error(err.message || '操作失败'); }
   }
@@ -252,7 +254,10 @@ export default function MemberManagementView({ tenantId, tenantRole, currentUser
         <RoleEditModal
           editingRole={editingRole}
           onClose={() => setRoleModalOpen(false)}
-          onSaved={loadData}
+          onSaved={async () => {
+            invalidateRoles();
+            await loadData();
+          }}
         />
       )}
 

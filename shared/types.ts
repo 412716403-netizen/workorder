@@ -157,6 +157,12 @@ export type CollabAcceptTransferBody = {
 };
 
 /**
+ * 协作发出 `subcontract_collaboration_dispatches.amendment_status`：
+ * 甲方在「待接受」下直接同步修改 payload 后，乙方需确认已查看最新明细（与已接受后的修订流 `PENDING_B_CONFIRM` 区分）。
+ */
+export const COLLAB_DISPATCH_AMENDMENT_PENDING_B_REVIEW = 'PENDING_B_REVIEW' as const;
+
+/**
  * `production_op_records.collab_data` JSON 常见键（与 `utils/productionOpCollab/*` 键名一致）。
  * 与 `Record<string, unknown>` 交叉以允许扩展字段。
  */

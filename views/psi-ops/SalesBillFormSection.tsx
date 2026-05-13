@@ -21,7 +21,7 @@ import {
   categoryUsesBatchManagement,
 } from '../../types';
 import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
-import { usePsiStockIndex } from '../../hooks/usePsiStockIndex';
+import { useStockSnapshot } from '../../hooks/useStockSnapshot';
 import { PsiListPrintPicker } from '../../components/psi/PsiListPrintPicker';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
@@ -123,7 +123,7 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
   prodRecords = [],
 }) => {
   const confirm = useConfirm();
-  const { listAvailableBatches } = usePsiStockIndex(recordsList, prodRecords);
+  const { listAvailableBatches } = useStockSnapshot();
 
   return (
     <div className={psiOrderBillFormShellClass}>

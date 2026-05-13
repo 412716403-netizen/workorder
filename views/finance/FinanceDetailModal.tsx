@@ -1,5 +1,7 @@
 import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Pencil, Printer, Trash2, X } from 'lucide-react';
+import * as api from '../../services/api';
 import type {
   AppDictionaries,
   FinanceCategory,
@@ -40,8 +42,6 @@ interface FinanceDetailModalProps {
   globalNodes: GlobalNodeTemplate[];
   dictionaries?: AppDictionaries;
   categories: ProductCategory[];
-  psiRecords: PsiRecord[];
-  prodRecords: ProductionOpRecord[];
   financeCatMap: Map<string, FinanceCategory>;
   bizConfig: Record<FinanceOpType, { label: string; partnerLabel: string }>;
   current: { partnerLabel: string; label?: string };
@@ -70,19 +70,56 @@ function FinanceDetailModal({
   globalNodes,
   dictionaries,
   categories,
-  psiRecords,
-  prodRecords,
   financeCatMap,
   bizConfig,
   current,
   type: _type,
 }: FinanceDetailModalProps) {
-  if (!detailRecord) return null;
+  const financeRec = detailRecord ? getFinanceRecordFromDetail(detailRecord) : null;
+  /**
+   * Phase 3.A：详情区按 docNumber/docNo 后端窄查 PSI / 生产明细，避免依赖 AppDataContext 全量。
+   * 仅在对账详情且数据来源命中时才发起请求，结果缓存 30s。
+   */
+  const psiDocLookup = (() => {
+    if (!detailRecord || !isPartnerReconRow(detailRecord) || detailRecord.source !== 'psi') return null;
+    const docType = detailRecord.docType === '采购单' ? 'PURCHASE_BILL' : 'SALES_BILL';
+    return { docNumber: detailRecord.docNo, type: docType };
+  })();
+  const psiDocQuery = useQuery({
+    queryKey: ['finance-detail', 'psi', psiDocLookup?.type, psiDocLookup?.docNumber],
+    queryFn: () =>
+      api.psi.list({
+        type: psiDocLookup!.type,
+        docNumber: psiDocLookup!.docNumber,
+        all: 'true',
+      } as Record<string, string>),
+    enabled: !!psiDocLookup,
+    staleTime: 30_000,
+  });
+  // Phase 3.D follow-up：context 已删除 psiRecords/prodRecords，详情完全依赖按 docNo 的 query。
+  const psiDocRecords = (psiDocQuery.data as unknown as PsiRecord[] | undefined) ?? [];
 
-  const financeRec = getFinanceRecordFromDetail(detailRecord);
-  const isReconRow = isPartnerReconRow(detailRecord);
-  const isSettleRow = isSettlementReconRow(detailRecord);
-  const reconSource = isReconRow ? detailRecord.source : null;
+  const prodDocLookup = (() => {
+    if (!detailRecord || !isPartnerReconRow(detailRecord) || detailRecord.source !== 'prod') return null;
+    const rec = detailRecord.rec;
+    return rec.docNo ? { docNo: rec.docNo } : null;
+  })();
+  const prodDocQuery = useQuery({
+    queryKey: ['finance-detail', 'prod', prodDocLookup?.docNo],
+    queryFn: () =>
+      api.production.listPage({
+        type: 'OUTSOURCE',
+        status: '已收回',
+        docNo: prodDocLookup!.docNo,
+        pageSize: 200,
+      }),
+    enabled: !!prodDocLookup,
+    staleTime: 30_000,
+  });
+  const prodDocRecords =
+    (prodDocQuery.data?.data as ProductionOpRecord[] | undefined) ?? [];
+
+  if (!detailRecord) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -136,7 +173,7 @@ function FinanceDetailModal({
           </div>
         </div>
         <div className="p-8 overflow-y-auto flex-1 space-y-5">
-          {isSettleRow && detailRecord.source === 'work_report' && (() => {
+          {isSettlementReconRow(detailRecord) && detailRecord.source === 'work_report' && (() => {
             const row = detailRecord;
             return (
               <div className="space-y-5">
@@ -179,7 +216,7 @@ function FinanceDetailModal({
               </div>
             );
           })()}
-          {isSettleRow && detailRecord.source === 'rework_report' && (() => {
+          {isSettlementReconRow(detailRecord) && detailRecord.source === 'rework_report' && (() => {
             const row = detailRecord;
             const rec = row.rec;
             const order = orders.find(o => o.id === rec.orderId);
@@ -205,11 +242,11 @@ function FinanceDetailModal({
               </div>
             );
           })()}
-          {reconSource === 'psi' && (() => {
+          {isPartnerReconRow(detailRecord) && detailRecord.source === 'psi' && (() => {
             const row = detailRecord;
             if (row.source !== 'psi') return null;
             const psiType = row.docType === '采购单' ? 'PURCHASE_BILL' : 'SALES_BILL';
-            const lineRecords = (psiRecords as any[]).filter((r: any) => r.type === psiType && (r.docNumber === row.docNo || r.docNo === row.docNo));
+            const lineRecords = (psiDocRecords as any[]).filter((r: any) => r.type === psiType && (r.docNumber === row.docNo || r.docNo === row.docNo));
             return (
               <div className="space-y-5">
                 <div className="grid grid-cols-2 gap-x-8 gap-y-4">
@@ -301,7 +338,7 @@ function FinanceDetailModal({
               </div>
             );
           })()}
-          {reconSource === 'prod' && (() => {
+          {isPartnerReconRow(detailRecord) && detailRecord.source === 'prod' && (() => {
             const row = detailRecord;
             if (row.source !== 'prod') return null;
             const rec = row.rec;
@@ -310,7 +347,7 @@ function FinanceDetailModal({
             const node = rec.nodeId ? globalNodes.find(n => n.id === rec.nodeId) : null;
             const unitPrice = rec.unitPrice != null && rec.unitPrice !== undefined ? Number(rec.unitPrice) : null;
             const amount = Number(rec.amount) || 0;
-            const relatedRecs = (prodRecords as ProductionOpRecord[]).filter(r =>
+            const relatedRecs = (prodDocRecords as ProductionOpRecord[]).filter(r =>
               r.type === 'OUTSOURCE' && r.status === '已收回' && r.docNo === rec.docNo
             );
             const category = product ? categories.find(c => c.id === product.categoryId) : null;

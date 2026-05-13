@@ -1,11 +1,9 @@
 import type {
   AppDictionaries,
-  FinanceRecord,
   PrintListRow,
   PrintRenderContext,
   Product,
   ProductVariant,
-  ProductionOpRecord,
   PsiRecord,
   SalesBillMatrixColorRow,
   SalesBillMatrixGroup,
@@ -18,10 +16,7 @@ import {
   serializeColorSizeMatrixPayload,
 } from './colorSizeMatrixPrint';
 import { BATCH_NO_UNTAGGED } from '../shared/types';
-import { localCalendarYmdStartToIso } from './localDateTime';
 import { sortedVariantColorEntries } from './sortVariantsByProduct';
-import { computePartnerReceivableBeforeDoc } from './partnerReceivableLedger';
-import { flowRecordsEarliestMs } from './flowDocSort';
 import { groupPsiDocLines } from './psiPrintShared';
 
 export type SalesBillLineInput = {
@@ -257,6 +252,17 @@ export function buildMatrixJsonAndTotalQtyFromVariantLine(opts: {
   };
 }
 
+/**
+ * Phase 3.D follow-up：销售单打印 builder。
+ *
+ * 改造前：接收 `psiRecords / financeRecords / prodRecords` 三个全量数组，在 builder 内
+ * 通过 `computePartnerReceivableBeforeDoc` 在前端扫表算应收 ledger，违反"builder 纯函数 + 无副作用"
+ * 的同时也强迫调用方持有 context 中三大全量数组。
+ *
+ * 改造后：builder 接收**已经算好的** `preBalance: { previousBalance, anchorTimeMs }`；
+ * 调用方（PSIOpsView 打印入口）负责异步调 `api.finance.partnerReceivable` 拿到 `previousBalance`，
+ * 然后把本单签名净额（`docTotalAmount`）加上 `previousBalance` 即为 `accumulatedDebt`。
+ */
 export function buildSalesBillPrintRenderContext(opts: {
   form: {
     partner: string;
@@ -271,42 +277,20 @@ export function buildSalesBillPrintRenderContext(opts: {
   productMap: Map<string, Product>;
   warehouseMap: Map<string, Warehouse>;
   dictionaries: AppDictionaries;
-  psiRecords: PsiRecord[];
-  financeRecords: FinanceRecord[];
-  prodRecords: ProductionOpRecord[];
+  /** 已由后端 `api.finance.partnerReceivable` 算好的应收 ledger 截至本单时刻的余额 */
+  preBalance: { previousBalance: number };
   editingDocNumber: string | null;
 }): PrintRenderContext {
-  const { form, lines, productMap, warehouseMap, dictionaries, psiRecords, financeRecords, prodRecords, editingDocNumber } = opts;
+  const { form, lines, productMap, warehouseMap, dictionaries, preBalance, editingDocNumber } = opts;
   const groupsForTotals = buildSalesBillMatrixGroups(lines, productMap, dictionaries);
   const docTotalQty = groupsForTotals.reduce((s, g) => s + g.totalQty, 0);
   const docTotalAmount = groupsForTotals.reduce((s, g) => s + g.totalAmount, 0);
 
   const docNumber = (form.docNumber || '').trim() || (editingDocNumber ?? '') || '—';
-  const docKey = `SALES_BILL|${(editingDocNumber || form.docNumber || '').trim() || `__draft_${Date.now()}__`}`;
 
-  let anchorTimeMs = Date.now();
-  if (editingDocNumber) {
-    const docLines = (psiRecords || []).filter((r) => r.type === 'SALES_BILL' && r.docNumber === editingDocNumber);
-    const ms = flowRecordsEarliestMs(docLines);
-    if (ms > 0) anchorTimeMs = ms;
-  } else {
-    const iso = localCalendarYmdStartToIso(form.createdAt || '');
-    const t = Date.parse(iso);
-    if (!Number.isNaN(t)) anchorTimeMs = t;
-  }
-
-  const bal = computePartnerReceivableBeforeDoc(
-    form.partner || '',
-    form.partnerId,
-    psiRecords || [],
-    financeRecords || [],
-    prodRecords || [],
-    {
-      docKey,
-      anchorTimeMs,
-      currentSignedAmount: docTotalAmount,
-    },
-  );
+  const previousBalance = Number.isFinite(preBalance.previousBalance) ? preBalance.previousBalance : 0;
+  const currentDebt = docTotalAmount;
+  const accumulatedDebt = previousBalance + currentDebt;
 
   const wh = warehouseMap.get(form.warehouseId);
 
@@ -325,9 +309,9 @@ export function buildSalesBillPrintRenderContext(opts: {
     note: form.note || '',
     docTotalQty,
     docTotalAmount,
-    previousBalance: Math.round(bal.previousBalance * 100) / 100,
-    currentDebt: Math.round(bal.currentDebt * 100) / 100,
-    accumulatedDebt: Math.round(bal.accumulatedDebt * 100) / 100,
+    previousBalance: Math.round(previousBalance * 100) / 100,
+    currentDebt: Math.round(currentDebt * 100) / 100,
+    accumulatedDebt: Math.round(accumulatedDebt * 100) / 100,
     custom,
   };
 
@@ -353,17 +337,18 @@ export function buildSalesBillLinesFromPsiRecords(docItems: PsiRecord[]): SalesB
   }));
 }
 
+/**
+ * Phase 3.D follow-up：从 PSI 同单据明细生成打印上下文；同样改为接收已算好的 `preBalance`。
+ */
 export function buildSalesBillPrintContextFromPsiDoc(params: {
   docNumber: string;
   docItems: PsiRecord[];
   productMap: Map<string, Product>;
   warehouseMap: Map<string, Warehouse>;
   dictionaries: AppDictionaries;
-  psiRecords: PsiRecord[];
-  financeRecords: FinanceRecord[];
-  prodRecords: ProductionOpRecord[];
+  preBalance: { previousBalance: number };
 }): PrintRenderContext {
-  const { docNumber, docItems, productMap, warehouseMap, dictionaries, psiRecords, financeRecords, prodRecords } = params;
+  const { docNumber, docItems, productMap, warehouseMap, dictionaries, preBalance } = params;
   const main = docItems[0] ?? {};
   const lines = buildSalesBillLinesFromPsiRecords(docItems);
   const createdAtRaw = (main.createdAt as string | undefined) ?? '';
@@ -385,9 +370,7 @@ export function buildSalesBillPrintContextFromPsiDoc(params: {
     productMap,
     warehouseMap,
     dictionaries,
-    psiRecords,
-    financeRecords,
-    prodRecords,
+    preBalance,
     editingDocNumber: docNumber,
   });
 }

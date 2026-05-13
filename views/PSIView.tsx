@@ -25,7 +25,10 @@ import {
 import { useModulePermission, usePermFilteredTabs } from '../hooks/useModulePermission';
 import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useMasterData, useConfigData, useOrdersData, usePsiData, useAppActions } from '../contexts/AppDataContext';
+import { useMasterData, useConfigData, useOrdersData, useAppActions } from '../contexts/AppDataContext';
+// Phase 3.D follow-up：PSIView 不再向 PSIOpsView 透传 `prodRecords` 全量大包；
+// WarehousePanel 内已用 useQuery 按 STOCK_* 类型窄拉；OrderBillFormPage 内 prodRecords
+// 仅用于销售单打印应收 ledger，Step 3.2 会改为打印时异步取后端 partner-receivable。
 
 // 简化业务类型，将仓库相关合并为 WAREHOUSE_MGMT
 type PSITab = 'PURCHASE_ORDER' | 'PURCHASE_BILL' | 'SALES_ORDER' | 'SALES_BILL' | 'WAREHOUSE_MGMT';
@@ -42,9 +45,14 @@ const PSIView: React.FC = () => {
   const m = useMasterData();
   const c = useConfigData();
   const o = useOrdersData();
-  const { psiRecords: records } = usePsiData();
   const a = useAppActions();
   const { tenantCtx } = useAuth();
+  /**
+   * Phase 3.D follow-up：context 已不再维护 psi 全量；
+   * 各 PSI 作业页内部由 `usePsiOpsRecordsList` 按 tab 的 type 集合 react-query 窄拉，
+   * 这里仅传 [] 占位（保留 PSIOpsView records prop 签名，后续可整体删）。
+   */
+  const records: any[] = [];
 
   useEffect(() => { void a.ensureDeferredLoaded(); }, [a.ensureDeferredLoaded]);
 
@@ -66,7 +74,6 @@ const PSIView: React.FC = () => {
   const onAddRecordBatch = a.onAddPSIRecordBatch;
   const onReplaceRecords = a.onReplacePSIRecords;
   const onDeleteRecords = a.onDeletePSIRecords;
-  const prodRecords = o.prodRecords;
   const orders = o.orders;
   const userPermissions = tenantCtx?.permissions;
   const tenantRole = tenantCtx?.tenantRole || '';
@@ -199,7 +206,6 @@ const PSIView: React.FC = () => {
           onAddRecordBatch={onAddRecordBatch}
           onReplaceRecords={onReplaceRecords}
           onDeleteRecords={onDeleteRecords}
-          prodRecords={prodRecords}
           orders={orders}
           userPermissions={userPermissions}
           tenantRole={tenantRole}

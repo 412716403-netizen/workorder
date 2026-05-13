@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   X,
   Package,
@@ -16,6 +17,10 @@ import { toast } from 'sonner';
 import { Product, Warehouse, ProductCategory, Partner, AppDictionaries } from '../../types';
 import { categoryUsesBatchManagement } from '../../types';
 import * as api from '../../services/api';
+import { production as productionApi } from '../../services/api';
+import { normalizeDecimals } from '../../contexts/formSettingsDefaults';
+import { fetchAllPages, type PaginatedLike } from '../../utils/fetchAllPages';
+import { computeWarehouseFlowRows } from './warehouseFlowHelpers';
 import { sortedColorEntries } from '../../utils/sortVariantsByProduct';
 import { useProgressiveList } from '../../hooks/useProgressiveList';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -59,7 +64,8 @@ interface WarehouseProps {
   partners: Partner[];
   dictionaries: AppDictionaries;
   records: any[];
-  prodRecords: any[];
+  /** 已废弃：本组件内 useQuery 按 STOCK_* 类型窄拉；保留兼容旧调用方但不再消费 */
+  prodRecords?: any[];
   orders: { id: string; orderNumber?: string }[];
   onAddRecord: (record: any) => void;
   onAddRecordBatch?: (records: any[]) => Promise<void>;
@@ -85,7 +91,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   partners,
   dictionaries,
   records,
-  prodRecords,
+  prodRecords: _legacyProdRecords,
   orders,
   onAddRecord,
   onAddRecordBatch,
@@ -107,6 +113,50 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   const recordsList = records ?? [];
   const ordersList = orders ?? [];
 
+  /**
+   * Phase 3.D follow-up：仓库流水合并需要的生产入库 / 物料发出 / 物料退回三类记录，
+   * 由本组件 useQuery 按 types 窄拉，替代 `AppDataContext.prodRecords` 全量大包。
+   * 注意：返回数据走 `normalizeDecimals`，与 context 旧行为一致。
+   *
+   * Phase 3.E follow-up：默认窗口最近 30 天，避免大租户长时间运营后单次拉回数万条
+   * 让页面卡顿。"近 30 天"足够覆盖仓库视图的库存反推与流水浏览；
+   * 历史范围请改走「仓库流水」弹窗（内部按用户选择的日期再发请求）。
+   */
+  const stockProdDateRange = useMemo(() => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 30);
+    return {
+      startDate: start.toISOString(),
+      endDate: end.toISOString(),
+      ymd: `${start.toISOString().slice(0, 10)}_${end.toISOString().slice(0, 10)}`,
+    };
+  }, []);
+  const stockProdQuery = useQuery({
+    queryKey: ['warehousePanel.prodStockRecords', stockProdDateRange.ymd],
+    queryFn: async () => {
+      // 业务消费侧（仓库视图聚合）目前用动态字段访问，沿用 any 兼容；
+      // 后续若把 prodStockRecords 类型化为 ProductionOpRecord[] 再统一收紧。
+      const all = await fetchAllPages<any>(
+        page =>
+          productionApi.listPage({
+            types: 'STOCK_IN,STOCK_OUT,STOCK_RETURN',
+            page,
+            pageSize: 200,
+            startDate: stockProdDateRange.startDate,
+            endDate: stockProdDateRange.endDate,
+          }) as Promise<any[] | PaginatedLike<any>>,
+        { maxPages: 60, warnTag: 'warehousePanel.prodStockRecords' },
+      );
+      return normalizeDecimals(all as never[]);
+    },
+    staleTime: 15_000,
+  });
+  const prodRecords = useMemo<any[]>(() => {
+    if (stockProdQuery.isSuccess && Array.isArray(stockProdQuery.data)) return stockProdQuery.data as any[];
+    return [];
+  }, [stockProdQuery.isSuccess, stockProdQuery.data]);
+
   const hasPsiPerm = (perm: string) => hasModulePerm(tenantRole, userPermissions, 'psi', perm);
 
   // ── 仓库管理子视图状态 ──
@@ -117,6 +167,11 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [warehouseFlowModalOpen, setWarehouseFlowModalOpen] = useState(false);
   const [warehouseFlowDetailKey, setWarehouseFlowDetailKey] = useState<string | null>(null);
+  /**
+   * 仓库流水弹窗按日期窄拉 records，详情打开时把当时窄拉的 PSI / 生产记录附带传回，
+   * 补齐 WarehouseFlowDocumentDetailModal 在 panel.recordsList / prodRecords 之外的数据。
+   */
+  const [warehouseFlowDetailExtra, setWarehouseFlowDetailExtra] = useState<{ psiRecords: any[]; prodRecords: any[] } | null>(null);
   const [productFlowDetail, setProductFlowDetail] = useState<{ productId: string; productName: string; warehouseId: string | null; warehouseName: string | null } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebouncedValue(searchTerm);
@@ -687,155 +742,18 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   const nonZeroStocks = useMemo(() => filteredProductStocks.filter(p => p.total !== 0), [filteredProductStocks]);
   const pStocks = useProgressiveList(nonZeroStocks);
 
-  // ── 仓库流水 ──
-  const WAREHOUSE_FLOW_TYPES = ['PURCHASE_BILL', 'SALES_BILL', 'TRANSFER', 'STOCKTAKE', 'STOCK_IN', 'STOCK_RETURN', 'STOCK_OUT'] as const;
-  const warehouseFlowTypeLabel: Record<string, string> = { PURCHASE_BILL: '采购入库', SALES_BILL: '销售出库', SALES_RETURN: '销售退货', TRANSFER: '调拨', STOCKTAKE: '盘点', STOCK_IN: '生产入库', STOCK_RETURN: '生产退料', STOCK_OUT: '领料发出' };
-  const formatFlowDateTime = (ts: string) => {
-    if (!ts || !ts.toString().trim()) return '—';
-    const d = new Date(ts.toString());
-    if (isNaN(d.getTime())) return ts.toString();
-    const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0 || d.getSeconds() !== 0 || (ts.toString().length > 10 && /[T\s]/.test(ts.toString()));
-    return hasTime ? d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : d.toLocaleDateString('zh-CN');
-  };
-  const toFlowDateStr = (ts: string) => {
-    if (!ts || !ts.toString().trim()) return '';
-    const d = new Date(ts.toString());
-    if (isNaN(d.getTime())) return ts.toString().slice(0, 10);
-    const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  };
+  // ── 仓库流水 ── 聚合逻辑下沉到 ./warehouseFlowHelpers
   const warehouseFlowRows = useMemo(() => {
-    const list = recordsList.filter(r => WAREHOUSE_FLOW_TYPES.includes(r.type as any)) as any[];
-    const psiRows = list.map(r => {
-      const product = productMapPSI.get(r.productId);
-      const dateStr = toFlowDateStr((r.createdAt || r.timestamp || '').toString()) || (r.createdAt || r.timestamp || '').toString().slice(0, 10);
-      const dateOnly = dateStr;
-      const displayDate = dateOnly || (r.timestamp || '—');
-      const displayDateTime = formatFlowDateTime(r.timestamp || r.createdAt || '');
-      const inboundWarehouseId = r.type === 'TRANSFER' ? r.toWarehouseId : r.warehouseId;
-      const outboundWarehouseId = r.type === 'TRANSFER' ? r.fromWarehouseId : (r.type === 'SALES_BILL' ? r.warehouseId : undefined);
-      const warehouseName = r.type === 'SALES_BILL'
-        ? (warehouseMapPSI.get(r.warehouseId)?.name ?? '—')
-        : (r.type === 'TRANSFER'
-          ? (r.toWarehouseId ? warehouseMapPSI.get(r.toWarehouseId)?.name ?? '—' : '—')
-          : (warehouseMapPSI.get(r.warehouseId)?.name ?? '—'));
-      const qty = r.quantity ?? 0;
-      const isSalesReturn = r.type === 'SALES_BILL' && qty < 0;
-      return {
-        id: r.id,
-        type: r.type,
-        typeLabel: isSalesReturn ? '销售退货' : (warehouseFlowTypeLabel[r.type] || r.type),
-        docNumber: r.docNumber || '—',
-        dateStr: displayDate,
-        displayDateTime: displayDateTime,
-        productId: r.productId,
-        productName: product?.name ?? '—',
-        productSku: product?.sku ?? '—',
-        quantity: qty,
-        warehouseId: inboundWarehouseId || r.warehouseId,
-        warehouseName,
-        isOutbound: r.type === 'SALES_BILL',
-        partner: r.partner ?? '—',
-        record: r
-      };
+    return computeWarehouseFlowRows({
+      recordsList: recordsList as any[],
+      prodRecords: prodRecords as any[],
+      productMapPSI,
+      warehouseMapPSI,
+      ordersList: ordersList as { id: string; orderNumber?: string }[],
+      parseRecordTime,
     });
-    const stockInList = (prodRecords || []).filter((r: any) => r.type === 'STOCK_IN') as any[];
-    const stockInRows = stockInList.map(r => {
-      const product = productMapPSI.get(r.productId);
-      const order = ordersList.find((o: { id: string; orderNumber?: string }) => o.id === r.orderId);
-      const dateStr = toFlowDateStr((r.timestamp || '').toString()) || (r.timestamp || '').toString().slice(0, 10);
-      const displayDate = dateStr || '—';
-      const docNumber = r.docNo || (order?.orderNumber ? `工单入库-${order.orderNumber}` : `SI-${r.id}`);
-      return {
-        id: r.id,
-        type: 'STOCK_IN',
-        typeLabel: '生产入库',
-        docNumber,
-        dateStr: displayDate,
-        displayDateTime: formatFlowDateTime(r.timestamp || ''),
-        productId: r.productId,
-        productName: product?.name ?? '—',
-        productSku: product?.sku ?? '—',
-        quantity: r.quantity ?? 0,
-        warehouseId: r.warehouseId,
-        warehouseName: warehouseMapPSI.get(r.warehouseId)?.name ?? '—',
-        isOutbound: false,
-        partner: '—',
-        record: r
-      };
-    });
-    const stockReturnList = (prodRecords || []).filter((r: any) => r.type === 'STOCK_RETURN') as any[];
-    const stockReturnRows = stockReturnList.map(r => {
-      const product = productMapPSI.get(r.productId);
-      const order = ordersList.find((o: { id: string; orderNumber?: string }) => o.id === r.orderId);
-      const dateStr = toFlowDateStr((r.timestamp || '').toString()) || (r.timestamp || '').toString().slice(0, 10);
-      const displayDate = dateStr || '—';
-      const docNumber = r.docNo || (order?.orderNumber ? `退料-${order.orderNumber}` : `TR-${r.id}`);
-      return {
-        id: r.id,
-        type: 'STOCK_RETURN',
-        typeLabel: '生产退料',
-        docNumber,
-        dateStr: displayDate,
-        displayDateTime: formatFlowDateTime(r.timestamp || ''),
-        productId: r.productId,
-        productName: product?.name ?? '—',
-        productSku: product?.sku ?? '—',
-        quantity: r.quantity ?? 0,
-        warehouseId: r.warehouseId,
-        warehouseName: warehouseMapPSI.get(r.warehouseId)?.name ?? '—',
-        isOutbound: false,
-        partner: '—',
-        record: r
-      };
-    });
-    const stockOutList = (prodRecords || []).filter((r: any) => r.type === 'STOCK_OUT') as any[];
-    const stockOutRows = stockOutList.map(r => {
-      const product = productMapPSI.get(r.productId);
-      const order = ordersList.find((o: { id: string; orderNumber?: string }) => o.id === r.orderId);
-      const dateStr = toFlowDateStr((r.timestamp || '').toString()) || (r.timestamp || '').toString().slice(0, 10);
-      const displayDate = dateStr || '—';
-      const docNumber = r.docNo || (order?.orderNumber ? `领料-${order.orderNumber}` : `LO-${r.id}`);
-      return {
-        id: r.id,
-        type: 'STOCK_OUT',
-        typeLabel: '领料发出',
-        docNumber,
-        dateStr: displayDate,
-        displayDateTime: formatFlowDateTime(r.timestamp || ''),
-        productId: r.productId,
-        productName: product?.name ?? '—',
-        productSku: product?.sku ?? '—',
-        quantity: r.quantity ?? 0,
-        warehouseId: r.warehouseId,
-        warehouseName: warehouseMapPSI.get(r.warehouseId)?.name ?? '—',
-        isOutbound: true,
-        partner: '—',
-        record: r
-      };
-    });
-    const allRows = [...psiRows, ...stockInRows, ...stockReturnRows, ...stockOutRows];
-    type FlowAggRow = (typeof allRows)[number];
-    const groups = new Map<string, FlowAggRow[]>();
-    allRows.forEach(r => {
-      const key = `${r.type}|${r.docNumber}|${r.productId}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(r);
-    });
-    return Array.from(groups.entries()).map(([key, rows]) => {
-      const tsList = rows.map(r => parseRecordTime(r.record)).filter(t => !Number.isNaN(t) && t > 0);
-      const minTs = tsList.length ? Math.min(...tsList) : 0;
-      const displayRow = rows.reduce((best, cur) => {
-        const tb = parseRecordTime(best.record);
-        const tc = parseRecordTime(cur.record);
-        if (Number.isNaN(tc) || tc <= 0) return best;
-        if (Number.isNaN(tb) || tb <= 0) return cur;
-        return tc < tb ? cur : best;
-      }, rows[0]);
-      const totalQty = rows.reduce((s, r) => s + r.quantity, 0);
-      return { ...displayRow, id: key, quantity: totalQty, _sortTs: minTs };
-    }).sort((a, b) => (b as { _sortTs: number })._sortTs - (a as { _sortTs: number })._sortTs || String(a.id).localeCompare(String(b.id)));
-  }, [recordsList, prodRecords, products, warehouses, ordersList, parseRecordTime, productMapPSI, warehouseMapPSI]);
+  }, [recordsList, prodRecords, productMapPSI, warehouseMapPSI, ordersList, parseRecordTime]);
+  // 占位：保留下面原 IIFE 直到下方匹配 `}, [recordsList...` 行被一并删除（见 git diff）
 
   // ── 按仓库聚合的库存列表 ──
   const warehouseStockList = useMemo(() => {
@@ -1444,10 +1362,14 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                />
                <WarehouseFlowModal
                  open={warehouseFlowModalOpen}
-                 onClose={() => { setWarehouseFlowModalOpen(false); setWarehouseFlowDetailKey(null); }}
-                 warehouseFlowRows={warehouseFlowRows}
+                 onClose={() => { setWarehouseFlowModalOpen(false); setWarehouseFlowDetailKey(null); setWarehouseFlowDetailExtra(null); }}
+                 products={products}
                  warehouses={warehouses}
-                 onViewDetail={setWarehouseFlowDetailKey}
+                 orders={ordersList}
+                 onViewDetail={(key, extra) => {
+                   setWarehouseFlowDetailExtra(extra);
+                   setWarehouseFlowDetailKey(key);
+                 }}
                />
                {productFlowDetail && (
                  <ProductFlowDetailModal
@@ -1462,9 +1384,9 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                {(warehouseFlowModalOpen || productFlowDetail) && warehouseFlowDetailKey && (
                  <WarehouseFlowDocumentDetailModal
                    warehouseFlowDetailKey={warehouseFlowDetailKey}
-                   onClose={() => setWarehouseFlowDetailKey(null)}
-                   recordsList={recordsList}
-                   prodRecords={prodRecords}
+                   onClose={() => { setWarehouseFlowDetailKey(null); setWarehouseFlowDetailExtra(null); }}
+                   recordsList={warehouseFlowDetailExtra?.psiRecords ?? recordsList}
+                   prodRecords={warehouseFlowDetailExtra?.prodRecords ?? prodRecords}
                    ordersList={ordersList}
                    productMapPSI={productMapPSI}
                    warehouseMapPSI={warehouseMapPSI}

@@ -7,8 +7,8 @@ import { toast } from 'sonner';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import * as api from '../../services/api';
 import type { Partner, Product, ProductionOpRecord, AppDictionaries, Warehouse, ProductCategory } from '../../types';
-import { categoryUsesBatchManagement, normalizeCollabSpecLabel, type CollabAcceptCategoryDecision } from '../../types';
-import { initCollabAcceptCategoryFromPayload } from '../../utils/collabAcceptDecision';
+import { categoryUsesBatchManagement, COLLAB_DISPATCH_AMENDMENT_PENDING_B_REVIEW, normalizeCollabSpecLabel, type CollabAcceptCategoryDecision } from '../../types';
+import { initCollabAcceptCategoryFromPayload, collabAcceptCategoryDisabledForIncomingMatrix } from '../../utils/collabAcceptDecision';
 import {
   dispatchStatusLabel, normalizeAcceptSpecList, returnStatusLabel, resolvePreferredCollabMatrixOrder,
 } from './collabHelpers';
@@ -84,7 +84,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
   const [acceptDesc, setAcceptDesc] = useState('');
   const [acceptColors, setAcceptColors] = useState<string[]>([]);
   const [acceptSizes, setAcceptSizes] = useState<string[]>([]);
-  const [acceptCategoryDecision, setAcceptCategoryDecision] = useState<CollabAcceptCategoryDecision>('none');
+  const [acceptCategoryDecision, setAcceptCategoryDecision] = useState<CollabAcceptCategoryDecision>('existing');
   const [acceptCategoryId, setAcceptCategoryId] = useState('');
   const [acceptCategoryNameToCreate, setAcceptCategoryNameToCreate] = useState('');
   /** 打开待接受派发时拉取 getTransfer，以使用后端 _acceptDispatchMode（CREATE / UPDATE_ACK / READY） */
@@ -201,6 +201,19 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
     try {
       await api.collaboration.rejectDispatchAmendment(doc.id);
       toast.success('已拒绝修订');
+      await afterMutation();
+    } catch (err: any) {
+      toast.error(err?.message || '操作失败');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleAckDispatchPayloadRefresh = async () => {
+    setBusy(true);
+    try {
+      await api.collaboration.ackDispatchPayloadRefresh(doc.id);
+      toast.success('已标记为已查看最新明细');
       await afterMutation();
     } catch (err: any) {
       toast.error(err?.message || '操作失败');
@@ -400,14 +413,22 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
     setAcceptDesc(typeof payload.description === 'string' ? payload.description : '');
     setAcceptColors(colors);
     setAcceptSizes(sizes);
+    const hasIncomingMatrixSpec = colors.length > 0 || sizes.length > 0;
     const catInit = initCollabAcceptCategoryFromPayload(
       typeof payload.categoryName === 'string' ? payload.categoryName : undefined,
       categories,
+      { hasIncomingMatrixSpec },
     );
     setAcceptCategoryDecision(catInit.categoryDecision);
     setAcceptCategoryId(catInit.categoryId);
     setAcceptCategoryNameToCreate(catInit.categoryNameToCreate);
   }, [open, docKind, doc, transfer, categories]);
+
+  const acceptIncomingHasMatrixSpec = useMemo(() => {
+    const c = normalizeAcceptSpecList(acceptColors);
+    const s = normalizeAcceptSpecList(acceptSizes);
+    return c.length > 0 || s.length > 0;
+  }, [acceptColors, acceptSizes]);
 
   const linkedProductForAck = useMemo(
     () => (transfer._acceptResolvedReceiverProductId
@@ -484,8 +505,12 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
           return;
         }
         const sel = categories.find(c => c.id === acceptCategoryId);
+        if (sel && hasMatrixSpec && !sel.hasColorSize) {
+          toast.warning('本次派发含规格明细，请选择已启用规格维度的分类，或改用「新建分类」');
+          return;
+        }
         if (sel && categoryUsesBatchManagement(sel) && hasMatrixSpec) {
-          toast.warning('所选分类已启用批次管理，与颜色尺码互斥，请另选分类或改为不归类');
+          toast.warning('所选分类已启用批次管理，与规格矩阵互斥，请另选支持规格的分类或改用「新建分类」');
           return;
         }
       }
@@ -507,12 +532,12 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
       });
     }
     if (mode === 'UPDATE_ACK' && acceptUpdateAckPreview?.batchBlock) {
-      toast.error('当前产品所属分类已启用批次管理，无法接受带颜色尺码的派发修订，请先在「设置 → 产品分类」调整该分类后再试。');
+      toast.error('当前产品所属分类已启用批次管理，无法接受带规格矩阵的派发修订，请先在「设置 → 产品分类」调整该分类后再试。');
       return;
     }
     const msg =
       mode === 'UPDATE_ACK'
-        ? '确认接受该派发？将把甲方本次名称/SKU/描述及色码变更同步到本地已关联产品，并生成或并入工单。'
+        ? '确认接受该派发？将把甲方本次名称/SKU/描述及规格变更同步到本地已关联产品，并生成或并入工单。'
         : mode === 'READY'
           ? '确认接受该派发？将生成或并入工单。'
           : '确认接受该派发？将创建乙方产品并生成对应工单。';
@@ -582,6 +607,10 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
   const canDeleteDispatch = docKind === 'dispatch' && isSender && doc.status === 'WITHDRAWN' && !isMidChainDispatch;
   const canWithdrawForward = docKind === 'dispatch' && !isSender && !!transfer.childTransferId && !transfer.childConfirmed;
   const dispatchAmendmentPending = docKind === 'dispatch' && doc.amendmentStatus === 'PENDING_B_CONFIRM';
+  const dispatchPayloadRefreshPending = docKind === 'dispatch'
+    && !isSender
+    && doc.status === 'PENDING'
+    && doc.amendmentStatus === COLLAB_DISPATCH_AMENDMENT_PENDING_B_REVIEW;
 
   // 回传单
   const canReceiveReturn = docKind === 'return' && isSender && doc.status === 'PENDING_A_RECEIVE';
@@ -669,6 +698,23 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
             </div>
 
             <div className="min-h-0 flex-1 space-y-4 p-5">
+            {dispatchPayloadRefreshPending && (
+              <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2 py-0.5 bg-sky-600 text-white text-[10px] font-black rounded">明细已更新</span>
+                  <span className="text-sm font-bold text-sky-950">甲方已同步修改本批次的数量或规格明细，请核对下方矩阵后再继续。</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAckDispatchPayloadRefresh}
+                  disabled={busy}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-black text-white bg-sky-600 hover:bg-sky-700 disabled:opacity-50 transition-colors"
+                >
+                  <Check className="w-4 h-4 shrink-0" />
+                  {busy ? '处理中…' : '已查看最新明细'}
+                </button>
+              </div>
+            )}
             <div>
               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
                 规格明细{items.length > 0 ? `（${items.length}）` : ''}
@@ -758,16 +804,6 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
                       />
                       新建分类
                     </label>
-                    <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="accept-cat-decision"
-                        checked={acceptCategoryDecision === 'none'}
-                        onChange={() => setAcceptCategoryDecision('none')}
-                        disabled={busy}
-                      />
-                      不归类
-                    </label>
                   </div>
                   {acceptCategoryDecision === 'existing' && (
                     <div className="space-y-1">
@@ -780,21 +816,21 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
                       >
                         <option value="">请选择…</option>
                         {categories.map(cat => {
-                          const specColors = normalizeAcceptSpecList(acceptColors);
-                          const specSizes = normalizeAcceptSpecList(acceptSizes);
-                          const hasSpec = specColors.length > 0 || specSizes.length > 0;
-                          const mutex = categoryUsesBatchManagement(cat) && hasSpec;
+                          const disabled = collabAcceptCategoryDisabledForIncomingMatrix(cat, acceptIncomingHasMatrixSpec);
+                          let reason = '';
+                          if (disabled) {
+                            if (acceptIncomingHasMatrixSpec && !cat.hasColorSize) reason = '（分类未启用规格）';
+                            else if (categoryUsesBatchManagement(cat) && acceptIncomingHasMatrixSpec) reason = '（批次与规格矩阵互斥）';
+                          }
                           return (
-                            <option key={cat.id} value={cat.id} disabled={mutex}>
-                              {(cat.name ?? '').trim() || cat.id}
-                              {cat.hasColorSize ? ' · 色码' : ''}
-                              {mutex ? '（批次管理与色码互斥）' : ''}
+                            <option key={cat.id} value={cat.id} disabled={disabled}>
+                              {(cat.name ?? '').trim() || cat.id}{reason}
                             </option>
                           );
                         })}
                       </select>
                       <p className="text-[11px] text-slate-500">
-                        若启用批次管理的分类与本次颜色/尺码冲突，请另选分类或改为「不归类」。
+                        列表与「设置 → 产品分类」名称一致。若甲方本次含规格明细，未启用规格维度的分类不可选；已启用批次管理且不支持规格矩阵的分类亦不可选。
                       </p>
                     </div>
                   )}
@@ -809,13 +845,8 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
                         placeholder="填写分类名称"
                         className="w-full bg-white border border-slate-200 rounded-lg py-2 px-3 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none disabled:opacity-50"
                       />
-                      <p className="text-[11px] text-slate-500">将新建分类并按本次是否含颜色/尺码自动启用色码标志。</p>
+                      <p className="text-[11px] text-slate-500">将新建分类并按本次派发明细自动启用分类上的规格相关标志。</p>
                     </div>
-                  )}
-                  {acceptCategoryDecision === 'none' && (
-                    <p className="text-[11px] text-amber-800 bg-amber-50/80 rounded-md px-2 py-1.5">
-                      产品将进入「全部」未归类视图，建议后续在产品档案中补充分类。
-                    </p>
                   )}
                 </div>
                 {(acceptColors.length > 0 || acceptSizes.length > 0) && (
@@ -832,7 +863,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
                     )}
                     {acceptSizes.length > 0 && (
                       <div>
-                        <span className="text-[10px] font-black text-slate-500 uppercase block ml-0.5 mb-1">尺码（来自甲方）</span>
+                        <span className="text-[10px] font-black text-slate-500 uppercase block ml-0.5 mb-1">规格列（来自甲方）</span>
                         <div className="flex flex-wrap gap-1.5">
                           {acceptSizes.map((s, i) => (
                             <span key={i} className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-xs font-bold">{s}</span>
@@ -856,7 +887,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
             {canAcceptDispatch && !acceptUiLoading && acceptMode === 'UPDATE_ACK' && (
               <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-4 space-y-3">
                 <p className="text-sm text-amber-950 font-bold leading-relaxed">
-                  已关联本地产品「{linkedProductLabel}」。甲方本次派发的名称、SKU、描述或色码与本地不一致，确认接受后将把甲方数据同步到该产品（若个别字段在本地存在冲突则会跳过并提示）。
+                  已关联本地产品「{linkedProductLabel}」。甲方本次派发的名称、SKU、描述或规格与本地不一致，确认接受后将把甲方数据同步到该产品（若个别字段在本地存在冲突则会跳过并提示）。
                 </p>
                 {acceptUpdateAckPreview && (
                   <div className="rounded-lg border border-amber-100 bg-white/70 p-3 space-y-2 text-xs text-slate-800">
@@ -871,7 +902,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
                         )}
                         {acceptUpdateAckPreview.newSizes.length > 0 && (
                           <p>
-                            <span className="font-bold text-slate-600">尺码：</span>
+                            <span className="font-bold text-slate-600">规格列：</span>
                             {acceptUpdateAckPreview.newSizes.join('、')}
                           </p>
                         )}
@@ -879,12 +910,12 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
                     )}
                     {acceptUpdateAckPreview.willUpgradeCategory && (
                       <p className="font-bold text-indigo-900">
-                        分类「{acceptUpdateAckPreview.catName}」当前未启用颜色尺码；接受后将自动启用色码以容纳甲方规格。
+                        分类「{acceptUpdateAckPreview.catName}」当前未启用规格维度；接受后将自动启用以容纳甲方派发明细。
                       </p>
                     )}
                     {acceptUpdateAckPreview.batchBlock && (
                       <p className="font-bold text-red-700">
-                        当前分类「{acceptUpdateAckPreview.catName}」已启用批次管理，与颜色尺码互斥，无法接受本派发修订。请先到「设置 → 产品分类」关闭批次管理或更换产品分类。
+                        当前分类「{acceptUpdateAckPreview.catName}」已启用批次管理，与规格矩阵互斥，无法接受本派发修订。请先到「设置 → 产品分类」关闭批次管理或更换产品分类。
                       </p>
                     )}
                   </div>

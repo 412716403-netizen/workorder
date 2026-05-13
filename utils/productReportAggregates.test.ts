@@ -5,6 +5,7 @@ import {
   pmpCompletedAtTemplate,
   pmpCompletedAtTemplateVariant,
   orderMaxReportableAtTemplateProductAware,
+  combinedCompletedAtTemplate,
 } from './productReportAggregates';
 import { MilestoneStatus, OrderStatus } from '../types';
 import type { ProductionOrder, ProductMilestoneProgress } from '../types';
@@ -85,6 +86,30 @@ describe('pmpCompletedAtTemplate', () => {
 
   it('returns 0 when no match', () => {
     expect(pmpCompletedAtTemplate([], 'p1', 't1')).toBe(0);
+  });
+});
+
+describe('combinedCompletedAtTemplate', () => {
+  it('sums variant breakdown from reports, not raw milestone completedQuantity when reports exist', () => {
+    const order: ProductionOrder = {
+      ...makeOrder(
+        'o1',
+        [
+          { quantity: 100, variantId: 'v-s' },
+          { quantity: 100, variantId: 'v-m' },
+          { quantity: 200, variantId: 'v-l' },
+        ],
+        [{ templateId: '横机', completedQuantity: 403 }],
+      ),
+    };
+    const ms = order.milestones.find(m => m.templateId === '横机')!;
+    ms.reports = [
+      { variantId: 'v-s', quantity: 130, defectiveQuantity: 0 },
+      { variantId: 'v-m', quantity: 130, defectiveQuantity: 0 },
+      { variantId: 'v-l', quantity: 140, defectiveQuantity: 0 },
+    ] as ProductionOrder['milestones'][0]['reports'];
+    expect(combinedCompletedAtTemplate([order], [], 'prod-1', '横机')).toBe(400);
+    expect(ms.completedQuantity).toBe(403);
   });
 });
 

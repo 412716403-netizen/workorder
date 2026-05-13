@@ -282,7 +282,7 @@
 
 **真源**：乙方租户侧 `POST /api/collaboration/subcontract-transfers/:id/accept` 的 `createProduct` 与既有产品同步逻辑（`collaboration.service`）。
 
-- **分类不由甲方 `payload.categoryName` 自动写库**：甲方名称仅作前端默认提示；乙方必须在「接受派发 / 新建本地产品」时明确 `categoryDecision`：`existing`（绑定已有分类）、`create`（新建分类）、`none`（不归类）。
+- **分类不由甲方 `payload.categoryName` 自动写库**：甲方名称仅作前端默认提示；乙方在「接受派发 / 新建本地产品」界面须选择 **既有分类** 或 **新建分类**（与「设置 → 产品分类」同一列表）。若派发含颜色/尺码，未启用色码（`hasColorSize`）的分类在下拉中置灰不可选；与批次管理互斥的分类规则不变。`categoryDecision` 在 API 上仍为 `existing` | `create` | `none`（`none` 仅兼容历史/外部调用，协作接受弹窗不再提供「不归类」入口）。
 - **颜色尺码与批次互斥**：若乙方选择「既有分类」且该分类已启用批次管理（`categoryUsesBatchManagement`），则本次派发若带颜色/尺码矩阵，不得绑定该分类（前端置灰选项，后端亦拒绝将分类升级为 `hasColorSize` 当分类仍带批次语义时）。
 - **复用本地同名/SKU 产品**：接受时除同步色码字典外，可按同一 `categoryDecision` 补绑分类、或在新增色码时将分类 `hasColorSize` 升为 `true`（仍受上述互斥守卫约束）。
 - **外协链转发**：中间站转发给下游的派发 `payload.categoryName` 优先取**链头甲方**最早派发单上的分类名（与色码沿用链头一致），避免中间站本地分类名污染下游默认展示。

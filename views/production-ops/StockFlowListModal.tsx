@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   ArrowUpFromLine,
   Undo2,
@@ -7,11 +8,19 @@ import {
   ScrollText,
   Filter,
   FileText,
+  Loader2,
 } from 'lucide-react';
 import type { ProductionOpRecord, ProductionOrder, Product } from '../../types';
 import { hasOpsPerm, type StockDocDetail } from './types';
 import { formatLocalDateTimeZh, parseProductionOpTimestampMs, toLocalDateYmdFromProductionTimestamp } from '../../utils/localDateTime';
 import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
+import {
+  fetchProductionByFilter,
+  dateInputToIsoStart,
+  dateInputToIsoEndExclusive,
+  isoToDateInput,
+  getTodayRangeIso,
+} from './sharedFlowListHelpers';
 
 type StockFlowBizType =
   | 'all'
@@ -28,7 +37,6 @@ function getStockFlowBizType(r: ProductionOpRecord): Exclude<StockFlowBizType, '
 export interface StockFlowListModalProps {
   visible: boolean;
   onClose: () => void;
-  records: ProductionOpRecord[];
   orders: ProductionOrder[];
   products: Product[];
   productionLinkMode: 'order' | 'product';
@@ -40,7 +48,6 @@ export interface StockFlowListModalProps {
 const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
   visible,
   onClose,
-  records,
   orders,
   products,
   productionLinkMode,
@@ -48,12 +55,26 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
   userPermissions,
   tenantRole,
 }) => {
+  const todayDate = useMemo(() => isoToDateInput(getTodayRangeIso().from), []);
   const [stockFlowFilterType, setStockFlowFilterType] = useState<StockFlowBizType>('all');
   const [stockFlowFilterOrderKeyword, setStockFlowFilterOrderKeyword] = useState('');
   const [stockFlowFilterProductKeyword, setStockFlowFilterProductKeyword] = useState('');
   const [stockFlowFilterDocNo, setStockFlowFilterDocNo] = useState('');
-  const [stockFlowFilterDateFrom, setStockFlowFilterDateFrom] = useState('');
-  const [stockFlowFilterDateTo, setStockFlowFilterDateTo] = useState('');
+  const [stockFlowFilterDateFrom, setStockFlowFilterDateFrom] = useState(todayDate);
+  const [stockFlowFilterDateTo, setStockFlowFilterDateTo] = useState(todayDate);
+
+  const stockFlowQuery = useQuery({
+    queryKey: ['flow.stock', stockFlowFilterDateFrom, stockFlowFilterDateTo],
+    queryFn: () =>
+      fetchProductionByFilter({
+        types: 'STOCK_OUT,STOCK_RETURN',
+        startDate: dateInputToIsoStart(stockFlowFilterDateFrom),
+        endDate: dateInputToIsoEndExclusive(stockFlowFilterDateTo),
+      }),
+    enabled: visible,
+    staleTime: 15_000,
+  });
+  const records = stockFlowQuery.data ?? [];
 
   /** 按单据号聚合：整张单按组内最早时间倒序，单内明细按 id 稳定序 */
   const stockFlowRecords = useMemo(() => {
@@ -107,6 +128,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
       const kw = stockFlowFilterDocNo.trim().toLowerCase();
       list = list.filter(r => ((r.docNo ?? '').toLowerCase()).includes(kw));
     }
+    // 服务端已按日期窗口窄拉；客户端再按 YMD 兜底确保边界精确（用户改输入框后视觉一致）
     if (stockFlowFilterDateFrom) {
       const from = stockFlowFilterDateFrom;
       list = list.filter(r => {
@@ -170,6 +192,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
           <div className="flex items-center gap-2 mb-3">
             <Filter className="w-4 h-4 text-slate-500" />
             <span className="text-xs font-bold text-slate-500 uppercase">筛选</span>
+            <span className="text-[10px] text-slate-400">默认显示当天，扩大日期范围需手动改</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
             <div>
@@ -251,16 +274,21 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
           <div className="mt-2 flex items-center gap-4">
             <button
               type="button"
-              onClick={() => { setStockFlowFilterType('all'); setStockFlowFilterOrderKeyword(''); setStockFlowFilterProductKeyword(''); setStockFlowFilterDocNo(''); setStockFlowFilterDateFrom(''); setStockFlowFilterDateTo(''); }}
+              onClick={() => { setStockFlowFilterType('all'); setStockFlowFilterOrderKeyword(''); setStockFlowFilterProductKeyword(''); setStockFlowFilterDocNo(''); setStockFlowFilterDateFrom(todayDate); setStockFlowFilterDateTo(todayDate); }}
               className="text-xs font-bold text-slate-500 hover:text-slate-700"
             >
-              清空筛选
+              重置为当天
             </button>
             <span className="text-xs text-slate-400">共 {filteredStockFlowRecords.length} 条</span>
+            {stockFlowQuery.isFetching && (
+              <span className="text-xs text-indigo-500 inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />加载中</span>
+            )}
           </div>
         </div>
         <div className="flex-1 overflow-auto p-4">
-          {filteredStockFlowRecords.length === 0 ? (
+          {stockFlowQuery.isLoading ? (
+            <p className="text-slate-500 text-center py-12">加载中…</p>
+          ) : filteredStockFlowRecords.length === 0 ? (
             <p className="text-slate-500 text-center py-12">暂无领料/退料流水</p>
           ) : (
             <div className="border border-slate-200 rounded-2xl overflow-hidden">

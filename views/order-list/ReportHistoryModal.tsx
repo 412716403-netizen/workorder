@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
-import { History, X, Filter, FileText } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { History, X, Filter, FileText, Loader2 } from 'lucide-react';
 import {
   ProductionOrder,
   Product,
@@ -12,6 +13,13 @@ import {
 import { toLocalDateYmd } from '../../utils/localDateTime';
 import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 import { fmtDT } from '../../utils/formatTime';
+import { orders as ordersApi } from '../../services/api';
+import {
+  dateInputToIsoStart,
+  dateInputToIsoEndExclusive,
+  getTodayRangeIso,
+  isoToDateInput,
+} from '../production-ops/sharedFlowListHelpers';
 
 interface ReportHistoryModalProps {
   open: boolean;
@@ -38,6 +46,7 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
   prodRecords,
   onOpenBatchDetail,
 }) => {
+  const todayDate = useMemo(() => isoToDateInput(getTodayRangeIso().from), []);
   const [reportHistoryFilter, setReportHistoryFilter] = useState<{
     productId: string;
     orderNumber: string;
@@ -46,7 +55,23 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
     dateFrom: string;
     dateTo: string;
     reportNo: string;
-  }>({ productId: '', orderNumber: '', milestoneName: '', operator: '', dateFrom: '', dateTo: '', reportNo: '' });
+  }>({ productId: '', orderNumber: '', milestoneName: '', operator: '', dateFrom: todayDate, dateTo: todayDate, reportNo: '' });
+
+  /**
+   * Phase 3.E：报工流水改走后端窄查接口，按日期窗口扁平展开 milestone.reports + PMP.reports。
+   * 不再依赖 props.orders 全量遍历。详情链路仍用 props.orders / productMilestoneProgresses 兜底解析。
+   */
+  const historyQuery = useQuery({
+    queryKey: ['flow.reportHistory', reportHistoryFilter.dateFrom, reportHistoryFilter.dateTo, productionLinkMode],
+    queryFn: () =>
+      ordersApi.listReportHistory({
+        startDate: dateInputToIsoStart(reportHistoryFilter.dateFrom),
+        endDate: dateInputToIsoEndExclusive(reportHistoryFilter.dateTo),
+        productionLinkMode,
+      }),
+    enabled: open,
+    staleTime: 15_000,
+  });
 
   const reportHistoryData = useMemo(() => {
     type ReportRow = {
@@ -58,12 +83,42 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
         [k: string]: any;
       };
     };
+    const ordersById = new Map<string, ProductionOrder>(orders.map(o => [o.id, o] as const));
+    const pmpsById = new Map<string, ProductMilestoneProgress>(productMilestoneProgresses.map(p => [p.id, p] as const));
+    const productsById = new Map<string, Product>(products.map(p => [p.id, p] as const));
     const allRows: ReportRow[] = [];
-    orders.forEach(o => {
-      o.milestones?.forEach(m => {
-        (m.reports || []).forEach(r => {
-          allRows.push({ order: o, milestone: { id: m.id, name: m.name, templateId: m.templateId }, report: r });
-        });
+    const orderReportsRaw = (historyQuery.data?.orderReports ?? []) as Array<Record<string, any>>;
+    orderReportsRaw.forEach(row => {
+      const orderFromProps = ordersById.get(row.orderId as string);
+      const fallbackOrder = {
+        id: row.orderId,
+        orderNumber: row.orderNumber,
+        productId: row.productId,
+        productName: row.productName ?? '',
+        sku: row.sku ?? '',
+        customer: row.customer ?? '',
+        items: [],
+        milestones: [],
+      } as unknown as ProductionOrder;
+      const order: ProductionOrder = orderFromProps ?? fallbackOrder;
+      allRows.push({
+        order,
+        milestone: { id: row.milestoneId, name: row.milestoneName, templateId: row.templateId },
+        report: {
+          id: row.reportId,
+          timestamp: row.timestamp,
+          operator: row.operator ?? '',
+          quantity: Number(row.quantity) || 0,
+          defectiveQuantity: row.defectiveQuantity != null ? Number(row.defectiveQuantity) : undefined,
+          variantId: row.variantId ?? undefined,
+          reportBatchId: row.reportBatchId ?? undefined,
+          reportNo: row.reportNo ?? undefined,
+          customData: row.customData ?? {},
+          notes: row.notes ?? undefined,
+          rate: row.rate != null ? Number(row.rate) : undefined,
+          workerId: row.workerId ?? undefined,
+          weight: row.weight != null ? Number(row.weight) : null,
+        },
       });
     });
     type OrderBatch = { source: 'order'; key: string; rows: ReportRow[]; first: ReportRow; totalGood: number; totalDefective: number; totalAmount: number; reportNo?: string };
@@ -125,10 +180,37 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
       reportNo: rows.find(r => r.report.reportBatchId || r.report.reportNo)?.report.reportNo
     }));
     let productBatches: ProductBatch[] = [];
-    if (productionLinkMode === 'product' && productMilestoneProgresses.length > 0) {
-      const productRows: ProductBatchItem[] = [];
-      productMilestoneProgresses.forEach(pmp => {
-        (pmp.reports ?? []).forEach(r => { productRows.push({ progress: pmp, report: r }); });
+    if (productionLinkMode === 'product') {
+      const productReportsRaw = (historyQuery.data?.productReports ?? []) as Array<Record<string, any>>;
+      const productRows: ProductBatchItem[] = productReportsRaw.map(row => {
+        const pmp = pmpsById.get(row.progressId as string);
+        const fallbackProgress = {
+          id: row.progressId,
+          productId: row.productId,
+          variantId: row.variantId ?? null,
+          milestoneTemplateId: row.templateId,
+          completedQuantity: 0,
+          reports: [],
+        } as unknown as ProductMilestoneProgress;
+        const progress: ProductMilestoneProgress = pmp ?? fallbackProgress;
+        return {
+          progress,
+          report: {
+            id: row.reportId,
+            timestamp: row.timestamp,
+            operator: row.operator ?? '',
+            quantity: Number(row.quantity) || 0,
+            defectiveQuantity: row.defectiveQuantity != null ? Number(row.defectiveQuantity) : undefined,
+            variantId: row.variantId ?? undefined,
+            reportBatchId: row.reportBatchId ?? undefined,
+            reportNo: row.reportNo ?? undefined,
+            customData: row.customData ?? {},
+            notes: row.notes ?? undefined,
+            rate: row.rate != null ? Number(row.rate) : undefined,
+            workerId: row.workerId ?? undefined,
+            weight: row.weight != null ? Number(row.weight) : null,
+          } as any,
+        };
       });
       const filteredProductRows = productRows.filter(({ progress, report }) => {
         if (f.productId) {
@@ -165,7 +247,7 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
       });
       productBatches = Array.from(productGroups.entries()).map(([k, rows]) => {
         const first = rows[0];
-        const p = products.find(px => px.id === first.progress.productId);
+        const p = productsById.get(first.progress.productId);
         const defaultRate = p?.nodeRates?.[first.progress.milestoneTemplateId] ?? 0;
         return {
           source: 'product' as const, key: `product-${k}`, progressId: first.progress.id,
@@ -197,11 +279,11 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
     const firstBatchProductId = batches.length > 0 ? (batches[0].source === 'order' ? batches[0].first.order.productId : batches[0].productId) : '';
     const summaryUnit = batches.length > 0 && batches.every(b => (b.source === 'order' ? b.first.order.productId : b.productId) === firstBatchProductId)
       ? getUnitName(firstBatchProductId) : '件';
-    const uniqueProducts = [...new Set([...orders.map(o => o.productId), ...productMilestoneProgresses.map(p => p.productId)])].filter(Boolean);
+    const uniqueProducts = [...new Set([...allRows.map(r => r.order.productId), ...productBatches.map(b => b.productId)])].filter(Boolean);
     const uniqueMilestones = [...new Set([...allRows.map(r => r.milestone.name), ...productBatches.map(b => b.milestoneName)])].filter(Boolean);
     const uniqueOperators = [...new Set([...allRows.map(r => r.report.operator), ...productBatches.flatMap(b => b.rows.map(r => r.report.operator))])].filter(Boolean).sort((a, b) => a.localeCompare(b));
     return { batches, totalGood, totalDefective, totalAmount, summaryUnit, uniqueProducts, uniqueMilestones, uniqueOperators, getUnitName };
-  }, [orders, products, productMilestoneProgresses, reportHistoryFilter, productionLinkMode, globalNodes, dictionaries]);
+  }, [historyQuery.data, orders, products, productMilestoneProgresses, reportHistoryFilter, productionLinkMode, globalNodes, dictionaries]);
 
   if (!open) return null;
 
@@ -220,6 +302,7 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
           <div className="flex items-center gap-2 mb-3">
             <Filter className="w-4 h-4 text-slate-500" />
             <span className="text-xs font-bold text-slate-500 uppercase">筛选</span>
+            <span className="text-[10px] text-slate-400">默认显示当天，扩大日期范围需手动改</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-3">
             <div>
@@ -281,12 +364,17 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
             </div>
           </div>
           <div className="mt-2 flex items-center gap-4">
-            <button onClick={() => setReportHistoryFilter({ productId: '', orderNumber: '', milestoneName: '', operator: '', dateFrom: '', dateTo: '', reportNo: '' })} className="text-xs font-bold text-slate-500 hover:text-slate-700">清空筛选</button>
+            <button onClick={() => setReportHistoryFilter({ productId: '', orderNumber: '', milestoneName: '', operator: '', dateFrom: todayDate, dateTo: todayDate, reportNo: '' })} className="text-xs font-bold text-slate-500 hover:text-slate-700">重置为当天</button>
             <span className="text-xs text-slate-400">共 {batches.length} 次报工</span>
+            {historyQuery.isFetching && (
+              <span className="text-xs text-indigo-500 inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />加载中</span>
+            )}
           </div>
         </div>
         <div className="flex-1 overflow-auto p-4">
-          {batches.length === 0 ? (
+          {historyQuery.isLoading ? (
+            <p className="text-slate-500 text-center py-12">加载中…</p>
+          ) : batches.length === 0 ? (
             <p className="text-slate-500 text-center py-12">暂无报工流水</p>
           ) : (
             <div className="border border-slate-200 rounded-2xl overflow-hidden">

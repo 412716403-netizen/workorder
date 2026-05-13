@@ -1,8 +1,11 @@
 import { Prisma } from '@prisma/client';
 import type { TenantPrismaClient } from '../lib/prisma.js';
 import { prisma as basePrisma } from '../lib/prisma.js';
-import { generateDocNo } from '../utils/docNumber.js';
-import { nextOutsourceDocNoForPartner } from '../utils/partnerDocNumberServer.js';
+import { generateDocNo, generateDocNoWithLock } from '../utils/docNumber.js';
+import {
+  nextOutsourceDocNoForPartner,
+  nextOutsourceDocNoForPartnerTx,
+} from '../utils/partnerDocNumberServer.js';
 import { genId } from '../utils/genId.js';
 import { sanitizeUpdate, sanitizeCreate, normalizeDates } from '../utils/request.js';
 import { calcUsageByWeight } from '../utils/bomMaterialUsageByWeight.js';
@@ -75,24 +78,191 @@ const DOC_PREFIX: Record<string, string> = {
   SCRAP: 'BS',
 };
 
+export interface ProductionListFilter {
+  type?: string;
+  /** Phase 3.C：支持多 type 窄拉（容器层按 tab 选择 ['STOCK_OUT','STOCK_RETURN'] 等） */
+  types?: string[];
+  orderId?: string;
+  /** 工单中心等：多工单 id 窄拉（与 productIds 组合时为 OR 作用域） */
+  orderIds?: string[];
+  productId?: string;
+  /** 关联产品模式外协/返工（无 orderId）及按产品汇总的 STOCK_IN */
+  productIds?: string[];
+  /** 关联产品模式领退料：按"成品" sourceProductId 收口（无 orderId，productId 为物料 id） */
+  sourceProductIds?: string[];
+  workerId?: string;
+  partner?: string;
+  status?: string;
+  docNo?: string;
+  startDate?: string;
+  endDate?: string;
+  search?: string;
+}
+
+function buildProductionWhere(opts: ProductionListFilter): Record<string, unknown> {
+  const where: Record<string, unknown> = {};
+  if (opts.types && opts.types.length > 0) {
+    where.type = { in: opts.types };
+  } else if (opts.type) {
+    where.type = opts.type;
+  }
+  const orderIds = (opts.orderIds ?? []).filter(Boolean);
+  const productIds = (opts.productIds ?? []).filter(Boolean);
+  const sourceProductIds = (opts.sourceProductIds ?? []).filter(Boolean);
+  if (orderIds.length > 0 || productIds.length > 0 || sourceProductIds.length > 0) {
+    const orBranches: Record<string, unknown>[] = [];
+    if (orderIds.length > 0) {
+      orBranches.push({ orderId: { in: orderIds } });
+    }
+    if (productIds.length > 0) {
+      orBranches.push({
+        AND: [
+          { productId: { in: productIds } },
+          { orderId: null },
+          { type: { in: ['OUTSOURCE', 'REWORK'] } },
+        ],
+      });
+      orBranches.push({
+        AND: [{ productId: { in: productIds } }, { type: 'STOCK_IN' }],
+      });
+    }
+    if (sourceProductIds.length > 0) {
+      // 关联产品模式领退料：写入时 productId=物料、sourceProductId=成品、orderId=null；
+      // 按成品 id 命中所有相关 STOCK_OUT/STOCK_RETURN。
+      orBranches.push({ sourceProductId: { in: sourceProductIds } });
+    }
+    if (orBranches.length === 1) {
+      Object.assign(where, orBranches[0]);
+    } else {
+      const existingAnd = Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : [];
+      where.AND = [...existingAnd, { OR: orBranches }];
+    }
+  } else {
+    if (opts.orderId) where.orderId = opts.orderId;
+    if (opts.productId) where.productId = opts.productId;
+  }
+  if (opts.workerId) where.workerId = opts.workerId;
+  if (opts.partner) where.partner = { contains: opts.partner, mode: 'insensitive' };
+  if (opts.status) where.status = opts.status;
+  if (opts.docNo) where.docNo = opts.docNo;
+
+  if (opts.startDate || opts.endDate) {
+    const ts: Record<string, Date> = {};
+    if (opts.startDate) {
+      const d = new Date(opts.startDate);
+      if (!Number.isNaN(d.getTime())) ts.gte = d;
+    }
+    if (opts.endDate) {
+      const d = new Date(opts.endDate);
+      if (!Number.isNaN(d.getTime())) ts.lte = d;
+    }
+    if (Object.keys(ts).length) where.timestamp = ts;
+  }
+  if (opts.search) {
+    where.OR = [
+      { docNo: { contains: opts.search, mode: 'insensitive' } },
+      { partner: { contains: opts.search, mode: 'insensitive' } },
+      { reason: { contains: opts.search, mode: 'insensitive' } },
+    ];
+  }
+  return where;
+}
+
 export async function listRecords(
   db: TenantPrismaClient,
-  opts: { type?: string; orderId?: string; productId?: string; page?: number; pageSize?: number },
+  opts: ProductionListFilter & {
+    all?: boolean;
+    page?: number;
+    pageSize?: number;
+  },
 ) {
-  const where: Record<string, unknown> = {};
-  if (opts.type) where.type = opts.type;
-  if (opts.orderId) where.orderId = opts.orderId;
-  if (opts.productId) where.productId = opts.productId;
+  const where = buildProductionWhere(opts);
   const orderBy: any = [{ timestamp: 'desc' }, { id: 'asc' }];
 
-  if (opts.page != null && opts.pageSize != null) {
-    const [data, total] = await Promise.all([
-      db.productionOpRecord.findMany({ where, orderBy, skip: (opts.page - 1) * opts.pageSize, take: opts.pageSize }),
-      db.productionOpRecord.count({ where }),
-    ]);
-    return { data, total, page: opts.page, pageSize: opts.pageSize };
+  if (opts.all) {
+    return db.productionOpRecord.findMany({ where, orderBy });
   }
-  return db.productionOpRecord.findMany({ where, orderBy });
+
+  const page = Math.max(1, opts.page ?? 1);
+  const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+  const [data, total] = await Promise.all([
+    db.productionOpRecord.findMany({ where, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
+    db.productionOpRecord.count({ where }),
+  ]);
+  return { data, total, page, pageSize };
+}
+
+/**
+ * Phase 3.C：生产报工汇总接口。
+ * - `byType`：按操作类型（STOCK_OUT/STOCK_RETURN/STOCK_IN/OUTSOURCE/REWORK/SCRAP 等）的数量/重量合计、笔数
+ * - `byStatus`：`type × status`（外协是否收回、报工是否结算等）的笔数
+ * - `byWorker`：按工人聚合数量与重量，topN
+ * - `byPartner`：按外协合作单位聚合数量与重量，topN
+ * 与列表口径完全一致（同一 `filter`），用于报工模块"经营分析 / 看板"类页面。
+ */
+export async function summarize(
+  db: TenantPrismaClient,
+  opts: ProductionListFilter & { topWorkers?: number; topPartners?: number },
+) {
+  const where = buildProductionWhere(opts);
+  const topWorkers = Math.min(Math.max(1, opts.topWorkers ?? 10), 50);
+  const topPartners = Math.min(Math.max(1, opts.topPartners ?? 10), 50);
+
+  const [byType, byStatus, byWorker, byPartner] = await Promise.all([
+    db.productionOpRecord.groupBy({
+      by: ['type'],
+      where,
+      _sum: { quantity: true, weight: true },
+      _count: { _all: true },
+    }),
+    db.productionOpRecord.groupBy({
+      by: ['type', 'status'],
+      where,
+      _count: { _all: true },
+    }),
+    db.productionOpRecord.groupBy({
+      by: ['workerId'],
+      where: { ...where, workerId: { not: null } },
+      _sum: { quantity: true, weight: true },
+      _count: { _all: true },
+      orderBy: { _sum: { quantity: 'desc' } },
+      take: topWorkers,
+    }),
+    db.productionOpRecord.groupBy({
+      by: ['partner'],
+      where: { ...where, partner: { not: null } },
+      _sum: { quantity: true, weight: true },
+      _count: { _all: true },
+      orderBy: { _sum: { quantity: 'desc' } },
+      take: topPartners,
+    }),
+  ]);
+
+  return {
+    byType: byType.map(r => ({
+      type: r.type,
+      quantity: Number(r._sum.quantity ?? 0),
+      weight: Number(r._sum.weight ?? 0),
+      count: r._count._all,
+    })),
+    byStatus: byStatus.map(r => ({
+      type: r.type,
+      status: r.status,
+      count: r._count._all,
+    })),
+    byWorker: byWorker.map(r => ({
+      workerId: r.workerId,
+      quantity: Number(r._sum.quantity ?? 0),
+      weight: Number(r._sum.weight ?? 0),
+      count: r._count._all,
+    })),
+    byPartner: byPartner.map(r => ({
+      partner: r.partner,
+      quantity: Number(r._sum.quantity ?? 0),
+      weight: Number(r._sum.weight ?? 0),
+      count: r._count._all,
+    })),
+  };
 }
 
 export async function getRecord(db: TenantPrismaClient, id: string) {
@@ -103,11 +273,18 @@ export async function createRecord(
   db: TenantPrismaClient,
   body: Record<string, unknown>,
   tenantId?: string,
+  /** `createRecordBatch` 已在外层 `basePrisma.$transaction` 内调用本函数时传入：此时 `db` 为事务内的 `tx`，无 `$transaction` 方法，不可再套一层。 */
+  opts?: { skipNestedStockTransaction?: boolean },
 ) {
   const data = sanitizeCreate(body);
   if (!data.id) data.id = genId('prodop');
   normalizeDates(data);
   if (!data.timestamp) data.timestamp = new Date();
+  // sanitizeCreate 会剥掉 tenantId，正常情况下 getTenantPrisma 的 Proxy 会自动回填；
+  // 但 createRecordBatch 内部把裸 $transaction 的 tx 强转成 TenantPrismaClient 传进来，
+  // 那条路径上 Proxy 不生效，Prisma 就会抛 "Argument `tenantId` is missing"。
+  // 这里显式回填一次，对 Proxy 路径只是重复赋值，无副作用。
+  if (tenantId && !data.tenantId) data.tenantId = tenantId;
 
   if (!data.docNo) {
     if (data.type === 'OUTSOURCE' && data.partner && tenantId) {
@@ -146,21 +323,27 @@ export async function createRecord(
 
   const stockish = data.type === 'STOCK_OUT' || data.type === 'STOCK_RETURN';
   const record = stockish
-    ? await withSerializableRetry(() =>
-        db.$transaction(
-          async tx => {
-            const txDb = tx as unknown as TenantPrismaClient;
-            await validateStockReturnBatchOnWrite(txDb, data as Record<string, unknown>);
-            await validateStockOutBatchOnWrite(txDb, data as Record<string, unknown>, undefined);
-            return tx.productionOpRecord.create({ data: data as any });
-          },
-          {
-            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-            maxWait: 10_000,
-            timeout: 60_000,
-          },
-        ),
-      )
+    ? opts?.skipNestedStockTransaction
+      ? await (async () => {
+          await validateStockReturnBatchOnWrite(db, data as Record<string, unknown>);
+          await validateStockOutBatchOnWrite(db, data as Record<string, unknown>, undefined);
+          return db.productionOpRecord.create({ data: data as any });
+        })()
+      : await withSerializableRetry(() =>
+          db.$transaction(
+            async tx => {
+              const txDb = tx as unknown as TenantPrismaClient;
+              await validateStockReturnBatchOnWrite(txDb, data as Record<string, unknown>);
+              await validateStockOutBatchOnWrite(txDb, data as Record<string, unknown>, undefined);
+              return tx.productionOpRecord.create({ data: data as any });
+            },
+            {
+              isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+              maxWait: 10_000,
+              timeout: 60_000,
+            },
+          ),
+        )
     : await (async () => {
         await validateStockReturnBatchOnWrite(db, data as Record<string, unknown>);
         await validateStockOutBatchOnWrite(db, data as Record<string, unknown>, undefined);
@@ -172,6 +355,81 @@ export async function createRecord(
   }
 
   return record;
+}
+
+/**
+ * 批量写入生产流水。
+ *
+ * 关键语义：当传入的一批记录"同 type、同 OUTSOURCE partner（或非 OUTSOURCE）、全部缺省 docNo"时，
+ * 在服务端**先**统一分配一个 docNo 给整批共享；再依次走 `createRecord` 跑各自的副作用
+ * （称重快照 / OUTSOURCE 进度回写 / 库存校验等）。
+ *
+ * 解决前端基于 stale 缓存自算 docNo 导致的"两次批量入库串号 / 加合"问题
+ * （表现：第二张单的明细被并到上一张 docNo 下，待入库列表也没有及时消失）。
+ *
+ * Phase 3.E follow-up（并发安全 + 原子性）：
+ * 1. **整批包一个 $transaction**：任一条 insert 失败 → 全部回滚，不再留半成品。
+ * 2. **docNo 分配在事务内 + 持 advisory lock**：lock 持续到所有 insert 完成才释放，
+ *    彻底闭合"取号→insert"之间的 race window，PM2 cluster / 多副本下也不会串号。
+ * 3. 与单条 `createRecord` 走的同一个 lock key（`production_op_records:doc_no:<prefix>`
+ *    / `outsource:<prefix>:<partner>`），跨入口完全互斥。
+ *
+ * 注：内部仍走 `createRecord(tx, ..., { skipNestedStockTransaction: true })` 复用所有既有副作用。
+ * 事务内的 `tx` 没有 `$transaction` 方法，故领退料分支必须跳过内层再开事务（否则报
+ * `db.$transaction is not a function`）。
+ */
+export async function createRecordBatch(
+  db: TenantPrismaClient,
+  records: Record<string, unknown>[],
+  tenantId?: string,
+) {
+  if (!Array.isArray(records) || records.length === 0) return [];
+
+  const types = new Set(records.map(r => r.type));
+  const hasDocNo = records.some(r => r.docNo != null && String(r.docNo).trim() !== '');
+  const allSameType = types.size === 1;
+  const onlyType = allSameType ? String([...types][0]) : '';
+  const partners = new Set(records.map(r => (r.partner ?? '') as string));
+  const isOutsource = onlyType === 'OUTSOURCE';
+  const sharePartner = isOutsource ? partners.size === 1 : true;
+  const canShareDocNo = !hasDocNo && allSameType && sharePartner;
+
+  return basePrisma.$transaction(
+    async tx => {
+      const txDb = tx as unknown as TenantPrismaClient;
+      let sharedDocNo: string | null = null;
+      if (canShareDocNo) {
+        if (isOutsource && tenantId) {
+          const partner = ([...partners][0] || '').trim();
+          if (partner) {
+            const kind = records.every(r => r.status === '已收回') ? 'receive' : 'dispatch';
+            sharedDocNo = await nextOutsourceDocNoForPartnerTx(tx, tenantId, kind, partner);
+          }
+        } else if (DOC_PREFIX[onlyType]) {
+          sharedDocNo = await generateDocNoWithLock(
+            tx,
+            DOC_PREFIX[onlyType],
+            'production_op_records',
+            'doc_no',
+            tenantId,
+          );
+        }
+      }
+
+      const out: unknown[] = [];
+      for (const r of records) {
+        const body = { ...r };
+        if (!body.docNo && sharedDocNo) body.docNo = sharedDocNo;
+        out.push(await createRecord(txDb, body, tenantId, { skipNestedStockTransaction: true }));
+      }
+      return out;
+    },
+    {
+      // STOCK_IN/OUTSOURCE 等批量写入可能触发库存批次校验与外协进度回写，预留较长超时。
+      maxWait: 10_000,
+      timeout: 60_000,
+    },
+  );
 }
 
 export async function updateRecord(

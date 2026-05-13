@@ -15,10 +15,13 @@ import {
 } from '../../types';
 import { categoryUsesBatchManagement } from '../../types';
 import { toast } from 'sonner';
+import { useQuery } from '@tanstack/react-query';
 import * as api from '../../services/api';
+import { production as productionApi } from '../../services/api';
+import { normalizeDecimals } from '../../contexts/formSettingsDefaults';
+import { fetchAllPages, type PaginatedLike } from '../../utils/fetchAllPages';
 import { clampBatchNoInput } from '../../hooks/useBatchPicker';
 import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
-import { toLocalCompactYmd } from '../../utils/localDateTime';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import {
@@ -28,7 +31,7 @@ import {
   WAREHOUSE_DOC_KIND,
 } from '../../utils/warehouseDocPreference';
 import { formatMaterialQtyDisplay } from '../../utils/formatMaterialQtyDisplay';
-import { usePsiStockIndex } from '../../hooks/usePsiStockIndex';
+import { useStockSnapshot } from '../../hooks/useStockSnapshot';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 
 interface MaterialIssueModalProps {
@@ -40,7 +43,12 @@ interface MaterialIssueModalProps {
   warehouses: Warehouse[];
   globalNodes: GlobalNodeTemplate[];
   dictionaries: AppDictionaries;
-  prodRecords: ProductionOpRecord[];
+  /**
+   * Phase 3.D follow-up：调用方不再传 `prodRecords` 全量。本组件按当前 orderId / forProduct.productId
+   * 用 react-query 自行窄拉 STOCK_OUT / STOCK_RETURN，作为发料进度统计与单号生成的数据源。
+   * 仅在调用方仍以历史链路注入时作为初始 fallback 使用。
+   */
+  prodRecords?: ProductionOpRecord[];
   productionLinkMode: 'order' | 'product';
   onAddRecord: (record: ProductionOpRecord) => void;
   onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
@@ -90,8 +98,9 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
   boms,
   warehouses,
   globalNodes,
-  prodRecords,
+  prodRecords: propsProdRecords,
   onAddRecord,
+  onAddRecordBatch,
   onClose,
   categories = [],
   psiRecords = [],
@@ -120,6 +129,55 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const categoryById = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
 
+  /**
+   * Phase 3.D follow-up：调用方不再传 `prodRecords` 全量。
+   * 这里按当前 orderId / forProduct 的 family orderIds 用 react-query 自取 STOCK_OUT / STOCK_RETURN，
+   * 用于发料进度统计（本工单/产品已发 - 已退 = 净领用）。
+   */
+  const familyOrderIds = useMemo<string[]>(() => {
+    if (orderId && !forProduct) return [orderId];
+    if (forProduct) return forProduct.orders.map(o => o.id);
+    return [];
+  }, [orderId, forProduct]);
+
+  /**
+   * 关联产品模式（forProduct）：领退料写入时 `orderId=null`、`sourceProductId=成品 id`，
+   * 仅按 `orderIds` 窄拉会漏掉这些记录（产生"净已领 0"的 bug）。
+   * 这里额外用 `sourceProductIds=forProduct.productId` 取并集。
+   */
+  const sourceProductIdForQuery = forProduct?.productId ?? '';
+  const stockProdQuery = useQuery({
+    queryKey: ['materialIssueStockProd', familyOrderIds.join(','), sourceProductIdForQuery],
+    enabled: familyOrderIds.length > 0 || !!sourceProductIdForQuery,
+    queryFn: async (): Promise<ProductionOpRecord[]> => {
+      const all = await fetchAllPages<ProductionOpRecord>(
+        page => {
+          const params: Record<string, string> = {
+            page: String(page),
+            pageSize: '200',
+            types: 'STOCK_OUT,STOCK_RETURN',
+          };
+          if (familyOrderIds.length > 0) params.orderIds = familyOrderIds.join(',');
+          if (sourceProductIdForQuery) params.sourceProductIds = sourceProductIdForQuery;
+          return productionApi.listPage(params) as Promise<
+            ProductionOpRecord[] | PaginatedLike<ProductionOpRecord>
+          >;
+        },
+        { maxPages: 40, warnTag: 'materialIssueStockProd' },
+      );
+      return normalizeDecimals(all);
+    },
+    staleTime: 10_000,
+  });
+
+  const prodRecords = useMemo<ProductionOpRecord[]>(() => {
+    if (stockProdQuery.isSuccess && Array.isArray(stockProdQuery.data)) return stockProdQuery.data;
+    return propsProdRecords ?? [];
+  }, [stockProdQuery.isSuccess, stockProdQuery.data, propsProdRecords]);
+
+  // 旧版需要拉「当日 STOCK_OUT」用于客户端自算 LL 单号；docNo 收口到后端后，
+  // 这个查询已无消费者，整段连同 `toLocalCompactYmd` 引用一并移除。
+
   /** 与工单中心列表产品行一致：展示分类「表单中」勾选的自定义字段（不含附件列） */
   const materialProductCustomTags = (productId: string) => {
     const p = productMap.get(productId);
@@ -136,7 +194,7 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
       </div>
     );
   };
-  const { listAvailableBatches } = usePsiStockIndex(psiRecords, prodRecords);
+  const { listAvailableBatches } = useStockSnapshot({ enabled: !!(orderId || forProduct) });
 
   if (!orderId && !forProduct) return null;
 
@@ -146,15 +204,8 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
     onClose();
   };
 
-  const getNextStockDocNo = () => {
-    const prefix = 'LL';
-    const todayStr = toLocalCompactYmd(new Date());
-    const pattern = `${prefix}${todayStr}-`;
-    const existing = prodRecords.filter(r => r.type === 'STOCK_OUT' && r.docNo && r.docNo.startsWith(pattern));
-    const seqs = existing.map(r => parseInt(r.docNo!.slice(pattern.length), 10)).filter(n => !isNaN(n));
-    const maxSeq = seqs.length ? Math.max(...seqs) : 0;
-    return `${prefix}${todayStr}-${String(maxSeq + 1).padStart(4, '0')}`;
-  };
+  // docNo 不再前端自算：领料 LL 单号统一由后端 createRecordBatch / createRecord
+  // 在事务 + advisory lock 下分配（避免 PM2 cluster / 多副本部署或快速重复提交时串号）。
 
   /* ────── Order-based material issue ────── */
   if (orderId && !forProduct) {
@@ -259,12 +310,11 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
           }
         }
       }
-      const docNo = getNextStockDocNo();
-      toIssue.forEach(m => {
+      const batch: ProductionOpRecord[] = toIssue.map(m => {
         const p = productMap.get(m.productId);
         const c = categoryById.get(p?.categoryId ?? '');
         const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(materialIssueLineBatch[m.productId] ?? '') : '';
-        const rec: ProductionOpRecord = {
+        return {
           id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           type: 'STOCK_OUT' as ProdOpType,
           orderId: order.id,
@@ -274,11 +324,19 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
           timestamp: new Date().toLocaleString(),
           status: '已完成',
           warehouseId: materialIssueWarehouseId || undefined,
-          docNo,
+          // docNo 留空，由后端分配
           ...(bn ? { batchNo: bn } : {}),
         };
-        onAddRecord(rec);
       });
+      try {
+        if (onAddRecordBatch && batch.length > 1) {
+          await onAddRecordBatch(batch);
+        } else {
+          for (const rec of batch) await onAddRecord(rec);
+        }
+      } catch {
+        return;
+      }
       if (materialIssueWarehouseId) {
         writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PROD_MATERIAL_ISSUE, {
           warehouseId: materialIssueWarehouseId,
@@ -578,12 +636,11 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
           }
         }
       }
-      const docNo = getNextStockDocNo();
-      toIssue.forEach(m => {
+      const batch: ProductionOpRecord[] = toIssue.map(m => {
         const p = productMap.get(m.productId);
         const c = categoryById.get(p?.categoryId ?? '');
         const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(materialIssueLineBatch[m.productId] ?? '') : '';
-        onAddRecord({
+        return {
           id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           type: 'STOCK_OUT' as ProdOpType,
           productId: m.productId,
@@ -592,11 +649,20 @@ const MaterialIssueModal: React.FC<MaterialIssueModalProps> = ({
           timestamp: new Date().toLocaleString(),
           status: '已完成',
           warehouseId: materialIssueWarehouseId || undefined,
-          docNo,
+          // docNo 留空，由后端分配
           sourceProductId,
           ...(bn ? { batchNo: bn } : {}),
-        });
+        };
       });
+      try {
+        if (onAddRecordBatch && batch.length > 1) {
+          await onAddRecordBatch(batch);
+        } else {
+          for (const rec of batch) await onAddRecord(rec);
+        }
+      } catch {
+        return;
+      }
       if (materialIssueWarehouseId) {
         writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PROD_MATERIAL_ISSUE, {
           warehouseId: materialIssueWarehouseId,

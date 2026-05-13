@@ -115,25 +115,18 @@ function maxOutsourceSeqForSegment(
   prefix: string,
   seg: string,
   records: OutsourceRecordLike[],
-  kind: OutsourceDocKind,
   partnerName: string,
 ): number {
   const escaped = seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const re = new RegExp(`^${prefix}-${escaped}-(\\d+)$`);
   const pt = trimStr(partnerName);
-  const filtered = records.filter(r => {
-    if (r.type !== 'OUTSOURCE' || !r.docNo) return false;
-    if (trimStr(r.partner || '') !== pt) return false;
-    if (kind === 'receive') {
-      if (r.status !== '已收回') return false;
-    } else {
-      if (r.status === '已收回') return false;
-    }
-    return true;
-  });
   let maxSeq = 0;
-  for (const r of filtered) {
-    const m = r.docNo!.match(re);
+  for (const r of records) {
+    if (r.type !== 'OUTSOURCE' || !r.docNo) continue;
+    if (trimStr(r.partner || '') !== pt) continue;
+    // 发出/收回单号在同一前缀+合作单位段下必须单调递增，不按状态过滤：
+    // 旧逻辑对 WX 排除「已收回」会在「仅余收回行或本地 records 不全」时又从 001 取号，造成重号。
+    const m = r.docNo.match(re);
     if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
   }
   return maxSeq;
@@ -158,7 +151,7 @@ export function nextOutsourceDocNumber(
     seg = '0000';
   }
   const prefix = OUTSOURCE_PREFIX[kind];
-  const nextSeq = maxOutsourceSeqForSegment(prefix, seg, records, kind, partnerName) + 1;
+  const nextSeq = maxOutsourceSeqForSegment(prefix, seg, records, partnerName) + 1;
   return `${prefix}-${seg}-${String(nextSeq).padStart(3, '0')}`;
 }
 

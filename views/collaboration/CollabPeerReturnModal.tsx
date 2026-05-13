@@ -106,7 +106,7 @@ const CollabPeerReturnModal: React.FC<CollabPeerReturnModalProps> = ({
         } else {
           next.push({
             transfer: t,
-            selected: true,
+            selected: false,
             expanded: true,
             rows: rows.map(r => ({ ...r, qty: String(r.maxReturnable) })),
             note: '',
@@ -151,6 +151,10 @@ const CollabPeerReturnModal: React.FC<CollabPeerReturnModalProps> = ({
   const submit = async () => {
     if (warehouses.length > 0 && !warehouseId) {
       toast.warning('请选择出库仓库');
+      return;
+    }
+    if (selectedCount === 0) {
+      toast.warning('请先勾选要回传的产品');
       return;
     }
     const payloads: Array<{ transferId: string; productName: string; body: any }> = [];

@@ -2,10 +2,14 @@ import { getTenantPrisma } from '../lib/prisma.js';
 import { str } from '../utils/request.js';
 import * as settingsService from '../services/settings.service.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
+import { listQueryFromRequest, warnListAllFromRequest } from '../utils/listQuery.js';
 
 // ── 产品分类 ──
 export const listCategories = asyncHandler(async (req, res) => {
-  res.json(await settingsService.listCategories(getTenantPrisma(req.tenantId!)));
+  const db = getTenantPrisma(req.tenantId!);
+  const { all, page, pageSize } = listQueryFromRequest(req);
+  if (all) warnListAllFromRequest('settings.listCategories', req);
+  res.json(await settingsService.listCategories(db, { all, page, pageSize }));
 });
 export const createCategory = asyncHandler(async (req, res) => {
   res.status(201).json(await settingsService.createCategory(getTenantPrisma(req.tenantId!), req.body));
@@ -19,7 +23,10 @@ export const deleteCategory = asyncHandler(async (req, res) => {
 
 // ── 合作单位分类 ──
 export const listPartnerCategories = asyncHandler(async (req, res) => {
-  res.json(await settingsService.listPartnerCategories(getTenantPrisma(req.tenantId!)));
+  const db = getTenantPrisma(req.tenantId!);
+  const { all, page, pageSize } = listQueryFromRequest(req);
+  if (all) warnListAllFromRequest('settings.listPartnerCategories', req);
+  res.json(await settingsService.listPartnerCategories(db, { all, page, pageSize }));
 });
 export const createPartnerCategory = asyncHandler(async (req, res) => {
   res.status(201).json(await settingsService.createPartnerCategory(getTenantPrisma(req.tenantId!), req.body));
@@ -33,7 +40,10 @@ export const deletePartnerCategory = asyncHandler(async (req, res) => {
 
 // ── 工序节点 ──
 export const listNodes = asyncHandler(async (req, res) => {
-  res.json(await settingsService.listNodes(getTenantPrisma(req.tenantId!)));
+  const db = getTenantPrisma(req.tenantId!);
+  const { all, page, pageSize } = listQueryFromRequest(req);
+  if (all) warnListAllFromRequest('settings.listNodes', req);
+  res.json(await settingsService.listNodes(db, { all, page, pageSize }));
 });
 export const createNode = asyncHandler(async (req, res) => {
   res.status(201).json(await settingsService.createNode(getTenantPrisma(req.tenantId!), req.body));
@@ -47,7 +57,10 @@ export const deleteNode = asyncHandler(async (req, res) => {
 
 // ── 仓库 ──
 export const listWarehouses = asyncHandler(async (req, res) => {
-  res.json(await settingsService.listWarehouses(getTenantPrisma(req.tenantId!)));
+  const db = getTenantPrisma(req.tenantId!);
+  const { all, page, pageSize } = listQueryFromRequest(req);
+  if (all) warnListAllFromRequest('settings.listWarehouses', req);
+  res.json(await settingsService.listWarehouses(db, { all, page, pageSize }));
 });
 export const createWarehouse = asyncHandler(async (req, res) => {
   res.status(201).json(await settingsService.createWarehouse(getTenantPrisma(req.tenantId!), req.body));
@@ -61,7 +74,10 @@ export const deleteWarehouse = asyncHandler(async (req, res) => {
 
 // ── 收付款类型 ──
 export const listFinanceCategories = asyncHandler(async (req, res) => {
-  res.json(await settingsService.listFinanceCategories(getTenantPrisma(req.tenantId!)));
+  const db = getTenantPrisma(req.tenantId!);
+  const { all, page, pageSize } = listQueryFromRequest(req);
+  if (all) warnListAllFromRequest('settings.listFinanceCategories', req);
+  res.json(await settingsService.listFinanceCategories(db, { all, page, pageSize }));
 });
 export const createFinanceCategory = asyncHandler(async (req, res) => {
   res.status(201).json(await settingsService.createFinanceCategory(getTenantPrisma(req.tenantId!), req.body));
@@ -75,7 +91,10 @@ export const deleteFinanceCategory = asyncHandler(async (req, res) => {
 
 // ── 收支账户类型 ──
 export const listFinanceAccountTypes = asyncHandler(async (req, res) => {
-  res.json(await settingsService.listFinanceAccountTypes(getTenantPrisma(req.tenantId!)));
+  const db = getTenantPrisma(req.tenantId!);
+  const { all, page, pageSize } = listQueryFromRequest(req);
+  if (all) warnListAllFromRequest('settings.listFinanceAccountTypes', req);
+  res.json(await settingsService.listFinanceAccountTypes(db, { all, page, pageSize }));
 });
 export const createFinanceAccountType = asyncHandler(async (req, res) => {
   res.status(201).json(await settingsService.createFinanceAccountType(getTenantPrisma(req.tenantId!), req.body));

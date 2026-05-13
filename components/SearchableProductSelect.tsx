@@ -9,6 +9,8 @@ import {
   formatReportCustomDataForList,
   getShowInFormCategoryFields,
 } from '../utils/reportCustomDocField';
+import { compareProductsArchiveOrder } from '../utils/productSort';
+import { productMatchesSearchQuery } from '../utils/productSearchMatch';
 
 /** 动态加载，避免与 ProductEditForm 形成静态循环依赖（否则 BOM 内 SearchableProductSelect 会整段挂掉） */
 const ProductArchiveCreateModal = lazy(() => import('./ProductArchiveCreateModal'));
@@ -75,16 +77,16 @@ export function SearchableProductSelect({
   const selectedProduct = options.find(p => p.id === value);
 
   const filteredOptions = useMemo(() => {
+    const q = search.trim();
     return options
       .filter(p => {
-        const matchesSearch =
-          p.name.toLowerCase().includes(search.toLowerCase()) ||
-          (p.sku && p.sku.toLowerCase().includes(search.toLowerCase()));
+        const cat = categories.find(c => c.id === p.categoryId) ?? null;
+        const matchesSearch = productMatchesSearchQuery(p, cat, q);
         const matchesCategory = activeTab === 'all' || p.categoryId === activeTab;
         return matchesSearch && matchesCategory;
       })
-      .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.id.localeCompare(b.id));
-  }, [options, search, activeTab]);
+      .sort(compareProductsArchiveOrder);
+  }, [options, search, activeTab, categories]);
 
   const updatePanelPosition = useCallback(() => {
     const el = triggerRef.current;
@@ -199,7 +201,7 @@ export function SearchableProductSelect({
             autoFocus
             type="text"
             className={searchInputCls}
-            placeholder="输入名称或 SKU 搜索..."
+            placeholder="名称、SKU 或自定义字段内容…"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />

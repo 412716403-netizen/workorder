@@ -33,22 +33,31 @@ import {
 import { useModulePermission } from '../hooks/useModulePermission';
 import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useMasterData, useConfigData, useOrdersData, usePsiData, useFinanceData, useAppActions } from '../contexts/AppDataContext';
+import { useMasterData, useConfigData, useOrdersData, useFinanceData, useAppActions } from '../contexts/AppDataContext';
 
 const FinanceView: React.FC = () => {
   const m = useMasterData();
   const c = useConfigData();
   const o = useOrdersData();
-  const { psiRecords } = usePsiData();
   const f = useFinanceData();
   const a = useAppActions();
   const { tenantCtx } = useAuth();
 
   useEffect(() => { void a.ensureDeferredLoaded(); }, [a.ensureDeferredLoaded]);
+  /**
+   * Phase 3.A + Phase 3.D follow-up：
+   * - FinanceOpsView 自己 react-query 按 page+search 窄拉、对账 hook 内部按 partner/worker 窄拉。
+   * - FinanceDetailModal 改为按 docNo 按需查 psi/prod 明细（不再依赖 context 全量）。
+   * 因此本视图不再触发 refreshPsiRecords / refreshProdRecords。
+   */
 
   const orders = o.orders;
-  const records = f.financeRecords;
-  const prodRecords = o.prodRecords;
+  /**
+   * Phase 3.D follow-up：context 已不再维护 `financeRecords` 全量；
+   * - 列表 / 单号 / 对账由 FinanceOpsView 内部 react-query 按 type/page/partner 窄拉。
+   * - 这里仅给 FinanceOpsView 传空数组占位，保持 prop 签名兼容（后续可整体删 records/allRecords props）。
+   */
+  const records: FinanceRecord[] = [];
   const productMilestoneProgresses = o.productMilestoneProgresses;
   const onAddRecord = a.onAddFinanceRecord;
   const onUpdateRecord = a.onUpdateFinanceRecord;
@@ -176,10 +185,8 @@ const FinanceView: React.FC = () => {
         <FinanceOpsView 
           type={activeTab}
           orders={orders}
-          records={records.filter(r => r.type === activeTab)}
+          records={records}
           allRecords={records}
-          psiRecords={psiRecords ?? []}
-          prodRecords={prodRecords}
           productMilestoneProgresses={productMilestoneProgresses}
           onAddRecord={onAddRecord}
           onUpdateRecord={onUpdateRecord}

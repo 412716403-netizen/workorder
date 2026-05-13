@@ -87,8 +87,8 @@ export function buildOutsourceFlowPrintContext(opts: {
     const qtySum = recs.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
     idx += 1;
     const order = r0.orderId ? orders.find(o => o.id === r0.orderId) : undefined;
-    const productId = order?.productId ?? r0.productId;
-    const product = products.find(p => p.id === productId);
+    const productId = r0.productId ?? order?.productId;
+    const product = productId ? products.find(p => p.id === productId) : undefined;
     const nodeName = r0.nodeId ? globalNodes.find(n => n.id === r0.nodeId)?.name ?? r0.nodeId : '—';
     const unitPrice = isReceiveDoc ? (r0.unitPrice ?? recs.find(x => x.unitPrice != null)?.unitPrice ?? 0) : undefined;
     const amount = isReceiveDoc ? recs.reduce((s, r) => s + (Number(r.amount) || 0), 0) : undefined;
@@ -148,7 +148,7 @@ export function buildOutsourceFlowPrintContext(opts: {
   if (isReceiveDoc) {
     const totalAmount = docRecords.reduce((s, r) => s + (Number(r.amount) || 0), 0);
     const order = first.orderId ? orders.find(o => o.id === first.orderId) : undefined;
-    const product = products.find(p => p.id === (order?.productId ?? first.productId));
+    const product = products.find(p => p.id === (first.productId ?? order?.productId));
     return {
       order: order ?? undefined,
       product: product ?? undefined,
@@ -158,7 +158,7 @@ export function buildOutsourceFlowPrintContext(opts: {
   }
 
   const order = first.orderId ? orders.find(o => o.id === first.orderId) : undefined;
-  const product = products.find(p => p.id === (order?.productId ?? first.productId));
+  const product = products.find(p => p.id === (first.productId ?? order?.productId));
   return {
     order: order ?? undefined,
     product: product ?? undefined,

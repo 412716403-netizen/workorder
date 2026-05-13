@@ -1,19 +1,37 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
+import {
+  readOutsourceCollabRoutePreference,
+  resolvePreferredOutsourceRouteId,
+  writeOutsourceCollabRoutePreference,
+} from '../../utils/outsourceCollabRoutePreference';
+
+export interface OutsourceCollabSyncConfirmPayload {
+  partnerName: string;
+  collaborationTenantId: string;
+  recordIds: string[];
+  /** 本次发出涉及的产品 id（去重）；仅当长度为 1 时用该产品记忆默认路线 */
+  productIds: string[];
+}
 
 export interface OutsourceCollabSyncModalProps {
-  collabSyncConfirm: {
-    partnerName: string;
-    collaborationTenantId: string;
-    recordIds: string[];
-  };
-  collabRoutes: any[];
+  tenantId: string | undefined | null;
+  collabSyncConfirm: OutsourceCollabSyncConfirmPayload;
+  collabRoutes: CollabOutsourceRouteRow[];
   onClose: () => void;
 }
 
+/** 与 `api.collaboration.listOutsourceRoutes` 返回项兼容的最小形状 */
+export interface CollabOutsourceRouteRow {
+  id: string;
+  name?: string;
+  steps?: { stepOrder: number; receiverTenantId: string; nodeName: string; receiverTenantName: string }[];
+}
+
 const OutsourceCollabSyncModal: React.FC<OutsourceCollabSyncModalProps> = ({
+  tenantId,
   collabSyncConfirm,
   collabRoutes,
   onClose,
@@ -21,10 +39,25 @@ const OutsourceCollabSyncModal: React.FC<OutsourceCollabSyncModalProps> = ({
   const [collabSyncing, setCollabSyncing] = useState(false);
   const [selectedRouteId, setSelectedRouteId] = useState('');
 
-  const matchingRoutes = collabRoutes.filter((r: any) => {
-    const sorted = [...(r.steps || [])].sort((a: any, b: any) => a.stepOrder - b.stepOrder);
-    return sorted.length > 0 && sorted[0].receiverTenantId === collabSyncConfirm.collaborationTenantId;
-  });
+  const matchingRoutes = useMemo(
+    () =>
+      collabRoutes.filter(r => {
+        const sorted = [...(r.steps || [])].sort((a, b) => a.stepOrder - b.stepOrder);
+        return sorted.length > 0 && sorted[0].receiverTenantId === collabSyncConfirm.collaborationTenantId;
+      }),
+    [collabRoutes, collabSyncConfirm.collaborationTenantId],
+  );
+
+  useEffect(() => {
+    if (collabSyncConfirm.productIds.length !== 1) {
+      setSelectedRouteId('');
+      return;
+    }
+    const productId = collabSyncConfirm.productIds[0];
+    const saved = readOutsourceCollabRoutePreference(tenantId, productId, collabSyncConfirm.collaborationTenantId);
+    const allowedIds = matchingRoutes.map(r => r.id);
+    setSelectedRouteId(resolvePreferredOutsourceRouteId(saved, allowedIds));
+  }, [tenantId, collabSyncConfirm.collaborationTenantId, collabSyncConfirm.productIds, matchingRoutes]);
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -41,19 +74,25 @@ const OutsourceCollabSyncModal: React.FC<OutsourceCollabSyncModalProps> = ({
             <label className="text-[10px] font-black text-slate-400 uppercase block ml-1">外协路线（可选）</label>
             <select value={selectedRouteId} onChange={e => setSelectedRouteId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm font-bold text-slate-800">
               <option value="">不使用路线（单步外协）</option>
-              {matchingRoutes.map((r: any) => (<option key={r.id} value={r.id}>{r.name} ({(r.steps || []).length} 步)</option>))}
+              {matchingRoutes.map(r => (
+                <option key={r.id} value={r.id}>
+                  {r.name} ({(r.steps || []).length} 步)
+                </option>
+              ))}
             </select>
             {selectedRouteId && (() => {
-              const route = collabRoutes.find((r: any) => r.id === selectedRouteId);
+              const route = collabRoutes.find(r => r.id === selectedRouteId);
               if (!route) return null;
               return (
                 <div className="flex items-center gap-1 flex-wrap pt-1">
-                  {(route.steps || []).sort((a: any, b: any) => a.stepOrder - b.stepOrder).map((s: any, i: number) => (
-                    <React.Fragment key={i}>
-                      {i > 0 && <span className="text-slate-400 text-xs">→</span>}
-                      <span className="text-xs font-bold text-indigo-600">{s.nodeName}·{s.receiverTenantName}</span>
-                    </React.Fragment>
-                  ))}
+                  {(route.steps || [])
+                    .sort((a, b) => a.stepOrder - b.stepOrder)
+                    .map((s, i: number) => (
+                      <React.Fragment key={i}>
+                        {i > 0 && <span className="text-slate-400 text-xs">→</span>}
+                        <span className="text-xs font-bold text-indigo-600">{s.nodeName}·{s.receiverTenantName}</span>
+                      </React.Fragment>
+                    ))}
                   <span className="text-slate-400 text-xs">→</span>
                   <span className="text-xs font-bold text-emerald-600">回传</span>
                 </div>
@@ -71,10 +110,21 @@ const OutsourceCollabSyncModal: React.FC<OutsourceCollabSyncModalProps> = ({
                 collaborationTenantId: collabSyncConfirm.collaborationTenantId,
                 ...(selectedRouteId ? { outsourceRouteId: selectedRouteId } : {}),
               });
+              if (selectedRouteId) {
+                const pidSet = new Set(collabSyncConfirm.productIds.map(p => p.trim()).filter(Boolean));
+                for (const pid of pidSet) {
+                  writeOutsourceCollabRoutePreference(
+                    tenantId,
+                    pid,
+                    collabSyncConfirm.collaborationTenantId,
+                    selectedRouteId,
+                  );
+                }
+              }
               toast.success(`已同步 ${res.dispatches?.length ?? 0} 条到协作企业`);
               onClose();
-            } catch (err: any) {
-              toast.error(err.message || '同步失败');
+            } catch (err: unknown) {
+              toast.error(err instanceof Error ? err.message : '同步失败');
             } finally {
               setCollabSyncing(false);
             }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Package, Route, Settings2, Link2, ChevronRight, Truck, X, Users, Forward, PackageCheck, CheckCircle2,
 } from 'lucide-react';
@@ -6,13 +7,15 @@ import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { useMasterData, useOrdersData, useAppActions } from '../contexts/AppDataContext';
 import * as api from '../services/api';
+import { production as productionApi } from '../services/api';
+import { normalizeDecimals } from '../contexts/formSettingsDefaults';
+import { fetchAllPages, type PaginatedLike } from '../utils/fetchAllPages';
 import { resolveCollabOutboundWarehouseId, WAREHOUSE_DOC_KIND } from '../utils/warehouseDocPreference';
 import {
   moduleHeaderRowClass, outlineToolbarButtonClass, pageSubtitleClass, pageTitleClass,
 } from '../styles/uiDensity';
-import type {
-  Product, Partner, PartnerCategory, ProductionOpRecord, Warehouse, ProductionOrder, AppDictionaries, GlobalNodeTemplate,
-} from '../types';
+import type { ProductionOpRecord } from '../types';
+import { COLLAB_DISPATCH_AMENDMENT_PENDING_B_REVIEW } from '../types';
 import {
   computeCollaborationForwardableRows,
   computeCollaborationReturnableRows,
@@ -102,6 +105,8 @@ type PeerSummary = {
   peerTenantName: string;
   entries: PeerTransferEntry[];
   pendingDispatches: number;
+  /** 乙方：待接受发出被甲方改过 payload，需在详情内点「已查看最新明细」 */
+  pendingDispatchPayloadRefresh: number;
   pendingReturns: number;
   pendingForwards: number;
   totalItems: number;
@@ -120,20 +125,82 @@ const CollaborationInboxView: React.FC = () => {
   const categories = m.categories;
   const partnerCategories = m.partnerCategories;
   const orders = o.orders;
-  const prodRecords = o.prodRecords;
   const warehouses = m.warehouses;
   const dictionaries = m.dictionaries;
   const nodeTemplates = m.globalNodes;
   const onRefreshPartners = a.refreshPartners;
   const onRefreshProducts = a.refreshProducts;
   const onRefreshOrders = a.refreshOrders;
-  const onRefreshProdRecords = a.refreshProdRecords;
   const onRefreshPMP = a.refreshPMP;
 
   const { tenantCtx, userId } = useAuth();
+  const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<ViewMode>('inbox');
   const [transfers, setTransfers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  /**
+   * Phase 3.D follow-up：替代 `AppDataContext.prodRecords` 全量大包。
+   * 协作收件箱里 `collabHelpers.computeCollabPhysicalStockDelta / Returnable / Forwardable` 只读
+   * `STOCK_IN/STOCK_OUT/STOCK_RETURN/OUTSOURCE` 且筛选 `productId === transfer.receiverProductId`。
+   * 因此按 transfers 涉及的 productIds 用 useQuery 窄拉这四类。
+   */
+  const productIdsKey = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of transfers) {
+      const pid = (t as any)?.receiverProductId;
+      if (typeof pid === 'string' && pid) set.add(pid);
+    }
+    return Array.from(set).sort();
+  }, [transfers]);
+
+  /**
+   * Phase 3.E follow-up：协作收发箱列表加默认 30 天窗口，避免长期运营后单次返万条。
+   * 范围足够覆盖"最近收发的协作单"的浏览需求；如需查更早的历史记录，
+   * 请走外协 / 生产流水弹窗（内部按日期再发请求）。
+   */
+  const collabProdDateRange = useMemo(() => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 30);
+    return {
+      startDate: start.toISOString(),
+      endDate: end.toISOString(),
+      ymd: `${start.toISOString().slice(0, 10)}_${end.toISOString().slice(0, 10)}`,
+    };
+  }, []);
+  const prodRecordsQuery = useQuery({
+    queryKey: ['collabInbox.prodRecords', productIdsKey, collabProdDateRange.ymd],
+    enabled: productIdsKey.length > 0,
+    staleTime: 15_000,
+    queryFn: async () => {
+      const all = await fetchAllPages<ProductionOpRecord>(
+        page =>
+          productionApi.listPage({
+            types: 'STOCK_IN,STOCK_OUT,STOCK_RETURN,OUTSOURCE',
+            productIds: productIdsKey.join(','),
+            page,
+            pageSize: 200,
+            startDate: collabProdDateRange.startDate,
+            endDate: collabProdDateRange.endDate,
+          }) as Promise<ProductionOpRecord[] | PaginatedLike<ProductionOpRecord>>,
+        { maxPages: 60, warnTag: 'collabInbox.prodRecords' },
+      );
+      return normalizeDecimals(all) as ProductionOpRecord[];
+    },
+  });
+  const prodRecords = useMemo<ProductionOpRecord[]>(() => {
+    if (prodRecordsQuery.isSuccess && Array.isArray(prodRecordsQuery.data)) return prodRecordsQuery.data;
+    return [];
+  }, [prodRecordsQuery.isSuccess, prodRecordsQuery.data]);
+
+  /**
+   * 子组件 mutation 完成后需要把"窄拉的协作流水"也刷新；统一通过本地 invalidate 触发，
+   * 而不是再调 `AppDataContext.refreshProdRecords` 全量拉。
+   */
+  const onRefreshProdRecords = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ['collabInbox.prodRecords'] });
+  }, [queryClient]);
   const [myTenantId, setMyTenantId] = useState<string | null>(null);
   const [collabs, setCollabs] = useState<any[]>([]);
   const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null);
@@ -215,6 +282,7 @@ const CollaborationInboxView: React.FC = () => {
           peerTenantName: tenantNameById.get(peerId) ?? '未知合作单位',
           entries: [],
           pendingDispatches: 0,
+          pendingDispatchPayloadRefresh: 0,
           pendingReturns: 0,
           pendingForwards: 0,
           totalItems: 0,
@@ -237,7 +305,11 @@ const CollaborationInboxView: React.FC = () => {
           s.entries.push({ transfer: t, kinds: new Set(b.kinds) });
         }
         if (b.kinds.has('dispatch') && isReceiver) {
-          s.pendingDispatches += (t.dispatches || []).filter((d: any) => d.status === 'PENDING').length;
+          const dispatches = t.dispatches || [];
+          s.pendingDispatches += dispatches.filter((d: any) => d.status === 'PENDING').length;
+          s.pendingDispatchPayloadRefresh += dispatches.filter(
+            (d: any) => d.status === 'PENDING' && d.amendmentStatus === COLLAB_DISPATCH_AMENDMENT_PENDING_B_REVIEW,
+          ).length;
         }
         if (b.kinds.has('return') && isSender) {
           s.pendingReturns += (t.returns || []).filter((r: any) => r.status === 'PENDING_A_RECEIVE').length;
@@ -264,6 +336,9 @@ const CollaborationInboxView: React.FC = () => {
       const pendA = a.pendingDispatches + a.pendingReturns + a.pendingForwards;
       const pendB = b.pendingDispatches + b.pendingReturns + b.pendingForwards;
       if (pendA !== pendB) return pendB - pendA;
+      const refA = a.pendingDispatchPayloadRefresh;
+      const refB = b.pendingDispatchPayloadRefresh;
+      if (refA !== refB) return refB - refA;
       return a.peerTenantName.localeCompare(b.peerTenantName, 'zh-CN');
     });
   }, [transfers, myTenantId]);
@@ -739,6 +814,11 @@ const CollaborationInboxView: React.FC = () => {
                         {pending > 0 && <span className="ml-auto w-2 h-2 rounded-full bg-rose-500" aria-label="待办" />}
                       </div>
                       <div className="text-[11px] text-slate-500 mt-0.5">协作单 {s.entries.length} 张 · 文档 {s.totalItems} 项</div>
+                      {s.pendingDispatchPayloadRefresh > 0 && (
+                        <div className="text-[11px] font-bold text-amber-700 mt-1">
+                          甲方已更新 {s.pendingDispatchPayloadRefresh} 条待发单明细，请打开核对
+                        </div>
+                      )}
                     </div>
                   </button>
                 );
@@ -888,12 +968,16 @@ const DispatchBubble: React.FC<{ item: TimelineItem; myTenantId: string | null; 
   const side = isSender ? 'right' : 'left';
   const qty = sumItems((d.payload as any)?.items);
   const docNo = ((d.payload as any)?.senderRef?.docNos ?? []).join('、');
+  const needsPayloadRefresh = !isSender && d.status === 'PENDING' && d.amendmentStatus === COLLAB_DISPATCH_AMENDMENT_PENDING_B_REVIEW;
   return (
     <BubbleShell side={side} onClick={onOpen} accent="indigo" title="派发">
       <div className="flex items-center gap-2 min-w-0">
         <Package className="w-4 h-4 text-indigo-600 shrink-0" />
         <span className="text-sm font-black text-slate-900 truncate">{t.senderProductName || '—'}</span>
         {t.senderProductSku && <span className="text-xs font-bold text-slate-500 shrink-0">{t.senderProductSku}</span>}
+        {needsPayloadRefresh && (
+          <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-200">明细已更新</span>
+        )}
         <span className="ml-auto">{dispatchStatusLabel(d.status)}</span>
       </div>
       <div className="text-[11px] text-slate-500 mt-1 flex gap-2 flex-wrap">

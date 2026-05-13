@@ -38,7 +38,7 @@ import {
 } from '../../styles/uiDensity';
 import WorkerSelector from '../../components/WorkerSelector';
 import EquipmentSelector from '../../components/EquipmentSelector';
-import { nextOutsourceDocNumber } from '../../utils/partnerDocNumber';
+import { nextOutsourceDocNumberResolved } from './sharedFlowListHelpers';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
@@ -369,7 +369,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
     [order.productId, applyScanQuantity],
   );
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!isOutsourceRework) {
       if (!reworkReportWorkerId?.trim()) {
         toast.warning('请先选择生产人员');
@@ -562,7 +562,19 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
       return;
     }
     if (isOutsourceRework && appliedReportQty > 0) {
-      const receiveDocNo = nextOutsourceDocNumber('receive', partners, records, '', (outsourcePartner || '').trim());
+      let receiveDocNo: string;
+      try {
+        receiveDocNo = await nextOutsourceDocNumberResolved(
+          'receive',
+          partners,
+          records,
+          '',
+          (outsourcePartner || '').trim(),
+        );
+      } catch (e) {
+        toast.error(`生成外协收回单号失败：${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
       const ts = new Date().toLocaleString();
       const firstDispatch = records.find(r =>
         r.type === 'OUTSOURCE' && r.status === '加工中' && r.sourceReworkId &&
