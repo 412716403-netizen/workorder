@@ -8,6 +8,7 @@ import type {
   Warehouse,
   ProdOpType,
 } from '../../types';
+import type { StockDocDetail } from './types';
 import { DEFAULT_MATERIAL_FORM_SETTINGS, categoryUsesBatchManagement } from '../../types';
 import { useWarehouseBatchOptions, clampBatchNoInput } from '../../hooks/useBatchPicker';
 import { toast } from 'sonner';
@@ -33,6 +34,8 @@ export interface StockMaterialFormModalProps {
   materialFormSettings?: MaterialFormSettings;
   categories?: ProductCategory[];
   onAddRecord: (record: ProductionOpRecord) => void | Promise<ProductionOpRecord | null | void>;
+  /** 保存成功且拿到服务端 docNo 后打开物料单据详情（与清单确认领退料一致） */
+  onAfterDocSaved?: (detail: StockDocDetail) => void;
 }
 
 const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
@@ -46,6 +49,7 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
   materialFormSettings = DEFAULT_MATERIAL_FORM_SETTINGS,
   categories = [],
   onAddRecord,
+  onAfterDocSaved,
 }) => {
   const { currentUser, tenantCtx, userId } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
@@ -154,7 +158,25 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
         : {}),
       ...collabExtra,
     };
-    await onAddRecord(newRecord);
+    const created = await onAddRecord(newRecord);
+    const docNo =
+      created && typeof created === 'object' && 'docNo' in created
+        ? String((created as ProductionOpRecord).docNo ?? '').trim()
+        : '';
+    const bn = batchEnabled ? clampBatchNoInput(form.batchNo) : '';
+    if (docNo && onAfterDocSaved) {
+      onAfterDocSaved({
+        docNo,
+        type: recordType,
+        orderId: productionLinkMode === 'product' ? '' : (form.orderId || ''),
+        timestamp: newRecord.timestamp ?? '',
+        warehouseId: form.warehouseId || '',
+        lines: [{ productId: form.productId, quantity: form.quantity, ...(bn ? { batchNo: bn } : {}) }],
+        reason: form.reason || undefined,
+        operator: docOperator,
+        partner: form.partner?.trim() || undefined,
+      });
+    }
     const kind =
       stockModalMode === 'stock_return'
         ? WAREHOUSE_DOC_KIND.PROD_STOCK_MATERIAL_FORM_IN

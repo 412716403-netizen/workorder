@@ -1425,6 +1425,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         materialFormSettings={materialFormSettings}
         categories={categories}
         onAddRecord={onAddRecord}
+        onAfterDocSaved={detail => setStockDocDetail(detail)}
       />
 
       {showConfigModal && onUpdateMaterialPanelSettings && onUpdateMaterialFormSettings && (

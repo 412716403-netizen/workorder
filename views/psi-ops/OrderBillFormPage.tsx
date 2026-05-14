@@ -100,6 +100,8 @@ interface OrderBillFormPageProps {
   getUnitName: (productId: string) => string;
   formatQtyDisplay: (q: number | string | undefined | null) => number;
   onBack: () => void;
+  /** 进销存四单：仅「新建」保存成功后由父层切到详情阶段；不传则仍 onBack 关闭 */
+  onAfterNewDocSaved?: (docNumber: string) => void;
   /** 单条进销存写入（须传一条记录对象，勿传数组） */
   onSave: (record: any) => void;
   onSaveBatch: (records: any[]) => Promise<void>;
@@ -137,6 +139,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   getUnitName,
   formatQtyDisplay,
   onBack,
+  onAfterNewDocSaved,
   onSave,
   onSaveBatch,
   onReplaceRecords,
@@ -841,7 +844,13 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         else { for (const r of newRecords) await onSave(r); }
       }
 
-      onBack();
+      if (editingDocNumber) {
+        onBack();
+      } else if (onAfterNewDocSaved) {
+        onAfterNewDocSaved(docNumber);
+      } else {
+        onBack();
+      }
       return;
     }
 
@@ -978,7 +987,13 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PURCHASE_BILL, {
         warehouseId: form.warehouseId,
       });
-      onBack();
+      if (editingDocNumber) {
+        onBack();
+      } else if (onAfterNewDocSaved) {
+        onAfterNewDocSaved(docNumber);
+      } else {
+        onBack();
+      }
       return;
     }
 
@@ -1081,7 +1096,13 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         if (onSaveBatch) await onSaveBatch(newRecords);
         else { for (const r of newRecords) await onSave(r); }
       }
-      onBack();
+      if (editingDocNumber) {
+        onBack();
+      } else if (onAfterNewDocSaved) {
+        onAfterNewDocSaved(docNumber);
+      } else {
+        onBack();
+      }
       return;
     }
 
@@ -1212,7 +1233,13 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.SALES_BILL, {
         warehouseId: form.warehouseId,
       });
-      onBack();
+      if (editingDocNumber) {
+        onBack();
+      } else if (onAfterNewDocSaved) {
+        onAfterNewDocSaved(docNumber);
+      } else {
+        onBack();
+      }
       return;
     }
   };
@@ -1331,6 +1358,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         onResetItems={() => setPurchaseBillItems([])}
         onSaveManual={() => handleSaveManual('PURCHASE_BILL')}
         onBack={onBack}
+        onAfterNewDocSaved={onAfterNewDocSaved}
         onSaveRecord={onSave}
         onSaveBatch={onSaveBatch}
         onDeleteRecords={onDeleteRecords}

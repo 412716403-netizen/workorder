@@ -278,6 +278,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
     setSalesOrderModalPhase(null);
     setSalesBillModalPhase(null);
     setPsiProductImagePreviewUrl(null);
+    setPendingShipDetailGroup(null);
+    setSalesBillRevealFromPending(null);
   }, [type]);
 
   const bizConfig: Record<string, any> = {
@@ -294,6 +296,23 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
   const [showPendingShipmentModal, setShowPendingShipmentModal] = useState(false);
   /** 待发货清单 - 详情弹窗：当前选中的分组 */
   const [pendingShipDetailGroup, setPendingShipDetailGroup] = useState<PendingShipmentGroup | null>(null);
+  /** 待发货清单生成销售单后，在销售订单 tab 上叠加销售单详情（该 tab 的 recordsList 不含销售单行，用 records 合并展示） */
+  const [salesBillRevealFromPending, setSalesBillRevealFromPending] = useState<{ docNumber: string; records: any[] } | null>(null);
+
+  const recordsListForSalesBillRevealMerged = useMemo(() => {
+    const extra = salesBillRevealFromPending?.records;
+    if (!extra?.length) return recordsList;
+    const byId = new Map<string, unknown>();
+    for (const r of recordsList) {
+      const id = (r as { id?: string }).id;
+      if (id) byId.set(id, r);
+    }
+    for (const r of extra) {
+      const id = (r as { id?: string }).id;
+      if (id) byId.set(id, r);
+    }
+    return [...byId.values()];
+  }, [recordsList, salesBillRevealFromPending]);
 
   /** 与 flowDocSort.recordDocLineTimeMs 一致，用于库存流水等排序 */
   const parseRecordTime = useCallback((r: any): number => recordDocLineTimeMs(r), []);
@@ -540,7 +559,18 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
     setPurchaseBillModalPhase(null);
     setSalesOrderModalPhase(null);
     setSalesBillModalPhase(null);
+    setSalesBillRevealFromPending(null);
   }, []);
+
+  const salesBillRevealOpen = salesBillRevealFromPending != null;
+  const salesBillStdModalOpen = type === 'SALES_BILL' && showModal === 'SALES_BILL' && salesBillModalPhase;
+  const salesBillOverlayOpen = salesBillStdModalOpen || salesBillRevealOpen;
+  const salesBillModalPhaseResolved = salesBillRevealOpen ? 'detail' : salesBillModalPhase;
+  const salesBillEditingDocForModal = salesBillRevealOpen ? salesBillRevealFromPending!.docNumber : editingSBDocNumber;
+  const salesBillDetailRecordsList = salesBillRevealOpen ? recordsListForSalesBillRevealMerged : recordsList;
+  const salesBillShowPrintResolved = salesBillRevealOpen
+    ? safeSalesBillFormSettings.listPrint?.showPrintButton !== false
+    : showSbListPrintButton;
 
   return (
     <div className="space-y-4">
@@ -662,6 +692,9 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           onAddRecordBatch={onAddRecordBatch}
           onReplaceRecords={onReplaceRecords}
           generateSBDocNumberForPartner={generateSBDocNumberForPartner}
+          onSalesBillCreated={(docNumber, billRecords) => {
+            setSalesBillRevealFromPending({ docNumber, records: billRecords });
+          }}
         />
       )}
 
@@ -737,6 +770,10 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               getUnitName={getUnitName}
               formatQtyDisplay={formatQtyDisplay}
               onBack={closeOrderBillModal}
+              onAfterNewDocSaved={docNumber => {
+                setEditingPODocNumber(docNumber);
+                setPurchaseOrderModalPhase('detail');
+              }}
               onSave={onAddRecord}
               onSaveBatch={onAddRecordBatch}
               onReplaceRecords={onReplaceRecords}
@@ -814,6 +851,10 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               getUnitName={getUnitName}
               formatQtyDisplay={formatQtyDisplay}
               onBack={closeOrderBillModal}
+              onAfterNewDocSaved={docNumber => {
+                setEditingPBDocNumber(docNumber);
+                setPurchaseBillModalPhase('detail');
+              }}
               onSave={onAddRecord}
               onSaveBatch={onAddRecordBatch}
               onReplaceRecords={onReplaceRecords}
@@ -889,6 +930,10 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               getUnitName={getUnitName}
               formatQtyDisplay={formatQtyDisplay}
               onBack={closeOrderBillModal}
+              onAfterNewDocSaved={docNumber => {
+                setEditingSODocNumber(docNumber);
+                setSalesOrderModalPhase('detail');
+              }}
               onSave={onAddRecord}
               onSaveBatch={onAddRecordBatch}
               onReplaceRecords={onReplaceRecords}
@@ -908,33 +953,39 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
         />
       )}
 
-      {type === 'SALES_BILL' && showModal === 'SALES_BILL' && salesBillModalPhase && (
+      {salesBillOverlayOpen && salesBillModalPhaseResolved && (
         <PsiOrderBillDocModal
           open
-          phase={salesBillModalPhase}
-          editingDocNumber={editingSBDocNumber}
+          phase={salesBillModalPhaseResolved}
+          editingDocNumber={salesBillEditingDocForModal}
           maxWidthClass="max-w-4xl"
           detailTitle="销售单详情"
           editTitle="编辑销售单"
           newTitle="新建销售单"
-          showPrint={showSbListPrintButton}
+          showPrint={salesBillShowPrintResolved}
           onPrint={() => {
             void refreshPrintTemplates();
-            sbListPrintControllerRef.current?.openPicker(editingSBDocNumber);
+            sbListPrintControllerRef.current?.openPicker(salesBillEditingDocForModal);
           }}
           permSubmodule="sales_bill"
           deleteConfirmMessage="确定要删除该销售单吗？"
           recordType="SALES_BILL"
           onDeleteRecords={onDeleteRecords}
-          onClose={closeOrderBillModal}
+          onClose={() => {
+            if (salesBillRevealOpen) {
+              setSalesBillRevealFromPending(null);
+              return;
+            }
+            closeOrderBillModal();
+          }}
           onEnterEdit={() => setSalesBillModalPhase('edit')}
           onCancelEdit={() => setSalesBillModalPhase('detail')}
           hasPsiPerm={hasPsiPerm}
           detailContent={
             <PsiDocDetailSummary
               docType="SALES_BILL"
-              docNumber={editingSBDocNumber!}
-              recordsList={recordsList}
+              docNumber={salesBillEditingDocForModal!}
+              recordsList={salesBillDetailRecordsList}
               productMapPSI={productMapPSI}
               categories={categories}
               warehouseMapPSI={warehouseMapPSI}
@@ -965,6 +1016,10 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               getUnitName={getUnitName}
               formatQtyDisplay={formatQtyDisplay}
               onBack={closeOrderBillModal}
+              onAfterNewDocSaved={docNumber => {
+                setEditingSBDocNumber(docNumber);
+                setSalesBillModalPhase('detail');
+              }}
               onSave={onAddRecord}
               onSaveBatch={onAddRecordBatch}
               onReplaceRecords={onReplaceRecords}
@@ -1851,14 +1906,18 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
         />
       )}
 
-      {type === 'SALES_BILL' && (
+      {(type === 'SALES_BILL' || salesBillRevealOpen) && (
         <PsiListPrintController<any>
           ref={sbListPrintControllerRef}
           listPrintSlot={safeSalesBillFormSettings.listPrint}
           printTemplates={printTemplates}
-          resolveDocItems={docNumber =>
-            recordsList.filter((r: any) => r.type === 'SALES_BILL' && r.docNumber === docNumber)
-          }
+          resolveDocItems={docNumber => {
+            const list =
+              salesBillRevealFromPending?.docNumber === docNumber
+                ? recordsListForSalesBillRevealMerged
+                : recordsList;
+            return list.filter((r: any) => r.type === 'SALES_BILL' && r.docNumber === docNumber);
+          }}
           /**
            * Phase 3.D follow-up：销售单打印「上次结余」改为 await 后端 `api.finance.partnerReceivable`，
            * 而不是把 context 的 psi/finance/prod 三个全量数组喂给 builder。

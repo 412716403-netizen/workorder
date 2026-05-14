@@ -97,6 +97,8 @@ interface PurchaseBillFormSectionProps {
   onResetItems: () => void;
   onSaveManual: () => void;
   onBack: () => void;
+  /** 新建（含从订单生成）保存成功后由父层切到详情；不传则 onBack */
+  onAfterNewDocSaved?: (docNumber: string) => void;
   /** 单条写入（与进销存「添加一条」一致，须为对象不可传数组） */
   onSaveRecord: (record: any) => void | Promise<void>;
   /** 多条一次写入（推荐：由采购订单转化时整单批量保存） */
@@ -132,7 +134,7 @@ interface PurchaseBillFormSectionProps {
 const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
   form, setForm,
   purchaseBillItems, onAddItem, onUpdateItem, onUpdateVariantQty, onRemoveItem, onResetItems,
-  onSaveManual, onBack, onSaveRecord, onSaveBatch, onDeleteRecords,
+  onSaveManual, onBack, onAfterNewDocSaved, onSaveRecord, onSaveBatch, onDeleteRecords,
   editingDocNumber, hasPsiPerm,
   products, categories, partners, partnerCategories, dictionaries, warehouses,
   productMapPSI, categoryMapPSI, formatQtyDisplay, getUnitName,
@@ -314,7 +316,13 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
         } else {
           for (const r of newRecords) await Promise.resolve(onSaveRecord(r));
         }
-        onBack();
+        if (editingDocNumber) {
+          onBack();
+        } else if (onAfterNewDocSaved) {
+          onAfterNewDocSaved(pbDocNumber);
+        } else {
+          onBack();
+        }
         toast.success(`采购单 ${pbDocNumber} 已成功创建，包含 ${addedCount} 条入库明细`);
       } catch {
         /* onSaveBatch / onSaveRecord 已 toast */

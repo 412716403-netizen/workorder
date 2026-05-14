@@ -27,6 +27,7 @@ import { writeWarehousePreference, WAREHOUSE_DOC_KIND } from '../../utils/wareho
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { useStockSnapshot } from '../../hooks/useStockSnapshot';
 import { psiOrderBillCompactLineInputClass } from '../../styles/uiDensity';
+import type { StockDocDetail } from './types';
 
 /**
  * 子工单等：外协记录上的 variantId 常为父成品规格，与本产品 BOM 规格对不上。
@@ -96,8 +97,10 @@ export interface OutsourceMaterialDispatchModalProps {
   categories?: ProductCategory[];
   /** 外协领料发出自定义字段（生产物料 → 字段配置） */
   materialFormSettings?: MaterialFormSettings;
-  onAddRecord: (record: ProductionOpRecord) => void;
-  onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
+  onAddRecord: (record: ProductionOpRecord) => void | Promise<ProductionOpRecord | null | void>;
+  onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<ProductionOpRecord[] | void>;
+  /** 保存成功后打开与「生产物料」一致的物料发出/退回详情单 */
+  onAfterMatDocSaved?: (detail: StockDocDetail) => void;
   onClose: () => void;
   /** 进销存快照，合并批次下拉里余量 */
   psiRecords?: PsiRecord[];
@@ -126,6 +129,7 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
   materialFormSettings = DEFAULT_MATERIAL_FORM_SETTINGS,
   onAddRecord,
   onAddRecordBatch,
+  onAfterMatDocSaved,
   onClose,
   psiRecords = [],
 }) => {
@@ -465,11 +469,42 @@ const OutsourceMaterialDispatchModal: React.FC<OutsourceMaterialDispatchModalPro
         ...collabExtra,
       };
     });
-    if (onAddRecordBatch && batch.length > 1) {
-      await onAddRecordBatch(batch);
-    } else {
-      for (const rec of batch) onAddRecord(rec);
-    }
+    const submitAndResolveDocNo = async (submitBatch: ProductionOpRecord[]): Promise<string> => {
+      if (onAddRecordBatch && submitBatch.length > 1) {
+        const created = await onAddRecordBatch(submitBatch);
+        const first = Array.isArray(created) ? created[0] : null;
+        const fromServer = (first?.docNo ?? '').trim();
+        return fromServer || docNo;
+      }
+      let resolved = '';
+      for (const rec of submitBatch) {
+        const r = await Promise.resolve(onAddRecord(rec));
+        if (!resolved && r && typeof r === 'object' && 'docNo' in r) {
+          resolved = String((r as ProductionOpRecord).docNo ?? '').trim();
+        }
+      }
+      return resolved || docNo;
+    };
+    const resolvedDocNo = await submitAndResolveDocNo(batch);
+    const orderIdForDetail = isProductMode ? '' : (matDispatchOrderId ?? '');
+    const detail: StockDocDetail = {
+      docNo: resolvedDocNo,
+      type: 'STOCK_OUT',
+      orderId: orderIdForDetail,
+      ...(isProductMode && targetProductId ? { sourceProductId: targetProductId } : {}),
+      timestamp,
+      warehouseId: matDispatchWarehouseId || '',
+      lines: toIssue.map(m => {
+        const p = products.find(x => x.id === m.productId);
+        const c = categoryById.get(p?.categoryId ?? '');
+        const bn = categoryUsesBatchManagement(c) ? clampBatchNoInput(lineBatchByProduct[m.productId] ?? '') : '';
+        return { productId: m.productId, quantity: matDispatchQty[m.productId], ...(bn ? { batchNo: bn } : {}) };
+      }),
+      reason: matDispatchRemark.trim() || undefined,
+      operator: docOperator,
+      partner: matDispatchPartner,
+    };
+    if (resolvedDocNo) onAfterMatDocSaved?.(detail);
     if (matDispatchWarehouseId) {
       writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.OUTSOURCE_MAT_DISPATCH, {
         warehouseId: matDispatchWarehouseId,

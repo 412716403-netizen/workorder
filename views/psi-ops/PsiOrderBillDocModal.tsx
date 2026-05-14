@@ -28,6 +28,10 @@ export interface PsiOrderBillDocModalProps {
   hasPsiPerm: (perm: string) => boolean;
   detailContent: React.ReactNode;
   formContent: React.ReactNode;
+  /** 详情顶栏「编辑」，默认 true */
+  showDetailEditButton?: boolean;
+  /** 详情顶栏「删除」，默认 true */
+  showDetailDeleteButton?: boolean;
 }
 
 const PsiOrderBillDocModal: React.FC<PsiOrderBillDocModalProps> = ({
@@ -50,6 +54,8 @@ const PsiOrderBillDocModal: React.FC<PsiOrderBillDocModalProps> = ({
   hasPsiPerm,
   detailContent,
   formContent,
+  showDetailEditButton = true,
+  showDetailDeleteButton = true,
 }) => (
   <DocPhaseModal
     open={open}
@@ -82,6 +88,8 @@ const PsiOrderBillDocModal: React.FC<PsiOrderBillDocModalProps> = ({
     onClose={onClose}
     onEnterEdit={onEnterEdit}
     onCancelEdit={onCancelEdit}
+    showDetailEditButton={showDetailEditButton}
+    showDetailDeleteButton={showDetailDeleteButton}
     detailContent={detailContent}
     formContent={formContent}
   />

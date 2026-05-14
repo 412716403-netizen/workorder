@@ -27,6 +27,10 @@ export interface DocPhaseModalProps {
   renderDocBadge?: (docNumber: string) => React.ReactNode;
   /** 详情态、在「打印」按钮之前插入的控件（如外协 `OrderCenterDetailPrintBlock`） */
   leadingDetailActions?: React.ReactNode;
+  /** 详情顶栏是否显示「编辑」，默认 true */
+  showDetailEditButton?: boolean;
+  /** 详情顶栏是否显示「删除」，默认 true */
+  showDetailDeleteButton?: boolean;
   onClose: () => void;
   onEnterEdit: () => void;
   onCancelEdit: () => void;
@@ -63,6 +67,8 @@ const DocPhaseModal: React.FC<DocPhaseModalProps> = ({
   onDelete,
   renderDocBadge,
   leadingDetailActions,
+  showDetailEditButton = true,
+  showDetailDeleteButton = true,
   onClose,
   onEnterEdit,
   onCancelEdit,
@@ -124,7 +130,7 @@ const DocPhaseModal: React.FC<DocPhaseModalProps> = ({
                     <Printer className="w-4 h-4" /> 打印
                   </button>
                 )}
-                {(hasPerm(editPerm) || hasPerm(viewPerm)) && (
+                {showDetailEditButton && (hasPerm(editPerm) || hasPerm(viewPerm)) && (
                   <button
                     type="button"
                     onClick={onEnterEdit}
@@ -133,7 +139,7 @@ const DocPhaseModal: React.FC<DocPhaseModalProps> = ({
                     <Pencil className="w-4 h-4" /> 编辑
                   </button>
                 )}
-                {onDelete && deletePerm && hasPerm(deletePerm) && (
+                {showDetailDeleteButton && onDelete && deletePerm && hasPerm(deletePerm) && (
                   <button
                     type="button"
                     onClick={() => {

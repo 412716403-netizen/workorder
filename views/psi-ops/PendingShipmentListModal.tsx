@@ -29,6 +29,8 @@ interface PendingShipmentListModalProps {
   onAddRecordBatch?: (records: any[]) => Promise<void>;
   onReplaceRecords?: (type: string, docNumber: string, newRecords: any[]) => void;
   generateSBDocNumberForPartner: (partnerId: string, partnerName: string) => string;
+  /** 待发货清单生成销售单成功后：单号 + 新建行（销售订单 tab 下 recordsList 不含销售单，供详情合并展示） */
+  onSalesBillCreated?: (docNumber: string, billRecords: any[]) => void;
 }
 
 const PendingShipmentListModal: React.FC<PendingShipmentListModalProps> = ({
@@ -41,6 +43,7 @@ const PendingShipmentListModal: React.FC<PendingShipmentListModalProps> = ({
   onAddRecordBatch,
   onReplaceRecords,
   generateSBDocNumberForPartner,
+  onSalesBillCreated,
 }) => {
   const { currentUser } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
@@ -230,6 +233,7 @@ const PendingShipmentListModal: React.FC<PendingShipmentListModalProps> = ({
                 toast.success('销售发货单已生成', {
                   description: `单号 ${newDocNumber}，${newBillRecords.length} 条明细，合计 ${shipTotalQty} 件`,
                 });
+                onSalesBillCreated?.(newDocNumber, newBillRecords);
                 if (onReplaceRecords) {
                   const docNumbersToUpdate = [...new Set(selectedRecords.map((r: any) => r.docNumber))];
                   docNumbersToUpdate.forEach(docNum => {

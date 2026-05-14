@@ -34,7 +34,7 @@ import type {
   PlanFormSettings,
 } from '../../types';
 import { DEFAULT_MATERIAL_FORM_SETTINGS, DEFAULT_OUTSOURCE_FORM_SETTINGS } from '../../types';
-import { PanelProps, hasOpsPerm, OutsourceModalType } from './types';
+import { PanelProps, hasOpsPerm, OutsourceModalType, type StockDocDetail } from './types';
 import { useDataIndexes } from './useDataIndexes';
 import * as api from '../../services/api';
 import {
@@ -79,6 +79,7 @@ import {
 import OutsourceFlowListModal, { type OutsourceFlowOpenSeed } from './OutsourceFlowListModal';
 import OutsourcePartnerFlowDetailModal from './OutsourcePartnerFlowDetailModal';
 import OutsourceFlowDocumentDetailModal from './OutsourceFlowDocumentDetailModal';
+import StockDocDetailModal from './StockDocDetailModal';
 import DocPhaseModal from '../../components/DocPhaseModal';
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
 import { buildOutsourceFlowPrintContext } from '../../utils/buildOutsourceFlowPrintContext';
@@ -253,6 +254,8 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
    * 避免 panel 自身 records 没覆盖到该日期范围时详情打不开。
    */
   const [flowDetailExtraRecords, setFlowDetailExtraRecords] = useState<ProductionOpRecord[] | null>(null);
+  /** 从待发/待收回保存后直接打开单据详情时，不依赖「外协流水」列表弹窗（outsourceModal==='flow'） */
+  const [flowDetailRevealStandalone, setFlowDetailRevealStandalone] = useState(false);
   const [flowDocPhase, setFlowDocPhase] = useState<'detail' | 'edit'>('detail');
   const [flowOpenSeed, setFlowOpenSeed] = useState<OutsourceFlowOpenSeed>(null);
   const [flowOpenNonce, setFlowOpenNonce] = useState(0);
@@ -271,6 +274,8 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   const [matReturnWarehouseId, setMatReturnWarehouseId] = useState('');
   const [matReturnRemark, setMatReturnRemark] = useState('');
   const [matReturnQty, setMatReturnQty] = useState<Record<string, number>>({});
+  /** 外协物料发出/退回保存后，与「生产物料」页一致的物料单据详情 */
+  const [stockDocDetail, setStockDocDetail] = useState<StockDocDetail | null>(null);
   const [showOutsourceConfig, setShowOutsourceConfig] = useState(false);
   const [outsourceConfigDefaultTab, setOutsourceConfigDefaultTab] = useState<'fields' | 'print'>('fields');
   const [dispatchCustomValues, setDispatchCustomValues] = useState<Record<string, unknown>>({});
@@ -296,6 +301,9 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   }, [receiveFormModalOpen]);
   useEffect(() => {
     if (flowDetailKey) setFlowDocPhase('detail');
+  }, [flowDetailKey]);
+  useEffect(() => {
+    if (!flowDetailKey) setFlowDetailRevealStandalone(false);
   }, [flowDetailKey]);
   useEffect(() => {
     if (receiveModal) setReceiveLineCustomValues({});
@@ -828,6 +836,11 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       for (const rec of batch) await onAddRecord(rec);
     }
 
+    setFlowDetailExtraRecords([...batch]);
+    setFlowDetailKey(docNo);
+    setFlowDocPhase('detail');
+    setFlowDetailRevealStandalone(true);
+
     const matchedPartner = partners.find(p => p.name === partnerName);
     const collabTenantId = matchedPartner?.collaborationTenantId;
 
@@ -885,7 +898,11 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       docNo: receiveDocNo,
       ...lineCollab,
     };
-    onAddRecord(receiveRec);
+    await Promise.resolve(onAddRecord(receiveRec));
+    setFlowDetailExtraRecords([receiveRec]);
+    setFlowDetailKey(receiveDocNo);
+    setFlowDocPhase('detail');
+    setFlowDetailRevealStandalone(true);
     toast.success('收货已保存', {
       description: `收回单号 ${receiveDocNo}，本次收回 ${receiveQty} 件`,
     });
@@ -990,6 +1007,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       return;
     }
     const receiveCollab = outsourceCustomCollabPart(receiveCustomValues, 'receive');
+    const createdReceiveBatch: ProductionOpRecord[] = [];
     for (const [key, qty] of entries) {
       const resolved = resolveReceiveEntry(key);
       if (!resolved) continue;
@@ -1026,19 +1044,26 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       };
       if (isProductScope) {
         /** product 维度发出 → product 维度收回；不附 orderId，与发出对称 */
+        createdReceiveBatch.push(baseRecord);
         onAddRecord(baseRecord);
       } else {
         /** order 维度发出 → order 维度收回；附 orderId，写回 milestone，与发出对称 */
         const order = idx.ordersById.get(row.orderId!);
         if (!order) continue;
-        onAddRecord({
+        const rowRec: ProductionOpRecord = {
           ...baseRecord,
           orderId: row.orderId!,
           productId: order.productId,
-        });
+        };
+        createdReceiveBatch.push(rowRec);
+        onAddRecord(rowRec);
       }
     }
     const receiveTotalQty = entries.reduce((s, [, q]) => s + q, 0);
+    setFlowDetailExtraRecords(createdReceiveBatch);
+    setFlowDetailKey(receiveDocNo);
+    setFlowDocPhase('detail');
+    setFlowDetailRevealStandalone(true);
     toast.success('收货已保存', {
       description: `收回单号 ${receiveDocNo}，${entries.length} 条明细，合计 ${receiveTotalQty} 件`,
     });
@@ -1365,6 +1390,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           categories={categories}
           onAddRecord={onAddRecord}
           onAddRecordBatch={onAddRecordBatch}
+          onAfterMatDocSaved={setStockDocDetail}
           onClose={() => {
             setMatDispatchOrderId(null);
             setMatDispatchProductId(null);
@@ -1400,6 +1426,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           categories={categories}
           onAddRecord={onAddRecord}
           onAddRecordBatch={onAddRecordBatch}
+          onAfterMatDocSaved={setStockDocDetail}
           onClose={() => {
             setMatReturnOrderId(null);
             setMatReturnProductId(null);
@@ -1410,6 +1437,23 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           psiRecords={psiRecords}
         />
       )}
+
+      <StockDocDetailModal
+        detail={stockDocDetail}
+        onClose={() => setStockDocDetail(null)}
+        onDetailChange={setStockDocDetail}
+        records={records}
+        orders={orders}
+        products={products}
+        warehouses={warehouses}
+        dictionaries={dictionaries}
+        materialFormSettings={materialFormSettings}
+        printTemplates={printTemplates}
+        onUpdateRecord={onUpdateRecord}
+        onDeleteRecord={onDeleteRecord}
+        userPermissions={userPermissions}
+        tenantRole={tenantRole}
+      />
 
       {outsourceModal === 'dispatch' && (
         <OutsourceDispatchListModal
@@ -1570,7 +1614,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
         outsourceFormSettings={outsourceFormSettings}
       />
 
-      {outsourceModal === 'flow' && flowDetailKey && (
+      {flowDetailKey && (outsourceModal === 'flow' || flowDetailRevealStandalone) && (
         <DocPhaseModal
           open
           phase={flowDocPhase}
