@@ -1,9 +1,11 @@
 
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { FileText, X, Check, UserPlus, BookOpen } from 'lucide-react';
-import { ScanInputButton } from '../../components/scan/ScanInputButton';
+import { ScanBatchTrigger } from '../../components/scan/ScanBatchTrigger';
 import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
-import type { ScanPayload } from '../../utils/scanPayload';
+import { rewriteScanApiErrorForIme, type ScanPayload } from '../../utils/scanPayload';
+import type { ScanBatchRowDetail } from '../../utils/scanBatchRowDetail';
+import { scanItemResultToRowDetail, scanVirtualBatchResultToRowDetail } from '../../utils/scanBatchRowDetail';
 import {
   ProductionOrder,
   Milestone,
@@ -305,40 +307,36 @@ const ReportModal: React.FC<ReportModalProps> = ({
   const scannedItemTokensRef = useRef<Set<string>>(new Set());
   const scannedBatchTokensRef = useRef<Set<string>>(new Set());
 
-  const handleScanPayload = useCallback(
-    async (payload: ScanPayload) => {
-      if (!payload.token) return;
+  const applyScanPayload = useCallback(
+    async (payload: ScanPayload): Promise<boolean> => {
+      if (!payload.token) return false;
       const currentPlanOrderId = reportModal.order.planOrderId;
       if (!currentPlanOrderId) {
         toast.error('当前工单未关联计划，无法校验扫码');
-        return;
+        return false;
       }
       try {
         if (payload.kind === 'ITEM') {
           if (scannedItemTokensRef.current.has(payload.token)) {
             toast.warning('此单品码已扫描过');
-            return;
+            return false;
           }
           const res = await itemCodesApi.scan(payload.token);
-          if (res.kind !== 'ITEM_CODE') {
-            toast.error('识别到批次码，请改用批次扫码逻辑');
-            return;
-          }
           if (res.status === 'VOIDED') {
             toast.error(res.message || '单品码已作废');
-            return;
+            return false;
           }
           const callerPlanId = res.callerContext?.callerPlanOrderId ?? res.planOrderId;
           if (callerPlanId !== currentPlanOrderId) {
             toast.error('此码不属于当前工单所在计划');
-            return;
+            return false;
           }
           scannedItemTokensRef.current.add(payload.token);
           const vid = res.variantId || '';
           if (reportForm.variantQuantities && !vid) {
             scannedItemTokensRef.current.delete(payload.token);
             toast.error('单品码未带规格，无法在按规格模式下累加');
-            return;
+            return false;
           }
           setReportForm(f => {
             if (f.variantQuantities) {
@@ -352,21 +350,22 @@ const ReportModal: React.FC<ReportModalProps> = ({
               res.ownerTenantName && res.callerContext?.relation !== 'OWNER' ? ` · 来自 ${res.ownerTenantName}` : ''
             }`,
           );
-        } else if (payload.kind === 'BATCH') {
+          return true;
+        }
+        if (payload.kind === 'BATCH') {
           if (scannedBatchTokensRef.current.has(payload.token)) {
             toast.warning('此批次码已扫描过');
-            return;
+            return false;
           }
           const res = await planVirtualBatchesApi.scan(payload.token);
-          if (res.kind !== 'VIRTUAL_BATCH') return;
           if (res.status === 'VOIDED') {
             toast.error(res.message || '批次码已作废');
-            return;
+            return false;
           }
           const callerPlanId = res.callerContext?.callerPlanOrderId ?? res.planOrderId;
           if (callerPlanId !== currentPlanOrderId) {
             toast.error('此批次码不属于当前工单所在计划');
-            return;
+            return false;
           }
           scannedBatchTokensRef.current.add(payload.token);
           const qty = res.quantity ?? 0;
@@ -374,7 +373,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
           if (reportForm.variantQuantities && !vid) {
             scannedBatchTokensRef.current.delete(payload.token);
             toast.error('批次码未带规格，无法在按规格模式下累加');
-            return;
+            return false;
           }
           setReportForm(f => {
             if (f.variantQuantities) {
@@ -388,12 +387,88 @@ const ReportModal: React.FC<ReportModalProps> = ({
               res.ownerTenantName && res.callerContext?.relation !== 'OWNER' ? ` · 来自 ${res.ownerTenantName}` : ''
             }`,
           );
+          return true;
         }
       } catch (e) {
-        toast.error((e as Error)?.message || '扫码查询失败');
+        toast.error(rewriteScanApiErrorForIme(payload.raw, (e as Error)?.message || '扫码查询失败'));
+        return false;
       }
+      return false;
     },
     [reportModal.order.planOrderId, reportForm.variantQuantities],
+  );
+
+  const resolveReportScanRowPreview = useCallback(
+    async (payload: ScanPayload): Promise<ScanBatchRowDetail | null> => {
+      if (!payload.token) return null;
+      const currentPlanOrderId = reportModal.order.planOrderId;
+      if (!currentPlanOrderId) {
+        toast.error('当前工单未关联计划，无法校验扫码');
+        return null;
+      }
+      try {
+        if (payload.kind === 'ITEM') {
+          if (scannedItemTokensRef.current.has(payload.token)) {
+            toast.warning('此单品码已扫描过');
+            return null;
+          }
+          const res = await itemCodesApi.scan(payload.token);
+          if (res.status === 'VOIDED') {
+            toast.error(res.message || '单品码已作废');
+            return null;
+          }
+          const callerPlanId = res.callerContext?.callerPlanOrderId ?? res.planOrderId;
+          if (callerPlanId !== currentPlanOrderId) {
+            toast.error('此码不属于当前工单所在计划');
+            return null;
+          }
+          const vid = res.variantId || '';
+          if (reportForm.variantQuantities && !vid) {
+            toast.error('单品码未带规格，无法在按规格模式下累加');
+            return null;
+          }
+          return scanItemResultToRowDetail(res);
+        }
+        if (payload.kind === 'BATCH') {
+          if (scannedBatchTokensRef.current.has(payload.token)) {
+            toast.warning('此批次码已扫描过');
+            return null;
+          }
+          const res = await planVirtualBatchesApi.scan(payload.token);
+          if (res.status === 'VOIDED') {
+            toast.error(res.message || '批次码已作废');
+            return null;
+          }
+          const callerPlanId = res.callerContext?.callerPlanOrderId ?? res.planOrderId;
+          if (callerPlanId !== currentPlanOrderId) {
+            toast.error('此批次码不属于当前工单所在计划');
+            return null;
+          }
+          const vid = res.variantId || '';
+          if (reportForm.variantQuantities && !vid) {
+            toast.error('批次码未带规格，无法在按规格模式下累加');
+            return null;
+          }
+          return scanVirtualBatchResultToRowDetail(res);
+        }
+      } catch (e) {
+        toast.error(rewriteScanApiErrorForIme(payload.raw, (e as Error)?.message || '扫码查询失败'));
+        return null;
+      }
+      return null;
+    },
+    [reportModal.order.planOrderId, reportForm.variantQuantities],
+  );
+
+  const handleScanBatchConfirm = useCallback(
+    async (payloads: ScanPayload[]) => {
+      for (const p of payloads) {
+        const ok = await applyScanPayload(p);
+        if (!ok) return false;
+      }
+      return true;
+    },
+    [applyScanPayload],
   );
 
   const getSeqRemainingForVariant = useCallback((variantId: string): number => {
@@ -915,7 +990,15 @@ const ReportModal: React.FC<ReportModalProps> = ({
               <div className="flex items-baseline justify-between gap-3">
                 <label className="text-[10px] font-bold text-slate-400 uppercase shrink-0">本次完成数量（按规格）</label>
                 <div className="flex items-center gap-2 shrink-0">
-                  <ScanInputButton onScan={handleScanPayload} size="sm" hint="扫码录入" />
+                  <ScanBatchTrigger
+                    onApply={handleScanBatchConfirm}
+                    resolveRowPreview={resolveReportScanRowPreview}
+                    size="sm"
+                    hint="扫码录入"
+                    modalTitle="报工 · 批量扫码"
+                    modalHint="请使用扫码枪；请先切换到英文（半角）输入法。扫入的码显示在列表中，确认后一次性累加到本次完成数量。"
+                    showScanIntentToggle
+                  />
                   <span className="text-xs sm:text-sm font-bold text-indigo-600 tabular-nums">合计 {matrixTotalQty} 件</span>
                 </div>
               </div>
@@ -1208,7 +1291,14 @@ const ReportModal: React.FC<ReportModalProps> = ({
                 <div className="flex flex-col gap-0.5 shrink-0 sm:pl-1">
                   <label className="text-[9px] font-black text-slate-400 uppercase whitespace-nowrap tracking-wide">扫码累加</label>
                   <div className="h-8 flex items-center">
-                    <ScanInputButton showCameraButton={false} onScan={handleScanPayload} hint="扫码录入" />
+                    <ScanBatchTrigger
+                      onApply={handleScanBatchConfirm}
+                      resolveRowPreview={resolveReportScanRowPreview}
+                      hint="扫码录入"
+                      modalTitle="报工 · 批量扫码"
+                      modalHint="请使用扫码枪；请先切换到英文（半角）输入法。扫入的码显示在列表中，确认后一次性累加到本次完成数量。"
+                      showScanIntentToggle
+                    />
                   </div>
                 </div>
               </div>

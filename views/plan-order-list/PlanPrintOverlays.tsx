@@ -117,7 +117,9 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
                 {itemCodePrintLoading ? (
                   <div className="text-center py-2 text-xs text-slate-400">加载中...</div>
                 ) : itemCodePrintCodes.length === 0 ? (
-                  <div className="text-center py-2 text-xs text-slate-400">暂无单品码，请先生成单品码</div>
+                  <div className="text-center py-2 text-xs text-slate-400">
+                    暂无单品码；请在计划详情「追溯码」中选择「单品码+批次码」并生成批次后自动创建。
+                  </div>
                 ) : (
                   <p className="text-[11px] leading-snug text-slate-500">
                     共{' '}

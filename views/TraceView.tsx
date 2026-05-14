@@ -14,10 +14,11 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ScanPanel from '../components/scan/ScanPanel';
-import type { ScanPayload } from '../utils/scanPayload';
+import { rewriteScanApiErrorForIme, scanRawLooksLikeImeCorruption, type ScanPayload } from '../utils/scanPayload';
 import { itemCodesApi, planVirtualBatchesApi } from '../services/api';
 import type { ScanResult, TraceResult } from '../types';
 import { formatItemCodeSerialLabel } from '../utils/serialLabels';
+import { playScanErrorSound, playScanSuccessSound } from '../utils/scanFeedbackSound';
 
 const TRACE_PAGE_SIZE = 50;
 
@@ -33,11 +34,17 @@ export default function TraceView() {
   const [traceKind, setTraceKind] = useState<'ITEM' | 'BATCH' | null>(null);
   const [tracePage, setTracePage] = useState(1);
   const [traceLoadingMore, setTraceLoadingMore] = useState(false);
+  const [recentDisplayByRaw, setRecentDisplayByRaw] = useState<Record<string, string>>({});
 
-  const onScan = useCallback(async (payload: ScanPayload) => {
+  const executeTrace = useCallback(async (payload: ScanPayload): Promise<ScanResult | null> => {
     if (payload.kind === 'UNKNOWN' || !payload.token) {
-      toast.error(`无法识别：${payload.raw.slice(0, 32)}`);
-      return;
+      const preview = `${payload.raw.slice(0, 32)}${payload.raw.length > 32 ? '…' : ''}`;
+      const imeHint = scanRawLooksLikeImeCorruption(payload.raw)
+        ? '检测到可能为中文输入法误转（如「。」「—」或全角字母数字）。请切换到英文（半角）输入法后重试。'
+        : undefined;
+      playScanErrorSound();
+      toast.error(`无法识别：${preview}`, imeHint ? { description: imeHint } : undefined);
+      return null;
     }
     setLoading(true);
     setError(null);
@@ -47,29 +54,49 @@ export default function TraceView() {
     setTraceKind(payload.kind === 'ITEM' ? 'ITEM' : 'BATCH');
     setTracePage(1);
     try {
+      let s: ScanResult;
       if (payload.kind === 'ITEM') {
-        const [s, t] = await Promise.all([
+        const [scanRes, t] = await Promise.all([
           itemCodesApi.scan(payload.token),
           itemCodesApi.trace(payload.token, { page: 1, pageSize: TRACE_PAGE_SIZE }).catch(() => null),
         ]);
-        setScan(s);
+        s = scanRes;
         if (t) setTrace(t);
       } else {
-        const [s, t] = await Promise.all([
+        const [scanRes, t] = await Promise.all([
           planVirtualBatchesApi.scan(payload.token),
           planVirtualBatchesApi.trace(payload.token, { page: 1, pageSize: TRACE_PAGE_SIZE }).catch(() => null),
         ]);
-        setScan(s);
+        s = scanRes;
         if (t) setTrace(t);
       }
+      setScan(s);
+      return s;
     } catch (e) {
-      const msg = (e as Error)?.message || '查询失败';
+      playScanErrorSound();
+      const msg = rewriteScanApiErrorForIme(payload.raw, (e as Error)?.message || '查询失败');
       setError(msg);
       toast.error(msg);
+      return null;
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const onScan = useCallback(
+    (payload: ScanPayload) => {
+      void (async () => {
+        const s = await executeTrace(payload);
+        if (s) {
+          playScanSuccessSound();
+          const name =
+            (s.kind === 'ITEM_CODE' ? s.productName ?? s.sku : s.productName ?? s.sku)?.trim() || '—';
+          setRecentDisplayByRaw(prev => ({ ...prev, [payload.raw]: name }));
+        }
+      })();
+    },
+    [executeTrace],
+  );
 
   const loadMoreTrace = useCallback(async () => {
     if (!traceToken || !traceKind || !trace?.hasMore || traceLoadingMore) return;
@@ -108,11 +135,17 @@ export default function TraceView() {
         </div>
         <div>
           <h1 className="text-xl font-black text-slate-900">产品追溯查询</h1>
-          <p className="text-xs text-slate-500 mt-0.5">扫单品码或批次码，查看跨租户生产链路时间轴</p>
+          <p className="text-xs text-slate-500 mt-0.5">无弹窗、无摄像头：扫码枪或粘贴查询；扫一个查一个，再扫即切换</p>
         </div>
       </header>
 
-      <ScanPanel onScan={onScan} />
+      <ScanPanel
+        onScan={onScan}
+        suppressDispatchSounds
+        showCameraButton={false}
+        recentDisplayByRaw={recentDisplayByRaw}
+        placeholder="仅支持扫码枪与手工粘贴：每扫或粘贴一次立即查询，下方展示当前码的追溯路径；再扫下一条会切换为新产品/批次的信息。"
+      />
 
       {loading && (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">

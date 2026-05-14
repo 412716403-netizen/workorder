@@ -120,11 +120,22 @@ export function normalizePlanFormSettings(raw: PlanFormSettings | null | undefin
       allowedTemplateIds: allowedList.length > 0 ? allowedList : undefined,
     },
     labelPrint: s.labelPrint
-      ? {
-          ...s.labelPrint,
-          allowedTemplateIds: allowedLabel.length > 0 ? allowedLabel : undefined,
-          showPlanDetailTraceSection: s.labelPrint.showPlanDetailTraceSection !== false,
-        }
+      ? (() => {
+          const lp = s.labelPrint;
+          const { bulkQuickSplitBatchSize: rawSizeIn, bulkQuickSplitWithItemCodes: _drop, ...lpRest } = lp;
+          let bulkQuickSplitBatchSize: number | undefined;
+          if (rawSizeIn != null && Number.isFinite(Number(rawSizeIn))) {
+            const n = Math.floor(Number(rawSizeIn));
+            if (n >= 1 && n <= 100_000) bulkQuickSplitBatchSize = n;
+          }
+          return {
+            ...lpRest,
+            allowedTemplateIds: allowedLabel.length > 0 ? allowedLabel : undefined,
+            showPlanDetailTraceSection: lp.showPlanDetailTraceSection !== false,
+            ...(bulkQuickSplitBatchSize !== undefined ? { bulkQuickSplitBatchSize } : {}),
+            bulkQuickSplitWithItemCodes: lp.bulkQuickSplitWithItemCodes !== false,
+          };
+        })()
       : s.labelPrint,
   };
 }

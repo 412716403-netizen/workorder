@@ -803,8 +803,8 @@ export function PrintPaper({ template, ctx, children, bodyClassName, editorMode 
           ...ctxBase,
           page: { current: pageIndex, total: totalPages },
           ...(isLabelPerRow ? { listRow: ctx.printListRows![pageIndex - 1] } : {}),
-          /** 编辑器预览：`ctxBase` 已去掉 listRow；补回供画布上 {{行.xxx}}（如单品码）解析 */
-          ...(editorMode && ctx.listRow ? { listRow: ctx.listRow } : {}),
+          /** `ctxBase` 已去掉 listRow；非按件分页时补回，供 {{行.xxx}}（单品码等）在编辑器与模版管理预览中解析 */
+          ...(!isLabelPerRow && ctx.listRow ? { listRow: ctx.listRow } : {}),
           ...(isLabelPerVirtualBatch ? { virtualBatch: ctx.virtualBatchRows![pageIndex - 1] } : {}),
         };
         const listChunk =

@@ -1,9 +1,11 @@
 import React, { useMemo, useCallback, useRef } from 'react';
 import { ArrowDownToLine, X, Check, Scale, Package, FileText, Layers } from 'lucide-react';
 import { toast } from 'sonner';
-import { ScanInputButton } from '../../components/scan/ScanInputButton';
+import { ScanBatchTrigger } from '../../components/scan/ScanBatchTrigger';
 import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
-import type { ScanPayload } from '../../utils/scanPayload';
+import { rewriteScanApiErrorForIme, type ScanPayload } from '../../utils/scanPayload';
+import type { ScanBatchRowDetail } from '../../utils/scanBatchRowDetail';
+import { scanItemResultToRowDetail, scanVirtualBatchResultToRowDetail } from '../../utils/scanBatchRowDetail';
 import type {
   ProductionOpRecord,
   ProductionOrder,
@@ -186,9 +188,9 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
     return names.length ? names.join('、') : '';
   }, [visibleRows]);
 
-  const handleScanPayload = useCallback(
-    async (payload: ScanPayload) => {
-      if (!payload.token || visibleRows.length === 0) return;
+  const applyReceiveScanPayload = useCallback(
+    async (payload: ScanPayload): Promise<boolean> => {
+      if (!payload.token || visibleRows.length === 0) return false;
       try {
         let productId = '';
         let variantId: string | null = null;
@@ -197,12 +199,12 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
         if (payload.kind === 'ITEM') {
           if (scannedItemRef.current.has(payload.token)) {
             toast.warning('此单品码已扫描过');
-            return;
+            return false;
           }
           const res = await itemCodesApi.scan(payload.token);
-          if (res.kind !== 'ITEM_CODE' || res.status !== 'ACTIVE') {
+          if (res.status !== 'ACTIVE') {
             toast.error(res.message || '单品码不可用');
-            return;
+            return false;
           }
           productId = res.productId ?? '';
           variantId = res.variantId ?? null;
@@ -213,12 +215,12 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
         } else if (payload.kind === 'BATCH') {
           if (scannedBatchRef.current.has(payload.token)) {
             toast.warning('此批次码已扫描过');
-            return;
+            return false;
           }
           const res = await planVirtualBatchesApi.scan(payload.token);
-          if (res.kind !== 'VIRTUAL_BATCH' || res.status !== 'ACTIVE') {
+          if (res.status !== 'ACTIVE') {
             toast.error(res.message || '批次码不可用');
-            return;
+            return false;
           }
           productId = res.productId ?? '';
           variantId = res.variantId ?? null;
@@ -229,12 +231,12 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
         }
         if (!productId) {
           toast.error('扫码结果缺少产品信息');
-          return;
+          return false;
         }
         const row = visibleRows.find((r) => r.productId === productId);
         if (!row) {
           toast.error('此码对应产品不在本次收货列表中');
-          return;
+          return false;
         }
         const baseKey = outsourceReceiveBaseKey(row);
         const product = products.find((p) => p.id === row.productId);
@@ -248,7 +250,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
           key = isProductBlockRecv ? `${baseKey}${RECEIVE_VARIANT_SEP}${variantId}` : `${baseKey}|${variantId}`;
         } else if (hasColorSizeMatrix && !variantId) {
           toast.error('当前产品按规格管理，码未带规格');
-          return;
+          return false;
         }
 
         setReceiveFormQuantities((prev) => ({
@@ -258,11 +260,97 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
         if (payload.kind === 'ITEM') scannedItemRef.current.add(payload.token);
         if (payload.kind === 'BATCH') scannedBatchRef.current.add(payload.token);
         toast.success(`外协收货 +${addQty}${tip ? ` ${tip}` : ''}`);
+        return true;
       } catch (e) {
-        toast.error((e as Error)?.message || '扫码查询失败');
+        toast.error(rewriteScanApiErrorForIme(payload.raw, (e as Error)?.message || '扫码查询失败'));
+        return false;
       }
     },
     [visibleRows, products, categories, setReceiveFormQuantities],
+  );
+
+  const resolveReceiveScanRowPreview = useCallback(
+    async (payload: ScanPayload): Promise<ScanBatchRowDetail | null> => {
+      if (!payload.token || visibleRows.length === 0) return null;
+      try {
+        let productId = '';
+        if (payload.kind === 'ITEM') {
+          if (scannedItemRef.current.has(payload.token)) {
+            toast.warning('此单品码已扫描过');
+            return null;
+          }
+          const res = await itemCodesApi.scan(payload.token);
+          if (res.status !== 'ACTIVE') {
+            toast.error(res.message || '单品码不可用');
+            return null;
+          }
+          productId = res.productId ?? '';
+          if (!productId) {
+            toast.error('扫码结果缺少产品信息');
+            return null;
+          }
+          const row = visibleRows.find((r) => r.productId === productId);
+          if (!row) {
+            toast.error('此码对应产品不在本次收货列表中');
+            return null;
+          }
+          const product = products.find((p) => p.id === row.productId);
+          const category = categories.find((c) => c.id === product?.categoryId);
+          const hasColorSizeMatrix = productHasColorSizeMatrix(product, category);
+          const variantId = res.variantId ?? null;
+          if (hasColorSizeMatrix && !variantId) {
+            toast.error('当前产品按规格管理，码未带规格');
+            return null;
+          }
+          return scanItemResultToRowDetail(res);
+        }
+        if (payload.kind === 'BATCH') {
+          if (scannedBatchRef.current.has(payload.token)) {
+            toast.warning('此批次码已扫描过');
+            return null;
+          }
+          const res = await planVirtualBatchesApi.scan(payload.token);
+          if (res.status !== 'ACTIVE') {
+            toast.error(res.message || '批次码不可用');
+            return null;
+          }
+          productId = res.productId ?? '';
+          if (!productId) {
+            toast.error('扫码结果缺少产品信息');
+            return null;
+          }
+          const row = visibleRows.find((r) => r.productId === productId);
+          if (!row) {
+            toast.error('此码对应产品不在本次收货列表中');
+            return null;
+          }
+          const product = products.find((p) => p.id === row.productId);
+          const category = categories.find((c) => c.id === product?.categoryId);
+          const hasColorSizeMatrix = productHasColorSizeMatrix(product, category);
+          const variantId = res.variantId ?? null;
+          if (hasColorSizeMatrix && !variantId) {
+            toast.error('当前产品按规格管理，码未带规格');
+            return null;
+          }
+          return scanVirtualBatchResultToRowDetail(res);
+        }
+      } catch (e) {
+        toast.error(rewriteScanApiErrorForIme(payload.raw, (e as Error)?.message || '扫码查询失败'));
+        return null;
+      }
+      return null;
+    },
+    [visibleRows, products, categories],
+  );
+
+  const handleReceiveScanBatchConfirm = useCallback(
+    async (payloads: ScanPayload[]) => {
+      for (const p of payloads) {
+        if (!(await applyReceiveScanPayload(p))) return false;
+      }
+      return true;
+    },
+    [applyReceiveScanPayload],
   );
 
   const weightEnabledByNodeId = useMemo(() => {
@@ -354,7 +442,14 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold uppercase text-slate-400">扫码录入</span>
-                    <ScanInputButton onScan={handleScanPayload} hint="扫码收货" />
+                    <ScanBatchTrigger
+                      onApply={handleReceiveScanBatchConfirm}
+                      resolveRowPreview={resolveReceiveScanRowPreview}
+                      hint="扫码收货"
+                      modalTitle="外协收货 · 批量扫码"
+                      modalHint="请使用扫码枪；请先切换到英文（半角）输入法。扫入的码显示在列表中，确认后一次性累加收货数量。"
+                      showScanIntentToggle
+                    />
                   </div>
                 </div>
                 <div className="space-y-3">

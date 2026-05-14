@@ -50,7 +50,9 @@ export {
   BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
   BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID,
   BUILTIN_PLAN_LABEL_PRINT_TEMPLATE_ID,
+  BUILTIN_PLAN_BATCH_LABEL_PRINT_TEMPLATE_ID,
   isCodeMergedPrintTemplateId,
+  isReadonlySystemPrintTemplate,
   isSystemLockedPrintTemplateId,
   SYSTEM_LOCKED_PRINT_TEMPLATE_IDS,
 } from './shared/systemPrintTemplates';
@@ -121,6 +123,8 @@ export interface ScanItemCodeResult {
   batchId?: string | null;
   batchSequenceNo?: number | null;
   batchSerialLabel?: string | null;
+  /** 关联虚拟批次的扫码 token；无批次时为 null（报工等场景「批次扫码方式」下扫单品归一化用） */
+  batchScanToken?: string | null;
   callerContext?: ScanCallerContext;
 }
 
@@ -486,6 +490,10 @@ export interface PlanLabelPrintSettings {
   allowedTemplateIds?: string[];
   /** 为 false 时计划详情不显示「追溯码」区块（单品码/批次码等）；默认 true */
   showPlanDetailTraceSection?: boolean;
+  /** 计划详情「一键生成全部规格」每批件数；合法范围 1–100000，非法值在归一化时剔除 */
+  bulkQuickSplitBatchSize?: number;
+  /** 在「单品码+批次码」模式下，一键生成是否同步生成关联单品码；默认 true（仅影响一键生成，单条生成仍跟详情页生成类型） */
+  bulkQuickSplitWithItemCodes?: boolean;
 }
 
 /** 计划单列表显示相关开关（与「字段配置」标准字段分离） */

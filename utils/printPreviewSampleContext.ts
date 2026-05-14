@@ -586,8 +586,8 @@ export function augmentPrintPreviewContext(
     const mergedRows =
       rows && rows.length > 0
         ? rows.map((row, i) => ({
-            ...buildSampleItemCodeListRowForPreview(next, i),
             ...row,
+            ...buildSampleItemCodeListRowForPreview(next, i),
           }))
         : [
             buildSampleItemCodeListRowForPreview(next, 0),

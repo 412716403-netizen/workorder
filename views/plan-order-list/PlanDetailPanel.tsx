@@ -156,6 +156,7 @@ export interface PlanDetailPanelProps {
   onRefreshPrintTemplates?: () => void | Promise<void>;
   /** 将模版 id 合并进计划单「标签可选模版」白名单（仅当已处于限制模式时生效） */
   onMergeLabelPrintWhitelist: (templateId: string) => void;
+  onUpdatePlanFormSettings: (settings: PlanFormSettings) => void | Promise<void>;
 }
 
 const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
@@ -192,6 +193,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   onUpdatePrintTemplates,
   onRefreshPrintTemplates,
   onMergeLabelPrintWhitelist,
+  onUpdatePlanFormSettings,
 }) => {
   const equipmentFeaturesOn = useEquipmentFeaturesEffective();
   const confirm = useConfirm();
@@ -1825,6 +1827,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                 onOpenBatchPrint={(plan2, batch) => setBatchPrintModal({ plan: plan2, batch })}
                 onVirtualBatchesChange={setVirtualBatches}
                 onTraceItemCodesInventoryMayHaveChanged={probePlanActiveItemCodes}
+                planFormSettings={planFormSettings}
+                onUpdatePlanFormSettings={onUpdatePlanFormSettings}
               />
             )}
 

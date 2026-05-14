@@ -34,11 +34,13 @@ import {
 } from '../../utils/warehouseDocPreference';
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
 import { PlanFormCustomFieldReadonly } from '../../components/PlanFormCustomFieldControls';
-import { ScanInputButton } from '../../components/scan/ScanInputButton';
+import { ScanBatchTrigger } from '../../components/scan/ScanBatchTrigger';
 import DocPhaseModal from '../../components/DocPhaseModal';
 import { DocSummaryCard, DocInlineMetaRow } from '../../components/doc-modal';
 import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
-import type { ScanPayload } from '../../utils/scanPayload';
+import { rewriteScanApiErrorForIme, type ScanPayload } from '../../utils/scanPayload';
+import type { ScanBatchRowDetail } from '../../utils/scanBatchRowDetail';
+import { scanItemResultToRowDetail, scanVirtualBatchResultToRowDetail } from '../../utils/scanBatchRowDetail';
 import { fmtDT } from '../../utils/formatTime';
 import { buildOneBlockMatrixPrintRows } from '../../utils/variantMatrixPrintRows';
 import {
@@ -533,27 +535,27 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
           const order = stockInOrder.order;
           const unitName = getUnitName(order.productId);
 
-          const handleStockInScan = async (payload: ScanPayload) => {
-            if (!payload.token) return;
+          const applyStockInScan = async (payload: ScanPayload): Promise<boolean> => {
+            if (!payload.token) return false;
             try {
               if (payload.kind === 'ITEM') {
                 if (stockInScannedItemRef.current.has(payload.token)) {
                   toast.warning('此单品码已扫描过');
-                  return;
+                  return false;
                 }
                 const res = await itemCodesApi.scan(payload.token);
-                if (res.kind !== 'ITEM_CODE' || res.status !== 'ACTIVE') {
+                if (res.status !== 'ACTIVE') {
                   toast.error(res.message || '单品码不可用');
-                  return;
+                  return false;
                 }
                 if (res.productId !== order.productId) {
                   toast.error('此码产品与当前入库工单不一致');
-                  return;
+                  return false;
                 }
                 const callerPlanId = res.callerContext?.callerPlanOrderId ?? res.planOrderId;
                 if (order.planOrderId && callerPlanId !== order.planOrderId) {
                   toast.error('此码不属于当前工单所在计划');
-                  return;
+                  return false;
                 }
                 stockInScannedItemRef.current.add(payload.token);
                 const vid = res.variantId || '';
@@ -561,7 +563,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                   if (!vid) {
                     stockInScannedItemRef.current.delete(payload.token);
                     toast.error('产品按规格管理，码未带规格');
-                    return;
+                    return false;
                   }
                   setStockInForm((f) => ({
                     ...f,
@@ -578,24 +580,26 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                     res.ownerTenantName && res.callerContext?.relation !== 'OWNER' ? ` · 来自 ${res.ownerTenantName}` : ''
                   }`,
                 );
-              } else if (payload.kind === 'BATCH') {
+                return true;
+              }
+              if (payload.kind === 'BATCH') {
                 if (stockInScannedBatchRef.current.has(payload.token)) {
                   toast.warning('此批次码已扫描过');
-                  return;
+                  return false;
                 }
                 const res = await planVirtualBatchesApi.scan(payload.token);
-                if (res.kind !== 'VIRTUAL_BATCH' || res.status !== 'ACTIVE') {
+                if (res.status !== 'ACTIVE') {
                   toast.error(res.message || '批次码不可用');
-                  return;
+                  return false;
                 }
                 if (res.productId !== order.productId) {
                   toast.error('此批次码产品与当前入库工单不一致');
-                  return;
+                  return false;
                 }
                 const callerPlanId = res.callerContext?.callerPlanOrderId ?? res.planOrderId;
                 if (order.planOrderId && callerPlanId !== order.planOrderId) {
                   toast.error('此批次码不属于当前工单所在计划');
-                  return;
+                  return false;
                 }
                 stockInScannedBatchRef.current.add(payload.token);
                 const qty = res.quantity ?? 0;
@@ -604,7 +608,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                   if (!vid) {
                     stockInScannedBatchRef.current.delete(payload.token);
                     toast.error('产品按规格管理，码未带规格');
-                    return;
+                    return false;
                   }
                   setStockInForm((f) => ({
                     ...f,
@@ -621,10 +625,82 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                     res.ownerTenantName && res.callerContext?.relation !== 'OWNER' ? ` · 来自 ${res.ownerTenantName}` : ''
                   }`,
                 );
+                return true;
               }
             } catch (e) {
-              toast.error((e as Error)?.message || '扫码查询失败');
+              toast.error(rewriteScanApiErrorForIme(payload.raw, (e as Error)?.message || '扫码查询失败'));
+              return false;
             }
+            return false;
+          };
+
+          const resolveStockInScanRowPreview = async (payload: ScanPayload): Promise<ScanBatchRowDetail | null> => {
+            if (!payload.token) return null;
+            try {
+              if (payload.kind === 'ITEM') {
+                if (stockInScannedItemRef.current.has(payload.token)) {
+                  toast.warning('此单品码已扫描过');
+                  return null;
+                }
+                const res = await itemCodesApi.scan(payload.token);
+                if (res.status !== 'ACTIVE') {
+                  toast.error(res.message || '单品码不可用');
+                  return null;
+                }
+                if (res.productId !== order.productId) {
+                  toast.error('此码产品与当前入库工单不一致');
+                  return null;
+                }
+                const callerPlanId = res.callerContext?.callerPlanOrderId ?? res.planOrderId;
+                if (order.planOrderId && callerPlanId !== order.planOrderId) {
+                  toast.error('此码不属于当前工单所在计划');
+                  return null;
+                }
+                const vid = res.variantId || '';
+                if (hasColorSize && !vid) {
+                  toast.error('产品按规格管理，码未带规格');
+                  return null;
+                }
+                return scanItemResultToRowDetail(res);
+              }
+              if (payload.kind === 'BATCH') {
+                if (stockInScannedBatchRef.current.has(payload.token)) {
+                  toast.warning('此批次码已扫描过');
+                  return null;
+                }
+                const res = await planVirtualBatchesApi.scan(payload.token);
+                if (res.status !== 'ACTIVE') {
+                  toast.error(res.message || '批次码不可用');
+                  return null;
+                }
+                if (res.productId !== order.productId) {
+                  toast.error('此批次码产品与当前入库工单不一致');
+                  return null;
+                }
+                const callerPlanId = res.callerContext?.callerPlanOrderId ?? res.planOrderId;
+                if (order.planOrderId && callerPlanId !== order.planOrderId) {
+                  toast.error('此批次码不属于当前工单所在计划');
+                  return null;
+                }
+                const vid = res.variantId || '';
+                if (hasColorSize && !vid) {
+                  toast.error('产品按规格管理，码未带规格');
+                  return null;
+                }
+                return scanVirtualBatchResultToRowDetail(res);
+              }
+            } catch (e) {
+              toast.error(rewriteScanApiErrorForIme(payload.raw, (e as Error)?.message || '扫码查询失败'));
+              return null;
+            }
+            return null;
+          };
+
+          const handleStockInBatchConfirm = async (payloads: ScanPayload[]) => {
+            for (const p of payloads) {
+              if (!(await applyStockInScan(p))) return false;
+            }
+            return true;
           };
 
           return (
@@ -684,7 +760,14 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider">入库数量明细（颜色尺码）</h4>
-                        <ScanInputButton onScan={handleStockInScan} hint="扫码入库" />
+                        <ScanBatchTrigger
+                          onApply={handleStockInBatchConfirm}
+                          resolveRowPreview={resolveStockInScanRowPreview}
+                          hint="扫码入库"
+                          modalTitle="入库 · 批量扫码"
+                          modalHint="请使用扫码枪；请先切换到英文（半角）输入法。扫入的码显示在列表中，确认后一次性累加入库数量。"
+                          showScanIntentToggle
+                        />
                       </div>
                       <VariantQtyMatrixInputs
                         product={product}
@@ -715,7 +798,14 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">入库数量 ({unitName})</label>
-                        <ScanInputButton onScan={handleStockInScan} hint="扫码入库" />
+                        <ScanBatchTrigger
+                          onApply={handleStockInBatchConfirm}
+                          resolveRowPreview={resolveStockInScanRowPreview}
+                          hint="扫码入库"
+                          modalTitle="入库 · 批量扫码"
+                          modalHint="请使用扫码枪；请先切换到英文（半角）输入法。扫入的码显示在列表中，确认后一次性累加入库数量。"
+                          showScanIntentToggle
+                        />
                       </div>
                       <input
                         type="number"

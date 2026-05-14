@@ -15,6 +15,43 @@ import {
 
 const INSERT_CHUNK = 2000;
 
+/**
+ * 已为某规格生成「批次绑定的单品码」后，作废同计划、同规格下旧的「纯计划单品码」（batchId=null）。
+ * 避免详情/打印列表里并存两套 ACTIVE 单品码；已印出的旧码扫码会提示已作废。
+ */
+export async function voidActivePlanLevelItemCodesForVariants(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tx: any,
+  tenantId: string,
+  planOrderId: string,
+  variantIds: Array<string | null>,
+): Promise<number> {
+  const uniq: Array<string | null> = [];
+  const seen = new Set<string>();
+  for (const v of variantIds) {
+    const key = v === null || v === undefined ? '' : v;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    uniq.push(v ?? null);
+  }
+  if (uniq.length === 0) return 0;
+  let total = 0;
+  for (const variantId of uniq) {
+    const r = await tx.itemCode.updateMany({
+      where: {
+        tenantId,
+        planOrderId,
+        batchId: null,
+        status: 'ACTIVE',
+        variantId,
+      },
+      data: { status: 'VOIDED' },
+    });
+    total += r.count;
+  }
+  return total;
+}
+
 /** 删计划单前调用：无外键级联时由应用层清理码表 */
 export async function deleteItemCodesAndVirtualBatchesForPlan(
   db: TenantPrismaClient,
@@ -150,10 +187,11 @@ export async function scanItemCode(callerTenantId: string, token: string) {
   let batchIdOut: string | null = code.batchId ?? null;
   let batchSequenceNo: number | null = null;
   let batchSerialLabel: string | null = null;
+  let batchScanToken: string | null = null;
   if (code.batchId) {
     const vb = await basePrisma.planVirtualBatch.findFirst({
       where: { tenantId: ownerTenantId, id: code.batchId! },
-      select: { sequenceNo: true, planOrderId: true },
+      select: { sequenceNo: true, planOrderId: true, scanToken: true },
     });
     if (vb) {
       const pl = await basePrisma.planOrder.findUnique({
@@ -165,6 +203,7 @@ export async function scanItemCode(callerTenantId: string, token: string) {
         pl?.planNumber != null
           ? `B-${pl.planNumber}-${String(vb.sequenceNo).padStart(4, '0')}`
           : null;
+      batchScanToken = vb.scanToken ?? null;
     }
   }
 
@@ -194,6 +233,7 @@ export async function scanItemCode(callerTenantId: string, token: string) {
     batchId: batchIdOut,
     batchSequenceNo,
     batchSerialLabel,
+    batchScanToken,
     callerContext,
   };
 }

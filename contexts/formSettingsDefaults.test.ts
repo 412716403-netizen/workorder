@@ -38,6 +38,39 @@ describe('normalizePlanFormSettings listDisplay', () => {
     });
     expect(n.standardFields.some(f => f.id === 'dueDate')).toBe(false);
   });
+
+  it('normalizes bulkQuickSplitBatchSize to integer in range', () => {
+    const n = normalizePlanFormSettings({
+      labelPrint: { bulkQuickSplitBatchSize: 50.7, bulkQuickSplitWithItemCodes: true },
+    });
+    expect(n.labelPrint?.bulkQuickSplitBatchSize).toBe(50);
+    expect(n.labelPrint?.bulkQuickSplitWithItemCodes).toBe(true);
+  });
+
+  it('drops bulkQuickSplitBatchSize when out of range or invalid', () => {
+    expect(
+      normalizePlanFormSettings({ labelPrint: { bulkQuickSplitBatchSize: 0 } }).labelPrint?.bulkQuickSplitBatchSize,
+    ).toBeUndefined();
+    expect(
+      normalizePlanFormSettings({ labelPrint: { bulkQuickSplitBatchSize: 100_001 } }).labelPrint?.bulkQuickSplitBatchSize,
+    ).toBeUndefined();
+    expect(
+      normalizePlanFormSettings({ labelPrint: { bulkQuickSplitBatchSize: Number.NaN } }).labelPrint?.bulkQuickSplitBatchSize,
+    ).toBeUndefined();
+  });
+
+  it('defaults bulkQuickSplitWithItemCodes to true when unset', () => {
+    const n = normalizePlanFormSettings({ labelPrint: { allowedTemplateIds: ['x'] } });
+    expect(n.labelPrint?.bulkQuickSplitWithItemCodes).toBe(true);
+  });
+
+  it('preserves bulkQuickSplitWithItemCodes false when set', () => {
+    const n = normalizePlanFormSettings({
+      labelPrint: { bulkQuickSplitBatchSize: 10, bulkQuickSplitWithItemCodes: false },
+    });
+    expect(n.labelPrint?.bulkQuickSplitBatchSize).toBe(10);
+    expect(n.labelPrint?.bulkQuickSplitWithItemCodes).toBe(false);
+  });
 });
 
 describe('repairPlanLabelPrintWhitelistMissingPlanLabelTemplates', () => {

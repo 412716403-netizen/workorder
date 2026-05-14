@@ -75,7 +75,7 @@ interface PlanOrderListViewProps {
   partners: Partner[]; 
   partnerCategories: PartnerCategory[];
   planFormSettings: PlanFormSettings;
-  onUpdatePlanFormSettings: (settings: PlanFormSettings) => void;
+  onUpdatePlanFormSettings: (settings: PlanFormSettings) => void | Promise<void>;
   printTemplates: PrintTemplate[];
   onUpdatePrintTemplates: (list: PrintTemplate[]) => void | Promise<void>;
   /** 进入「打印模版」页签时从服务端拉取最新列表（多标签保存后同步） */
@@ -861,6 +861,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
           onUpdatePrintTemplates={onUpdatePrintTemplates}
           onRefreshPrintTemplates={onRefreshPrintTemplates}
           onMergeLabelPrintWhitelist={id => mergePlanPrintWhitelist('planLabel', id)}
+          onUpdatePlanFormSettings={onUpdatePlanFormSettings}
         />
       )}
 

@@ -39,7 +39,7 @@
 - **统一下发采购单 / 销售单（进销存入库、出库单列表打印）**：读配置时合并 **`builtin-purchase-bill-v2`**、**`builtin-sales-bill-v2`**（241×140mm；占位符 `采购单.*` / `销售单.*`；显示名含「（颜色尺码）」）；持久化规则同上。
 - **统一下发生产物料详情打印**：读配置时合并 **`builtin-material-issue-v1`**（领料发出）、**`builtin-material-return-v1`**（生产退料）、**`builtin-outsource-material-issue-v1`**（外协领料发出）、**`builtin-outsource-material-return-v1`**（外协生产退料），241×140mm；占位符分别为 `领料发出.*`、`生产退料.*`、`外协领料发出.*`、`外协生产退料.*`；持久化规则同上。`normalizeMaterialFormSettings` 在未配置 `materialCenterPrint` 或某一子槽为 `undefined` 时，为该槽写入默认白名单（指向对应内置 id）。
 - **统一下发返工管理详情打印**：读配置时合并 **`builtin-rework-defect-treatment-v1`**（处理不良单，版式参考外协发出）、**`builtin-rework-report-flow-v1`**（返工报工单，含工序列与颜色尺码矩阵）；占位符 `处理不良.*`、`返工报工.*`；持久化规则同上。`normalizeReworkFormSettings` 在未配置 `reworkCenterPrint` 或子槽为 `undefined` 时写入对应默认白名单。
-- **统一下发计划单列表 / 单品码标签**：读配置时合并 **`builtin-plan-list-v1`**（A4，`planList`）与 **`builtin-plan-label-v1`**（30×50mm，`planLabel`；10pt、货号/颜色/尺码左对齐、小二维码、边距 2mm、序列号下方居中短横线）；与其它锁定内置模版相同：列表标「系统」、不可删、不可直接可视化编辑保存，可复制为自有模版；持久化规则同上。若租户 `labelPrint.allowedTemplateIds` 误只含列表模版，`repairPlanLabelPrintWhitelistMissingPlanLabelTemplates` 会在加载时并入所有 `planLabel` 模版 id。
+- **统一下发计划单列表 / 单品码与批次码标签**：读配置时合并 **`builtin-plan-list-v1`**（A4，`planList`）、**`builtin-plan-label-v1`**（30×50mm，`planLabel`，单品码行占位符）与 **`builtin-plan-batch-label-v1`**（30×50mm，`planLabel`，`{{批次.*}}` 虚拟批次标签）；与其它锁定内置模版相同：列表标「系统」、不可删、不可直接可视化编辑保存，可复制为自有模版；持久化规则同上。若租户 `labelPrint.allowedTemplateIds` 误只含列表模版，`repairPlanLabelPrintWhitelistMissingPlanLabelTemplates` 会在加载时并入所有 `planLabel` 模版 id。
 - **外协 / 进销存表单配置**：`normalizeOutsourceFormSettings` 等仅做字段归一化，并从 `outsourceCenterPrint.*.allowedTemplateIds` 中剔除已废弃 **`builtin-outsource-dispatch-v1`**；**不再**在归一化阶段自动写入内置模版 id。表单「打印模版」Tab 中的 **「可选模版（已加入）」** 与列表/详情 **「增加 / 管理模版」** 写入的 `allowedTemplateIds` 一致；若某 schema 将 **`hideOptionalTemplateList`** 设为 `true`，则隐藏芯片区（仅保留开关与「增加模版」），见 `PrintTemplateWhitelistCard`。
 
 ---
@@ -271,19 +271,19 @@ PrintRenderContext.virtualBatch
 
 | 场景 | 文件 | 入口位置 | 累加规则 |
 |------|------|----------|----------|
-| 工单报工 | `views/order-list/ReportModal.tsx` | 「本次完成数量」标题行右侧小按钮 | 单品 +1；批次 +`quantity`；`callerContext.callerPlanOrderId`（或 `planOrderId`）须与当前工单 `planOrderId` 一致；防重扫 |
-| 返工报工 | `views/production-ops/ReworkReportSubmitModal.tsx` | 「扫码累加」+ 摄像头/扫码枪 | 产品须一致；按规格匹配首条有待返工的路径累加 |
-| 外协收货 | `views/production-ops/OutsourceReceiveQuantityModal.tsx` | 「商品明细」标题栏右侧 | 在已选行中按 `productId` 匹配行，规格 key 使用 `__v__`（关联产品块）或 `\|`（工单按规格） |
-| 生产入库 | `views/order-list/PendingStockPanel.tsx` | 入库弹窗内「入库数量明细」/「入库数量」标题旁 | 同上计划校验 + 矩阵写 `variantQuantities` / 否则 `singleQuantity` |
-| 产品追溯 | `views/TraceView.tsx` | `App.tsx` 侧栏「切换企业」与主导航之间独立「扫码追溯」 | `ScanPanel` + `scan` + `trace` 展示时间轴 |
+| 工单报工 | `views/order-list/ReportModal.tsx` | 「本次完成数量」旁 `ScanBatchTrigger`（`showScanIntentToggle`，默认「批次码」） | 弹窗内可选「批次码 / 单品码」；规则与 `scanBatchIntent` 一致；单品 +1、批次 +`quantity`；计划校验与防重同下 |
+| 返工报工 | `views/production-ops/ReworkReportSubmitModal.tsx` | 「扫码累加」旁 `ScanBatchTrigger`（同上） | 同上；产品须一致；按规格匹配有待返工的路径累加 |
+| 外协收货 | `views/production-ops/OutsourceReceiveQuantityModal.tsx` | 「商品明细」标题栏旁 `ScanBatchTrigger`（同上） | 同上；在已选行中按 `productId` 匹配行，规格 key 使用 `__v__`（关联产品块）或 `\|`（工单按规格） |
+| 生产入库 | `views/order-list/PendingStockPanel.tsx` | 入库弹窗内 `ScanBatchTrigger`（同上，矩阵/单量两处） | 同上；计划校验 + 矩阵写 `variantQuantities` / 否则 `singleQuantity` |
+| 产品追溯 | `views/TraceView.tsx` | `App.tsx` 侧栏「切换企业」与主导航之间独立「扫码追溯」 | **无批量弹窗、无摄像头**：`ScanPanel`（`showCameraButton={false}`）仅扫码枪 + 粘贴，每扫一次即 `scan+trace` 刷新下方；再扫下一条码即切换为当前码的追溯信息 |
 
-通用能力：`utils/scanPayload.ts`、`hooks/useScanGun.ts`、`components/scan/ScanInputButton.tsx`、`components/scan/ScanPanel.tsx`；摄像头依赖 `@zxing/browser`。
+通用能力：`utils/scanPayload.ts`、`utils/scanBatchIntent.ts`（批量弹窗扫码方式归一化）、`hooks/useScanGun.ts`；**报工 / 返工 / 外协收货 / 生产入库**使用 `ScanBatchSessionModal` + `ScanBatchTrigger`（先收集列表再确认；列表行展示依赖 `resolveRowPreview`）。**产品追溯**使用 `ScanPanel`（即时查询，`suppressDispatchSounds` + 关闭摄像头）。`ScanInputButton` 供其他入口复用；摄像头依赖 `@zxing/browser`（`ScanInputButton`、`ScanPanel` 在 `showCameraButton` 为真时、`ScanBatchSessionModal` 在开启 `showCameraButton` 时）。
 
 ### 10.2 后端接口
 
 | 接口 | 说明 |
 |------|------|
-| `GET /item-codes/scan/:token` | 单品码解析；返回 `kind: 'ITEM_CODE'`、`planOrderId`、`callerContext` |
+| `GET /item-codes/scan/:token` | 单品码解析；返回 `kind: 'ITEM_CODE'`、`planOrderId`、`callerContext`；若码关联虚拟批次则含 **`batchScanToken`**（批次扫码方式下扫单品归一化用） |
 | `GET /plan-virtual-batches/scan/:token` | 批次码解析；返回 `kind: 'VIRTUAL_BATCH'`、`planOrderId`、`callerContext` |
 | `GET /item-codes/trace/:token` | 追溯时间轴（按产品 + 规格 + 计划树聚合） |
 | `GET /plan-virtual-batches/trace/:token` | 同上（入口在 `itemCodes.service` 的 `traceVirtualBatch`） |

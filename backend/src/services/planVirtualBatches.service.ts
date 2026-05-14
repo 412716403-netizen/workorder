@@ -13,6 +13,7 @@ import {
   resolveVariantLabel,
   verifyCollaborationAccess,
 } from './planTreeQuota.service.js';
+import { voidActivePlanLevelItemCodesForVariants } from './itemCodes.service.js';
 
 const INSERT_CHUNK = 2000;
 
@@ -232,6 +233,9 @@ export async function createBatch(
         quantity: row.quantity,
         batchId: row.id,
       });
+      if (created > 0) {
+        await voidActivePlanLevelItemCodesForVariants(tx, tenantId, planOrderId, [variantId]);
+      }
     }
     return { batch: row, itemCodesCreated: created };
   });
@@ -312,6 +316,9 @@ export async function bulkSplit(
           batchId: row.id,
         });
       }
+    }
+    if (withItemCodes && codes > 0) {
+      await voidActivePlanLevelItemCodesForVariants(tx, tenantId, planOrderId, [variantId]);
     }
     return { rows: rowsOut, itemCodesCreated: codes };
   });
@@ -463,6 +470,10 @@ export async function bulkSplitAllVariants(
           batchId: row.id,
         });
       }
+    }
+    if (withItemCodes && codes > 0) {
+      const variantKeys = [...new Set(pending.map((p) => p.variantId))];
+      await voidActivePlanLevelItemCodesForVariants(tx, tenantId, planOrderId, variantKeys);
     }
     return { rows: rowsOut, itemCodesCreated: codes };
   });

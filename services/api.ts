@@ -948,9 +948,11 @@ export const itemCodesApi = {
     status?: string;
     page?: number;
     pageSize?: number;
+    /** 仅兼容旧「全量」拉取；默认不传，走服务端分页（page/pageSize）。 */
+    all?: boolean;
   }) => {
     const qs = new URLSearchParams();
-    qs.set('all', 'true');
+    if (params.all === true) qs.set('all', 'true');
     if (params.planOrderId) qs.set('planOrderId', params.planOrderId);
     if (params.variantId) qs.set('variantId', params.variantId);
     if (params.batchId) qs.set('batchId', params.batchId);
@@ -1008,7 +1010,7 @@ export const planVirtualBatchesApi = {
       body: JSON.stringify(body),
     }),
 
-  /** 计划树内出现的每个规格分别按每批件数拆满剩余额度，无需指定 variantId */
+  /** 计划树内各规格分别按每批件数拆完剩余额度（一键生成全部规格），无需指定 variantId */
   bulkSplitAll: (body: { planOrderId: string; batchSize: number; withItemCodes?: boolean }) =>
     request<{
       totalCreated: number;

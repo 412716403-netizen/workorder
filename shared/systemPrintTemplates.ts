@@ -15,6 +15,7 @@
  * - `builtin-rework-report-flow-v1`：统一下发「返工报工单」详情打印（占位符 `返工报工.*`，含工序列与颜色尺码矩阵）。
  * - `builtin-plan-list-v1`：统一下发「计划单」列表打印（A4；含颜色尺码矩阵与颜色×工序物料矩阵列）。
  * - `builtin-plan-label-v1`：统一下发「计划单品码」小标签打印（30×50mm，`planLabel`；10pt、货号色码左对齐、小二维码、边距 2mm；序列号下居中短横线）。
+ * - `builtin-plan-batch-label-v1`：统一下发「计划批次码」小标签打印（30×50mm，`planLabel`；占位符 `批次.*`；与单品码标签版式类似，用于虚拟批次扫码标签）。
  * 以上合并进各租户 `printTemplates`；持久化写入时剔除，避免与代码副本重复落库。
  */
 
@@ -59,6 +60,9 @@ export const BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID = 'builtin-plan-list-v1' as con
 /** 计划单品码（标签）打印：统一下发模版 id */
 export const BUILTIN_PLAN_LABEL_PRINT_TEMPLATE_ID = 'builtin-plan-label-v1' as const;
 
+/** 计划批次码（标签）打印：统一下发模版 id */
+export const BUILTIN_PLAN_BATCH_LABEL_PRINT_TEMPLATE_ID = 'builtin-plan-batch-label-v1' as const;
+
 /** 由代码合并、不应写入租户 `printTemplates` 持久化的内置 id */
 const MERGED_CODE_PRINT_TEMPLATE_IDS = new Set<string>([
   BUILTIN_OUTSOURCE_DISPATCH_PRINT_TEMPLATE_ID,
@@ -75,6 +79,7 @@ const MERGED_CODE_PRINT_TEMPLATE_IDS = new Set<string>([
   BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
   BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID,
   BUILTIN_PLAN_LABEL_PRINT_TEMPLATE_ID,
+  BUILTIN_PLAN_BATCH_LABEL_PRINT_TEMPLATE_ID,
 ]);
 
 /** 锁定：租户不可删、编辑器走「系统模版」只读/复制为自有流程 */
@@ -93,12 +98,19 @@ export const SYSTEM_LOCKED_PRINT_TEMPLATE_IDS = [
   BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
   BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID,
   BUILTIN_PLAN_LABEL_PRINT_TEMPLATE_ID,
+  BUILTIN_PLAN_BATCH_LABEL_PRINT_TEMPLATE_ID,
 ] as const;
 
 const LOCKED_SET = new Set<string>(SYSTEM_LOCKED_PRINT_TEMPLATE_IDS);
 
 export function isSystemLockedPrintTemplateId(id: string | undefined): boolean {
   return id != null && LOCKED_SET.has(String(id).trim());
+}
+
+/** 系统统一下发或标记为系统模版：不可删除、不可直接可视化编辑保存（可复制为自有模版） */
+export function isReadonlySystemPrintTemplate(t: { id: string; isSystemTemplate?: boolean } | null | undefined): boolean {
+  if (!t?.id) return false;
+  return t.isSystemTemplate === true || isSystemLockedPrintTemplateId(t.id);
 }
 
 /** 统一下发、租户只读（与 {@link isSystemLockedPrintTemplateId} 区分） */
@@ -1717,6 +1729,98 @@ const BUILTIN_PLAN_LABEL_V1: Record<string, unknown> = {
   updatedAt: '2026-05-13T16:30:00.000Z',
 };
 
+/** 计划批次码小标签：30×50mm、`planLabel`；占位符与 `VirtualBatchPrintRow` / 打印解析一致 */
+const BUILTIN_PLAN_BATCH_LABEL_V1: Record<string, unknown> = {
+  id: BUILTIN_PLAN_BATCH_LABEL_PRINT_TEMPLATE_ID,
+  name: '批次码标签',
+  isSystemTemplate: true,
+  documentType: 'plan',
+  printTemplateManageScope: 'planLabel',
+  paperSize: { widthMm: 30, heightMm: 50 },
+  paperSizeCustom: true,
+  paperMarginsMm: { top: 2, left: 2, right: 2, bottom: 2 },
+  paperBackgroundColor: '#FFFFFF',
+  elements: [
+    {
+      x: 0,
+      y: 0,
+      id: 'el-builtin-plan-batch-label-tenant',
+      type: 'text',
+      width: 26,
+      config: {
+        color: '#111827',
+        content: '{{租户.name}}',
+        textAlign: 'center',
+        fontSizePt: 10,
+        fontWeight: 'bold',
+      },
+      height: 5.5,
+      zIndex: 1,
+    },
+    {
+      x: 0,
+      y: 5.7,
+      id: 'el-builtin-plan-batch-label-fields',
+      type: 'text',
+      width: 25,
+      config: {
+        color: '#111827',
+        content: '货号：{{产品.name}}\n颜色：{{批次.colorName}}\n尺码：{{批次.sizeName}}\n数量：{{批次.quantity}}',
+        textAlign: 'left',
+        fontSizePt: 10,
+        fontWeight: 'normal',
+      },
+      height: 16.9,
+      zIndex: 2,
+    },
+    {
+      x: 7,
+      y: 24,
+      id: 'el-builtin-plan-batch-label-qrcode',
+      type: 'qrcode',
+      width: 12.9,
+      config: {
+        content: '{{批次.scanUrl}}',
+      },
+      height: 12.6,
+      zIndex: 3,
+    },
+    {
+      x: 0,
+      y: 37.2,
+      id: 'el-builtin-plan-batch-label-serial',
+      type: 'text',
+      width: 26,
+      config: {
+        color: '#111827',
+        content: '{{批次.serialLabel}}',
+        textAlign: 'center',
+        fontSizePt: 8,
+        fontWeight: 'normal',
+      },
+      height: 5.1,
+      zIndex: 4,
+    },
+    {
+      x: 3.2,
+      y: 43.3,
+      id: 'el-builtin-plan-batch-label-footer-line',
+      type: 'line',
+      width: 18,
+      config: {
+        color: '#000000',
+        angleDeg: 0,
+        lineStyle: 'solid',
+        thicknessMm: 0.4,
+      },
+      height: 0.5,
+      zIndex: 5,
+    },
+  ],
+  createdAt: '2026-05-14T00:00:00.000Z',
+  updatedAt: '2026-05-14T00:00:00.000Z',
+};
+
 export function listSystemPrintTemplateRecordsForMerge(): Record<string, unknown>[] {
   return [
     BUILTIN_OUTSOURCE_DISPATCH_V2,
@@ -1733,6 +1837,7 @@ export function listSystemPrintTemplateRecordsForMerge(): Record<string, unknown
     BUILTIN_REWORK_REPORT_FLOW_V1,
     BUILTIN_PLAN_LIST_V1,
     BUILTIN_PLAN_LABEL_V1,
+    BUILTIN_PLAN_BATCH_LABEL_V1,
   ];
 }
 

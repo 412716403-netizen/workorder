@@ -14,6 +14,7 @@ import {
   BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
   BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID,
   BUILTIN_PLAN_LABEL_PRINT_TEMPLATE_ID,
+  BUILTIN_PLAN_BATCH_LABEL_PRINT_TEMPLATE_ID,
   mergePrintTemplatesForTenantConfig,
   stripSystemPrintTemplatesForPersistence,
 } from './systemPrintTemplates';
@@ -38,6 +39,7 @@ describe('mergePrintTemplatesForTenantConfig', () => {
     expect(ids).toContain(BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID);
     expect(ids).toContain(BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID);
     expect(ids).toContain(BUILTIN_PLAN_LABEL_PRINT_TEMPLATE_ID);
+    expect(ids).toContain(BUILTIN_PLAN_BATCH_LABEL_PRINT_TEMPLATE_ID);
     expect(ids).toContain('tenant-a');
   });
 
@@ -88,6 +90,7 @@ describe('stripSystemPrintTemplatesForPersistence', () => {
       { id: BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID, name: '报工', paperSize: { widthMm: 241, heightMm: 140 }, elements: [], createdAt: '', updatedAt: '' },
       { id: BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID, name: '计划单', paperSize: { widthMm: 210, heightMm: 297 }, elements: [], createdAt: '', updatedAt: '' },
       { id: BUILTIN_PLAN_LABEL_PRINT_TEMPLATE_ID, name: '标签', paperSize: { widthMm: 30, heightMm: 50 }, elements: [], createdAt: '', updatedAt: '' },
+      { id: BUILTIN_PLAN_BATCH_LABEL_PRINT_TEMPLATE_ID, name: '批次', paperSize: { widthMm: 30, heightMm: 50 }, elements: [], createdAt: '', updatedAt: '' },
       { id: 'x', name: 'x', paperSize: { widthMm: 210, heightMm: 297 }, elements: [], createdAt: '', updatedAt: '' },
     ]);
     expect(stripped.map(x => (x as { id: string }).id)).toEqual(['x']);

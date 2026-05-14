@@ -99,4 +99,55 @@ describe('augmentPrintPreviewContext', () => {
     expect(String(r0.serialLabel)).toContain('PLN-预览-');
     expect(String(r0.scanUrl)).toContain('demo-item-scan-token-0');
   });
+
+  it('item-code sample fields win over plan list rows so empty color/size do not blank preview', () => {
+    const textEl = {
+      id: 't1',
+      type: 'text' as const,
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 10,
+      zIndex: 1,
+      config: {
+        content: '{{行.colorName}} {{行.sizeName}}',
+        fontSizePt: 10,
+        fontWeight: 'normal' as const,
+        textAlign: 'left' as const,
+        color: '#000',
+      },
+    };
+    const ctx = augmentPrintPreviewContext(
+      {
+        plan: {
+          id: 'p1',
+          planNumber: 'PLN-预览',
+          items: [],
+          startDate: '2026-01-01',
+          status: PlanStatus.DRAFT,
+          customer: '',
+          priority: 'Medium',
+          productId: 'pr1',
+        },
+        printListRows: [
+          {
+            lineNo: 1,
+            sku: 'X',
+            productName: 'P',
+            qty: 1,
+            unitPrice: '0',
+            amount: '0',
+            remark: '',
+            colorName: '',
+            sizeName: '',
+          },
+        ],
+      },
+      stubTemplate({ documentType: 'plan', elements: [textEl] }),
+    );
+    expect(ctx.listRow?.colorName).toBe('红色');
+    expect(ctx.listRow?.sizeName).toBe('L');
+    expect(ctx.printListRows?.[0]?.colorName).toBe('红色');
+    expect(ctx.printListRows?.[0]?.sizeName).toBe('L');
+  });
 });

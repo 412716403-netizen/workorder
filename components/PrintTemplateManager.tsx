@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Copy, Plus, RotateCcw, Search, Trash2, ZoomIn, ZoomOut } from 'lucide-react';
 import { toast } from 'sonner';
 import type { PlanOrder, PlanPrintTemplateManageScope, PrintTemplate, ProductionOrder, Product } from '../types';
-import { isSystemLockedPrintTemplateId } from '../types';
+import { isReadonlySystemPrintTemplate } from '../types';
 import { PrintPaper } from './print-editor/PrintPaper';
 import { duplicatePrintTemplate } from '../utils/printTemplateDefaults';
 import { stashPrintTemplateForEditorBootstrap } from '../utils/printTemplateBootstrap';
@@ -101,7 +101,7 @@ export const PrintTemplateManager: React.FC<PrintTemplateManagerProps> = ({
 
   const removeSelected = async () => {
     if (!selectedId) return;
-    if (isSystemLockedPrintTemplateId(selectedId)) {
+    if (selected && isReadonlySystemPrintTemplate(selected)) {
       toast.error('系统模版不可删除');
       return;
     }
@@ -185,7 +185,7 @@ export const PrintTemplateManager: React.FC<PrintTemplateManagerProps> = ({
               >
                 <div className="flex min-w-0 items-center gap-1.5">
                   <span className="truncate text-sm font-black text-slate-800">{t.name}</span>
-                  {t.isSystemTemplate || isSystemLockedPrintTemplateId(t.id) ? (
+                  {isReadonlySystemPrintTemplate(t) ? (
                     <span className="shrink-0 rounded-md bg-slate-200 px-1.5 py-0.5 text-[9px] font-black text-slate-600">
                       系统
                     </span>
@@ -249,7 +249,7 @@ export const PrintTemplateManager: React.FC<PrintTemplateManagerProps> = ({
               <button
                 type="button"
                 onClick={() => void removeSelected()}
-                disabled={selected ? isSystemLockedPrintTemplateId(selected.id) : false}
+                disabled={selected ? isReadonlySystemPrintTemplate(selected) : false}
                 className="flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 disabled:pointer-events-none disabled:opacity-40"
               >
                 <Trash2 className="h-3.5 w-3.5" /> 删除
@@ -262,7 +262,7 @@ export const PrintTemplateManager: React.FC<PrintTemplateManagerProps> = ({
                   if (t) stashPrintTemplateForEditorBootstrap(t);
                   openEditor(selectedId, manageScope);
                 }}
-                disabled={selected ? isSystemLockedPrintTemplateId(selected.id) : false}
+                disabled={selected ? isReadonlySystemPrintTemplate(selected) : false}
                 className="rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-[11px] font-bold text-indigo-700 hover:bg-indigo-50 disabled:pointer-events-none disabled:opacity-40"
               >
                 可视化编辑
