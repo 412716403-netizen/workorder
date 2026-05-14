@@ -49,6 +49,7 @@ export {
   BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID,
   BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
   BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID,
+  BUILTIN_PLAN_LABEL_PRINT_TEMPLATE_ID,
   isCodeMergedPrintTemplateId,
   isSystemLockedPrintTemplateId,
   SYSTEM_LOCKED_PRINT_TEMPLATE_IDS,
@@ -1177,6 +1178,11 @@ export interface PrintTemplate {
    */
   printTemplateManageScope?: PlanPrintTemplateManageScope;
   paperSize: { widthMm: number; heightMm: number };
+  /**
+   * 为 true 时「尺寸及方向」下拉固定显示「自定义尺寸」，即使宽高与某预设（如 A4）相同。
+   * 用于区分「选用 A4 预设」与「自定义为 210×297」；未设置时按宽高匹配预设。
+   */
+  paperSizeCustom?: boolean;
   /** 纸张内边距（mm），作用于整张纸内的内容区 */
   paperMarginsMm?: PrintPaperMarginsMm;
   /** 纸张底色（可打印区外侧仍为白时可与边距配合） */

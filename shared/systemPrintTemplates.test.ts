@@ -13,6 +13,7 @@ import {
   BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID,
   BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
   BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID,
+  BUILTIN_PLAN_LABEL_PRINT_TEMPLATE_ID,
   mergePrintTemplatesForTenantConfig,
   stripSystemPrintTemplatesForPersistence,
 } from './systemPrintTemplates';
@@ -36,6 +37,7 @@ describe('mergePrintTemplatesForTenantConfig', () => {
     expect(ids).toContain(BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID);
     expect(ids).toContain(BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID);
     expect(ids).toContain(BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID);
+    expect(ids).toContain(BUILTIN_PLAN_LABEL_PRINT_TEMPLATE_ID);
     expect(ids).toContain('tenant-a');
   });
 
@@ -55,6 +57,18 @@ describe('mergePrintTemplatesForTenantConfig', () => {
     ]);
     expect(merged.some(x => (x as { id: string }).id === 'builtin-outsource-dispatch-v1')).toBe(false);
   });
+
+  it('tenant template with same id as builtin plan label is replaced by code version', () => {
+    const merged = mergePrintTemplatesForTenantConfig([
+      { id: BUILTIN_PLAN_LABEL_PRINT_TEMPLATE_ID, name: '伪造', paperSize: { widthMm: 1, heightMm: 1 }, elements: [], createdAt: '', updatedAt: '' },
+    ]);
+    const builtin = merged.find(x => (x as { id: string }).id === BUILTIN_PLAN_LABEL_PRINT_TEMPLATE_ID) as {
+      name: string;
+      paperSize: { widthMm: number };
+    };
+    expect(builtin.name).toBe('单品码标签');
+    expect(builtin.paperSize.widthMm).toBe(30);
+  });
 });
 
 describe('stripSystemPrintTemplatesForPersistence', () => {
@@ -73,6 +87,7 @@ describe('stripSystemPrintTemplatesForPersistence', () => {
       { id: BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID, name: '不良', paperSize: { widthMm: 241, heightMm: 140 }, elements: [], createdAt: '', updatedAt: '' },
       { id: BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID, name: '报工', paperSize: { widthMm: 241, heightMm: 140 }, elements: [], createdAt: '', updatedAt: '' },
       { id: BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID, name: '计划单', paperSize: { widthMm: 210, heightMm: 297 }, elements: [], createdAt: '', updatedAt: '' },
+      { id: BUILTIN_PLAN_LABEL_PRINT_TEMPLATE_ID, name: '标签', paperSize: { widthMm: 30, heightMm: 50 }, elements: [], createdAt: '', updatedAt: '' },
       { id: 'x', name: 'x', paperSize: { widthMm: 210, heightMm: 297 }, elements: [], createdAt: '', updatedAt: '' },
     ]);
     expect(stripped.map(x => (x as { id: string }).id)).toEqual(['x']);

@@ -70,7 +70,9 @@ import {
   normalizeReworkFormSettings,
   normalizeSalesBillFormSettings,
   normalizeSalesOrderFormSettings,
+  repairPlanLabelPrintWhitelistMissingPlanLabelTemplates,
 } from './formSettingsDefaults';
+import { mergePrintTemplatesForTenantConfig } from '../shared/systemPrintTemplates';
 
 export function settledVal<T>(results: PromiseSettledResult<unknown>[], i: number): T | undefined {
   return results[i]?.status === 'fulfilled' ? (results[i] as PromiseFulfilledResult<unknown>).value as T : undefined;
@@ -159,7 +161,14 @@ export async function executeAppDataLoadCore(
   s.setProductionLinkMode((cfg.productionLinkMode as ProductionLinkMode) ?? 'order');
   s.setProcessSequenceMode((cfg.processSequenceMode as ProcessSequenceMode) ?? 'free');
   s.setAllowExceedMaxReportQty(cfg.allowExceedMaxReportQty !== false);
-  s.setPlanFormSettings(normalizePlanFormSettings(cfg.planFormSettings as PlanFormSettings));
+  const printTemplatesFromCfg = Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : [];
+  const printTemplatesMerged = mergePrintTemplatesForTenantConfig(printTemplatesFromCfg) as PrintTemplate[];
+  s.setPlanFormSettings(
+    repairPlanLabelPrintWhitelistMissingPlanLabelTemplates(
+      normalizePlanFormSettings(cfg.planFormSettings as PlanFormSettings),
+      printTemplatesMerged,
+    ),
+  );
   s.setOrderFormSettings(normalizeOrderFormSettings((cfg.orderFormSettings as OrderFormSettings) ?? DEFAULT_ORDER_FORM_SETTINGS));
   {
     const po = (cfg.purchaseOrderFormSettings as PurchaseOrderFormSettings) ?? DEFAULT_PURCHASE_ORDER_FORM_SETTINGS;
@@ -189,7 +198,7 @@ export async function executeAppDataLoadCore(
   s.setMaterialFormSettings(normalizeMaterialFormSettings((cfg.materialFormSettings as MaterialFormSettings) ?? DEFAULT_MATERIAL_FORM_SETTINGS));
   s.setOutsourceFormSettings(normalizeOutsourceFormSettings((cfg.outsourceFormSettings as OutsourceFormSettings) ?? DEFAULT_OUTSOURCE_FORM_SETTINGS));
   s.setReworkFormSettings(normalizeReworkFormSettings((cfg.reworkFormSettings as ReworkFormSettings) ?? DEFAULT_REWORK_FORM_SETTINGS));
-  s.setPrintTemplates(Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : []);
+  s.setPrintTemplates(printTemplatesMerged);
   if (settledVal(coreResults, 1)) {
     s.setCategories(normalizeProductCategoriesFromApi(settledVal<ProductCategory[]>(coreResults, 1)!));
   }

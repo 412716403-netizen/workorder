@@ -9,7 +9,9 @@ import React, {
 } from 'react';
 import { Plus, Printer, X } from 'lucide-react';
 import type { PlanListPrintSettings, PrintRenderContext, PrintTemplate } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 import { HiddenPrintSlot, usePrintTemplateAction } from '../print-editor/PrintPreview';
+import { mergeTenantPrintContext } from '../../utils/mergeTenantPrintContext';
 import { createBlankCustomTemplate } from '../../utils/printTemplateDefaults';
 import { OrderCenterDetailPrintBlock } from '../order-print/OrderCenterDetailPrintBlock';
 
@@ -108,6 +110,7 @@ function PsiListPrintControllerInner<TDoc>(
   }: PsiListPrintControllerProps<TDoc>,
   ref: React.Ref<PsiListPrintControllerHandle>,
 ): React.ReactElement {
+  const { tenantCtx } = useAuth();
   const [printRun, setPrintRun] = useState<{ template: PrintTemplate; ctx: PrintRenderContext } | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerDocNum, setPickerDocNum] = useState<string | null>(null);
@@ -176,11 +179,11 @@ function PsiListPrintControllerInner<TDoc>(
       if (!pickerDocNum) return;
       const docItems = resolveDocItems(pickerDocNum);
       const maybe = buildContext(t, { docNumber: pickerDocNum, docItems });
-      const ctx = await Promise.resolve(maybe);
+      const ctx = mergeTenantPrintContext(await Promise.resolve(maybe), tenantCtx?.tenantName);
       setPrintRun({ template: t, ctx });
       closePicker();
     },
-    [pickerDocNum, resolveDocItems, buildContext, closePicker],
+    [pickerDocNum, resolveDocItems, buildContext, closePicker, tenantCtx?.tenantName],
   );
 
   return (

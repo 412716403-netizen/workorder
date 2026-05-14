@@ -58,4 +58,45 @@ describe('augmentPrintPreviewContext', () => {
     );
     expect(ctx.plan?.dueDate).toBe('2026-04-17');
   });
+
+  it('injects listRow and merges item-code keys into printListRows when template uses 单品码行 placeholders', () => {
+    const textEl = {
+      id: 't1',
+      type: 'text' as const,
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 10,
+      zIndex: 1,
+      config: {
+        content: '{{行.serialLabel}} {{行.scanUrl}}',
+        fontSizePt: 10,
+        fontWeight: 'normal' as const,
+        textAlign: 'left' as const,
+        color: '#000',
+      },
+    };
+    const ctx = augmentPrintPreviewContext(
+      {
+        plan: {
+          id: 'p1',
+          planNumber: 'PLN-预览',
+          items: [],
+          startDate: '2026-01-01',
+          status: PlanStatus.DRAFT,
+          customer: '',
+          priority: 'Medium',
+          productId: 'pr1',
+        },
+      },
+      stubTemplate({ documentType: 'plan', elements: [textEl] }),
+    );
+    expect(ctx.listRow?.serialLabel).toBeTruthy();
+    expect(String(ctx.listRow?.serialLabel)).toMatch(/^PLN-预览-/);
+    expect(String(ctx.listRow?.scanUrl)).toContain('/scan/demo-item-scan-token-0');
+    expect(ctx.printListRows?.length).toBeGreaterThan(0);
+    const r0 = ctx.printListRows![0]!;
+    expect(String(r0.serialLabel)).toContain('PLN-预览-');
+    expect(String(r0.scanUrl)).toContain('demo-item-scan-token-0');
+  });
 });

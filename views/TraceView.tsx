@@ -17,6 +17,7 @@ import ScanPanel from '../components/scan/ScanPanel';
 import type { ScanPayload } from '../utils/scanPayload';
 import { itemCodesApi, planVirtualBatchesApi } from '../services/api';
 import type { ScanResult, TraceResult } from '../types';
+import { formatItemCodeSerialLabel } from '../utils/serialLabels';
 
 const TRACE_PAGE_SIZE = 50;
 
@@ -147,8 +148,8 @@ function ScanSummaryCard({ scan }: { scan: ScanResult }) {
 
   const isItem = scan.kind === 'ITEM_CODE';
   const serialLabel = isItem
-    ? scan.planNumber && scan.serialNo
-      ? `J-${scan.planNumber}-${String(scan.serialNo).padStart(4, '0')}`
+    ? scan.planNumber && scan.serialNo != null
+      ? formatItemCodeSerialLabel(scan.planNumber, scan.serialNo)
       : null
     : scan.planNumber && scan.batchId
       ? null

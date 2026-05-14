@@ -319,9 +319,28 @@ export function usePrintEditor(initial: PrintTemplate) {
   const setPaperSize = useCallback((widthMm: number, heightMm: number) => {
     updateTemplate(t => ({
       ...t,
+      paperSizeCustom: true,
       paperSize: {
         widthMm: roundPrintDecimal1(Math.max(0.1, widthMm)),
         heightMm: roundPrintDecimal1(Math.max(0.1, heightMm)),
+      },
+    }));
+  }, [updateTemplate]);
+
+  /** 纸张下拉：选预设尺寸或「自定义尺寸」（自定义时不改宽高，仅打标） */
+  const applyPaperPreset = useCallback((value: string) => {
+    if (value === 'custom') {
+      updateTemplate(t => ({ ...t, paperSizeCustom: true }));
+      return;
+    }
+    const [aw, ah] = value.split('x').map(Number);
+    if (!(aw > 0 && ah > 0)) return;
+    updateTemplate(t => ({
+      ...t,
+      paperSizeCustom: false,
+      paperSize: {
+        widthMm: roundPrintDecimal1(Math.max(0.1, aw)),
+        heightMm: roundPrintDecimal1(Math.max(0.1, ah)),
       },
     }));
   }, [updateTemplate]);
@@ -370,6 +389,7 @@ export function usePrintEditor(initial: PrintTemplate) {
     setName,
     setDocumentType,
     setPaperSize,
+    applyPaperPreset,
     setPaperMarginsMm,
     setPaperBackgroundColor,
     swapPaperDimensions,

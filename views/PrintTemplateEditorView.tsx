@@ -119,6 +119,7 @@ export default function PrintTemplateEditorView() {
     setName,
     setDocumentType,
     setPaperSize,
+    applyPaperPreset,
     setPaperMarginsMm,
     setPaperBackgroundColor,
     swapPaperDimensions,
@@ -812,6 +813,7 @@ export default function PrintTemplateEditorView() {
                 onSetName={setName}
                 onSetDocumentType={setDocumentType}
                 setPaperSize={setPaperSize}
+                applyPaperPreset={applyPaperPreset}
                 setPaperMarginsMm={setPaperMarginsMm}
                 setPaperBackgroundColor={setPaperBackgroundColor}
                 swapPaperDimensions={swapPaperDimensions}

@@ -190,7 +190,7 @@ export function buildPrintFieldOptions(opts: {
     { group: '单品码行', value: '行.scanUrl', label: '扫码URL（二维码内容）' },
     { group: '单品码行', value: '行.scanToken', label: '扫码Token' },
     { group: '单品码行', value: '行.serialNo', label: '单品码序号（数字）' },
-    { group: '单品码行', value: '行.serialLabel', label: '单品码编号（如 J-PLN12-0001）' },
+    { group: '单品码行', value: '行.serialLabel', label: '单品码编号（如 PLN12-0001）' },
     { group: '单品码行', value: '行.variantLabel', label: '规格文案（颜色+尺码）' },
     { group: '单品码行', value: '行.colorName', label: '颜色名称' },
     { group: '单品码行', value: '行.sizeName', label: '尺码名称' },

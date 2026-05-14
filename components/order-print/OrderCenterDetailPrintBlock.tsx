@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Printer, X } from 'lucide-react';
 import type { PlanListPrintSettings, PrintRenderContext, PrintTemplate } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 import { HiddenPrintSlot, usePrintTemplateAction } from '../print-editor/PrintPreview';
 import { createBlankCustomTemplate } from '../../utils/printTemplateDefaults';
+import { mergeTenantPrintContext } from '../../utils/mergeTenantPrintContext';
 
 export interface OrderCenterDetailPrintBlockProps {
   printSlot?: PlanListPrintSettings;
@@ -24,6 +26,7 @@ export const OrderCenterDetailPrintBlock: React.FC<OrderCenterDetailPrintBlockPr
   pickerSubtitle,
   onAddPrintTemplate,
 }) => {
+  const { tenantCtx } = useAuth();
   const showBtn = printSlot?.showPrintButton !== false;
   /** 仅当已在表单配置中加入至少一个可选模版 id 时，才列出可选模版；未配置时不列出全部模版 */
   const { pickerTemplates, hasWhitelist } = useMemo(() => {
@@ -78,10 +81,13 @@ export const OrderCenterDetailPrintBlock: React.FC<OrderCenterDetailPrintBlockPr
 
   const handlePick = useCallback(
     (t: PrintTemplate) => {
-      setPrintRun({ template: t, ctx: buildContext(t) });
+      setPrintRun({
+        template: t,
+        ctx: mergeTenantPrintContext(buildContext(t), tenantCtx?.tenantName),
+      });
       setPickerOpen(false);
     },
-    [buildContext],
+    [buildContext, tenantCtx?.tenantName],
   );
 
   return (

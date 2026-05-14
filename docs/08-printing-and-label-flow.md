@@ -28,7 +28,7 @@
 | 列表分页 | `utils/printListPagination*` | 动态列表跨页分页 |
 | 单品码转标签行 | `utils/printItemCodeRows.ts` | 把 `ItemCode[]` 转成打印行 |
 | 批次码转标签行 | `utils/printVirtualBatch.ts` | 把 `PlanVirtualBatch` 转成打印上下文 |
-| 序列号文案 | `utils/serialLabels.ts` | `J-PLNxx-0001` / `B-PLNxx-0001` |
+| 序列号文案 | `utils/serialLabels.ts` | 单品码 `PLNxx-0001`；批次码 `B-PLNxx-0001` |
 
 ### 2.1 打印模版配置与历史系统模版 id 清理
 
@@ -39,6 +39,7 @@
 - **统一下发采购单 / 销售单（进销存入库、出库单列表打印）**：读配置时合并 **`builtin-purchase-bill-v2`**、**`builtin-sales-bill-v2`**（241×140mm；占位符 `采购单.*` / `销售单.*`；显示名含「（颜色尺码）」）；持久化规则同上。
 - **统一下发生产物料详情打印**：读配置时合并 **`builtin-material-issue-v1`**（领料发出）、**`builtin-material-return-v1`**（生产退料）、**`builtin-outsource-material-issue-v1`**（外协领料发出）、**`builtin-outsource-material-return-v1`**（外协生产退料），241×140mm；占位符分别为 `领料发出.*`、`生产退料.*`、`外协领料发出.*`、`外协生产退料.*`；持久化规则同上。`normalizeMaterialFormSettings` 在未配置 `materialCenterPrint` 或某一子槽为 `undefined` 时，为该槽写入默认白名单（指向对应内置 id）。
 - **统一下发返工管理详情打印**：读配置时合并 **`builtin-rework-defect-treatment-v1`**（处理不良单，版式参考外协发出）、**`builtin-rework-report-flow-v1`**（返工报工单，含工序列与颜色尺码矩阵）；占位符 `处理不良.*`、`返工报工.*`；持久化规则同上。`normalizeReworkFormSettings` 在未配置 `reworkCenterPrint` 或子槽为 `undefined` 时写入对应默认白名单。
+- **统一下发计划单列表 / 单品码标签**：读配置时合并 **`builtin-plan-list-v1`**（A4，`planList`）与 **`builtin-plan-label-v1`**（30×50mm，`planLabel`；10pt、货号/颜色/尺码左对齐、小二维码、边距 2mm、序列号下方居中短横线）；与其它锁定内置模版相同：列表标「系统」、不可删、不可直接可视化编辑保存，可复制为自有模版；持久化规则同上。若租户 `labelPrint.allowedTemplateIds` 误只含列表模版，`repairPlanLabelPrintWhitelistMissingPlanLabelTemplates` 会在加载时并入所有 `planLabel` 模版 id。
 - **外协 / 进销存表单配置**：`normalizeOutsourceFormSettings` 等仅做字段归一化，并从 `outsourceCenterPrint.*.allowedTemplateIds` 中剔除已废弃 **`builtin-outsource-dispatch-v1`**；**不再**在归一化阶段自动写入内置模版 id。表单「打印模版」Tab 中的 **「可选模版（已加入）」** 与列表/详情 **「增加 / 管理模版」** 写入的 `allowedTemplateIds` 一致；若某 schema 将 **`hideOptionalTemplateList`** 设为 `true`，则隐藏芯片区（仅保留开关与「增加模版」），见 `PrintTemplateWhitelistCard`。
 
 ---
@@ -197,12 +198,12 @@ PrintRenderContext.virtualBatch
 
 当前序列号展示约定：
 
-- 单品码前缀：`J`
+- 单品码：`formatItemCodeSerialLabel` → **`{计划单号}-{四位序号}`**（无字母前缀；与批次码区分靠批次使用 `B-` 前缀）
 - 批次码前缀：`B`
 
 例如：
 
-- `J-PLN12-0001`
+- `PLN12-0001`
 - `B-PLN12-0003`
 
 ---

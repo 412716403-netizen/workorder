@@ -43,7 +43,9 @@ import SplitPlanModal from './plan-order-list/SplitPlanModal';
 import PlanFormConfigModal from './plan-order-list/PlanFormConfigModal';
 import { HiddenPrintSlot, usePrintTemplateAction } from '../components/print-editor/PrintPreview';
 import { createBlankCustomTemplate } from '../utils/printTemplateDefaults';
+import { mergeTenantPrintContext } from '../utils/mergeTenantPrintContext';
 import { buildPlanPrintListRows } from '../utils/buildPlanPrintListRows';
+import { useAuth } from '../contexts/AuthContext';
 import {
   formConfigToolbarButtonClass,
   moduleHeaderRowClass,
@@ -180,6 +182,7 @@ function renderPlanListCustomFieldValue(
 }
 
 const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMode = 'order', plans, products, categories, dictionaries, workers, equipment, globalNodes, boms, partners, partnerCategories = [], planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orders = [], onCreatePlan, onSplitPlan, onConvertToOrder, onDeletePlan, onUpdateProduct, onUpdatePlan, onUpdateOrder, onAddPSIRecord, onAddPSIRecordBatch, onCreateSubPlan, onCreateSubPlans }) => {
+  const { tenantCtx } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [viewDetailPlanId, setViewDetailPlanId] = useState<string | null>(null);
   const [viewProductId, setViewProductId] = useState<string | null>(null);
@@ -313,17 +316,20 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   const idlePlanPrintCtx = useMemo<PrintRenderContext>(() => ({}), []);
 
   const planListActivePrintTemplate = planListPrintRun?.template ?? idlePlanPrintTemplate;
-  const planListActivePrintCtx: PrintRenderContext = planListPrintRun
-    ? {
-        plan: planListPrintRun.plan,
-        product: products.find(p => p.id === planListPrintRun.plan.productId),
-        printListRows: (planListPrintRun.plan as any)._printListRows ?? undefined,
-        labelPerRow: (planListPrintRun.plan as any)._labelPerRow ?? undefined,
-        virtualBatch: (planListPrintRun.plan as any)._virtualBatch ?? undefined,
-        virtualBatchRows: (planListPrintRun.plan as any)._virtualBatchRows ?? undefined,
-        labelPerVirtualBatch: (planListPrintRun.plan as any)._labelPerVirtualBatch ?? undefined,
-      }
-    : idlePlanPrintCtx;
+  const planListActivePrintCtx: PrintRenderContext = useMemo(() => {
+    const raw: PrintRenderContext = planListPrintRun
+      ? {
+          plan: planListPrintRun.plan,
+          product: products.find(p => p.id === planListPrintRun.plan.productId),
+          printListRows: (planListPrintRun.plan as any)._printListRows ?? undefined,
+          labelPerRow: (planListPrintRun.plan as any)._labelPerRow ?? undefined,
+          virtualBatch: (planListPrintRun.plan as any)._virtualBatch ?? undefined,
+          virtualBatchRows: (planListPrintRun.plan as any)._virtualBatchRows ?? undefined,
+          labelPerVirtualBatch: (planListPrintRun.plan as any)._labelPerVirtualBatch ?? undefined,
+        }
+      : idlePlanPrintCtx;
+    return mergeTenantPrintContext(raw, tenantCtx?.tenantName);
+  }, [planListPrintRun, idlePlanPrintCtx, products, tenantCtx?.tenantName]);
 
   const { printRef: planListPrintRef, handlePrint: handlePlanListPrint } = usePrintTemplateAction(
     planListActivePrintTemplate,

@@ -16,7 +16,7 @@ import {
   COLOR_MATERIAL_MATRIX_JSON_KEY,
   serializeColorMaterialMatrixPayload,
 } from './colorMaterialMatrixPrint';
-import { formatBatchSerialLabel } from './serialLabels';
+import { formatBatchSerialLabel, formatItemCodeSerialLabel } from './serialLabels';
 import { amountToChineseRmbUppercase } from './numberToChineseRmb';
 
 /** 与可视化编辑器一致的示例销售单表头，供销售单类模版预览 */
@@ -85,6 +85,56 @@ function previewShouldInjectSampleVirtualBatch(template: PrintTemplate | null | 
   } catch {
     return false;
   }
+}
+
+/** 与 printFieldOptions「单品码行」占位符路径一致；画布/动态列表预览需 listRow 与行数据含这些键 */
+const ITEM_CODE_ROW_PATH_MARKERS: readonly string[] = [
+  '行.scanUrl',
+  '行.scanToken',
+  '行.serialNo',
+  '行.serialLabel',
+  '行.variantLabel',
+  '行.colorName',
+  '行.sizeName',
+  '行.orderNumbers',
+  '行.status',
+];
+
+function templateReferencesItemCodeRowFields(template: PrintTemplate | null | undefined): boolean {
+  if (!template) return false;
+  let s = '';
+  try {
+    s = JSON.stringify(template);
+  } catch {
+    return false;
+  }
+  return ITEM_CODE_ROW_PATH_MARKERS.some(m => s.includes(m));
+}
+
+function printPreviewOriginBase(): string {
+  const o = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://example.com';
+  return o.replace(/\/$/, '');
+}
+
+/** 单品码标签/列表打印：编辑器与模版管理预览用的示例行（键与 buildPrintListRowsFromItemCodes 一致） */
+export function buildSampleItemCodeListRowForPreview(ctx: PrintRenderContext, rowIndex: number): PrintListRow {
+  const planNumber = ctx.plan?.planNumber ?? 'PLN-示例';
+  const base = printPreviewOriginBase();
+  const serialNo = 7 + rowIndex;
+  const scanToken = `demo-item-scan-token-${rowIndex}`;
+  const serialLabel = formatItemCodeSerialLabel(planNumber, serialNo);
+  return {
+    scanUrl: `${base}/scan/${scanToken}`,
+    scanToken,
+    serialNo,
+    serialLabel,
+    variantLabel: '红色 / L',
+    colorName: '红色',
+    sizeName: 'L',
+    orderNumbers: 'WO-0001、WO-0002',
+    status: '正常',
+    variantId: 'var-demo',
+  };
 }
 
 export const SAMPLE_SALES_BILL_MATRIX_GROUPS: SalesBillMatrixGroup[] = [
@@ -530,6 +580,24 @@ export function augmentPrintPreviewContext(
   }
   if (previewShouldInjectSampleVirtualBatch(template) && next.virtualBatch == null) {
     next = { ...next, virtualBatch: buildSampleVirtualBatchPrintRow(next) };
+  }
+  if (templateReferencesItemCodeRowFields(template)) {
+    const rows = next.printListRows;
+    const mergedRows =
+      rows && rows.length > 0
+        ? rows.map((row, i) => ({
+            ...buildSampleItemCodeListRowForPreview(next, i),
+            ...row,
+          }))
+        : [
+            buildSampleItemCodeListRowForPreview(next, 0),
+            buildSampleItemCodeListRowForPreview(next, 1),
+          ];
+    next = {
+      ...next,
+      printListRows: mergedRows,
+      listRow: next.listRow ?? buildSampleItemCodeListRowForPreview(next, 0),
+    };
   }
   if (!next.tenantName?.trim()) {
     next = { ...next, tenantName: PREVIEW_TENANT_NAME_FALLBACK };

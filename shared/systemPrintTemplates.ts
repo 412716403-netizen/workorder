@@ -14,6 +14,7 @@
  * - `builtin-rework-defect-treatment-v1`：统一下发「处理不良单」返工管理详情打印（占位符 `处理不良.*`，版式参考外协发出）。
  * - `builtin-rework-report-flow-v1`：统一下发「返工报工单」详情打印（占位符 `返工报工.*`，含工序列与颜色尺码矩阵）。
  * - `builtin-plan-list-v1`：统一下发「计划单」列表打印（A4；含颜色尺码矩阵与颜色×工序物料矩阵列）。
+ * - `builtin-plan-label-v1`：统一下发「计划单品码」小标签打印（30×50mm，`planLabel`；10pt、货号色码左对齐、小二维码、边距 2mm；序列号下居中短横线）。
  * 以上合并进各租户 `printTemplates`；持久化写入时剔除，避免与代码副本重复落库。
  */
 
@@ -55,6 +56,9 @@ export const BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID = 'builtin-rework-repo
 /** 计划单列表打印：统一下发模版 id */
 export const BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID = 'builtin-plan-list-v1' as const;
 
+/** 计划单品码（标签）打印：统一下发模版 id */
+export const BUILTIN_PLAN_LABEL_PRINT_TEMPLATE_ID = 'builtin-plan-label-v1' as const;
+
 /** 由代码合并、不应写入租户 `printTemplates` 持久化的内置 id */
 const MERGED_CODE_PRINT_TEMPLATE_IDS = new Set<string>([
   BUILTIN_OUTSOURCE_DISPATCH_PRINT_TEMPLATE_ID,
@@ -70,6 +74,7 @@ const MERGED_CODE_PRINT_TEMPLATE_IDS = new Set<string>([
   BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID,
   BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
   BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID,
+  BUILTIN_PLAN_LABEL_PRINT_TEMPLATE_ID,
 ]);
 
 /** 锁定：租户不可删、编辑器走「系统模版」只读/复制为自有流程 */
@@ -87,6 +92,7 @@ export const SYSTEM_LOCKED_PRINT_TEMPLATE_IDS = [
   BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID,
   BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
   BUILTIN_PLAN_LIST_PRINT_TEMPLATE_ID,
+  BUILTIN_PLAN_LABEL_PRINT_TEMPLATE_ID,
 ] as const;
 
 const LOCKED_SET = new Set<string>(SYSTEM_LOCKED_PRINT_TEMPLATE_IDS);
@@ -1619,6 +1625,98 @@ const BUILTIN_PLAN_LIST_V1: Record<string, unknown> = {
   updatedAt: '2026-05-09T09:25:22.098Z',
 };
 
+/** 计划单品码小标签：30×50mm、`planLabel`；版式含序列号下居中短横线；与租户「单品码标签（副本）」一致时可同步其 line 段 */
+const BUILTIN_PLAN_LABEL_V1: Record<string, unknown> = {
+  id: BUILTIN_PLAN_LABEL_PRINT_TEMPLATE_ID,
+  name: '单品码标签',
+  isSystemTemplate: true,
+  documentType: 'plan',
+  printTemplateManageScope: 'planLabel',
+  paperSize: { widthMm: 30, heightMm: 50 },
+  paperSizeCustom: true,
+  paperMarginsMm: { top: 2, left: 2, right: 2, bottom: 2 },
+  paperBackgroundColor: '#FFFFFF',
+  elements: [
+    {
+      x: 0,
+      y: 5.5,
+      id: 'el-builtin-plan-label-product',
+      type: 'text',
+      width: 26,
+      config: {
+        color: '#111827',
+        content: '货号：{{产品.name}}\n颜色：{{行.colorName}}\n尺码：{{行.sizeName}}',
+        textAlign: 'left',
+        fontSizePt: 10,
+        fontWeight: 'normal',
+      },
+      height: 13,
+      zIndex: 1,
+    },
+    {
+      x: 0,
+      y: 0,
+      id: 'el-builtin-plan-label-tenant',
+      type: 'text',
+      width: 26,
+      config: {
+        color: '#111827',
+        content: '{{租户.name}}',
+        textAlign: 'center',
+        fontSizePt: 10,
+        fontWeight: 'bold',
+      },
+      height: 5.5,
+      zIndex: 2,
+    },
+    {
+      x: 7,
+      y: 19,
+      id: 'el-builtin-plan-label-qrcode',
+      type: 'qrcode',
+      width: 12,
+      config: {
+        content: '{{行.scanUrl}}',
+      },
+      height: 12,
+      zIndex: 3,
+    },
+    {
+      x: 0,
+      y: 33.5,
+      id: 'el-builtin-plan-label-serial',
+      type: 'text',
+      width: 26,
+      config: {
+        color: '#111827',
+        content: '{{行.serialLabel}}',
+        textAlign: 'center',
+        fontSizePt: 10,
+        fontWeight: 'normal',
+      },
+      height: 7,
+      zIndex: 4,
+    },
+    {
+      x: 6,
+      y: 41.2,
+      id: 'el-builtin-plan-label-footer-line',
+      type: 'line',
+      width: 14,
+      config: {
+        color: '#000000',
+        angleDeg: 0,
+        lineStyle: 'solid',
+        thicknessMm: 0.45,
+      },
+      height: 1,
+      zIndex: 5,
+    },
+  ],
+  createdAt: '2026-05-13T00:00:00.000Z',
+  updatedAt: '2026-05-13T16:30:00.000Z',
+};
+
 export function listSystemPrintTemplateRecordsForMerge(): Record<string, unknown>[] {
   return [
     BUILTIN_OUTSOURCE_DISPATCH_V2,
@@ -1634,6 +1732,7 @@ export function listSystemPrintTemplateRecordsForMerge(): Record<string, unknown
     BUILTIN_REWORK_DEFECT_TREATMENT_V1,
     BUILTIN_REWORK_REPORT_FLOW_V1,
     BUILTIN_PLAN_LIST_V1,
+    BUILTIN_PLAN_LABEL_V1,
   ];
 }
 

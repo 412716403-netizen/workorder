@@ -17,6 +17,7 @@ function TemplatePaperSettingsInner({
   onSetName,
   onSetDocumentType,
   setPaperSize,
+  applyPaperPreset,
   setPaperMarginsMm,
   setPaperBackgroundColor,
   swapPaperDimensions,
@@ -25,6 +26,7 @@ function TemplatePaperSettingsInner({
   onSetName: (name: string) => void;
   onSetDocumentType: (documentType: PrintTemplateDocumentType) => void;
   setPaperSize: (w: number, h: number) => void;
+  applyPaperPreset: (value: string) => void;
   setPaperMarginsMm: (patch: Partial<{ top: number; bottom: number; left: number; right: number }>) => void;
   setPaperBackgroundColor: (c: string) => void;
   swapPaperDimensions: () => void;
@@ -33,9 +35,10 @@ function TemplatePaperSettingsInner({
   const { widthMm: w, heightMm: h } = template.paperSize;
   const isLandscape = w > h;
   const presetValue = useMemo(() => {
+    if (template.paperSizeCustom === true) return 'custom';
     const hit = PAPER_PRESETS.find(p => p.w === w && p.h === h);
     return hit ? `${hit.w}x${hit.h}` : 'custom';
-  }, [w, h]);
+  }, [w, h, template.paperSizeCustom]);
   const bg = template.paperBackgroundColor ?? '#FFFFFF';
 
   return (
@@ -80,15 +83,7 @@ function TemplatePaperSettingsInner({
         <div className="flex gap-2">
           <select
             value={presetValue}
-            onChange={e => {
-              const v = e.target.value;
-              if (v === 'custom') {
-                setPaperSize(PRINT_PAPER_A4_MM.widthMm, PRINT_PAPER_A4_MM.heightMm);
-                return;
-              }
-              const [aw, ah] = v.split('x').map(Number);
-              if (aw > 0 && ah > 0) setPaperSize(aw, ah);
-            }}
+            onChange={e => applyPaperPreset(e.target.value)}
             className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-2 text-xs font-bold"
           >
             {PAPER_PRESETS.map(p => (

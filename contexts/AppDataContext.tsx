@@ -52,6 +52,7 @@ import {
 } from '../utils/reportCustomDocField';
 import { currentOperatorDisplayName } from '../utils/currentOperatorDisplayName';
 import { broadcastPrintTemplatesSaved, subscribePrintTemplatesChanged } from '../utils/printTemplatesCrossTab';
+import { mergePrintTemplatesForTenantConfig } from '../shared/systemPrintTemplates';
 
 import {
   normalizeDecimals,
@@ -560,7 +561,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const refreshPrintTemplates = useCallback(async () => {
     try {
       const cfg = (await api.settings.getConfig()) as Record<string, unknown>;
-      setPrintTemplates(Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : []);
+      setPrintTemplates(
+        mergePrintTemplatesForTenantConfig(Array.isArray(cfg.printTemplates) ? cfg.printTemplates : []) as PrintTemplate[],
+      );
     } catch (err: any) {
       toast.error(err?.message || '打印模版刷新失败');
     }
@@ -653,9 +656,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     await api.settings.updateConfig('printTemplates', v);
     try {
       const cfg = (await api.settings.getConfig()) as Record<string, unknown>;
-      setPrintTemplates(Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : []);
+      setPrintTemplates(
+        mergePrintTemplatesForTenantConfig(Array.isArray(cfg.printTemplates) ? cfg.printTemplates : []) as PrintTemplate[],
+      );
     } catch {
-      setPrintTemplates(v);
+      setPrintTemplates(mergePrintTemplatesForTenantConfig(v) as PrintTemplate[]);
     }
     broadcastPrintTemplatesSaved(printTemplatesCrossTabIdRef.current);
   }, []);

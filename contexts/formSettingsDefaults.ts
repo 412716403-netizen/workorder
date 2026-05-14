@@ -6,6 +6,7 @@ import type {
   PlanFormSettings,
   OrderFormSettings,
   PlanListPrintSettings,
+  PrintTemplate,
   PurchaseOrderFormSettings,
   SalesOrderFormSettings,
   PurchaseBillFormSettings,
@@ -125,6 +126,45 @@ export function normalizePlanFormSettings(raw: PlanFormSettings | null | undefin
           showPlanDetailTraceSection: s.labelPrint.showPlanDetailTraceSection !== false,
         }
       : s.labelPrint,
+  };
+}
+
+/**
+ * 修复：标签打印白名单里误只加了「计划单列表」归属模版（planList），导致计划详情里
+ * `planLabel` 单品码等标签模版不在可选列表中。此时在内存中合并所有 `printTemplateManageScope === 'planLabel'`
+ * 的模版 id（不自动写库，下次保存计划表单配置时持久化）。
+ */
+export function repairPlanLabelPrintWhitelistMissingPlanLabelTemplates(
+  planForm: PlanFormSettings,
+  printTemplates: PrintTemplate[],
+): PlanFormSettings {
+  const prev = planForm.labelPrint?.allowedTemplateIds?.filter(Boolean).map(String) ?? [];
+  if (prev.length === 0) return planForm;
+
+  const byId = new Map(printTemplates.map(t => [String(t.id).trim(), t] as const));
+  for (const tid of prev) {
+    if (!byId.has(tid)) return planForm;
+  }
+
+  const planLabelIds = printTemplates
+    .filter(t => t.printTemplateManageScope === 'planLabel')
+    .map(t => String(t.id).trim())
+    .filter(Boolean);
+  if (!planLabelIds.length) return planForm;
+
+  if (planLabelIds.some(pid => prev.includes(pid))) return planForm;
+
+  const hasPlanListInWhitelist = prev.some(tid => byId.get(tid)?.printTemplateManageScope === 'planList');
+  if (!hasPlanListInWhitelist) return planForm;
+
+  const next = [...new Set([...prev, ...planLabelIds])];
+  return {
+    ...planForm,
+    labelPrint: {
+      ...planForm.labelPrint,
+      showPlanDetailTraceSection: planForm.labelPrint?.showPlanDetailTraceSection !== false,
+      allowedTemplateIds: next,
+    },
   };
 }
 

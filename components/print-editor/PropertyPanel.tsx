@@ -38,6 +38,7 @@ export function PropertyPanel({
   onSetName,
   onSetDocumentType,
   setPaperSize,
+  applyPaperPreset,
   setPaperMarginsMm,
   setPaperBackgroundColor,
   swapPaperDimensions,
@@ -58,6 +59,7 @@ export function PropertyPanel({
   onSetName: (name: string) => void;
   onSetDocumentType: (documentType: PrintTemplateDocumentType) => void;
   setPaperSize: (w: number, h: number) => void;
+  applyPaperPreset: (value: string) => void;
   setPaperMarginsMm: (patch: Partial<{ top: number; bottom: number; left: number; right: number }>) => void;
   setPaperBackgroundColor: (c: string) => void;
   swapPaperDimensions: () => void;
@@ -91,6 +93,7 @@ export function PropertyPanel({
         onSetName={onSetName}
         onSetDocumentType={onSetDocumentType}
         setPaperSize={setPaperSize}
+        applyPaperPreset={applyPaperPreset}
         setPaperMarginsMm={setPaperMarginsMm}
         setPaperBackgroundColor={setPaperBackgroundColor}
         swapPaperDimensions={swapPaperDimensions}
