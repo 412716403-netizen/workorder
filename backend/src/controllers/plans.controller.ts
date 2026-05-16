@@ -44,13 +44,6 @@ export const deletePlan = asyncHandler(async (req, res) => {
   res.json(result);
 });
 
-export const splitPlan = asyncHandler(async (req, res) => {
-  const tenantId = req.tenantId!;
-  const db = getTenantPrisma(tenantId);
-  const results = await planService.splitPlan(db, tenantId, str(req.params.id), req.body);
-  res.status(201).json(results);
-});
-
 export const convertToOrder = asyncHandler(async (req, res) => {
   const tenantId = req.tenantId!;
   const db = getTenantPrisma(tenantId);

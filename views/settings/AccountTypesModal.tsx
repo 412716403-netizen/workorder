@@ -8,6 +8,7 @@ import {
 import { FinanceAccountType } from '../../types';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
+import { formStandardControlClass } from '../../styles/uiDensity';
 
 interface AccountTypesModalProps {
   financeAccountTypes: FinanceAccountType[];
@@ -77,7 +78,7 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({
                 placeholder="如：现金、银行存款、微信、支付宝"
                 value={newAccountTypeName}
                 onChange={e => setNewAccountTypeName(e.target.value)}
-                className="flex-1 bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                className={`${formStandardControlClass} flex-1`}
               />
               <button type="button" onClick={() => void addFinanceAccountType()} disabled={!newAccountTypeName.trim() || addLock.busy} className="px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shrink-0">
                 {addLock.busy ? '提交中…' : '确认添加'}

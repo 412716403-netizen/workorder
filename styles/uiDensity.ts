@@ -16,6 +16,55 @@ export const stackTight = 'space-y-2';
 /** 两列表单栅格 */
 export const formGridGap = 'gap-4';
 
+// ── 全站标准表单密度（h-9 / text-xs / font-medium，以新增产品为基准）──
+
+/** 字段标签 */
+export const formStandardLabelClass =
+  'text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1 ml-0.5';
+
+/** 文本框、下拉等标准控件 */
+export const formStandardControlClass =
+  'w-full h-9 min-h-9 box-border bg-slate-50 border border-slate-100 rounded-lg px-3 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-200 outline-none transition-all';
+
+/** 左侧带图标的数字输入 */
+export const formStandardControlIconClass =
+  'w-full h-9 min-h-9 box-border bg-slate-50 border border-slate-100 rounded-lg pl-9 pr-3 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-200 outline-none transition-all';
+
+/** 多行备注等（高度随内容，最小约两行） */
+export const formStandardTextareaClass =
+  'w-full min-h-[4.5rem] box-border bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-200 outline-none transition-all resize-none';
+
+/** 单位/供应商/规格旁的「+」快捷按钮 */
+export const formStandardQuickAddBtnClass =
+  'shrink-0 inline-flex items-center justify-center w-9 h-9 min-w-9 min-h-9 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all';
+
+/** 可搜索合作单位/产品下拉触发器 */
+export const formStandardPartnerTriggerClass =
+  'text-xs w-full max-w-full !min-h-9 !h-9 !font-medium rounded-lg border border-slate-100 bg-slate-50';
+
+/** 颜色/尺码等已选展示触发区 */
+export const formStandardSpecPickerClass =
+  'flex-1 min-w-0 h-9 min-h-9 flex flex-wrap gap-1 items-center text-left bg-slate-50 rounded-lg px-3 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none hover:bg-slate-100/80 transition-colors border border-slate-100 focus:border-indigo-200';
+
+/** 主白卡片 */
+export const formStandardCardClass =
+  'bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm space-y-4';
+
+/** 双列表单栅格间距 */
+export const formStandardGridGapClass = 'gap-4';
+
+/** 吸顶工具条 */
+export const formStandardStickyBarClass =
+  'flex items-center justify-between sticky top-0 z-40 py-2 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200 gap-2 flex-wrap';
+
+/** 分类/Tab 胶囊 */
+export function formStandardCategoryPillClass(active: boolean): string {
+  const base = 'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border';
+  return active
+    ? `${base} bg-indigo-600 text-white border-indigo-600 shadow-sm hover:bg-indigo-700 hover:border-indigo-700`
+    : `${base} bg-white/80 text-slate-600 border-slate-200 hover:bg-white hover:text-slate-800 hover:border-slate-300`;
+}
+
 // ── 进销存：采购/销售订单与采购/销售单 新建编辑页（紧凑布局，四表单共用）──
 
 /** 页外壳：较窄最大宽度、略减纵向间距与底部留白 */
@@ -39,13 +88,12 @@ export const psiOrderBillFormDetailSplitClass = 'pt-6 border-t border-slate-50 s
 /** 基础信息双列表单栅格间距 */
 export const psiOrderBillFormGridGapClass = 'gap-3';
 
-/** 文本/日期/自定义字段等标准控件高度（替代原 h-[52px]） */
-export const psiOrderBillFormFieldControlClass =
-  'w-full bg-slate-50 border-none rounded-xl py-2.5 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-11';
+/** 文本/日期/自定义字段等标准控件（全站 h-9，与 formStandardControlClass 一致） */
+export const psiOrderBillFormFieldControlClass = formStandardControlClass;
 
 /** 只读单号等展示框 */
 export const psiOrderBillFormReadonlyBoxClass =
-  'w-full min-w-0 bg-slate-100 border border-slate-100 rounded-xl py-2.5 pl-10 pr-4 font-bold text-slate-800 h-11 flex items-center truncate';
+  'w-full min-w-0 h-9 min-h-9 box-border bg-slate-100 border border-slate-100 rounded-lg py-0 pl-10 pr-3 text-xs font-medium text-slate-800 flex items-center truncate';
 
 /** 小节标题旁图标底（靛蓝） */
 export const psiOrderBillFormSectionIconIndigoClass =
@@ -55,12 +103,11 @@ export const psiOrderBillFormSectionIconIndigoClass =
 export const psiOrderBillFormSectionIconEmeraldClass =
   'w-9 h-9 bg-emerald-50 rounded-lg flex items-center justify-center text-emerald-600 shrink-0';
 
-/** 合作单位等触发器与 h-11 控件对齐 */
-export const psiOrderBillFormPartnerTriggerClass = 'text-sm w-full max-w-full !min-h-[44px] h-11';
+/** 合作单位等触发器（与标准控件同高） */
+export const psiOrderBillFormPartnerTriggerClass = formStandardPartnerTriggerClass;
 
 /** 与 SearchableProductSelect `compact`、明细行品项选择同密度 */
-export const psiOrderBillFormPartnerTriggerClassCompact =
-  'text-sm w-full max-w-full !min-h-9 h-9';
+export const psiOrderBillFormPartnerTriggerClassCompact = formStandardPartnerTriggerClass;
 
 /** 明细行字段标签（与销售单新增一致） */
 export const psiOrderBillCompactLineLabelClass =
@@ -68,7 +115,7 @@ export const psiOrderBillCompactLineLabelClass =
 
 /** 明细行数字输入 / 与 `MaterialIssueBatchSelect` default 同高 */
 export const psiOrderBillCompactLineInputClass =
-  'h-9 min-h-9 w-full box-border rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold leading-tight text-slate-900 tabular-nums outline-none focus:ring-2 focus:ring-indigo-500';
+  'h-9 min-h-9 w-full box-border rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium leading-tight text-slate-900 tabular-nums outline-none focus:ring-2 focus:ring-indigo-500';
 
 /** 明细行只读金额、总数等 */
 export const psiOrderBillCompactLineReadonlyClass =
@@ -195,3 +242,15 @@ export const docFormCompactListEmptyClass = psiOrderBillListEmptyClass;
 export const docFormCompactListCardClass = psiOrderBillListCardClass;
 export const docFormCompactListCardHeaderClass = psiOrderBillListCardHeaderClass;
 export const docFormCompactListTableWrapClass = psiOrderBillListTableWrapClass;
+
+// ── 产品档案：formStandard* 别名（历史 import 兼容）──
+export const productArchiveFormLabelClass = formStandardLabelClass;
+export const productArchiveFormControlClass = formStandardControlClass;
+export const productArchiveFormControlIconClass = formStandardControlIconClass;
+export const productArchiveFormQuickAddBtnClass = formStandardQuickAddBtnClass;
+export const productArchiveFormPartnerTriggerClass = formStandardPartnerTriggerClass;
+export const productArchiveFormSpecPickerClass = formStandardSpecPickerClass;
+export const productArchiveFormCardClass = formStandardCardClass;
+export const productArchiveFormGridGapClass = formStandardGridGapClass;
+export const productArchiveFormStickyBarClass = formStandardStickyBarClass;
+export const productArchiveFormCategoryPillClass = formStandardCategoryPillClass;

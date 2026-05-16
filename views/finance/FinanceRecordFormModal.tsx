@@ -15,6 +15,7 @@ import { PartnerSelect } from '../../components/PartnerSelect';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import WorkerSelectWithTabs from './WorkerSelectWithTabs';
 import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
+import { formStandardControlClass, formStandardControlIconClass, formStandardTextareaClass } from '../../styles/uiDensity';
 
 export interface FinanceRecordFormValues {
   amount: number;
@@ -78,7 +79,7 @@ function OrderSearchSelect({ orders, products, value, onChange, label }: { order
   return (
     <div className="space-y-1 relative" ref={containerRef}>
       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
-      <button type="button" onClick={() => setIsOpen(!isOpen)} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 flex items-center justify-between h-[52px]">
+      <button type="button" onClick={() => setIsOpen(!isOpen)} className={`${formStandardControlClass} flex items-center justify-between`}>
         <span className={value ? 'text-slate-900 truncate' : 'text-slate-400'}>{selected ? `${selected.orderNumber} - ${selected.productName}` : '搜索工单号、商品名称或编号...'}</span>
         <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : 'text-slate-400'}`} />
       </button>
@@ -86,7 +87,14 @@ function OrderSearchSelect({ orders, products, value, onChange, label }: { order
         <div className="absolute top-full left-0 right-0 z-[100] mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl p-4 animate-in fade-in zoom-in-95">
           <div className="relative mb-3">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input autoFocus type="text" className="w-full bg-slate-50 border-none rounded-xl py-2.5 pl-10 pr-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="搜索工单号、商品名称、商品编号..." value={search} onChange={e => setSearch(e.target.value)} />
+            <input
+              autoFocus
+              type="text"
+              className={formStandardControlIconClass}
+              placeholder="搜索工单号、商品名称、商品编号..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
           </div>
           <div className="max-h-52 overflow-y-auto space-y-1">
             {filtered.map(o => (
@@ -144,7 +152,7 @@ function FinanceRecordFormModal({
                     <select
                       value={form.categoryId}
                       onChange={e => setForm({ ...form, categoryId: e.target.value, customData: {} })}
-                      className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                      className={`${formStandardControlClass} cursor-pointer`}
                     >
                       <option value="">请选择分类...</option>
                       {categoriesForType.map(c => (
@@ -175,7 +183,7 @@ function FinanceRecordFormModal({
                     {selectedCategory.selectPaymentAccount && (
                       <div className="space-y-1">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">收支账户</label>
-                        <select value={financeAccountTypes.find(a => a.name === form.paymentAccount)?.id ?? ''} onChange={e => { const a = financeAccountTypes.find(x => x.id === e.target.value); setForm({ ...form, paymentAccount: a ? a.name : '' }); }} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                        <select value={financeAccountTypes.find(a => a.name === form.paymentAccount)?.id ?? ''} onChange={e => { const a = financeAccountTypes.find(x => x.id === e.target.value); setForm({ ...form, paymentAccount: a ? a.name : '' }); }} className={`${formStandardControlClass} cursor-pointer`}>
                           <option value="">请选择收支账户类型...</option>
                           {financeAccountTypes.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                         </select>
@@ -198,7 +206,7 @@ function FinanceRecordFormModal({
                           onChange={(fieldId, v) =>
                             setForm({ ...form, customData: { ...form.customData, [fieldId]: v } })
                           }
-                          inputClassName="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                          inputClassName={formStandardControlClass}
                         />
                       </div>
                     )}
@@ -236,12 +244,23 @@ function FinanceRecordFormModal({
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">结算金额 (CNY)</label>
               <div className="relative">
                 <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                <input type="number" value={form.amount} onChange={e => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })} className="w-full bg-slate-50 border-none rounded-2xl py-3 pl-10 pr-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
+                <input
+                  type="number"
+                  value={form.amount}
+                  onChange={e => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })}
+                  className={formStandardControlIconClass}
+                />
               </div>
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">备注说明</label>
-              <textarea rows={2} placeholder="输入备注..." value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+              <textarea
+                rows={2}
+                placeholder="输入备注..."
+                value={form.note}
+                onChange={e => setForm({ ...form, note: e.target.value })}
+                className={formStandardTextareaClass}
+              />
             </div>
           </div>
         </div>

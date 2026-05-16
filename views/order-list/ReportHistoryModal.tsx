@@ -20,6 +20,7 @@ import {
   getTodayRangeIso,
   isoToDateInput,
 } from '../production-ops/sharedFlowListHelpers';
+import { resolveReportDisplayEconomics } from '../../utils/outsourceReceiveReportDisplay';
 
 interface ReportHistoryModalProps {
   open: boolean;
@@ -174,8 +175,13 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
       totalDefective: rows.reduce((s, r) => s + (r.report.defectiveQuantity ?? 0), 0),
       totalAmount: rows.reduce((s, r) => {
         const p = products.find(px => px.id === r.order.productId);
-        const rate = r.report.rate ?? p?.nodeRates?.[r.milestone.templateId] ?? 0;
-        return s + r.report.quantity * rate;
+        const eco = resolveReportDisplayEconomics(r.report, prodRecords, {
+          nodeId: r.milestone.templateId,
+          productId: r.order.productId,
+          orderId: r.order.id,
+          fallbackRate: p?.nodeRates?.[r.milestone.templateId],
+        });
+        return s + eco.amount;
       }, 0),
       reportNo: rows.find(r => r.report.reportBatchId || r.report.reportNo)?.report.reportNo
     }));
@@ -257,7 +263,15 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
           rows, first,
           totalGood: rows.reduce((s, x) => s + x.report.quantity, 0),
           totalDefective: rows.reduce((s, x) => s + (x.report.defectiveQuantity ?? 0), 0),
-          totalAmount: rows.reduce((s, x) => s + x.report.quantity * (x.report.rate ?? defaultRate), 0),
+          totalAmount: rows.reduce((s, x) => {
+            const eco = resolveReportDisplayEconomics(x.report, prodRecords, {
+              nodeId: first.progress.milestoneTemplateId,
+              productId: first.progress.productId,
+              orderId: null,
+              fallbackRate: defaultRate,
+            });
+            return s + eco.amount;
+          }, 0),
           reportNo: rows.find(r => r.report.reportBatchId || r.report.reportNo)?.report.reportNo
         };
       });
@@ -283,7 +297,7 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
     const uniqueMilestones = [...new Set([...allRows.map(r => r.milestone.name), ...productBatches.map(b => b.milestoneName)])].filter(Boolean);
     const uniqueOperators = [...new Set([...allRows.map(r => r.report.operator), ...productBatches.flatMap(b => b.rows.map(r => r.report.operator))])].filter(Boolean).sort((a, b) => a.localeCompare(b));
     return { batches, totalGood, totalDefective, totalAmount, summaryUnit, uniqueProducts, uniqueMilestones, uniqueOperators, getUnitName };
-  }, [historyQuery.data, orders, products, productMilestoneProgresses, reportHistoryFilter, productionLinkMode, globalNodes, dictionaries]);
+  }, [historyQuery.data, orders, products, productMilestoneProgresses, reportHistoryFilter, productionLinkMode, globalNodes, dictionaries, prodRecords]);
 
   if (!open) return null;
 

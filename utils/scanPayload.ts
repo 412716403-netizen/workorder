@@ -41,7 +41,8 @@ function normalizeScanSeparators(s: string): string {
   return out
     .replace(/[\u3002\uFF0E]/g, '.') // 中文句号 / 全角句点 → .
     .replace(/[\u2014\u2013\u2212\uFF0D]/g, '-') // EM/EN DASH / 减号 / 全角连字符 → -
-    .replace(/[\uFF3F]/g, '_'); // 全角下划线 → _
+    .replace(/[\uFF3F]/g, '_') // 全角下划线 → _
+    .replace(/\uFF0F/g, '/'); // 全角斜杠 → /（批次 URL `/scan/batch/` 在中文输入法下常见）
 }
 
 /**
@@ -52,7 +53,7 @@ export function scanRawLooksLikeImeCorruption(raw: string): boolean {
   const s = String(raw ?? '');
   if (!s) return false;
   // 常见误转：句号、破折号、减号、下划线
-  if (/[\u3002\uFF0E\u2014\u2013\u2212\uFF0D\uFF3F]/.test(s)) return true;
+  if (/[\u3002\uFF0E\u2014\u2013\u2212\uFF0D\uFF3F\uFF0F]/.test(s)) return true;
   // 全角英文/数字（未走 NFKC 前的原始串里仍可能存在）
   if (/[\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19]/.test(s)) return true;
   return false;
@@ -83,6 +84,17 @@ export function rewriteScanApiErrorForIme(raw: string, message: string): string 
   if (!m || !SCAN_CODE_NOT_FOUND_RE.test(m)) return message;
   if (!scanInputLikelyImeIssue(raw)) return message;
   return '读码内容疑似被输入法改写，请切换到英文（半角）输入法后重新扫码。若已切换仍失败，请核对条码是否有效。';
+}
+
+const UNRECOGNIZED_SCAN_IME_HINT =
+  '检测到可能为中文输入法误转（如「。」「—」、全角斜杠或全角字母数字）。请切换到英文（半角）输入法后重扫。';
+
+/** 无法解析扫码串时，是否应附带「切换英文输入法」说明（单品码 / 批次码通用）。 */
+export function getUnrecognizedScanImeHint(raw: string): string | undefined {
+  if (scanInputLikelyImeIssue(raw) || scanRawLooksLikeImeCorruption(raw)) {
+    return UNRECOGNIZED_SCAN_IME_HINT;
+  }
+  return undefined;
 }
 
 function trimAndStripQuery(v: string): string {

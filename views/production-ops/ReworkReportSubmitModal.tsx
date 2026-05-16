@@ -20,6 +20,7 @@ import {
 } from '../../types';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
+import { checkExceedMax } from '../../utils/scanApplyGuards';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import {
   sectionTitleClass,
@@ -280,11 +281,14 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
           return false;
         }
         const key = `${target.pathKey}__${vid}`;
-        setReworkReportQuantities((prev) => {
-          const prevV = prev[key] ?? 0;
-          const cap = target.pendingByVariant[vid] ?? 0;
-          return { ...prev, [key]: Math.min(cap, prevV + add) };
-        });
+        const cap = target.pendingByVariant[vid] ?? 0;
+        const cur = reworkReportQuantities[key] ?? 0;
+        const ck = checkExceedMax(cur, add, cap);
+        if (ck.exceeds) {
+          toast.error(ck.message ?? '本次扫入数量超过该规格待返工上限');
+          return false;
+        }
+        setReworkReportQuantities((prev) => ({ ...prev, [key]: (prev[key] ?? 0) + add }));
         toast.success(
           `扫码 +${add}${variantLabel ? `（${variantLabel}）` : ''} → ${target.pathLabel}${
             ownerTenantName && relation !== 'OWNER' ? ` · 来自 ${ownerTenantName}` : ''
@@ -292,10 +296,16 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
         );
       } else {
         const target = reworkReportPaths[0];
-        setReworkReportQuantities((prev) => {
-          const prevV = prev[target.pathKey] ?? 0;
-          return { ...prev, [target.pathKey]: Math.min(target.totalPending, prevV + add) };
-        });
+        const cur = reworkReportQuantities[target.pathKey] ?? 0;
+        const ck = checkExceedMax(cur, add, target.totalPending);
+        if (ck.exceeds) {
+          toast.error(ck.message ?? '本次扫入数量超过该路径待返工上限');
+          return false;
+        }
+        setReworkReportQuantities((prev) => ({
+          ...prev,
+          [target.pathKey]: (prev[target.pathKey] ?? 0) + add,
+        }));
         toast.success(
           `扫码 +${add} → ${target.pathLabel}${
             ownerTenantName && relation !== 'OWNER' ? ` · 来自 ${ownerTenantName}` : ''
@@ -304,7 +314,33 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
       }
       return true;
     },
-    [reworkReportPaths, reworkReportHasColorSize],
+    [reworkReportPaths, reworkReportHasColorSize, reworkReportQuantities],
+  );
+
+  /**
+   * 返工报工持久化去重：scope 用 (orderId, 目标 nodeId)，code 已被本流程任一 source 报工过即拒绝。
+   */
+  const validateReworkScan = useCallback(
+    async (params: { itemCodeId: string | null; virtualBatchId: string | null }): Promise<boolean> => {
+      const { itemCodeId, virtualBatchId } = params;
+      if (!itemCodeId && !virtualBatchId) return true;
+      try {
+        const res = await itemCodesApi.validateUsage({
+          purpose: 'REWORK_REPORT',
+          scope: { orderId: order.id, nodeId: reworkReportModal.nodeId },
+          itemCodeId,
+          virtualBatchId,
+        });
+        if (res.code === 'DUPLICATE_SAVED') {
+          toast.error(res.message || '该码已在本返工流程报工，不可重复扫码');
+          return false;
+        }
+        return true;
+      } catch {
+        return true;
+      }
+    },
+    [order.id, reworkReportModal.nodeId],
   );
 
   const applyReworkScanPayload = useCallback(
@@ -317,6 +353,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
             return false;
           }
           const res = await itemCodesApi.scan(payload.token);
+          if (res.kind !== 'ITEM_CODE') return false;
           if (res.status !== 'ACTIVE') {
             toast.error(res.message || '单品码不可用');
             return false;
@@ -325,6 +362,13 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
             toast.error('此码产品与当前工单不一致');
             return false;
           }
+          if (
+            !(await validateReworkScan({
+              itemCodeId: res.itemCodeId ?? null,
+              virtualBatchId: res.batchId ?? null,
+            }))
+          )
+            return false;
           if (
             !applyScanQuantity({
               vid: res.variantId || '',
@@ -345,6 +389,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
             return false;
           }
           const res = await planVirtualBatchesApi.scan(payload.token);
+          if (res.kind !== 'VIRTUAL_BATCH') return false;
           if (res.status !== 'ACTIVE') {
             toast.error(res.message || '批次码不可用');
             return false;
@@ -353,6 +398,13 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
             toast.error('此批次码产品与当前工单不一致');
             return false;
           }
+          if (
+            !(await validateReworkScan({
+              itemCodeId: null,
+              virtualBatchId: res.batchId ?? null,
+            }))
+          )
+            return false;
           if (
             !applyScanQuantity({
               vid: res.variantId || '',
@@ -373,7 +425,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
       }
       return false;
     },
-    [order.productId, applyScanQuantity],
+    [order.productId, applyScanQuantity, validateReworkScan],
   );
 
   const resolveReworkScanRowPreview = useCallback(
@@ -409,6 +461,14 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
             toast.error('暂无待返工路径可累加');
             return null;
           }
+          if (res.kind !== 'ITEM_CODE') return null;
+          if (
+            !(await validateReworkScan({
+              itemCodeId: res.itemCodeId ?? null,
+              virtualBatchId: res.batchId ?? null,
+            }))
+          )
+            return null;
           return scanItemResultToRowDetail(res);
         }
         if (payload.kind === 'BATCH') {
@@ -417,6 +477,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
             return null;
           }
           const res = await planVirtualBatchesApi.scan(payload.token);
+          if (res.kind !== 'VIRTUAL_BATCH') return null;
           if (res.status !== 'ACTIVE') {
             toast.error(res.message || '批次码不可用');
             return null;
@@ -445,6 +506,13 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
             toast.error('暂无待返工路径可累加');
             return null;
           }
+          if (
+            !(await validateReworkScan({
+              itemCodeId: null,
+              virtualBatchId: res.batchId ?? null,
+            }))
+          )
+            return null;
           return scanVirtualBatchResultToRowDetail(res);
         }
       } catch (e) {
@@ -453,7 +521,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
       }
       return null;
     },
-    [order.productId, reworkReportPaths, reworkReportHasColorSize],
+    [order.productId, reworkReportPaths, reworkReportHasColorSize, validateReworkScan],
   );
 
   const handleReworkScanBatchConfirm = useCallback(
@@ -906,30 +974,36 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
                       </div>
                       <div className="flex shrink-0 flex-wrap items-start gap-2 sm:gap-3">
                         {reworkSingleSimpleQuantityPath ? (
-                          <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
-                            <label className={psiOrderBillCompactLineLabelClass}>数量</label>
-                            <input
-                              type="number"
-                              min={0}
-                              max={reworkSingleSimpleQuantityPath.totalPending}
-                              value={
-                                (reworkReportQuantities[reworkSingleSimpleQuantityPath.pathKey] ?? 0) === 0
-                                  ? ''
-                                  : reworkReportQuantities[reworkSingleSimpleQuantityPath.pathKey]
-                              }
-                              onChange={e =>
-                                setReworkReportQuantities(prev => ({
-                                  ...prev,
-                                  [reworkSingleSimpleQuantityPath.pathKey]: Math.min(
-                                    reworkSingleSimpleQuantityPath.totalPending,
-                                    Math.max(0, Number(e.target.value) || 0),
-                                  ),
-                                }))
-                              }
-                              placeholder="0"
-                              title={`最多 ${reworkSingleSimpleQuantityPath.totalPending}`}
-                              className={psiOrderBillCompactLineInputClass}
-                            />
+                          <div className="min-w-[10rem] max-w-[18rem] flex-1 space-y-0.5 sm:min-w-[11rem]">
+                            <label className={`${psiOrderBillCompactLineLabelClass} !ml-0`}>数量</label>
+                            <div className="flex min-w-0 items-center gap-2">
+                              <input
+                                type="number"
+                                min={0}
+                                max={reworkSingleSimpleQuantityPath.totalPending}
+                                value={
+                                  (reworkReportQuantities[reworkSingleSimpleQuantityPath.pathKey] ?? 0) === 0
+                                    ? ''
+                                    : reworkReportQuantities[reworkSingleSimpleQuantityPath.pathKey]
+                                }
+                                onChange={e =>
+                                  setReworkReportQuantities(prev => ({
+                                    ...prev,
+                                    [reworkSingleSimpleQuantityPath.pathKey]: Math.min(
+                                      reworkSingleSimpleQuantityPath.totalPending,
+                                      Math.max(0, Number(e.target.value) || 0),
+                                    ),
+                                  }))
+                                }
+                                placeholder="0"
+                                title={`最多 ${reworkSingleSimpleQuantityPath.totalPending}`}
+                                className={`${psiOrderBillCompactLineInputClass} min-w-0 flex-1`}
+                              />
+                              <span className="shrink-0 text-[9px] font-bold tabular-nums text-slate-400">
+                                最多{reworkSingleSimpleQuantityPath.totalPending}
+                              </span>
+                              <span className="w-8 shrink-0 text-right text-[9px] font-bold text-slate-400">{reworkUnitName}</span>
+                            </div>
                           </div>
                         ) : (
                           <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">

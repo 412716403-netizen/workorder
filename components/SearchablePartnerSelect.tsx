@@ -195,9 +195,8 @@ export function SearchablePartnerSelect({
     setActiveTab('all');
   }, [onlyCategoryId]);
 
-  const triggerCls = compact
-    ? 'w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-2.5 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between disabled:opacity-50 transition-all min-h-[36px]'
-    : 'w-full bg-slate-50 border border-slate-200 rounded-xl py-3.5 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between disabled:opacity-50 transition-all min-h-[48px]';
+  const triggerCls =
+    'w-full h-9 min-h-9 box-border bg-slate-50 border border-slate-200 rounded-lg px-2.5 text-xs font-medium text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between disabled:opacity-50 transition-all';
 
   const searchInputCls = compact
     ? 'w-full bg-slate-50 border-none rounded-lg py-1.5 pl-8 pr-2.5 text-xs font-semibold leading-tight outline-none focus:ring-2 focus:ring-indigo-500'

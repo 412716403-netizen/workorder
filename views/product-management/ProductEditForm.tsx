@@ -53,108 +53,36 @@ import { useAuthOptional } from '../../contexts/AuthContext';
 import { hasSubPermission } from '../../utils/hasSubPermission';
 import BomEditorPortal, { useBomEditorPortalState } from './BomEditorPortal';
 import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
+import {
+  readLastUnitByCategoryMap,
+  writeLastUnitForCategory,
+  resolveDefaultUnitForNewProductCategory,
+} from '../../utils/productLastUnitByCategory';
+import { resolveProductSkuForSave } from '../../utils/productSkuAutoGen';
+import {
+  productArchiveFormCardClass,
+  productArchiveFormCategoryPillClass,
+  productArchiveFormControlClass,
+  productArchiveFormControlIconClass,
+  productArchiveFormGridGapClass,
+  productArchiveFormLabelClass,
+  productArchiveFormPartnerTriggerClass,
+  productArchiveFormQuickAddBtnClass,
+  productArchiveFormSpecPickerClass,
+  productArchiveFormStickyBarClass,
+  primaryToolbarButtonClass,
+  sectionTitleClass,
+} from '../../styles/uiDensity';
 
 const LazyProductArchiveCreateModal = lazy(() => import('../../components/ProductArchiveCreateModal'));
 
-/** 未手填产品编号时生成：两个大写字母 + 生成时刻的时间戳（毫秒） */
-const AUTO_SKU_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-
-function generateAutoProductSku(): string {
-  let prefix = '';
-  for (let i = 0; i < 2; i++) {
-    prefix += AUTO_SKU_LETTERS[Math.floor(Math.random() * AUTO_SKU_LETTERS.length)];
-  }
-  return `${prefix}${Date.now()}`;
-}
-
-/** 产品编号留空时生成租户内唯一的编号，供保存前写入 */
-function resolveProductSkuForSave(p: Product, catalog: Product[]): Product {
-  const sku = (p.sku ?? '').trim();
-  if (sku) return p;
-  let candidate = '';
-  for (let i = 0; i < 20; i++) {
-    candidate = generateAutoProductSku();
-    if (!catalog.some(o => o.id !== p.id && (o.sku ?? '').trim() === candidate)) break;
-  }
-  return { ...p, sku: candidate };
-}
+// 产品编号自动生成已外迁，见 utils/productSkuAutoGen.ts
 
 function resolveDefaultPartnerCategoryId(categories: PartnerCategory[]): string {
   return categories.find(c => c.name.includes('供应商'))?.id ?? categories[0]?.id ?? '';
 }
 
-const LAST_UNIT_BY_CATEGORY_LS_PREFIX = 'stpro:lastUnitByProductCategory:v1';
-
-function lastUnitByCategoryStorageKey(tenantId: string | null | undefined): string {
-  const tid = tenantId && String(tenantId).trim() ? String(tenantId).trim() : '_';
-  return `${LAST_UNIT_BY_CATEGORY_LS_PREFIX}:${tid}`;
-}
-
-function readLastUnitByCategoryMap(tenantId: string | null | undefined): Record<string, string> {
-  if (typeof localStorage === 'undefined') return {};
-  try {
-    const raw = localStorage.getItem(lastUnitByCategoryStorageKey(tenantId));
-    if (!raw) return {};
-    const o = JSON.parse(raw) as unknown;
-    if (!o || typeof o !== 'object' || Array.isArray(o)) return {};
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(o as Record<string, unknown>)) {
-      if (typeof v === 'string' && v.trim()) out[k] = v.trim();
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
-
-function writeLastUnitForCategory(
-  tenantId: string | null | undefined,
-  categoryId: string,
-  unitId: string,
-): void {
-  if (typeof localStorage === 'undefined') return;
-  const cid = categoryId.trim();
-  const uid = unitId.trim();
-  if (!cid || !uid) return;
-  try {
-    const key = lastUnitByCategoryStorageKey(tenantId);
-    const map = readLastUnitByCategoryMap(tenantId);
-    map[cid] = uid;
-    localStorage.setItem(key, JSON.stringify(map));
-  } catch {
-    /* quota / private mode */
-  }
-}
-
-/** 新建产品选分类时：本机该分类上次选的单位 → 否则同分类已有产品中最近更新的单位 */
-function resolveDefaultUnitForNewProductCategory(
-  tenantId: string | null | undefined,
-  categoryId: string,
-  productsCatalog: Product[],
-  unitIdsInDictionary: Set<string>,
-): string | undefined {
-  const cid = categoryId.trim();
-  if (!cid || unitIdsInDictionary.size === 0) return undefined;
-
-  const fromPrefs = readLastUnitByCategoryMap(tenantId)[cid];
-  if (fromPrefs && unitIdsInDictionary.has(fromPrefs)) return fromPrefs;
-
-  type PWithTs = Product & { updatedAt?: string };
-  let bestUnit: string | undefined;
-  let bestTs = -1;
-  for (const p of productsCatalog as PWithTs[]) {
-    if (p.categoryId !== cid) continue;
-    const u = (p.unitId ?? '').trim();
-    if (!u || !unitIdsInDictionary.has(u)) continue;
-    const t = typeof p.updatedAt === 'string' && p.updatedAt ? Date.parse(p.updatedAt) : 0;
-    const score = Number.isFinite(t) ? t : 0;
-    if (score >= bestTs) {
-      bestTs = score;
-      bestUnit = u;
-    }
-  }
-  return bestUnit;
-}
+// localStorage 偏好读写已外迁，见 utils/productLastUnitByCategory.ts
 
 function normalizeRouteReportValuesFromApi(raw: unknown): Record<string, Record<string, string>> {
   const out: Record<string, Record<string, string>> = {};
@@ -267,7 +195,7 @@ const SpecSelectorModal = ({
                 placeholder={type === 'color' ? '搜索名称或色值…' : '搜索名称或编码…'}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 pl-12 pr-4 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
+                className={`${productArchiveFormControlIconClass} pl-9`}
               />
             </div>
             {search.trim() && !exactMatch && (
@@ -1244,7 +1172,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                   }}
                   placeholder="例如：件、箱、米"
                   disabled={quickAddUnitBusy}
-                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all disabled:opacity-60"
+                  className={`${productArchiveFormControlClass} disabled:opacity-60`}
                 />
               </div>
               <div className="flex justify-end gap-2 pt-1">
@@ -1252,7 +1180,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                   type="button"
                   disabled={quickAddUnitBusy}
                   onClick={() => setQuickAddUnitOpen(false)}
-                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all disabled:opacity-50"
+                  className="h-9 px-3 rounded-lg text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all disabled:opacity-50"
                 >
                   取消
                 </button>
@@ -1260,7 +1188,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                   type="button"
                   disabled={quickAddUnitBusy}
                   onClick={() => void submitQuickAddUnit()}
-                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="h-9 px-4 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {quickAddUnitBusy ? '添加中…' : '确定添加'}
                 </button>
@@ -1310,7 +1238,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                   }}
                   placeholder="例如：华南辅料厂"
                   disabled={quickAddSupplierBusy}
-                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all disabled:opacity-60"
+                  className={`${productArchiveFormControlClass} disabled:opacity-60`}
                 />
               </div>
               {partnerCategories.length > 0 && (
@@ -1321,7 +1249,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                     value={quickAddSupplierCategoryId}
                     onChange={e => setQuickAddSupplierCategoryId(e.target.value)}
                     disabled={quickAddSupplierBusy}
-                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all disabled:opacity-60"
+                    className={`${productArchiveFormControlClass} disabled:opacity-60`}
                   >
                     {partnerCategories.map(cat => (
                       <option key={cat.id} value={cat.id}>
@@ -1336,7 +1264,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                   type="button"
                   disabled={quickAddSupplierBusy}
                   onClick={() => setQuickAddSupplierOpen(false)}
-                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all disabled:opacity-50"
+                  className="h-9 px-3 rounded-lg text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all disabled:opacity-50"
                 >
                   取消
                 </button>
@@ -1344,7 +1272,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                   type="button"
                   disabled={quickAddSupplierBusy}
                   onClick={() => void submitQuickAddSupplier()}
-                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="h-9 px-4 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {quickAddSupplierBusy ? '添加中…' : '确定添加'}
                 </button>
@@ -1398,7 +1326,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                   }}
                   placeholder={quickAddSpecOpen === 'color' ? '例如：藏青、本白' : '例如：M、均码'}
                   disabled={quickAddSpecBusy}
-                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all disabled:opacity-60"
+                  className={`${productArchiveFormControlClass} disabled:opacity-60`}
                 />
               </div>
               <div className="flex justify-end gap-2 pt-1">
@@ -1406,7 +1334,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                   type="button"
                   disabled={quickAddSpecBusy}
                   onClick={() => setQuickAddSpecOpen(null)}
-                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all disabled:opacity-50"
+                  className="h-9 px-3 rounded-lg text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all disabled:opacity-50"
                 >
                   取消
                 </button>
@@ -1414,7 +1342,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                   type="button"
                   disabled={quickAddSpecBusy}
                   onClick={() => void submitQuickAddSpec()}
-                  className="px-4 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="h-9 px-4 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {quickAddSpecBusy ? '添加中…' : '确定添加'}
                 </button>
@@ -1423,9 +1351,9 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
           </div>
         )}
 
-        <div className="flex items-center justify-between sticky top-0 z-40 py-3 bg-slate-50/90 backdrop-blur-md -mx-4 px-4 border-b border-slate-200 gap-2 flex-wrap">
-          <button type="button" onClick={onBack} className="flex items-center gap-2 text-slate-500 font-semibold text-sm hover:text-slate-800 transition-all">
-            <ArrowLeft className="w-4 h-4 shrink-0" /> {embeddedInQuickCreateModal ? '关闭' : '返回列表'}
+        <div className={productArchiveFormStickyBarClass}>
+          <button type="button" onClick={onBack} className="flex items-center gap-1.5 text-slate-500 font-medium text-xs hover:text-slate-800 transition-all h-9 px-2">
+            <ArrowLeft className="w-3.5 h-3.5 shrink-0" /> {embeddedInQuickCreateModal ? '关闭' : '返回列表'}
           </button>
           <div className="flex items-center gap-2 ml-auto">
             {permCanDelete && onDeleteProduct && isPersistedProduct && (
@@ -1433,26 +1361,31 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                 type="button"
                 disabled={deleteProductBusy}
                 onClick={() => void handleDeletePersistedProduct()}
-                className="px-4 py-2 rounded-lg font-semibold flex items-center gap-2 border border-rose-200 text-rose-600 bg-white hover:bg-rose-50 disabled:opacity-50 transition-all text-sm shadow-sm"
+                className="h-9 px-3 rounded-lg font-medium flex items-center gap-1.5 border border-rose-200 text-rose-600 bg-white hover:bg-rose-50 disabled:opacity-50 transition-all text-xs shadow-sm"
               >
-                <Trash2 className="w-4 h-4 shrink-0" /> 删除产品
+                <Trash2 className="w-3.5 h-3.5 shrink-0" /> 删除产品
               </button>
             )}
-            <button type="button" disabled={saveProductBusy} onClick={() => void saveProduct()} className="bg-indigo-600 text-white px-4 sm:px-5 py-2 rounded-lg font-semibold flex items-center gap-2 shadow-sm hover:bg-indigo-700 active:scale-[0.98] transition-all text-sm disabled:opacity-60 disabled:cursor-not-allowed">
-              <Save className="w-4 h-4 shrink-0" /> {saveProductBusy ? '保存中…' : '保存产品资料'}
+            <button
+              type="button"
+              disabled={saveProductBusy}
+              onClick={() => void saveProduct()}
+              className={`${primaryToolbarButtonClass} bg-indigo-600 text-white h-9 px-4 flex items-center gap-1.5 hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed`}
+            >
+              <Save className="w-3.5 h-3.5 shrink-0" /> {saveProductBusy ? '保存中…' : '保存产品资料'}
             </button>
           </div>
         </div>
 
         {/* 1. 核心档案 */}
-        <div className="bg-white rounded-[40px] p-5 md:p-6 border border-slate-200 shadow-sm space-y-4">
+        <div className={productArchiveFormCardClass}>
           <div className="flex items-center gap-3 border-b border-slate-50 pb-3">
-            <div className="w-9 h-9 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600"><FileText className="w-[18px] h-[18px]" /></div>
-            <h3 className="text-base font-semibold text-slate-900 tracking-tight">1. 核心业务档案</h3>
+            <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600"><FileText className="w-4 h-4" /></div>
+            <h3 className={sectionTitleClass}>1. 核心业务档案</h3>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className={`grid grid-cols-1 md:grid-cols-2 ${productArchiveFormGridGapClass}`}>
              <div className="md:col-span-2 space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">业务分类</label>
+              <label className={productArchiveFormLabelClass}>业务分类</label>
               <div className="flex flex-wrap gap-1.5" role="group" aria-label="选择业务分类">
                 {categories.map(cat => {
                   const active = workingProduct.categoryId === cat.id;
@@ -1476,11 +1409,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                           return next;
                         });
                       }}
-                      className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all border ${
-                        active
-                          ? 'bg-indigo-600 text-white shadow-sm border-indigo-600 hover:bg-indigo-700 hover:border-indigo-700'
-                          : 'bg-white/60 text-slate-600 border-slate-200/80 hover:bg-white hover:text-slate-800 hover:border-slate-300'
-                      }`}
+                      className={productArchiveFormCategoryPillClass(active)}
                     >
                       {cat.name}
                     </button>
@@ -1489,21 +1418,21 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
               </div>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">产品全称 <span className="text-rose-500">*</span></label>
-              <input type="text" value={workingProduct.name} onChange={e => setWorkingProduct({...workingProduct, name: e.target.value})} className="w-full bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
+              <label className={productArchiveFormLabelClass}>产品全称 <span className="text-rose-500">*</span></label>
+              <input type="text" value={workingProduct.name} onChange={e => setWorkingProduct({...workingProduct, name: e.target.value})} className={productArchiveFormControlClass} />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">产品编号</label>
+              <label className={productArchiveFormLabelClass}>产品编号</label>
               <input
                 type="text"
                 value={workingProduct.sku}
                 onChange={e => setWorkingProduct({ ...workingProduct, sku: e.target.value })}
                 placeholder="留空则保存时自动生成"
-                className="w-full bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                className={productArchiveFormControlClass}
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">产品单位</label>
+              <label className={productArchiveFormLabelClass}>产品单位</label>
               <div className="flex gap-2 items-stretch">
                 <select
                   value={workingProduct.unitId ?? ''}
@@ -1514,7 +1443,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                       persistLastUnitPreference(workingProduct.categoryId, unitId);
                     }
                   }}
-                  className="flex-1 min-w-0 bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className={`${productArchiveFormControlClass} flex-1 min-w-0`}
                 >
                   <option value="">请选择单位</option>
                   {(dictionaries.units ?? []).map(u => (
@@ -1531,16 +1460,16 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                     setQuickAddUnitName('');
                     setQuickAddUnitOpen(true);
                   }}
-                  className="shrink-0 inline-flex items-center justify-center px-3 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-0 outline-none transition-all"
+                  className={productArchiveFormQuickAddBtnClass}
                 >
-                  <Plus className="w-5 h-5" />
+                  <Plus className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
             {/* 产品图片 */}
             <div className="md:col-span-2 space-y-1">
-              <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">产品图片</label>
+              <label className={productArchiveFormLabelClass}>产品图片</label>
               <div
                 className={`flex items-center gap-4 rounded-2xl p-3 -m-1 transition-all outline-none ${
                   productImageDragOver
@@ -1591,8 +1520,8 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                       e.target.value = '';
                     }}
                   />
-                  <label htmlFor="product-image-upload" className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg text-sm font-semibold cursor-pointer hover:bg-indigo-100 transition-all w-fit">
-                    <ImagePlus className="w-4 h-4 shrink-0" /> 上传图片
+                  <label htmlFor="product-image-upload" className="flex items-center gap-1.5 h-9 px-3 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-medium cursor-pointer hover:bg-indigo-100 transition-all w-fit">
+                    <ImagePlus className="w-3.5 h-3.5 shrink-0" /> 上传图片
                   </label>
                   <span className="text-[10px] text-slate-500 leading-relaxed">
                     支持 JPG、PNG、GIF，建议尺寸 200×200；也可将图片拖放到本区域
@@ -1603,28 +1532,28 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
 
             {/* 价格与供应商管理 */}
             {(activeCategory?.hasSalesPrice || activeCategory?.hasPurchasePrice) && (
-              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4 pt-3">
                  {activeCategory.hasSalesPrice && (
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">标准销售单价 (CNY)</label>
+                      <label className={productArchiveFormLabelClass}>标准销售单价 (CNY)</label>
                       <div className="relative">
-                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                        <input type="number" value={workingProduct.salesPrice ?? ''} onChange={e => setWorkingProduct({...workingProduct, salesPrice: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0)})} className="w-full bg-slate-50 border-none rounded-lg py-2.5 pl-10 pr-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="" />
+                        <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
+                        <input type="number" value={workingProduct.salesPrice ?? ''} onChange={e => setWorkingProduct({...workingProduct, salesPrice: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0)})} className={productArchiveFormControlIconClass} placeholder="" />
                       </div>
                     </div>
                  )}
                  {activeCategory.hasPurchasePrice && (
                     <>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">参考采购单价 (CNY)</label>
+                        <label className={productArchiveFormLabelClass}>参考采购单价 (CNY)</label>
                         <div className="relative">
-                          <ShoppingCart className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                          <input type="number" value={workingProduct.purchasePrice ?? ''} onChange={e => setWorkingProduct({...workingProduct, purchasePrice: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0)})} className="w-full bg-slate-50 border-none rounded-lg py-2.5 pl-10 pr-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="" />
+                          <ShoppingCart className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300" />
+                          <input type="number" value={workingProduct.purchasePrice ?? ''} onChange={e => setWorkingProduct({...workingProduct, purchasePrice: e.target.value === '' ? undefined : (parseFloat(e.target.value) || 0)})} className={productArchiveFormControlIconClass} placeholder="" />
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5 ml-1 tracking-widest">首选供应商 (档案关联)</label>
-                        <div className="flex gap-2 items-start">
+                        <label className={productArchiveFormLabelClass}>首选供应商 (档案关联)</label>
+                        <div className="flex gap-2 items-stretch">
                           <div className="flex-1 min-w-0">
                             <SupplierSelect
                               options={partners}
@@ -1634,6 +1563,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                               valueMode="id"
                               placeholder="未关联供应商"
                               portalZIndex={embeddedInQuickCreateModal ? 10900 : undefined}
+                              triggerClassName={productArchiveFormPartnerTriggerClass}
                             />
                           </div>
                           {canQuickAddSupplier && (
@@ -1646,9 +1576,9 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                                 setQuickAddSupplierCategoryId(resolveDefaultPartnerCategoryId(partnerCategories));
                                 setQuickAddSupplierOpen(true);
                               }}
-                              className="shrink-0 inline-flex items-center justify-center px-3 h-12 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-0 outline-none transition-all"
+                              className={productArchiveFormQuickAddBtnClass}
                             >
-                              <Plus className="w-5 h-5" />
+                              <Plus className="w-4 h-4" />
                             </button>
                           )}
                         </div>
@@ -1673,7 +1603,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                         categoryCustomData: { ...workingProduct.categoryCustomData, [fieldId]: value },
                       })
                     }
-                    inputClassName="w-full bg-slate-50 border-none rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                    inputClassName={productArchiveFormControlClass}
                     onFilePreview={openFilePreview}
                   />
                 </div>
@@ -1684,18 +1614,18 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
 
         {/* 2. 颜色尺码配置 */}
         {workingProduct && productColorSizeEnabled(workingProduct, activeCategory) && (
-          <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] divide-x divide-slate-100">
-               <div className="px-4 sm:px-8 py-4 bg-slate-50/50 text-xs font-semibold text-slate-500 flex items-center justify-center">规格名</div>
-               <div className="px-4 sm:px-8 py-4 bg-slate-50/50 text-xs font-semibold text-slate-500 flex items-center">已选规格值</div>
+               <div className="px-4 sm:px-6 py-3 bg-slate-50/50 text-[10px] font-semibold text-slate-500 flex items-center justify-center">规格名</div>
+               <div className="px-4 sm:px-6 py-3 bg-slate-50/50 text-[10px] font-semibold text-slate-500 flex items-center">已选规格值</div>
                
-               <div className="px-4 sm:px-8 py-6 flex items-center justify-center text-sm font-semibold text-slate-700">颜色</div>
-               <div className="px-4 sm:px-8 py-6 flex items-center gap-2 min-w-0">
+               <div className="px-4 sm:px-6 py-4 flex items-center justify-center text-xs font-medium text-slate-700">颜色</div>
+               <div className="px-4 sm:px-6 py-4 flex items-center gap-2 min-w-0">
                   <div className="flex flex-1 min-w-0 gap-2 items-stretch">
                     <button
                       type="button"
                       onClick={() => setModalType('color')}
-                      className="flex-1 min-w-0 min-h-[42px] flex flex-wrap gap-1.5 items-center text-left bg-slate-50 rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none hover:bg-slate-100/80 transition-colors border border-transparent focus:border-indigo-200"
+                      className={productArchiveFormSpecPickerClass}
                     >
                       <Palette className="w-4 h-4 text-slate-400 shrink-0" aria-hidden />
                       {workingProduct.colorIds.length === 0 ? (
@@ -1721,20 +1651,20 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                         setQuickAddSpecName('');
                         setQuickAddSpecOpen('color');
                       }}
-                      className="shrink-0 inline-flex items-center justify-center px-3 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-0 outline-none transition-all"
+                      className={productArchiveFormQuickAddBtnClass}
                     >
-                      <Plus className="w-5 h-5" />
+                      <Plus className="w-4 h-4" />
                     </button>
                   </div>
                </div>
 
-               <div className="px-4 sm:px-8 py-6 flex items-center justify-center text-sm font-semibold text-slate-700">尺寸</div>
-               <div className="px-4 sm:px-8 py-6 flex items-center gap-2 min-w-0">
+               <div className="px-4 sm:px-6 py-4 flex items-center justify-center text-xs font-medium text-slate-700">尺寸</div>
+               <div className="px-4 sm:px-6 py-4 flex items-center gap-2 min-w-0">
                   <div className="flex flex-1 min-w-0 gap-2 items-stretch">
                     <button
                       type="button"
                       onClick={() => setModalType('size')}
-                      className="flex-1 min-w-0 min-h-[42px] flex flex-wrap gap-1.5 items-center text-left bg-slate-50 rounded-lg py-2.5 px-3 text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none hover:bg-slate-100/80 transition-colors border border-transparent focus:border-indigo-200"
+                      className={productArchiveFormSpecPickerClass}
                     >
                       <Hash className="w-4 h-4 text-slate-400 shrink-0" aria-hidden />
                       {workingProduct.sizeIds.length === 0 ? (
@@ -1759,9 +1689,9 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                         setQuickAddSpecName('');
                         setQuickAddSpecOpen('size');
                       }}
-                      className="shrink-0 inline-flex items-center justify-center px-3 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-0 outline-none transition-all"
+                      className={productArchiveFormQuickAddBtnClass}
                     >
-                      <Plus className="w-5 h-5" />
+                      <Plus className="w-4 h-4" />
                     </button>
                   </div>
                </div>
@@ -1771,10 +1701,10 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
 
         {/* 3. 生产工序与工艺 BOM */}
         {activeCategory?.hasProcess && (
-          <div className="bg-white rounded-[40px] p-5 md:p-6 border border-slate-200 shadow-sm space-y-4">
+          <div className={productArchiveFormCardClass}>
             <div className="flex items-center gap-3 border-b border-slate-50 pb-3">
-              <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600"><ClipboardCheck className="w-[18px] h-[18px]" /></div>
-              <h3 className="text-base font-semibold text-slate-900 tracking-tight">2. 生产工序与工艺 BOM</h3>
+              <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600"><ClipboardCheck className="w-4 h-4" /></div>
+              <h3 className={sectionTitleClass}>2. 生产工序与工艺 BOM</h3>
             </div>
 
             <div className="space-y-4">

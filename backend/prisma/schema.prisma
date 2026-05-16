@@ -57,6 +57,10 @@ model Tenant {
   expiresAt  DateTime? @map("expires_at") @db.Timestamptz()
   /** 平台开启后：该企业是否启用设备管理、工序设备派工与报工选设备（默认开） */
   equipmentModuleEnabled Boolean @default(true) @map("equipment_module_enabled")
+  /** 行业类型：`generic` 等，与 shared `TenantIndustryKind` 一致 */
+  industryKind              String    @default("generic") @map("industry_kind") @db.VarChar(40)
+  /** 行业预设数据首次灌入成功的时间；非空则不再自动灌入 */
+  industryPresetAppliedAt   DateTime? @map("industry_preset_applied_at") @db.Timestamptz()
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
@@ -459,7 +463,9 @@ model ItemCode {
   status      String   @default("ACTIVE") @db.VarChar(20)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
   /** 由「批次码+单品码」生成时关联的批次；纯单品码为 null */
-  batchId     String?  @map("batch_id") @db.Uuid
+  batchId       String? @map("batch_id") @db.Uuid
+  /** 批次内第几件（1..quantity）；仅 batchId 非空时有值，用于展示编号「计划单号-批次序号-件号」 */
+  batchPieceNo  Int?    @map("batch_piece_no")
 
   @@id([tenantId, id])
   @@unique([tenantId, scanToken])
@@ -596,6 +602,10 @@ model MilestoneReport {
   weight            Decimal? @db.Decimal(12, 4)
   /** 按 BOM 占比把 weight 拆成各子物料实际消耗的快照（MaterialBreakdownRow[]） */
   materialBreakdown Json?    @map("material_breakdown")
+  /** 扫码报工关联的虚拟批次（plan_virtual_batches.id） */
+  virtualBatchId    String?  @map("virtual_batch_id") @db.Uuid
+  /** 扫码报工关联的单品码（item_codes.id） */
+  itemCodeId        String?  @map("item_code_id") @db.Uuid
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   milestone Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
@@ -604,6 +614,8 @@ model MilestoneReport {
   @@index([reportBatchId])
   @@index([workerId])
   @@index([reportNo])
+  @@index([virtualBatchId])
+  @@index([itemCodeId])
   @@map("milestone_reports")
 }
 
@@ -647,6 +659,8 @@ model ProductProgressReport {
   weight            Decimal? @db.Decimal(12, 4)
   /** 按 BOM 占比把 weight 拆成各子物料实际消耗的快照（MaterialBreakdownRow[]） */
   materialBreakdown Json?    @map("material_breakdown")
+  virtualBatchId    String?  @map("virtual_batch_id") @db.Uuid
+  itemCodeId        String?  @map("item_code_id") @db.Uuid
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   progress ProductMilestoneProgress @relation(fields: [progressId], references: [id], onDelete: Cascade)
@@ -654,6 +668,8 @@ model ProductProgressReport {
   @@index([progressId])
   @@index([reportBatchId])
   @@index([reportNo])
+  @@index([virtualBatchId])
+  @@index([itemCodeId])
   @@map("product_progress_reports")
 }
 
@@ -694,6 +710,8 @@ model ProductionOpRecord {
   collabData                      Json?    @map("collab_data")
   /// 领料/退料/外协物料等按批次号与进销存 `PsiRecord.batchNo` 对齐
   batchNo                         String?  @map("batch_no") @db.VarChar(100)
+  virtualBatchId                  String?  @map("virtual_batch_id") @db.Uuid
+  itemCodeId                      String?  @map("item_code_id") @db.Uuid
   createdAt                       DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   updatedAt                       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
@@ -703,6 +721,8 @@ model ProductionOpRecord {
   @@index([tenantId])
   @@index([type])
   @@index([orderId])
+  @@index([virtualBatchId])
+  @@index([itemCodeId])
   @@index([productId])
   @@index([timestamp])
   @@index([docNo])

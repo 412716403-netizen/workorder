@@ -3,6 +3,7 @@ import { ScrollText, FileText, Package, Search } from 'lucide-react';
 import { ProductionOrder, Product, OrderStatus, PlanFormSettings } from '../types';
 import { STATUS_COLORS, ORDER_STATUS_MAP } from '../constants';
 import { formatOrderFlowPlacedDisplay, localTodayYmd, toLocalDateYmd, YMD_ONLY } from '../utils/localDateTime';
+import { formStandardLabelClass } from '../styles/uiDensity';
 
 /** 用于筛选/排序的本地日历日（YYYY-MM-DD） */
 function getOrderDateYmd(order: ProductionOrder): string {
@@ -148,7 +149,7 @@ const OrderFlowView: React.FC<OrderFlowViewProps> = ({
               <Package className="w-5 h-5 text-slate-600" />
             </div>
             <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase">当前筛选</p>
+              <p className={formStandardLabelClass}>当前筛选</p>
               <p className="text-xl font-black text-slate-700">{filteredStats.count} 单 / {filteredStats.totalQty.toLocaleString()} 件</p>
             </div>
           </div>

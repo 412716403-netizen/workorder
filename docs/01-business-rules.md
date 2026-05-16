@@ -224,6 +224,15 @@
 
 按 `type` 过滤后，对 `amount` 求和。当前没有复杂的状态口径分叉说明时，默认按有效记录直接累计。
 
+### 4.3 合作单位对账 Excel 导出
+
+- **入口**：财务 → 对账 → 合作单位，在已选择合作单位并点击「查询」后，工具栏「导出 Excel」可用（数据加载中禁用）。
+- **汇总区**（表头前几行）：对账时间范围、合作单位名称；**上期结余、本期累计增加、本期累计减少、本期应收余额**与页面上方汇总条一致，按**整次查询**（所选日期区间 + 合作单位）的全量对账结果计算，**不受**列表上方搜索框过滤影响。
+- **明细表**：导出**当前搜索过滤后**的列表——「按单据」导出 `partnerReconWithBalance`；「按产品」导出 `partnerProductReconListFiltered`。
+- **按产品模式表尾**：在明细下方追加「产品汇总（按单价）」：按「产品名称 + 单价」分组汇总数量与金额；同一产品若存在多个不同单价，各占一行。
+
+**实现锚点**：`utils/buildPartnerReconciliationExportSheet.ts`、`utils/downloadPartnerReconciliationXlsx.ts`、`utils/partnerReconProductLedger.ts`（`summarizePartnerProductRowsByProductAndPrice`）、`views/FinanceOpsView.tsx`。
+
 ---
 
 ## 5. 系统设置与基础信息
@@ -278,6 +287,34 @@
   - `materialBreakdown` 固化每个子物料的 `ratio / actualWeight / theoreticalQty` 快照，避免后续改 BOM 后历史记录失真。
 - 消耗口径切换：`StockMaterialPanel` 的“报工耗材(理论)”列在对应工序开启后，自动改用 `materialBreakdown.actualWeight` 汇总；“结余”列（净领用 − 报工耗材）即反映真实物料损耗/结余。未开启工序维持原“件数 × BOM 用量”口径，两种模式可在同一产品不同工序并存。
 
+### 5.4.1 扫码去重与单据数量上限
+
+**适用入口**：工序报工（含产品池报工）、待入库扫码、返工报工、外协收货等所有「扫单品码 / 扫批次码」的累加入口。
+
+**规则一：已保存去重（持久化判定）**
+
+- 同一业务作用域内，若 `item_code_id` 或 `virtual_batch_id` 已出现在该作用域的已保存记录中 → 拒绝该次扫码并提示「该码在本工序 / 本单已报工（或已入库）」。
+- 作用域按入口语义划分：
+  - 工序报工 / 产品池报工：`milestone_id` 或 `productId + milestoneTemplateId + variantId`
+  - 待入库：合并行内全部 `order_id`（同一码不能在并行待入库的多个工单里二次入库）
+  - 返工报工：`order_id + 目标 nodeId`
+  - 外协收货：`order_id + product_id + partner`（已收回状态、排除返工收回）
+- 弹窗内 session 级去重（同一次编辑里扫两次同一码）仍保留，由 `scannedItemTokensRef` / `scannedBatchTokensRef` 处理，与持久化去重叠加生效。
+- 写入兜底：`createReport` / `createProductReport` / `createRecord` 在入库前再次调用 `assertScanNotAlreadyUsed`，绕过前端直连接口的重复写入会被以 `HTTP 409` 拒绝。
+
+**规则二：超单据最大数量拒绝（不再静默截断）**
+
+- `当前表单数量 + 本次扫码数量 > 该格 / 该单允许的最大数量` → toast 给出最大可填值与超出量，**不写入列表、不累加表单**。
+- 各入口「最大数量」与 UI 上展示的口径一致：
+  - 工序报工矩阵：`getSeqRemainingForVariant(vid) − 不良 − 净外协`
+  - 工序报工单规格：`effectiveRemainingForModal`
+  - 待入库矩阵：`pendingByVariant[variantId]`；单规格：`pendingTotal`
+  - 返工报工：路径行的 `pendingByVariant` / `totalPending`
+  - 外协收货：行级 `pending`（已派 − 已收）
+- 历史接口 `addScanQtyToStockInForm` 改为「超上限不修改表单」的兜底行为；新代码统一调用 [`tryAddScanQtyToStockInForm`](../utils/pendingStockScanMatch.ts) 与 [`checkExceedMax`](../utils/scanApplyGuards.ts)。
+
+**实现锚点**：后端 [`backend/src/services/scanValidate.service.ts`](../backend/src/services/scanValidate.service.ts) + `POST /api/item-codes/scan/validate-usage`；前端 `itemCodesApi.validateUsage` 经 [`useReportModalState`](../hooks/useReportModalState.ts)、[`usePendingStockState`](../hooks/usePendingStockState.ts)、[`ReworkReportSubmitModal`](../views/production-ops/ReworkReportSubmitModal.tsx)、[`OutsourceReceiveQuantityModal`](../views/production-ops/OutsourceReceiveQuantityModal.tsx) 调用。
+
 ### 5.5 协作派发：乙方接收与产品分类
 
 **真源**：乙方租户侧 `POST /api/collaboration/subcontract-transfers/:id/accept` 的 `createProduct` 与既有产品同步逻辑（`collaboration.service`）。
@@ -298,4 +335,4 @@
 
 ---
 
-*最后更新：补充颜色尺码矩阵在编辑场景下的录入范围说明。*
+*最后更新：补充扫码去重与单据数量上限校验规则（§5.4.1）。*

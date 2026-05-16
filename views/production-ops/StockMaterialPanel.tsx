@@ -3,6 +3,11 @@ import { useQuery } from '@tanstack/react-query';
 import type { Product } from '../../types';
 import { fetchProductionByFilter, getTodayRangeIso } from './sharedFlowListHelpers';
 import {
+  getActiveOrderIdsCsv,
+  getActiveSourceProductIdsCsv,
+  buildNodeWeightEnabledMap,
+} from '../../utils/stockMaterialHelpers';
+import {
   ArrowUpFromLine,
   Undo2,
   Layers,
@@ -114,15 +119,8 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
    * 关联产品模式补丁：领退料写入时 `orderId=null` + `sourceProductId=成品 id`，仅按 orderIds
    * 窄拉会漏掉这些记录（"净已领 0" bug）。同时按 `sourceProductIds=活动工单的 productId 集合` 取并集。
    */
-  const activeOrderIdsCsv = useMemo(
-    () => orders.map(o => o.id).filter(Boolean).join(','),
-    [orders],
-  );
-  const activeSourceProductIdsCsv = useMemo(() => {
-    const set = new Set<string>();
-    for (const o of orders) if (o.productId) set.add(o.productId);
-    return Array.from(set).join(',');
-  }, [orders]);
+  const activeOrderIdsCsv = useMemo(() => getActiveOrderIdsCsv(orders), [orders]);
+  const activeSourceProductIdsCsv = useMemo(() => getActiveSourceProductIdsCsv(orders), [orders]);
   const stockPanelQuery = useQuery({
     queryKey: ['stockPanel.records', activeOrderIdsCsv, activeSourceProductIdsCsv],
     queryFn: () =>
@@ -197,13 +195,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
    * 工序当前是否开启"称重报工"。报工/外协收回记录里的 materialBreakdown 是写入时按工序当时配置固化的快照，
    * 工序后续改回"非称重"会让这份快照变得不准（同物料数量却显示极小的实际重量），所以面板按当前开关决定是否信任快照。
    */
-  const nodeWeightEnabledMap = useMemo(() => {
-    const m = new Map<string, boolean>();
-    (globalNodes ?? []).forEach(n => {
-      if (n?.id) m.set(n.id, !!n.enableWeightOnReport);
-    });
-    return m;
-  }, [globalNodes]);
+  const nodeWeightEnabledMap = useMemo(() => buildNodeWeightEnabledMap(globalNodes), [globalNodes]);
   const renderProductCustomTags = useCallback((product: Product | undefined) => {
     if (!product) return null;
     return getProductCategoryCustomFieldEntries(product, categoryMap.get(product.categoryId), {

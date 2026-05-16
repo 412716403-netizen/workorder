@@ -14,6 +14,11 @@ import {
   validateStockOutBatchOnWrite,
   validateStockReturnBatchOnWrite,
 } from './productionStockBatchWriteValidation.js';
+import {
+  assertScanNotAlreadyUsed,
+  type ScanValidatePurpose,
+  type ScanValidateScope,
+} from './scanValidate.service.js';
 
 /**
  * 外协收回 / 生产报工等"按 BOM 占比把录入的本次交货总重量分摊为各子物料实际消耗"的统一算子。
@@ -68,6 +73,39 @@ async function buildOpWeightBreakdown(opts: {
   return { weight: rawWeight, materialBreakdown: breakdown };
 }
 
+/**
+ * 由生产流水的 type/status 推出扫码去重的 purpose 与作用域。
+ * 仅当传入的 record 带 itemCodeId / virtualBatchId 时才有意义。
+ */
+async function assertScanForRecord(
+  tenantId: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  const itemCodeId = (data.itemCodeId as string | undefined) ?? null;
+  const virtualBatchId = (data.virtualBatchId as string | undefined) ?? null;
+  if (!itemCodeId && !virtualBatchId) return;
+
+  let purpose: ScanValidatePurpose | null = null;
+  const scope: ScanValidateScope = {};
+  const type = String(data.type ?? '');
+  if (type === 'STOCK_IN') {
+    purpose = 'STOCK_IN';
+    if (data.orderId) scope.orderId = String(data.orderId);
+  } else if (type === 'REWORK_REPORT') {
+    purpose = 'REWORK_REPORT';
+    if (data.sourceReworkId) scope.sourceReworkId = String(data.sourceReworkId);
+    if (data.nodeId) scope.nodeId = String(data.nodeId);
+  } else if (type === 'OUTSOURCE' && data.status === '已收回' && !data.sourceReworkId) {
+    purpose = 'OUTSOURCE_RECEIVE';
+    if (data.orderId) scope.orderId = String(data.orderId);
+    if (data.productId) scope.productId = String(data.productId);
+    if (data.partner) scope.partner = String(data.partner);
+    if (data.docNo) scope.docNo = String(data.docNo);
+  }
+  if (!purpose) return;
+  await assertScanNotAlreadyUsed(tenantId, purpose, scope, { itemCodeId, virtualBatchId });
+}
+
 const DOC_PREFIX: Record<string, string> = {
   STOCK_OUT: 'LL',
   STOCK_RETURN: 'TL',
@@ -77,6 +115,19 @@ const DOC_PREFIX: Record<string, string> = {
   REWORK_REPORT: 'FGBG',
   SCRAP: 'BS',
 };
+
+/** 外协收回等写入时把 unitPrice / amount 规范为 Prisma Decimal */
+function normalizeMoneyFields(data: Record<string, unknown>): void {
+  for (const key of ['unitPrice', 'amount'] as const) {
+    if (!(key in data) || data[key] == null || data[key] === '') continue;
+    const n = Number(data[key]);
+    if (!Number.isFinite(n)) {
+      delete data[key];
+      continue;
+    }
+    data[key] = new Prisma.Decimal(n);
+  }
+}
 
 export interface ProductionListFilter {
   type?: string;
@@ -279,6 +330,7 @@ export async function createRecord(
   const data = sanitizeCreate(body);
   if (!data.id) data.id = genId('prodop');
   normalizeDates(data);
+  normalizeMoneyFields(data);
   if (!data.timestamp) data.timestamp = new Date();
   // sanitizeCreate 会剥掉 tenantId，正常情况下 getTenantPrisma 的 Proxy 会自动回填；
   // 但 createRecordBatch 内部把裸 $transaction 的 tx 强转成 TenantPrismaClient 传进来，
@@ -298,6 +350,11 @@ export async function createRecord(
         tenantId,
       );
     }
+  }
+
+  // 扫码去重兜底（STOCK_IN / REWORK_REPORT / OUTSOURCE 已收回）
+  if (tenantId) {
+    await assertScanForRecord(tenantId, data);
   }
 
   /**
@@ -442,6 +499,7 @@ export async function updateRecord(
 
   const data = sanitizeUpdate(body);
   normalizeDates(data);
+  normalizeMoneyFields(data);
 
   const stockishUpdate = oldRecord.type === 'STOCK_OUT' || oldRecord.type === 'STOCK_RETURN';
 

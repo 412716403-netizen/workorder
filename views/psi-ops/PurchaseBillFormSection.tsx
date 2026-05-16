@@ -53,6 +53,7 @@ import {
   psiOrderBillCompactSummaryLabelClass,
   psiOrderBillCompactSummaryValueClass,
   psiOrderBillCompactSummaryUnitClass,
+  formStandardLabelClass,
 } from '../../styles/uiDensity';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -413,7 +414,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
               </div>
               <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">供应商</label>
+                  <label className={formStandardLabelClass}>供应商</label>
                   <SupplierSelect
                     options={partners}
                     categories={partnerCategories}
@@ -423,7 +424,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                   />
                 </div>
                 <div className="space-y-1 min-w-0">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据编号</label>
+                  <label className={formStandardLabelClass}>单据编号</label>
                   <div className="relative">
                     <FileText className="absolute left-2.5 top-1/2 z-[1] h-3.5 w-3.5 -translate-y-1/2 text-slate-300 pointer-events-none" />
                     <div className={psiOrderBillCompactDocReadonlyInnerClass}>
@@ -439,7 +440,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                   <p className="text-[10px] font-bold text-slate-400 ml-1 leading-snug">由系统自动生成，不可修改</p>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">入库仓库</label>
+                  <label className={formStandardLabelClass}>入库仓库</label>
                   <select value={form.warehouseId} onChange={e => setForm({...form, warehouseId: e.target.value})} className={psiOrderBillCompactWarehouseSelectClass}>
                     <option value="">选择仓库...</option>
                     {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -449,7 +450,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                   const eff = effectivePlanFormFieldType(cf);
                   return (
                   <div key={cf.id} className={eff === 'text' || eff === 'file' ? 'md:col-span-2 space-y-1' : 'space-y-1'}>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{cf.label}</label>
+                    <label className={formStandardLabelClass}>{cf.label}</label>
                     <PlanFormCustomFieldInput
                       cf={cf}
                       value={form.customData?.[cf.id]}
@@ -560,7 +561,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                     </div>
                     {formSettings.relatedProductEnabled && (
                       <div className="space-y-1 min-w-0 w-full max-w-2xl">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">关联成品（与采购品项不同，可选）</label>
+                        <label className={formStandardLabelClass}>关联成品（与采购品项不同，可选）</label>
                         <SearchableProductSelect
                           compact
                           categories={categories}
@@ -577,7 +578,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                     )}
                     {pbHasVariants && line.productId && pbProd && (
                       <div className="pt-2 border-t border-slate-100 space-y-3">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">颜色尺码数量</label>
+                        <label className={formStandardLabelClass}>颜色尺码数量</label>
                         <VariantQtyMatrixInputs
                           product={pbProd}
                           dictionaries={dictionaries}

@@ -3,6 +3,72 @@ import type { Product, ProductionOpRecord, AppDictionaries } from '../../types';
 import { buildVariantQtyMatrixLayout } from '../../utils/variantQtyMatrix';
 import { normalizeCollabSpecLabel } from '../../shared/types';
 
+/**
+ * 协作侧本地类型。
+ *
+ * 后端 `services/api/collaboration.ts` 当前仍返回 `any`，为避免本文件内 30+ 处 `any`，
+ * 在此处按使用形态显式声明（字段宽松、可选）。后续 collaboration API 域类型化后，
+ * 可以把本地 `Collab*` 形状替换为后端 DTO。
+ */
+export interface CollabPayloadItem {
+  colorName?: string | null;
+  sizeName?: string | null;
+  quantity?: number;
+  unitPrice?: number;
+}
+
+export interface CollabDispatchPayload {
+  items?: CollabPayloadItem[];
+  forwardedFrom?: unknown;
+  originSettlement?: { unitPrice?: number } | null;
+  stockOutDocNo?: string | null;
+  [key: string]: unknown;
+}
+
+export interface CollabReturnPayload {
+  items?: CollabPayloadItem[];
+  stockOutDocNo?: string | null;
+  [key: string]: unknown;
+}
+
+export interface CollabDispatch {
+  id?: string;
+  status?: string;
+  payload?: CollabDispatchPayload | null;
+  createdAt?: string;
+  [key: string]: unknown;
+}
+
+export interface CollabReturn {
+  id?: string;
+  status?: string;
+  amendmentStatus?: string | null;
+  payload?: CollabReturnPayload | null;
+  createdAt?: string;
+  [key: string]: unknown;
+}
+
+export interface CollabRouteStep {
+  stepOrder: number;
+  nodeId?: string | null;
+  nodeName?: string | null;
+  receiverTenantId?: string | null;
+  receiverTenantName?: string | null;
+}
+
+export interface CollabTransferLike {
+  id?: string;
+  status?: string;
+  parentTransferId?: string | null;
+  receiverProductId?: string | null;
+  senderProductId?: string | null;
+  chainStep?: number;
+  outsourceRouteSnapshot?: CollabRouteStep[] | null;
+  dispatches?: CollabDispatch[];
+  returns?: CollabReturn[];
+  [key: string]: unknown;
+}
+
 export function normalizeAcceptSpecList(arr: unknown): string[] {
   if (!Array.isArray(arr)) return [];
   const seen = new Set<string>();
@@ -47,7 +113,7 @@ function collabPhysicalStockDelta(r: ProductionOpRecord): number {
  * 链式协作：当前站已「转给下一站」的累计数量（按色码键），来自所有 `parentTransferId === transferId` 的子协作单派发 payload。
  * 用于从「甲方派发总量 − 回传」中扣减，得到仍可转发的余量（与后端 forwardTransfer 校验一致）。
  */
-export function collabForwardedOutBySpec(parentTransferId: string | undefined, allTransfers: any[] | undefined): Map<string, number> {
+export function collabForwardedOutBySpec(parentTransferId: string | undefined, allTransfers: CollabTransferLike[] | undefined): Map<string, number> {
   const out = new Map<string, number>();
   if (!parentTransferId || !Array.isArray(allTransfers)) return out;
   for (const ct of allTransfers) {
@@ -55,8 +121,8 @@ export function collabForwardedOutBySpec(parentTransferId: string | undefined, a
     if (String(ct.status ?? '') === 'CANCELLED') continue;
     for (const d of ct.dispatches || []) {
       if (String(d?.status ?? '') === 'WITHDRAWN') continue;
-      for (const it of (d.payload as any)?.items ?? []) {
-        const k = collabVariantKey(it);
+      for (const it of d.payload?.items ?? []) {
+        const k = collabVariantKey({ colorName: it.colorName ?? null, sizeName: it.sizeName ?? null });
         const q = Number(it.quantity) || 0;
         if (!Number.isFinite(q) || q === 0) continue;
         out.set(k, (out.get(k) || 0) + q);
@@ -157,10 +223,10 @@ export function resolvePreferredCollabMatrixOrder(args: {
 }
 
 /** 取一条 transfer 上用于色码序参考的派发 payload（已接受/已转发/待接受优先）。 */
-export function collabFirstDispatchPayload(transfer: any): any {
-  const ds = [...(transfer?.dispatches || [])] as any[];
-  const prefer = ds.find((d: any) => ['ACCEPTED', 'FORWARDED', 'PENDING'].includes(String(d?.status ?? '')));
-  return (prefer ?? ds[0])?.payload;
+export function collabFirstDispatchPayload(transfer: CollabTransferLike | null | undefined): CollabDispatchPayload | undefined {
+  const ds: CollabDispatch[] = [...(transfer?.dispatches || [])];
+  const prefer = ds.find((d) => ['ACCEPTED', 'FORWARDED', 'PENDING'].includes(String(d?.status ?? '')));
+  return (prefer ?? ds[0])?.payload ?? undefined;
 }
 
 /**
@@ -236,7 +302,7 @@ function buildCollabCapRowsWithSharedNullPool(
 }
 
 export function computeCollaborationReturnableRows(
-  transfer: any,
+  transfer: CollabTransferLike | null | undefined,
   warehouseId: string | undefined,
   products: Product[],
   prodRecords: ProductionOpRecord[],
@@ -317,12 +383,12 @@ export function computeCollaborationReturnableRows(
  * 与 `computeCollaborationReturnableRows` 风格一致；同样默认丢弃「最大=0」行。
  */
 export function computeCollaborationForwardableRows(
-  transfer: any,
+  transfer: CollabTransferLike | null | undefined,
   warehouseId: string | undefined,
   products: Product[],
   prodRecords: ProductionOpRecord[],
   dict: AppDictionaries,
-  allChainTransfers?: any[] | null,
+  allChainTransfers?: CollabTransferLike[] | null,
 ): CollabReturnRow[] {
   if (!transfer) return [];
 
@@ -393,22 +459,16 @@ export function computeCollaborationForwardableRows(
 }
 
 /** 取转发链下一站步骤定义：按 `outsourceRouteSnapshot` 中 `stepOrder === chainStep + 1` 匹配；最后一站返回 null。 */
-export function getNextForwardStep(transfer: any): {
-  stepOrder: number;
-  nodeId?: string | null;
-  nodeName?: string | null;
-  receiverTenantId?: string | null;
-  receiverTenantName?: string | null;
-} | null {
-  const route = Array.isArray(transfer?.outsourceRouteSnapshot) ? (transfer.outsourceRouteSnapshot as any[]) : null;
+export function getNextForwardStep(transfer: CollabTransferLike | null | undefined): CollabRouteStep | null {
+  const route = Array.isArray(transfer?.outsourceRouteSnapshot) ? transfer.outsourceRouteSnapshot : null;
   if (!route?.length) return null;
-  const nextOrder = (transfer.chainStep ?? 0) + 1;
-  const step = route.find((s: any) => s?.stepOrder === nextOrder);
+  const nextOrder = (transfer?.chainStep ?? 0) + 1;
+  const step = route.find((s) => s?.stepOrder === nextOrder);
   return step ? { ...step } : null;
 }
 
 /** 下一站一致性判断键：`nodeId::receiverTenantId`，两者都为空时用 stepOrder 兜底。 */
-export function getNextForwardStepKey(transfer: any): string | null {
+export function getNextForwardStepKey(transfer: CollabTransferLike | null | undefined): string | null {
   const s = getNextForwardStep(transfer);
   if (!s) return null;
   const nodeKey = s.nodeId ?? '';
@@ -427,21 +487,21 @@ export function getNextForwardStepKey(transfer: any): string | null {
  *   3) 在该 return.payload.items 中，找到第一个 `Number.isFinite(unitPrice) && unitPrice >= 0` 的行作为默认单价。
  */
 export function lastCollabPeerReturnUnitPriceFromTransfers(
-  peerTransfers: any[],
+  peerTransfers: CollabTransferLike[],
   receiverProductId: string | null | undefined,
 ): number | null {
   if (!Array.isArray(peerTransfers) || peerTransfers.length === 0) return null;
   const pid = receiverProductId ?? null;
-  const candidates: Array<{ at: number; items: any[] }> = [];
+  const candidates: Array<{ at: number; items: CollabPayloadItem[] }> = [];
   for (const t of peerTransfers) {
     if (!t) continue;
     const tPid = t.receiverProductId ?? t.senderProductId ?? null;
     if (pid && tPid && tPid !== pid) continue;
     for (const r of t.returns || []) {
       if (r.status === 'WITHDRAWN') continue;
-      const items = (r.payload as any)?.items;
+      const items = r.payload?.items;
       if (!Array.isArray(items) || items.length === 0) continue;
-      const at = new Date(r.createdAt).getTime();
+      const at = new Date(r.createdAt ?? '').getTime();
       candidates.push({ at: Number.isFinite(at) ? at : 0, items });
     }
   }
@@ -449,7 +509,7 @@ export function lastCollabPeerReturnUnitPriceFromTransfers(
   candidates.sort((a, b) => b.at - a.at);
   for (const c of candidates) {
     for (const it of c.items) {
-      const n = Number((it as any)?.unitPrice);
+      const n = Number(it?.unitPrice);
       if (Number.isFinite(n) && n >= 0) return n;
     }
   }
@@ -460,7 +520,7 @@ export function lastCollabPeerReturnUnitPriceFromTransfers(
  * 同合作单位历史「链式转发」派发上的 `originSettlement.unitPrice`（按 dispatch.createdAt 最新一条）。
  */
 export function lastCollabPeerForwardOriginUnitPriceFromTransfers(
-  peerTransfers: any[],
+  peerTransfers: CollabTransferLike[],
   receiverProductId: string | null | undefined,
 ): number | null {
   if (!Array.isArray(peerTransfers) || peerTransfers.length === 0) return null;
@@ -472,11 +532,11 @@ export function lastCollabPeerForwardOriginUnitPriceFromTransfers(
     if (pid && tPid && tPid !== pid) continue;
     for (const d of t.dispatches || []) {
       if (String(d?.status ?? '') === 'WITHDRAWN') continue;
-      const p = d.payload as any;
+      const p = d.payload;
       if (!p?.forwardedFrom) continue;
       const n = Number(p?.originSettlement?.unitPrice);
       if (!Number.isFinite(n) || n < 0) continue;
-      const at = new Date(d.createdAt).getTime();
+      const at = new Date(d.createdAt ?? '').getTime();
       candidates.push({ at: Number.isFinite(at) ? at : 0, up: n });
     }
   }
@@ -491,7 +551,7 @@ export function lastCollabPeerForwardOriginUnitPriceFromTransfers(
  *   - 仍未命中 → 空字符串（由用户手动填写）
  */
 export function resolveCollabPeerDefaultUnitPriceString(opts: {
-  peerTransfers: any[];
+  peerTransfers: CollabTransferLike[];
   receiverProductId: string | null | undefined;
 }): string {
   const fromReturn = lastCollabPeerReturnUnitPriceFromTransfers(opts.peerTransfers, opts.receiverProductId);
@@ -528,13 +588,13 @@ export const returnStatusLabel = (s: string) => {
 /** 协作回传出库单号 → 回传记录状态（来自 listTransfers 的 returns[].payload.stockOutDocNo） */
 export type ReturnDocMeta = { status: string; amendmentStatus?: string | null };
 
-export function buildReturnDocNoMetaMap(transfers: any[]): Map<string, ReturnDocMeta> {
+export function buildReturnDocNoMetaMap(transfers: CollabTransferLike[]): Map<string, ReturnDocMeta> {
   const map = new Map<string, ReturnDocMeta>();
   for (const t of transfers || []) {
     for (const r of t.returns || []) {
-      const docNo = (r.payload as any)?.stockOutDocNo;
+      const docNo = r.payload?.stockOutDocNo;
       if (docNo && typeof docNo === 'string') {
-        map.set(docNo, { status: r.status, amendmentStatus: r.amendmentStatus ?? null });
+        map.set(docNo, { status: r.status ?? '', amendmentStatus: r.amendmentStatus ?? null });
       }
     }
   }

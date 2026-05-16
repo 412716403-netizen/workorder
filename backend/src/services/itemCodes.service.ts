@@ -12,6 +12,8 @@ import {
   resolveVariantLabel,
   verifyCollaborationAccess,
 } from './planTreeQuota.service.js';
+import { attachBatchPieceNos } from '../utils/itemCodeBatchPiece.js';
+import { formatBatchSerialLabel, formatItemCodeSerialLabel } from '../../../shared/serialLabels.js';
 
 const INSERT_CHUNK = 2000;
 
@@ -118,10 +120,12 @@ export async function listItemCodes(
     batchMap = new Map(batches.map((b) => [b.id, b]));
   }
 
-  const itemsOut = items.map((row) => ({
-    ...row,
-    batch: row.batchId ? batchMap.get(row.batchId) ?? null : null,
-  }));
+  const itemsOut = attachBatchPieceNos(
+    items.map((row) => ({
+      ...row,
+      batch: row.batchId ? batchMap.get(row.batchId) ?? null : null,
+    })),
+  );
 
   return { items: itemsOut, total, page, pageSize };
 }
@@ -186,9 +190,20 @@ export async function scanItemCode(callerTenantId: string, token: string) {
 
   let batchIdOut: string | null = code.batchId ?? null;
   let batchSequenceNo: number | null = null;
+  let batchPieceNo: number | null =
+    code.batchPieceNo != null && code.batchPieceNo > 0 ? code.batchPieceNo : null;
   let batchSerialLabel: string | null = null;
   let batchScanToken: string | null = null;
   if (code.batchId) {
+    if (batchPieceNo == null) {
+      batchPieceNo = await basePrisma.itemCode.count({
+        where: {
+          tenantId: ownerTenantId,
+          batchId: code.batchId,
+          serialNo: { lte: code.serialNo },
+        },
+      });
+    }
     const vb = await basePrisma.planVirtualBatch.findFirst({
       where: { tenantId: ownerTenantId, id: code.batchId! },
       select: { sequenceNo: true, planOrderId: true, scanToken: true },
@@ -200,9 +215,7 @@ export async function scanItemCode(callerTenantId: string, token: string) {
       });
       batchSequenceNo = vb.sequenceNo;
       batchSerialLabel =
-        pl?.planNumber != null
-          ? `B-${pl.planNumber}-${String(vb.sequenceNo).padStart(4, '0')}`
-          : null;
+        pl?.planNumber != null ? formatBatchSerialLabel(pl.planNumber, vb.sequenceNo) : null;
       batchScanToken = vb.scanToken ?? null;
     }
   }
@@ -213,13 +226,23 @@ export async function scanItemCode(callerTenantId: string, token: string) {
     ownerPlanOrderId: code.planOrderId,
   });
 
+  const planNumber = plan?.planNumber ?? null;
+  const serialLabel =
+    planNumber != null
+      ? formatItemCodeSerialLabel(planNumber, code.serialNo, {
+          batchSequenceNo,
+          batchPieceNo,
+        })
+      : null;
+
   return {
     kind: 'ITEM_CODE' as const,
     itemCodeId: code.id,
     serialNo: code.serialNo,
+    serialLabel,
     status: code.status,
     planOrderId: code.planOrderId,
-    planNumber: plan?.planNumber ?? null,
+    planNumber,
     orderNumbers: orders.map((o) => o.orderNumber),
     productId: code.productId,
     productName: product?.name ?? null,
@@ -232,6 +255,7 @@ export async function scanItemCode(callerTenantId: string, token: string) {
     ownerTenantName: tenant?.name ?? null,
     batchId: batchIdOut,
     batchSequenceNo,
+    batchPieceNo,
     batchSerialLabel,
     batchScanToken,
     callerContext,
@@ -418,6 +442,27 @@ function mapSqlRowToTraceEvent(
   };
 }
 
+/** 仅展示扫码写入 virtual_batch_id / item_code_id 关联的生产事件 */
+export type TraceScanLinkScope = {
+  virtualBatchId: string | null;
+  itemCodeId: string | null;
+  notBefore: Date;
+};
+
+function traceScanLinkSql(alias: string, scope: TraceScanLinkScope): Prisma.Sql {
+  const { virtualBatchId, itemCodeId } = scope;
+  if (virtualBatchId && itemCodeId) {
+    return Prisma.sql`(${Prisma.raw(alias)}.virtual_batch_id = ${virtualBatchId}::uuid OR ${Prisma.raw(alias)}.item_code_id = ${itemCodeId}::uuid)`;
+  }
+  if (virtualBatchId) {
+    return Prisma.sql`${Prisma.raw(alias)}.virtual_batch_id = ${virtualBatchId}::uuid`;
+  }
+  if (itemCodeId) {
+    return Prisma.sql`${Prisma.raw(alias)}.item_code_id = ${itemCodeId}::uuid`;
+  }
+  return Prisma.sql`FALSE`;
+}
+
 async function traceEventRowsPaged(params: {
   planIds: string[];
   tenantIds: string[];
@@ -426,15 +471,17 @@ async function traceEventRowsPaged(params: {
   orderIds: string[];
   page: number;
   pageSize: number;
+  scanLinkScope?: TraceScanLinkScope;
 }): Promise<{ rows: TraceEventRow[]; total: number }> {
-  const { planIds, tenantIds, productId, variantId, orderIds, page, pageSize } = params;
+  const { planIds, tenantIds, productId, variantId, orderIds, page, pageSize, scanLinkScope } = params;
   if (planIds.length === 0 || tenantIds.length === 0) {
     return { rows: [], total: 0 };
   }
 
   const offset = Math.max(0, (page - 1) * pageSize);
   const planList = Prisma.join(planIds);
-  const tenantList = Prisma.join(tenantIds);
+  /** Prisma.join(tenantIds) 默认为 text；库表 tenant_id 为 uuid，须显式 cast */
+  const tenantList = Prisma.join(tenantIds.map((id) => Prisma.sql`${id}::uuid`));
   const variantIsNull = variantId === null;
   const orderIdsEmpty = orderIds.length === 0;
   const variantCond = variantIsNull
@@ -445,9 +492,27 @@ async function traceEventRowsPaged(params: {
     ? Prisma.sql`por.variant_id IS NULL`
     : Prisma.sql`por.variant_id = ${variantId}`;
 
+  const pmpVariantCond = variantIsNull
+    ? Prisma.sql`pmp.variant_id IS NULL`
+    : Prisma.sql`pmp.variant_id = ${variantId}`;
+
   const opOrderCond = orderIdsEmpty
     ? Prisma.sql`TRUE`
     : Prisma.sql`(por.order_id IS NULL OR por.order_id IN (${Prisma.join(orderIds)}))`;
+
+  const timeNotBefore = scanLinkScope?.notBefore;
+  const mrTimeCond = timeNotBefore
+    ? Prisma.sql`mr.timestamp >= ${timeNotBefore}`
+    : Prisma.sql`TRUE`;
+  const porTimeCond = timeNotBefore
+    ? Prisma.sql`por.timestamp >= ${timeNotBefore}`
+    : Prisma.sql`TRUE`;
+  const pprTimeCond = timeNotBefore
+    ? Prisma.sql`ppr.timestamp >= ${timeNotBefore}`
+    : Prisma.sql`TRUE`;
+  const mrLinkCond = scanLinkScope ? traceScanLinkSql('mr', scanLinkScope) : Prisma.sql`TRUE`;
+  const porLinkCond = scanLinkScope ? traceScanLinkSql('por', scanLinkScope) : Prisma.sql`TRUE`;
+  const pprLinkCond = scanLinkScope ? traceScanLinkSql('ppr', scanLinkScope) : Prisma.sql`TRUE`;
 
   const unionInner = Prisma.sql`
     (
@@ -470,6 +535,8 @@ async function traceEventRowsPaged(params: {
       INNER JOIN production_orders po ON po.id = m.production_order_id
       WHERE po.plan_order_id IN (${planList})
         AND (${variantCond})
+        AND (${mrTimeCond})
+        AND (${mrLinkCond})
     )
     UNION ALL
     (
@@ -491,8 +558,35 @@ async function traceEventRowsPaged(params: {
       LEFT JOIN production_orders po ON po.id = por.order_id
       WHERE por.tenant_id IN (${tenantList})
         AND por.product_id = ${productId}
-        AND (${opVariantCond})
-        AND (${opOrderCond})
+        AND (${scanLinkScope ? Prisma.sql`TRUE` : opVariantCond})
+        AND (${scanLinkScope ? Prisma.sql`TRUE` : opOrderCond})
+        AND (${porTimeCond})
+        AND (${porLinkCond})
+    )
+    UNION ALL
+    (
+      SELECT
+        'REPORT'::text AS ev_kind,
+        'PRODUCT_PROGRESS'::text AS sub_kind,
+        ppr.id::text AS ev_id,
+        pmp.tenant_id::text AS tenant_id,
+        ppr.timestamp AS ts,
+        ppr.quantity AS qty,
+        NULL::text AS order_id,
+        NULL::text AS order_number,
+        gnt.name AS node_name,
+        ppr.operator AS operator,
+        ppr.notes AS notes,
+        NULL::text AS partner,
+        NULL::text AS warehouse_id
+      FROM product_progress_reports ppr
+      INNER JOIN product_milestone_progresses pmp ON pmp.id = ppr.progress_id
+      LEFT JOIN global_node_templates gnt ON gnt.id = pmp.milestone_template_id
+      WHERE pmp.tenant_id IN (${tenantList})
+        AND pmp.product_id = ${productId}
+        AND (${pmpVariantCond})
+        AND (${pprTimeCond})
+        AND (${pprLinkCond})
     )
   `;
 
@@ -523,6 +617,9 @@ async function buildTracePayloadPaged(params: {
   variantId: string | null;
   page: number;
   pageSize: number;
+  scanLinkScope?: TraceScanLinkScope;
+  scopeNote?: string | null;
+  itemSerialLabel?: string | null;
 }): Promise<{
   events: TraceEventRow[];
   total: number;
@@ -531,6 +628,8 @@ async function buildTracePayloadPaged(params: {
   hasMore: boolean;
   tenants: Array<{ id: string; name: string | null }>;
   planTree: Array<{ id: string; tenantId: string; planNumber: string; parentPlanId: string | null }>;
+  scopeNote?: string | null;
+  itemSerialLabel?: string | null;
 }> {
   const tree = await collectPlanTreeFromNode(params.rootPlanOrderId);
   const planIds = tree.map((n) => n.id);
@@ -557,6 +656,8 @@ async function buildTracePayloadPaged(params: {
       hasMore: false,
       tenants: tenants.map((t) => ({ id: t.id, name: t.name })),
       planTree,
+      scopeNote: params.scopeNote ?? null,
+      itemSerialLabel: params.itemSerialLabel ?? null,
     };
   }
 
@@ -574,6 +675,7 @@ async function buildTracePayloadPaged(params: {
     orderIds,
     page: params.page,
     pageSize: params.pageSize,
+    scanLinkScope: params.scanLinkScope,
   });
 
   const hasMore = params.page * params.pageSize < total;
@@ -586,6 +688,8 @@ async function buildTracePayloadPaged(params: {
     hasMore,
     tenants: tenants.map((t) => ({ id: t.id, name: t.name })),
     planTree,
+    scopeNote: params.scopeNote ?? null,
+    itemSerialLabel: params.itemSerialLabel ?? null,
   };
 }
 
@@ -602,33 +706,78 @@ export async function traceItemCode(
   }
   const p = Math.max(1, page);
   const ps = Math.min(200, Math.max(1, pageSize));
+  const variantId =
+    code.variantId != null && String(code.variantId).trim() !== ''
+      ? String(code.variantId).trim()
+      : null;
+  const planNumber = (await basePrisma.planOrder.findUnique({
+    where: { id: code.planOrderId },
+    select: { planNumber: true },
+  }))?.planNumber;
+  let batchSequenceNo: number | null = null;
+  let batchPieceNo: number | null = code.batchPieceNo ?? null;
+  let batchCreatedAt: Date | null = null;
+  let batchSerialLabel: string | null = null;
+  if (code.batchId) {
+    const vb = await basePrisma.planVirtualBatch.findFirst({
+      where: { tenantId: code.tenantId, id: code.batchId },
+      select: { sequenceNo: true, createdAt: true },
+    });
+    batchSequenceNo = vb?.sequenceNo ?? null;
+    batchCreatedAt = vb?.createdAt ?? null;
+    if (planNumber != null && batchSequenceNo != null) {
+      batchSerialLabel = formatBatchSerialLabel(planNumber, batchSequenceNo);
+    }
+    if (batchPieceNo == null || batchPieceNo <= 0) {
+      batchPieceNo = await basePrisma.itemCode.count({
+        where: {
+          tenantId: code.tenantId,
+          batchId: code.batchId,
+          serialNo: { lte: code.serialNo },
+        },
+      });
+    }
+  }
+  const itemSerialLabel =
+    planNumber != null
+      ? formatItemCodeSerialLabel(planNumber, code.serialNo, {
+          batchSequenceNo,
+          batchPieceNo,
+        })
+      : null;
+
+  /** 有批次时以批次生成时刻为下界；无批次则用单品码生成时刻 */
+  const notBefore = batchCreatedAt ?? code.createdAt;
+
+  const scopeNote = batchSerialLabel
+    ? itemSerialLabel
+      ? `单品码 ${itemSerialLabel}（所属批次 ${batchSerialLabel}）：仅显示扫码报工/扫码入库时写入关联的生产事件；同批次下各单品码共享该链路。`
+      : `所属批次 ${batchSerialLabel}：仅显示扫码关联的生产事件。`
+    : itemSerialLabel
+      ? `单品码 ${itemSerialLabel}：仅显示扫码关联的生产事件。`
+      : '仅显示扫码关联的生产事件。';
+
   return buildTracePayloadPaged({
     rootPlanOrderId: code.planOrderId,
     productId: code.productId,
-    variantId: code.variantId ?? null,
+    variantId,
     page: p,
     pageSize: ps,
+    scanLinkScope: {
+      virtualBatchId: code.batchId ?? null,
+      itemCodeId: code.id,
+      notBefore,
+    },
+    scopeNote,
+    itemSerialLabel,
   });
 }
 
 export async function traceVirtualBatch(
-  callerTenantId: string,
-  token: string,
-  page = 1,
-  pageSize = 50,
+  _callerTenantId: string,
+  _token: string,
+  _page = 1,
+  _pageSize = 50,
 ) {
-  const batch = await findVirtualBatchByScanToken(token);
-  if (!batch) throw new AppError(404, '批次码不存在');
-  if (!(await verifyCollaborationAccess(callerTenantId, batch.tenantId))) {
-    throw new AppError(403, '无权追溯该批次码');
-  }
-  const p = Math.max(1, page);
-  const ps = Math.min(200, Math.max(1, pageSize));
-  return buildTracePayloadPaged({
-    rootPlanOrderId: batch.planOrderId,
-    productId: batch.productId,
-    variantId: batch.variantId ?? null,
-    page: p,
-    pageSize: ps,
-  });
+  throw new AppError(400, '产品追溯仅支持单品码，请勿扫批次码');
 }

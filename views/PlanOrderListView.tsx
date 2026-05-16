@@ -39,7 +39,6 @@ import {
   PlanFormFieldConfig,
 } from '../types';
 import { effectivePlanFormFieldType } from '../utils/planFormCustomField';
-import SplitPlanModal from './plan-order-list/SplitPlanModal';
 import PlanFormConfigModal from './plan-order-list/PlanFormConfigModal';
 import { HiddenPrintSlot, usePrintTemplateAction } from '../components/print-editor/PrintPreview';
 import { createBlankCustomTemplate } from '../utils/printTemplateDefaults';
@@ -83,7 +82,6 @@ interface PlanOrderListViewProps {
   /** 用于打印模板预览示例数据 */
   orders?: ProductionOrder[];
   onCreatePlan: (plan: PlanOrder) => void | Promise<void>;
-  onSplitPlan: (planId: string, newPlans: PlanOrder[]) => void;
   onConvertToOrder: (planId: string) => void;
   onDeletePlan?: (planId: string) => void;
   onUpdateProduct: (product: Product) => Promise<Product | null>;
@@ -181,7 +179,7 @@ function renderPlanListCustomFieldValue(
   );
 }
 
-const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMode = 'order', plans, products, categories, dictionaries, workers, equipment, globalNodes, boms, partners, partnerCategories = [], planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orders = [], onCreatePlan, onSplitPlan, onConvertToOrder, onDeletePlan, onUpdateProduct, onUpdatePlan, onUpdateOrder, onAddPSIRecord, onAddPSIRecordBatch, onCreateSubPlan, onCreateSubPlans }) => {
+const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMode = 'order', plans, products, categories, dictionaries, workers, equipment, globalNodes, boms, partners, partnerCategories = [], planFormSettings, onUpdatePlanFormSettings, printTemplates, onUpdatePrintTemplates, onRefreshPrintTemplates, orders = [], onCreatePlan, onConvertToOrder, onDeletePlan, onUpdateProduct, onUpdatePlan, onUpdateOrder, onAddPSIRecord, onAddPSIRecordBatch, onCreateSubPlan, onCreateSubPlans }) => {
   const { tenantCtx } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [viewDetailPlanId, setViewDetailPlanId] = useState<string | null>(null);
@@ -198,7 +196,6 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   const [planPrintPickerPlan, setPlanPrintPickerPlan] = useState<PlanOrder | null>(null);
   const [planPrintTemplateManageScope, setPlanPrintTemplateManageScope] = useState<'planList' | 'planLabel' | null>(null);
   const [planListPrintRun, setPlanListPrintRun] = useState<{ template: PrintTemplate; plan: PlanOrder } | null>(null);
-  const [splitPlanId, setSplitPlanId] = useState<string | null>(null);
   /** 点击图片查看大图：url 为要放大的图片地址 */
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
@@ -253,7 +250,6 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   );
   const totalPlanPages = Math.max(1, Math.ceil(totalPlans / PLAN_PAGE_SIZE));
 
-  const splitPlan = splitPlanId ? plans.find(p => p.id === splitPlanId) ?? null : null;
   /** 从计划单号解析拆分组：仅当单号形如「原单-1」「原单-2」…「原单-99」时视为拆分单（本系统拆分生成），避免把 PLN-327611 等普通编号误判为拆分组 */
   const getSplitGroupKey = (planNumber: string): string | null => {
     const m = planNumber.match(/^(.+)-([1-9]\d?)$/);
@@ -526,7 +522,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
               const totalQty = plan.items && Array.isArray(plan.items) ? plan.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) : 0;
               const assignedCount = plan.assignments ? Object.values(plan.assignments).filter(a => (a as NodeAssignment).workerIds && (a as NodeAssignment).workerIds.length > 0).length : 0;
               const createdListLabel = formatPlanOrderCreatedAtForList(plan.createdAt, plan.id);
-                const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
+                const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? false;
                 const customListFields = planFormSettings.customFields.filter(f => f.showInList);
               return (
                 <div key={plan.id} className="bg-white px-5 py-2 rounded-[32px] border border-slate-200 hover:shadow-xl hover:border-indigo-200 transition-all group flex items-center justify-between">
@@ -621,7 +617,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         const indentPx = isChild ? 24 * depth : 0;
                         const assignedCount = plan.assignments ? Object.values(plan.assignments).filter(a => (a as NodeAssignment).workerIds && (a as NodeAssignment).workerIds.length > 0).length : 0;
                         const createdListLabel = formatPlanOrderCreatedAtForList(plan.createdAt, plan.id);
-                        const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
+                        const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? false;
                         const customListFields = planFormSettings.customFields.filter(f => f.showInList);
                         return (
                           <div key={plan.id} className={`bg-white px-5 py-2 rounded-2xl border transition-all flex items-center justify-between ${isChild ? 'border-l-4 border-l-slate-300 border-slate-200' : 'border-slate-200'} hover:shadow-lg hover:border-slate-300`} style={indentPx > 0 ? { marginLeft: `${indentPx}px` } : undefined}>
@@ -714,7 +710,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         const totalQty = plan.items && Array.isArray(plan.items) ? plan.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) : 0;
                         const assignedCount = plan.assignments ? Object.values(plan.assignments).filter(a => (a as NodeAssignment).workerIds && (a as NodeAssignment).workerIds.length > 0).length : 0;
                         const createdListLabel = formatPlanOrderCreatedAtForList(plan.createdAt, plan.id);
-                        const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
+                        const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? false;
                         const customListFields = planFormSettings.customFields.filter(f => f.showInList);
                         const indentPx = isChild ? 24 * depth : 0;
                         return (
@@ -852,7 +848,6 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
           onAddPSIRecordBatch={onAddPSIRecordBatch}
           onCreateSubPlan={onCreateSubPlan}
           onCreateSubPlans={onCreateSubPlans}
-          onRequestSplit={(plan) => setSplitPlanId(plan.id)}
           onImagePreview={(url) => setImagePreviewUrl(url)}
           onFilePreview={(url, type) => { setFilePreviewUrl(url); setFilePreviewType(type); }}
           onPrintRun={setPlanListPrintRun}
@@ -862,16 +857,6 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
           onRefreshPrintTemplates={onRefreshPrintTemplates}
           onMergeLabelPrintWhitelist={id => mergePlanPrintWhitelist('planLabel', id)}
           onUpdatePlanFormSettings={onUpdatePlanFormSettings}
-        />
-      )}
-
-      {splitPlan && (
-        <SplitPlanModal
-          plan={splitPlan}
-          products={products}
-          dictionaries={dictionaries}
-          onSplit={onSplitPlan}
-          onClose={() => setSplitPlanId(null)}
         />
       )}
 

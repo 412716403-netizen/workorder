@@ -18,7 +18,6 @@ import {
   Building2,
   FileSpreadsheet,
   ListOrdered,
-  Split,
   Printer,
   QrCode,
   RefreshCw,
@@ -69,19 +68,20 @@ import PlanPoSupplierAssignModal, {
   type PlanPoSupplierAssignRow,
   type PlanPoSupplierOverride,
 } from './PlanPoSupplierAssignModal';
-import { outlineToolbarButtonClass, primaryToolbarButtonClass } from '../../styles/uiDensity';
+import {
+  formStandardControlClass,
+  formStandardLabelClass,
+  outlineToolbarButtonClass,
+  primaryToolbarButtonClass,
+} from '../../styles/uiDensity';
+import {
+  formatPlanCreatedDateList,
+  effectiveSupplierIdFromProduct,
+  purchaseOrderRecordMatchesPlanPanel,
+} from '../../utils/planDetailHelpers';
 
-function formatPlanCreatedDateList(created: string | undefined | null): string {
-  if (!created) return '';
-  return toLocalDateYmd(created) || String(created).trim().slice(0, 10);
-}
-
-/** 产品档案上的默认供应商 id 是否在合作单位列表中有效 */
-function effectiveSupplierIdFromProduct(product: Product | undefined, partners: Partner[]): string | null {
-  const sid = product?.supplierId;
-  if (sid == null || sid === '') return null;
-  return partners.some(p => p.id === sid) ? sid : null;
-}
+// formatPlanCreatedDateList / effectiveSupplierIdFromProduct / purchaseOrderRecordMatchesPlanPanel
+// 已抽离至 utils/planDetailHelpers.ts
 
 interface ProposedOrder {
   orderNumber: string;
@@ -100,19 +100,7 @@ interface ProposedOrder {
   }[];
 }
 
-/** 采购订单是否属于当前计划面板（含子计划视角下的祖先单号、历史 note 匹配） */
-function purchaseOrderRecordMatchesPlanPanel(
-  r: { type?: string; note?: string | null; productId?: string; customData?: Record<string, unknown> | null },
-  planNumbersForPO: string[],
-  viewPlan: { id: string; planNumber: string } | null | undefined,
-): boolean {
-  if (!r || r.type !== 'PURCHASE_ORDER' || !r.productId || !viewPlan) return false;
-  const cd = r.customData && typeof r.customData === 'object' ? (r.customData as Record<string, unknown>) : {};
-  if (String(cd[PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID] ?? '').trim() === viewPlan.id) return true;
-  const sn = String(cd[PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER] ?? '').trim();
-  if (sn && planNumbersForPO.includes(sn)) return true;
-  return planNumbersForPO.some(planNum => String(r.note || '').includes(`计划单[${planNum}]`));
-}
+// 见 utils/planDetailHelpers.ts: purchaseOrderRecordMatchesPlanPanel
 
 export interface PlanDetailPanelProps {
   planId: string;
@@ -146,7 +134,6 @@ export interface PlanDetailPanelProps {
   onCreateSubPlans?: (params: { planId: string; items: Array<{ productId: string; quantity: number; bomNodeId: string; parentProductId?: string; parentNodeId?: string }> }) => void;
 
   // Shared UI actions
-  onRequestSplit: (plan: PlanOrder) => void;
   onImagePreview: (url: string) => void;
   onFilePreview: (url: string, type: 'image' | 'pdf') => void;
   onPrintRun: (run: { template: PrintTemplate; plan: PlanOrder } | null) => void;
@@ -184,7 +171,6 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   onAddPSIRecordBatch,
   onCreateSubPlan,
   onCreateSubPlans,
-  onRequestSplit,
   onImagePreview,
   onFilePreview,
   onPrintRun,
@@ -1199,38 +1185,38 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-white p-8 rounded-[32px] border border-slate-200 shadow-sm">
                   {planFormSettings.standardFields.find(f => f.id === 'planNumber')?.showInDetail !== false && (
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">
+                      <label className={formStandardLabelClass}>
                         单据号
                       </label>
-                      <div className="w-full bg-slate-50 rounded-2xl py-3 px-4 font-bold text-slate-900 border border-slate-100">
+                      <div className={`${formStandardControlClass} flex items-center`}>
                         {viewPlan.planNumber}
                       </div>
                     </div>
                   )}
                   {planFormSettings.standardFields.find(f => f.id === 'createdAt')?.showInDetail !== false && (
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">
+                      <label className={formStandardLabelClass}>
                         {planFormSettings.standardFields.find(f => f.id === 'createdAt')?.label ?? '创建时间'}
                       </label>
-                      <div className="w-full bg-slate-50 rounded-2xl py-3 px-4 font-bold text-slate-800 border border-slate-100">
+                      <div className={`${formStandardControlClass} flex items-center text-slate-800`}>
                         {formatPlanOrderCreatedAtForList(viewPlan.createdAt, viewPlan.id) || '—'}
                       </div>
                     </div>
                   )}
                   {planFormSettings.listDisplay?.showDeliveryDate === true && (
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">交货日期</label>
+                      <label className={formStandardLabelClass}>交货日期</label>
                       <input
                         type="date"
                         value={tempPlanInfo.dueDate}
                         onChange={e => setTempPlanInfo({ ...tempPlanInfo, dueDate: e.target.value })}
-                        className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none border border-slate-100"
+                        className={formStandardControlClass}
                       />
                     </div>
                   )}
                   {planFormSettings.standardFields.find(f => f.id === 'customer')?.showInDetail !== false && productionLinkMode !== 'product' && (
                     <div className="md:col-span-2 space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">计划客户（合作单位）</label>
+                      <label className={formStandardLabelClass}>计划客户（合作单位）</label>
                       <CustomerSelect
                         options={partners}
                         categories={partnerCategories}
@@ -1242,7 +1228,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                   )}
                   {planFormSettings.customFields.filter(f => f.showInDetail).map(cf => (
                     <div key={cf.id} className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">{cf.label}</label>
+                      <label className={formStandardLabelClass}>{cf.label}</label>
                       <PlanFormCustomFieldInput
                         cf={cf}
                         value={tempPlanInfo.customData?.[cf.id]}
@@ -1252,7 +1238,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                             customData: { ...tempPlanInfo.customData, [cf.id]: next },
                           })
                         }
-                        controlClassName="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
+                        controlClassName={formStandardControlClass}
                         onFilePreview={onFilePreview}
                       />
                     </div>
@@ -1851,15 +1837,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                     : '※ 点击保存将同步更新客户、交期、规格数量及派发方案。'}
                 </p>
              </div>
-             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:shrink-0">
-               <div className="flex flex-wrap items-center justify-end gap-2">
-                 <button
-                   type="button"
-                   onClick={onClose}
-                   className={`${outlineToolbarButtonClass} font-black text-slate-600`}
-                 >
-                   放弃修改
-                 </button>
+             <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
                  {onDeletePlan && (
                    <button
                      type="button"
@@ -1885,25 +1863,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                      删除
                    </button>
                  )}
-               </div>
-
-               <div className="hidden sm:block h-8 w-px shrink-0 self-center bg-slate-200/90" aria-hidden />
-
-               <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-2.5">
                  {viewPlan.status !== PlanStatus.CONVERTED && !viewPlan.parentPlanId && (
-                   <>
-                     {(parentToSubPlans.get(viewPlan.id)?.length ?? 0) === 0 && (
-                       <button
-                         type="button"
-                         onClick={() => {
-                           onRequestSplit(viewPlan);
-                           onClose();
-                         }}
-                         className="px-4 py-2 text-sm font-black text-amber-800 bg-amber-50 hover:bg-amber-100 rounded-xl border border-amber-200/90 flex items-center gap-2 active:scale-[0.98] transition-all"
-                       >
-                         <Split className="w-4 h-4" /> 拆分计划
-                       </button>
-                     )}
                      <button
                        type="button"
                        onClick={() => {
@@ -1914,7 +1874,6 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                      >
                        <ArrowRightCircle className="w-4 h-4" /> 下达工单
                      </button>
-                   </>
                  )}
                  {viewPlan.status === PlanStatus.CONVERTED && !viewPlan.parentPlanId && hasUnconvertedSubPlans(viewPlan.id) && (
                    <button
@@ -1937,7 +1896,6 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                    {isSaving ? <Clock className="h-4 w-4 animate-spin shrink-0" aria-hidden /> : <Save className="h-4 w-4 shrink-0" aria-hidden />}
                    {planWorkOrdersDispatched ? '保存更新' : '保存并更新计划内容'}
                  </button>
-               </div>
              </div>
           </div>
         </div>

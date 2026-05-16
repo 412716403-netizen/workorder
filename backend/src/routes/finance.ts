@@ -29,6 +29,12 @@ router.get(
   requireSubPermission('psi:sales_bill:view'),
   ctrl.partnerReceivable,
 );
+/** 合作单位对账「上期余额」窄查；与 partner-receivable 同 controller，权限走对账模块 */
+router.get(
+  '/reconciliation/partner-opening-balance',
+  requireSubPermission('finance:reconciliation:allow'),
+  ctrl.partnerReceivable,
+);
 router.get('/records/:id', requireSubPermission('finance:records:view'), ctrl.getRecord);
 router.post(
   '/records',

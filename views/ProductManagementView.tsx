@@ -11,7 +11,7 @@ import {
 import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, AppDictionaries, Partner } from '../types';
 import ProductImportModal from './ProductImportModal';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import { pageSubtitleClass, pageTitleClass } from '../styles/uiDensity';
+import { pageSubtitleClass, pageTitleClass, formStandardControlIconClass } from '../styles/uiDensity';
 import ProductEditForm from './product-management/ProductEditForm';
 import { bomHasConfiguredItems } from '../utils/bomEffective';
 import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
@@ -220,7 +220,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input type="search" value={productArchiveSearch} onChange={e => setProductArchiveSearch(e.target.value)}
               placeholder="搜索名称、编号、备注或分类自定义内容…"
-              className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-10 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-300 outline-none shadow-sm"
+              className={`${formStandardControlIconClass} bg-white pr-10 shadow-sm`}
               aria-label="搜索产品" />
             {productArchiveSearch.trim() !== '' && (
               <button type="button" onClick={() => setProductArchiveSearch('')}

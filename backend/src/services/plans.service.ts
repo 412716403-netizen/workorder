@@ -137,58 +137,7 @@ export async function deletePlan(db: TenantPrismaClient, planId: string) {
   return { message: '已删除' };
 }
 
-// ── split / convert / sub-plans (transactions & multi-step) ─────────────
-
-export async function splitPlan(
-  db: TenantPrismaClient,
-  tenantId: string,
-  planId: string,
-  body: { newPlans?: Array<{ items: unknown[] }>; splitItems?: unknown[] },
-) {
-  const sourcePlan = await db.planOrder.findUnique({ where: { id: planId }, include: { items: true } });
-  if (!sourcePlan) throw new AppError(404, '计划单不存在');
-
-  const { newPlans, splitItems } = body;
-  const planDataList: Array<{ items: unknown[] }> = Array.isArray(newPlans)
-    ? newPlans
-    : splitItems
-      ? [{ items: splitItems as unknown[] }]
-      : [];
-  if (planDataList.length === 0) throw new AppError(400, '请提供拆分后的计划数据');
-
-  return basePrisma.$transaction(async (tx) => {
-    const created: PlanWithItems[] = [];
-    for (const plan of planDataList) {
-      const planNumber = await getNextPlanNumber(tenantId, tx);
-      const p = await tx.planOrder.create({
-        data: {
-          id: genId('plan'),
-          tenantId,
-          planNumber,
-          productId: sourcePlan.productId,
-          startDate: sourcePlan.startDate,
-          dueDate: sourcePlan.dueDate,
-          status: sourcePlan.status,
-          customer: sourcePlan.customer,
-          priority: sourcePlan.priority,
-          parentPlanId: sourcePlan.parentPlanId,
-          items: { create: sanitizeItems(plan.items as Record<string, unknown>[]) },
-        } as Prisma.PlanOrderCreateInput,
-        include: { items: true },
-      });
-      created.push(p as PlanWithItems);
-    }
-    await tx.itemCode.deleteMany({
-      where: { planOrderId: sourcePlan.id, tenantId },
-    });
-    await tx.planVirtualBatch.deleteMany({
-      where: { planOrderId: sourcePlan.id, tenantId },
-    });
-    await tx.planItem.deleteMany({ where: { planOrderId: sourcePlan.id } });
-    await tx.planOrder.delete({ where: { id: sourcePlan.id } });
-    return created;
-  });
-}
+// ── convert / sub-plans (transactions & multi-step) ─────────────────────
 
 export async function convertPlanToOrders(db: TenantPrismaClient, tenantId: string, planId: string) {
   const plan = await db.planOrder.findUnique({

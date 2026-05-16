@@ -24,6 +24,7 @@ import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { RECEIVE_VARIANT_SEP, outsourceReceiveBaseKey } from './outsourceReceiveKeys';
 import { calcUsageByWeight } from '../../utils/bomMaterialUsageByWeight';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
+import { checkExceedMax } from '../../utils/scanApplyGuards';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import {
   sectionTitleClass,
@@ -188,6 +189,40 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
     return names.length ? names.join('、') : '';
   }, [visibleRows]);
 
+  /**
+   * 外协收货持久化去重：按 (orderId / productId, partner) 命中已存在 OUTSOURCE 已收回记录拒绝。
+   */
+  const validateReceiveScan = useCallback(
+    async (params: {
+      row: ReceiveRow;
+      itemCodeId: string | null;
+      virtualBatchId: string | null;
+    }): Promise<boolean> => {
+      const { row, itemCodeId, virtualBatchId } = params;
+      if (!itemCodeId && !virtualBatchId) return true;
+      try {
+        const res = await itemCodesApi.validateUsage({
+          purpose: 'OUTSOURCE_RECEIVE',
+          scope: {
+            orderId: row.orderId,
+            productId: row.productId,
+            partner: row.partner,
+          },
+          itemCodeId,
+          virtualBatchId,
+        });
+        if (res.code === 'DUPLICATE_SAVED') {
+          toast.error(res.message || '该码已在本单收货，不可重复扫码');
+          return false;
+        }
+        return true;
+      } catch {
+        return true;
+      }
+    },
+    [],
+  );
+
   const applyReceiveScanPayload = useCallback(
     async (payload: ScanPayload): Promise<boolean> => {
       if (!payload.token || visibleRows.length === 0) return false;
@@ -196,12 +231,15 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
         let variantId: string | null = null;
         let addQty = 0;
         let tip = '';
+        let scanItemCodeId: string | null = null;
+        let scanVirtualBatchId: string | null = null;
         if (payload.kind === 'ITEM') {
           if (scannedItemRef.current.has(payload.token)) {
             toast.warning('此单品码已扫描过');
             return false;
           }
           const res = await itemCodesApi.scan(payload.token);
+          if (res.kind !== 'ITEM_CODE') return false;
           if (res.status !== 'ACTIVE') {
             toast.error(res.message || '单品码不可用');
             return false;
@@ -209,6 +247,8 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
           productId = res.productId ?? '';
           variantId = res.variantId ?? null;
           addQty = 1;
+          scanItemCodeId = res.itemCodeId ?? null;
+          scanVirtualBatchId = res.batchId ?? null;
           tip = `${res.variantLabel || res.productName || ''}${
             res.ownerTenantName && res.callerContext?.relation !== 'OWNER' ? ` · 来自 ${res.ownerTenantName}` : ''
           }`;
@@ -218,6 +258,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
             return false;
           }
           const res = await planVirtualBatchesApi.scan(payload.token);
+          if (res.kind !== 'VIRTUAL_BATCH') return false;
           if (res.status !== 'ACTIVE') {
             toast.error(res.message || '批次码不可用');
             return false;
@@ -225,6 +266,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
           productId = res.productId ?? '';
           variantId = res.variantId ?? null;
           addQty = res.quantity ?? 0;
+          scanVirtualBatchId = res.batchId ?? null;
           tip = `${res.variantLabel || res.productName || ''}${
             res.ownerTenantName && res.callerContext?.relation !== 'OWNER' ? ` · 来自 ${res.ownerTenantName}` : ''
           }`;
@@ -253,6 +295,22 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
           return false;
         }
 
+        if (
+          !(await validateReceiveScan({
+            row,
+            itemCodeId: scanItemCodeId,
+            virtualBatchId: scanVirtualBatchId,
+          }))
+        )
+          return false;
+
+        const cur = receiveFormQuantities[key] ?? 0;
+        const ck = checkExceedMax(cur, addQty, row.pending);
+        if (ck.exceeds) {
+          toast.error(ck.message ?? '本次扫入数量超过该行外协待收上限');
+          return false;
+        }
+
         setReceiveFormQuantities((prev) => ({
           ...prev,
           [key]: (prev[key] ?? 0) + addQty,
@@ -266,7 +324,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
         return false;
       }
     },
-    [visibleRows, products, categories, setReceiveFormQuantities],
+    [visibleRows, products, categories, setReceiveFormQuantities, receiveFormQuantities, validateReceiveScan],
   );
 
   const resolveReceiveScanRowPreview = useCallback(
@@ -302,6 +360,15 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
             toast.error('当前产品按规格管理，码未带规格');
             return null;
           }
+          if (res.kind !== 'ITEM_CODE') return null;
+          if (
+            !(await validateReceiveScan({
+              row,
+              itemCodeId: res.itemCodeId ?? null,
+              virtualBatchId: res.batchId ?? null,
+            }))
+          )
+            return null;
           return scanItemResultToRowDetail(res);
         }
         if (payload.kind === 'BATCH') {
@@ -310,6 +377,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
             return null;
           }
           const res = await planVirtualBatchesApi.scan(payload.token);
+          if (res.kind !== 'VIRTUAL_BATCH') return null;
           if (res.status !== 'ACTIVE') {
             toast.error(res.message || '批次码不可用');
             return null;
@@ -332,6 +400,14 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
             toast.error('当前产品按规格管理，码未带规格');
             return null;
           }
+          if (
+            !(await validateReceiveScan({
+              row,
+              itemCodeId: null,
+              virtualBatchId: res.batchId ?? null,
+            }))
+          )
+            return null;
           return scanVirtualBatchResultToRowDetail(res);
         }
       } catch (e) {
@@ -340,7 +416,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
       }
       return null;
     },
-    [visibleRows, products, categories],
+    [visibleRows, products, categories, validateReceiveScan],
   );
 
   const handleReceiveScanBatchConfirm = useCallback(

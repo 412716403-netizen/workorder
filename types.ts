@@ -25,11 +25,21 @@ export {
   type ProductionLinkMode,
   type ProcessSequenceMode,
   type FinanceCategoryKind,
+  type TenantIndustryKind,
+  TENANT_INDUSTRY_KINDS,
+  TENANT_INDUSTRY_KIND_LABELS,
+  isTenantIndustryKind,
+  normalizeTenantIndustryKind,
   type ProdOpType,
   type FinanceOpType,
   type CustomDocFieldType,
   type LegacyCustomDocFieldType,
   type ProductionOpCollabData,
+  type ScanValidatePurpose,
+  type ScanValidateScope,
+  type ScanValidateRequest,
+  type ScanValidateResponse,
+  type ScanValidateCode,
 } from './shared/types';
 
 /** 与 CustomDocFieldType 相同，保留别名供计划单单据配置等既有命名 */
@@ -70,6 +80,8 @@ export interface ItemCode {
   createdAt: string;
   /** 由「批次码+单品码」生成时关联的批次 id */
   batchId?: string | null;
+  /** 批次内第几件（1..批次件数）；展示编号「计划单号-批次序号-件号」用 */
+  batchPieceNo?: number | null;
   /** 列表接口 include，用于展示所属批次编号 */
   batch?: { id: string; sequenceNo: number } | null;
 }
@@ -108,6 +120,8 @@ export interface ScanItemCodeResult {
   message?: string;
   itemCodeId?: string;
   serialNo?: number;
+  /** 单品展示编号，如 PLN47-2-1（扫码列表等用，由服务端或前端 formatItemCodeSerialLabel 生成） */
+  serialLabel?: string | null;
   planOrderId?: string;
   planNumber?: string | null;
   orderNumbers?: string[];
@@ -122,6 +136,7 @@ export interface ScanItemCodeResult {
   ownerTenantName?: string | null;
   batchId?: string | null;
   batchSequenceNo?: number | null;
+  batchPieceNo?: number | null;
   batchSerialLabel?: string | null;
   /** 关联虚拟批次的扫码 token；无批次时为 null（报工等场景「批次扫码方式」下扫单品归一化用） */
   batchScanToken?: string | null;
@@ -134,6 +149,10 @@ export interface ScanVirtualBatchResult {
   message?: string;
   batchId?: string;
   quantity?: number;
+  /** 计划内批次序号（展示编号 PLN47-2 用） */
+  sequenceNo?: number;
+  /** 批次展示编号，如 PLN47-2 */
+  serialLabel?: string | null;
   planOrderId?: string;
   planNumber?: string | null;
   orderNumbers?: string[];
@@ -178,6 +197,10 @@ export interface TraceResult {
   page?: number;
   pageSize?: number;
   hasMore?: boolean;
+  /** 追溯口径说明（单品码追溯页展示） */
+  scopeNote?: string | null;
+  /** 当前追溯的单品码展示编号 */
+  itemSerialLabel?: string | null;
 }
 
 /**
@@ -409,6 +432,8 @@ export interface PsiRecord {
   salesPrice?: number | string | null;
   operator?: string | null;
   warehouseId?: string | null;
+  /** 销售订单：配货仓 */
+  allocationWarehouseId?: string | null;
   allocatedQuantity?: number | string | null;
   shippedQuantity?: number | string | null;
   timestamp?: string | null;
@@ -416,6 +441,12 @@ export interface PsiRecord {
   _savedAtMs?: number | null;
   customData?: Record<string, unknown> | null;
   note?: string | null;
+  /** 采购单：到期日（YYYY-MM-DD） */
+  dueDate?: string | null;
+  /** 采购单据行：引用的采购订单单号（编辑保存时需带回） */
+  sourceOrderNumber?: string | null;
+  /** 采购单据行：引用的采购订单行 id */
+  sourceLineId?: string | null;
   /** 采购/销售单行金额等（列表 API 可能带） */
   amount?: number | string | null;
   /** 批次号（API 多为 `batchNo`；部分写入路径仍可能带 `batch`） */
@@ -1294,6 +1325,10 @@ export interface ProductionOrder {
 export interface ProductionOpRecord {
   id: string;
   type: ProdOpType;
+  /** 扫码入库/生产操作关联的虚拟批次 id */
+  virtualBatchId?: string;
+  /** 扫码关联的单品码 id */
+  itemCodeId?: string;
   /** 关联工单时必填，关联产品时为空 */
   orderId?: string;
   productId: string;

@@ -101,7 +101,6 @@ PostgreSQL
 | 功能 | 前端入口 | 主要依赖 | 后端入口 |
 |------|------|------|------|
 | 计划单 CRUD | `PlanOrderListView.tsx` | plans、products、globalNodes | `/api/plans` |
-| 拆单 | `PlanOrderListView.tsx` | plan items、variant、数量分配 | `/api/plans/:id/split` |
 | 创建子计划 | `PlanOrderListView.tsx` | BOM 递归、计划用量 | `/api/plans/:id/sub-plans` |
 | 计划转工单 | `AppDataContext` / `App.tsx` | plan 状态、子计划层级 | `/api/plans/:id/convert` |
 

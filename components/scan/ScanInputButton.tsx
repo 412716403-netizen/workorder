@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ScanLine, Camera } from 'lucide-react';
 import { toast } from 'sonner';
 import { useScanGun } from '../../hooks/useScanGun';
-import { parseScanPayload, scanRawLooksLikeImeCorruption, type ScanPayload } from '../../utils/scanPayload';
+import { getUnrecognizedScanImeHint, parseScanPayload, type ScanPayload } from '../../utils/scanPayload';
 import { playScanErrorSound, playScanSuccessSound } from '../../utils/scanFeedbackSound';
 import { CameraScannerModal } from './CameraScannerModal';
 
@@ -40,9 +40,7 @@ export function ScanInputButton({
       const payload = parseScanPayload(raw);
       if (payload.kind === 'UNKNOWN' || !payload.token) {
         const preview = `${raw.slice(0, 30)}${raw.length > 30 ? '…' : ''}`;
-        const imeHint = scanRawLooksLikeImeCorruption(raw)
-          ? '检测到可能为中文输入法误转（如「。」「—」或全角字母数字）。请切换到英文（半角）输入法后，再点「扫码录入」重扫一次。'
-          : undefined;
+        const imeHint = getUnrecognizedScanImeHint(raw);
         toast.error(`无法识别的扫码内容：${preview}`, imeHint ? { description: imeHint } : undefined);
         playScanErrorSound();
         return;

@@ -3,6 +3,7 @@ import type { AppDictionaries, Product, ProductVariant } from '../../types';
 import { buildVariantQtyMatrixLayout } from '../../utils/variantQtyMatrix';
 import QtyMatrixTable from './QtyMatrixTable';
 import { VariantQtyMatrixHint } from './VariantQtyMatrixHint';
+import { psiOrderBillCompactLineInputClass } from '../../styles/uiDensity';
 
 export type VariantQtyMatrixCellExtras = {
   max?: number;
@@ -27,8 +28,7 @@ export type VariantQtyMatrixInputsProps = {
   inputClassName?: string;
 };
 
-const defaultInputClass =
-  'h-9 w-[3.25rem] shrink-0 rounded-lg border border-slate-200 bg-slate-50/90 px-2 text-left text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200';
+const defaultInputClass = `${psiOrderBillCompactLineInputClass} w-[3.25rem] shrink-0 text-left shadow-sm focus:ring-indigo-200`;
 
 const VariantQtyMatrixInputs: React.FC<VariantQtyMatrixInputsProps> = ({
   product,

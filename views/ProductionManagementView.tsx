@@ -86,7 +86,6 @@ const ProductionManagementView: React.FC = () => {
   const onCreatePlan = a.onCreatePlan;
   const onUpdateProduct = a.onUpdateProduct;
   const onUpdatePlan = a.onUpdatePlan;
-  const onSplitPlan = a.onSplitPlan;
   const onConvertToOrder = a.onConvertToOrder;
   const onDeletePlan = a.onDeletePlan;
   const onAddRecord = a.onAddProdRecord;
@@ -271,7 +270,6 @@ const ProductionManagementView: React.FC = () => {
             onUpdateProduct={onUpdateProduct}
             onUpdatePlan={hasProdPerm('production:plans:edit') ? onUpdatePlan : undefined}
             onUpdateOrder={hasProdPerm('production:orders:edit') ? onUpdateOrder : undefined}
-            onSplitPlan={hasProdPerm('production:plans:edit') ? onSplitPlan : (() => {})}
             onConvertToOrder={hasProdPerm('production:plans:edit') ? onConvertToOrder : (() => {})}
             onDeletePlan={hasProdPerm('production:plans:delete') ? onDeletePlan : undefined}
             onAddPSIRecord={onAddPSIRecord}
@@ -298,6 +296,8 @@ const ProductionManagementView: React.FC = () => {
             categories={categories}
             dictionaries={dictionaries}
             partners={partners}
+            partnerCategories={partnerCategories}
+            outsourceFormSettings={outsourceFormSettings}
             boms={boms}
             globalNodes={globalNodes}
             planFormSettings={planFormSettings}

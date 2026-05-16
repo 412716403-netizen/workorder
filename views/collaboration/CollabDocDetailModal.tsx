@@ -11,6 +11,7 @@ import { categoryUsesBatchManagement, COLLAB_DISPATCH_AMENDMENT_PENDING_B_REVIEW
 import { initCollabAcceptCategoryFromPayload, collabAcceptCategoryDisabledForIncomingMatrix } from '../../utils/collabAcceptDecision';
 import {
   dispatchStatusLabel, normalizeAcceptSpecList, returnStatusLabel, resolvePreferredCollabMatrixOrder,
+  type CollabTransferLike, type CollabDispatch, type CollabReturn,
 } from './collabHelpers';
 import QtyMatrixTable from '../../components/variant-matrix/QtyMatrixTable';
 import {
@@ -22,12 +23,15 @@ import {
 
 type DocKind = 'dispatch' | 'return';
 
+/** doc 是 dispatch 或 return 的并集 —— 字段几乎相同，按 docKind 分支处理 */
+type CollabDoc = CollabDispatch | CollabReturn;
+
 interface CollabDocDetailModalProps {
   open: boolean;
   onClose: () => void;
   docKind: DocKind;
-  doc: any;
-  transfer: any;
+  doc: CollabDoc;
+  transfer: CollabTransferLike;
   warehouses: Warehouse[];
   products: Product[];
   partners: Partner[];
@@ -44,18 +48,18 @@ interface CollabDocDetailModalProps {
   onOpenCollabSettings?: () => void;
 }
 
-function sumItemsQty(items: any[] | undefined): number {
+function sumItemsQty(items: ReadonlyArray<{ quantity?: unknown } | null | undefined> | undefined): number {
   if (!Array.isArray(items)) return 0;
   let total = 0;
   for (const it of items) total += Number(it?.quantity) || 0;
   return total;
 }
 
-function formatDocNo(doc: any, kind: DocKind): string {
-  const p = doc?.payload;
+function formatDocNo(doc: CollabDoc | null | undefined, kind: DocKind): string {
+  const p = doc?.payload as (Record<string, unknown> | null | undefined);
   if (!p) return '';
-  if (kind === 'return' && typeof p.stockOutDocNo === 'string' && p.stockOutDocNo) return p.stockOutDocNo;
-  const senderRef = p.senderRef;
+  if (kind === 'return' && typeof p['stockOutDocNo'] === 'string' && p['stockOutDocNo']) return p['stockOutDocNo'] as string;
+  const senderRef = p['senderRef'] as { docNos?: string[] } | undefined;
   if (senderRef && Array.isArray(senderRef.docNos) && senderRef.docNos.length > 0) {
     return senderRef.docNos.join('、');
   }
@@ -72,8 +76,8 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
   const categories = categoriesProp ?? [];
   const confirm = useConfirm();
   const navigate = useNavigate();
-  const [transfer, setTransfer] = useState<any>(initialTransfer);
-  const [doc, setDoc] = useState<any>(initialDoc);
+  const [transfer, setTransfer] = useState<CollabTransferLike>(initialTransfer);
+  const [doc, setDoc] = useState<CollabDoc>(initialDoc);
   const [refreshing, setRefreshing] = useState(false);
 
   const [busy, setBusy] = useState(false);
@@ -104,10 +108,10 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
     if (!transfer?.id || !doc?.id) return;
     setRefreshing(true);
     try {
-      const detail = await api.collaboration.getTransfer(transfer.id);
+      const detail: CollabTransferLike = await api.collaboration.getTransfer(transfer.id);
       setTransfer(detail);
-      const pool: any[] = docKind === 'dispatch' ? (detail.dispatches || []) : (detail.returns || []);
-      const next = pool.find((x: any) => x.id === doc.id);
+      const pool: CollabDoc[] = docKind === 'dispatch' ? (detail.dispatches || []) : (detail.returns || []);
+      const next = pool.find((x) => x.id === doc.id);
       if (next) {
         setDoc(next);
       } else {
@@ -304,7 +308,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
     }
   };
 
-  const items: any[] = doc?.payload?.items ?? [];
+  const items: CollabPayloadItem[] = (doc?.payload?.items ?? []) as CollabPayloadItem[];
   const totalQty = sumItemsQty(items);
   const receiverProduct = useMemo(
     () => products.find(p => p.id === transfer?.receiverProductId),
@@ -333,7 +337,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
   const returnSpecQtyPrice = useMemo(() => {
     if (docKind !== 'return' || specMatrix.rows.length === 0) return null;
     const payloadItems = (doc?.payload?.items ?? []) as CollabPayloadItem[];
-    const tq = sumItemsQty(payloadItems as any[]);
+    const tq = sumItemsQty(payloadItems);
     const up = firstFiniteCollabUnitPrice(payloadItems);
     const amt = up != null ? tq * up : null;
     return { lineQty: tq, up, amt };
@@ -344,7 +348,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
       return null;
     }
     const aitems = (doc?.amendmentPayload?.items ?? []) as CollabPayloadItem[];
-    const aq = sumItemsQty(aitems as any[]);
+    const aq = sumItemsQty(aitems);
     const up = firstFiniteCollabUnitPrice(aitems);
     const amt = up != null ? aq * up : null;
     return { lineQty: aq, up, amt };
@@ -375,11 +379,11 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
         const detail = await api.collaboration.getTransfer(transfer.id);
         if (cancelled) return;
         setTransfer(detail);
-        const nd = (detail.dispatches || []).find((x: any) => x.id === doc.id);
+        const nd = (detail.dispatches || []).find((x) => x.id === doc.id);
         if (nd) setDoc(nd);
       } catch {
         if (!cancelled) {
-          setTransfer((prev: any) => ({ ...prev, _acceptDispatchMode: 'CREATE', _acceptResolvedReceiverProductId: null }));
+          setTransfer((prev) => ({ ...prev, _acceptDispatchMode: 'CREATE', _acceptResolvedReceiverProductId: null }));
         }
       } finally {
         if (!cancelled) setAcceptUiLoading(false);
@@ -405,7 +409,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
     const payload = doc.payload || {};
     let colors = normalizeAcceptSpecList(payload.colorNames);
     let sizes = normalizeAcceptSpecList(payload.sizeNames);
-    const itemList: any[] = payload.items ?? [];
+    const itemList: CollabPayloadItem[] = (payload.items ?? []) as CollabPayloadItem[];
     if (!colors.length) colors = [...new Set(itemList.map(i => i.colorName).filter(Boolean))] as string[];
     if (!sizes.length) sizes = [...new Set(itemList.map(i => i.sizeName).filter(Boolean))] as string[];
     setAcceptName(transfer.senderProductName || '');
@@ -545,7 +549,14 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
     if (!ok) return;
     setBusy(true);
     try {
-      const res: any = await api.collaboration.acceptTransfer(transfer.id, payload);
+      interface AcceptTransferRes {
+        accepted?: number;
+        createdOrders?: unknown[];
+        pendingProcess?: boolean;
+        receiverProductId?: string;
+        productInfoChanges?: Array<{ field: string; skipped?: boolean; reason?: string; from?: string; to?: string }>;
+      }
+      const res = (await api.collaboration.acceptTransfer(transfer.id, payload)) as AcceptTransferRes;
       const accepted = Number(res?.accepted) || 0;
       const ordersLen = Array.isArray(res?.createdOrders) ? res.createdOrders.length : 0;
       toast.success(
@@ -563,7 +574,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
         },
       );
       if (Array.isArray(res?.productInfoChanges) && res.productInfoChanges.length > 0) {
-        const lines: string[] = res.productInfoChanges.map((c: any) =>
+        const lines: string[] = res.productInfoChanges.map((c) =>
           c.skipped ? `· ${c.field}：未同步（${c.reason || '存在冲突'}）` : `· ${c.field}：${c.from || '—'} → ${c.to}`,
         );
         toast.info(`商品信息已根据甲方最新数据同步：\n${lines.join('\n')}`, { duration: 12000 });
@@ -589,7 +600,7 @@ const CollabDocDetailModal: React.FC<CollabDocDetailModalProps> = ({
 
   // ── 按条件判定动作按钮（派发「接受」、转发「确认」在详情内；其余批量入口在收件箱右上） ──
   const isMidChainDispatch = transfer._chainTransfers && doc?.transferId
-    && (transfer._chainTransfers as any[]).some((ct: any) => ct.id === doc.transferId && ct.chainStep > 0);
+    && (transfer._chainTransfers as CollabTransferLike[]).some((ct) => ct.id === doc.transferId && (ct.chainStep ?? 0) > 0);
 
   /** 乙方：待接受派发 — 在派发详情弹窗内确认接受（单条 dispatchIds） */
   const canAcceptDispatch = docKind === 'dispatch' && !isSender && doc.status === 'PENDING';

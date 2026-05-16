@@ -406,13 +406,12 @@ const SectionRenderer: React.FC<SectionRendererProps> = ({
         [k: string]: unknown;
       };
       const toggleKey = section.toggle?.key ?? 'showPrintButton';
-      const defaultChecked = section.toggle?.defaultChecked ?? true;
-      // 语义与现状保持一致：slot[toggleKey] === false 视为关闭，其它（含 undefined）视为开
+      const defaultChecked = section.toggle?.defaultChecked ?? false;
       const toggleChecked =
         section.toggle == null
-          ? true
-          : (slot[toggleKey] as boolean | undefined) !== false &&
-            ((slot[toggleKey] as boolean | undefined) !== undefined || defaultChecked);
+          ? false
+          : (slot[toggleKey] as boolean | undefined) === true ||
+            ((slot[toggleKey] as boolean | undefined) === undefined && defaultChecked);
       const onChangeAllowedTemplateIds = (next: string[] | undefined) => {
         const nextSlot: Record<string, unknown> = { ...slot, allowedTemplateIds: next };
         if (!next) delete nextSlot.allowedTemplateIds;

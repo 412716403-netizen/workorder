@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { seedTenantDefaultSettings } from '../lib/tenantDefaultSettings.js';
 import { ALL_PERMISSIONS } from '../types/index.js';
 import { AppError } from '../middleware/errorHandler.js';
 import crypto from 'crypto';
@@ -15,6 +16,7 @@ export async function createTenant(userId: string, body: { name: string; logo?: 
     data: { userId, tenantId: tenant.id, role: 'owner', permissions: [...ALL_PERMISSIONS] },
   });
   await prisma.user.update({ where: { id: userId }, data: { isEnterprise: true } });
+  await seedTenantDefaultSettings(tenant.id, prisma);
   return {
     tenant: { id: tenant.id, name: tenant.name, status: 'pending' },
     message: '企业已提交审核，请等待管理员通过',

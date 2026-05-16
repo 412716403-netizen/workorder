@@ -3,7 +3,12 @@ import type { PlanFormFieldConfig, Product, ProductCategory, ProductionOrder } f
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
-import { psiOrderBillCompactLineInputClass, psiOrderBillCompactWarehouseSelectClass } from '../../styles/uiDensity';
+import {
+  formStandardControlClass,
+  formStandardLabelClass,
+  psiOrderBillCompactLineInputClass,
+  psiOrderBillCompactWarehouseSelectClass,
+} from '../../styles/uiDensity';
 
 /** 将入库登记自定义字段写入 production_op_records.collabData.stockInCustomData */
 export function stockInCollabFromCustomData(customData: Record<string, unknown> | undefined): {
@@ -33,12 +38,12 @@ export function StockInCustomCreateFields({
     <div className="mt-3 space-y-3">
       {list.map(cf => (
         <div key={cf.id} className="space-y-1">
-          <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
+          <label className={formStandardLabelClass}>{cf.label}</label>
           <PlanFormCustomFieldInput
             cf={cf}
             value={values[cf.id]}
             onChange={v => onChange(cf.id, v)}
-            controlClassName="h-[52px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+            controlClassName={`${formStandardControlClass} bg-white`}
             onFilePreview={onFilePreview}
           />
         </div>
@@ -70,7 +75,7 @@ export function StockInCustomEditFields({
             key={cf.id}
             className={eff === 'text' || eff === 'file' ? 'min-w-0 space-y-1 md:col-span-2' : 'min-w-0 space-y-1'}
           >
-            <label className="mb-1.5 ml-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
+            <label className={formStandardLabelClass}>{cf.label}</label>
             <PlanFormCustomFieldInput
               cf={cf}
               value={values[cf.id]}

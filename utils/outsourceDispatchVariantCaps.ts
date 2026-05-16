@@ -85,7 +85,7 @@ export function sumOutsourceableByVariantProductMatrix(
   if (variants.length === 0) return Number.POSITIVE_INFINITY;
   const milestoneNodeIds = product.milestoneNodeIds || [];
   const pmp = productMilestoneProgresses ?? [];
-  const seq = processSequenceMode ?? 'free';
+  const seq = processSequenceMode ?? 'sequential';
   const getDefectiveRework = (orderId: string, tid: string) => {
     const x = getDr(orderId, tid);
     return { defective: x.defective, rework: x.rework, reworkByVariant: x.reworkByVariant ?? {} };

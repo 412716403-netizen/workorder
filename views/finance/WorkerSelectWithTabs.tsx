@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Search, User } from 'lucide-react';
 import type { GlobalNodeTemplate, Worker } from '../../types';
+import { formStandardControlClass } from '../../styles/uiDensity';
 
 interface WorkerSelectWithTabsProps {
   workers: Worker[];
@@ -81,7 +82,7 @@ function WorkerSelectWithTabs({ workers, processNodes, value, onChange, label, c
   return (
     <div className="space-y-1 relative" ref={containerRef}>
       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
-      <button type="button" onClick={() => setIsOpen(!isOpen)} className="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500 flex items-center justify-between h-[52px]">
+      <button type="button" onClick={() => setIsOpen(!isOpen)} className={`${formStandardControlClass} flex items-center justify-between`}>
         <div className="flex items-center gap-2 truncate">
           <User className={`w-4 h-4 flex-shrink-0 ${value ? 'text-indigo-600' : 'text-slate-300'}`} />
           <span className={value ? 'text-slate-900 truncate' : 'text-slate-400'}>{selected ? selected.name : '搜索并选择工人...'}</span>

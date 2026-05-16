@@ -20,6 +20,12 @@ import {
   X,
 } from 'lucide-react';
 import { adminUsers, adminTenants, type AdminUserRow, type AdminTenantRow } from '../services/api';
+import {
+  TENANT_INDUSTRY_KINDS,
+  TENANT_INDUSTRY_KIND_LABELS,
+  isTenantIndustryKind,
+  type TenantIndustryKind,
+} from '../types';
 import { pageSubtitleClass, pageTitleClass, primaryToolbarButtonClass } from '../styles/uiDensity';
 import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
 
@@ -75,8 +81,10 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
   const [tenantNoExpiry, setTenantNoExpiry] = useState(true);
   const [tenantExpiresAtInput, setTenantExpiresAtInput] = useState('');
   const [tenantEquipmentModule, setTenantEquipmentModule] = useState(true);
+  const [tenantIndustryKind, setTenantIndustryKind] = useState<TenantIndustryKind>('generic');
   const [tenantSaving, setTenantSaving] = useState(false);
   const [tenantError, setTenantError] = useState('');
+  const [tenantSuccessHint, setTenantSuccessHint] = useState('');
 
   const loadTenants = useCallback(async () => {
     setTenantLoading(true);
@@ -95,7 +103,9 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
   function openTenantModal(t: AdminTenantRow, action: 'approve' | 'edit' | 'reject') {
     setTenantModal({ tenant: t, action });
     setTenantError('');
+    setTenantSuccessHint('');
     setTenantEquipmentModule(t.equipmentFeaturesEnabled !== false);
+    setTenantIndustryKind(isTenantIndustryKind(t.industryKind) ? t.industryKind : 'generic');
     if (action === 'approve') {
       setTenantNoExpiry(true);
       setTenantExpiresAtInput('');
@@ -120,11 +130,13 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
         await adminTenants.update(tenant.id, { status: 'rejected' });
       } else {
         const expiresAt = tenantNoExpiry ? null : (tenantExpiresAtInput.trim() ? new Date(tenantExpiresAtInput).toISOString() : null);
-        await adminTenants.update(tenant.id, {
+        const res = await adminTenants.update(tenant.id, {
           ...(action === 'approve' ? { status: 'active' } : {}),
           expiresAt,
           equipmentModuleEnabled: tenantEquipmentModule,
+          industryKind: tenantIndustryKind,
         });
+        setTenantSuccessHint(res.presetSkippedReason ?? '');
       }
       setTenantModal(null);
       await loadTenants();
@@ -325,6 +337,9 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
 
       {tab === 'tenants' && (
         <div className="space-y-4">
+          {tenantSuccessHint && !tenantModal && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-sm">{tenantSuccessHint}</div>
+          )}
           {tenantError && !tenantModal && (
             <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{tenantError}</div>
           )}
@@ -353,13 +368,14 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
               <div className="py-16 text-center text-slate-400 text-sm">暂无数据</div>
             ) : (
               <div className="overflow-x-auto -mx-px">
-                <table className="w-full min-w-[820px] text-sm border-collapse">
+                <table className="w-full min-w-[940px] text-sm border-collapse">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-left text-slate-600">
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">企业名称</th>
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">创建者</th>
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500 text-center">成员数</th>
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500 text-center">设备模块</th>
+                      <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">行业类型</th>
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">状态</th>
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">到期时间</th>
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">创建时间</th>
@@ -381,6 +397,16 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
                             <span className="text-xs font-bold text-slate-400">关</span>
                           ) : (
                             <span className="text-xs font-bold text-emerald-600">开</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5 text-[13px] text-slate-600">
+                          <div className="font-medium">
+                            {isTenantIndustryKind(t.industryKind)
+                              ? TENANT_INDUSTRY_KIND_LABELS[t.industryKind]
+                              : (t.industryKind || '—')}
+                          </div>
+                          {t.industryPresetAppliedAt && (
+                            <div className="text-[10px] text-slate-400 mt-0.5">行业模板已应用</div>
                           )}
                         </td>
                         <td className="px-4 py-3.5 whitespace-nowrap">
@@ -468,6 +494,21 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
                         <input type="datetime-local" className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white" value={tenantExpiresAtInput} onChange={e => setTenantExpiresAtInput(e.target.value)} />
                       </div>
                     )}
+                  </div>
+                  <div className="rounded-xl border border-slate-100 bg-white p-3">
+                    <label className="block text-xs font-bold text-slate-500 mb-1.5">行业类型</label>
+                    <select
+                      value={tenantIndustryKind}
+                      onChange={e => setTenantIndustryKind(e.target.value as TenantIndustryKind)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    >
+                      {TENANT_INDUSTRY_KINDS.map(k => (
+                        <option key={k} value={k}>{TENANT_INDUSTRY_KIND_LABELS[k]}</option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-slate-500 font-medium mt-2 leading-snug">
+                      选择「毛衣工厂」且该企业下尚无产品分类、合作单位分类、仓库、财务类型与工序节点时，将自动灌入默认数据；否则跳过并提示原因。
+                    </p>
                   </div>
                   <div className="rounded-xl border border-slate-100 bg-white p-3">
                     <label className="flex items-start gap-2.5 cursor-pointer">

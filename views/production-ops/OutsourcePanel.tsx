@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProductionByFilter, getTodayRangeIso, nextOutsourceDocNumberResolved } from './sharedFlowListHelpers';
+import { getActiveOrderIdsCsv, getActiveSourceProductIdsCsv } from '../../utils/stockMaterialHelpers';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -79,6 +80,7 @@ import {
 import OutsourceFlowListModal, { type OutsourceFlowOpenSeed } from './OutsourceFlowListModal';
 import OutsourcePartnerFlowDetailModal from './OutsourcePartnerFlowDetailModal';
 import OutsourceFlowDocumentDetailModal from './OutsourceFlowDocumentDetailModal';
+import { buildWeightMapForKeyedEntries } from '../../utils/reportBatchWeightHelpers';
 import StockDocDetailModal from './StockDocDetailModal';
 import DocPhaseModal from '../../components/DocPhaseModal';
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
@@ -146,16 +148,9 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
    * 不良/返工：types=REWORK,REWORK_REPORT + activeOrderIds（不良工件反查口径）。
    * 合并去重后输出 records，覆盖 props.records。
    */
-  const activeOrderIdsCsv = useMemo(
-    () => orders.map(o => o.id).filter(Boolean).join(','),
-    [orders],
-  );
+  const activeOrderIdsCsv = useMemo(() => getActiveOrderIdsCsv(orders), [orders]);
   /** 关联产品模式领退料 sourceProductId 兜底（写入时 orderId=null） */
-  const activeSourceProductIdsCsv = useMemo(() => {
-    const set = new Set<string>();
-    for (const o of orders) if (o.productId) set.add(o.productId);
-    return Array.from(set).join(',');
-  }, [orders]);
+  const activeSourceProductIdsCsv = useMemo(() => getActiveSourceProductIdsCsv(orders), [orders]);
   /**
    * 关联产品模式外协主数据：后端对 OUTSOURCE 的 productIds 分支要求 orderId=null；
    * 若主查询只带 orderIds，会漏掉「纯产品维度」写入的历史外协，主页聚合只剩少量产品。
@@ -338,10 +333,13 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   /** 详情弹窗内 docRecords 需与打印兜底一致：合并流水弹窗附带的同单号行，避免正文为空 */
   const recordsForFlowDetailModal = useMemo(() => {
     if (!flowDetailKey) return records;
+    const fromPanel = records.filter(r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey);
     const extraMatch = (flowDetailExtraRecords ?? []).filter(
       r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey,
     );
     if (extraMatch.length === 0) return records;
+    /** 主流水已含该单时不再叠加 extra，避免编辑保存后旧 extra 与新 records 双计 */
+    if (fromPanel.length > 0) return records;
     const byId = new Map<string, ProductionOpRecord>(records.map(r => [r.id, r]));
     for (const r of extraMatch) byId.set(r.id, r);
     return Array.from(byId.values());
@@ -389,7 +387,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
                   nodeId,
                   productId,
                   productMilestoneProgresses || [],
-                  (processSequenceMode ?? 'free') as ProcessSequenceMode,
+                  (processSequenceMode ?? 'sequential') as ProcessSequenceMode,
                   getDr,
                   pmpByKey,
                   orders,
@@ -419,7 +417,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
               nodeId,
               blockOrders,
               productMilestoneProgresses,
-              (processSequenceMode ?? 'free') as ProcessSequenceMode,
+              (processSequenceMode ?? 'sequential') as ProcessSequenceMode,
               getDr,
               orders,
             );
@@ -1007,6 +1005,20 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       return;
     }
     const receiveCollab = outsourceCustomCollabPart(receiveCustomValues, 'receive');
+    const weightByEntryKey = buildWeightMapForKeyedEntries(
+      entries.flatMap(([key, qty]) => {
+        const resolved = resolveReceiveEntry(key);
+        if (!resolved) return [];
+        return [{
+          entryKey: key,
+          baseKey: resolved.baseKey,
+          nodeId: resolved.row.nodeId,
+          quantity: Number(qty),
+        }];
+      }),
+      receiveFormWeights,
+      nodeId => !!globalNodes.find(n => n.id === nodeId)?.enableWeightOnReport,
+    );
     const createdReceiveBatch: ProductionOpRecord[] = [];
     for (const [key, qty] of entries) {
       const resolved = resolveReceiveEntry(key);
@@ -1015,15 +1027,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       const nodeId = row.nodeId;
       const unitPrice = receiveFormUnitPrices[baseKey] ?? 0;
       const amount = qty * unitPrice;
-      const nodeEnablesWeight = !!globalNodes.find(n => n.id === nodeId)?.enableWeightOnReport;
-      const rowTotalWeight = receiveFormWeights[baseKey] ?? 0;
-      let weightForThis: number | undefined;
-      if (nodeEnablesWeight && rowTotalWeight > 0) {
-        const rowTotalQty = Object.entries(receiveFormQuantities)
-          .filter(([k]) => k === baseKey || k.startsWith(`${baseKey}${RECEIVE_VARIANT_SEP}`) || k.startsWith(`${baseKey}|`))
-          .reduce((s, [, q]) => s + (q as number), 0);
-        weightForThis = rowTotalQty > 0 ? rowTotalWeight * (qty / rowTotalQty) : rowTotalWeight;
-      }
+      const weightForThis = weightByEntryKey.get(key);
       const baseRecord = {
         id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         type: 'OUTSOURCE' as const,
@@ -1673,7 +1677,11 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
             <OutsourceFlowDocumentDetailModal
               layout="docPhase"
               phase={flowDocPhase}
-              onPhaseDetail={() => setFlowDocPhase('detail')}
+              onAfterSave={() => {
+                setFlowDetailKey(null);
+                setFlowDocPhase('detail');
+                setFlowDetailExtraRecords(null);
+              }}
               productionLinkMode={productionLinkMode}
               flowDetailKey={flowDetailKey}
               records={recordsForFlowDetailModal}

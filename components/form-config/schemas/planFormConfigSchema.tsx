@@ -139,7 +139,7 @@ export const planFormConfigSchema: FormConfigSchema<PlanFormSettings> = {
           toggle: {
             label: '在计划单列表显示「打印」按钮',
             key: 'showPrintButton',
-            defaultChecked: true,
+            defaultChecked: false,
           },
         },
         {
@@ -151,7 +151,7 @@ export const planFormConfigSchema: FormConfigSchema<PlanFormSettings> = {
           toggle: {
             label: '在计划详情中显示「追溯码」区块',
             key: 'showPlanDetailTraceSection',
-            defaultChecked: true,
+            defaultChecked: false,
           },
         },
       ],

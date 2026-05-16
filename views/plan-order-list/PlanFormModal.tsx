@@ -25,7 +25,7 @@ import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMa
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import { CustomerSelect } from '../../components/CustomerSelect';
-import { sectionTitleClass } from '../../styles/uiDensity';
+import { formStandardControlClass, formStandardLabelClass, sectionTitleClass } from '../../styles/uiDensity';
 import { localTodayYmd } from '../../utils/localDateTime';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 
@@ -205,7 +205,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2 space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">目标生产品项</label>
+                  <label className={formStandardLabelClass}>目标生产品项</label>
                   <div className="flex items-stretch gap-4">
                     {selectedProduct && (
                       <div className="shrink-0">
@@ -231,7 +231,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
                 </div>
                 {planFormSettings.standardFields.find(f => f.id === 'customer')?.showInCreate !== false && productionLinkMode !== 'product' && (
                   <div className="md:col-span-2 space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">计划客户（合作单位）</label>
+                    <label className={formStandardLabelClass}>计划客户（合作单位）</label>
                     <CustomerSelect
                       options={partners}
                       categories={partnerCategories}
@@ -250,18 +250,18 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
                       type="date"
                       value={form.dueDate}
                       onChange={e => setForm({ ...form, dueDate: e.target.value })}
-                      className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]"
+                      className={formStandardControlClass}
                     />
                   </div>
                 )}
                 {planFormSettings.customFields.filter(f => f.showInCreate).map(cf => (
                   <div key={cf.id} className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{cf.label}</label>
+                    <label className={formStandardLabelClass}>{cf.label}</label>
                     <PlanFormCustomFieldInput
                       cf={cf}
                       value={form.customData?.[cf.id]}
                       onChange={next => setForm({ ...form, customData: { ...form.customData, [cf.id]: next } })}
-                      controlClassName="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none h-[52px]"
+                      controlClassName={formStandardControlClass}
                       onFilePreview={onFilePreview}
                     />
                   </div>
@@ -293,7 +293,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
                   </div>
                 ) : (
                   <div className="max-w-xs space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">计划生产总量 ({getUnitName(form.productId)})</label>
+                    <label className={formStandardLabelClass}>计划生产总量 ({getUnitName(form.productId)})</label>
                     <input
                       type="number"
                       value={form.singleQuantity || ''}

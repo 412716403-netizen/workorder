@@ -16,7 +16,20 @@ import type {
 } from '../types';
 import { toLocalDateYmd } from '../utils/localDateTime';
 import { fetchAllPages, type PaginatedLike } from '../utils/fetchAllPages';
+import {
+  buildPartnerReconBalances,
+  summarizePartnerReconBalances,
+  type PartnerReconRow,
+} from '../utils/partnerReconLedger';
+import {
+  buildPartnerProductLineReconList,
+  filterPartnerProductReconList,
+  type PartnerProductReconRow,
+} from '../utils/partnerReconProductLedger';
 import * as api from '../services/api';
+
+export type { PartnerReconRow, PartnerProductReconRow };
+export type PartnerReconViewMode = 'document' | 'product';
 
 /**
  * Phase 3.A：对账场景按 partner/worker + 日期范围窄拉后端数据，避免依赖
@@ -36,11 +49,6 @@ function unwrapList<T>(resp: T[] | PaginatedLike<T> | null | undefined, fallback
   return fallback;
 }
 
-/** 合作单位对账：统一展示行（采购单/销售单/外协收回/收款单/付款单） */
-export type PartnerReconRow =
-  | { source: 'finance'; rec: FinanceRecord }
-  | { source: 'psi'; docType: string; docNo: string; timestamp: string; partner: string; amount: number; operator?: string; note?: string }
-  | { source: 'prod'; rec: ProductionOpRecord };
 
 /** 报工结算对账：统一展示行（报工单、返工报工、收款单、付款单） */
 export type SettlementReconRow =
@@ -92,6 +100,7 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
   const [reconQueryDateTo, setReconQueryDateTo] = useState('');
   const [reconQueryPartnerId, setReconQueryPartnerId] = useState('');
   const [reconQueryWorkerId, setReconQueryWorkerId] = useState('');
+  const [partnerReconViewMode, setPartnerReconViewMode] = useState<PartnerReconViewMode>('document');
 
   const reconHasFilter = type === 'RECONCILIATION' && (reconciliationSubTab === 'partner' ? !!reconQueryPartnerId : !!reconQueryWorkerId);
   const reconQueryDateFromT = reconQueryDateFrom.trim();
@@ -228,6 +237,27 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
   const reconLoading =
     (isReconcilePartner && (partnerFinanceQuery.isLoading || partnerPsiQuery.isLoading || partnerProdQuery.isLoading)) ||
     (isReconcileWorker && (workerFinanceQuery.isLoading || workerReworkProdQuery.isLoading));
+
+  /** 合作单位对账：开始日期之前的应收余额（上期欠款） */
+  const partnerOpeningBalanceQuery = useQuery({
+    queryKey: ['recon', 'opening', reconQueryPartnerId, reconQueryDateFromT],
+    queryFn: () =>
+      api.finance.partnerOpeningBalance({
+        partnerName,
+        partnerId: reconQueryPartnerId,
+        before: `${reconQueryDateFromT}T00:00:00.000Z`,
+      }),
+    enabled: isReconcilePartner && !!reconQueryDateFromT,
+    staleTime: RECON_STALE_MS,
+  });
+
+  const partnerOpeningBalance = useMemo(() => {
+    if (!reconQueryDateFromT) return 0;
+    return partnerOpeningBalanceQuery.data?.previousBalance ?? 0;
+  }, [reconQueryDateFromT, partnerOpeningBalanceQuery.data]);
+
+  const partnerOpeningBalanceLoading =
+    isReconcilePartner && !!reconQueryDateFromT && partnerOpeningBalanceQuery.isLoading;
 
   const inFinanceDateRangeQuery = useCallback((ts: string, from: string, to: string) => {
     const d = toLocalDateYmd(ts);
@@ -489,29 +519,60 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
     });
   }, [type, reconciliationSubTab, settlementReconListFiltered]);
 
+  const partnerReconAllWithBalance = useMemo(() => {
+    if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'partner' || partnerReconList.length === 0) return [];
+    return buildPartnerReconBalances(partnerReconList, partnerOpeningBalance);
+  }, [type, reconciliationSubTab, partnerReconList, partnerOpeningBalance]);
+
   const partnerReconWithBalance = useMemo(() => {
-    if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'partner' || partnerReconListFiltered.length === 0) return [];
-    let running = 0;
-    return partnerReconListFiltered.map(row => {
-      let inc = 0;
-      let dec = 0;
-      if (row.source === 'finance') {
-        if (row.rec.type === 'RECEIPT') dec = row.rec.amount;
-        else if (row.rec.type === 'PAYMENT') inc = row.rec.amount;
-      } else if (row.source === 'psi') {
-        if (row.docType === '采购单') dec = Math.abs(row.amount);
-        else if (row.docType === '外协收回') dec = Math.abs(row.amount);
-        else if (row.docType === '销售单') {
-          if (row.amount >= 0) inc = row.amount;
-          else dec = Math.abs(row.amount);
-        }
-      } else if (row.source === 'prod') {
-        dec = Number(row.rec.amount) || 0;
-      }
-      running += inc - dec;
-      return { row, receivableInc: inc, receivableDec: dec, balance: running };
+    if (partnerReconAllWithBalance.length === 0) return [];
+    const q = debouncedFinanceListSearch.trim();
+    if (!q) return partnerReconAllWithBalance;
+    const filtered = new Set(partnerReconListFiltered);
+    return partnerReconAllWithBalance.filter(({ row }) => filtered.has(row));
+  }, [partnerReconAllWithBalance, partnerReconListFiltered, debouncedFinanceListSearch]);
+
+  const partnerReconSummary = useMemo(() => {
+    if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'partner' || !reconHasFilter || !reconQueryDateFromT) {
+      return null;
+    }
+    return summarizePartnerReconBalances(partnerReconList, partnerOpeningBalance);
+  }, [
+    type,
+    reconciliationSubTab,
+    reconHasFilter,
+    reconQueryDateFromT,
+    partnerReconList,
+    partnerOpeningBalance,
+  ]);
+
+  const partnerProductReconList = useMemo((): PartnerProductReconRow[] => {
+    if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'partner' || !reconQueryPartnerId) return [];
+    return buildPartnerProductLineReconList({
+      documentRows: partnerReconList,
+      psiRecords: effectivePsiRecords,
+      prodRecords: effectivePartnerProdRecords,
+      productMap,
+      partnerName,
+      partnerId: reconQueryPartnerId,
+      partnerOpeningBalance,
     });
-  }, [type, reconciliationSubTab, partnerReconListFiltered]);
+  }, [
+    type,
+    reconciliationSubTab,
+    reconQueryPartnerId,
+    partnerReconList,
+    effectivePsiRecords,
+    effectivePartnerProdRecords,
+    productMap,
+    partnerName,
+    partnerOpeningBalance,
+  ]);
+
+  const partnerProductReconListFiltered = useMemo(
+    () => filterPartnerProductReconList(partnerProductReconList, debouncedFinanceListSearch),
+    [partnerProductReconList, debouncedFinanceListSearch],
+  );
 
   return {
     reconciliationSubTab,
@@ -541,6 +602,12 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
     partnerReconListFiltered,
     settlementReconListFiltered,
     partnerReconWithBalance,
+    partnerReconSummary,
+    partnerOpeningBalanceLoading,
+    partnerReconViewMode,
+    setPartnerReconViewMode,
+    partnerProductReconList,
+    partnerProductReconListFiltered,
     settlementReconWithBalance,
     displayRecords,
     tableSourceRecords,

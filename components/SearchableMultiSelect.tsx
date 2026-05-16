@@ -43,7 +43,7 @@ export const SearchableMultiSelect = ({
     <div className="relative w-full" ref={containerRef}>
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full bg-white border border-slate-200 rounded-xl flex flex-wrap gap-1.5 cursor-pointer hover:border-indigo-400 hover:ring-2 hover:ring-indigo-50 transition-all min-h-[46px] ${variant === 'compact' ? 'p-2' : 'p-3'}`}
+        className={`w-full bg-white border border-slate-200 rounded-lg flex flex-wrap gap-1.5 cursor-pointer hover:border-indigo-400 hover:ring-2 hover:ring-indigo-50 transition-all min-h-9 ${variant === 'compact' ? 'p-2' : 'p-3'}`}
       >
         {selectedIds.length === 0 ? (
           <span className="text-slate-300 text-[11px] font-bold flex items-center gap-1.5 py-1">
@@ -179,7 +179,7 @@ export const SearchableMultiSelectWithProcessTabs = ({
     <div className="relative w-full" ref={containerRef}>
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full bg-white border border-slate-200 rounded-xl flex flex-wrap gap-1.5 cursor-pointer hover:border-indigo-400 hover:ring-2 hover:ring-indigo-50 transition-all min-h-[46px] ${variant === 'compact' ? 'p-2' : 'p-3'}`}
+        className={`w-full bg-white border border-slate-200 rounded-lg flex flex-wrap gap-1.5 cursor-pointer hover:border-indigo-400 hover:ring-2 hover:ring-indigo-50 transition-all min-h-9 ${variant === 'compact' ? 'p-2' : 'p-3'}`}
       >
         {selectedIds.length === 0 ? (
           <span className="text-slate-300 text-[11px] font-bold flex items-center gap-1.5 py-1">

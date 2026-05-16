@@ -2,16 +2,17 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScanLine, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useScanGun } from '../../hooks/useScanGun';
-import { itemCodesApi } from '../../services/api';
+import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
 import {
+  getUnrecognizedScanImeHint,
   parseScanPayload,
   rewriteScanApiErrorForIme,
-  scanRawLooksLikeImeCorruption,
   type ScanPayload,
 } from '../../utils/scanPayload';
 import { normalizeScanPayloadForIntent, type ScanIntent } from '../../utils/scanBatchIntent';
 import type { ScanBatchRowDetail } from '../../utils/scanBatchRowDetail';
 import { playScanErrorSound, playScanSuccessSound } from '../../utils/scanFeedbackSound';
+import { checkScanSessionOverlap } from '../../utils/scanSessionOverlap';
 
 export type { ScanBatchRowDetail } from '../../utils/scanBatchRowDetail';
 export type { ScanIntent } from '../../utils/scanBatchIntent';
@@ -72,24 +73,54 @@ export function ScanBatchSessionModal({
   const [applying, setApplying] = useState(false);
   const [scanIntent, setScanIntent] = useState<ScanIntent>(defaultScanIntent);
   const keysRef = useRef<Set<string>>(new Set());
+  /**
+   * 会话内「批次 ⇄ 单品」重叠拦截。三个集合互不相同：
+   * - `sessionItemCodeIds`：会话中已加入的单品 ID（拒同一单品重复扫入）。
+   * - `sessionBatchScannedIds`：「按批次码扫入」的批次 ID（拒重复扫同一批次，
+   *   也拒之后再扫该批次包含的任何单品）。
+   * - `sessionItemParentBatchIds`：会话内由「单品码」带出的父批次 ID（拒之后
+   *   再扫整批，但允许同一父批次下多个单品分别扫入）。
+   * 规则：
+   *   扫单品 → 若 `sessionBatchScannedIds.has(parentBatchId)` 则拒；
+   *   扫批次 → 若 `sessionBatchScannedIds.has(batchId)` 或
+   *            `sessionItemParentBatchIds.has(batchId)` 则拒。
+   */
+  const sessionItemCodeIdsRef = useRef<Set<string>>(new Set());
+  const sessionBatchScannedIdsRef = useRef<Set<string>>(new Set());
+  const sessionItemParentBatchIdsRef = useRef<Set<string>>(new Set());
   const serialChainRef = useRef<Promise<void>>(Promise.resolve());
   const resolveRef = useRef(resolveRowPreview);
   resolveRef.current = resolveRowPreview;
+
+  const resetSessionDedup = useCallback(() => {
+    keysRef.current = new Set();
+    sessionItemCodeIdsRef.current = new Set();
+    sessionBatchScannedIdsRef.current = new Set();
+    sessionItemParentBatchIdsRef.current = new Set();
+  }, []);
 
   useEffect(() => {
     if (!open) {
       setRows([]);
       setManual('');
-      keysRef.current = new Set();
+      resetSessionDedup();
       return;
     }
     if (showScanIntentToggle) {
       setScanIntent(defaultScanIntent);
     }
-  }, [open, showScanIntentToggle, defaultScanIntent]);
+  }, [open, showScanIntentToggle, defaultScanIntent, resetSessionDedup]);
 
   const pushRow = useCallback((payload: ScanPayload, detail: ScanBatchRowDetail) => {
-    setRows(prev => [...prev, { id: nextRowId(), payload, detail }]);
+    if (detail.itemCodeId) sessionItemCodeIdsRef.current.add(detail.itemCodeId);
+    if (detail.virtualBatchId) {
+      if (payload.kind === 'BATCH') {
+        sessionBatchScannedIdsRef.current.add(detail.virtualBatchId);
+      } else {
+        sessionItemParentBatchIdsRef.current.add(detail.virtualBatchId);
+      }
+    }
+    setRows(prev => [{ id: nextRowId(), payload, detail }, ...prev]);
   }, []);
 
   const ingestRaw = useCallback(
@@ -97,9 +128,7 @@ export function ScanBatchSessionModal({
       const parsed = parseScanPayload(raw);
       if (parsed.kind === 'UNKNOWN' || !parsed.token) {
         const preview = `${raw.slice(0, 30)}${raw.length > 30 ? '…' : ''}`;
-        const imeHint = scanRawLooksLikeImeCorruption(raw)
-          ? '检测到可能为中文输入法误转（如「。」「—」或全角字母数字）。请切换到英文（半角）输入法后重扫。'
-          : undefined;
+        const imeHint = getUnrecognizedScanImeHint(raw);
         toast.error(`无法识别的扫码内容：${preview}`, imeHint ? { description: imeHint } : undefined);
         playScanErrorSound();
         return;
@@ -118,9 +147,16 @@ export function ScanBatchSessionModal({
                   }
                   return r;
                 },
+                scanBatchByToken: async t => {
+                  const r = await planVirtualBatchesApi.scan(t);
+                  if (r.kind !== 'VIRTUAL_BATCH') {
+                    throw new Error('扫码返回类型异常');
+                  }
+                  return r;
+                },
               });
               if (!n.ok) {
-                toast.error(n.message);
+                toast.error(rewriteScanApiErrorForIme(raw, n.message));
                 playScanErrorSound();
                 return;
               }
@@ -141,6 +177,25 @@ export function ScanBatchSessionModal({
                 const detail = await resolver(payload);
                 if (!detail) {
                   keysRef.current.delete(key);
+                  playScanErrorSound();
+                  return;
+                }
+                // 会话内「批次 ⇄ 单品」重叠拦截（纯函数判定）
+                const overlap = checkScanSessionOverlap(
+                  {
+                    itemCodeIds: sessionItemCodeIdsRef.current,
+                    batchScannedIds: sessionBatchScannedIdsRef.current,
+                    itemParentBatchIds: sessionItemParentBatchIdsRef.current,
+                  },
+                  {
+                    kind: payload.kind,
+                    itemCodeId: detail.itemCodeId ?? null,
+                    virtualBatchId: detail.virtualBatchId ?? null,
+                  },
+                );
+                if (overlap.overlaps) {
+                  keysRef.current.delete(key);
+                  toast.error(overlap.message ?? '该码与已扫入的批次/单品重叠');
                   playScanErrorSound();
                   return;
                 }
@@ -177,6 +232,24 @@ export function ScanBatchSessionModal({
       const row = prev.find(r => r.id === id);
       if (row) {
         keysRef.current.delete(rowKey(row.payload));
+        if (row.detail.itemCodeId) sessionItemCodeIdsRef.current.delete(row.detail.itemCodeId);
+        if (row.detail.virtualBatchId) {
+          if (row.payload.kind === 'BATCH') {
+            // 同一批次理论上只被一行批次码引用，安全删除
+            sessionBatchScannedIdsRef.current.delete(row.detail.virtualBatchId);
+          } else {
+            // 同一父批次可能被多行单品引用，仅当列表中已无任何其他同父单品时再移除
+            const stillReferenced = prev.some(
+              r =>
+                r.id !== id &&
+                r.payload.kind === 'ITEM' &&
+                r.detail.virtualBatchId === row.detail.virtualBatchId,
+            );
+            if (!stillReferenced) {
+              sessionItemParentBatchIdsRef.current.delete(row.detail.virtualBatchId);
+            }
+          }
+        }
       }
       return prev.filter(r => r.id !== id);
     });
@@ -184,8 +257,8 @@ export function ScanBatchSessionModal({
 
   const clearAll = useCallback(() => {
     setRows([]);
-    keysRef.current = new Set();
-  }, []);
+    resetSessionDedup();
+  }, [resetSessionDedup]);
 
   const handleConfirm = useCallback(async () => {
     if (rows.length === 0) {
@@ -300,7 +373,12 @@ export function ScanBatchSessionModal({
                       <span className="shrink-0 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-black uppercase text-indigo-700">
                         {r.detail.kindLabel}
                       </span>
-                      <span className="min-w-0 text-xs font-black text-slate-900">{r.detail.productName}</span>
+                      <span className="min-w-0 text-xs font-black text-slate-900">
+                        {r.detail.productName}
+                        {r.detail.codeLabel ? (
+                          <span className="font-mono font-bold text-slate-600"> ({r.detail.codeLabel})</span>
+                        ) : null}
+                      </span>
                     </div>
                     <div className="text-[11px] leading-snug text-slate-600">
                       <span>

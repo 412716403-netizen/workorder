@@ -20,6 +20,7 @@ import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { SupplierSelect } from '../../components/SupplierSelect';
 import {
   sectionTitleClass,
+  formStandardLabelClass,
   psiOrderBillFormSectionStackClass,
   psiOrderBillFormDetailSplitClass,
   psiOrderBillFormSectionIconIndigoClass,
@@ -596,7 +597,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
                 </div>
                 {reworkActionMode === 'outsource_rework' && (
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">外协工厂</label>
+                    <label className={formStandardLabelClass}>外协工厂</label>
                     <SupplierSelect
                       options={partners}
                       categories={partnerCategories}
@@ -628,7 +629,7 @@ const ReworkDefectiveActionModal: React.FC<ReworkDefectiveActionModalProps> = ({
                       ) : null}
                       <div className="flex flex-wrap items-end gap-3">
                         <div className="w-28 space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">
+                          <label className={formStandardLabelClass}>
                             {reworkActionMode === 'scrap' ? '报损数量' : reworkActionMode === 'outsource_rework' ? '委外返工数量' : '返工数量'}
                           </label>
                           <div className="flex items-center gap-1.5">

@@ -78,6 +78,11 @@ import { hasModulePerm } from '../utils/hasModulePerm';
 import { useStockSnapshot } from '../hooks/useStockSnapshot';
 import { usePsiOpsRecordsList } from '../hooks/usePsiOpsRecordsList';
 import { productHasColorSizeMatrix } from '../utils/productColorSize';
+import {
+  groupRecordsByDocNumber,
+  sumReceivedByOrderLine,
+  formatPsiQtyDisplay,
+} from '../utils/psiOpsAggregators';
 
 import {
   formatPsiDocNumForList,
@@ -220,11 +225,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
     return u?.name ?? 'PCS';
   };
   /** 数量列展示：转为数字去掉前导零，如 "035" 千克 -> 35 千克 */
-  const formatQtyDisplay = (q: number | string | undefined | null): number => {
-    if (q == null || q === '') return 0;
-    const n = Number(q);
-    return Number.isFinite(n) ? n : 0;
-  };
+  const formatQtyDisplay = formatPsiQtyDisplay;
 
   // 仓库管理子视图状态已迁移至 WarehousePanel
 
@@ -325,26 +326,13 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
   const { getStock, getStockVariant, getNullVariantProdStock, getStocktakeAdjust, getVariantDisplayQty } = useStockSnapshot();
   const generateSBDocNumberForPartner = (partnerId: string, partnerName: string): string =>
     nextSalesBillDocNumber(partners, recordsList, partnerId, partnerName);
-  const allPOByGroups = useMemo(() => {
-    const filtered = recordsList.filter(r => r.type === 'PURCHASE_ORDER');
-    const groups: Record<string, any[]> = {};
-    filtered.forEach(r => {
-      const key = r.docNumber;
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(r);
-    });
-    return groups;
-  }, [recordsList]);
+  const allPOByGroups = useMemo(
+    () => groupRecordsByDocNumber(recordsList, 'PURCHASE_ORDER'),
+    [recordsList],
+  );
 
   // 按 (sourceOrderNumber, sourceLineId) 汇总采购单已入库数量
-  const receivedByOrderLine = useMemo(() => {
-    const map: Record<string, number> = {};
-    recordsList.filter(r => r.type === 'PURCHASE_BILL' && r.sourceOrderNumber && r.sourceLineId).forEach(r => {
-      const key = `${r.sourceOrderNumber}::${r.sourceLineId}`;
-      map[key] = (map[key] ?? 0) + (r.quantity ?? 0);
-    });
-    return map;
-  }, [recordsList]);
+  const receivedByOrderLine = useMemo(() => sumReceivedByOrderLine(recordsList), [recordsList]);
 
 
 
@@ -387,16 +375,10 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
     });
   }, [recordsList, type, products, warehouses]);
 
-  const groupedRecords = useMemo(() => {
-    const filtered = recordsList.filter(r => r.type === type);
-    const groups: Record<string, any[]> = {};
-    filtered.forEach(r => {
-      const key = r.docNumber || 'UNGROUPED-' + r.id;
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(r);
-    });
-    return groups;
-  }, [recordsList, type]);
+  const groupedRecords = useMemo(
+    () => groupRecordsByDocNumber(recordsList, type),
+    [recordsList, type],
+  );
 
   /** 单据列表：销售单优先按业务创建日（行 createdAt）倒序，其余按组内制单时间倒序；无有效时间殿后，再按单号 */
   const sortedGroupedEntries = useMemo(() => {

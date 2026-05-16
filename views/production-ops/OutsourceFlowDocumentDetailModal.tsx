@@ -43,6 +43,15 @@ import {
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { sortVariantsByColorThenSize } from '../../utils/sortVariantsByProduct';
 import { DocPhaseEditToolbarPortalContext } from '../../components/DocPhaseModal';
+import {
+  buildWeightMapForKeyedEntries,
+  formatWeightKgDisplay,
+  roundWeightKg,
+} from '../../utils/reportBatchWeightHelpers';
+import {
+  propagateLineUnitPriceToEntries,
+  resolveOutsourceReceiveLineUnitPrice,
+} from '../../utils/outsourceReceiveUnitPrice';
 
 export interface OutsourceFlowDocumentDetailModalProps {
   productionLinkMode: 'order' | 'product';
@@ -72,6 +81,8 @@ export interface OutsourceFlowDocumentDetailModalProps {
   phase?: 'detail' | 'edit';
   /** 保存成功后回到详情态（由父级把 phase 设为 detail） */
   onPhaseDetail?: () => void;
+  /** 保存成功后回调（默认 docPhase 布局会关闭弹窗，避免 extra records 与刷新数据双计） */
+  onAfterSave?: () => void;
 }
 
 const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModalProps> = ({
@@ -98,6 +109,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   layout = 'standalone',
   phase = 'detail',
   onPhaseDetail,
+  onAfterSave,
 }) => {
   const { currentUser, tenantCtx } = useAuth();
   const flowDetailOperatorFallback = currentOperatorDisplayName(currentUser);
@@ -106,9 +118,34 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   const [flowDetailEditMode, setFlowDetailEditMode] = useState(false);
   const editActive = layout === 'docPhase' ? phase === 'edit' : flowDetailEditMode;
   const docPhaseInitKeyRef = useRef<string | null>(null);
+  /** 保存时同步读取，避免输入框 onChange 尚未 commit 就点保存导致单价丢失 */
+  const flowDetailQuantitiesRef = useRef<Record<string, number>>({});
+  const flowDetailUnitPricesRef = useRef<Record<string, number>>({});
   const [flowDetailEditPartner, setFlowDetailEditPartner] = useState('');
   const [flowDetailQuantities, setFlowDetailQuantities] = useState<Record<string, number>>({});
   const [flowDetailUnitPrices, setFlowDetailUnitPrices] = useState<Record<string, number>>({});
+  const patchFlowDetailQuantities = useCallback((patch: Record<string, number>) => {
+    setFlowDetailQuantities(prev => {
+      const next = { ...prev, ...patch };
+      flowDetailQuantitiesRef.current = next;
+      return next;
+    });
+  }, []);
+  const setLineUnitPrice = useCallback((lineKey: string, rawValue: string) => {
+    const trimmed = rawValue.trim();
+    const parsed = trimmed === '' ? undefined : parseFloat(trimmed);
+    const price = parsed != null && Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+    setFlowDetailUnitPrices(prev => {
+      const next = propagateLineUnitPriceToEntries(
+        prev,
+        lineKey,
+        price,
+        Object.keys(flowDetailQuantitiesRef.current),
+      );
+      flowDetailUnitPricesRef.current = next;
+      return next;
+    });
+  }, []);
   /** 收回单、工序启用称重：按明细行 key（`产品|工序` 或 `工单|工序`）编辑交货总重 kg，保存时按数量比分摊到各规格记录 */
   const [flowDetailLineWeights, setFlowDetailLineWeights] = useState<Record<string, number>>({});
   const [flowDetailEditCustom, setFlowDetailEditCustom] = useState<Record<string, unknown>>({});
@@ -169,6 +206,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
         : `${r.orderId}|${r.nodeId}${r.variantId ? '|' + r.variantId : ''}`;
       initQty[k] = (initQty[k] || 0) + r.quantity;
     });
+    flowDetailQuantitiesRef.current = initQty;
     setFlowDetailQuantities(initQty);
     const isRecv = firstD.status === '已收回';
     if (isRecv) {
@@ -177,13 +215,13 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
         const k = isProductMode
           ? `${r.productId}|${r.nodeId}${r.variantId ? '|' + r.variantId : ''}`
           : `${r.orderId}|${r.nodeId}${r.variantId ? '|' + r.variantId : ''}`;
-        initUnitPrice[k] = r.unitPrice ?? 0;
+        const up = r.unitPrice != null ? Number(r.unitPrice) : NaN;
+        if (Number.isFinite(up) && up >= 0) initUnitPrice[k] = up;
       });
       docRecords.forEach(r => {
-        if (r.variantId) {
-          const base = isProductMode ? `${r.productId}|${r.nodeId}` : `${r.orderId}|${r.nodeId}`;
-          if (initUnitPrice[base] == null) initUnitPrice[base] = r.unitPrice ?? 0;
-        }
+        const base = isProductMode ? `${r.productId}|${r.nodeId}` : `${r.orderId}|${r.nodeId}`;
+        const up = r.unitPrice != null ? Number(r.unitPrice) : NaN;
+        if (Number.isFinite(up) && up >= 0 && initUnitPrice[base] == null) initUnitPrice[base] = up;
       });
       const priceIdx = buildOutsourceReceiveLastPriceIndex(records, { excludeDocNo: flowDetailKey });
       if (priceIdx.size > 0) {
@@ -197,6 +235,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
           if (last != null) initUnitPrice[k] = last;
         });
       }
+      flowDetailUnitPricesRef.current = initUnitPrice;
       setFlowDetailUnitPrices(initUnitPrice);
       const initWt: Record<string, number> = {};
       const byLineW = new Map<string, ProductionOpRecord[]>();
@@ -211,10 +250,11 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
         const nid = recs[0]?.nodeId;
         if (!nid || !globalNodes.find(n => n.id === nid)?.enableWeightOnReport) return;
         const sum = recs.reduce((s, r) => s + (Number(r.weight) || 0), 0);
-        if (sum > 0) initWt[gk] = sum;
+        if (sum > 0) initWt[gk] = roundWeightKg(sum);
       });
       setFlowDetailLineWeights(initWt);
     } else {
+      flowDetailUnitPricesRef.current = {};
       setFlowDetailUnitPrices({});
       setFlowDetailLineWeights({});
     }
@@ -228,6 +268,8 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   useEffect(() => {
     if (layout !== 'docPhase' || phase !== 'detail') return;
     docPhaseInitKeyRef.current = null;
+    flowDetailUnitPricesRef.current = {};
+    flowDetailQuantitiesRef.current = {};
     setFlowDetailUnitPrices({});
     setFlowDetailLineWeights({});
     setFlowDetailEditCustom({});
@@ -251,16 +293,23 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
       !!nodeId && !!globalNodes.find(n => n.id === nodeId)?.enableWeightOnReport;
     const partnerName = (flowDetailEditPartner || '').trim();
     if (!partnerName) return;
-    const entries = (Object.entries(flowDetailQuantities) as [string, number][]).filter(([, qty]) => qty > 0);
+    const qtySnapshot = flowDetailQuantitiesRef.current;
+    const unitPricesSnapshot = flowDetailUnitPricesRef.current;
+    const entries = (Object.entries(qtySnapshot) as [string, number][]).filter(([, qty]) => qty > 0);
     if (entries.length === 0) return;
     const toDelete = isReceiveDocSave ? docRecords : docRecords.filter(r => r.status !== '已收回');
-    const lineQtyTotals = new Map<string, number>();
-    entries.forEach(([k, q]) => {
-      const p = k.split('|');
-      if (p.length < 2) return;
-      const bk = `${p[0]}|${p[1]}`;
-      lineQtyTotals.set(bk, (lineQtyTotals.get(bk) ?? 0) + Number(q));
-    });
+    const weightByEntryKey = isReceiveDocSave
+      ? buildWeightMapForKeyedEntries(
+          entries.map(([key, qty]) => {
+            const parts = key.split('|');
+            const nodeId = parts[1] ?? '';
+            const bk = parts.length >= 2 ? `${parts[0]}|${nodeId}` : key;
+            return { entryKey: key, baseKey: bk, nodeId, quantity: Number(qty) };
+          }),
+          flowDetailLineWeights,
+          nodeId => nodeUsesWeight(nodeId),
+        )
+      : new Map<string, number>();
     let preservedCollabData: Record<string, unknown> | undefined;
     for (const rec of toDelete) {
       const cd = rec.collabData;
@@ -279,6 +328,10 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
     for (const rec of toDelete) await onDeleteRecord(rec.id);
     const timestamp = firstSave.timestamp || new Date().toLocaleString();
     const newStatus = isReceiveDocSave ? '已收回' : '加工中';
+    const resolveReceiveUnitPrice = (entryKey: string, baseKey: string): number | undefined => {
+      if (!isReceiveDocSave) return undefined;
+      return resolveOutsourceReceiveLineUnitPrice(unitPricesSnapshot, entryKey, baseKey);
+    };
     const outsourcePendingWrites: ProductionOpRecord[] = [];
     entries.forEach(([key, qty]) => {
       const parts = key.split('|');
@@ -287,16 +340,9 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
       if (isProductModeSave) {
         const productId = parts[0];
         const bk = parts.length >= 2 ? `${productId}|${nodeId}` : key;
-        const unitPrice = isReceiveDocSave ? (flowDetailUnitPrices[key] ?? flowDetailUnitPrices[bk] ?? 0) : undefined;
-        const amount = isReceiveDocSave && unitPrice != null ? Number(qty) * unitPrice : undefined;
-        const lineTotalW = isReceiveDocSave && nodeUsesWeight(nodeId) ? Math.max(0, Number(flowDetailLineWeights[bk]) || 0) : 0;
-        const lineTq = lineQtyTotals.get(bk) ?? 0;
-        const weightForThis =
-          isReceiveDocSave && nodeUsesWeight(nodeId) && lineTotalW > 0
-            ? lineTq > 0
-              ? lineTotalW * (Number(qty) / lineTq)
-              : lineTotalW
-            : undefined;
+        const unitPrice = resolveReceiveUnitPrice(key, bk);
+        const amount = unitPrice != null ? Number(qty) * unitPrice : undefined;
+        const weightForThis = weightByEntryKey.get(key);
         outsourcePendingWrites.push({
           id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           type: 'OUTSOURCE',
@@ -310,8 +356,8 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
           docNo: flowDetailKey,
           nodeId,
           variantId: variantId || undefined,
-          unitPrice: unitPrice || undefined,
-          amount: amount ?? undefined,
+          unitPrice,
+          amount,
           weight: weightForThis != null && weightForThis > 0 ? weightForThis : undefined,
           ...mergeCollab(preservedCollabData),
         } as ProductionOpRecord);
@@ -321,16 +367,9 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
       const bk = parts.length >= 2 ? `${orderId}|${nodeId}` : key;
       const order = orders.find(o => o.id === orderId);
       if (!order) return;
-      const unitPrice = isReceiveDocSave ? (flowDetailUnitPrices[key] ?? flowDetailUnitPrices[bk] ?? 0) : undefined;
-      const amount = isReceiveDocSave && unitPrice != null ? Number(qty) * unitPrice : undefined;
-      const lineTotalWOrd = isReceiveDocSave && nodeUsesWeight(nodeId) ? Math.max(0, Number(flowDetailLineWeights[bk]) || 0) : 0;
-      const lineTqOrd = lineQtyTotals.get(bk) ?? 0;
-      const weightOrd =
-        isReceiveDocSave && nodeUsesWeight(nodeId) && lineTotalWOrd > 0
-          ? lineTqOrd > 0
-            ? lineTotalWOrd * (Number(qty) / lineTqOrd)
-            : lineTotalWOrd
-          : undefined;
+      const unitPrice = resolveReceiveUnitPrice(key, bk);
+      const amount = unitPrice != null ? Number(qty) * unitPrice : undefined;
+      const weightOrd = weightByEntryKey.get(key);
       outsourcePendingWrites.push({
         id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         type: 'OUTSOURCE',
@@ -345,8 +384,8 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
         docNo: flowDetailKey,
         nodeId,
         variantId: variantId || undefined,
-        unitPrice: unitPrice || undefined,
-        amount: amount ?? undefined,
+        unitPrice,
+        amount,
         weight: weightOrd != null && weightOrd > 0 ? weightOrd : undefined,
         ...mergeCollab(preservedCollabData),
       } as ProductionOpRecord);
@@ -390,12 +429,20 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
       }
     }
 
+    flowDetailUnitPricesRef.current = {};
+    flowDetailQuantitiesRef.current = {};
     setFlowDetailUnitPrices({});
     setFlowDetailLineWeights({});
     setFlowDetailEditCustom({});
     setFlowDetailDeliveryDate('');
-    if (layout === 'docPhase') onPhaseDetail?.();
-    else setFlowDetailEditMode(false);
+    toast.success('已保存');
+    if (onAfterSave) {
+      onAfterSave();
+    } else if (layout === 'docPhase') {
+      onClose();
+    } else {
+      setFlowDetailEditMode(false);
+    }
   }, [
     docRecords,
     flowDetailEditPartner,
@@ -411,7 +458,8 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
     flowDetailOperatorFallback,
     productionLinkMode,
     layout,
-    onPhaseDetail,
+    onAfterSave,
+    onClose,
     confirm,
     globalNodes,
     flowDetailDeliveryDate,
@@ -453,7 +501,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   const nodeUsesWeightRow = (nodeId?: string) => !!nodeId && !!globalNodes.find(n => n.id === nodeId)?.enableWeightOnReport;
   const showWeightCol = isReceiveDoc && detailLines.some(d => nodeUsesWeightRow(d.records[0]?.nodeId));
   const outsourceDetailColCount = (showOrderCol ? 3 : 2) + (isReceiveDoc ? 2 : 0) + (showWeightCol ? 1 : 0);
-  const formatLineWeightKg = (sum: number) => (sum > 0 ? String(Number(sum.toFixed(4))) : '—');
+  const formatLineWeightKg = (sum: number) => formatWeightKgDisplay(sum);
 
   const getUnitName = (productId: string | undefined) => {
     if (!productId) return 'PCS';
@@ -787,7 +835,13 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                       return sum + q * up;
                     }, 0)
                   : lineRecords.reduce((s, r) => s + (r.amount ?? 0), 0);
-                const matrixLineUnitPriceDisplay = lineRecords[0]?.unitPrice != null ? Number(lineRecords[0].unitPrice).toFixed(2) : '—';
+                const matrixLineUnitPriceVal = lineRecords.reduce<number | null>((picked, r) => {
+                  if (picked != null) return picked;
+                  const n = r.unitPrice != null ? Number(r.unitPrice) : NaN;
+                  return Number.isFinite(n) && n >= 0 ? n : null;
+                }, null);
+                const matrixLineUnitPriceDisplay =
+                  matrixLineUnitPriceVal != null ? matrixLineUnitPriceVal.toFixed(2) : '—';
                 return (
                   <React.Fragment key={key}>
                     <tr>
@@ -831,7 +885,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                               min={0}
                               step={0.01}
                               value={flowDetailUnitPrices[key] ?? ''}
-                              onChange={e => setFlowDetailUnitPrices(prev => ({ ...prev, [key]: Number(e.target.value) || 0 }))}
+                              onChange={e => setLineUnitPrice(key, e.target.value)}
                               placeholder="0"
                               className="ml-auto block h-8 w-full max-w-[6.5rem] rounded-lg border border-slate-200 bg-white px-2 text-right text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
                             />
@@ -898,8 +952,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                           readOnly={!editActive}
                           balancedNumericLayout
                           onVariantQtyChange={(variantId, qty) => {
-                            const qtyKey = `${key}|${variantId}`;
-                            setFlowDetailQuantities(prev => ({ ...prev, [qtyKey]: qty }));
+                            patchFlowDetailQuantities({ [`${key}|${variantId}`]: qty });
                           }}
                         />
                       </td>
@@ -948,7 +1001,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                           type="number"
                           min={0}
                           value={flowDetailQuantities[key] ?? ''}
-                          onChange={e => setFlowDetailQuantities(prev => ({ ...prev, [key]: Number(e.target.value) || 0 }))}
+                          onChange={e => patchFlowDetailQuantities({ [key]: Number(e.target.value) || 0 })}
                           className="h-8 w-[5.25rem] shrink-0 rounded-lg border border-slate-200 bg-white px-2 text-right text-sm font-black text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500"
                         />
                       ) : (
@@ -965,11 +1018,15 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                           min={0}
                           step={0.01}
                           value={flowDetailUnitPrices[key] ?? ''}
-                          onChange={e => setFlowDetailUnitPrices(prev => ({ ...prev, [key]: Number(e.target.value) || 0 }))}
+                          onChange={e => setLineUnitPrice(key, e.target.value)}
                           className="ml-auto block h-8 w-full max-w-[6.5rem] rounded-lg border border-slate-200 bg-white px-2 text-right text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
                         />
                       ) : (
-                        <span className="font-bold text-slate-600">¥{lineUnitPrice.toFixed(2)}</span>
+                        <span className="font-bold text-slate-600">
+                          {lineRec?.unitPrice != null && Number.isFinite(Number(lineRec.unitPrice))
+                            ? `¥${Number(lineRec.unitPrice).toFixed(2)}`
+                            : '—'}
+                        </span>
                       )}
                     </td>
                   ) : null}

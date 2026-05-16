@@ -14,36 +14,38 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ScanPanel from '../components/scan/ScanPanel';
-import { rewriteScanApiErrorForIme, scanRawLooksLikeImeCorruption, type ScanPayload } from '../utils/scanPayload';
-import { itemCodesApi, planVirtualBatchesApi } from '../services/api';
-import type { ScanResult, TraceResult } from '../types';
+import { getUnrecognizedScanImeHint, rewriteScanApiErrorForIme, type ScanPayload } from '../utils/scanPayload';
+import { itemCodesApi } from '../services/api';
+import type { ScanItemCodeResult, TraceEvent, TraceResult } from '../types';
 import { formatItemCodeSerialLabel } from '../utils/serialLabels';
 import { playScanErrorSound, playScanSuccessSound } from '../utils/scanFeedbackSound';
 
 const TRACE_PAGE_SIZE = 50;
 
 /**
- * 产品追溯查询页：扫码后展示码信息、业务上下文和跨租户时间轴。
+ * 产品追溯查询页：仅支持扫单品码；扫码后展示码信息与单件口径生产链路时间轴。
  */
 export default function TraceView() {
   const [loading, setLoading] = useState(false);
-  const [scan, setScan] = useState<ScanResult | null>(null);
+  const [scan, setScan] = useState<ScanItemCodeResult | null>(null);
   const [trace, setTrace] = useState<TraceResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [traceToken, setTraceToken] = useState<string | null>(null);
-  const [traceKind, setTraceKind] = useState<'ITEM' | 'BATCH' | null>(null);
   const [tracePage, setTracePage] = useState(1);
   const [traceLoadingMore, setTraceLoadingMore] = useState(false);
   const [recentDisplayByRaw, setRecentDisplayByRaw] = useState<Record<string, string>>({});
 
-  const executeTrace = useCallback(async (payload: ScanPayload): Promise<ScanResult | null> => {
+  const executeTrace = useCallback(async (payload: ScanPayload): Promise<ScanItemCodeResult | null> => {
     if (payload.kind === 'UNKNOWN' || !payload.token) {
       const preview = `${payload.raw.slice(0, 32)}${payload.raw.length > 32 ? '…' : ''}`;
-      const imeHint = scanRawLooksLikeImeCorruption(payload.raw)
-        ? '检测到可能为中文输入法误转（如「。」「—」或全角字母数字）。请切换到英文（半角）输入法后重试。'
-        : undefined;
+      const imeHint = getUnrecognizedScanImeHint(payload.raw);
       playScanErrorSound();
       toast.error(`无法识别：${preview}`, imeHint ? { description: imeHint } : undefined);
+      return null;
+    }
+    if (payload.kind === 'BATCH') {
+      playScanErrorSound();
+      toast.error('产品追溯仅支持扫单品码，请勿扫批次码');
       return null;
     }
     setLoading(true);
@@ -51,24 +53,19 @@ export default function TraceView() {
     setScan(null);
     setTrace(null);
     setTraceToken(payload.token);
-    setTraceKind(payload.kind === 'ITEM' ? 'ITEM' : 'BATCH');
     setTracePage(1);
     try {
-      let s: ScanResult;
-      if (payload.kind === 'ITEM') {
-        const [scanRes, t] = await Promise.all([
-          itemCodesApi.scan(payload.token),
-          itemCodesApi.trace(payload.token, { page: 1, pageSize: TRACE_PAGE_SIZE }).catch(() => null),
-        ]);
-        s = scanRes;
-        if (t) setTrace(t);
-      } else {
-        const [scanRes, t] = await Promise.all([
-          planVirtualBatchesApi.scan(payload.token),
-          planVirtualBatchesApi.trace(payload.token, { page: 1, pageSize: TRACE_PAGE_SIZE }).catch(() => null),
-        ]);
-        s = scanRes;
-        if (t) setTrace(t);
+      const s = await itemCodesApi.scan(payload.token);
+      if (s.kind !== 'ITEM_CODE') {
+        toast.error('扫码结果类型异常');
+        return null;
+      }
+      try {
+        const t = await itemCodesApi.trace(payload.token, { page: 1, pageSize: TRACE_PAGE_SIZE });
+        setTrace(t);
+      } catch (traceErr) {
+        setTrace(null);
+        toast.error((traceErr as Error)?.message || '加载生产链路时间轴失败');
       }
       setScan(s);
       return s;
@@ -89,9 +86,17 @@ export default function TraceView() {
         const s = await executeTrace(payload);
         if (s) {
           playScanSuccessSound();
-          const name =
-            (s.kind === 'ITEM_CODE' ? s.productName ?? s.sku : s.productName ?? s.sku)?.trim() || '—';
-          setRecentDisplayByRaw(prev => ({ ...prev, [payload.raw]: name }));
+          const label =
+            s.serialLabel?.trim() ||
+            (s.planNumber && s.serialNo != null
+              ? formatItemCodeSerialLabel(s.planNumber, s.serialNo, {
+                  batchSequenceNo: s.batchSequenceNo,
+                  batchPieceNo: s.batchPieceNo,
+                })
+              : null) ||
+            (s.productName ?? s.sku)?.trim() ||
+            '—';
+          setRecentDisplayByRaw(prev => ({ ...prev, [payload.raw]: label }));
         }
       })();
     },
@@ -99,14 +104,11 @@ export default function TraceView() {
   );
 
   const loadMoreTrace = useCallback(async () => {
-    if (!traceToken || !traceKind || !trace?.hasMore || traceLoadingMore) return;
+    if (!traceToken || !trace?.hasMore || traceLoadingMore) return;
     setTraceLoadingMore(true);
     try {
       const nextPage = tracePage + 1;
-      const t =
-        traceKind === 'ITEM'
-          ? await itemCodesApi.trace(traceToken, { page: nextPage, pageSize: TRACE_PAGE_SIZE })
-          : await planVirtualBatchesApi.trace(traceToken, { page: nextPage, pageSize: TRACE_PAGE_SIZE });
+      const t = await itemCodesApi.trace(traceToken, { page: nextPage, pageSize: TRACE_PAGE_SIZE });
       setTrace(prev =>
         prev
           ? {
@@ -125,7 +127,7 @@ export default function TraceView() {
     } finally {
       setTraceLoadingMore(false);
     }
-  }, [traceToken, traceKind, trace?.hasMore, traceLoadingMore, tracePage]);
+  }, [traceToken, trace?.hasMore, traceLoadingMore, tracePage]);
 
   return (
     <div className="max-w-5xl mx-auto space-y-5 py-4">
@@ -135,7 +137,9 @@ export default function TraceView() {
         </div>
         <div>
           <h1 className="text-xl font-black text-slate-900">产品追溯查询</h1>
-          <p className="text-xs text-slate-500 mt-0.5">无弹窗、无摄像头：扫码枪或粘贴查询；扫一个查一个，再扫即切换</p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            仅支持扫单品码：扫码枪或粘贴查询；每扫一次展示该单品码的生产链路（不含批次码）
+          </p>
         </div>
       </header>
 
@@ -144,7 +148,7 @@ export default function TraceView() {
         suppressDispatchSounds
         showCameraButton={false}
         recentDisplayByRaw={recentDisplayByRaw}
-        placeholder="仅支持扫码枪与手工粘贴：每扫或粘贴一次立即查询，下方展示当前码的追溯路径；再扫下一条会切换为新产品/批次的信息。"
+        placeholder="仅支持扫单品码：粘贴 URL 或 token 后按回车或扫码枪扫入"
       />
 
       {loading && (
@@ -169,24 +173,24 @@ export default function TraceView() {
   );
 }
 
-function ScanSummaryCard({ scan }: { scan: ScanResult }) {
+function ScanSummaryCard({ scan }: { scan: ScanItemCodeResult }) {
   if (scan.status === 'VOIDED') {
     return (
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 flex items-center gap-2">
         <AlertCircle className="w-4 h-4" />
-        该{scan.kind === 'ITEM_CODE' ? '单品码' : '批次码'}已作废：{scan.message}
+        该单品码已作废：{scan.message}
       </div>
     );
   }
 
-  const isItem = scan.kind === 'ITEM_CODE';
-  const serialLabel = isItem
-    ? scan.planNumber && scan.serialNo != null
-      ? formatItemCodeSerialLabel(scan.planNumber, scan.serialNo)
-      : null
-    : scan.planNumber && scan.batchId
-      ? null
-      : null;
+  const serialLabel =
+    scan.serialLabel?.trim() ||
+    (scan.planNumber && scan.serialNo != null
+      ? formatItemCodeSerialLabel(scan.planNumber, scan.serialNo, {
+          batchSequenceNo: scan.batchSequenceNo,
+          batchPieceNo: scan.batchPieceNo,
+        })
+      : null);
 
   const fields: Array<{ icon: React.ReactNode; label: string; value: React.ReactNode }> = [
     { icon: <Tag className="w-3.5 h-3.5" />, label: '产品', value: scan.productName || scan.sku || '-' },
@@ -202,11 +206,8 @@ function ScanSummaryCard({ scan }: { scan: ScanResult }) {
       value: scan.ownerTenantName || '-',
     },
   ];
-  if (isItem && scan.batchSerialLabel) {
+  if (scan.batchSerialLabel) {
     fields.push({ icon: <PackageCheck className="w-3.5 h-3.5" />, label: '所属批次', value: scan.batchSerialLabel });
-  }
-  if (!isItem && scan.quantity != null) {
-    fields.push({ icon: <PackageCheck className="w-3.5 h-3.5" />, label: '批次数量', value: `${scan.quantity} 件` });
   }
   if (scan.orderNumbers && scan.orderNumbers.length > 0) {
     fields.push({
@@ -222,10 +223,8 @@ function ScanSummaryCard({ scan }: { scan: ScanResult }) {
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
-            isItem ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'
-          }`}>
-            {isItem ? '单品码' : '批次码'}
+          <span className="rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider bg-indigo-50 text-indigo-600">
+            单品码
           </span>
           {serialLabel && (
             <span className="text-base font-black text-slate-900 font-mono">{serialLabel}</span>
@@ -277,19 +276,32 @@ function TimelineCard({
   onLoadMore: () => void;
   loadingMore: boolean;
 }) {
+  const scopeNote = trace?.scopeNote?.trim();
+
   if (!trace || trace.events.length === 0) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h3 className="text-sm font-black text-slate-900 mb-2">生产链路时间轴</h3>
-        <div className="text-xs text-slate-400 py-6 text-center">暂无生产事件记录</div>
+        <h3 className="text-sm font-black text-slate-900 mb-2">
+          生产链路时间轴
+          {trace?.itemSerialLabel ? (
+            <span className="ml-2 font-mono text-indigo-600">{trace.itemSerialLabel}</span>
+          ) : null}
+        </h3>
+        <div className="text-xs text-slate-400 py-6 text-center">暂无与该单品码匹配的生产事件</div>
+        {scopeNote ? <p className="text-[10px] text-slate-400 text-center leading-snug">{scopeNote}</p> : null}
       </div>
     );
   }
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-black text-slate-900">生产链路时间轴</h3>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <h3 className="text-sm font-black text-slate-900">
+          生产链路时间轴
+          {trace.itemSerialLabel ? (
+            <span className="ml-2 font-mono text-indigo-600">{trace.itemSerialLabel}</span>
+          ) : null}
+        </h3>
         <span className="text-[10px] text-slate-400">
           已加载 {trace.events.length}
           {trace.total != null ? ` / 共 ${trace.total}` : ''} 条事件 · {trace.tenants.length} 家企业
@@ -319,9 +331,13 @@ function TimelineCard({
           </button>
         </div>
       )}
-      <p className="mt-4 text-[10px] text-slate-400">
-        注：当前版本按"产品 + 规格 + 计划树"聚合事件，精度为同规格汇总，不分单件码。
-      </p>
+      {scopeNote ? (
+        <p className="mt-4 text-[10px] text-slate-400 leading-snug">{scopeNote}</p>
+      ) : (
+        <p className="mt-4 text-[10px] text-slate-400">
+          注：仅展示扫码报工/扫码入库时写入关联的事件；同批次下各单品码共享批次链路。
+        </p>
+      )}
     </div>
   );
 }
@@ -387,7 +403,12 @@ function eventMeta(e: TraceEvent): {
       return {
         icon: <Warehouse className="w-3.5 h-3.5 text-white" />,
         tone: { dot: 'bg-emerald-500', bg: 'bg-emerald-500' },
-        title: e.subKind?.includes('OUT') ? '出库' : '入库',
+        title:
+          e.subKind === 'STOCK_IN'
+            ? '生产入库'
+            : e.subKind?.includes('OUT')
+              ? '出库'
+              : '入库',
       };
     case 'TRANSFER':
       return {

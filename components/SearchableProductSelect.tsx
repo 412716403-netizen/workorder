@@ -159,9 +159,8 @@ export function SearchableProductSelect({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
-  const triggerCls = compact
-    ? 'h-9 min-h-9 w-full box-border rounded-lg border border-slate-200 bg-white px-2 font-bold text-slate-900 outline-none flex items-center justify-between gap-1 disabled:opacity-50 transition-all focus:ring-2 focus:ring-indigo-500'
-    : 'w-full bg-slate-50 border-none rounded-xl py-2.5 px-3 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none flex items-center justify-between disabled:opacity-50 transition-all min-h-[40px]';
+  const triggerCls =
+    'h-9 min-h-9 w-full box-border rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs font-medium text-slate-900 outline-none flex items-center justify-between gap-1 disabled:opacity-50 transition-all focus:ring-2 focus:ring-indigo-500';
 
   const searchInputCls = compact
     ? 'w-full bg-slate-50 border-none rounded-lg py-1.5 pl-8 pr-2.5 text-xs font-semibold leading-tight outline-none focus:ring-2 focus:ring-indigo-500'

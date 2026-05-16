@@ -6,6 +6,7 @@ import {
   normalizeReportCustomDataValue,
   normalizeReportFieldDefinition,
 } from '../utils/reportCustomDocField';
+import { formStandardControlClass, formStandardLabelClass } from '../styles/uiDensity';
 
 interface ReportCustomFieldsEditorProps {
   fields: ReportFieldDefinition[];
@@ -26,7 +27,7 @@ function reportFieldToPlanFormField(field: ReportFieldDefinition): PlanFormField
     options: f.options,
     dateWithTime: f.dateWithTime,
     dateAutoFill: f.dateAutoFill,
-    showInList: true,
+    showInList: false,
     showInCreate: true,
     showInDetail: true,
   };
@@ -46,7 +47,7 @@ const ReportCustomFieldsEditor: React.FC<ReportCustomFieldsEditorProps> = ({
   onChange,
   namePrefix: _namePrefix,
   fileHint: _fileHint,
-  inputClassName = 'w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm outline-none',
+  inputClassName = formStandardControlClass,
   onFilePreview,
 }) => {
   void _namePrefix;
@@ -58,7 +59,7 @@ const ReportCustomFieldsEditor: React.FC<ReportCustomFieldsEditorProps> = ({
         const value = coerceStoredValue(field, values[field.id]);
         return (
           <div key={field.id} className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase">
+            <label className={formStandardLabelClass}>
               {field.label} {field.required && <span className="text-rose-500">*</span>}
             </label>
             <PlanFormCustomFieldInput

@@ -17,6 +17,7 @@ globs:
 - 权限判断用 `utils/hasSubPermission.ts` / `utils/hasModulePerm.ts` / `hooks/useModulePermission.ts`，不要自己解析 `permissions` 数组。
 - 枚举 / 常量从根 `types.ts`（内部再从 `shared/types.ts` re-export）引入。
 - 大弹窗、复杂区块抽到 `views/<模块>/XxxModal.tsx` 或 `views/<模块>/XxxSection.tsx` 子组件。
+- 表单控件样式统一用 `styles/uiDensity` 的 `formStandard*`（h-9 / text-xs / font-medium）；勿手写 `h-11`、`py-3 text-sm font-bold` 等旧密度。
 
 ## 拆分阈值（经验值，非硬性）
 

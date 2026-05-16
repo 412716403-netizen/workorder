@@ -97,8 +97,8 @@ const EntitySelector: React.FC<EntitySelectorProps> = ({
     variant === 'form'
       ? 'flex h-9 min-h-9 flex-nowrap items-center bg-white px-2 py-0'
       : variant === 'compact'
-        ? 'flex min-h-[46px] flex-wrap bg-white p-2'
-        : 'flex min-h-[46px] flex-wrap bg-white p-3';
+        ? 'flex min-h-9 h-auto flex-wrap bg-white p-2'
+        : 'flex min-h-9 h-auto flex-wrap bg-white p-2.5';
 
   const triggerShellClass =
     variant === 'form'

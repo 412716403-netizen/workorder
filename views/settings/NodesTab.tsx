@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { ExtFieldLabelInput } from './shared';
 import { ReportCustomFieldsConfigTable } from '../../components/form-config/CustomFieldsEditorTable';
+import { formStandardControlClass } from '../../styles/uiDensity';
 import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
 import { isEquipmentAssignmentEnabled, isWorkerAssignmentEnabled } from '../../utils/nodeAssignmentFlags';
 
@@ -112,7 +113,7 @@ const NodesTab: React.FC<NodesTabProps> = ({
           <div className="pt-6 border-t border-slate-50">
             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">快速录入新工序</h3>
             <div className="space-y-4">
-              <input type="text" placeholder="工序名称" value={newNodeName} onChange={e => setNewNodeName(e.target.value)} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
+              <input type="text" placeholder="工序名称" value={newNodeName} onChange={e => setNewNodeName(e.target.value)} className={formStandardControlClass} />
               <button type="button" onClick={() => void handleQuickAddNode()} disabled={!newNodeName.trim() || addLock.busy} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed">{addLock.busy ? '提交中…' : '保存并配置'}</button>
             </div>
           </div>

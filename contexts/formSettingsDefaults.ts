@@ -77,13 +77,13 @@ export function normalizeDecimals<T>(arr: T[]): T[] {
 
 export const DEFAULT_PLAN_FORM_SETTINGS: PlanFormSettings = {
   standardFields: [
-    { id: 'planNumber', label: '计划单号', showInList: true, showInCreate: false, showInDetail: true },
-    { id: 'customer', label: '客户', showInList: true, showInCreate: true, showInDetail: true },
-    { id: 'createdAt', label: '创建时间', showInList: true, showInCreate: false, showInDetail: true },
+    { id: 'planNumber', label: '计划单号', showInList: false, showInCreate: false, showInDetail: true },
+    { id: 'customer', label: '客户', showInList: false, showInCreate: true, showInDetail: true },
+    { id: 'createdAt', label: '创建时间', showInList: false, showInCreate: false, showInDetail: true },
   ],
   customFields: [],
   listDisplay: { showDeliveryDate: false },
-  listPrint: { showPrintButton: true },
+  listPrint: { showPrintButton: false },
 };
 
 /** 合并租户已存配置与默认标准字段，避免旧数据缺少某项导致表单配置与新建/详情不同步 */
@@ -116,7 +116,7 @@ export function normalizePlanFormSettings(raw: PlanFormSettings | null | undefin
       showDeliveryDate: s.listDisplay?.showDeliveryDate === true,
     },
     listPrint: {
-      showPrintButton: s.listPrint?.showPrintButton !== false,
+      showPrintButton: s.listPrint?.showPrintButton === true,
       allowedTemplateIds: allowedList.length > 0 ? allowedList : undefined,
     },
     labelPrint: s.labelPrint
@@ -131,7 +131,7 @@ export function normalizePlanFormSettings(raw: PlanFormSettings | null | undefin
           return {
             ...lpRest,
             allowedTemplateIds: allowedLabel.length > 0 ? allowedLabel : undefined,
-            showPlanDetailTraceSection: lp.showPlanDetailTraceSection !== false,
+            showPlanDetailTraceSection: lp.showPlanDetailTraceSection === true,
             ...(bulkQuickSplitBatchSize !== undefined ? { bulkQuickSplitBatchSize } : {}),
             bulkQuickSplitWithItemCodes: lp.bulkQuickSplitWithItemCodes !== false,
           };
@@ -173,7 +173,7 @@ export function repairPlanLabelPrintWhitelistMissingPlanLabelTemplates(
     ...planForm,
     labelPrint: {
       ...planForm.labelPrint,
-      showPlanDetailTraceSection: planForm.labelPrint?.showPlanDetailTraceSection !== false,
+      showPlanDetailTraceSection: planForm.labelPrint?.showPlanDetailTraceSection === true,
       allowedTemplateIds: next,
     },
   };
@@ -183,7 +183,7 @@ function normalizePlanListSlot(slot: PlanListPrintSettings | undefined): PlanLis
   if (!slot) return undefined;
   const allowed = slot.allowedTemplateIds?.filter(Boolean) ?? [];
   return {
-    showPrintButton: slot.showPrintButton !== false,
+    showPrintButton: slot.showPrintButton === true,
     allowedTemplateIds: allowed.length > 0 ? allowed : undefined,
   };
 }
@@ -198,7 +198,7 @@ const MATERIAL_FLOW_DETAIL_BUILTIN_WHITELIST_IDS = new Set<string>([
 
 function normalizeMaterialCenterPrintDetailSlot(slot: PlanListPrintSettings | undefined): PlanListPrintSettings {
   const normalized = slot ? normalizePlanListSlot(slot) : undefined;
-  const showPrintButton = normalized?.showPrintButton !== false;
+  const showPrintButton = normalized?.showPrintButton === true;
   const rawAllowed = normalized?.allowedTemplateIds?.filter(Boolean) ?? [];
   const allowed = rawAllowed.filter(id => !MATERIAL_FLOW_DETAIL_BUILTIN_WHITELIST_IDS.has(String(id).trim()));
   return {
@@ -215,7 +215,7 @@ const REWORK_FLOW_DETAIL_BUILTIN_WHITELIST_IDS = new Set<string>([
 
 function normalizeReworkCenterPrintDetailSlot(slot: PlanListPrintSettings | undefined): PlanListPrintSettings {
   const normalized = slot ? normalizePlanListSlot(slot) : undefined;
-  const showPrintButton = normalized?.showPrintButton !== false;
+  const showPrintButton = normalized?.showPrintButton === true;
   const rawAllowed = normalized?.allowedTemplateIds?.filter(Boolean) ?? [];
   const allowed = rawAllowed.filter(id => !REWORK_FLOW_DETAIL_BUILTIN_WHITELIST_IDS.has(String(id).trim()));
   return {
@@ -239,7 +239,7 @@ function normalizePlanListSlotWithoutRemovedBuiltin(slot: PlanListPrintSettings 
 
 export const DEFAULT_ORDER_FORM_SETTINGS: OrderFormSettings = {
   standardFields: [
-    { id: 'orderNumber', label: '工单号', showInList: true, showInCreate: false, showInDetail: true },
+    { id: 'orderNumber', label: '工单号', showInList: false, showInCreate: false, showInDetail: true },
     { id: 'customer', label: '客户', showInList: false, showInCreate: true, showInDetail: true },
     { id: 'dueDate', label: '交期', showInList: false, showInCreate: true, showInDetail: true },
     { id: 'startDate', label: '开始日期', showInList: false, showInCreate: true, showInDetail: true },
@@ -328,16 +328,16 @@ export function normalizeOutsourceFormSettings(raw: OutsourceFormSettings | null
     return {
       ...base,
       outsourceCenterPrint: {
-        dispatchFlowDetail: normalizePlanListSlotWithoutRemovedBuiltin(undefined) ?? { showPrintButton: true },
-        receiveFlowDetail: normalizePlanListSlotWithoutRemovedBuiltin(undefined) ?? { showPrintButton: true },
+        dispatchFlowDetail: normalizePlanListSlotWithoutRemovedBuiltin(undefined) ?? { showPrintButton: false },
+        receiveFlowDetail: normalizePlanListSlotWithoutRemovedBuiltin(undefined) ?? { showPrintButton: false },
       },
     };
   }
   return {
     ...base,
     outsourceCenterPrint: {
-      dispatchFlowDetail: normalizePlanListSlotWithoutRemovedBuiltin(ocp.dispatchFlowDetail) ?? { showPrintButton: true },
-      receiveFlowDetail: normalizePlanListSlotWithoutRemovedBuiltin(ocp.receiveFlowDetail) ?? { showPrintButton: true },
+      dispatchFlowDetail: normalizePlanListSlotWithoutRemovedBuiltin(ocp.dispatchFlowDetail) ?? { showPrintButton: false },
+      receiveFlowDetail: normalizePlanListSlotWithoutRemovedBuiltin(ocp.receiveFlowDetail) ?? { showPrintButton: false },
     },
   };
 }
@@ -375,11 +375,11 @@ const DEPRECATED_PURCHASE_ORDER_STANDARD_FIELD_IDS = new Set(['dueDate', 'create
 
 export const DEFAULT_PURCHASE_ORDER_FORM_SETTINGS: PurchaseOrderFormSettings = {
   standardFields: [
-    { id: 'docNumber', label: '单据编号', showInList: true, showInCreate: false, showInDetail: true },
-    { id: 'partner', label: '供应商', showInList: true, showInCreate: true, showInDetail: true },
+    { id: 'docNumber', label: '单据编号', showInList: false, showInCreate: false, showInDetail: true },
+    { id: 'partner', label: '供应商', showInList: false, showInCreate: true, showInDetail: true },
   ],
   customFields: [],
-  listPrint: { showPrintButton: true },
+  listPrint: { showPrintButton: false },
   relatedProductEnabled: false,
 };
 
@@ -407,12 +407,12 @@ export function normalizePurchaseOrderFormSettings(raw: PurchaseOrderFormSetting
   const legacyDetail = normalizePlanListSlot(
     (s as PurchaseOrderFormSettings & { detailPrint?: PlanListPrintSettings }).detailPrint,
   );
-  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
+  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: false };
   const a = listNorm.allowedTemplateIds ?? [];
   const b = legacyDetail?.allowedTemplateIds ?? [];
   const mergedIds = a.length || b.length ? Array.from(new Set([...a, ...b])) : [];
   const mergedSlot: PlanListPrintSettings = {
-    showPrintButton: listNorm.showPrintButton !== false,
+    showPrintButton: listNorm.showPrintButton === true,
     allowedTemplateIds: mergedIds.length > 0 ? mergedIds : undefined,
   };
   const listPrint = mergedSlot;
@@ -441,11 +441,11 @@ const DEPRECATED_SALES_ORDER_STANDARD_FIELD_IDS = DEPRECATED_PURCHASE_ORDER_STAN
 
 export const DEFAULT_SALES_ORDER_FORM_SETTINGS: SalesOrderFormSettings = {
   standardFields: [
-    { id: 'docNumber', label: '单据编号', showInList: true, showInCreate: false, showInDetail: true },
-    { id: 'partner', label: '客户', showInList: true, showInCreate: true, showInDetail: true },
+    { id: 'docNumber', label: '单据编号', showInList: false, showInCreate: false, showInDetail: true },
+    { id: 'partner', label: '客户', showInList: false, showInCreate: true, showInDetail: true },
   ],
   customFields: [],
-  listPrint: { showPrintButton: true },
+  listPrint: { showPrintButton: false },
 };
 
 function mergeSalesOrderStandardFields(
@@ -470,12 +470,12 @@ export function normalizeSalesOrderFormSettings(raw: SalesOrderFormSettings | nu
   const legacyDetail = normalizePlanListSlot(
     (s as SalesOrderFormSettings & { detailPrint?: PlanListPrintSettings }).detailPrint,
   );
-  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
+  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: false };
   const a = listNorm.allowedTemplateIds ?? [];
   const b = legacyDetail?.allowedTemplateIds ?? [];
   const mergedIds = a.length || b.length ? Array.from(new Set([...a, ...b])) : [];
   const mergedSlot: PlanListPrintSettings = {
-    showPrintButton: listNorm.showPrintButton !== false,
+    showPrintButton: listNorm.showPrintButton === true,
     allowedTemplateIds: mergedIds.length > 0 ? mergedIds : undefined,
   };
   const listPrint = mergedSlot;
@@ -496,12 +496,12 @@ const DEPRECATED_PURCHASE_BILL_STANDARD_FIELD_IDS = new Set(['createdAt', 'note'
 
 export const DEFAULT_PURCHASE_BILL_FORM_SETTINGS: PurchaseBillFormSettings = {
   standardFields: [
-    { id: 'docNumber', label: '单据编号', showInList: true, showInCreate: false, showInDetail: true },
-    { id: 'partner', label: '供应商', showInList: true, showInCreate: true, showInDetail: true },
-    { id: 'warehouse', label: '入库仓库', showInList: true, showInCreate: true, showInDetail: true },
+    { id: 'docNumber', label: '单据编号', showInList: false, showInCreate: false, showInDetail: true },
+    { id: 'partner', label: '供应商', showInList: false, showInCreate: true, showInDetail: true },
+    { id: 'warehouse', label: '入库仓库', showInList: false, showInCreate: true, showInDetail: true },
   ],
   customFields: [],
-  listPrint: { showPrintButton: true },
+  listPrint: { showPrintButton: false },
   relatedProductEnabled: false,
 };
 
@@ -535,16 +535,16 @@ export function normalizePurchaseBillFormSettings(raw: PurchaseBillFormSettings 
   const legacyDetail = normalizePlanListSlot(leg.detailPrint);
   const legacyLabel = normalizePlanListSlot(
     leg.labelPrint?.allowedTemplateIds?.length
-      ? { showPrintButton: true, allowedTemplateIds: leg.labelPrint.allowedTemplateIds }
+      ? { showPrintButton: false, allowedTemplateIds: leg.labelPrint.allowedTemplateIds }
       : undefined,
   );
-  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
+  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: false };
   const a = listNorm.allowedTemplateIds ?? [];
   const b = legacyDetail?.allowedTemplateIds ?? [];
   const c = legacyLabel?.allowedTemplateIds ?? [];
   const mergedIds = a.length || b.length || c.length ? Array.from(new Set([...a, ...b, ...c])) : [];
   const mergedSlot: PlanListPrintSettings = {
-    showPrintButton: listNorm.showPrintButton !== false,
+    showPrintButton: listNorm.showPrintButton === true,
     allowedTemplateIds: mergedIds.length > 0 ? mergedIds : undefined,
   };
   const listPrint = mergedSlot;
@@ -565,15 +565,15 @@ export function normalizePurchaseBillFormSettings(raw: PurchaseBillFormSettings 
 export const DEFAULT_SALES_BILL_FORM_SETTINGS: SalesBillFormSettings = {
   standardFields: [],
   customFields: [],
-  listPrint: { showPrintButton: true },
+  listPrint: { showPrintButton: false },
 };
 
 export function normalizeSalesBillFormSettings(raw: SalesBillFormSettings | null | undefined): SalesBillFormSettings {
   const s = raw ?? DEFAULT_SALES_BILL_FORM_SETTINGS;
-  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
+  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: false };
   const rawIds = listNorm.allowedTemplateIds?.map(x => (x != null && x !== '' ? String(x).trim() : '')).filter(Boolean) ?? [];
   const mergedSlot: PlanListPrintSettings = {
-    showPrintButton: listNorm.showPrintButton !== false,
+    showPrintButton: listNorm.showPrintButton === true,
     allowedTemplateIds: rawIds.length > 0 ? Array.from(new Set(rawIds)) : undefined,
   };
   const listPrint = mergedSlot;
@@ -585,32 +585,32 @@ export function normalizeSalesBillFormSettings(raw: SalesBillFormSettings | null
 }
 
 export const DEFAULT_RECEIPT_FORM_SETTINGS: ReceiptFormSettings = {
-  listPrint: { showPrintButton: true },
+  listPrint: { showPrintButton: false },
 };
 
 export function normalizeReceiptFormSettings(raw: ReceiptFormSettings | null | undefined): ReceiptFormSettings {
   const s = raw ?? DEFAULT_RECEIPT_FORM_SETTINGS;
-  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
+  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: false };
   const rawIds = listNorm.allowedTemplateIds?.map(x => (x != null && x !== '' ? String(x).trim() : '')).filter(Boolean) ?? [];
   return {
     listPrint: {
-      showPrintButton: listNorm.showPrintButton !== false,
+      showPrintButton: listNorm.showPrintButton === true,
       allowedTemplateIds: rawIds.length > 0 ? Array.from(new Set(rawIds)) : undefined,
     },
   };
 }
 
 export const DEFAULT_PAYMENT_FORM_SETTINGS: PaymentFormSettings = {
-  listPrint: { showPrintButton: true },
+  listPrint: { showPrintButton: false },
 };
 
 export function normalizePaymentFormSettings(raw: PaymentFormSettings | null | undefined): PaymentFormSettings {
   const s = raw ?? DEFAULT_PAYMENT_FORM_SETTINGS;
-  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: true };
+  const listNorm = normalizePlanListSlot(s.listPrint) ?? { showPrintButton: false };
   const rawIds = listNorm.allowedTemplateIds?.map(x => (x != null && x !== '' ? String(x).trim() : '')).filter(Boolean) ?? [];
   return {
     listPrint: {
-      showPrintButton: listNorm.showPrintButton !== false,
+      showPrintButton: listNorm.showPrintButton === true,
       allowedTemplateIds: rawIds.length > 0 ? Array.from(new Set(rawIds)) : undefined,
     },
   };

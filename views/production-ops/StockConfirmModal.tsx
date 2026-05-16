@@ -15,6 +15,7 @@ import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldCo
 import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { useStockSnapshot } from '../../hooks/useStockSnapshot';
+import { formStandardControlClass, formStandardLabelClass } from '../../styles/uiDensity';
 
 export interface StockConfirmModalProps {
   visible: boolean;
@@ -214,12 +215,12 @@ const StockConfirmModal: React.FC<StockConfirmModalProps> = ({
               </h4>
               {materialCustomFieldDefs.map(cf => (
                 <div key={cf.id} className="space-y-1">
-                  <label className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-400">{cf.label}</label>
+                  <label className={formStandardLabelClass}>{cf.label}</label>
                   <PlanFormCustomFieldInput
                     cf={cf}
                     value={materialCustomValues[cf.id]}
                     onChange={v => onMaterialCustomValueChange(cf.id, v)}
-                    controlClassName="h-[52px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"
+                    controlClassName={`${formStandardControlClass} bg-white`}
                   />
                 </div>
               ))}

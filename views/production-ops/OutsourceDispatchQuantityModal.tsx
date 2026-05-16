@@ -251,7 +251,7 @@ function buildDefaultDispatchQuantities(
       const getDr = (oid: string, tid: string) =>
         defectiveReworkByOrderForOutsource.get(`${oid}|${tid}`) ?? { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> };
       const milestoneNodeIds = product?.milestoneNodeIds || [];
-      const seq = (processSequenceMode ?? 'free') as ProcessSequenceMode;
+      const seq = (processSequenceMode ?? 'sequential') as ProcessSequenceMode;
       const outsourceForProductNode = records.filter(
         r => r.type === 'OUTSOURCE' && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId,
       );
@@ -662,7 +662,7 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
             if (variantsInProductBlock.length > 0) {
               const getDr = (oid: string, tid: string) => defectiveReworkByOrderForOutsource.get(`${oid}|${tid}`) ?? { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> };
               const milestoneNodeIds = product?.milestoneNodeIds || [];
-              const seq = (processSequenceMode ?? 'free') as ProcessSequenceMode;
+              const seq = (processSequenceMode ?? 'sequential') as ProcessSequenceMode;
               const outsourceForProductNodeRender = records.filter(r => r.type === 'OUTSOURCE' && !r.orderId && r.productId === row.productId && r.nodeId === row.nodeId);
               const sumOtherVariantQtyProduct = (currentId: string) =>
                 variantsInProductBlock.reduce(

@@ -5,6 +5,7 @@ import { generateReportNo } from '../utils/docNumber.js';
 import { genId } from '../utils/genId.js';
 import { sanitizeUpdate, sanitizeItems, normalizeDates } from '../utils/request.js';
 import { buildReportWeightBreakdown } from './reportWeightBreakdown.service.js';
+import { assertScanNotAlreadyUsed } from './scanValidate.service.js';
 
 export async function listOrders(
   db: TenantPrismaClient,
@@ -363,6 +364,17 @@ export async function createReport(
       addQty: Number(body.quantity) || 0,
     });
   }
+
+  // 扫码去重兜底：同一工序同一 itemCodeId / virtualBatchId 已报工 → 拒绝写入
+  await assertScanNotAlreadyUsed(
+    tenantId,
+    'MILESTONE_REPORT',
+    { milestoneId },
+    {
+      itemCodeId: (body.itemCodeId as string | undefined) ?? null,
+      virtualBatchId: (body.virtualBatchId as string | undefined) ?? null,
+    },
+  );
   void verified;
   const weightPayload = milestone?.productionOrder?.productId
     ? await buildReportWeightBreakdown({
@@ -393,6 +405,8 @@ export async function createReport(
       workerId: body.workerId,
       weight: weightPayload.weight,
       materialBreakdown: weightPayload.materialBreakdown as any,
+      virtualBatchId: (body.virtualBatchId as string | undefined) || null,
+      itemCodeId: (body.itemCodeId as string | undefined) || null,
     } as any,
   });
   await recalcMilestoneCompleted(milestoneId);
@@ -650,6 +664,21 @@ export async function createProductReport(
     addQty: Number(reportData.quantity) || 0,
   });
 
+  // 扫码去重兜底：同一产品+工序模板（+规格）同一 itemCodeId / virtualBatchId 已报工 → 拒绝写入
+  await assertScanNotAlreadyUsed(
+    tenantId,
+    'PRODUCT_REPORT',
+    {
+      productId: productId as string,
+      milestoneTemplateId: milestoneTemplateId as string,
+      variantId: (variantId as string | null | undefined) ?? null,
+    },
+    {
+      itemCodeId: (reportData.itemCodeId as string | undefined) ?? null,
+      virtualBatchId: (reportData.virtualBatchId as string | undefined) ?? null,
+    },
+  );
+
   let progress = await db.productMilestoneProgress.findFirst({
     where: {
       productId: productId as string,
@@ -697,6 +726,8 @@ export async function createProductReport(
       workerId: reportData.workerId,
       weight: weightPayload.weight,
       materialBreakdown: weightPayload.materialBreakdown as any,
+      virtualBatchId: (reportData.virtualBatchId as string | undefined) || null,
+      itemCodeId: (reportData.itemCodeId as string | undefined) || null,
     } as any,
   });
 

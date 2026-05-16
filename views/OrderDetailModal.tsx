@@ -44,7 +44,7 @@ function reportFieldToPlanForm(cf: ReportFieldDefinition): PlanFormFieldConfig {
     options: cf.options,
     dateWithTime: cf.dateWithTime,
     dateAutoFill: cf.dateAutoFill,
-    showInList: true,
+    showInList: false,
     showInCreate: true,
     showInDetail: true,
   };

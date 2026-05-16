@@ -48,7 +48,7 @@ export const purchaseBillFormConfigSchema: FormConfigSchema<PurchaseBillFormSett
           toggle: {
             label: '在采购单列表显示「打印」按钮',
             key: 'showPrintButton',
-            defaultChecked: true,
+            defaultChecked: false,
           },
         },
       ],

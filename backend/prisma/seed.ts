@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { TENANT_DEFAULT_SETTINGS } from '../src/lib/tenantDefaultSettings.js';
 const prisma = new PrismaClient();
 
 const ALL_PERMISSIONS = [
@@ -60,84 +61,7 @@ async function main() {
   }
 
   // 4. 默认系统配置（关联到默认企业）
-  const defaultSettings: Record<string, unknown> = {
-    productionLinkMode: 'order',
-    processSequenceMode: 'free',
-    allowExceedMaxReportQty: true,
-    planFormSettings: {
-      standardFields: [
-        { id: 'planNumber', label: '计划单号', showInList: true, showInCreate: false, showInDetail: true },
-        { id: 'customer', label: '客户', showInList: true, showInCreate: true, showInDetail: true },
-        { id: 'createdAt', label: '创建时间', showInList: true, showInCreate: false, showInDetail: true },
-        { id: 'startDate', label: '开始日期', showInList: false, showInCreate: true, showInDetail: true },
-        { id: 'priority', label: '优先级', showInList: true, showInCreate: true, showInDetail: true },
-      ],
-      customFields: [],
-    },
-    orderFormSettings: {
-      standardFields: [
-        { id: 'orderNumber', label: '工单号', showInList: true, showInCreate: false, showInDetail: true },
-        { id: 'customer', label: '客户', showInList: true, showInCreate: false, showInDetail: true },
-        { id: 'dueDate', label: '交期', showInList: true, showInCreate: false, showInDetail: true },
-        { id: 'startDate', label: '开始日期', showInList: false, showInCreate: false, showInDetail: true },
-      ],
-      customFields: [],
-    },
-    purchaseOrderFormSettings: {
-      standardFields: [
-        { id: 'docNumber', label: '单据编号', showInList: true, showInCreate: true, showInDetail: true },
-        { id: 'partner', label: '供应商', showInList: true, showInCreate: true, showInDetail: true },
-      ],
-      customFields: [],
-      listPrint: { showPrintButton: true },
-      relatedProductEnabled: false,
-    },
-    salesOrderFormSettings: {
-      standardFields: [
-        { id: 'docNumber', label: '单据编号', showInList: true, showInCreate: false, showInDetail: true },
-        { id: 'partner', label: '客户', showInList: true, showInCreate: true, showInDetail: true },
-      ],
-      customFields: [],
-      listPrint: { showPrintButton: true },
-    },
-    purchaseBillFormSettings: {
-      standardFields: [
-        { id: 'docNumber', label: '单据号', showInList: true, showInCreate: false, showInDetail: true },
-        { id: 'partner', label: '供应商', showInList: true, showInCreate: true, showInDetail: true },
-        { id: 'warehouse', label: '入库仓库', showInList: true, showInCreate: true, showInDetail: true },
-      ],
-      customFields: [],
-      listPrint: { showPrintButton: true },
-    },
-    salesBillFormSettings: {
-      standardFields: [],
-      customFields: [],
-      listPrint: { showPrintButton: true },
-    },
-    materialPanelSettings: {
-      groupByOutsourcePartner: false,
-    },
-    materialFormSettings: {
-      materialIssueCustomFields: [],
-      materialReturnCustomFields: [],
-      outsourceMaterialIssueCustomFields: [],
-      outsourceMaterialReturnCustomFields: [],
-    },
-    outsourceFormSettings: {
-      outsourceDispatchCustomFields: [],
-      outsourceReceiveCustomFields: [],
-      showOutsourceDispatchDeliveryDate: false,
-      showPartnerFlowDetailOnList: false,
-      outsourceCenterPrint: {
-        dispatchFlowDetail: { showPrintButton: true },
-        receiveFlowDetail: { showPrintButton: true },
-      },
-    },
-    reworkFormSettings: {
-      defectTreatmentCustomFields: [],
-      reworkReportCustomFields: [],
-    },
-  };
+  const defaultSettings = TENANT_DEFAULT_SETTINGS;
 
   for (const [key, value] of Object.entries(defaultSettings)) {
     await prisma.systemSetting.upsert({

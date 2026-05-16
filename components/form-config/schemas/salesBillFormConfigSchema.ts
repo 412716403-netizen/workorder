@@ -36,7 +36,7 @@ export const salesBillFormConfigSchema: FormConfigSchema<SalesBillFormSettings> 
           toggle: {
             label: '在销售单列表显示「打印」按钮',
             key: 'showPrintButton',
-            defaultChecked: true,
+            defaultChecked: false,
           },
         },
       ],

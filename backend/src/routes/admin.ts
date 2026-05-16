@@ -31,12 +31,16 @@ router.post('/users', validate(createSchema), adminUsersCtrl.create);
 router.put('/users/:id', validate(updateSchema), adminUsersCtrl.update);
 router.delete('/users/:id', adminUsersCtrl.remove);
 
-const tenantUpdateSchema = z.object({
-  expiresAt: z.union([z.string().min(1), z.null()]).optional(),
-  status: z.enum(['active', 'rejected', 'pending']).optional(),
-  /** 企业是否启用设备模块（设备档案 + 派工/报工选设备） */
-  equipmentModuleEnabled: z.boolean().optional(),
-});
+const tenantUpdateSchema = z
+  .object({
+    expiresAt: z.union([z.string().min(1), z.null()]).optional(),
+    status: z.enum(['active', 'rejected', 'pending']).optional(),
+    /** 企业是否启用设备模块（设备档案 + 派工/报工选设备） */
+    equipmentModuleEnabled: z.boolean().optional(),
+    /** 行业类型：与 `shared/types` 中 `TenantIndustryKind` 一致 */
+    industryKind: z.enum(['generic', 'sweater_factory']).optional(),
+  })
+  .refine((b) => Object.keys(b).length > 0, { message: '至少提供一项要修改的字段' });
 
 router.get('/tenants', adminUsersCtrl.listTenants);
 router.put('/tenants/:id', validate(tenantUpdateSchema), adminUsersCtrl.updateTenant);

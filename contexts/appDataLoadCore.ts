@@ -159,8 +159,8 @@ export async function executeAppDataLoadCore(
 
   const cfg = (settledVal<Record<string, unknown>>(coreResults, 0) || {}) as Record<string, unknown>;
   s.setProductionLinkMode((cfg.productionLinkMode as ProductionLinkMode) ?? 'order');
-  s.setProcessSequenceMode((cfg.processSequenceMode as ProcessSequenceMode) ?? 'free');
-  s.setAllowExceedMaxReportQty(cfg.allowExceedMaxReportQty !== false);
+  s.setProcessSequenceMode((cfg.processSequenceMode as ProcessSequenceMode) ?? 'sequential');
+  s.setAllowExceedMaxReportQty(cfg.allowExceedMaxReportQty === true);
   const printTemplatesFromCfg = Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : [];
   const printTemplatesMerged = mergePrintTemplatesForTenantConfig(printTemplatesFromCfg) as PrintTemplate[];
   s.setPlanFormSettings(

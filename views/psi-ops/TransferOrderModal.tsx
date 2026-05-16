@@ -13,6 +13,7 @@ import { categoryUsesBatchManagement, normalizeBatchNo } from '../../types';
 import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { parsePsiNonVariantQuantityInput } from '../../utils/psiQtyInput';
+import { formStandardLabelClass } from '../../styles/uiDensity';
 
 interface TransferItem {
   id: string;
@@ -125,7 +126,7 @@ const TransferOrderModal: React.FC<TransferOrderModalProps> = ({
                   <div key={line.id} className={`rounded-2xl border space-y-4 transition-all ${isLineEmpty ? 'bg-white border-slate-200 p-4 border-dashed' : 'bg-white border-slate-200 p-4 shadow-sm'}`}>
                     <div className="flex flex-wrap items-end gap-3">
                       <div className="flex-1 min-w-[200px] max-w-md space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">{isLineEmpty ? '选择产品' : '产品'}</label>
+                        <label className={formStandardLabelClass}>{isLineEmpty ? '选择产品' : '产品'}</label>
                         <SearchableProductSelect options={products} categories={categories} value={line.productId} onChange={(id) => {
                           const p = productMapPSI.get(id);
                           const hv = p?.variants && p.variants.length > 0;

@@ -3,7 +3,7 @@ import { Printer, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { buildPrintListRowsFromItemCodes, type ItemCodePrintContext } from '../../utils/printItemCodeRows';
 import { buildVirtualBatchPrintRow } from '../../utils/printVirtualBatch';
-import { formatBatchSerialLabel, formatItemCodeSerialLabel } from '../../utils/serialLabels';
+import { formatBatchSerialLabel, formatItemCodeSerialLabelFromCode } from '../../utils/serialLabels';
 import { AppDictionaries, ItemCode, PlanOrder, PlanVirtualBatch, PrintTemplate, Product, ProductionOrder } from '../../types';
 
 interface PlanPrintOverlaysProps {
@@ -308,7 +308,7 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
                 <div>
                   <h3 className="text-base font-black text-slate-900">打印单品码标签</h3>
                   <p className="mt-0.5 text-xs text-slate-500 break-all">
-                    {formatItemCodeSerialLabel(modalPlan.planNumber, code.serialNo)}
+                    {formatItemCodeSerialLabelFromCode(modalPlan.planNumber, code)}
                     {variantLabel ? ` · ${variantLabel}` : ''}
                   </p>
                   <p className="mt-1.5 text-[11px] leading-snug text-slate-500">

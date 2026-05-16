@@ -11,6 +11,7 @@ import { PartnerCategory, ReportFieldDefinition } from '../../types';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { ReportCustomFieldsConfigTable } from '../../components/form-config/CustomFieldsEditorTable';
+import { formStandardControlClass } from '../../styles/uiDensity';
 
 interface PartnerCategoriesTabProps {
   partnerCategories: PartnerCategory[];
@@ -92,7 +93,7 @@ const PartnerCategoriesTab: React.FC<PartnerCategoriesTabProps> = ({
           <div className="pt-6 border-t border-slate-50">
             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">快速新增单位分类</h3>
             <div className="space-y-4">
-              <input type="text" placeholder="分类名称 (如：核心供应商)" value={newPCatName} onChange={e => setNewPCatName(e.target.value)} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
+              <input type="text" placeholder="分类名称 (如：核心供应商)" value={newPCatName} onChange={e => setNewPCatName(e.target.value)} className={formStandardControlClass} />
               <button type="button" onClick={() => void addPartnerCategory()} disabled={!newPCatName.trim() || addLock.busy} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed">{addLock.busy ? '提交中…' : '确认添加'}</button>
             </div>
           </div>

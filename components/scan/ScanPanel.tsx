@@ -4,6 +4,7 @@ import { useScanGun } from '../../hooks/useScanGun';
 import { formatScanRecentChipText, parseScanPayload, type ScanPayload } from '../../utils/scanPayload';
 import { playScanErrorSound, playScanSuccessSound } from '../../utils/scanFeedbackSound';
 import { CameraScannerModal } from './CameraScannerModal';
+import { formStandardLabelClass } from '../../styles/uiDensity';
 
 /**
  * 大号扫码面板，追溯页 / 专用扫码页使用。
@@ -117,7 +118,7 @@ export function ScanPanel({
 
       {recent.length > 0 && (
         <div className="pt-3 border-t border-slate-100 space-y-1">
-          <span className="text-[10px] font-bold text-slate-400 uppercase">最近扫码</span>
+          <span className={formStandardLabelClass}>最近扫码</span>
           <div className="flex flex-wrap gap-1.5">
             {recent.map((r) => {
               const display = recentDisplayByRaw?.[r] ?? formatScanRecentChipText(r);

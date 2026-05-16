@@ -66,7 +66,7 @@ export const purchaseOrderFormConfigSchema: FormConfigSchema<PurchaseOrderFormSe
           toggle: {
             label: '在采购订单列表显示「打印」按钮',
             key: 'showPrintButton',
-            defaultChecked: true,
+            defaultChecked: false,
           },
         },
       ],

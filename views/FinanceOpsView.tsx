@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Clock, Search, Building2, User, FileText, Sliders, Printer } from 'lucide-react';
+import { Plus, Clock, Search, Building2, User, FileText, Sliders, Printer, FileSpreadsheet } from 'lucide-react';
+import { toast } from 'sonner';
 import * as api from '../services/api';
 import {
   FinanceRecord,
@@ -29,6 +30,9 @@ import {
   pageSubtitleClass,
   pageTitleClass,
   primaryToolbarButtonClass,
+  psiOrderBillCompactSummaryBarClass,
+  psiOrderBillCompactSummaryLabelClass,
+  psiOrderBillCompactSummaryValueClass,
   psiOrderBillFormPartnerTriggerClassCompact,
 } from '../styles/uiDensity';
 import { PsiListPrintController, type PsiListPrintControllerHandle } from '../components/psi/PsiListPrintPicker';
@@ -37,6 +41,7 @@ import { buildPaymentPrintContextFromRecord } from '../utils/buildPaymentPrintCo
 import ReceiptFormConfigModal from './finance/ReceiptFormConfigModal';
 import PaymentFormConfigModal from './finance/PaymentFormConfigModal';
 import FinanceDetailModal from './finance/FinanceDetailModal';
+import PartnerProductReconTable from './finance/PartnerProductReconTable';
 import FinanceRecordFormModal, { type FinanceRecordFormValues } from './finance/FinanceRecordFormModal';
 import WorkerSelectWithTabs from './finance/WorkerSelectWithTabs';
 import { type DetailTarget } from './finance/financeDetailTypes';
@@ -45,6 +50,7 @@ import { useConfirm } from '../contexts/ConfirmContext';
 import { toLocalCompactYmd, toLocalDateYmd } from '../utils/localDateTime';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useFinanceReconciliation } from '../hooks/useFinanceReconciliation';
+import { downloadPartnerReconciliationXlsx } from '../utils/downloadPartnerReconciliationXlsx';
 import { fmtDT } from '../utils/formatTime';
 import { hasModulePerm } from '../utils/hasModulePerm';
 
@@ -293,14 +299,64 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
     partnerReconListFiltered,
     settlementReconListFiltered,
     partnerReconWithBalance,
+    partnerReconSummary,
+    partnerOpeningBalanceLoading,
+    partnerReconViewMode,
+    setPartnerReconViewMode,
+    partnerProductReconList,
+    partnerProductReconListFiltered,
     settlementReconWithBalance,
     displayRecords,
     tableSourceRecords,
+    reconLoading,
   } = recon;
+
+  const partnerQueryDisplayName = useMemo(
+    () => partners.find(p => p.id === reconQueryPartnerId)?.name?.trim() ?? '',
+    [partners, reconQueryPartnerId],
+  );
+
+  const canExportPartnerReconciliation =
+    type === 'RECONCILIATION' &&
+    reconciliationSubTab === 'partner' &&
+    reconHasFilter &&
+    !!partnerReconSummary &&
+    !reconLoading &&
+    !partnerOpeningBalanceLoading;
+
+  const handleExportPartnerReconciliation = useCallback(async () => {
+    if (!partnerReconSummary) {
+      toast.warning('请先完成查询后再导出');
+      return;
+    }
+    try {
+      await downloadPartnerReconciliationXlsx({
+        dateFrom: reconQueryDateFromT,
+        dateTo: reconQueryDateToT,
+        partnerName: partnerQueryDisplayName || reconQueryPartnerId || '合作单位',
+        summary: partnerReconSummary,
+        viewMode: partnerReconViewMode,
+        documentRows: partnerReconWithBalance,
+        productRows: partnerProductReconListFiltered,
+      });
+      toast.success('已导出 Excel');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '导出失败');
+    }
+  }, [
+    partnerReconSummary,
+    reconQueryDateFromT,
+    reconQueryDateToT,
+    partnerQueryDisplayName,
+    reconQueryPartnerId,
+    partnerReconViewMode,
+    partnerReconWithBalance,
+    partnerProductReconListFiltered,
+  ]);
 
   useEffect(() => {
     setFinanceListSearch('');
-  }, [type, reconciliationSubTab]);
+  }, [type, reconciliationSubTab, partnerReconViewMode]);
 
   const categoriesForType = useMemo(() =>
     financeCategories.filter(c => c.kind === type),
@@ -414,7 +470,10 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setReconciliationSubTab('settlement')}
+                    onClick={() => {
+                      setReconciliationSubTab('settlement');
+                      setPartnerReconViewMode('document');
+                    }}
                     className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${reconciliationSubTab === 'settlement' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                   >
                     <User className="w-3.5 h-3.5" /> 报工结算
@@ -520,6 +579,30 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
                 >
                   查询
                 </button>
+                <div className="flex bg-slate-100 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setPartnerReconViewMode('document')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${partnerReconViewMode === 'document' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    按单据
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPartnerReconViewMode('product')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${partnerReconViewMode === 'product' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    按产品
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  disabled={!canExportPartnerReconciliation}
+                  onClick={() => void handleExportPartnerReconciliation()}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" /> 导出 Excel
+                </button>
               </>
             ) : (
               <>
@@ -546,9 +629,67 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
         )}
       </div>
 
+      {type === 'RECONCILIATION' && reconciliationSubTab === 'partner' && reconHasFilter && reconQueryDateFromT && (
+        <div className={`${psiOrderBillCompactSummaryBarClass} grid grid-cols-2 sm:grid-cols-4 gap-4`}>
+          {partnerOpeningBalanceLoading || reconLoading ? (
+            <p className="col-span-full text-center text-sm font-bold text-white/90 py-1">计算中…</p>
+          ) : partnerReconSummary ? (
+            <>
+              <div>
+                <p className={psiOrderBillCompactSummaryLabelClass}>上期余额</p>
+                <p className={`${psiOrderBillCompactSummaryValueClass} text-white`}>
+                  ¥ {partnerReconSummary.openingBalance.toLocaleString()}
+                </p>
+              </div>
+              <div>
+                <p className={psiOrderBillCompactSummaryLabelClass}>本期累计增加</p>
+                <p className={`${psiOrderBillCompactSummaryValueClass} text-white`}>
+                  {partnerReconSummary.periodInc > 0
+                    ? `¥ ${partnerReconSummary.periodInc.toLocaleString()}`
+                    : '—'}
+                </p>
+              </div>
+              <div>
+                <p className={psiOrderBillCompactSummaryLabelClass}>本期累计减少</p>
+                <p className={`${psiOrderBillCompactSummaryValueClass} text-white`}>
+                  {partnerReconSummary.periodDec > 0
+                    ? `¥ ${partnerReconSummary.periodDec.toLocaleString()}`
+                    : '—'}
+                </p>
+              </div>
+              <div>
+                <p className={psiOrderBillCompactSummaryLabelClass}>本期应收余额</p>
+                <p className={`${psiOrderBillCompactSummaryValueClass} text-white`}>
+                  ¥ {partnerReconSummary.closingBalance.toLocaleString()}
+                </p>
+              </div>
+            </>
+          ) : null}
+        </div>
+      )}
+
       {/* 数据列表 */}
       <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
+          {type === 'RECONCILIATION' && reconciliationSubTab === 'partner' && partnerReconViewMode === 'product' ? (
+            !reconHasFilter ? (
+              <div className="px-8 py-20 text-center text-slate-300 italic text-sm">请选择合作单位后点击查询</div>
+            ) : reconLoading ? (
+              <div className="px-8 py-20 text-center text-slate-300 text-sm">加载中…</div>
+            ) : (
+              <PartnerProductReconTable
+                rows={partnerProductReconListFiltered}
+                emptyMessage={
+                  debouncedFinanceListSearch.trim() &&
+                  partnerProductReconList.length > 0 &&
+                  partnerProductReconListFiltered.length === 0
+                    ? '无匹配项，请调整搜索关键词'
+                    : '该条件下暂无对账单据'
+                }
+              />
+            )
+          ) : (
+            <>
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/50">
@@ -767,6 +908,8 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
               <button type="button" disabled={finPage <= 1} onClick={() => setFinPage(p => p - 1)} className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed">上一页</button>
               <button type="button" disabled={finPage >= finTotalPages} onClick={() => setFinPage(p => p + 1)} className="px-3 py-1.5 text-xs font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed">下一页</button>
             </div>
+          )}
+            </>
           )}
         </div>
       </div>

@@ -56,7 +56,7 @@ export function createPaymentFormConfigSchema(opts: {
             toggle: {
               label: '在付款单列表显示「打印」按钮',
               key: 'showPrintButton',
-              defaultChecked: true,
+              defaultChecked: false,
             },
           },
         ],

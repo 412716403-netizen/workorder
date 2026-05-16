@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildScanUrl,
   formatScanRecentChipText,
+  getUnrecognizedScanImeHint,
   parseScanPayload,
   rewriteScanApiErrorForIme,
   scanInputLikelyImeIssue,
@@ -57,6 +58,21 @@ describe('parseScanPayload', () => {
     expect(p.token).toBe('cabbaeb9.P6vnWi-KRwerKWpZ');
   });
 
+  it('normalizes fullwidth slashes in batch scan URL', () => {
+    const token = 'a1b2c3d4.Z9Y8X7W6V5U4T3S2';
+    const url = `https://app.example.com\uFF0Fscan\uFF0Fbatch\uFF0F${token}`;
+    const p = parseScanPayload(url);
+    expect(p.kind).toBe('BATCH');
+    expect(p.token).toBe(token);
+  });
+
+  it('normalizes IME in batch scan URL token', () => {
+    const url = 'http://localhost:3000/scan/batch/cabbaeb9。P6vnWi—KRwerKWpZ';
+    const p = parseScanPayload(url);
+    expect(p.kind).toBe('BATCH');
+    expect(p.token).toBe('cabbaeb9.P6vnWi-KRwerKWpZ');
+  });
+
   it('normalizes fullwidth digits/letters via NFKC', () => {
     const fw = 'cabbaeb9.Ｐ６ｖｎＷｉ_KRwerKWpZ'; // 全角 P6vnWi
     const p = parseScanPayload(fw);
@@ -90,6 +106,13 @@ describe('scanInputLikelyImeIssue', () => {
 
   it('returns false for clean ASCII scan line', () => {
     expect(scanInputLikelyImeIssue('cabbaeb9.P6vnWi-KRwerKWpZ')).toBe(false);
+  });
+});
+
+describe('getUnrecognizedScanImeHint', () => {
+  it('returns hint for fullwidth slash batch URL', () => {
+    const token = 'a1b2c3d4.Z9Y8X7W6V5U4T3S2';
+    expect(getUnrecognizedScanImeHint(`https://x.com\uFF0Fscan\uFF0Fbatch\uFF0F${token}`)).toContain('输入法');
   });
 });
 

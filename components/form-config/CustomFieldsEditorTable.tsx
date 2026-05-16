@@ -64,7 +64,7 @@ function buildDefaultField(prefix: string): PlanFormFieldConfig {
     id: makeId(prefix),
     label: '新自定义项',
     type: 'text',
-    showInList: true,
+    showInList: false,
     showInCreate: true,
     showInDetail: true,
   };

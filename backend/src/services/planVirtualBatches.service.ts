@@ -14,6 +14,7 @@ import {
   verifyCollaborationAccess,
 } from './planTreeQuota.service.js';
 import { voidActivePlanLevelItemCodesForVariants } from './itemCodes.service.js';
+import { formatBatchSerialLabel } from '../../../shared/serialLabels.js';
 
 const INSERT_CHUNK = 2000;
 
@@ -547,13 +548,22 @@ export async function scanBatch(callerTenantId: string, token: string) {
     ownerPlanOrderId: batch.planOrderId,
   });
 
+  const planNumber = plan?.planNumber ?? null;
+  const sequenceNo = batch.sequenceNo;
+  const serialLabel =
+    planNumber != null && sequenceNo != null
+      ? formatBatchSerialLabel(planNumber, sequenceNo)
+      : null;
+
   return {
     kind: 'VIRTUAL_BATCH' as const,
     status: batch.status,
     batchId: batch.id,
     quantity: batch.quantity,
+    sequenceNo,
+    serialLabel,
     planOrderId: batch.planOrderId,
-    planNumber: plan?.planNumber ?? null,
+    planNumber,
     orderNumbers: orders.map((o) => o.orderNumber),
     productId: batch.productId,
     productName: product?.name ?? null,

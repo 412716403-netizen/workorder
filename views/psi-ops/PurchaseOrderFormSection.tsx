@@ -35,6 +35,7 @@ import {
   psiOrderBillCompactSummaryLabelClass,
   psiOrderBillCompactSummaryValueClass,
   psiOrderBillCompactSummaryUnitClass,
+  formStandardLabelClass,
 } from '../../styles/uiDensity';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
@@ -148,7 +149,7 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
           <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
             <div className={`md:col-span-2 grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
               <div className="space-y-1.5 min-w-0">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{partnerLabel}</label>
+                <label className={formStandardLabelClass}>{partnerLabel}</label>
                 <SupplierSelect
                   options={partners}
                   categories={partnerCategories}
@@ -158,7 +159,7 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
                 />
               </div>
               <div className="space-y-1 min-w-0">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">单据编号</label>
+                <label className={formStandardLabelClass}>单据编号</label>
                 <div className="relative">
                   <FileText className="absolute left-2.5 top-1/2 z-[1] h-3.5 w-3.5 -translate-y-1/2 text-slate-300 pointer-events-none" />
                   <div className={psiOrderBillCompactDocReadonlyInnerClass}>
@@ -176,7 +177,7 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
             </div>
             {formSettings.relatedProductEnabled && (
               <div className="space-y-1.5 min-w-0 md:col-span-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">
+                <label className={formStandardLabelClass}>
                   关联产品
                 </label>
                 <p className="text-[10px] font-bold text-slate-400 ml-1 mb-1 leading-snug">
@@ -201,7 +202,7 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
             )}
             {editingDocNumber && formSettings.standardFields.find(f => f.id === 'dueDate')?.showInCreate !== false && (
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">期望到货日期</label>
+                <label className={formStandardLabelClass}>期望到货日期</label>
                 <input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} className={psiOrderBillCompactLineInputClass} />
               </div>
             )}
@@ -209,7 +210,7 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
               const eff = effectivePlanFormFieldType(cf);
               return (
               <div key={cf.id} className={eff === 'text' || eff === 'file' ? 'md:col-span-2 space-y-1' : 'space-y-1'}>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">{cf.label}</label>
+                <label className={formStandardLabelClass}>{cf.label}</label>
                 <PlanFormCustomFieldInput
                   cf={cf}
                   value={form.customData?.[cf.id]}

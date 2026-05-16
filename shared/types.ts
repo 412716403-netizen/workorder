@@ -28,6 +28,26 @@ export type ProcessPricingMode = 'per_piece' | 'per_hour';
 export type ProductionLinkMode = 'order' | 'product';
 export type ProcessSequenceMode = 'free' | 'sequential';
 export type FinanceCategoryKind = 'RECEIPT' | 'PAYMENT';
+
+/** 租户行业类型（平台管理员指定；预设数据在代码中维护） */
+export const TENANT_INDUSTRY_KINDS = ['generic', 'sweater_factory'] as const;
+export type TenantIndustryKind = (typeof TENANT_INDUSTRY_KINDS)[number];
+
+export const TENANT_INDUSTRY_KIND_LABELS: Record<TenantIndustryKind, string> = {
+  generic: '通用',
+  sweater_factory: '毛衣工厂',
+};
+
+export function isTenantIndustryKind(value: string): value is TenantIndustryKind {
+  return (TENANT_INDUSTRY_KINDS as readonly string[]).includes(value);
+}
+
+/** 非法或空值归一为 `generic` */
+export function normalizeTenantIndustryKind(value: string | null | undefined): TenantIndustryKind {
+  if (value != null && value !== '' && isTenantIndustryKind(value)) return value;
+  return 'generic';
+}
+
 export type ProdOpType =
   | 'STOCK_IN'
   | 'STOCK_OUT'
@@ -176,3 +196,47 @@ export type ProductionOpCollabData = {
   defectTreatmentCustomData?: Record<string, unknown>;
   materialStockCustomData?: Record<string, unknown>;
 } & Record<string, unknown>;
+
+/**
+ * 扫码二次校验（去重 + 单据上限）请求/响应。
+ * 前端 `itemCodesApi.validateUsage` 与后端 `POST /item-codes/scan/validate-usage`
+ * 共用：扫码成功后、改表单前调用；持久化去重作用域由 `purpose` 决定。
+ */
+export type ScanValidatePurpose =
+  | 'MILESTONE_REPORT'
+  | 'PRODUCT_REPORT'
+  | 'STOCK_IN'
+  | 'REWORK_REPORT'
+  | 'OUTSOURCE_RECEIVE';
+
+export interface ScanValidateScope {
+  milestoneId?: string;
+  productId?: string;
+  milestoneTemplateId?: string;
+  variantId?: string | null;
+  orderId?: string;
+  orderIds?: string[];
+  sourceReworkId?: string;
+  nodeId?: string;
+  partner?: string;
+  docNo?: string;
+  excludeRecordId?: string;
+}
+
+export interface ScanValidateRequest {
+  purpose: ScanValidatePurpose;
+  scope: ScanValidateScope;
+  itemCodeId?: string | null;
+  virtualBatchId?: string | null;
+  currentQty?: number;
+  addQty?: number;
+  maxQty?: number;
+}
+
+export type ScanValidateCode = 'ALLOWED' | 'DUPLICATE_SAVED' | 'EXCEEDS_MAX';
+
+export interface ScanValidateResponse {
+  code: ScanValidateCode;
+  message?: string;
+  remaining?: number;
+}

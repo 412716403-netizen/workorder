@@ -1,6 +1,6 @@
 import React from 'react';
 import { SearchablePartnerSelect } from './SearchablePartnerSelect';
-import { psiOrderBillFormPartnerTriggerClassCompact } from '../styles/uiDensity';
+import { formStandardPartnerTriggerClass } from '../styles/uiDensity';
 
 type BaseProps = React.ComponentProps<typeof SearchablePartnerSelect>;
 
@@ -12,7 +12,7 @@ type BaseProps = React.ComponentProps<typeof SearchablePartnerSelect>;
 export function PartnerSelect({
   compact = true,
   showCategoryHint = false,
-  triggerClassName = psiOrderBillFormPartnerTriggerClassCompact,
+  triggerClassName = formStandardPartnerTriggerClass,
   ...rest
 }: BaseProps) {
   return (

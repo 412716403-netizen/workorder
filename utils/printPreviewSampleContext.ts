@@ -122,7 +122,10 @@ export function buildSampleItemCodeListRowForPreview(ctx: PrintRenderContext, ro
   const base = printPreviewOriginBase();
   const serialNo = 7 + rowIndex;
   const scanToken = `demo-item-scan-token-${rowIndex}`;
-  const serialLabel = formatItemCodeSerialLabel(planNumber, serialNo);
+  const serialLabel = formatItemCodeSerialLabel(planNumber, serialNo, {
+    batchSequenceNo: 3,
+    batchPieceNo: 1 + rowIndex,
+  });
   return {
     scanUrl: `${base}/scan/${scanToken}`,
     scanToken,

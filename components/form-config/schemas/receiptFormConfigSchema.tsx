@@ -56,7 +56,7 @@ export function createReceiptFormConfigSchema(opts: {
             toggle: {
               label: '在收款单列表显示「打印」按钮',
               key: 'showPrintButton',
-              defaultChecked: true,
+              defaultChecked: false,
             },
           },
         ],

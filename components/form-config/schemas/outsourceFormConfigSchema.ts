@@ -49,7 +49,7 @@ export const outsourceFormConfigSchema: FormConfigSchema<OutsourceFormSettings> 
           toggle: {
             label: '在对应详情弹窗显示「打印」按钮',
             key: 'showPrintButton',
-            defaultChecked: true,
+            defaultChecked: false,
           },
         },
         {
@@ -61,7 +61,7 @@ export const outsourceFormConfigSchema: FormConfigSchema<OutsourceFormSettings> 
           toggle: {
             label: '在对应详情弹窗显示「打印」按钮',
             key: 'showPrintButton',
-            defaultChecked: true,
+            defaultChecked: false,
           },
         },
       ],

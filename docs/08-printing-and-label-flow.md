@@ -28,7 +28,7 @@
 | 列表分页 | `utils/printListPagination*` | 动态列表跨页分页 |
 | 单品码转标签行 | `utils/printItemCodeRows.ts` | 把 `ItemCode[]` 转成打印行 |
 | 批次码转标签行 | `utils/printVirtualBatch.ts` | 把 `PlanVirtualBatch` 转成打印上下文 |
-| 序列号文案 | `utils/serialLabels.ts` | 单品码 `PLNxx-0001`；批次码 `B-PLNxx-0001` |
+| 序列号文案 | `shared/serialLabels.ts` | 单品码 `PLN47-1-1`；批次码 `PLN47-1` |
 
 ### 2.1 打印模版配置与历史系统模版 id 清理
 
@@ -198,13 +198,14 @@ PrintRenderContext.virtualBatch
 
 当前序列号展示约定：
 
-- 单品码：`formatItemCodeSerialLabel` → **`{计划单号}-{四位序号}`**（无字母前缀；与批次码区分靠批次使用 `B-` 前缀）
-- 批次码前缀：`B`
+- 单品码：`formatItemCodeSerialLabel` → **`{计划单号}-{批次序号}-{批次内件号}`**（如 `PLN47-1-1` 表示计划 PLN47、第 1 批、该批第 1 件）；无批次绑定的历史纯计划单品码仍为 `{计划单号}-{全局序号}`（如 `PLN47-12`）
+- 批次码：`formatBatchSerialLabel` → **`{计划单号}-{批次序号}`**（如 `PLN47-1`，不再使用 `B-` 前缀）
 
 例如：
 
-- `PLN12-0001`
-- `B-PLN12-0003`
+- `PLN47-1-1`（单品码，绑定批次时）
+- `PLN47-12`（纯计划单品码，无批次）
+- `PLN47-1`（批次码）
 
 ---
 
@@ -296,4 +297,4 @@ PrintRenderContext.virtualBatch
 
 ### 10.4 追溯粒度说明
 
-报工与 `ProductionOpRecord` 当前**未**持久化 `itemCodeId` / `batchId`，因此 `trace` 时间轴为「同产品 + 规格 + 计划树」上的事件汇总，而非单件码专属轨迹。若要单件级追溯，需在写入链路增加字段并回填。
+报工与 `ProductionOpRecord` 当前**未**持久化 `itemCodeId` / `batchId`，因此 `trace` 时间轴为「同产品 + 规格 + 计划树」上的事件汇总，而非单件码专属轨迹。时间轴数据源含：`milestone_reports`（关联工单报工）、`product_progress_reports`（关联产品报工）、`production_op_records`（入库/外协/返工等）。若要单件级追溯，需在写入链路增加字段并回填。

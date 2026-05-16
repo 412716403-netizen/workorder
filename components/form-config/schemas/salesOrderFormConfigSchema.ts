@@ -57,7 +57,7 @@ export const salesOrderFormConfigSchema: FormConfigSchema<SalesOrderFormSettings
           toggle: {
             label: '在销售订单列表显示「打印」按钮',
             key: 'showPrintButton',
-            defaultChecked: true,
+            defaultChecked: false,
           },
         },
       ],

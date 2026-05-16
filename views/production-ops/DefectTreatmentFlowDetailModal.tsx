@@ -30,6 +30,7 @@ import {
 } from '../../components/doc-modal';
 import {
   sectionTitleClass,
+  formStandardLabelClass,
   psiOrderBillFormSectionStackClass,
   psiOrderBillFormGridGapClass,
   psiOrderBillFormSectionIconIndigoClass,
@@ -372,15 +373,15 @@ const DefectTreatmentFlowDetailModal: React.FC<DefectTreatmentFlowDetailModalPro
                     </div>
                     <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">时间</label>
+                        <label className={formStandardLabelClass}>时间</label>
                         <input type="datetime-local" value={editing.form.timestamp} onChange={e => setEditing(prev => prev ? { ...prev, form: { ...prev.form, timestamp: e.target.value } } : prev)} className={psiOrderBillFormFieldControlClass} />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">操作人</label>
+                        <label className={formStandardLabelClass}>操作人</label>
                         <input type="text" value={editing.form.operator} onChange={e => setEditing(prev => prev ? { ...prev, form: { ...prev.form, operator: e.target.value } } : prev)} className={psiOrderBillFormFieldControlClass} placeholder="操作人" />
                       </div>
                       <div className="md:col-span-2 space-y-1">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">原因/备注</label>
+                        <label className={formStandardLabelClass}>原因/备注</label>
                         <input type="text" value={editing.form.reason} onChange={e => setEditing(prev => prev ? { ...prev, form: { ...prev.form, reason: e.target.value } } : prev)} className={psiOrderBillFormFieldControlClass} placeholder="选填" />
                       </div>
                     </div>

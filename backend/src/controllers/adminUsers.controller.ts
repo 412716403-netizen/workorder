@@ -1,7 +1,7 @@
 import * as adminUsersService from '../services/adminUsers.service.js';
+import * as adminTenantsService from '../services/adminTenants.service.js';
 import { str } from '../utils/request.js';
 import { prisma } from '../lib/prisma.js';
-import { AppError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { listQueryFromRequest, warnListAllFromRequest } from '../utils/listQuery.js';
 
@@ -49,6 +49,8 @@ export const listTenants = asyncHandler(async (req, res) => {
     status: string;
     expiresAt: Date | null;
     equipmentModuleEnabled: boolean | null;
+    industryKind: string;
+    industryPresetAppliedAt: Date | null;
     createdAt: Date;
     memberships: Array<{ user: { id: string; username: string; displayName: string | null; phone: string | null } | null }>;
     _count: { memberships: number };
@@ -60,6 +62,8 @@ export const listTenants = asyncHandler(async (req, res) => {
       status: t.status,
       expiresAt: t.expiresAt?.toISOString() ?? null,
       equipmentFeaturesEnabled: t.equipmentModuleEnabled !== false,
+      industryKind: t.industryKind,
+      industryPresetAppliedAt: t.industryPresetAppliedAt?.toISOString() ?? null,
       memberCount: t._count.memberships,
       owner: owner ? { id: owner.id, username: owner.username, displayName: owner.displayName, phone: owner.phone } : null,
       createdAt: t.createdAt.toISOString(),
@@ -81,47 +85,6 @@ export const listTenants = asyncHandler(async (req, res) => {
 
 export const updateTenant = asyncHandler(async (req, res) => {
   const id = str(req.params.id);
-  const { expiresAt, status, equipmentModuleEnabled } = req.body;
-  const data: { expiresAt?: Date | null; status?: string; equipmentModuleEnabled?: boolean } = {};
-
-  if (status !== undefined) {
-    if (!['active', 'rejected', 'pending'].includes(status)) throw new AppError(400, '无效的状态值');
-    data.status = status;
-  }
-
-  if (expiresAt === null || expiresAt === '') {
-    data.expiresAt = null;
-  } else if (typeof expiresAt === 'string') {
-    const d = new Date(expiresAt);
-    if (Number.isNaN(d.getTime())) throw new AppError(400, '到期时间格式无效');
-    data.expiresAt = d;
-  }
-
-  if (equipmentModuleEnabled !== undefined) {
-    if (typeof equipmentModuleEnabled !== 'boolean') throw new AppError(400, 'equipmentModuleEnabled 须为布尔值');
-    data.equipmentModuleEnabled = equipmentModuleEnabled;
-  }
-
-  const tenant = await prisma.$transaction(async (tx) => {
-    const t = await tx.tenant.update({ where: { id }, data });
-    if (data.equipmentModuleEnabled === false) {
-      await tx.globalNodeTemplate.updateMany({
-        where: { tenantId: id },
-        data: {
-          enableWorkerAssignment: false,
-          enableEquipmentAssignment: false,
-          enableEquipmentOnReport: false,
-        },
-      });
-    }
-    return t;
-  });
-
-  res.json({
-    id: tenant.id,
-    name: tenant.name,
-    status: tenant.status,
-    expiresAt: tenant.expiresAt?.toISOString() ?? null,
-    equipmentFeaturesEnabled: tenant.equipmentModuleEnabled !== false,
-  });
+  const result = await adminTenantsService.updatePlatformTenant(id, req.body);
+  res.json(result);
 });

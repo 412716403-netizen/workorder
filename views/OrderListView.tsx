@@ -14,6 +14,8 @@ import {
   ProductCategory,
   AppDictionaries,
   Partner,
+  PartnerCategory,
+  OutsourceFormSettings,
   BOM,
   ProductionOpRecord,
   Worker,
@@ -23,6 +25,7 @@ import {
 } from '../types';
 import PlanProductDetail from './plan-order-list/PlanProductDetail';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { getRootOrderNumber, reworkRemainingAtNode } from '../utils/orderListHelpers';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProductionByFilter } from './production-ops/sharedFlowListHelpers';
 import { orders as ordersApi, production as productionApi } from '../services/api';
@@ -74,6 +77,8 @@ interface OrderListViewProps {
   categories: ProductCategory[];
   dictionaries: AppDictionaries;
   partners: Partner[];
+  partnerCategories?: PartnerCategory[];
+  outsourceFormSettings?: OutsourceFormSettings;
   boms: BOM[];
   globalNodes: GlobalNodeTemplate[];
   /** 计划单列表显示配置；用于工单模式下「交期」列是否与「显示交货日期」联动 */
@@ -125,8 +130,8 @@ interface OrderListViewExtendedProps extends OrderListViewProps {
 
 const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   productionLinkMode = 'order',
-  processSequenceMode = 'free',
-  allowExceedMaxReportQty = true,
+  processSequenceMode = 'sequential',
+  allowExceedMaxReportQty = false,
   initialDetailOrderId,
   onClearDetailOrderIdFromState,
   orders,
@@ -137,6 +142,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   categories,
   dictionaries,
   partners,
+  partnerCategories = [],
+  outsourceFormSettings,
   boms,
   globalNodes,
   planFormSettings,
@@ -382,19 +389,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     });
   };
 
-  /** 顺序模式：单条返工记录在工序 nodeId 上的「剩余可报数」= 上道已完成流入本道 - 本道已完成 */
-  const reworkRemainingAtNode = (r: ProductionOpRecord, nodeId: string): number => {
-    const pathNodes = (r.reworkNodeIds && r.reworkNodeIds.length > 0) ? r.reworkNodeIds : (r.nodeId ? [r.nodeId] : []);
-    const idx = pathNodes.indexOf(nodeId);
-    if (idx < 0) return 0;
-    const doneAtNode = r.reworkCompletedQuantityByNode?.[nodeId] ?? ((r.completedNodeIds ?? []).includes(nodeId) ? r.quantity : 0);
-    if (processSequenceMode === 'sequential' && idx > 0) {
-      const prevNodeId = pathNodes[idx - 1];
-      const doneAtPrev = r.reworkCompletedQuantityByNode?.[prevNodeId] ?? 0;
-      return Math.max(0, Math.min(doneAtPrev, r.quantity) - doneAtNode);
-    }
-    return Math.max(0, r.quantity - doneAtNode);
-  };
+  // reworkRemainingAtNode / getRootOrderNumber 已抽离至 utils/orderListHelpers.ts
 
   /** 按单 + 目标工序聚合返工统计（工单中心返工详情弹窗用）；顺序模式下 pendingQty = 按路径上道完成后的可报数 */
   const reworkStatsByOrderId = useMemo(() => {
@@ -412,7 +407,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           cur.totalQty += r.quantity;
           const doneAtNode = r.reworkCompletedQuantityByNode?.[nodeId] ?? ((r.completedNodeIds ?? []).includes(nodeId) || completed ? r.quantity : 0);
           cur.completedQty += Math.min(r.quantity, doneAtNode);
-          cur.pendingSeq += reworkRemainingAtNode(r, nodeId);
+          cur.pendingSeq += reworkRemainingAtNode(r, nodeId, processSequenceMode);
           byNode.set(nodeId, cur);
         });
       });
@@ -435,7 +430,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     return result;
   }, [productionLinkMode, effectiveProdRecords, displayOrders, globalNodes, processSequenceMode]);
 
-  const showInList = (id: string) => orderFormSettings.standardFields.find(f => f.id === id)?.showInList ?? true;
+  const showInList = (id: string) => orderFormSettings.standardFields.find(f => f.id === id)?.showInList ?? false;
 
   /**
    * 关联产品模式下，PMP 没有 orderId 字段（详见 docs/05-production-link-mode.md），
@@ -524,15 +519,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     return result;
   };
 
-  /** 关联工单模式下：工单号根（反复去掉末尾 -数字），如 WO2-1-2 → WO2-1 → WO2，同一计划单拆出的工单归到同一框 */
-  const getRootOrderNumber = (orderNumber: string): string => {
-    let s = orderNumber || '';
-    for (;;) {
-      const m = s.match(/^(.+)-([1-9]\d?)$/);
-      if (!m) return s;
-      s = m[1];
-    }
-  };
+  // getRootOrderNumber 已抽离至 utils/orderListHelpers.ts
 
   /** 关联工单模式下：根工单号 → 该原单下所有工单（WO2-1-1、WO2-1-2、WO2-2 等，仅包含至少 2 条的同组；基于当前筛选列表） */
   const rootToOrders = useMemo(() => {
@@ -865,7 +852,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                           {productionLinkMode !== 'product' &&
                             (order.customer ?? '').trim() !== '' &&
-                            (planFormSettings?.standardFields?.find(f => f.id === 'customer')?.showInList ?? true) && (
+                            (planFormSettings?.standardFields?.find(f => f.id === 'customer')?.showInList ?? false) && (
                               <span className="flex items-center gap-1">
                                 <User className="w-3 h-3" /> {order.customer}
                               </span>
@@ -1574,6 +1561,15 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           onReportSubmit={onReportSubmit}
           onReportSubmitProduct={onReportSubmitProduct}
           hasOrderPerm={hasOrderPerm}
+          partners={partners}
+          partnerCategories={partnerCategories}
+          outsourceFormSettings={outsourceFormSettings}
+          onAddRecord={onAddRecord}
+          onAddRecordBatch={onAddRecordBatch}
+          onUpdateRecord={onUpdateRecord}
+          onDeleteRecord={onDeleteRecord}
+          userPermissions={userPermissions}
+          tenantRole={tenantRole}
         />
       )}
 

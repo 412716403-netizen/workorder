@@ -176,7 +176,7 @@ describe('normalizeMaterialFormSettings materialCenterPrint', () => {
     expect(n.materialCenterPrint?.stockReturnFlowDetail?.allowedTemplateIds).toBeUndefined();
     expect(n.materialCenterPrint?.outsourceStockOutFlowDetail?.allowedTemplateIds).toBeUndefined();
     expect(n.materialCenterPrint?.outsourceStockReturnFlowDetail?.allowedTemplateIds).toBeUndefined();
-    expect(n.materialCenterPrint?.stockOutFlowDetail?.showPrintButton).not.toBe(false);
+    expect(n.materialCenterPrint?.stockOutFlowDetail?.showPrintButton).toBe(false);
   });
 
   it('strips code-merged material builtin ids from whitelists', () => {
@@ -211,7 +211,7 @@ describe('normalizeReworkFormSettings reworkCenterPrint', () => {
     const n = normalizeReworkFormSettings({});
     expect(n.reworkCenterPrint?.defectTreatmentFlowDetail?.allowedTemplateIds).toBeUndefined();
     expect(n.reworkCenterPrint?.reworkReportFlowDetail?.allowedTemplateIds).toBeUndefined();
-    expect(n.reworkCenterPrint?.defectTreatmentFlowDetail?.showPrintButton).not.toBe(false);
+    expect(n.reworkCenterPrint?.defectTreatmentFlowDetail?.showPrintButton).toBe(false);
   });
 
   it('strips code-merged rework builtin ids from whitelists', () => {
@@ -241,7 +241,7 @@ describe('normalizeOutsourceFormSettings', () => {
     expect(n.showOutsourceDispatchDeliveryDate).toBe(false);
     expect(n.outsourceCenterPrint?.dispatchFlowDetail?.allowedTemplateIds).toBeUndefined();
     expect(n.outsourceCenterPrint?.receiveFlowDetail?.allowedTemplateIds).toBeUndefined();
-    expect(n.outsourceCenterPrint?.dispatchFlowDetail?.showPrintButton).not.toBe(false);
+    expect(n.outsourceCenterPrint?.dispatchFlowDetail?.showPrintButton).toBe(false);
   });
 
   it('strips removed builtin-outsource-dispatch-v1 from dispatch whitelist', () => {

@@ -96,7 +96,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
   partnerCategories = [],
   workers = [],
   equipment = [],
-  processSequenceMode = 'free',
+  processSequenceMode = 'sequential',
   materialPanelSettings,
   onUpdateMaterialPanelSettings,
   materialFormSettings,

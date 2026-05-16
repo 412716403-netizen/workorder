@@ -11,6 +11,8 @@ import {
   PurchaseBillFormSettings,
   SalesBillFormSettings,
   PrintTemplate,
+  PsiRecord,
+  ProductionOpRecord,
   PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID,
   PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER,
 } from '../../types';
@@ -44,9 +46,9 @@ import { categoryUsesBatchManagement } from '../../types';
 type FormType = 'PURCHASE_ORDER' | 'PURCHASE_BILL' | 'SALES_ORDER' | 'SALES_BILL';
 
 /** 新建用当前 UTC ISO；编辑保留原单据组内最早可解析时间，便于列表排序与展示一致（避免 toLocaleString 不可解析） */
-function psiDocTimestampIsoForSave(recordsList: any[], formType: FormType, editingDocNumber: string | null): string {
+function psiDocTimestampIsoForSave(recordsList: PsiRecord[], formType: FormType, editingDocNumber: string | null): string {
   if (editingDocNumber) {
-    const lines = recordsList.filter((r: any) => r.type === formType && r.docNumber === editingDocNumber);
+    const lines = recordsList.filter((r) => r.type === formType && r.docNumber === editingDocNumber);
     const ms = flowRecordsEarliestMs(lines);
     if (ms > 0) return new Date(ms).toISOString();
   }
@@ -57,7 +59,7 @@ function psiDocTimestampIsoForSave(recordsList: any[], formType: FormType, editi
  * 重新保存销售订单时从原行带回已发、已配（待发）、配货仓；若订单数量改小则收敛到不超过新数量且已配 ≥ 已发。
  */
 function preservedSalesOrderLinePsi(
-  recordsList: any[],
+  recordsList: PsiRecord[],
   sourceRecordIds: string[] | undefined,
   variantId: string | undefined,
   newQty: number,
@@ -66,17 +68,17 @@ function preservedSalesOrderLinePsi(
   if (!ids?.length || newQty <= 0) return {};
   const idSet = new Set(ids);
   const candidates = recordsList.filter(
-    (r: any) =>
+    (r) =>
       r.type === 'SALES_ORDER' &&
       idSet.has(r.id) &&
       (variantId ? r.variantId === variantId : !r.variantId),
   );
   if (!candidates.length) return {};
-  const shippedRaw = candidates.reduce((s, r: any) => s + (Number(r.shippedQuantity) || 0), 0);
-  const allocatedRaw = candidates.reduce((s, r: any) => s + (Number(r.allocatedQuantity) || 0), 0);
+  const shippedRaw = candidates.reduce((s, r) => s + (Number(r.shippedQuantity) || 0), 0);
+  const allocatedRaw = candidates.reduce((s, r) => s + (Number(r.allocatedQuantity) || 0), 0);
   const shipped = Math.min(shippedRaw, newQty);
   const allocated = Math.min(Math.max(allocatedRaw, shipped), newQty);
-  const allocationWarehouseId = candidates.map((r: any) => r.allocationWarehouseId).find((w: any) => w != null && w !== '') as string | undefined;
+  const allocationWarehouseId = candidates.map((r) => r.allocationWarehouseId).find((w) => w != null && w !== '') as string | undefined;
   const out: Record<string, unknown> = { shippedQuantity: shipped, allocatedQuantity: allocated };
   if (allocationWarehouseId) out.allocationWarehouseId = allocationWarehouseId;
   return out as Partial<{ allocatedQuantity: number; shippedQuantity: number; allocationWarehouseId: string }>;
@@ -90,7 +92,7 @@ interface OrderBillFormPageProps {
   partners: Partner[];
   partnerCategories: PartnerCategory[];
   dictionaries: AppDictionaries;
-  records: any[];
+  records: PsiRecord[];
   getStock: (pId: string, whId?: string, excludeDocNumber?: string) => number;
   getVariantDisplayQty: (pId: string, whId: string, variantId: string) => number;
   getNullVariantProdStock: (pId: string, whId?: string) => number;
@@ -103,9 +105,9 @@ interface OrderBillFormPageProps {
   /** 进销存四单：仅「新建」保存成功后由父层切到详情阶段；不传则仍 onBack 关闭 */
   onAfterNewDocSaved?: (docNumber: string) => void;
   /** 单条进销存写入（须传一条记录对象，勿传数组） */
-  onSave: (record: any) => void;
-  onSaveBatch: (records: any[]) => Promise<void>;
-  onReplaceRecords?: (type: string, docNumber: string, newRecords: any[]) => void;
+  onSave: (record: Partial<PsiRecord>) => void;
+  onSaveBatch: (records: Partial<PsiRecord>[]) => Promise<void>;
+  onReplaceRecords?: (type: string, docNumber: string, newRecords: Partial<PsiRecord>[]) => void;
   onDeleteRecords?: (type: string, docNumber: string) => void;
   editingDocNumber: string | null;
   purchaseOrderFormSettings?: PurchaseOrderFormSettings;
@@ -116,7 +118,7 @@ interface OrderBillFormPageProps {
   tenantRole?: string;
   partnerLabel: string;
   /** 生产外协收回等（打印销售单应收结余用） */
-  prodRecords?: any[];
+  prodRecords?: ProductionOpRecord[];
   /** 采购订单/采购单详情打印模版列表（未传时回退到全局配置） */
   orderBillPrintTemplates?: PrintTemplate[];
 }
@@ -207,7 +209,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       customData: {} as Record<string, any>,
     };
         if (editingDocNumber) {
-      const existing = recordsList.filter((r: any) => r.type === formType && r.docNumber === editingDocNumber);
+      const existing = recordsList.filter((r) => r.type === formType && r.docNumber === editingDocNumber);
       if (existing.length > 0) {
         const first = existing[0];
         base.partner = first.partner ?? '';
@@ -272,27 +274,27 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
     }[]
   >(() => {
     if (formType !== 'PURCHASE_ORDER' || !editingDocNumber) return [];
-    const existing = recordsList.filter((r: any) => r.type === 'PURCHASE_ORDER' && r.docNumber === editingDocNumber);
+    const existing = recordsList.filter((r) => r.type === 'PURCHASE_ORDER' && r.docNumber === editingDocNumber);
     if (existing.length === 0) return [];
-    const lineMap: Record<string, any[]> = {};
-    existing.forEach((r: any) => {
+    const lineMap: Record<string, PsiRecord[]> = {};
+    existing.forEach((r) => {
       const lg = r.lineGroupId ?? r.id;
       if (!lineMap[lg]) lineMap[lg] = [];
       lineMap[lg].push(r);
     });
     return Object.entries(lineMap).map(([lgId, recs]) => {
       const first = recs[0];
-      const hasVar = recs.some((r: any) => r.variantId);
+      const hasVar = recs.some((r) => r.variantId);
       const vq: Record<string, number> = {};
-      if (hasVar) recs.forEach((r: any) => { if (r.variantId) vq[r.variantId] = (vq[r.variantId] ?? 0) + (Number(r.quantity) || 0); });
-      const lineQtyNoVar = recs.reduce((s, r: any) => s + (Number(r.quantity) || 0), 0);
+      if (hasVar) recs.forEach((r) => { if (r.variantId) vq[r.variantId] = (vq[r.variantId] ?? 0) + (Number(r.quantity) || 0); });
+      const lineQtyNoVar = recs.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
       return {
         id: lgId,
         productId: first.productId,
         quantity: hasVar ? undefined : lineQtyNoVar,
         purchasePrice: first.purchasePrice ?? 0,
         variantQuantities: hasVar ? vq : undefined,
-        sourceRecordIds: recs.map((r: any) => r.id),
+        sourceRecordIds: recs.map((r) => r.id),
       };
     });
   });
@@ -332,10 +334,10 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
     lineNote?: string;
   }[]>(() => {
     if (formType !== 'PURCHASE_BILL' || !editingDocNumber) return [];
-    const existing = recordsList.filter((r: any) => r.type === 'PURCHASE_BILL' && r.docNumber === editingDocNumber);
+    const existing = recordsList.filter((r) => r.type === 'PURCHASE_BILL' && r.docNumber === editingDocNumber);
     if (existing.length === 0) return [];
-    const lineMap: Record<string, any[]> = {};
-    existing.forEach((r: any) => {
+    const lineMap: Record<string, PsiRecord[]> = {};
+    existing.forEach((r) => {
       const lg = r.lineGroupId ?? r.id;
       if (!lineMap[lg]) lineMap[lg] = [];
       lineMap[lg].push(r);
@@ -350,10 +352,10 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         if (son) sourceOrderNumber = son;
         if (sl) sourceLineId = sl;
       }
-      const hasVar = recs.some((r: any) => r.variantId);
+      const hasVar = recs.some((r) => r.variantId);
       const vq: Record<string, number> = {};
-      if (hasVar) recs.forEach((r: any) => { if (r.variantId) vq[r.variantId] = (vq[r.variantId] ?? 0) + (Number(r.quantity) || 0); });
-      const lineQtyNoVar = recs.reduce((s, r: any) => s + (Number(r.quantity) || 0), 0);
+      if (hasVar) recs.forEach((r) => { if (r.variantId) vq[r.variantId] = (vq[r.variantId] ?? 0) + (Number(r.quantity) || 0); });
+      const lineQtyNoVar = recs.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
       const firstCd = first.customData;
       const lineRel =
         firstCd && typeof firstCd === 'object' && !Array.isArray(firstCd)
@@ -377,27 +379,27 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   // ── Sales order items ──
   const [salesOrderItems, setSalesOrderItems] = useState<{ id: string; productId: string; quantity?: number; salesPrice: number; variantQuantities?: Record<string, number>; sourceRecordIds?: string[] }[]>(() => {
     if (formType !== 'SALES_ORDER' || !editingDocNumber) return [];
-    const existing = recordsList.filter((r: any) => r.type === 'SALES_ORDER' && r.docNumber === editingDocNumber);
+    const existing = recordsList.filter((r) => r.type === 'SALES_ORDER' && r.docNumber === editingDocNumber);
     if (existing.length === 0) return [];
-    const lineMap: Record<string, any[]> = {};
-    existing.forEach((r: any) => {
+    const lineMap: Record<string, PsiRecord[]> = {};
+    existing.forEach((r) => {
       const lg = r.lineGroupId ?? r.id;
       if (!lineMap[lg]) lineMap[lg] = [];
       lineMap[lg].push(r);
     });
     return Object.entries(lineMap).map(([lgId, recs]) => {
       const first = recs[0];
-      const hasVar = recs.some((r: any) => r.variantId);
+      const hasVar = recs.some((r) => r.variantId);
       const vq: Record<string, number> = {};
-      if (hasVar) recs.forEach((r: any) => { if (r.variantId) vq[r.variantId] = (vq[r.variantId] ?? 0) + (Number(r.quantity) || 0); });
-      const lineQtyNoVar = recs.reduce((s, r: any) => s + (Number(r.quantity) || 0), 0);
+      if (hasVar) recs.forEach((r) => { if (r.variantId) vq[r.variantId] = (vq[r.variantId] ?? 0) + (Number(r.quantity) || 0); });
+      const lineQtyNoVar = recs.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
       return {
         id: lgId,
         productId: first.productId,
         quantity: hasVar ? undefined : lineQtyNoVar,
         salesPrice: first.salesPrice ?? 0,
         variantQuantities: hasVar ? vq : undefined,
-        sourceRecordIds: recs.map((r: any) => r.id),
+        sourceRecordIds: recs.map((r) => r.id),
       };
     });
   });
@@ -415,20 +417,20 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
     }[]
   >(() => {
     if (formType !== 'SALES_BILL' || !editingDocNumber) return [];
-    const existing = recordsList.filter((r: any) => r.type === 'SALES_BILL' && r.docNumber === editingDocNumber);
+    const existing = recordsList.filter((r) => r.type === 'SALES_BILL' && r.docNumber === editingDocNumber);
     if (existing.length === 0) return [];
-    const lineMap: Record<string, any[]> = {};
-    existing.forEach((r: any) => {
+    const lineMap: Record<string, PsiRecord[]> = {};
+    existing.forEach((r) => {
       const lg = r.lineGroupId ?? r.id;
       if (!lineMap[lg]) lineMap[lg] = [];
       lineMap[lg].push(r);
     });
     return Object.entries(lineMap).map(([lgId, recs]) => {
       const first = recs[0];
-      const hasVar = recs.some((r: any) => r.variantId);
+      const hasVar = recs.some((r) => r.variantId);
       const vq: Record<string, number> = {};
-      if (hasVar) recs.forEach((r: any) => { if (r.variantId) vq[r.variantId] = (vq[r.variantId] ?? 0) + (Number(r.quantity) || 0); });
-      const lineQtyNoVar = recs.reduce((s, r: any) => s + (Number(r.quantity) || 0), 0);
+      if (hasVar) recs.forEach((r) => { if (r.variantId) vq[r.variantId] = (vq[r.variantId] ?? 0) + (Number(r.quantity) || 0); });
+      const lineQtyNoVar = recs.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
       const batchRaw = first.batchNo ?? first.batch;
       const batch =
         typeof batchRaw === 'string' && batchRaw.trim() !== '' ? batchRaw.trim() : undefined;
@@ -438,14 +440,14 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         quantity: hasVar ? undefined : lineQtyNoVar,
         salesPrice: first.salesPrice ?? 0,
         variantQuantities: hasVar ? vq : undefined,
-        sourceRecordIds: recs.map((r: any) => r.id),
+        sourceRecordIds: recs.map((r) => r.id),
         batch: hasVar ? undefined : batch,
       };
     });
   });
 
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
-  const [allocationModal, setAllocationModal] = useState<{ docNumber: string; lineGroupId: string; product: Product; grp: any[] } | null>(null);
+  const [allocationModal, setAllocationModal] = useState<{ docNumber: string; lineGroupId: string; product: Product; grp: PsiRecord[] } | null>(null);
   const [allocationQuantities, setAllocationQuantities] = useState<number | Record<string, number> | null>(null);
   const [allocationWarehouseId, setAllocationWarehouseId] = useState<string>('');
 
@@ -732,7 +734,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       /** 采购订单单号：新增保存时自动生成；编辑沿用原单号且不可改 */
       let docNumber = editingDocNumber ? editingDocNumber : generatePODocNumber();
       if (!editingDocNumber) {
-        const exists = (n: string) => recordsList.some((r: any) => r.type === 'PURCHASE_ORDER' && (r.docNumber || '').toLowerCase() === n.toLowerCase());
+        const exists = (n: string) => recordsList.some((r) => r.type === 'PURCHASE_ORDER' && (r.docNumber || '').toLowerCase() === n.toLowerCase());
         let attempts = 0;
         while (exists(docNumber) && attempts < 100) {
           const m = docNumber.match(/-(\d+)$/);
@@ -772,7 +774,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       const poCreatedAtIso = (() => {
         if (!editingDocNumber) return localCalendarYmdStartToIso(localTodayYmd());
         const row = recordsList.find(
-          (r: any) => r.type === 'PURCHASE_ORDER' && String(r.docNumber || '') === String(editingDocNumber),
+          (r) => r.type === 'PURCHASE_ORDER' && String(r.docNumber || '') === String(editingDocNumber),
         );
         if (!row) return localCalendarYmdStartToIso(localTodayYmd());
         const ca = row.createdAt;
@@ -781,13 +783,13 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         return localCalendarYmdStartToIso(toLocalDateYmd(ca) || localTodayYmd());
       })();
 
-      const newRecords: any[] = [];
+      const newRecords: Partial<PsiRecord>[] = [];
       let recIdx = 0;
       purchaseOrderItems.forEach((item) => {
         if (!item.productId) return;
         const price = item.purchasePrice || 0;
         if (item.variantQuantities && Object.keys(item.variantQuantities).length > 0) {
-          Object.entries(item.variantQuantities).forEach(([variantId, qty]) => {
+          Object.entries(item.variantQuantities).forEach(([variantId, qty]: [string, number]) => {
             if (!qty || qty <= 0) return;
             const amount = qty * price;
             newRecords.push({
@@ -865,7 +867,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       /** 采购单单号：新增保存时自动生成；编辑沿用原单号且不可改 */
       let docNumber = editingDocNumber ? editingDocNumber : generatePBDocNumber(form.partnerId || '', form.partner || '');
       if (!editingDocNumber) {
-        const exists = (n: string) => recordsList.some((r: any) => r.type === 'PURCHASE_BILL' && (r.docNumber || '').toLowerCase() === n.toLowerCase());
+        const exists = (n: string) => recordsList.some((r) => r.type === 'PURCHASE_BILL' && (r.docNumber || '').toLowerCase() === n.toLowerCase());
         let attempts = 0;
         while (exists(docNumber) && attempts < 100) {
           const m = docNumber.match(/-(\d+)$/);
@@ -891,7 +893,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       const pbCreatedAtIso = (() => {
         if (!editingDocNumber) return localCalendarYmdStartToIso(localTodayYmd());
         const row = recordsList.find(
-          (r: any) => r.type === 'PURCHASE_BILL' && String(r.docNumber || '') === String(editingDocNumber),
+          (r) => r.type === 'PURCHASE_BILL' && String(r.docNumber || '') === String(editingDocNumber),
         );
         if (!row) return localCalendarYmdStartToIso(localTodayYmd());
         const ca = row.createdAt;
@@ -922,14 +924,14 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         }
         return docOperator;
       };
-      const newRecords: any[] = [];
+      const newRecords: Partial<PsiRecord>[] = [];
       let pbIdx = 0;
       purchaseBillItems.forEach((item) => {
         if (!item.productId) return;
         const price = item.purchasePrice || 0;
         const lineCustom = buildPurchaseBillLineCustomData(item.relatedProductId);
         if (item.variantQuantities && Object.keys(item.variantQuantities).length > 0) {
-          Object.entries(item.variantQuantities).forEach(([variantId, qty]) => {
+          Object.entries(item.variantQuantities).forEach(([variantId, qty]: [string, number]) => {
             if (!qty || qty <= 0) return;
             newRecords.push({
               id: `psi-pb-${Date.now()}-${pbIdx++}`,
@@ -1008,7 +1010,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       /** 销售订单单号：新增保存时自动生成；编辑沿用原单号且不可改 */
       let docNumber = editingDocNumber ? editingDocNumber : generateSODocNumber();
       if (!editingDocNumber) {
-        const exists = (n: string) => recordsList.some((r: any) => r.type === 'SALES_ORDER' && (r.docNumber || '').toLowerCase() === n.toLowerCase());
+        const exists = (n: string) => recordsList.some((r) => r.type === 'SALES_ORDER' && (r.docNumber || '').toLowerCase() === n.toLowerCase());
         let attempts = 0;
         while (exists(docNumber) && attempts < 100) {
           const m = docNumber.match(/-(\d+)$/);
@@ -1024,7 +1026,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       const soCreatedAtIso = (() => {
         if (!editingDocNumber) return localCalendarYmdStartToIso(localTodayYmd());
         const row = recordsList.find(
-          (r: any) => r.type === 'SALES_ORDER' && String(r.docNumber || '') === String(editingDocNumber),
+          (r) => r.type === 'SALES_ORDER' && String(r.docNumber || '') === String(editingDocNumber),
         );
         if (!row) return localCalendarYmdStartToIso(localTodayYmd());
         const ca = row.createdAt;
@@ -1033,13 +1035,13 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         return localCalendarYmdStartToIso(toLocalDateYmd(ca) || localTodayYmd());
       })();
       const timestamp = psiDocTimestampIsoForSave(recordsList, 'SALES_ORDER', editingDocNumber);
-      const newRecords: any[] = [];
+      const newRecords: Partial<PsiRecord>[] = [];
       let recIdx = 0;
       salesOrderItems.forEach((item) => {
         if (!item.productId) return;
         const price = item.salesPrice || 0;
         if (item.variantQuantities && Object.keys(item.variantQuantities).length > 0) {
-          Object.entries(item.variantQuantities).forEach(([variantId, qty]) => {
+          Object.entries(item.variantQuantities).forEach(([variantId, qty]: [string, number]) => {
             if (!qty || qty <= 0) return;
             const amount = qty * price;
             newRecords.push({
@@ -1148,7 +1150,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       const originalDocNumber = editingDocNumber || '';
       let docNumber = (editingDocNumber || generateSBDocNumber()).trim();
       if (!editingDocNumber) {
-        const exists = (n: string) => recordsList.some((r: any) => r.type === 'SALES_BILL' && (r.docNumber || '').toLowerCase() === n.toLowerCase());
+        const exists = (n: string) => recordsList.some((r) => r.type === 'SALES_BILL' && (r.docNumber || '').toLowerCase() === n.toLowerCase());
         let attempts = 0;
         while (exists(docNumber) && attempts < 100) {
           const m = docNumber.match(/-(\d+)$/);
@@ -1163,7 +1165,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       }
       const timestamp = psiDocTimestampIsoForSave(recordsList, 'SALES_BILL', editingDocNumber);
       const sbHead = editingDocNumber
-        ? recordsList.find((r: any) => r.type === 'SALES_BILL' && r.docNumber === editingDocNumber)
+        ? recordsList.find((r) => r.type === 'SALES_BILL' && r.docNumber === editingDocNumber)
         : undefined;
       const sbCreatedAtIso = sbHead?.createdAt
         ? (String(sbHead.createdAt).trim().includes('T')
@@ -1171,13 +1173,13 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
           : localCalendarYmdStartToIso(toLocalDateYmd(sbHead.createdAt) || localTodayYmd()))
         : localCalendarYmdStartToIso(localTodayYmd());
       const sbNotePreserve = sbHead && editingDocNumber ? (sbHead.note != null ? String(sbHead.note) : '') : '';
-      const newRecords: any[] = [];
+      const newRecords: Partial<PsiRecord>[] = [];
       let recIdx = 0;
       salesBillItems.forEach((item) => {
         if (!item.productId) return;
         const price = item.salesPrice || 0;
         if (item.variantQuantities && Object.keys(item.variantQuantities).length > 0) {
-          Object.entries(item.variantQuantities).forEach(([variantId, qty]) => {
+          Object.entries(item.variantQuantities).forEach(([variantId, qty]: [string, number]) => {
             if (qty === 0) return;
             newRecords.push({
               id: `psi-sb-${Date.now()}-${recIdx++}`,

@@ -1,10 +1,15 @@
-import type { ScanItemCodeResult } from '../types';
+import type { ScanItemCodeResult, ScanVirtualBatchResult } from '../types';
 import type { ScanPayload } from './scanPayload';
+import { rewriteScanApiErrorForIme } from './scanPayload';
 
 export type ScanIntent = 'BATCH' | 'ITEM';
 
+const SCAN_BATCH_NOT_FOUND_RE = /批次码不存在/;
+const SCAN_ITEM_NOT_FOUND_RE = /单品码不存在/;
+
 export interface NormalizeScanPayloadDeps {
   scanItemByToken: (token: string) => Promise<ScanItemCodeResult>;
+  scanBatchByToken: (token: string) => Promise<ScanVirtualBatchResult>;
 }
 
 /**
@@ -23,11 +28,40 @@ export async function normalizeScanPayloadForIntent(
     return { ok: false, message: '当前为单品码扫码，请勿扫批次码' };
   }
   if (intent === 'BATCH' && payload.kind === 'ITEM') {
+    let batchNotFound = false;
+    try {
+      const batchRes = await deps.scanBatchByToken(payload.token);
+      if (batchRes.kind === 'VIRTUAL_BATCH') {
+        if (batchRes.status === 'VOIDED') {
+          return { ok: false, message: batchRes.message ?? '该批次码已作废' };
+        }
+        return {
+          ok: true,
+          payload: { kind: 'BATCH', token: payload.token, raw: payload.raw },
+        };
+      }
+    } catch (e) {
+      const batchMsg = (e as Error)?.message ?? '批次码查询失败';
+      if (SCAN_BATCH_NOT_FOUND_RE.test(batchMsg)) {
+        batchNotFound = true;
+      } else {
+        return { ok: false, message: rewriteScanApiErrorForIme(payload.raw, batchMsg) };
+      }
+    }
+
     let res: ScanItemCodeResult;
     try {
       res = await deps.scanItemByToken(payload.token);
     } catch (e) {
-      return { ok: false, message: (e as Error)?.message ?? '单品码查询失败' };
+      const itemMsg = (e as Error)?.message ?? '单品码查询失败';
+      const preferBatch = batchNotFound && SCAN_ITEM_NOT_FOUND_RE.test(itemMsg);
+      return {
+        ok: false,
+        message: rewriteScanApiErrorForIme(
+          payload.raw,
+          preferBatch ? '批次码不存在' : itemMsg,
+        ),
+      };
     }
     if (res.status === 'VOIDED') {
       return { ok: false, message: res.message ?? '该单品码已作废' };

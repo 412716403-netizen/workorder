@@ -3,12 +3,12 @@ import { useAsyncSubmitLock } from '../../hooks/useAsyncSubmitLock';
 import {
   Warehouse as WarehouseIcon,
   ArrowRight,
-  MapPin,
   Trash2,
 } from 'lucide-react';
 import { Warehouse } from '../../types';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
+import { formStandardControlClass } from '../../styles/uiDensity';
 
 interface WarehousesTabProps {
   warehouses: Warehouse[];
@@ -25,7 +25,7 @@ const WarehousesTab: React.FC<WarehousesTabProps> = ({
 }) => {
   const [newWhName, setNewWhName] = useState('');
   const [editingWhId, setEditingWhId] = useState<string | null>(null);
-  const [whDraft, setWhDraft] = useState({ name: '', location: '' });
+  const [whDraft, setWhDraft] = useState({ name: '' });
   const addLock = useAsyncSubmitLock();
 
   const handleAddWarehouse = async () => {
@@ -40,7 +40,6 @@ const WarehousesTab: React.FC<WarehousesTabProps> = ({
         setEditingWhId(created.id);
         setWhDraft({
           name: (created as Warehouse).name || newWhName.trim(),
-          location: (created as Warehouse).location || '',
         });
         await onRefreshWarehouses();
       } catch (err: any) { toast.error(err.message || '操作失败'); }
@@ -71,7 +70,6 @@ const WarehousesTab: React.FC<WarehousesTabProps> = ({
                   setEditingWhId(wh.id);
                   setWhDraft({
                     name: wh.name || '',
-                    location: wh.location || '',
                   });
                 }}
                 className={`flex items-center justify-between p-3.5 rounded-2xl border cursor-pointer transition-all group ${
@@ -89,7 +87,7 @@ const WarehousesTab: React.FC<WarehousesTabProps> = ({
           <div className="pt-6 border-t border-slate-50">
             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">快速录入新仓库</h3>
             <div className="space-y-4">
-              <input type="text" placeholder="仓库名称" value={newWhName} onChange={e => setNewWhName(e.target.value)} className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" />
+              <input type="text" placeholder="仓库名称" value={newWhName} onChange={e => setNewWhName(e.target.value)} className={formStandardControlClass} />
               <button type="button" onClick={() => void handleAddWarehouse()} disabled={!newWhName.trim() || addLock.busy} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed">{addLock.busy ? '提交中…' : '确认添加'}</button>
             </div>
           </div>
@@ -106,56 +104,32 @@ const WarehousesTab: React.FC<WarehousesTabProps> = ({
                       {canDelete && <button onClick={() => removeWarehouse(wh.id)} className="text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition-all"><Trash2 className="w-5 h-5" /></button>}
                     </div>
                     <div className="p-8 space-y-10">
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1 md:col-span-2">
-                             <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest">仓库名称</label>
-                             <input
-                               type="text"
-                               value={whDraft.name}
-                               onChange={(e) => setWhDraft((d) => ({ ...d, name: e.target.value }))}
-                               onBlur={async () => {
-                                 const cur = warehouses.find((x) => x.id === wh.id);
-                                 if (!cur) return;
-                                 const next = whDraft.name.trim();
-                                 if (next === (cur.name || '')) return;
-                                 if (!next) {
-                                   toast.error('仓库名称不能为空');
-                                   setWhDraft((d) => ({ ...d, name: cur.name || '' }));
-                                   return;
-                                 }
-                                 try {
-                                   await api.settings.warehouses.update(wh.id, { name: next });
-                                   await onRefreshWarehouses();
-                                 } catch (err: unknown) {
-                                   toast.error(err instanceof Error ? err.message : '保存失败');
-                                   setWhDraft((d) => ({ ...d, name: cur.name || '' }));
-                                 }
-                               }}
-                               className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
-                             />
-                          </div>
-                          <div className="space-y-1 md:col-span-2">
-                             <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest flex items-center gap-2"><MapPin className="w-3 h-3" /> 地理位置</label>
-                             <input
-                               type="text"
-                               value={whDraft.location}
-                               onChange={(e) => setWhDraft((d) => ({ ...d, location: e.target.value }))}
-                               onBlur={async () => {
-                                 const cur = warehouses.find((x) => x.id === wh.id);
-                                 if (!cur) return;
-                                 const next = whDraft.location.trim();
-                                 if (next === (cur.location || '').trim()) return;
-                                 try {
-                                   await api.settings.warehouses.update(wh.id, { location: next || null });
-                                   await onRefreshWarehouses();
-                                 } catch (err: unknown) {
-                                   toast.error(err instanceof Error ? err.message : '保存失败');
-                                   setWhDraft((d) => ({ ...d, location: cur.location || '' }));
-                                 }
-                               }}
-                               className="w-full bg-slate-50 border-none rounded-xl py-3 px-4 font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none"
-                             />
-                          </div>
+                       <div className="space-y-1 max-w-xl">
+                          <label className="text-[10px] font-black text-slate-400 uppercase block mb-1 tracking-widest">仓库名称</label>
+                          <input
+                            type="text"
+                            value={whDraft.name}
+                            onChange={(e) => setWhDraft((d) => ({ ...d, name: e.target.value }))}
+                            onBlur={async () => {
+                              const cur = warehouses.find((x) => x.id === wh.id);
+                              if (!cur) return;
+                              const next = whDraft.name.trim();
+                              if (next === (cur.name || '')) return;
+                              if (!next) {
+                                toast.error('仓库名称不能为空');
+                                setWhDraft((d) => ({ ...d, name: cur.name || '' }));
+                                return;
+                              }
+                              try {
+                                await api.settings.warehouses.update(wh.id, { name: next });
+                                await onRefreshWarehouses();
+                              } catch (err: unknown) {
+                                toast.error(err instanceof Error ? err.message : '保存失败');
+                                setWhDraft((d) => ({ ...d, name: cur.name || '' }));
+                              }
+                            }}
+                            className={formStandardControlClass}
+                          />
                        </div>
                     </div>
                  </div>

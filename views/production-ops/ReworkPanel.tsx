@@ -88,7 +88,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
   partnerCategories = [],
   workers = [],
   equipment = [],
-  processSequenceMode = 'free',
+  processSequenceMode = 'sequential',
   plans = [],
   reworkFormSettings,
   onUpdateReworkFormSettings,

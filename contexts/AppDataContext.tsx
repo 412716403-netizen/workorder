@@ -149,7 +149,6 @@ export interface AppDataContextValue {
   // Plans
   onCreatePlan: (p: PlanOrder) => Promise<void>;
   onUpdatePlan: (id: string, updates: Partial<PlanOrder>) => Promise<void>;
-  onSplitPlan: (planId: string, newPlans: PlanOrder[]) => Promise<void>;
   onDeletePlan: (id: string) => Promise<void>;
   onConvertToOrder: (id: string) => Promise<void>;
   onCreateSubPlan: (data: { productId: string; quantity: number; planId: string; bomNodeId?: string }) => Promise<void>;
@@ -404,47 +403,20 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       : `pt-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
   );
   const [productionLinkMode, setProductionLinkMode] = useState<ProductionLinkMode>('order');
-  const [processSequenceMode, setProcessSequenceMode] = useState<ProcessSequenceMode>('free');
-  const [allowExceedMaxReportQty, setAllowExceedMaxReportQty] = useState<boolean>(true);
+  const [processSequenceMode, setProcessSequenceMode] = useState<ProcessSequenceMode>('sequential');
+  const [allowExceedMaxReportQty, setAllowExceedMaxReportQty] = useState<boolean>(false);
   const [productMilestoneProgresses, setProductMilestoneProgresses] = useState<ProductMilestoneProgress[]>([]);
 
   const activeTenantId = tenantCtx?.tenantId;
 
   // ── Initial data loading (core data only — heavy data loaded on demand) ──
-  // 依赖当前企业 ID：切换公司后必须清空并重新拉取，避免与进销存等数据错位（表现为「未知产品」等）
+  // App.tsx 通过 `key={`${userId}_${tenantCtx.tenantId}`}` 重建整个 Provider 子树，
+  // 切换租户时所有 useState 自动回到初始值，故无需在此手动 setX([]) reset。
   useEffect(() => {
     if (!activeTenantId) return;
     let cancelled = false;
 
     setDataLoading(true);
-    setProducts([]);
-    setOrders([]);
-    setPlans([]);
-    setCategories([]);
-    setPartnerCategories([]);
-    setDictionaries(EMPTY_DICTIONARIES);
-    setGlobalNodes([]);
-    setBoms([]);
-    setPartners([]);
-    setWorkers([]);
-    setEquipment([]);
-    setWarehouses([]);
-    setFinanceCategories([]);
-    setFinanceAccountTypes([]);
-    setPlanFormSettings(DEFAULT_PLAN_FORM_SETTINGS);
-    setOrderFormSettings(DEFAULT_ORDER_FORM_SETTINGS);
-    setPurchaseOrderFormSettings(DEFAULT_PURCHASE_ORDER_FORM_SETTINGS);
-    setSalesOrderFormSettings(DEFAULT_SALES_ORDER_FORM_SETTINGS);
-    setPurchaseBillFormSettings(DEFAULT_PURCHASE_BILL_FORM_SETTINGS);
-    setSalesBillFormSettings(DEFAULT_SALES_BILL_FORM_SETTINGS);
-    setReceiptFormSettings(DEFAULT_RECEIPT_FORM_SETTINGS);
-    setPaymentFormSettings(DEFAULT_PAYMENT_FORM_SETTINGS);
-    setMaterialPanelSettings(DEFAULT_MATERIAL_PANEL_SETTINGS);
-    setMaterialFormSettings(DEFAULT_MATERIAL_FORM_SETTINGS);
-    setOutsourceFormSettings(DEFAULT_OUTSOURCE_FORM_SETTINGS);
-    setReworkFormSettings(DEFAULT_REWORK_FORM_SETTINGS);
-    setPrintTemplates([]);
-    setProductMilestoneProgresses([]);
 
     (async () => {
       try {
@@ -517,10 +489,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ── Refresh helpers (with incremental sync support) ──
-  const refreshPlans = useCallback(async () => { setPlans(normalizeDecimals(await api.plans.list() as PlanOrder[])); markFetched('plans'); }, []);
+  const refreshPlans = useCallback(async () => { setPlans(normalizeDecimals(await api.plans.list())); markFetched('plans'); }, []);
   const refreshOrders = useCallback(async () => {
     const ts = lastFetchTs.current['orders'];
-    const data = normalizeDecimals(await api.orders.list(ts ? { updatedAfter: ts } : undefined) as ProductionOrder[]);
+    const data = normalizeDecimals(await api.orders.list(ts ? { updatedAfter: ts } : undefined));
     setOrders(prev => ts ? mergeById(prev, data) : data);
     markFetched('orders');
   }, []);
@@ -533,7 +505,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
    * - PSI 业务页 → `usePsiOpsRecordsList` / `api.psi.listPaginated`
    * - 财务列表 / 对账 → FinanceOpsView 内部 react-query；销售单打印走 `api.finance.partnerReceivable`
    */
-  const refreshPMP = useCallback(async () => setProductMilestoneProgresses(normalizeDecimals(await api.orders.listProductProgress() as ProductMilestoneProgress[])), []);
+  const refreshPMP = useCallback(async () => setProductMilestoneProgresses(normalizeDecimals(await api.orders.listProductProgress())), []);
   const refreshCategories = useCallback(
     async () => setCategories(normalizeProductCategoriesFromApi(await api.settings.categories.list() as ProductCategory[])),
     [],
@@ -713,24 +685,17 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   // ── Plan handlers ──
   const onCreatePlan = useCallback(async (p: PlanOrder) => {
     try {
-      const created = await api.plans.create(p) as PlanOrder;
+      const created = await api.plans.create(p);
       setPlans(prev => [...prev, norm1(created)]);
     } catch (err: any) { toast.error(err.message || '创建计划失败'); }
   }, []);
 
   const onUpdatePlan = useCallback(async (id: string, updates: Partial<PlanOrder>) => {
     try {
-      const updated = await api.plans.update(id, updates) as PlanOrder;
+      const updated = await api.plans.update(id, updates);
       setPlans(prev => prev.map(p => p.id === id ? norm1(updated) : p));
     } catch (err: any) { toast.error(err.message || '更新计划失败'); }
   }, []);
-
-  const onSplitPlan = useCallback(async (planId: string, newPlans: PlanOrder[]) => {
-    try {
-      await api.plans.split(planId, { newPlans: newPlans.map(p => ({ items: p.items })) });
-      await refreshPlans();
-    } catch (err: any) { toast.error(err.message || '拆分失败'); }
-  }, [refreshPlans]);
 
   const onDeletePlan = useCallback(async (id: string) => {
     try { await api.plans.delete(id); setPlans(prev => prev.filter(p => p.id !== id)); }
@@ -764,13 +729,17 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       const operatorName = workerId ? (workers.find((w: any) => w.id === workerId)?.name ?? '未知') : currentOperatorDisplayName(currentUser);
       const order = orders.find(o => o.id === oId);
       const rate = products.find(p => p.id === order?.productId)?.nodeRates?.[order?.milestones.find(m => m.id === mId)?.templateId ?? ''];
+      const raw = data ?? {};
+      const { virtualBatchId, itemCodeId, ...customData } = raw as Record<string, unknown>;
       await api.orders.createReport(oId, mId, {
         quantity: qty, operator: operatorName, defectiveQuantity: defectiveQty || 0,
         variantId: vId, workerId, equipmentId, reportBatchId, reportNo,
-        customData: data ?? {}, rate: rate != null ? rate : undefined,
+        customData, rate: rate != null ? rate : undefined,
         weight,
+        virtualBatchId: typeof virtualBatchId === 'string' ? virtualBatchId : undefined,
+        itemCodeId: typeof itemCodeId === 'string' ? itemCodeId : undefined,
       });
-      const updated = await api.orders.get(oId) as ProductionOrder;
+      const updated = await api.orders.get(oId);
       setOrders(prev => prev.map(o => o.id === oId ? norm1(updated) : o));
       invalidateAllProdRecords();
     } catch (err: any) { toast.error(err.message || '报工失败'); }
@@ -780,11 +749,15 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     try {
       const operatorName = workerId ? (workers.find((w: any) => w.id === workerId)?.name ?? '未知') : currentOperatorDisplayName(currentUser);
       const rate = products.find(p => p.id === productId)?.nodeRates?.[milestoneTemplateId];
+      const raw = data ?? {};
+      const { virtualBatchId, itemCodeId, ...customData } = raw as Record<string, unknown>;
       await api.orders.createProductReport({
         productId, milestoneTemplateId, quantity: qty, operator: operatorName,
         defectiveQuantity: defectiveQty || 0, variantId: vId, workerId, equipmentId,
-        reportBatchId, reportNo, customData: data ?? {}, rate: rate != null ? rate : undefined,
+        reportBatchId, reportNo, customData, rate: rate != null ? rate : undefined,
         weight,
+        virtualBatchId: typeof virtualBatchId === 'string' ? virtualBatchId : undefined,
+        itemCodeId: typeof itemCodeId === 'string' ? itemCodeId : undefined,
       });
       await refreshPMP();
       invalidateAllProdRecords();
@@ -803,7 +776,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       } else {
         await api.orders.updateReport(orderId, milestoneId, reportId, payload);
       }
-      const updated = await api.orders.get(orderId) as ProductionOrder;
+      const updated = await api.orders.get(orderId);
       setOrders(prev => prev.map(o => o.id === orderId ? norm1(updated) : o));
     } catch (err: any) { toast.error(err.message || '更新报工失败'); }
   }, []);
@@ -811,7 +784,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const onDeleteReport = useCallback(async ({ orderId, milestoneId, reportId }: { orderId: string; milestoneId: string; reportId: string }) => {
     try {
       await api.orders.deleteReport(orderId, milestoneId, reportId);
-      const updated = await api.orders.get(orderId) as ProductionOrder;
+      const updated = await api.orders.get(orderId);
       setOrders(prev => prev.map(o => o.id === orderId ? norm1(updated) : o));
     } catch (err: any) { toast.error(err.message || '删除报工失败'); }
   }, []);
@@ -844,7 +817,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const onUpdateOrder = useCallback(async (orderId: string, updates: Partial<ProductionOrder>) => {
     try {
-      const updated = await api.orders.update(orderId, updates) as ProductionOrder;
+      const updated = await api.orders.update(orderId, updates);
       setOrders(prev => prev.map(o => o.id === orderId ? norm1(updated) : o));
     } catch (err: any) { toast.error(err.message || '更新工单失败'); }
   }, []);
@@ -861,7 +834,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
    */
   const onAddProdRecord = useCallback(async (record: ProductionOpRecord): Promise<ProductionOpRecord | null> => {
     try {
-      const created = (await api.production.create(record)) as ProductionOpRecord;
+      const created = await api.production.create(record);
       invalidateAllProdRecords();
       void Promise.allSettled([refreshOrders(), refreshPMP()]);
       return created ?? null;
@@ -882,7 +855,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
        * 让 view 层（StockMaterialPanel 等）可以在弹窗里展示真实单号，
        * 而不需要再各自维护一份客户端 docNo 生成逻辑。
        */
-      const created = (await api.production.createBatch(records)) as ProductionOpRecord[] | null | undefined;
+      const created: ProductionOpRecord[] | null | undefined = await api.production.createBatch(records);
       invalidateAllProdRecords();
       void Promise.allSettled([refreshOrders(), refreshPMP()]);
       return Array.isArray(created) ? created : [];
@@ -934,7 +907,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const onReplacePSIRecords = useCallback(async (type: string, docNumber: string, newRecords: any[]) => {
     try {
       // 旧实现先在前端遍历 psiRecords 拿 id 列表再 replace；现改为按 type+docNumber 拉一次窄查询
-      const list = await api.psi.list({ type, docNumber } as Record<string, string>) as any[];
+      const list = await api.psi.list({ type, docNumber });
       const deleteIds = (Array.isArray(list) ? list : []).map(r => r.id).filter(Boolean);
       await api.psi.replace(deleteIds, newRecords);
       invalidateAllPsiRecords();
@@ -943,7 +916,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   const onDeletePSIRecords = useCallback(async (type: string, docNumber: string) => {
     try {
-      const list = await api.psi.list({ type, docNumber } as Record<string, string>) as any[];
+      const list = await api.psi.list({ type, docNumber });
       const ids = (Array.isArray(list) ? list : []).map(r => r.id).filter(Boolean);
       if (ids.length) await api.psi.deleteBatch(ids);
       invalidateAllPsiRecords();
@@ -1005,7 +978,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     onUpdateReceiptFormSettings, onUpdatePaymentFormSettings,
     onUpdateMaterialPanelSettings, onUpdateMaterialFormSettings, onUpdateOutsourceFormSettings, onUpdateReworkFormSettings, onUpdatePrintTemplates,
     onUpdateProduct, onDeleteProduct, onUpdateBOM,
-    onCreatePlan, onUpdatePlan, onSplitPlan, onDeletePlan, onConvertToOrder,
+    onCreatePlan, onUpdatePlan, onDeletePlan, onConvertToOrder,
     onCreateSubPlan, onCreateSubPlans,
     onReportSubmit, onReportSubmitProduct,
     onUpdateReport, onDeleteReport, onUpdateReportProduct, onDeleteReportProduct,
@@ -1027,7 +1000,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     onUpdateReceiptFormSettings, onUpdatePaymentFormSettings,
     onUpdateMaterialPanelSettings, onUpdateMaterialFormSettings, onUpdateOutsourceFormSettings, onUpdateReworkFormSettings, onUpdatePrintTemplates,
     onUpdateProduct, onDeleteProduct, onUpdateBOM,
-    onCreatePlan, onUpdatePlan, onSplitPlan, onDeletePlan, onConvertToOrder,
+    onCreatePlan, onUpdatePlan, onDeletePlan, onConvertToOrder,
     onCreateSubPlan, onCreateSubPlans,
     onReportSubmit, onReportSubmitProduct,
     onUpdateReport, onDeleteReport, onUpdateReportProduct, onDeleteReportProduct,

@@ -1,5 +1,5 @@
 import type { ItemCode, PrintListRow, DictionaryItem } from '../types';
-import { formatItemCodeSerialLabel } from './serialLabels';
+import { formatItemCodeSerialLabelFromCode } from './serialLabels';
 
 export interface ItemCodePrintContext {
   planNumber: string;
@@ -40,7 +40,7 @@ export function buildPrintListRowsFromItemCodes(
       }
     }
 
-    const serialLabel = formatItemCodeSerialLabel(ctx.planNumber, code.serialNo);
+    const serialLabel = formatItemCodeSerialLabelFromCode(ctx.planNumber, code);
 
     return {
       scanUrl: `${baseUrl}/scan/${code.scanToken}`,

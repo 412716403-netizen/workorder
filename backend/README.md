@@ -183,7 +183,6 @@ npx prisma studio
 ### 生产计划
 
 - `/api/plans` - 计划单 CRUD
-- `POST /api/plans/:id/split` - 拆单
 - `POST /api/plans/:id/convert` - 下达工单
 - `POST /api/plans/:id/sub-plans` - 创建子计划
 
