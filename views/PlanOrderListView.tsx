@@ -380,14 +380,17 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
     [planFormSettings, onUpdatePlanFormSettings],
   );
 
-  const labelPrintPickerTemplates = useMemo(
-    () =>
-      filterPrintTemplatesByAllowedIds(
-        printTemplates,
-        planFormSettings.labelPrint?.allowedTemplateIds,
-      ),
-    [printTemplates, planFormSettings.labelPrint?.allowedTemplateIds],
-  );
+  const { labelPrintPickerTemplates, labelPrintPickerHasWhitelist } = useMemo(() => {
+    const raw = planFormSettings.labelPrint?.allowedTemplateIds;
+    const filtered = filterPrintTemplatesByAllowedIds(printTemplates, raw);
+    const hasWhitelist =
+      Array.isArray(raw) &&
+      raw.some(x => x != null && x !== '' && String(x).trim() !== '');
+    return {
+      labelPrintPickerTemplates: filtered,
+      labelPrintPickerHasWhitelist: hasWhitelist,
+    };
+  }, [printTemplates, planFormSettings.labelPrint?.allowedTemplateIds]);
 
   /** 递归获取某计划下所有子孙计划（深度优先，用于列表展示），返回 { plan, depth } */
   const getAllDescendantsWithDepth = (planId: string, depth: number): { plan: PlanOrder; depth: number }[] => {
@@ -851,6 +854,8 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
           onFilePreview={(url, type) => { setFilePreviewUrl(url); setFilePreviewType(type); }}
           onPrintRun={setPlanListPrintRun}
           labelPrintPickerTemplates={labelPrintPickerTemplates}
+          labelPrintPickerHasWhitelist={labelPrintPickerHasWhitelist}
+          onOpenLabelPrintConfig={openPlanFormPrintTab}
           printTemplates={printTemplates}
           onUpdatePrintTemplates={onUpdatePrintTemplates}
           onRefreshPrintTemplates={onRefreshPrintTemplates}

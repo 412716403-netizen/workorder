@@ -138,6 +138,9 @@ export interface PlanDetailPanelProps {
   onFilePreview: (url: string, type: 'image' | 'pdf') => void;
   onPrintRun: (run: { template: PrintTemplate; plan: PlanOrder } | null) => void;
   labelPrintPickerTemplates: PrintTemplate[];
+  labelPrintPickerHasWhitelist: boolean;
+  /** 打开计划单表单配置 → 打印模版（标签打印） */
+  onOpenLabelPrintConfig: () => void;
   printTemplates: PrintTemplate[];
   onUpdatePrintTemplates: (list: PrintTemplate[]) => void | Promise<void>;
   onRefreshPrintTemplates?: () => void | Promise<void>;
@@ -175,6 +178,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   onFilePreview,
   onPrintRun,
   labelPrintPickerTemplates,
+  labelPrintPickerHasWhitelist,
+  onOpenLabelPrintConfig,
   printTemplates,
   onUpdatePrintTemplates,
   onRefreshPrintTemplates,
@@ -1120,6 +1125,15 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     })();
   }, []);
 
+  const handleOpenLabelPrintConfig = useCallback(() => {
+    setItemCodePrintOpen(false);
+    setItemCodePrintPlan(null);
+    setBatchBulkPrintOpen(false);
+    setItemCodeSinglePrintModal(null);
+    setBatchPrintModal(null);
+    onOpenLabelPrintConfig();
+  }, [onOpenLabelPrintConfig]);
+
   // --- Guard: bail out if plan or product not found ---
   if (!viewPlan || !viewProduct) return null;
 
@@ -1969,6 +1983,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
         dictionaries={dictionaries}
         orders={orders ?? []}
         labelPrintPickerTemplates={labelPrintPickerTemplates}
+        labelPrintPickerHasWhitelist={labelPrintPickerHasWhitelist}
+        onOpenLabelPrintConfig={handleOpenLabelPrintConfig}
         onPrintRun={onPrintRun}
         virtualBatches={virtualBatches}
         itemCodePrintOpen={itemCodePrintOpen}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Printer, X } from 'lucide-react';
+import { Plus, Printer, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { buildPrintListRowsFromItemCodes, type ItemCodePrintContext } from '../../utils/printItemCodeRows';
 import { buildVirtualBatchPrintRow } from '../../utils/printVirtualBatch';
@@ -13,6 +13,8 @@ interface PlanPrintOverlaysProps {
   dictionaries: AppDictionaries;
   orders: ProductionOrder[];
   labelPrintPickerTemplates: PrintTemplate[];
+  labelPrintPickerHasWhitelist: boolean;
+  onOpenLabelPrintConfig: () => void;
   onPrintRun: (run: { template: PrintTemplate; plan: PlanOrder } | null) => void;
   virtualBatches: PlanVirtualBatch[];
   itemCodePrintOpen: boolean;
@@ -29,6 +31,29 @@ interface PlanPrintOverlaysProps {
   setBatchPrintModal: (modal: { plan: PlanOrder; batch: PlanVirtualBatch } | null) => void;
 }
 
+const LabelPrintTemplateEmptyState: React.FC<{
+  hasWhitelist: boolean;
+  onAddTemplate: () => void;
+}> = ({ hasWhitelist, onAddTemplate }) => (
+  <div className="px-2 py-2">
+    <div className="flex flex-col items-center gap-4 px-4 py-8 text-center">
+      <p className="text-xs leading-relaxed text-slate-500">
+        {hasWhitelist
+          ? '已加入的可选模版在当前列表中均不可用，或模版已被删除。请在「表单配置 → 打印模版」中调整。'
+          : '请先在「表单配置 → 打印模版」中为「标签打印」增加模版并加入可选列表后，再在此处打印。'}
+      </p>
+      <button
+        type="button"
+        onClick={onAddTemplate}
+        className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-indigo-700"
+      >
+        <Plus className="h-4 w-4" />
+        增加打印模版
+      </button>
+    </div>
+  </div>
+);
+
 const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
   plan,
   product,
@@ -36,6 +61,8 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
   dictionaries,
   orders,
   labelPrintPickerTemplates,
+  labelPrintPickerHasWhitelist,
+  onOpenLabelPrintConfig,
   onPrintRun,
   virtualBatches,
   itemCodePrintOpen,
@@ -130,13 +157,15 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
                 )}
               </div>
 
-              <ul className="max-h-[min(40vh,280px)] divide-y divide-slate-100 overflow-y-auto p-2">
+              <div className="max-h-[min(40vh,280px)] overflow-y-auto">
                 {labelPrintPickerTemplates.length === 0 ? (
-                  <li className="px-4 py-6 text-center text-xs leading-relaxed text-slate-400">
-                    暂无标签打印模版。请在「表单配置 → 打印模版」中创建模版或加入白名单。
-                  </li>
+                  <LabelPrintTemplateEmptyState
+                    hasWhitelist={labelPrintPickerHasWhitelist}
+                    onAddTemplate={onOpenLabelPrintConfig}
+                  />
                 ) : (
-                  labelPrintPickerTemplates.map(t => (
+                  <ul className="divide-y divide-slate-100 p-2">
+                  {labelPrintPickerTemplates.map(t => (
                     <li key={t.id}>
                       <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-slate-50/80">
                         <div className="min-w-0 flex-1">
@@ -155,9 +184,10 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
                         </button>
                       </div>
                     </li>
-                  ))
+                  ))}
+                  </ul>
                 )}
-              </ul>
+              </div>
             </div>
           </div>
         );
@@ -238,13 +268,15 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
                 )}
               </div>
 
-              <ul className="max-h-[min(40vh,280px)] divide-y divide-slate-100 overflow-y-auto p-2">
+              <div className="max-h-[min(40vh,280px)] overflow-y-auto">
                 {labelPrintPickerTemplates.length === 0 ? (
-                  <li className="px-4 py-6 text-center text-xs leading-relaxed text-slate-400">
-                    暂无标签打印模版。请在「表单配置 → 打印模版」中创建模版或加入白名单。
-                  </li>
+                  <LabelPrintTemplateEmptyState
+                    hasWhitelist={labelPrintPickerHasWhitelist}
+                    onAddTemplate={onOpenLabelPrintConfig}
+                  />
                 ) : (
-                  labelPrintPickerTemplates.map(t => (
+                  <ul className="divide-y divide-slate-100 p-2">
+                  {labelPrintPickerTemplates.map(t => (
                     <li key={t.id}>
                       <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-slate-50/80">
                         <div className="min-w-0 flex-1">
@@ -263,9 +295,10 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
                         </button>
                       </div>
                     </li>
-                  ))
+                  ))}
+                  </ul>
                 )}
-              </ul>
+              </div>
             </div>
           </div>
         );
@@ -323,13 +356,15 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <ul className="max-h-[min(40vh,280px)] divide-y divide-slate-100 overflow-y-auto p-2">
+              <div className="max-h-[min(40vh,280px)] overflow-y-auto">
                 {labelPrintPickerTemplates.length === 0 ? (
-                  <li className="px-4 py-6 text-center text-xs leading-relaxed text-slate-400">
-                    暂无标签打印模版。请在「表单配置 → 打印模版」中创建模版或加入白名单。
-                  </li>
+                  <LabelPrintTemplateEmptyState
+                    hasWhitelist={labelPrintPickerHasWhitelist}
+                    onAddTemplate={onOpenLabelPrintConfig}
+                  />
                 ) : (
-                  labelPrintPickerTemplates.map(t => (
+                  <ul className="divide-y divide-slate-100 p-2">
+                  {labelPrintPickerTemplates.map(t => (
                     <li key={t.id}>
                       <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-slate-50/80">
                         <div className="min-w-0 flex-1">
@@ -348,9 +383,10 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
                         </button>
                       </div>
                     </li>
-                  ))
+                  ))}
+                  </ul>
                 )}
-              </ul>
+              </div>
             </div>
           </div>
         );
@@ -415,13 +451,15 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <ul className="max-h-[min(40vh,280px)] divide-y divide-slate-100 overflow-y-auto p-2">
+              <div className="max-h-[min(40vh,280px)] overflow-y-auto">
                 {labelPrintPickerTemplates.length === 0 ? (
-                  <li className="px-4 py-6 text-center text-xs leading-relaxed text-slate-400">
-                    暂无标签打印模版。请在「表单配置 → 打印模版」中创建模版或加入白名单。
-                  </li>
+                  <LabelPrintTemplateEmptyState
+                    hasWhitelist={labelPrintPickerHasWhitelist}
+                    onAddTemplate={onOpenLabelPrintConfig}
+                  />
                 ) : (
-                  labelPrintPickerTemplates.map(t => (
+                  <ul className="divide-y divide-slate-100 p-2">
+                  {labelPrintPickerTemplates.map(t => (
                     <li key={t.id}>
                       <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-slate-50/80">
                         <div className="min-w-0 flex-1">
@@ -440,9 +478,10 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
                         </button>
                       </div>
                     </li>
-                  ))
+                  ))}
+                  </ul>
                 )}
-              </ul>
+              </div>
             </div>
           </div>
         );
