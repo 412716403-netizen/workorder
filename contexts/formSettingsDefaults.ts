@@ -79,7 +79,7 @@ export const DEFAULT_PLAN_FORM_SETTINGS: PlanFormSettings = {
   standardFields: [
     { id: 'planNumber', label: '计划单号', showInList: false, showInCreate: false, showInDetail: true },
     { id: 'product', label: '产品名称', showInList: true, showInCreate: false, showInDetail: true },
-    { id: 'customer', label: '客户', showInList: false, showInCreate: true, showInDetail: true },
+    { id: 'customer', label: '客户', showInList: false, showInCreate: false, showInDetail: false },
     { id: 'createdAt', label: '创建时间', showInList: false, showInCreate: false, showInDetail: true },
   ],
   customFields: [],
@@ -105,13 +105,33 @@ function mergePlanStandardFields(
   return merged;
 }
 
+/** 与计划单表单配置「显示客户」开关一致：三处须同时为 true，否则视为关闭 */
+function alignPlanCustomerVisibility(
+  fields: PlanFormSettings['standardFields'],
+): PlanFormSettings['standardFields'] {
+  const customer = fields.find(f => f.id === 'customer');
+  if (!customer) return fields;
+  const allOn =
+    customer.showInList === true &&
+    customer.showInCreate === true &&
+    customer.showInDetail === true;
+  if (allOn) return fields;
+  return fields.map(f =>
+    f.id === 'customer'
+      ? { ...f, showInList: false, showInCreate: false, showInDetail: false }
+      : f,
+  );
+}
+
 export function normalizePlanFormSettings(raw: PlanFormSettings | null | undefined): PlanFormSettings {
   const s = raw ?? DEFAULT_PLAN_FORM_SETTINGS;
   const allowedList = s.listPrint?.allowedTemplateIds?.filter(Boolean) ?? [];
   const allowedLabel = s.labelPrint?.allowedTemplateIds?.filter(Boolean) ?? [];
   return {
     ...s,
-    standardFields: mergePlanStandardFields(s.standardFields).filter(f => f.id !== 'dueDate'),
+    standardFields: alignPlanCustomerVisibility(
+      mergePlanStandardFields(s.standardFields).filter(f => f.id !== 'dueDate'),
+    ),
     customFields: normalizePlanFormFieldConfigArray(s.customFields),
     listDisplay: {
       showDeliveryDate: s.listDisplay?.showDeliveryDate === true,
@@ -132,7 +152,10 @@ export function normalizePlanFormSettings(raw: PlanFormSettings | null | undefin
           return {
             ...lpRest,
             allowedTemplateIds: allowedLabel.length > 0 ? allowedLabel : undefined,
-            showPlanDetailTraceSection: lp.showPlanDetailTraceSection === true,
+            // 默认显示（与 PlanDetailPanel 中 `!== false` 判断及配置默认勾选一致）；
+            // 仅在用户显式关闭时存为 false，避免「保存拆批设置」等其它写入路径
+            // 把 undefined 误规范为 false 后让追溯码区块整体消失。
+            showPlanDetailTraceSection: lp.showPlanDetailTraceSection !== false,
             ...(bulkQuickSplitBatchSize !== undefined ? { bulkQuickSplitBatchSize } : {}),
             bulkQuickSplitWithItemCodes: lp.bulkQuickSplitWithItemCodes !== false,
           };
@@ -174,7 +197,7 @@ export function repairPlanLabelPrintWhitelistMissingPlanLabelTemplates(
     ...planForm,
     labelPrint: {
       ...planForm.labelPrint,
-      showPlanDetailTraceSection: planForm.labelPrint?.showPlanDetailTraceSection === true,
+      showPlanDetailTraceSection: planForm.labelPrint?.showPlanDetailTraceSection !== false,
       allowedTemplateIds: next,
     },
   };

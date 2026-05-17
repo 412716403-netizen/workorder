@@ -229,7 +229,7 @@ const PlanFormModal: React.FC<PlanFormModalProps> = ({
                     </div>
                   </div>
                 </div>
-                {planFormSettings.standardFields.find(f => f.id === 'customer')?.showInCreate !== false && productionLinkMode !== 'product' && (
+                {planFormSettings.standardFields.find(f => f.id === 'customer')?.showInCreate === true && productionLinkMode !== 'product' && (
                   <div className="md:col-span-2 space-y-1">
                     <label className={formStandardLabelClass}>计划客户（合作单位）</label>
                     <CustomerSelect

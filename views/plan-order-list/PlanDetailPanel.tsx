@@ -1214,7 +1214,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                       />
                     </div>
                   )}
-                  {planFormSettings.standardFields.find(f => f.id === 'customer')?.showInDetail !== false && productionLinkMode !== 'product' && (
+                  {planFormSettings.standardFields.find(f => f.id === 'customer')?.showInDetail === true && productionLinkMode !== 'product' && (
                     <div className="md:col-span-2 space-y-2">
                       <label className={formStandardLabelClass}>计划客户（合作单位）</label>
                       <CustomerSelect

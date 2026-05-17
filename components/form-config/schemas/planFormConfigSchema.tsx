@@ -151,7 +151,7 @@ export const planFormConfigSchema: FormConfigSchema<PlanFormSettings> = {
           toggle: {
             label: '在计划详情中显示「追溯码」区块',
             key: 'showPlanDetailTraceSection',
-            defaultChecked: false,
+            defaultChecked: true,
           },
         },
       ],

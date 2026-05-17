@@ -52,6 +52,44 @@ describe('normalizePlanFormSettings listDisplay', () => {
     expect(product?.showInList).toBe(true);
   });
 
+  it('aligns customer visibility when not all show flags are true (matches 显示客户 toggle)', () => {
+    const n = normalizePlanFormSettings({
+      standardFields: [
+        { id: 'customer', label: '客户', showInList: false, showInCreate: true, showInDetail: true },
+      ],
+    });
+    const customer = n.standardFields.find(f => f.id === 'customer');
+    expect(customer?.showInList).toBe(false);
+    expect(customer?.showInCreate).toBe(false);
+    expect(customer?.showInDetail).toBe(false);
+  });
+
+  it('keeps showPlanDetailTraceSection true when undefined (default visible)', () => {
+    const n = normalizePlanFormSettings({
+      labelPrint: { bulkQuickSplitBatchSize: 50 },
+    });
+    expect(n.labelPrint?.showPlanDetailTraceSection).toBe(true);
+  });
+
+  it('preserves showPlanDetailTraceSection false when explicitly disabled', () => {
+    const n = normalizePlanFormSettings({
+      labelPrint: { bulkQuickSplitBatchSize: 50, showPlanDetailTraceSection: false },
+    });
+    expect(n.labelPrint?.showPlanDetailTraceSection).toBe(false);
+  });
+
+  it('preserves customer visibility when all show flags are true', () => {
+    const n = normalizePlanFormSettings({
+      standardFields: [
+        { id: 'customer', label: '客户', showInList: true, showInCreate: true, showInDetail: true },
+      ],
+    });
+    const customer = n.standardFields.find(f => f.id === 'customer');
+    expect(customer?.showInList).toBe(true);
+    expect(customer?.showInCreate).toBe(true);
+    expect(customer?.showInDetail).toBe(true);
+  });
+
   it('normalizes bulkQuickSplitBatchSize to integer in range', () => {
     const n = normalizePlanFormSettings({
       labelPrint: { bulkQuickSplitBatchSize: 50.7, bulkQuickSplitWithItemCodes: true },

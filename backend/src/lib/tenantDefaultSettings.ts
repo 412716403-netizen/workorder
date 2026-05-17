@@ -10,7 +10,7 @@ export const TENANT_DEFAULT_SETTINGS: Record<string, unknown> = {
     standardFields: [
       { id: 'planNumber', label: '计划单号', showInList: false, showInCreate: false, showInDetail: true },
       { id: 'product', label: '产品名称', showInList: true, showInCreate: false, showInDetail: true },
-      { id: 'customer', label: '客户', showInList: false, showInCreate: true, showInDetail: true },
+      { id: 'customer', label: '客户', showInList: false, showInCreate: false, showInDetail: false },
       { id: 'createdAt', label: '创建时间', showInList: false, showInCreate: false, showInDetail: true },
       { id: 'startDate', label: '开始日期', showInList: false, showInCreate: true, showInDetail: true },
       { id: 'priority', label: '优先级', showInList: false, showInCreate: true, showInDetail: true },
