@@ -363,7 +363,7 @@ const WarehouseFlowModal: React.FC<WarehouseFlowModalProps> = ({
                      <td className="px-4 py-3"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">{row.typeLabel}</span></td>
                      <td className="px-4 py-3 text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">{row.docNumber}</td>
                      <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{row.warehouseName}</td>
-                     <td className="px-4 py-3 font-bold text-slate-800">{row.productName} <span className="text-slate-400 font-normal text-[10px]">{row.productSku}</span></td>
+                     <td className="px-4 py-3 font-bold text-slate-800">{row.productName} <span className="text-[10px] font-bold text-slate-500">{row.productSku}</span></td>
                      <td className="px-4 py-3 text-right font-black text-indigo-600">{row.quantity}</td>
                      <td className="px-4 py-3">
                         <button type="button" onClick={() => handleViewDetail(`${row.type}|${row.docNumber}`)} className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all whitespace-nowrap">

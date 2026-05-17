@@ -1541,7 +1541,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                           {rowProductName || '未知产品'}
                                         </span>
                                         {!!rowProductSku && (
-                                          <span className="text-[9px] text-slate-300 font-bold uppercase tracking-tight">
+                                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">
                                             {rowProductSku}
                                             {showVariantSuffixInSku && ` · ${variantLabel}`}
                                           </span>

@@ -985,7 +985,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                                            <td className="px-4 py-3">
                                              <div>
                                                <p className="text-sm font-bold text-slate-800">{line.name}</p>
-                                               <p className="text-[10px] text-slate-400 font-bold uppercase">{line.sku}</p>
+                                               <p className="text-[10px] font-bold text-slate-500 uppercase">{line.sku}</p>
                                              </div>
                                            </td>
                                            <td className="px-4 py-3 text-sm text-slate-600">{line.categoryName}</td>
@@ -1164,7 +1164,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                                   <td className="px-6 py-3">
                                     <div>
                                       <p className="text-sm font-bold text-slate-800">{ps.name}</p>
-                                      <p className="text-[10px] text-slate-400 font-bold uppercase">{ps.sku}</p>
+                                      <p className="text-[10px] font-bold text-slate-500 uppercase">{ps.sku}</p>
                                     </div>
                                   </td>
                                   <td className="px-6 py-3 text-sm text-slate-600">{ps.categoryName}</td>

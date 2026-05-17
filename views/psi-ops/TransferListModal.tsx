@@ -151,7 +151,7 @@ const TransferListModal: React.FC<TransferListModalProps> = ({
                             const product = productMapPSI.get(firstLine.productId);
                             const qty = grp.reduce((s: number, r: any) => s + (r.quantity ?? 0), 0);
                             return (
-                              <tr key={gid} className="border-b border-slate-100 last:border-0"><td className="px-4 py-3 font-bold text-slate-800">{product?.name ?? '—'} <span className="text-slate-400 font-normal text-xs">{product?.sku ?? ''}</span></td><td className="px-4 py-3 text-right font-black text-indigo-600">{qty} {product ? getUnitName(product.id) : 'PCS'}</td></tr>
+                              <tr key={gid} className="border-b border-slate-100 last:border-0"><td className="px-4 py-3 font-bold text-slate-800">{product?.name ?? '—'} <span className="text-[10px] font-bold text-slate-500">{product?.sku ?? ''}</span></td><td className="px-4 py-3 text-right font-black text-indigo-600">{qty} {product ? getUnitName(product.id) : 'PCS'}</td></tr>
                             );
                           })}
                         </tbody>

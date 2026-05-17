@@ -129,7 +129,7 @@ const ProductCell: React.FC<{
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
           <span className="font-bold text-slate-700">{name || '未知产品'}</span>
           {!!sku && (
-            <span className="text-[9px] text-slate-300 font-bold uppercase tracking-tight">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">
               {sku}{variantLabel ? ` · ${variantLabel}` : ''}
             </span>
           )}
@@ -241,7 +241,7 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
                   return (
                     <span className="text-slate-600 font-bold normal-case text-xs sm:text-sm" title={label}>
                       {label}：{rp?.name || rid}
-                      {rp?.sku ? <span className="text-slate-400 font-semibold"> · {rp.sku}</span> : null}
+                      {rp?.sku ? <span className="text-[10px] font-bold text-slate-500"> · {rp.sku}</span> : null}
                     </span>
                   );
                 })()}
@@ -409,7 +409,7 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
                             <>
                               {lineRelProduct?.name || lineRel}
                               {lineRelProduct?.sku ? (
-                                <span className="text-slate-400 font-semibold"> · {lineRelProduct.sku}</span>
+                                <span className="text-[10px] font-bold text-slate-500"> · {lineRelProduct.sku}</span>
                               ) : null}
                             </>
                           )

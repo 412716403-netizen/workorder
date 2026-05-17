@@ -167,7 +167,7 @@ const StocktakeListModal: React.FC<StocktakeListModalProps> = ({
                             return (
                               <React.Fragment key={gid}>
                                 <tr className="border-b border-slate-100">
-                                  <td className="px-4 py-3 font-bold text-slate-800">{product?.name ?? '—'} <span className="text-slate-400 font-normal text-xs">{product?.sku ?? ''}</span></td>
+                                  <td className="px-4 py-3 font-bold text-slate-800">{product?.name ?? '—'} <span className="text-[10px] font-bold text-slate-500">{product?.sku ?? ''}</span></td>
                                   <td className="px-4 py-3 text-right font-bold text-slate-600">{systemQtyAtStocktake} {product ? getUnitName(product.id) : 'PCS'}</td>
                                   <td className="px-4 py-3 text-right font-black text-indigo-600">{qty} {product ? getUnitName(product.id) : 'PCS'}</td>
                                 </tr>
@@ -190,7 +190,7 @@ const StocktakeListModal: React.FC<StocktakeListModalProps> = ({
                                                   const sysV = variantSysFromGrp(v.id) ?? actualV;
                                                   return (
                                                     <div key={v.id} className="flex flex-col gap-0.5 w-24">
-                                                      <span className="text-[9px] font-bold text-slate-400 uppercase">{size?.name || v.skuSuffix}</span>
+                                                      <span className="text-[9px] font-bold text-slate-500 uppercase">{size?.name || v.skuSuffix}</span>
                                                       <div className="flex items-center gap-2 text-xs">
                                                         <span className="text-slate-500">系统 <span className="font-bold text-slate-600">{sysV}</span></span>
                                                         <span className="text-slate-400">/</span>

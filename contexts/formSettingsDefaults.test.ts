@@ -39,6 +39,19 @@ describe('normalizePlanFormSettings listDisplay', () => {
     expect(n.standardFields.some(f => f.id === 'dueDate')).toBe(false);
   });
 
+  it('merges in product standard field with list visible when saved config omits it', () => {
+    const n = normalizePlanFormSettings({
+      standardFields: [
+        { id: 'planNumber', label: '计划单号', showInList: false, showInCreate: false, showInDetail: true },
+        { id: 'customer', label: '客户', showInList: false, showInCreate: true, showInDetail: true },
+        { id: 'createdAt', label: '创建时间', showInList: false, showInCreate: false, showInDetail: true },
+      ],
+    });
+    const product = n.standardFields.find(f => f.id === 'product');
+    expect(product).toBeDefined();
+    expect(product?.showInList).toBe(true);
+  });
+
   it('normalizes bulkQuickSplitBatchSize to integer in range', () => {
     const n = normalizePlanFormSettings({
       labelPrint: { bulkQuickSplitBatchSize: 50.7, bulkQuickSplitWithItemCodes: true },

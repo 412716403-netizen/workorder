@@ -839,7 +839,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                                   {product?.name ?? '—'}
                                 </p>
                                 {skuLine ? (
-                                  <p className="line-clamp-2 text-[10px] leading-snug text-slate-500" title={skuLine}>
+                                  <p className="line-clamp-2 text-[10px] font-bold leading-snug text-slate-500" title={skuLine}>
                                     {skuLine}
                                   </p>
                                 ) : null}
