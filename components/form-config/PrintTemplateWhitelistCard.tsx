@@ -5,7 +5,7 @@ import type { PrintTemplate } from '../../types';
 export interface PrintTemplateWhitelistCardProps {
   title: string;
   hint?: ReactNode;
-  /** 已加入的模版白名单（空/不填表示打印时可选全部模版） */
+  /** 已加入的模版白名单（空表示未配置；打印时仅可选已加入的模版） */
   allowedTemplateIds?: string[];
   onChangeAllowedTemplateIds: (next: string[] | undefined) => void;
   /**

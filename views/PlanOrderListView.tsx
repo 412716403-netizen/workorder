@@ -44,6 +44,7 @@ import { HiddenPrintSlot, usePrintTemplateAction } from '../components/print-edi
 import { createBlankCustomTemplate } from '../utils/printTemplateDefaults';
 import { mergeTenantPrintContext } from '../utils/mergeTenantPrintContext';
 import { buildPlanPrintListRows } from '../utils/buildPlanPrintListRows';
+import { filterPrintTemplatesByAllowedIds } from '../utils/printTemplateWhitelist';
 import { useAuth } from '../contexts/AuthContext';
 import {
   formConfigToolbarButtonClass,
@@ -293,18 +294,13 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   /** 仅当已在表单配置中加入至少一个可选模版 id 时，才列出可选模版；未配置时不列出全部模版（与工单中心一致） */
   const { planListPrintPickerTemplates, planListPrintPickerHasWhitelist } = useMemo(() => {
     const raw = planFormSettings.listPrint?.allowedTemplateIds;
-    if (!raw || !Array.isArray(raw) || raw.length === 0) {
-      return { planListPrintPickerTemplates: [] as PrintTemplate[], planListPrintPickerHasWhitelist: false };
-    }
-    const allowedSet = new Set(
-      raw.map(x => (x != null && x !== '' ? String(x).trim() : '')).filter(Boolean),
-    );
-    if (allowedSet.size === 0) {
-      return { planListPrintPickerTemplates: [] as PrintTemplate[], planListPrintPickerHasWhitelist: false };
-    }
+    const filtered = filterPrintTemplatesByAllowedIds(printTemplates, raw);
+    const hasWhitelist =
+      Array.isArray(raw) &&
+      raw.some(x => x != null && x !== '' && String(x).trim() !== '');
     return {
-      planListPrintPickerTemplates: printTemplates.filter(t => allowedSet.has(String(t.id).trim())),
-      planListPrintPickerHasWhitelist: true,
+      planListPrintPickerTemplates: filtered,
+      planListPrintPickerHasWhitelist: hasWhitelist,
     };
   }, [printTemplates, planFormSettings.listPrint?.allowedTemplateIds]);
 
@@ -384,11 +380,14 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
     [planFormSettings, onUpdatePlanFormSettings],
   );
 
-  const labelPrintPickerTemplates = useMemo(() => {
-    const allowed = planFormSettings.labelPrint?.allowedTemplateIds;
-    if (!allowed?.length) return printTemplates;
-    return printTemplates.filter(t => allowed.includes(t.id));
-  }, [printTemplates, planFormSettings.labelPrint?.allowedTemplateIds]);
+  const labelPrintPickerTemplates = useMemo(
+    () =>
+      filterPrintTemplatesByAllowedIds(
+        printTemplates,
+        planFormSettings.labelPrint?.allowedTemplateIds,
+      ),
+    [printTemplates, planFormSettings.labelPrint?.allowedTemplateIds],
+  );
 
   /** 递归获取某计划下所有子孙计划（深度优先，用于列表展示），返回 { plan, depth } */
   const getAllDescendantsWithDepth = (planId: string, depth: number): { plan: PlanOrder; depth: number }[] => {
