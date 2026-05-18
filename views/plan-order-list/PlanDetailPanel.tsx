@@ -52,6 +52,7 @@ import {
   PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER,
 } from '../../types';
 import { itemCodesApi, psi } from '../../services/api';
+import { fetchAllPages } from '../../utils/fetchAllPages';
 import { useQuery } from '@tanstack/react-query';
 import { CustomerSelect } from '../../components/CustomerSelect';
 import { SearchableMultiSelectWithProcessTabs } from '../../components/SearchableMultiSelect';
@@ -1097,24 +1098,22 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     setItemCodePrintOpen(true);
     setItemCodePrintLoading(true);
     void (async () => {
-      const base: Record<string, string | number> = {
+      const listParams: Parameters<typeof itemCodesApi.list>[0] = {
         planOrderId: plan.id,
         status: 'ACTIVE',
+        ...(variantFilter ? { variantId: variantFilter } : {}),
+        ...(batchFilter ? { batchId: batchFilter } : {}),
       };
-      if (variantFilter) base.variantId = variantFilter;
-      if (batchFilter) base.batchId = batchFilter;
-      const chunk = 10_000;
+      /** 与后端 listItemCodes 单页上限一致；须循环分页，不可用「本页条数 < 请求 pageSize」作为结束条件。 */
+      const pageSize = 200;
       try {
-        let page = 1;
-        const acc: ItemCode[] = [];
-        let total = 0;
-        for (;;) {
-          const res = await itemCodesApi.list({ ...base, page, pageSize: chunk } as any);
-          if (page === 1) total = res.total;
-          acc.push(...res.items);
-          if (acc.length >= total || res.items.length === 0 || res.items.length < chunk) break;
-          page++;
-        }
+        const acc = await fetchAllPages<ItemCode>(
+          async page => {
+            const res = await itemCodesApi.list({ ...listParams, page, pageSize });
+            return { data: res.items, total: res.total, page: res.page, pageSize: res.pageSize };
+          },
+          { warnTag: 'itemCodes.print' },
+        );
         setItemCodePrintCodes(acc);
       } catch {
         toast.error('加载单品码失败');

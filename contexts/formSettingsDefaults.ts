@@ -79,6 +79,7 @@ export const DEFAULT_PLAN_FORM_SETTINGS: PlanFormSettings = {
   standardFields: [
     { id: 'planNumber', label: '计划单号', showInList: false, showInCreate: false, showInDetail: true },
     { id: 'product', label: '产品名称', showInList: true, showInCreate: false, showInDetail: true },
+    { id: 'totalQty', label: '计划数量', showInList: true, showInCreate: false, showInDetail: true },
     { id: 'customer', label: '客户', showInList: false, showInCreate: false, showInDetail: false },
     { id: 'createdAt', label: '创建时间', showInList: false, showInCreate: false, showInDetail: true },
   ],

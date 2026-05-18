@@ -117,6 +117,16 @@ function collectSubtreePlanIdsForPlan(rootId: string, allPlans: PlanOrder[]): st
   return out;
 }
 
+function sumPlanItemsQty(plan: PlanOrder): number {
+  if (!plan.items || !Array.isArray(plan.items)) return 0;
+  return plan.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+}
+
+function planListQtyUnitName(product: Product | undefined, units: AppDictionaries['units']): string {
+  if (!product?.unitId) return 'PCS';
+  return units?.find(u => u.id === product.unitId)?.name ?? 'PCS';
+}
+
 function renderPlanListCustomFieldValue(
   cf: PlanFormFieldConfig,
   plan: PlanOrder,
@@ -521,7 +531,6 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
               if (block.type === 'single') {
                 const plan = block.plan;
               const product = products.find(p => p.id === plan.productId);
-              const totalQty = plan.items && Array.isArray(plan.items) ? plan.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) : 0;
               const assignedCount = plan.assignments ? Object.values(plan.assignments).filter(a => (a as NodeAssignment).workerIds && (a as NodeAssignment).workerIds.length > 0).length : 0;
               const createdListLabel = formatPlanOrderCreatedAtForList(plan.createdAt, plan.id);
                 const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? false;
@@ -552,7 +561,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         <div className="mb-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(product)}</div>
                         <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                           {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
-                          {showInList('totalQty') && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 计划总量: {totalQty}</span>}
+                          {showInList('totalQty') && (
+                            <span className="flex items-center gap-1">
+                              <Layers className="w-3 h-3 shrink-0" />
+                              计划数量: {sumPlanItemsQty(plan).toLocaleString()} {planListQtyUnitName(product, dictionaries.units)}
+                            </span>
+                          )}
                           {showInList('createdAt') && createdListLabel && (
                             <span className="flex items-center gap-1 shrink-0" title="单据创建时间">
                               <CalendarClock className="w-3 h-3 shrink-0" />
@@ -614,7 +628,6 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                     <div className="p-2.5 space-y-1.5">
                       {allWithDepth.map(({ plan, depth }, idx) => {
                         const product = products.find(p => p.id === plan.productId);
-                        const totalQty = plan.items && Array.isArray(plan.items) ? plan.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) : 0;
                         const isChild = depth > 0;
                         const indentPx = isChild ? 24 * depth : 0;
                         const assignedCount = plan.assignments ? Object.values(plan.assignments).filter(a => (a as NodeAssignment).workerIds && (a as NodeAssignment).workerIds.length > 0).length : 0;
@@ -644,7 +657,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                 <div className="mb-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(product)}</div>
                                 <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                                   {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
-                                  {showInList('totalQty') && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 计划总量: {totalQty}</span>}
+                                  {showInList('totalQty') && (
+                            <span className="flex items-center gap-1">
+                              <Layers className="w-3 h-3 shrink-0" />
+                              计划数量: {sumPlanItemsQty(plan).toLocaleString()} {planListQtyUnitName(product, dictionaries.units)}
+                            </span>
+                          )}
                                   {showInList('createdAt') && createdListLabel && (
                                     <span className="flex items-center gap-1 shrink-0" title="单据创建时间">
                                       <CalendarClock className="w-3 h-3 shrink-0" />
@@ -709,7 +727,6 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                         const isChild = depth > 0;
                         const plan = p;
                         const product = products.find(pr => pr.id === plan.productId);
-                        const totalQty = plan.items && Array.isArray(plan.items) ? plan.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) : 0;
                         const assignedCount = plan.assignments ? Object.values(plan.assignments).filter(a => (a as NodeAssignment).workerIds && (a as NodeAssignment).workerIds.length > 0).length : 0;
                         const createdListLabel = formatPlanOrderCreatedAtForList(plan.createdAt, plan.id);
                         const showInList = (id: string) => planFormSettings.standardFields.find(f => f.id === id)?.showInList ?? false;
@@ -742,7 +759,12 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                               <div className="mb-1 flex flex-wrap items-center gap-1">{renderProductCustomTags(product)}</div>
                               <div className="flex items-center gap-4 text-xs text-slate-500 font-medium flex-wrap">
                                 {showInList('customer') && productionLinkMode !== 'product' && <span className="flex items-center gap-1"><User className="w-3 h-3" /> {plan.customer}</span>}
-                                {showInList('totalQty') && <span className="flex items-center gap-1"><Layers className="w-3 h-3" /> 计划总量: {totalQty}</span>}
+                                {showInList('totalQty') && (
+                            <span className="flex items-center gap-1">
+                              <Layers className="w-3 h-3 shrink-0" />
+                              计划数量: {sumPlanItemsQty(plan).toLocaleString()} {planListQtyUnitName(product, dictionaries.units)}
+                            </span>
+                          )}
                                 {showInList('createdAt') && createdListLabel && (
                                   <span className="flex items-center gap-1 shrink-0" title="单据创建时间">
                                     <CalendarClock className="w-3 h-3 shrink-0" />
