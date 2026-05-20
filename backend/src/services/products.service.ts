@@ -210,10 +210,8 @@ export async function deleteProduct(
   if (!existing) throw new AppError(404, '产品不存在');
 
   const blockers: string[] = [];
-  const bomParent = await db.bom.count({ where: { parentProductId: productId } });
-  if (bomParent > 0) blockers.push(`有 ${bomParent} 条 BOM 以该产品为父产品`);
   const bomItem = await basePrisma.bomItem.count({ where: { productId, bom: { tenantId } } });
-  if (bomItem > 0) blockers.push(`有 ${bomItem} 条 BOM 子件引用该产品`);
+  if (bomItem > 0) blockers.push(`有 ${bomItem} 条 BOM 子件引用该产品（请先在其他产品物料单中移除）`);
   const plans = await db.planOrder.count({ where: { productId } });
   if (plans > 0) blockers.push(`有 ${plans} 条生产计划`);
   const orders = await db.productionOrder.count({ where: { productId } });
@@ -246,7 +244,11 @@ export async function deleteProduct(
   if (collabMaps > 0) blockers.push(`有 ${collabMaps} 条协作产品映射`);
 
   if (blockers.length > 0) throw new AppError(409, `无法删除产品：${blockers.join('；')}`);
-  await db.product.delete({ where: { id: productId } });
+
+  await db.$transaction(async (tx) => {
+    await tx.bom.deleteMany({ where: { parentProductId: productId } });
+    await tx.product.delete({ where: { id: productId } });
+  });
   return { message: '已删除' };
 }
 

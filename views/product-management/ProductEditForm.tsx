@@ -917,7 +917,10 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
 
   const handleDeletePersistedProduct = async () => {
     if (!workingProduct || !onDeleteProduct || !isPersistedProduct) return;
-    const ok = await confirm({ message: `确定删除产品「${workingProduct.name || workingProduct.sku}」？删除后不可恢复。`, danger: true });
+    const ok = await confirm({
+      message: `确定删除产品「${workingProduct.name || workingProduct.sku}」？将同时删除其工序物料单（若已配置），且不可恢复。`,
+      danger: true,
+    });
     if (!ok) return;
     setDeleteProductBusy(true);
     try {
