@@ -301,7 +301,7 @@ function resolvePath(ctx: PrintRenderContext, path: string): unknown {
     const v = purchaseOrderField(ctx.salesOrderPrint, sub);
     return v === undefined ? '' : v;
   }
-  if (ns === '采购单') {
+  if (ns === '采购单' || ns === '采购入库') {
     if (!ctx.purchaseBillPrint) return '';
     const v = purchaseBillField(ctx.purchaseBillPrint, sub);
     return v === undefined ? '' : v;
@@ -502,7 +502,11 @@ export function resolvePrintPlaceholders(text: string, ctx: PrintRenderContext):
     if (trimmed.startsWith('返工报工.') && (v === '' || v === undefined)) return '';
     if (trimmed.startsWith('采购订单.') && (v === '' || v === undefined)) return '';
     if (trimmed.startsWith('销售订单.') && (v === '' || v === undefined)) return '';
-    if (trimmed.startsWith('采购单.') && (v === '' || v === undefined)) return '';
+    if (
+      (trimmed.startsWith('采购单.') || trimmed.startsWith('采购入库.')) &&
+      (v === '' || v === undefined)
+    )
+      return '';
     if (trimmed.startsWith('计划.') && (v === '' || v === undefined)) return '';
     if (trimmed.startsWith('工单.') && (v === '' || v === undefined)) return '';
     if (trimmed.startsWith('产品.') && (v === '' || v === undefined)) return '';

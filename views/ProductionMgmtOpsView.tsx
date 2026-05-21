@@ -57,6 +57,8 @@ interface ProductionMgmtOpsViewProps {
   workers?: Worker[];
   equipment?: { id: string; name: string; code?: string; assignedMilestoneIds?: string[] }[];
   processSequenceMode?: ProcessSequenceMode;
+  /** 受 SystemSetting.allowExceedMaxOutsourceReceiveQty 控制；仅外协 tab 使用，默认 false */
+  allowExceedMaxOutsourceReceiveQty?: boolean;
   materialPanelSettings?: MaterialPanelSettings;
   onUpdateMaterialPanelSettings?: (settings: MaterialPanelSettings) => void;
   materialFormSettings: MaterialFormSettings;
@@ -97,6 +99,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
   workers = [],
   equipment = [],
   processSequenceMode = 'sequential',
+  allowExceedMaxOutsourceReceiveQty = false,
   materialPanelSettings,
   onUpdateMaterialPanelSettings,
   materialFormSettings,
@@ -164,6 +167,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
         onUpdatePrintTemplates={onUpdatePrintTemplates}
         onRefreshPrintTemplates={onRefreshPrintTemplates}
         psiRecords={psiRecords}
+        allowExceedMaxOutsourceReceiveQty={allowExceedMaxOutsourceReceiveQty}
       />
     );
   if (limitType === 'REWORK')

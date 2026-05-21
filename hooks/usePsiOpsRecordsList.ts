@@ -20,7 +20,7 @@ async function fetchAllPsiPages(filter: { type: string }): Promise<unknown[]> {
 }
 
 /**
- * 进销存作业页：按当前 tab 的 `type` 从后端分页拉全量该类型（及采购订单 tab 所需的采购单），
+ * 进销存作业页：按当前 tab 的 `type` 从后端分页拉全量该类型（及采购订单 tab 所需的采购入库），
  * 替代 `psi.list?all=true` 全类型大包；上下文 `records` 仅作加载前占位与 mutation 后 queryKey 触发刷新。
  *
  * 仓库管理（`WAREHOUSE_MGMT`）：合并 TRANSFER、STOCKTAKE、PURCHASE_BILL、SALES_BILL，
@@ -47,9 +47,9 @@ export function usePsiOpsRecordsList(type: string, recordsFromContext: unknown[]
   });
 
   /**
-   * 采购单 tab 需要同时拥有「采购订单」记录：
-   * - 新建采购单时支持「引用采购订单生成」勾选并整单转化；
-   * - 已收数量统计也依赖采购单本身（已在 mainQuery 中加载），无需额外拉。
+   * 采购入库 tab 需要同时拥有「采购订单」记录：
+   * - 新建采购入库时支持「引用采购订单生成」勾选并整单转化；
+   * - 已收数量统计也依赖采购入库本身（已在 mainQuery 中加载），无需额外拉。
    */
   const purchaseOrdersForPbQuery = useQuery({
     queryKey: ['psiOpsRecords', 'PURCHASE_ORDER', 'forPurchaseBillTab'],

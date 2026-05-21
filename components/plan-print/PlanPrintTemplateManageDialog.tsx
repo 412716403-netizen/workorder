@@ -136,7 +136,7 @@ function scopeTitle(scope: PlanPrintTemplateManageScope): string {
     case 'salesOrderList':
       return '销售订单打印模版';
     case 'purchaseBillList':
-      return '采购单打印模版';
+      return '采购入库打印模版';
     case 'salesBillList':
       return '销售单打印模版';
     case 'receiptList':
@@ -195,7 +195,7 @@ function scopeHint(scope: PlanPrintTemplateManageScope): string {
     return '用于进销存销售订单列表「打印」及登记/详情页「打印」；请将模版数据源选为「销售订单」。选中左侧模版后点「加入列表打印可选」。';
   }
   if (scope === 'purchaseBillList') {
-    return '用于进销存采购单列表「打印」及登记/详情页「打印」；请将模版数据源选为「采购单」。选中左侧模版后点「加入列表打印可选」。';
+    return '用于进销存采购入库列表「打印」及登记/详情页「打印」；请将模版数据源选为「采购入库」。选中左侧模版后点「加入列表打印可选」。';
   }
   if (scope === 'salesBillList') {
     return '用于进销存销售单列表「打印」及登记/详情页「打印」；请将模版数据源选为「销售单」。选中左侧模版后点「加入列表打印可选」。';

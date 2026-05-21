@@ -10,6 +10,10 @@ const updateOrderSchema = z.object({
   items: z.array(z.object({}).passthrough()).optional(),
 }).passthrough();
 
+const dispatchStatusSchema = z.object({
+  status: z.enum(['IN_PROGRESS', 'COMPLETED']),
+});
+
 const createReportSchema = z.object({
   quantity: z.number({ required_error: '报工数量不能为空' }),
   operator: z.string().optional(),
@@ -109,6 +113,14 @@ router.delete(
   '/:id',
   requireSubPermission('production:orders:delete'),
   ctrl.deleteOrder,
+);
+
+/** 手动切换工单派发完成状态（关联工单模式下工单中心徽章使用） */
+router.patch(
+  '/:id/dispatch-status',
+  requireSubPermission('production:orders:edit'),
+  validate(dispatchStatusSchema),
+  ctrl.updateDispatchStatus,
 );
 
 router.post(

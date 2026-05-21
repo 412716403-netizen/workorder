@@ -23,6 +23,7 @@ import {
   PlanOrder,
   Product,
   PlanStatus,
+  PlanDispatchStatus,
   ProductCategory,
   AppDictionaries,
   Worker,
@@ -38,6 +39,8 @@ import {
   PrintRenderContext,
   PlanFormFieldConfig,
 } from '../types';
+import { parsePlanSearch } from '../utils/parsePlanSearch';
+import { getPlanDispatchStatusStyle } from '../utils/dispatchStatusStyle';
 import { effectivePlanFormFieldType } from '../utils/planFormCustomField';
 import PlanFormConfigModal from './plan-order-list/PlanFormConfigModal';
 import { HiddenPrintSlot, usePrintTemplateAction } from '../components/print-editor/PrintPreview';
@@ -220,27 +223,50 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   const [fetchedPlans, setFetchedPlans] = useState<PlanOrder[]>([]);
   const planFetchGen = useRef(0);
 
-  const fetchPagedPlans = useCallback(async (page: number, searchTerm: string) => {
-    const gen = ++planFetchGen.current;
-    try {
-      const params: Record<string, string> = { page: String(page), pageSize: String(PLAN_PAGE_SIZE) };
-      if (searchTerm) params.search = searchTerm;
-      const result = await plansApi.listPaginated(params);
-      if (gen !== planFetchGen.current) return;
-      const data = Array.isArray(result) ? (result as unknown as PlanOrder[]) : ((result?.data ?? []) as PlanOrder[]);
-      const total = Array.isArray(result) ? data.length : (result?.total ?? 0);
-      setFetchedPlans(data);
-      setTotalPlans(total);
-    } catch (e) {
-      console.error('Failed to fetch paginated plans', e);
-    }
-  }, []);
+  /**
+   * 解析搜索框文本：
+   * - 工单模式：识别「未下单 / 未完成 / 已完成」 → dispatchStatus 过滤（与文本搜索互斥）
+   * - 产品模式：直接作为模糊关键字
+   */
+  const parsedPlanSearch = useMemo(() => {
+    if (productionLinkMode !== 'order') return { search: debouncedPlanSearch.trim(), dispatchStatus: undefined };
+    return parsePlanSearch(debouncedPlanSearch);
+  }, [debouncedPlanSearch, productionLinkMode]);
 
-  useEffect(() => { setPlanPage(1); }, [debouncedPlanSearch]);
+  const onlyShowNotCompletedPlans =
+    productionLinkMode === 'order' && planFormSettings.listDisplay?.onlyShowNotCompleted === true;
+
+  const fetchPagedPlans = useCallback(
+    async (
+      page: number,
+      searchTerm: string,
+      dispatchStatus: PlanDispatchStatus | undefined,
+      excludeCompleted: boolean,
+    ) => {
+      const gen = ++planFetchGen.current;
+      try {
+        const params: Record<string, string> = { page: String(page), pageSize: String(PLAN_PAGE_SIZE) };
+        if (searchTerm) params.search = searchTerm;
+        if (dispatchStatus) params.dispatchStatus = dispatchStatus;
+        if (excludeCompleted) params.excludeCompleted = 'true';
+        const result = await plansApi.listPaginated(params);
+        if (gen !== planFetchGen.current) return;
+        const data = Array.isArray(result) ? (result as unknown as PlanOrder[]) : ((result?.data ?? []) as PlanOrder[]);
+        const total = Array.isArray(result) ? data.length : (result?.total ?? 0);
+        setFetchedPlans(data);
+        setTotalPlans(total);
+      } catch (e) {
+        console.error('Failed to fetch paginated plans', e);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => { setPlanPage(1); }, [parsedPlanSearch.search, parsedPlanSearch.dispatchStatus, onlyShowNotCompletedPlans]);
   // 列表数据以分页接口为准；Context 中 plans 在增删改后会变，须同步重拉当前页，否则界面仍显示旧的 fetchedPlans
   useEffect(() => {
-    fetchPagedPlans(planPage, debouncedPlanSearch);
-  }, [planPage, debouncedPlanSearch, fetchPagedPlans, plans]);
+    fetchPagedPlans(planPage, parsedPlanSearch.search, parsedPlanSearch.dispatchStatus, onlyShowNotCompletedPlans);
+  }, [planPage, parsedPlanSearch.search, parsedPlanSearch.dispatchStatus, onlyShowNotCompletedPlans, fetchPagedPlans, plans]);
 
   const displayPlans = fetchedPlans.length > 0 || debouncedPlanSearch || planPage > 1 ? fetchedPlans : plans;
   /** 列表统一按单据生成时间新在前（与后端分页 orderBy 一致，并修正子计划与父计划交错时的展示顺序） */
@@ -417,6 +443,27 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   const hasUnconvertedSubPlans = (planId: string) =>
     getAllDescendantsWithDepth(planId, 1).some(d => d.plan.status !== PlanStatus.CONVERTED);
 
+  /**
+   * 关联工单模式专属：派发完成状态徽章（未下单/未完成/已完成）。
+   * `derivedStatus` 由后端 listPlans 注入；后端未带时回退「未下单」（多见于产品模式或旧客户端数据）。
+   * 产品模式直接返回 null，不展示徽章。
+   */
+  const renderDispatchBadge = useCallback(
+    (plan: PlanOrder) => {
+      if (productionLinkMode !== 'order') return null;
+      const style = getPlanDispatchStatusStyle(plan.derivedStatus);
+      return (
+        <span
+          className={`text-[10px] font-bold px-2 py-0.5 rounded ${style.className}`}
+          title={`派发完成状态：${style.label}`}
+        >
+          {style.label}
+        </span>
+      );
+    },
+    [productionLinkMode],
+  );
+
   /** 列表展示块：单条 或 拆分组 或 父计划+子计划分组 */
   type ListBlock = { type: 'single'; plan: PlanOrder } | { type: 'group'; groupKey: string; plans: PlanOrder[] } | { type: 'parentChild'; parent: PlanOrder; children: PlanOrder[] };
   const listBlocks = useMemo((): ListBlock[] => {
@@ -492,11 +539,15 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
           <p className={pageSubtitleClass}>从需求预测到生产指令的初步规划</p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 shrink-0 w-full sm:w-auto">
-          <div className="relative w-full sm:w-56 sm:max-w-xs">
+          <div className="relative w-full sm:w-72 sm:max-w-xs">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input
               type="search"
-              placeholder="搜索计划单号、客户..."
+              placeholder={
+                productionLinkMode === 'order'
+                  ? '搜索计划单号、客户、产品名称/编号、状态（未下单/未完成/已完成）...'
+                  : '搜索计划单号、客户、产品名称/编号...'
+              }
               value={planSearch}
               onChange={e => setPlanSearch(e.target.value)}
               className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-10 pr-3 text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
@@ -543,13 +594,14 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                           <img loading="lazy" decoding="async" src={product.imageUrl} alt={product.name} className="w-full h-full object-cover block" />
                         </button>
                       ) : (
-                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 ${plan.status === PlanStatus.CONVERTED ? 'bg-emerald-50 text-emerald-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600`}>
                       {plan.status === PlanStatus.CONVERTED ? <CheckCircle2 className="w-7 h-7" /> : <Clock className="w-7 h-7" />}
                     </div>
                       )}
                     <div>
                         <div className="flex items-center gap-3 mb-1 flex-wrap">
                         <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-widest">{plan.planNumber}</span>
+                          {renderDispatchBadge(plan)}
                           {showInList('product') && product && (
                             <button type="button" onClick={(e) => { e.stopPropagation(); setViewProductId(product.id); }} className="text-left text-base font-bold text-slate-800 hover:text-indigo-600 hover:underline transition-colors">
                               {product.name || '未知产品'}
@@ -640,7 +692,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                               {product?.imageUrl ? (
                                 <button type="button" onClick={() => setImagePreviewUrl(product.imageUrl)} className="w-12 h-12 rounded-xl overflow-hidden border border-slate-100 flex-shrink-0"><img loading="lazy" decoding="async" src={product.imageUrl} alt={product.name} className="w-full h-full object-cover block" /></button>
                               ) : (
-                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${plan.status === PlanStatus.CONVERTED ? 'bg-emerald-50 text-emerald-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600`}>
                                   {plan.status === PlanStatus.CONVERTED ? <CheckCircle2 className="w-6 h-6" /> : <Clock className="w-6 h-6" />}
                                 </div>
                               )}
@@ -648,6 +700,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                 <div className="flex items-center gap-3 mb-1 flex-wrap">
                                   <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase">{plan.planNumber}</span>
                                   {isChild && <span className="text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">子计划</span>}
+                                  {renderDispatchBadge(plan)}
                                   {showInList('product') && product && (
                                     <button type="button" onClick={(e) => { e.stopPropagation(); setViewProductId(product.id); }} className="text-left text-sm font-bold text-slate-800 hover:text-indigo-600 hover:underline">{product.name || '未知产品'}</button>
                                   )}
@@ -740,7 +793,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                 <img loading="lazy" decoding="async" src={product.imageUrl} alt={product.name} className="w-full h-full object-cover block" />
                               </button>
                             ) : (
-                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${plan.status === PlanStatus.CONVERTED ? 'bg-emerald-50 text-emerald-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-indigo-50 text-indigo-600`}>
                                 {plan.status === PlanStatus.CONVERTED ? <CheckCircle2 className="w-6 h-6" /> : <Clock className="w-6 h-6" />}
                               </div>
                             )}
@@ -748,6 +801,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                               <div className="flex items-center gap-3 mb-1 flex-wrap">
                                 <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-widest">{plan.planNumber}</span>
                                 {isChild && <span className="text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">子计划</span>}
+                                {renderDispatchBadge(plan)}
                                 {showInList('product') && product && (
                                   <button type="button" onClick={(e) => { e.stopPropagation(); setViewProductId(product.id); }} className="text-left text-sm font-bold text-slate-800 hover:text-indigo-600 hover:underline transition-colors">
                                     {product.name || '未知产品'}

@@ -89,6 +89,7 @@ export interface AppDataLoadCoreSetters {
   setProductionLinkMode: Dispatch<SetStateAction<ProductionLinkMode>>;
   setProcessSequenceMode: Dispatch<SetStateAction<ProcessSequenceMode>>;
   setAllowExceedMaxReportQty: Dispatch<SetStateAction<boolean>>;
+  setAllowExceedMaxOutsourceReceiveQty: Dispatch<SetStateAction<boolean>>;
   setPlanFormSettings: Dispatch<SetStateAction<PlanFormSettings>>;
   setOrderFormSettings: Dispatch<SetStateAction<OrderFormSettings>>;
   setPurchaseOrderFormSettings: Dispatch<SetStateAction<PurchaseOrderFormSettings>>;
@@ -161,6 +162,7 @@ export async function executeAppDataLoadCore(
   s.setProductionLinkMode((cfg.productionLinkMode as ProductionLinkMode) ?? 'order');
   s.setProcessSequenceMode((cfg.processSequenceMode as ProcessSequenceMode) ?? 'sequential');
   s.setAllowExceedMaxReportQty(cfg.allowExceedMaxReportQty === true);
+  s.setAllowExceedMaxOutsourceReceiveQty(cfg.allowExceedMaxOutsourceReceiveQty === true);
   const printTemplatesFromCfg = Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : [];
   const printTemplatesMerged = mergePrintTemplatesForTenantConfig(printTemplatesFromCfg) as PrintTemplate[];
   s.setPlanFormSettings(

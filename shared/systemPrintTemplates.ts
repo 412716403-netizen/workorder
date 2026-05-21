@@ -5,7 +5,7 @@
  * - `builtin-outsource-receive-v2`：统一下发「外协收回单」打印模版（含单价/金额列与合计金额）。
  * - `builtin-purchase-order-v2`：统一下发「采购订单」列表打印模版（布局同外协收回单；占位符 `采购订单.*`）。
  * - `builtin-sales-order-v2`：统一下发「销售订单」列表打印模版（占位符 `销售订单.*`）。
- * - `builtin-purchase-bill-v2`：统一下发进销存「采购单」（入库单）列表/详情打印模版（占位符 `采购单.*` = `purchaseBillPrint`）。
+ * - `builtin-purchase-bill-v2`：统一下发进销存「采购入库」列表/详情打印模版（占位符 `采购入库.*` = `purchaseBillPrint`，兼容 `采购单.*`）。
  * - `builtin-sales-bill-v2`：统一下发「销售单」（出库单）列表打印模版（占位符 `销售单.*`）。
  * - `builtin-material-issue-v1`：统一下发「领料发出单」生产物料详情打印（占位符 `领料发出.*`）。
  * - `builtin-material-return-v1`：统一下发「生产退料单」详情打印（占位符 `生产退料.*`）。
@@ -703,10 +703,10 @@ const BUILTIN_SALES_ORDER_V2: Record<string, unknown> = {
   updatedAt: '2026-04-28T10:00:00.000Z',
 };
 
-/** 进销存「采购单」入库：版式同外协收回单；`documentType` 为采购单以便本入口列表展示。 */
+/** 进销存「采购入库」：版式同外协收回单；`documentType` 为 purchaseBill 以便本入口列表展示。 */
 const BUILTIN_PURCHASE_BILL_V2: Record<string, unknown> = {
   id: BUILTIN_PURCHASE_BILL_PRINT_TEMPLATE_ID,
-  name: '采购单（颜色尺码）',
+  name: '采购入库（颜色尺码）',
   isSystemTemplate: true,
   documentType: 'purchaseBill',
   printTemplateManageScope: 'purchaseBillList',
@@ -722,7 +722,7 @@ const BUILTIN_PURCHASE_BILL_V2: Record<string, unknown> = {
       width: 72.5,
       config: {
         color: '#111827',
-        content: '{{租户.name}}采购单',
+        content: '{{租户.name}}采购入库',
         textAlign: 'center',
         fontSizePt: 17,
         fontWeight: 'bold',
@@ -738,7 +738,7 @@ const BUILTIN_PURCHASE_BILL_V2: Record<string, unknown> = {
       width: 47,
       config: {
         color: '#111827',
-        content: '{{系统.pageCurrent}}/{{系统.pageTotal}}页\n{{系统.systemTime}}\nNO：{{采购单.docNumber}}',
+        content: '{{系统.pageCurrent}}/{{系统.pageTotal}}页\n{{系统.systemTime}}\nNO：{{采购入库.docNumber}}',
         textAlign: 'right',
         fontSizePt: 10,
         fontWeight: 'normal',
@@ -754,7 +754,7 @@ const BUILTIN_PURCHASE_BILL_V2: Record<string, unknown> = {
       width: 160,
       config: {
         color: '#111827',
-        content: '供应商：{{采购单.partner}}\n入库仓库：{{采购单.warehouseName}}',
+        content: '供应商：{{采购入库.partner}}\n入库仓库：{{采购入库.warehouseName}}',
         textAlign: 'left',
         fontSizePt: 10,
         fontWeight: 'normal',
@@ -839,7 +839,7 @@ const BUILTIN_PURCHASE_BILL_V2: Record<string, unknown> = {
       width: 112,
       config: {
         color: '#111827',
-        content: '合计数量：{{采购单.docTotalQty}}\n总金额：{{采购单.docTotalAmount}}元',
+        content: '合计数量：{{采购入库.docTotalQty}}\n总金额：{{采购入库.docTotalAmount}}元',
         textAlign: 'right',
         fontSizePt: 10,
         fontWeight: 'normal',

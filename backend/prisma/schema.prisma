@@ -524,6 +524,10 @@ model ProductionOrder {
   priority      String    @default("Medium") @db.VarChar(10)
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+  /** 派发完成状态：'IN_PROGRESS' | 'COMPLETED'。STOCK_IN 累计 ≥ items 总量自动写 COMPLETED；用户手动可覆盖。 */
+  dispatchStatus       String  @default("IN_PROGRESS") @map("dispatch_status") @db.VarChar(20)
+  /** 是否被手动覆盖过 dispatchStatus；true 时自动入库逻辑跳过该工单。 */
+  dispatchStatusManual Boolean @default(false) @map("dispatch_status_manual")
 
   planOrder    PlanOrder?        @relation(fields: [planOrderId], references: [id])
   parentOrder  ProductionOrder?  @relation("OrderHierarchy", fields: [parentOrderId], references: [id])

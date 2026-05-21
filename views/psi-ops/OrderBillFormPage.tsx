@@ -119,7 +119,7 @@ interface OrderBillFormPageProps {
   partnerLabel: string;
   /** 生产外协收回等（打印销售单应收结余用） */
   prodRecords?: ProductionOpRecord[];
-  /** 采购订单/采购单详情打印模版列表（未传时回退到全局配置） */
+  /** 采购订单/采购入库详情打印模版列表（未传时回退到全局配置） */
   orderBillPrintTemplates?: PrintTemplate[];
 }
 
@@ -864,7 +864,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       });
       if (!form.partner || !form.warehouseId || purchaseBillItems.length === 0 || !hasValidBillLine) return;
       const originalDocNumber = editingDocNumber || '';
-      /** 采购单单号：新增保存时自动生成；编辑沿用原单号且不可改 */
+      /** 采购入库单号：新增保存时自动生成；编辑沿用原单号且不可改 */
       let docNumber = editingDocNumber ? editingDocNumber : generatePBDocNumber(form.partnerId || '', form.partner || '');
       if (!editingDocNumber) {
         const exists = (n: string) => recordsList.some((r) => r.type === 'PURCHASE_BILL' && (r.docNumber || '').toLowerCase() === n.toLowerCase());

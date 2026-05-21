@@ -60,7 +60,7 @@ export const PRODUCTION_SUB_MODULES: { key: string; label: string; actions: stri
 
 export const PSI_SUB_MODULES: { key: string; label: string; actions: string[]; group: string }[] = [
   { key: 'purchase_order', label: '采购订单', actions: ['view', 'create', 'edit', 'delete'], group: '采购订单' },
-  { key: 'purchase_bill', label: '采购单', actions: ['view', 'create', 'edit', 'delete'], group: '采购单' },
+  { key: 'purchase_bill', label: '采购入库', actions: ['view', 'create', 'edit', 'delete'], group: '采购入库' },
   { key: 'sales_order', label: '销售订单', actions: ['view', 'create', 'edit', 'delete'], group: '销售订单' },
   { key: 'sales_order_allocation', label: '配货', actions: ['allow'], group: '销售订单' },
   { key: 'sales_order_pending_shipment', label: '待发货清单', actions: ['allow'], group: '销售订单' },

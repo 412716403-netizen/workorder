@@ -24,6 +24,59 @@ export enum PlanStatus {
   CONVERTED = 'CONVERTED',
 }
 
+/**
+ * 工单派发完成状态（持久化字段，`ProductionOrder.dispatchStatus`）。
+ * - `IN_PROGRESS`：进行中（默认值，或入库未达计划数）
+ * - `COMPLETED`：已完成（入库累计 ≥ 计划数 自动写入；或用户手动覆盖）
+ * 自动推进规则见 `recalcOrderDispatchStatusByStockIn`：当 `dispatchStatusManual=true` 时跳过自动逻辑。
+ */
+export enum OrderDispatchStatus {
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+}
+
+export const ORDER_DISPATCH_STATUS_LABEL: Record<OrderDispatchStatus, string> = {
+  [OrderDispatchStatus.IN_PROGRESS]: '进行中',
+  [OrderDispatchStatus.COMPLETED]: '已完成',
+};
+
+/**
+ * 计划单派发完成状态（响应派生字段，不落库，由后端 `listPlans` 注入）。
+ * 基于该计划单下「直接关联的工单」（`productionOrders WHERE planOrderId = plan.id`）聚合得到：
+ * - 无工单 → `NOT_DISPATCHED`
+ * - 全部工单 `dispatchStatus === COMPLETED` → `COMPLETED`
+ * - 其他 → `IN_PROGRESS`
+ * 父子计划在列表里各自是独立的 `PlanOrder` 行，互不影响。
+ */
+export enum PlanDispatchStatus {
+  NOT_DISPATCHED = 'NOT_DISPATCHED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+}
+
+export const PLAN_DISPATCH_STATUS_LABEL: Record<PlanDispatchStatus, string> = {
+  [PlanDispatchStatus.NOT_DISPATCHED]: '未下单',
+  [PlanDispatchStatus.IN_PROGRESS]: '未完成',
+  [PlanDispatchStatus.COMPLETED]: '已完成',
+};
+
+/** 中文状态文案 → PlanDispatchStatus 映射（搜索框关键字匹配用） */
+export const PLAN_DISPATCH_STATUS_BY_LABEL: Record<string, PlanDispatchStatus> = {
+  未下单: PlanDispatchStatus.NOT_DISPATCHED,
+  未完成: PlanDispatchStatus.IN_PROGRESS,
+  已完成: PlanDispatchStatus.COMPLETED,
+};
+
+export function isPlanDispatchStatus(v: unknown): v is PlanDispatchStatus {
+  return v === PlanDispatchStatus.NOT_DISPATCHED
+    || v === PlanDispatchStatus.IN_PROGRESS
+    || v === PlanDispatchStatus.COMPLETED;
+}
+
+export function isOrderDispatchStatus(v: unknown): v is OrderDispatchStatus {
+  return v === OrderDispatchStatus.IN_PROGRESS || v === OrderDispatchStatus.COMPLETED;
+}
+
 export type ProcessPricingMode = 'per_piece' | 'per_hour';
 export type ProductionLinkMode = 'order' | 'product';
 export type ProcessSequenceMode = 'free' | 'sequential';
@@ -130,6 +183,16 @@ export const PSI_TYPES_WITH_BATCH_LINE = [
   'TRANSFER',
   'STOCKTAKE',
 ] as const;
+
+/** 进销存 `PURCHASE_BILL` 单据中文名（导航、表单、对账、打印分组等） */
+export const PSI_PURCHASE_BILL_LABEL = '采购入库';
+
+const PSI_PURCHASE_BILL_LABEL_LEGACY = '采购单';
+
+/** 对账/详情等处的 docType 是否为采购入库（兼容历史「采购单」文案） */
+export function isPurchaseBillDocType(docType: string): boolean {
+  return docType === PSI_PURCHASE_BILL_LABEL || docType === PSI_PURCHASE_BILL_LABEL_LEGACY;
+}
 
 /**
  * 产品分类是否按批次管理物料（与颜色尺码互斥：二者不应同时为 true，服务端会拒绝）。

@@ -28,3 +28,11 @@ export function salesOrderDocHasNotFullyShippedLine(
   }
   return false;
 }
+
+/** 销售订单单据级：全部行组已发数量 ≥ 订货数量 */
+export function salesOrderDocFullyShipped(
+  docItems: Array<{ id: string; lineGroupId?: string; quantity?: number | null; shippedQuantity?: number | null }>,
+): boolean {
+  if (docItems.length === 0) return false;
+  return !salesOrderDocHasNotFullyShippedLine(docItems);
+}

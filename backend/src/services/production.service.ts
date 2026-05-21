@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type { TenantPrismaClient } from '../lib/prisma.js';
 import { prisma as basePrisma } from '../lib/prisma.js';
+import { OrderDispatchStatus } from '../types/index.js';
 import { generateDocNo, generateDocNoWithLock } from '../utils/docNumber.js';
 import {
   nextOutsourceDocNoForPartner,
@@ -19,6 +20,7 @@ import {
   type ScanValidatePurpose,
   type ScanValidateScope,
 } from './scanValidate.service.js';
+import { AppError } from '../middleware/errorHandler.js';
 
 /**
  * 外协收回 / 生产报工等"按 BOM 占比把录入的本次交货总重量分摊为各子物料实际消耗"的统一算子。
@@ -320,6 +322,50 @@ export async function getRecord(db: TenantPrismaClient, id: string) {
   return db.productionOpRecord.findUnique({ where: { id } });
 }
 
+/**
+ * 根据当前 STOCK_IN 入库累计推进工单 `dispatchStatus`。
+ *
+ * 规则（与「关联工单模式」下计划单/工单状态徽章保持一致）：
+ * - `dispatchStatusManual = true`：跳过自动逻辑（用户手动覆盖优先）。
+ * - 入库累计 (`SUM(quantity) WHERE type='STOCK_IN' AND orderId=order.id`) ≥ 工单 `items` 总量 → COMPLETED。
+ * - 否则 → IN_PROGRESS（用于删除/退库导致回退的场景）。
+ *
+ * 调用点：所有可能改变 `STOCK_IN` 数据的入口（createRecord / createRecordBatch 内单条 / updateRecord / deleteRecord）。
+ * 事务上下文：传入的 `db` 在批量路径下是 tx；非事务路径下是 TenantPrismaClient（Proxy）。两者都支持 `productionOrder.update`。
+ */
+export async function recalcOrderDispatchStatusByStockIn(
+  orderId: string,
+  db: TenantPrismaClient,
+): Promise<void> {
+  const order = await db.productionOrder.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true,
+      dispatchStatus: true,
+      dispatchStatusManual: true,
+      items: { select: { quantity: true } },
+    },
+  });
+  if (!order) return;
+  if (order.dispatchStatusManual) return;
+
+  const inSum = await db.productionOpRecord.aggregate({
+    where: { orderId, type: 'STOCK_IN' },
+    _sum: { quantity: true },
+  });
+  const totalIn = Number(inSum._sum.quantity ?? 0);
+  const orderQty = order.items.reduce((s, i) => s + Number(i.quantity), 0);
+  const next = orderQty > 0 && totalIn >= orderQty
+    ? OrderDispatchStatus.COMPLETED
+    : OrderDispatchStatus.IN_PROGRESS;
+  if (next === order.dispatchStatus) return;
+
+  await db.productionOrder.update({
+    where: { id: orderId },
+    data: { dispatchStatus: next },
+  });
+}
+
 export async function createRecord(
   db: TenantPrismaClient,
   body: Record<string, unknown>,
@@ -355,6 +401,11 @@ export async function createRecord(
   // 扫码去重兜底（STOCK_IN / REWORK_REPORT / OUTSOURCE 已收回）
   if (tenantId) {
     await assertScanForRecord(tenantId, data);
+  }
+
+  // 外协收货数量上限硬校验（受 SystemSetting.allowExceedMaxOutsourceReceiveQty 控制）
+  if (tenantId && data.type === 'OUTSOURCE' && data.status === '已收回' && !data.sourceReworkId) {
+    await enforceOutsourceReceiveQuantity(db, tenantId, data as Record<string, unknown>);
   }
 
   /**
@@ -409,6 +460,12 @@ export async function createRecord(
 
   if (data.type === 'OUTSOURCE' && data.status === '已收回' && !data.sourceReworkId) {
     await applyOutsourceProgress({ ...record, tenantId: tenantId ?? null });
+  }
+
+  // STOCK_IN 写入后推进工单 dispatchStatus（仅当关联工单非空，且未被手动覆盖）。
+  // 与「关联工单模式」下计划单/工单状态徽章联动；产品模式不展示徽章但字段仍写入避免切模式数据丢失。
+  if ((record as { type?: string }).type === 'STOCK_IN' && (record as { orderId?: string }).orderId) {
+    await recalcOrderDispatchStatusByStockIn(String((record as { orderId: string }).orderId), db);
   }
 
   return record;
@@ -555,6 +612,16 @@ export async function updateRecord(
     await syncOutsourceReportOnUpdate(oldRecord, record);
   }
 
+  // STOCK_IN 修改后推进涉及工单 dispatchStatus：旧/新 orderId 都触发（含从 STOCK_IN 改成其他 type 的回退场景）
+  const affected = new Set<string>();
+  if (oldRecord.type === 'STOCK_IN' && oldRecord.orderId) affected.add(oldRecord.orderId);
+  if ((record as { type?: string }).type === 'STOCK_IN' && (record as { orderId?: string }).orderId) {
+    affected.add(String((record as { orderId: string }).orderId));
+  }
+  for (const oid of affected) {
+    await recalcOrderDispatchStatusByStockIn(oid, db);
+  }
+
   return record;
 }
 
@@ -566,6 +633,10 @@ export async function deleteRecord(db: TenantPrismaClient, id: string) {
 
   if (record.type === 'OUTSOURCE' && record.status === '已收回' && record.docNo) {
     await removeOutsourceProgress(record);
+  }
+
+  if (record.type === 'STOCK_IN' && record.orderId) {
+    await recalcOrderDispatchStatusByStockIn(record.orderId, db);
   }
 
   return { message: '已删除' };
@@ -604,6 +675,76 @@ export async function getDefectiveRework(db: TenantPrismaClient) {
 }
 
 // ── outsource progress helpers (kept as-is from original controller) ──
+
+/**
+ * 后端外协收货"最大可收货数量"硬校验（兜底）：
+ * - 受 SystemSetting.allowExceedMaxOutsourceReceiveQty 控制：true 时**完全跳过**校验（业务允许超收）；
+ *   false 时执行下面的兜底口径。
+ * - 兜底口径（保守，与前端 OutsourcePanel.handleReceiveFormSubmit 同范围切分）：
+ *   - order scope（写入记录有 orderId）：按 orderId + nodeId + partner（+ variantId 若有）聚合；
+ *   - product scope（写入记录无 orderId）：按 productId + nodeId + partner（+ variantId 若有）且 orderId 为空聚合。
+ *   要求 `已收 + 本次收 ≤ 已派`，否则拒绝。
+ * - 不复刻前端"非规格聚合 vs 规格细分"的精细切分；防止 API 直连绕过前端的明显越界即可。
+ */
+async function enforceOutsourceReceiveQuantity(
+  db: TenantPrismaClient,
+  tenantId: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  const addQty = Number(data.quantity);
+  if (!(addQty > 0)) return;
+  if (!data.nodeId) return;
+
+  const setting = await basePrisma.systemSetting.findUnique({
+    where: { tenantId_key: { tenantId, key: 'allowExceedMaxOutsourceReceiveQty' } },
+  });
+  if (setting?.value === true) return;
+
+  const nodeId = String(data.nodeId);
+  const partner = data.partner == null ? null : String(data.partner);
+  const orderId = data.orderId ? String(data.orderId) : null;
+  const productId = data.productId ? String(data.productId) : null;
+  const variantId =
+    data.variantId == null || data.variantId === '' ? null : String(data.variantId);
+
+  const baseWhere: Record<string, unknown> = {
+    tenantId,
+    type: 'OUTSOURCE',
+    sourceReworkId: null,
+    nodeId,
+    partner,
+  };
+  if (orderId) {
+    baseWhere.orderId = orderId;
+  } else {
+    if (!productId) return;
+    baseWhere.orderId = null;
+    baseWhere.productId = productId;
+  }
+  if (variantId !== null) {
+    baseWhere.variantId = variantId;
+  }
+
+  const [dispatchAgg, receiveAgg] = await Promise.all([
+    db.productionOpRecord.aggregate({
+      where: { ...baseWhere, status: '加工中' } as any,
+      _sum: { quantity: true },
+    }),
+    db.productionOpRecord.aggregate({
+      where: { ...baseWhere, status: '已收回' } as any,
+      _sum: { quantity: true },
+    }),
+  ]);
+  const dispatched = Number(dispatchAgg._sum.quantity ?? 0);
+  const received = Number(receiveAgg._sum.quantity ?? 0);
+  if (received + addQty > dispatched) {
+    const pending = Math.max(0, dispatched - received);
+    throw new AppError(
+      400,
+      `本次外协收货 ${addQty} 件 + 已收 ${received} 件 已超过该范围已派 ${dispatched} 件（待收 ${pending} 件），且系统未开启「允许超过最大可收货数量」。`,
+    );
+  }
+}
 
 export async function applyOutsourceProgress(record: {
   id?: string;

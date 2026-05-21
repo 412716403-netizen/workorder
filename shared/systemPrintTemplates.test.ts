@@ -80,7 +80,7 @@ describe('stripSystemPrintTemplatesForPersistence', () => {
       { id: BUILTIN_OUTSOURCE_RECEIVE_PRINT_TEMPLATE_ID, name: '外协收回单', paperSize: { widthMm: 241, heightMm: 140 }, elements: [], createdAt: '', updatedAt: '' },
       { id: BUILTIN_PURCHASE_ORDER_PRINT_TEMPLATE_ID, name: '采购单', paperSize: { widthMm: 241, heightMm: 140 }, elements: [], createdAt: '', updatedAt: '' },
       { id: BUILTIN_SALES_ORDER_PRINT_TEMPLATE_ID, name: '销售单', paperSize: { widthMm: 241, heightMm: 140 }, elements: [], createdAt: '', updatedAt: '' },
-      { id: BUILTIN_PURCHASE_BILL_PRINT_TEMPLATE_ID, name: '采购单', paperSize: { widthMm: 241, heightMm: 140 }, elements: [], createdAt: '', updatedAt: '' },
+      { id: BUILTIN_PURCHASE_BILL_PRINT_TEMPLATE_ID, name: '采购入库', paperSize: { widthMm: 241, heightMm: 140 }, elements: [], createdAt: '', updatedAt: '' },
       { id: BUILTIN_SALES_BILL_PRINT_TEMPLATE_ID, name: '销售单', paperSize: { widthMm: 241, heightMm: 140 }, elements: [], createdAt: '', updatedAt: '' },
       { id: BUILTIN_MATERIAL_ISSUE_PRINT_TEMPLATE_ID, name: '领料', paperSize: { widthMm: 241, heightMm: 140 }, elements: [], createdAt: '', updatedAt: '' },
       { id: BUILTIN_MATERIAL_RETURN_PRINT_TEMPLATE_ID, name: '退料', paperSize: { widthMm: 241, heightMm: 140 }, elements: [], createdAt: '', updatedAt: '' },

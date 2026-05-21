@@ -124,6 +124,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   workers,
   equipment,
   processSequenceMode,
+  allowExceedMaxOutsourceReceiveQty = false,
   userPermissions,
   tenantRole,
   plans = [],
@@ -864,7 +865,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
 
   const handleOutsourceReceiveSubmit = async () => {
     if (!receiveModal || receiveQty <= 0) return;
-    if (receiveQty > receiveModal.pendingQty) {
+    if (!allowExceedMaxOutsourceReceiveQty && receiveQty > receiveModal.pendingQty) {
       toast.error(`本次收回数量不能大于待收回数量（${receiveModal.pendingQty}）。`);
       return;
     }
@@ -923,6 +924,8 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       toast.warning('请至少填写一项收回数量。');
       return;
     }
+    /** 受 SystemSetting.allowExceedMaxOutsourceReceiveQty 控制：开启后跳过本段所有 pending 校验。 */
+    if (!allowExceedMaxOutsourceReceiveQty) {
     for (const [key, qty] of entries) {
       const resolved = resolveReceiveEntry(key);
       if (!resolved) continue;
@@ -992,6 +995,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           }
         }
       }
+    }
     }
     const timestamp = new Date().toLocaleString();
     const firstKey = receiveSelectedKeys.values().next().value;
@@ -1574,6 +1578,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
               setReceiveCustomValues={setReceiveCustomValues}
               globalNodes={globalNodes}
               boms={boms}
+              allowExceedMaxOutsourceReceiveQty={allowExceedMaxOutsourceReceiveQty}
               onSubmit={handleReceiveFormSubmit}
               onClose={() => setReceiveFormModalOpen(false)}
             />

@@ -13,7 +13,7 @@
 
 ## 1. 进销存 (PSI)
 
-采购订单、采购单（入库）、调拨、盘点：**无颜色尺码**（单行数量、非规格矩阵）时，数量允许为**非负小数，至多 2 位小数**（与 `PsiRecord.quantity` Decimal(12,2) 一致）；有颜色尺码时规格格仍为**整数**件数。
+采购订单、采购入库、调拨、盘点：**无颜色尺码**（单行数量、非规格矩阵）时，数量允许为**非负小数，至多 2 位小数**（与 `PsiRecord.quantity` Decimal(12,2) 一致）；有颜色尺码时规格格仍为**整数**件数。
 
 ### 1.1 库存计算
 
@@ -38,13 +38,13 @@
 
 ### 1.2 采购订单已入库数量 (`receivedByOrderLine`)
 
-**规则**：按 `(sourceOrderNumber, sourceLineId)` 汇总采购单中引用该订单行的数量。
+**规则**：按 `(sourceOrderNumber, sourceLineId)` 汇总采购入库中引用该订单行的数量。
 
 - 数据来源：`type === 'PURCHASE_BILL'` 且 `sourceOrderNumber`、`sourceLineId` 均存在
 - 汇总键：`${sourceOrderNumber}::${sourceLineId}`
 - 汇总值：`quantity` 累加
 
-**用途**：用于采购订单关联采购单时判断已入库数量、剩余可转数量。
+**用途**：用于采购订单关联采购入库时判断已入库数量、剩余可转数量。
 
 ### 1.3 行分组 (`lineGroupId`)
 
@@ -81,16 +81,16 @@
 
 **仓库管理**：批次类产品在「按物料」或「按仓库」结存格子上可展开查看该仓各批号结存（懒加载 `getStockBatches`）。
 
-**采购订单（`PURCHASE_ORDER`）与批次**：采购订单**不写入** `psi_records`、不产生库存结存，行上**不要求**批次号。批次约束发生在**转采购入库单（`PURCHASE_BILL`）**时：与采购单、销售出库等一致，按分类 `categoryUsesBatchManagement` 在入库界面选择/填写 `batchNo`。若未来业务要求「订单阶段即锁定批号」，需单独建模（订单行预占批号），当前产品未实现。
+**采购订单（`PURCHASE_ORDER`）与批次**：采购订单**不写入** `psi_records`、不产生库存结存，行上**不要求**批次号。批次约束发生在**转采购入库（`PURCHASE_BILL`）**时：与采购入库、销售出库等一致，按分类 `categoryUsesBatchManagement` 在入库界面选择/填写 `batchNo`。若未来业务要求「订单阶段即锁定批号」，需单独建模（订单行预占批号），当前产品未实现。
 
-**展示边界**：生产物料主面板、领料/退料流水列表、仓库流水**列表**主表仍可为总账；仓库流水**单据详情**、采购单详情（有条件列）、对应打印模板可选用 `行.batchNo`；仓库列表展开子表展示批次结存。
+**展示边界**：生产物料主面板、领料/退料流水列表、仓库流水**列表**主表仍可为总账；仓库流水**单据详情**、采购入库详情（有条件列）、对应打印模板可选用 `行.batchNo`；仓库列表展开子表展示批次结存。
 
 ### 1.4 单据号生成
 
 | 类型 | 格式 | 规则 |
 |------|------|------|
 | 采购订单 | `PO-{partnerCode}-{seq}` | `partnerCode` 取 `partnerId` 前 8 位字母数字；`seq` 按该供应商已有订单递增 |
-| 采购单 | `PB-{partnerCode}-{seq}` | 同上 |
+| 采购入库 | `PB-{partnerCode}-{seq}` | 同上 |
 
 ### 1.5 替换保存时顺序保持
 
@@ -207,6 +207,47 @@
 标准可配置字段主要包括：工单号、客户、交期、开始日期。  
 产品、SKU、总量、状态通常为固定展示字段。
 
+**列表显示**（关联工单模式）：
+
+| 开关 | 字段 | 效果 |
+|------|------|------|
+| 仅显示未完成 | `orderFormSettings.listDisplay.onlyShowNotCompleted` | 工单中心分页列表传 `excludeCompleted=true`，SQL 过滤 `dispatchStatus=IN_PROGRESS` |
+
+计划单表单配置 **列表显示** 页签另有「仅显示未完成 / 未下单」（`planFormSettings.listDisplay.onlyShowNotCompleted`），列表传 `excludeCompleted=true`，后端按派生 `PlanDispatchStatus` 内存过滤（隐藏 `COMPLETED`）。
+
+### 3.10 派发完成状态徽章（关联工单模式专属）
+
+仅在「关联工单模式」(`productionLinkMode === 'order'`) 的工单中心与计划单列表展示。
+
+#### 工单层（`ProductionOrder.dispatchStatus`，持久化）
+
+| 状态 | 中文 | 判定 |
+|------|------|------|
+| `IN_PROGRESS` | 进行中 | 默认；入库累计不足或被回退 |
+| `COMPLETED`   | 已完成 | `sum(STOCK_IN.quantity WHERE orderId=order.id) ≥ sum(items.quantity)` |
+
+- **自动推进**：所有改变 `STOCK_IN` 数据的入口（`createRecord` / `createRecordBatch` 内单条 / `updateRecord` / `deleteRecord`）在事务后调用 `recalcOrderDispatchStatusByStockIn`，当 `dispatchStatusManual=false` 时自动推进。
+- **手动覆盖**：用户在工单中心点击徽章 → `PATCH /api/orders/:id/dispatch-status`，后端写 `dispatchStatusManual=true`，自动逻辑不再覆盖该工单。
+- **回退**：删除 `STOCK_IN` 导致入库量回落，若 `manual=false` 会自动从 COMPLETED 退回 IN_PROGRESS。
+- **本期不提供**「恢复自动判定」按钮，需手动覆盖后保持手动状态；后续可补 `dispatchStatusManual=false` 的"恢复自动"动作。
+- **与 `OrderStatus`（PLANNING/PRODUCING/QC/SHIPPED/ON_HOLD）解耦**，互不影响。
+
+#### 计划单层（`PlanOrder.derivedStatus`，响应派生，不落库）
+
+| 状态 | 中文 | 判定 |
+|------|------|------|
+| `NOT_DISPATCHED` | 未下单 | 该计划无直接关联工单 |
+| `IN_PROGRESS`    | 未完成 | 有工单但未全部完成 |
+| `COMPLETED`      | 已完成 | 所有 `planOrderId = plan.id` 工单 `dispatchStatus === COMPLETED` |
+
+- 由后端 `plans.service.listPlans` / `getPlan` 注入；前端不再二次算。
+- **父子计划独立**：父和子计划各自是独立的 `PlanOrder` 行，徽章互不影响。
+- **多工单的计划**（如「补充下达子工单」）：所有工单都 COMPLETED 才算计划完成；任何一张退回，计划单也回到 IN_PROGRESS。
+
+#### 搜索关键字
+
+计划单列表搜索框支持「未下单 / 未完成 / 已完成」整词匹配（仅工单模式）；命中后通过 `?dispatchStatus=` 透传后端，后端退化为「全量 `where` 命中 → 内存按派生状态过滤 → 切片分页」。不支持状态 + 关键字组合搜索（命中状态词即整段视为状态过滤）。
+
 ---
 
 ## 4. 财务 (Finance)
@@ -310,7 +351,7 @@
   - 工序报工单规格：`effectiveRemainingForModal`
   - 待入库矩阵：`pendingByVariant[variantId]`；单规格：`pendingTotal`
   - 返工报工：路径行的 `pendingByVariant` / `totalPending`
-  - 外协收货：行级 `pending`（已派 − 已收）
+  - 外协收货：行级 `pending`（已派 − 已收）；**受 `SystemSetting.allowExceedMaxOutsourceReceiveQty` 控制**——开启后所有 pending clamp（手输、矩阵 cell、扫码累加）以及 `OutsourcePanel.handleReceiveFormSubmit` 的提交校验全部跳过，后端 `enforceOutsourceReceiveQuantity` 同步放行。
 - 历史接口 `addScanQtyToStockInForm` 改为「超上限不修改表单」的兜底行为；新代码统一调用 [`tryAddScanQtyToStockInForm`](../utils/pendingStockScanMatch.ts) 与 [`checkExceedMax`](../utils/scanApplyGuards.ts)。
 
 **实现锚点**：后端 [`backend/src/services/scanValidate.service.ts`](../backend/src/services/scanValidate.service.ts) + `POST /api/item-codes/scan/validate-usage`；前端 `itemCodesApi.validateUsage` 经 [`useReportModalState`](../hooks/useReportModalState.ts)、[`usePendingStockState`](../hooks/usePendingStockState.ts)、[`ReworkReportSubmitModal`](../views/production-ops/ReworkReportSubmitModal.tsx)、[`OutsourceReceiveQuantityModal`](../views/production-ops/OutsourceReceiveQuantityModal.tsx) 调用。

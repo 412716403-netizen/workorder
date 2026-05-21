@@ -19,7 +19,7 @@ export interface PsiDocDetailSummaryProps {
   categories: ProductCategory[];
   /** 采购订单详情：是否展示「关联产品」（与表单配置 `relatedProductEnabled` 一致） */
   showPurchaseOrderRelatedProduct?: boolean;
-  /** 采购单详情：是否展示「关联产品」（与表单配置 `relatedProductEnabled` 一致） */
+  /** 采购入库详情：是否展示「关联产品」（与表单配置 `relatedProductEnabled` 一致） */
   showPurchaseBillRelatedProduct?: boolean;
   warehouseMapPSI?: Map<string, Warehouse>;
   dictionaries: AppDictionaries;
@@ -40,7 +40,7 @@ function readPsiLinePrice(i: PsiRecord, priceField: string): number {
 const DOC_META: Record<PsiDocType, { priceField: string; emptyMsg: string; priceLabel: string }> = {
   PURCHASE_ORDER: { priceField: 'purchasePrice', emptyMsg: '未找到该采购订单数据。', priceLabel: '采购价' },
   SALES_ORDER:    { priceField: 'salesPrice',    emptyMsg: '未找到该销售订单数据。', priceLabel: '销售价' },
-  PURCHASE_BILL:  { priceField: 'purchasePrice', emptyMsg: '未找到该采购单数据。',   priceLabel: '采购价' },
+  PURCHASE_BILL:  { priceField: 'purchasePrice', emptyMsg: '未找到该采购入库数据。',   priceLabel: '采购价' },
   SALES_BILL:     { priceField: 'salesPrice',    emptyMsg: '未找到该销售单数据。',   priceLabel: '销售价' },
 };
 

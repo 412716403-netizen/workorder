@@ -73,6 +73,8 @@ const SettingsView: React.FC = () => {
   const onUpdateProcessSequenceMode = a.onUpdateProcessSequenceMode;
   const allowExceedMaxReportQty = c.allowExceedMaxReportQty;
   const onUpdateAllowExceedMaxReportQty = a.onUpdateAllowExceedMaxReportQty;
+  const allowExceedMaxOutsourceReceiveQty = c.allowExceedMaxOutsourceReceiveQty;
+  const onUpdateAllowExceedMaxOutsourceReceiveQty = a.onUpdateAllowExceedMaxOutsourceReceiveQty;
   const onRefreshCategories = a.refreshCategories;
   const onRefreshPartnerCategories = a.refreshPartnerCategories;
   const onRefreshGlobalNodes = a.refreshGlobalNodes;
@@ -236,6 +238,8 @@ const SettingsView: React.FC = () => {
             onUpdateProcessSequenceMode={onUpdateProcessSequenceMode}
             allowExceedMaxReportQty={allowExceedMaxReportQty}
             onUpdateAllowExceedMaxReportQty={onUpdateAllowExceedMaxReportQty}
+            allowExceedMaxOutsourceReceiveQty={allowExceedMaxOutsourceReceiveQty}
+            onUpdateAllowExceedMaxOutsourceReceiveQty={onUpdateAllowExceedMaxOutsourceReceiveQty}
             canEdit={canEdit('production')}
           />
         )}

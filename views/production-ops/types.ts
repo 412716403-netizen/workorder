@@ -82,6 +82,8 @@ export interface PanelProps {
   workers: Worker[];
   equipment: { id: string; name: string; code?: string; assignedMilestoneIds?: string[] }[];
   processSequenceMode: ProcessSequenceMode;
+  /** 受 SystemSetting.allowExceedMaxOutsourceReceiveQty 控制：true 时放开外协收货数量上限（前端 + 后端双侧）。默认 false。 */
+  allowExceedMaxOutsourceReceiveQty?: boolean;
   userPermissions?: string[];
   tenantRole?: string;
   /** 外协管理专用（可选，仅外协页使用） */

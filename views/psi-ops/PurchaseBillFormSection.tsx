@@ -324,7 +324,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
         } else {
           onBack();
         }
-        toast.success(`采购单 ${pbDocNumber} 已成功创建，包含 ${addedCount} 条入库明细`);
+        toast.success(`采购入库 ${pbDocNumber} 已成功创建，包含 ${addedCount} 条入库明细`);
       } catch {
         /* onSaveBatch / onSaveRecord 已 toast */
       }
@@ -356,7 +356,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
             <button
               type="button"
               onClick={() => {
-                void confirm({ message: '确定要删除该采购单吗？', danger: true }).then((ok) => {
+                void confirm({ message: '确定要删除该采购入库单吗？', danger: true }).then((ok) => {
                   if (!ok) return;
                   onDeleteRecords!('PURCHASE_BILL', editingDocNumber!);
                   onBack();
@@ -388,7 +388,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
             })}
               className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
             >
-              <Save className="w-4 h-4" /> {editingDocNumber ? '保存修改' : '确认保存采购单'}
+              <Save className="w-4 h-4" /> {editingDocNumber ? '保存修改' : '确认保存采购入库'}
             </button>
           ) : (
             <button
@@ -410,7 +410,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
             <div className={psiOrderBillFormSectionStackClass}>
               <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
                 <div className={psiOrderBillFormSectionIconIndigoClass}><FileText className="w-4 h-4" /></div>
-                <h3 className={sectionTitleClass}>1. 采购单基础信息</h3>
+                <h3 className={sectionTitleClass}>1. 采购入库基础信息</h3>
               </div>
               <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
                 <div className="space-y-1.5">

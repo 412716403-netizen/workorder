@@ -36,6 +36,7 @@ import type {
   Partner,
   Worker,
   Equipment,
+  OrderDispatchStatus,
 } from '../types';
 import {
   DEFAULT_MATERIAL_PANEL_SETTINGS,
@@ -116,11 +117,13 @@ export interface AppDataContextValue {
   productionLinkMode: ProductionLinkMode;
   processSequenceMode: ProcessSequenceMode;
   allowExceedMaxReportQty: boolean;
+  allowExceedMaxOutsourceReceiveQty: boolean;
   productMilestoneProgresses: ProductMilestoneProgress[];
   // Config handlers
   onUpdateProductionLinkMode: (mode: ProductionLinkMode) => Promise<void>;
   onUpdateProcessSequenceMode: (mode: ProcessSequenceMode) => Promise<void>;
   onUpdateAllowExceedMaxReportQty: (v: boolean) => Promise<void>;
+  onUpdateAllowExceedMaxOutsourceReceiveQty: (v: boolean) => Promise<void>;
   onUpdatePlanFormSettings: (v: PlanFormSettings) => Promise<void>;
   onUpdateOrderFormSettings: (v: OrderFormSettings) => Promise<void>;
   onUpdatePurchaseOrderFormSettings: (v: PurchaseOrderFormSettings) => Promise<void>;
@@ -161,6 +164,8 @@ export interface AppDataContextValue {
   onUpdateReportProduct: (data: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string; customData?: Record<string, unknown>; weight?: number | null }) => Promise<void>;
   onDeleteReportProduct: (data: { progressId: string; reportId: string }) => Promise<void>;
   onUpdateOrder: (orderId: string, updates: Partial<ProductionOrder>) => Promise<void>;
+  /** 关联工单模式：手动切换工单派发完成状态（持久化 `dispatchStatusManual=true`，自动逻辑不再覆盖） */
+  onUpdateOrderDispatchStatus: (orderId: string, status: OrderDispatchStatus) => Promise<void>;
   onDeleteOrder: (orderId: string) => Promise<void>;
   // Production records
   onAddProdRecord: (record: ProductionOpRecord) => Promise<ProductionOpRecord | null>;
@@ -203,7 +208,7 @@ export type AppDataState = Pick<AppDataContextValue,
   'financeCategories' | 'financeAccountTypes' |
   'planFormSettings' | 'orderFormSettings' | 'purchaseOrderFormSettings' | 'salesOrderFormSettings' | 'purchaseBillFormSettings' | 'salesBillFormSettings' | 'receiptFormSettings' | 'paymentFormSettings' | 'materialPanelSettings' | 'materialFormSettings' | 'outsourceFormSettings' | 'reworkFormSettings' |
   'printTemplates' |
-  'productionLinkMode' | 'processSequenceMode' | 'allowExceedMaxReportQty' | 'productMilestoneProgresses'
+  'productionLinkMode' | 'processSequenceMode' | 'allowExceedMaxReportQty' | 'allowExceedMaxOutsourceReceiveQty' | 'productMilestoneProgresses'
 >;
 
 export type AppDataActions = Omit<AppDataContextValue, keyof AppDataState>;
@@ -227,6 +232,7 @@ export interface ConfigState {
   productionLinkMode: ProductionLinkMode;
   processSequenceMode: ProcessSequenceMode;
   allowExceedMaxReportQty: boolean;
+  allowExceedMaxOutsourceReceiveQty: boolean;
   planFormSettings: PlanFormSettings;
   orderFormSettings: OrderFormSettings;
   purchaseOrderFormSettings: PurchaseOrderFormSettings;
@@ -405,6 +411,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [productionLinkMode, setProductionLinkMode] = useState<ProductionLinkMode>('order');
   const [processSequenceMode, setProcessSequenceMode] = useState<ProcessSequenceMode>('sequential');
   const [allowExceedMaxReportQty, setAllowExceedMaxReportQty] = useState<boolean>(false);
+  const [allowExceedMaxOutsourceReceiveQty, setAllowExceedMaxOutsourceReceiveQty] = useState<boolean>(false);
   const [productMilestoneProgresses, setProductMilestoneProgresses] = useState<ProductMilestoneProgress[]>([]);
 
   const activeTenantId = tenantCtx?.tenantId;
@@ -425,6 +432,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           setProductionLinkMode,
           setProcessSequenceMode,
           setAllowExceedMaxReportQty,
+          setAllowExceedMaxOutsourceReceiveQty,
           setPlanFormSettings,
           setOrderFormSettings,
           setPurchaseOrderFormSettings,
@@ -552,6 +560,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const onUpdateProductionLinkMode = useCallback(async (mode: ProductionLinkMode) => { await api.settings.updateConfig('productionLinkMode', mode); setProductionLinkMode(mode); }, []);
   const onUpdateProcessSequenceMode = useCallback(async (mode: ProcessSequenceMode) => { await api.settings.updateConfig('processSequenceMode', mode); setProcessSequenceMode(mode); }, []);
   const onUpdateAllowExceedMaxReportQty = useCallback(async (value: boolean) => { await api.settings.updateConfig('allowExceedMaxReportQty', value); setAllowExceedMaxReportQty(value); }, []);
+  const onUpdateAllowExceedMaxOutsourceReceiveQty = useCallback(async (value: boolean) => { await api.settings.updateConfig('allowExceedMaxOutsourceReceiveQty', value); setAllowExceedMaxOutsourceReceiveQty(value); }, []);
   /**
    * 统一的 *FormSettings 保存 handler：
    * normalize → api.settings.updateConfig(key, next) → setter(next)。
@@ -822,6 +831,22 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     } catch (err: any) { toast.error(err.message || '更新工单失败'); }
   }, []);
 
+  /**
+   * 关联工单模式：手动切换工单派发完成状态徽章。
+   * 后端会一并把 `dispatchStatusManual` 置为 true，自动入库逻辑不再覆盖该工单。
+   */
+  const onUpdateOrderDispatchStatus = useCallback(
+    async (orderId: string, status: OrderDispatchStatus) => {
+      try {
+        const updated = await api.orders.updateDispatchStatus(orderId, status);
+        setOrders(prev => prev.map(o => o.id === orderId ? norm1(updated) : o));
+      } catch (err: any) {
+        toast.error(err.message || '切换工单状态失败');
+      }
+    },
+    [],
+  );
+
   const onDeleteOrder = useCallback(async (orderId: string) => {
     try { await api.orders.delete(orderId); setOrders(prev => prev.filter(o => o.id !== orderId)); }
     catch (err: any) { toast.error(err.message || '删除工单失败'); }
@@ -954,11 +979,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }), [categories, partnerCategories, dictionaries, globalNodes, partners, workers, equipment, warehouses, products, boms]);
 
   const configValue: ConfigState = useMemo(() => ({
-    productionLinkMode, processSequenceMode, allowExceedMaxReportQty,
+    productionLinkMode, processSequenceMode, allowExceedMaxReportQty, allowExceedMaxOutsourceReceiveQty,
     planFormSettings, orderFormSettings, purchaseOrderFormSettings, salesOrderFormSettings, purchaseBillFormSettings, salesBillFormSettings,
     receiptFormSettings, paymentFormSettings,
     materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates,
-  }), [productionLinkMode, processSequenceMode, allowExceedMaxReportQty, planFormSettings, orderFormSettings, purchaseOrderFormSettings, salesOrderFormSettings, purchaseBillFormSettings, salesBillFormSettings, receiptFormSettings, paymentFormSettings, materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates]);
+  }), [productionLinkMode, processSequenceMode, allowExceedMaxReportQty, allowExceedMaxOutsourceReceiveQty, planFormSettings, orderFormSettings, purchaseOrderFormSettings, salesOrderFormSettings, purchaseBillFormSettings, salesBillFormSettings, receiptFormSettings, paymentFormSettings, materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates]);
 
   const ordersValue: OrdersState = useMemo(() => ({
     orders, plans, productMilestoneProgresses,
@@ -971,7 +996,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }), [financeCategories, financeAccountTypes]);
 
   const actionsValue: AppDataActions = useMemo(() => ({
-    onUpdateProductionLinkMode, onUpdateProcessSequenceMode, onUpdateAllowExceedMaxReportQty,
+    onUpdateProductionLinkMode, onUpdateProcessSequenceMode, onUpdateAllowExceedMaxReportQty, onUpdateAllowExceedMaxOutsourceReceiveQty,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
     onUpdatePurchaseOrderFormSettings, onUpdateSalesOrderFormSettings,
     onUpdatePurchaseBillFormSettings, onUpdateSalesBillFormSettings,
@@ -982,7 +1007,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     onCreateSubPlan, onCreateSubPlans,
     onReportSubmit, onReportSubmitProduct,
     onUpdateReport, onDeleteReport, onUpdateReportProduct, onDeleteReportProduct,
-    onUpdateOrder, onDeleteOrder,
+    onUpdateOrder, onUpdateOrderDispatchStatus, onDeleteOrder,
     onAddProdRecord, onAddProdRecordBatch, onUpdateProdRecord, onDeleteProdRecord,
     onAddPSIRecord, onAddPSIRecordBatch, onReplacePSIRecords, onDeletePSIRecords,
     onAddFinanceRecord, onUpdateFinanceRecord, onDeleteFinanceRecord,
@@ -993,7 +1018,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     refreshPrintTemplates,
     ensureDeferredLoaded,
   }), [
-    onUpdateProductionLinkMode, onUpdateProcessSequenceMode, onUpdateAllowExceedMaxReportQty,
+    onUpdateProductionLinkMode, onUpdateProcessSequenceMode, onUpdateAllowExceedMaxReportQty, onUpdateAllowExceedMaxOutsourceReceiveQty,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
     onUpdatePurchaseOrderFormSettings, onUpdateSalesOrderFormSettings,
     onUpdatePurchaseBillFormSettings, onUpdateSalesBillFormSettings,
@@ -1004,7 +1029,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     onCreateSubPlan, onCreateSubPlans,
     onReportSubmit, onReportSubmitProduct,
     onUpdateReport, onDeleteReport, onUpdateReportProduct, onDeleteReportProduct,
-    onUpdateOrder, onDeleteOrder,
+    onUpdateOrder, onUpdateOrderDispatchStatus, onDeleteOrder,
     onAddProdRecord, onAddProdRecordBatch, onUpdateProdRecord, onDeleteProdRecord,
     onAddPSIRecord, onAddPSIRecordBatch, onReplacePSIRecords, onDeletePSIRecords,
     onAddFinanceRecord, onUpdateFinanceRecord, onDeleteFinanceRecord,

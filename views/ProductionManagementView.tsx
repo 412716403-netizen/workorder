@@ -56,6 +56,7 @@ const ProductionManagementView: React.FC = () => {
   const productionLinkMode = c.productionLinkMode;
   const processSequenceMode = c.processSequenceMode;
   const allowExceedMaxReportQty = c.allowExceedMaxReportQty;
+  const allowExceedMaxOutsourceReceiveQty = c.allowExceedMaxOutsourceReceiveQty;
   const plans = o.plans;
   const orders = o.orders;
   const products = m.products;
@@ -98,6 +99,7 @@ const ProductionManagementView: React.FC = () => {
   const onCreateSubPlan = a.onCreateSubPlan;
   const onCreateSubPlans = a.onCreateSubPlans;
   const onUpdateOrder = a.onUpdateOrder;
+  const onUpdateOrderDispatchStatus = a.onUpdateOrderDispatchStatus;
   const onDeleteOrder = a.onDeleteOrder;
   const onUpdateReport = a.onUpdateReport;
   const onDeleteReport = a.onDeleteReport;
@@ -309,6 +311,7 @@ const ProductionManagementView: React.FC = () => {
             onUpdateOrderFormSettings={onUpdateOrderFormSettings}
             onReportSubmit={onReportSubmit}
             onUpdateOrder={onUpdateOrder}
+            onUpdateOrderDispatchStatus={onUpdateOrderDispatchStatus}
             onDeleteOrder={onDeleteOrder}
             onUpdateReport={onUpdateReport}
             onDeleteReport={onDeleteReport}
@@ -351,6 +354,7 @@ const ProductionManagementView: React.FC = () => {
             workers={workers}
             equipment={equipment}
             processSequenceMode={processSequenceMode}
+            allowExceedMaxOutsourceReceiveQty={allowExceedMaxOutsourceReceiveQty}
             materialPanelSettings={materialPanelSettings}
             onUpdateMaterialPanelSettings={onUpdateMaterialPanelSettings}
             materialFormSettings={materialFormSettings}

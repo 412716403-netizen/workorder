@@ -4,6 +4,13 @@ export {
   MilestoneStatus,
   OrderStatus,
   PlanStatus,
+  OrderDispatchStatus,
+  PlanDispatchStatus,
+  ORDER_DISPATCH_STATUS_LABEL,
+  PLAN_DISPATCH_STATUS_LABEL,
+  PLAN_DISPATCH_STATUS_BY_LABEL,
+  isPlanDispatchStatus,
+  isOrderDispatchStatus,
   FINANCE_DOC_NO_PREFIX,
   PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID,
   PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER,
@@ -14,6 +21,8 @@ export {
   batchNoForDisplay,
   batchNoForWrite,
   PSI_TYPES_WITH_BATCH_LINE,
+  PSI_PURCHASE_BILL_LABEL,
+  isPurchaseBillDocType,
   categoryUsesBatchManagement,
   normalizeCollabSpecLabel,
   COLLAB_ACCEPT_CATEGORY_DECISION,
@@ -441,11 +450,11 @@ export interface PsiRecord {
   _savedAtMs?: number | null;
   customData?: Record<string, unknown> | null;
   note?: string | null;
-  /** 采购单：到期日（YYYY-MM-DD） */
+  /** 采购入库：到期日（YYYY-MM-DD） */
   dueDate?: string | null;
-  /** 采购单据行：引用的采购订单单号（编辑保存时需带回） */
+  /** 采购入库行：引用的采购订单单号（编辑保存时需带回） */
   sourceOrderNumber?: string | null;
-  /** 采购单据行：引用的采购订单行 id */
+  /** 采购入库行：引用的采购订单行 id */
   sourceLineId?: string | null;
   /** 采购/销售单行金额等（列表 API 可能带） */
   amount?: number | string | null;
@@ -488,6 +497,12 @@ export interface PlanOrder {
   updatedAt?: string;
   /** 本计划单各工序计价方式（仅本单使用，不同步到商品）；未设时用产品的 nodePricingModes 或计件 */
   nodePricingModes?: Record<string, ProcessPricingMode>;
+  /**
+   * 计划单派发完成状态（响应派生字段，由后端 `listPlans` / `getPlan` 注入；不写库）。
+   * 仅在「关联工单模式 productionLinkMode='order'」的列表上展示徽章。
+   * 计算规则：基于该计划下直接关联工单 `productionOrders WHERE planOrderId = plan.id` 的 `dispatchStatus` 聚合。
+   */
+  derivedStatus?: PlanDispatchStatus;
 }
 
 /** 计划单表单字段显示配置（标准字段或自定义字段） */
@@ -531,6 +546,11 @@ export interface PlanLabelPrintSettings {
 export interface PlanListDisplaySettings {
   /** 为 true 时：计划新建/详情/列表显示交货日期；打印可选「计划.dueDate」；工单中心与外协流水列表在工单模式下显示交期列 */
   showDeliveryDate?: boolean;
+  /**
+   * 为 true 时计划单列表仅显示「未下单」「未完成」（隐藏派生状态为「已完成」的行）。
+   * 关联工单模式下生效；筛选走后端 `excludeCompleted` 参数（内存分页，与状态关键字搜索同路径）。
+   */
+  onlyShowNotCompleted?: boolean;
 }
 
 /** 计划单表单配置：列表/新增/详情页显示哪些字段，及自定义项 */
@@ -592,22 +612,23 @@ export interface SalesOrderFormSettings {
 }
 
 /**
- * 采购单（入库）表单配置：与采购订单类似；列表与登记/详情打印共用 `listPrint` 白名单。
+ * 采购入库表单配置：与采购订单类似；列表与登记/详情打印共用 `listPrint` 白名单。
  */
 export interface PurchaseBillFormSettings {
   standardFields: PlanFormFieldConfig[];
   customFields: PlanFormFieldConfig[];
-  /** 进销存采购单列表「打印」及登记/详情页「打印」入口与白名单 */
+  /** 进销存采购入库列表「打印」及登记/详情页「打印」入口与白名单 */
   listPrint?: PlanListPrintSettings;
   /**
-   * 为 true 时，采购单在列表、新建/编辑、详情中展示「关联成品」：存**每行** `customData.relatedProductId`（与采购品项不同）；列表为各行的去重汇总。
+   * 为 true 时，采购入库在列表、新建/编辑、详情中展示「关联成品」：存**每行** `customData.relatedProductId`（与采购品项不同）；列表为各行的去重汇总。
    * 与 `standardFields` 中历史遗留的 `relatedProduct` 伪字段互斥：归一化时会迁移并剔除该伪字段。
+   * 在「进销存 → 采购入库 → 表单配置」中，该开关位于 **列表显示** 页签，数据仍存本字段。
    */
   relatedProductEnabled?: boolean;
 }
 
 /**
- * 销售单（出库）表单配置：与采购单同形；表单配置弹窗仅维护自定义项与 `listPrint`，`standardFields` 持久化为空。
+ * 销售单（出库）表单配置：与采购入库同形；表单配置弹窗仅维护自定义项与 `listPrint`，`standardFields` 持久化为空。
  * 列表与登记/详情打印共用 `listPrint` 白名单。
  */
 export interface SalesBillFormSettings {
@@ -945,7 +966,7 @@ export interface SalesBillMatrixGroup {
   unitPrice: number;
   totalAmount: number;
   remark: string;
-  /** 采购单等 PSI 行携带的批次，透传到 PrintListRow.batchNo */
+  /** 采购入库等 PSI 行携带的批次，透传到 PrintListRow.batchNo */
   batchNo?: string;
 }
 
@@ -962,7 +983,7 @@ export interface PurchaseOrderPrintContext {
 /** 销售订单打印：占位符 {{销售订单.xxx}}（表头字段与采购订单对应项语义一致，标签在字段选项中区分客户等） */
 export type SalesOrderPrintContext = PurchaseOrderPrintContext;
 
-/** 采购单（入库）打印：占位符 {{采购单.xxx}} */
+/** 采购入库打印：占位符 {{采购入库.xxx}}（兼容 {{采购单.xxx}}） */
 export interface PurchaseBillPrintContext {
   docNumber: string;
   partner: string;
@@ -1057,7 +1078,7 @@ export interface PrintRenderContext {
   purchaseOrderPrint?: PurchaseOrderPrintContext;
   /** 销售订单打印：占位符 {{销售订单.xxx}} */
   salesOrderPrint?: SalesOrderPrintContext;
-  /** 采购单（入库）打印：占位符 {{采购单.xxx}} */
+  /** 采购入库打印：占位符 {{采购入库.xxx}}（兼容 {{采购单.xxx}}） */
   purchaseBillPrint?: PurchaseBillPrintContext;
   /**
    * 入库单详情打印：占位符 {{入库.docNo}} 等；自定义项为 {{入库.custom.<字段id>}}，见工单表单配置「入库自定义单据内容」。
@@ -1320,6 +1341,14 @@ export interface ProductionOrder {
   createdAt?: string;
   /** 服务端 @updatedAt，报工等会刷新；用于列表「最近活动」排序 */
   updatedAt?: string;
+  /**
+   * 工单派发完成状态（持久化）。
+   * 由 STOCK_IN 入库累计与本单 items 总量自动推进；用户在工单中心手动点击可覆盖。
+   * 仅在「关联工单模式 productionLinkMode='order'」的列表上展示徽章；产品模式不展示但字段仍写入。
+   */
+  dispatchStatus?: OrderDispatchStatus;
+  /** 是否被用户手动覆盖过 `dispatchStatus`；为 true 时自动入库逻辑跳过该工单。 */
+  dispatchStatusManual?: boolean;
 }
 
 export interface ProductionOpRecord {

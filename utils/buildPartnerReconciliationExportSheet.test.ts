@@ -9,7 +9,7 @@ describe('buildPartnerReconciliationExportSheet', () => {
   it('按单据模式含汇总与明细表头', () => {
     const rows: PartnerReconBalancedRow[] = [
       {
-        row: { source: 'psi', docType: '采购单', docNo: 'PB-1', timestamp: '2026-05-01T10:00:00', partner: '万新', amount: 10 },
+        row: { source: 'psi', docType: '采购入库', docNo: 'PB-1', timestamp: '2026-05-01T10:00:00', partner: '万新', amount: 10 },
         receivableInc: 0,
         receivableDec: 10,
         balance: 90,
@@ -38,7 +38,7 @@ describe('buildPartnerReconciliationExportSheet', () => {
         kind: 'line',
         timestamp: '2026-05-01T10:00:00',
         docNo: 'PB-1',
-        docType: '采购单',
+        docType: '采购入库',
         partner: '万新',
         productName: '产品A',
         quantity: 2,
@@ -46,7 +46,7 @@ describe('buildPartnerReconciliationExportSheet', () => {
         receivableInc: 0,
         receivableDec: 20,
         balance: 80,
-        detailTarget: { source: 'psi', docType: '采购单', docNo: 'PB-1', timestamp: '', partner: '', amount: 20 },
+        detailTarget: { source: 'psi', docType: '采购入库', docNo: 'PB-1', timestamp: '', partner: '', amount: 20 },
       },
     ];
     const aoa = buildPartnerReconciliationExportSheet({

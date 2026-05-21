@@ -88,6 +88,12 @@ export interface OutsourceReceiveQuantityModalProps {
   globalNodes?: GlobalNodeTemplate[];
   /** 当前租户全部 BOM，用于根据 nodeId + productId 派生子物料占比并生成预览 */
   boms?: BOM[];
+  /**
+   * 受 SystemSetting.allowExceedMaxOutsourceReceiveQty 控制：
+   * - false（默认）：录入与扫码累加都被 clamp 到行级 pending；
+   * - true：放开所有 pending clamp，允许超过最大可收货数量。
+   */
+  allowExceedMaxOutsourceReceiveQty?: boolean;
   onSubmit: () => void;
   onClose: () => void;
   /** 嵌入 `DocPhaseModal` 时由外层提供遮罩与标题 */
@@ -136,6 +142,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
   setReceiveCustomValues,
   globalNodes,
   boms,
+  allowExceedMaxOutsourceReceiveQty = false,
   onSubmit,
   onClose,
   embedded = false,
@@ -305,10 +312,12 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
           return false;
 
         const cur = receiveFormQuantities[key] ?? 0;
-        const ck = checkExceedMax(cur, addQty, row.pending);
-        if (ck.exceeds) {
-          toast.error(ck.message ?? '本次扫入数量超过该行外协待收上限');
-          return false;
+        if (!allowExceedMaxOutsourceReceiveQty) {
+          const ck = checkExceedMax(cur, addQty, row.pending);
+          if (ck.exceeds) {
+            toast.error(ck.message ?? '本次扫入数量超过该行外协待收上限');
+            return false;
+          }
         }
 
         setReceiveFormQuantities((prev) => ({
@@ -324,7 +333,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
         return false;
       }
     },
-    [visibleRows, products, categories, setReceiveFormQuantities, receiveFormQuantities, validateReceiveScan],
+    [visibleRows, products, categories, setReceiveFormQuantities, receiveFormQuantities, validateReceiveScan, allowExceedMaxOutsourceReceiveQty],
   );
 
   const resolveReceiveScanRowPreview = useCallback(
@@ -783,11 +792,12 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                         onVariantQtyChange={(variantId, qty) => {
                           const maxV = getPendingForVariantProduct(variantId);
                           const qtyKey = `${baseKey}${RECEIVE_VARIANT_SEP}${variantId}`;
-                          setReceiveFormQuantities(prev => ({ ...prev, [qtyKey]: Math.min(qty, maxV) }));
+                          const next = allowExceedMaxOutsourceReceiveQty ? Math.max(0, qty) : Math.min(qty, maxV);
+                          setReceiveFormQuantities(prev => ({ ...prev, [qtyKey]: next }));
                         }}
                         getCellExtras={v => {
                           const maxV = getPendingForVariantProduct(v.id);
-                          return { max: maxV, hint: `最多${maxV}` };
+                          return { max: allowExceedMaxOutsourceReceiveQty ? undefined : maxV, hint: `最多${maxV}` };
                         }}
                         inputClassName={receiveQtyMatrixInputClass}
                       />
@@ -802,11 +812,12 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                           <input
                             type="number"
                             min={0}
-                            max={pendingNoVarRecv}
+                            max={allowExceedMaxOutsourceReceiveQty ? undefined : pendingNoVarRecv}
                             value={(receiveFormQuantities[baseKey] ?? 0) === 0 ? '' : receiveFormQuantities[baseKey]}
                             onChange={e => {
                               const raw = Math.max(0, Math.floor(Number(e.target.value) || 0));
-                              setReceiveFormQuantities(prev => ({ ...prev, [baseKey]: Math.min(raw, pendingNoVarRecv) }));
+                              const next = allowExceedMaxOutsourceReceiveQty ? raw : Math.min(raw, pendingNoVarRecv);
+                              setReceiveFormQuantities(prev => ({ ...prev, [baseKey]: next }));
                             }}
                             placeholder="0"
                             title={`最多 ${pendingNoVarRecv}`}
@@ -915,11 +926,14 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                         onVariantQtyChange={(variantId, qty) => {
                           const maxVariant = getPendingForVariant(variantId);
                           const qtyKey = `${baseKey}|${variantId}`;
-                          setReceiveFormQuantities(prev => ({ ...prev, [qtyKey]: Math.min(Math.max(0, qty), maxVariant) }));
+                          const next = allowExceedMaxOutsourceReceiveQty
+                            ? Math.max(0, qty)
+                            : Math.min(Math.max(0, qty), maxVariant);
+                          setReceiveFormQuantities(prev => ({ ...prev, [qtyKey]: next }));
                         }}
                         getCellExtras={v => {
                           const maxVariant = getPendingForVariant(v.id);
-                          return { max: maxVariant, hint: `最多${maxVariant}` };
+                          return { max: allowExceedMaxOutsourceReceiveQty ? undefined : maxVariant, hint: `最多${maxVariant}` };
                         }}
                         inputClassName={receiveQtyMatrixInputClass}
                       />
@@ -983,13 +997,16 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                         <input
                           type="number"
                           min={0}
-                          max={row.pending}
+                          max={allowExceedMaxOutsourceReceiveQty ? undefined : row.pending}
                           value={(receiveFormQuantities[baseKey] ?? 0) === 0 ? '' : receiveFormQuantities[baseKey]}
                           onChange={e => {
                             const raw = Number(e.target.value) || 0;
+                            const next = allowExceedMaxOutsourceReceiveQty
+                              ? Math.max(0, raw)
+                              : Math.min(Math.max(0, raw), row.pending);
                             setReceiveFormQuantities(prev => ({
                               ...prev,
-                              [baseKey]: Math.min(Math.max(0, raw), row.pending),
+                              [baseKey]: next,
                             }));
                           }}
                           placeholder="0"

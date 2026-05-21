@@ -21,8 +21,8 @@ const psi = (docType: string, amount: number): PartnerReconRow => ({
 });
 
 describe('computePartnerReconRowDelta', () => {
-  it('采购单减少应收', () => {
-    expect(computePartnerReconRowDelta(psi('采购单', 24.4))).toEqual({ inc: 0, dec: 24.4 });
+  it('采购入库减少应收', () => {
+    expect(computePartnerReconRowDelta(psi('采购入库', 24.4))).toEqual({ inc: 0, dec: 24.4 });
   });
 
   it('销售单正数增加应收', () => {
@@ -48,14 +48,14 @@ describe('computePartnerReconRowDelta', () => {
 
 describe('buildPartnerReconBalances', () => {
   it('从 0 起算逐行累计', () => {
-    const rows = [psi('采购单', 24.4), psi('采购单', 53200)];
+    const rows = [psi('采购入库', 24.4), psi('采购入库', 53200)];
     const balanced = buildPartnerReconBalances(rows, 0);
     expect(balanced[0].balance).toBe(-24.4);
     expect(balanced[1].balance).toBe(-53224.4);
   });
 
   it('叠加期初余额', () => {
-    const rows = [psi('采购单', 24.4)];
+    const rows = [psi('采购入库', 24.4)];
     const balanced = buildPartnerReconBalances(rows, -10000);
     expect(balanced[0].balance).toBe(-10024.4);
   });
@@ -65,7 +65,7 @@ describe('summarizePartnerReconBalances', () => {
   it('汇总公式：期末 = 期初 + 增 - 减', () => {
     const rows = [
       psi('销售单', 1000),
-      psi('采购单', 200),
+      psi('采购入库', 200),
       fin('RECEIPT', 300),
     ];
     const summary = summarizePartnerReconBalances(rows, -5000);

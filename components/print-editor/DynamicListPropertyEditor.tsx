@@ -67,7 +67,7 @@ function fieldOptionsForListSource(
         : src === 'salesOrder'
           ? ['销售订单明细', '销售订单', '产品', '系统']
         : src === 'purchaseBill'
-          ? ['采购单明细', '采购单', '产品', '系统']
+          ? ['采购入库明细', '采购入库', '采购单明细', '采购单', '产品', '系统']
       : src === 'order'
         ? ['工单', '明细行', '系统', '工序', '产品', '计划']
         : src === 'plan'

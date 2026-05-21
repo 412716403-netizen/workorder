@@ -1,8 +1,9 @@
+import { PSI_PURCHASE_BILL_LABEL, isPurchaseBillDocType } from '../shared/types';
 import type { FinanceRecord, Product, ProductionOpRecord, PsiRecord } from '../types';
 import type { PartnerReconRow } from './partnerReconLedger';
 import { computePartnerReconRowDelta } from './partnerReconLedger';
 
-const PSI_LABEL: Record<string, string> = { PURCHASE_BILL: '采购单', SALES_BILL: '销售单' };
+const PSI_LABEL: Record<string, string> = { PURCHASE_BILL: PSI_PURCHASE_BILL_LABEL, SALES_BILL: '销售单' };
 const UNKNOWN_PRODUCT_ID = '__unknown__';
 
 /** 按产品明细行：详情仍走 FinanceDetailModal，与对账详情类型一致 */
@@ -218,7 +219,7 @@ export function buildPartnerProductLineReconList(input: BuildPartnerProductLineR
       continue;
     }
 
-    const billType = docRow.docType === '采购单' ? 'PURCHASE_BILL' : 'SALES_BILL';
+    const billType = isPurchaseBillDocType(docRow.docType) ? 'PURCHASE_BILL' : 'SALES_BILL';
     const lines = sortPsiLines(
       psiRecords.filter(
         r =>

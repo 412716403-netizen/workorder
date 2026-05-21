@@ -122,6 +122,40 @@ export const planFormConfigSchema: FormConfigSchema<PlanFormSettings> = {
             );
           },
         },
+        {
+          kind: 'customSlot',
+          id: 'planOrderOnlyNotCompletedToggle',
+          render: (ctx, extras) => {
+            if (extras?.productionLinkMode !== 'order') return null;
+            const ld = (ctx.get('listDisplay') as PlanFormSettings['listDisplay']) ?? {};
+            const checked = ld.onlyShowNotCompleted === true;
+            return (
+              <div className="mt-4">
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                  <label className="flex cursor-pointer items-start gap-3 text-sm font-bold text-slate-800">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded text-indigo-600"
+                      checked={checked}
+                      onChange={e => {
+                        ctx.set('listDisplay', {
+                          ...ld,
+                          onlyShowNotCompleted: e.target.checked,
+                        });
+                      }}
+                    />
+                    <span>
+                      仅显示未完成 / 未下单
+                      <p className="mt-1 text-xs font-medium text-slate-500">
+                        开启后，计划单列表隐藏「已完成」的计划，只保留「未完成」与「未下单」。
+                      </p>
+                    </span>
+                  </label>
+                </div>
+              </div>
+            );
+          },
+        },
       ],
     },
     {

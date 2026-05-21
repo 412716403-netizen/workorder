@@ -5,6 +5,7 @@ import type {
   ProductMilestoneProgress,
   MilestoneReport,
 } from '../../types';
+import type { OrderDispatchStatus } from '../../types';
 
 // ── Orders ──
 const ordersCrud = crud<ProductionOrder>('/orders');
@@ -40,6 +41,15 @@ export const orders = {
     productionLinkMode?: 'order' | 'product';
   }) =>
     request<{ orderReports: MilestoneReport[]; productReports: MilestoneReport[] }>(`/orders/report-history${buildQs(params)}`),
+  /**
+   * 手动切换工单派发完成状态（关联工单模式下工单中心徽章点击）。
+   * 后端会同时把 `dispatchStatusManual` 置为 true，之后 STOCK_IN 入库自动逻辑不再覆盖。
+   */
+  updateDispatchStatus: (orderId: string, status: OrderDispatchStatus) =>
+    request<ProductionOrder>(`/orders/${orderId}/dispatch-status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
 };
 
 // ── Production ──

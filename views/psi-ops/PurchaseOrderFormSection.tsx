@@ -1,6 +1,6 @@
 /**
  * 采购订单：意向/数量与单价约定，不落 PSI 库存；行级无批次列。
- * 批次在转采购入库单时由采购单（入库）表单按分类规则录入，见 `docs/01-business-rules.md`「采购订单与批次」。
+ * 批次在转采购入库时由采购入库表单按分类规则录入，见 `docs/01-business-rules.md`「采购订单与批次」。
  */
 import React from 'react';
 import {

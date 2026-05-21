@@ -3,6 +3,8 @@ import { str, optStr } from '../utils/request.js';
 import * as ordersService from '../services/orders.service.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { listQueryFromRequest, warnListAllFromRequest } from '../utils/listQuery.js';
+import { isOrderDispatchStatus } from '../types/index.js';
+import { AppError } from '../middleware/errorHandler.js';
 
 export const listOrders = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
@@ -14,6 +16,7 @@ export const listOrders = asyncHandler(async (req, res) => {
     parentOrderId: optStr(req.query.parentOrderId),
     search: optStr(req.query.search),
     lite: req.query.lite === 'true',
+    excludeCompleted: req.query.excludeCompleted === 'true',
     all,
     page,
     pageSize,
@@ -33,6 +36,20 @@ export const updateOrder = asyncHandler(async (req, res) => {
 export const deleteOrder = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
   res.json(await ordersService.deleteOrder(db, str(req.params.id)));
+});
+
+/**
+ * PATCH /api/orders/:id/dispatch-status
+ * 手动切换工单派发完成状态（仅工单中心徽章使用）。
+ * body：`{ status: 'IN_PROGRESS' | 'COMPLETED' }`
+ */
+export const updateDispatchStatus = asyncHandler(async (req, res) => {
+  const db = getTenantPrisma(req.tenantId!);
+  const status = (req.body as { status?: unknown })?.status;
+  if (!isOrderDispatchStatus(status)) {
+    throw new AppError(400, 'status 仅允许 IN_PROGRESS 或 COMPLETED');
+  }
+  res.json(await ordersService.updateOrderDispatchStatus(db, str(req.params.id), status));
 });
 
 export const createReport = asyncHandler(async (req, res) => {

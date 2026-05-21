@@ -52,7 +52,7 @@ export type PsiDocListMainRow = {
 };
 
 /**
- * 采购单：按**所有行**的 `customData.relatedProductId` 去重后，顿号连接展示（列表/汇总用）。
+ * 采购入库：按**所有行**的 `customData.relatedProductId` 去重后，顿号连接展示（列表/汇总用）。
  * 无行级关联时回退为 — 。
  */
 export function aggregatePurchaseBillRelatedProductListText(
@@ -106,7 +106,7 @@ export type PurchaseBillListTextOptions = {
   allLinesForRelatedProduct?: Array<{ customData?: unknown }>;
 };
 
-/** 采购单标准字段在列表中的显示文案（按 fieldId 分派，含仓库名查表） */
+/** 采购入库标准字段在列表中的显示文案（按 fieldId 分派，含仓库名查表） */
 export function purchaseBillStandardListText(
   fieldId: string,
   mainInfo: PsiDocListMainRow,

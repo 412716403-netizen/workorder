@@ -34,9 +34,10 @@
 
 | 模块 | 当前状态 | 说明 | 剩余收口 |
 |------|------|------|------|
-| 计划单 CRUD、拆单、下达工单、子计划 | 已落地 | 已有 `/api/plans` 及相关动作接口 | 继续核对前端是否仍保留旧计算路径 |
-| 工单 CRUD、报工、可报量查询 | 已落地 | 已有 `/api/orders`、报工与产品进度接口；`GET /:id/reportable` 已合并 PMP；`createReport` / `createProductReport` 受 `allowExceedMaxReportQty` 控制做硬校验 | 继续补充服务层与测试 |
-| 生产操作记录 | 已落地 | 已有 `/api/production/records` 等接口 | 梳理大体量前端页面与复杂业务校验 |
+| 计划单 CRUD、拆单、下达工单、子计划 | 已落地 | 已有 `/api/plans` 及相关动作接口；`listPlans` / `getPlan` 注入 `derivedStatus`（关联工单模式徽章数据源） | 继续核对前端是否仍保留旧计算路径 |
+| 工单 CRUD、报工、可报量查询 | 已落地 | 已有 `/api/orders`、报工与产品进度接口；`GET /:id/reportable` 已合并 PMP；`createReport` / `createProductReport` 受 `allowExceedMaxReportQty` 控制做硬校验；新增 `PATCH /:id/dispatch-status` 用于关联工单模式下手动切换派发完成徽章（写 `dispatchStatusManual=true`） | 继续补充服务层与测试 |
+| 工单派发完成状态（关联工单模式） | 已落地 | `ProductionOrder.dispatchStatus` / `dispatchStatusManual` 持久化字段，由 STOCK_IN 入库累计自动推进（`production.service.recalcOrderDispatchStatusByStockIn`，在 `createRecord` / `createRecordBatch` 内单条 / `updateRecord` / `deleteRecord` 触发，`manual=true` 时跳过）；计划单徽章基于工单聚合（详见 `docs/01-business-rules.md §3.10`） | 后续如需"恢复自动判定"按钮，可补 `dispatchStatusManual=false` 重置接口 |
+| 生产操作记录 | 已落地 | 已有 `/api/production/records` 等接口；`createRecord` / `createRecordBatch` 在 `OUTSOURCE 已收回` 写入前调用 `enforceOutsourceReceiveQuantity`，受 `allowExceedMaxOutsourceReceiveQty` 控制做硬校验 | 梳理大体量前端页面与复杂业务校验 |
 | 生产关联模式 | 已落地 | 规则与实现并存，读口径统一为"PMP + milestone 双路求和"（含 `OrderDetailModal` / `OrderListView` / 后端 `getReportable`）；OutsourcePanel 展示统计端已"全收"含 `orderId` 历史记录；**待收回清单与收货录入弹窗按行级 `orderId` 决定 scope，跨模式可见、可收回**（方案 A）；`OrderListView` 工单卡 / 产品组卡圆下剩余数字保持原口径（不扣外协），**hover tooltip 上额外提示"外协剩余 Z 件"**作为补充信息；`ProductionConfigTab` 切换前已加 `useConfirm` 提示；删除工单在 `product` 模式下不再跳过基础校验；后端 `createReport`/`createProductReport` 加 `enforceReportQuantity` 硬校验（受 `allowExceedMaxReportQty` 控制） | 持续在更多页面（看板、打印）核对模式分流口径 |
 
 ### 3.1 流水自定义 `collabData` 键映射

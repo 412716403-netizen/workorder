@@ -13,7 +13,8 @@ import { createOrderFormConfigSchema } from '../../components/form-config/schema
 interface OrderFormConfigModalProps {
   open: boolean;
   onClose: () => void;
-  defaultTabWhenOpen?: 'fields' | 'print';
+  defaultTabWhenOpen?: 'fields' | 'print' | 'list';
+  productionLinkMode?: 'order' | 'product';
   orderFormSettings: OrderFormSettings;
   onUpdateOrderFormSettings: (settings: OrderFormSettings) => void;
   printTemplates: PrintTemplate[];
@@ -29,6 +30,7 @@ const OrderFormConfigModal: React.FC<OrderFormConfigModalProps> = ({
   open,
   onClose,
   defaultTabWhenOpen,
+  productionLinkMode,
   orderFormSettings,
   onUpdateOrderFormSettings,
   printTemplates,
@@ -54,6 +56,7 @@ const OrderFormConfigModal: React.FC<OrderFormConfigModalProps> = ({
       onClose={onClose}
       defaultTabId={defaultTabWhenOpen}
       schema={schema}
+      productionLinkMode={productionLinkMode}
       initialValue={orderFormSettings}
       onSave={onUpdateOrderFormSettings}
       printTemplates={printTemplates}

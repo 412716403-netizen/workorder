@@ -6,6 +6,7 @@ import { getNextPlanNumber } from '../utils/docNumber.js';
 import { genId } from '../utils/genId.js';
 import { sanitizeCreate, sanitizeUpdate, sanitizeItems, normalizeDates } from '../utils/request.js';
 import { deleteItemCodesAndVirtualBatchesForPlan } from './itemCodes.service.js';
+import { PlanDispatchStatus } from '../types/index.js';
 
 type PlanWithItems = PlanOrder & { items: PlanItem[] };
 
@@ -27,25 +28,129 @@ async function getAllDescendantPlans(planId: string, tenantId: string, depth = 0
 
 // ── simple CRUD ──────────────────────────────────────────────
 
-export async function listPlans(
+/**
+ * 计算计划单派发完成派生状态（响应字段，不落库）。
+ *
+ * 仅在「关联工单模式 productionLinkMode='order'」的前端列表展示徽章；
+ * 后端无论模式都会在 listPlans/getPlan 返回中附带 `derivedStatus`，避免切换模式数据丢失。
+ *
+ * 规则：基于该计划下直接关联工单 `productionOrders WHERE planOrderId = plan.id` 的 `dispatchStatus` 聚合：
+ * - 无工单 → `NOT_DISPATCHED`
+ * - 全部 `COMPLETED` → `COMPLETED`
+ * - 其他 → `IN_PROGRESS`
+ *
+ * 父子计划在列表里各自是独立 PlanOrder 行，互不影响。
+ */
+function computePlanDispatchStatus(plan: {
+  productionOrders?: { dispatchStatus: string }[] | null;
+}): PlanDispatchStatus {
+  const linked = plan.productionOrders ?? [];
+  if (linked.length === 0) return PlanDispatchStatus.NOT_DISPATCHED;
+  const allCompleted = linked.every(o => o.dispatchStatus === PlanDispatchStatus.COMPLETED);
+  return allCompleted ? PlanDispatchStatus.COMPLETED : PlanDispatchStatus.IN_PROGRESS;
+}
+
+/** 给 plan 注入 derivedStatus 并剥离 productionOrders 子集，避免响应膨胀。 */
+function attachPlanDerivedStatus<T extends { productionOrders?: { dispatchStatus: string }[] | null }>(
+  plan: T,
+): Omit<T, 'productionOrders'> & { derivedStatus: PlanDispatchStatus } {
+  const derivedStatus = computePlanDispatchStatus(plan);
+  const { productionOrders: _omit, ...rest } = plan as T & {
+    productionOrders?: { dispatchStatus: string }[] | null;
+  };
+  return { ...(rest as Omit<T, 'productionOrders'>), derivedStatus };
+}
+
+/** 计划单列表 where：search 匹配计划单号、客户，以及关联产品的名称 / SKU。 */
+async function buildPlanListWhere(
   db: TenantPrismaClient,
-  opts: { status?: string; productId?: string; search?: string; all?: boolean; page?: number; pageSize?: number },
-) {
+  opts: { status?: string; productId?: string; search?: string },
+): Promise<Record<string, unknown>> {
   const where: Record<string, unknown> = {};
   if (opts.status) where.status = opts.status;
   if (opts.productId) where.productId = opts.productId;
   if (opts.search) {
-    where.OR = [
-      { planNumber: { contains: opts.search, mode: 'insensitive' } },
-      { customer: { contains: opts.search, mode: 'insensitive' } },
+    const term = opts.search;
+    const productMatches = await db.product.findMany({
+      where: {
+        OR: [
+          { name: { contains: term, mode: 'insensitive' } },
+          { sku: { contains: term, mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true },
+    });
+    const orClauses: Record<string, unknown>[] = [
+      { planNumber: { contains: term, mode: 'insensitive' } },
+      { customer: { contains: term, mode: 'insensitive' } },
     ];
+    if (productMatches.length > 0) {
+      orClauses.push({ productId: { in: productMatches.map(p => p.id) } });
+    }
+    where.OR = orClauses;
   }
+  return where;
+}
 
-  const include = { items: true, childPlans: { include: { items: true } } };
+function postFilterPlansByDerivedStatus<T extends { derivedStatus: PlanDispatchStatus }>(
+  rows: T[],
+  opts: { dispatchStatus?: PlanDispatchStatus; excludeCompleted?: boolean },
+): T[] {
+  let out = rows;
+  if (opts.excludeCompleted) {
+    out = out.filter(r => r.derivedStatus !== PlanDispatchStatus.COMPLETED);
+  }
+  if (opts.dispatchStatus) {
+    out = out.filter(r => r.derivedStatus === opts.dispatchStatus);
+  }
+  return out;
+}
+
+export async function listPlans(
+  db: TenantPrismaClient,
+  opts: {
+    status?: string;
+    productId?: string;
+    search?: string;
+    /** 派生状态过滤（仅工单模式列表使用）：传入时退化为全量过滤 + 内存分页 */
+    dispatchStatus?: PlanDispatchStatus;
+    /** 列表仅显示未下单/未完成（隐藏已完成） */
+    excludeCompleted?: boolean;
+    all?: boolean;
+    page?: number;
+    pageSize?: number;
+  },
+) {
+  const where = await buildPlanListWhere(db, opts);
+
+  // 派生状态需要 productionOrders 关联：只 select 计算所需字段，控制响应体积。
+  const include = {
+    items: true,
+    childPlans: { include: { items: true } },
+    productionOrders: { select: { id: true, dispatchStatus: true } },
+  } satisfies Prisma.PlanOrderInclude;
   const orderBy: any = [{ createdAt: 'desc' }, { id: 'asc' }];
 
   if (opts.all) {
-    return db.planOrder.findMany({ where, include, orderBy });
+    const rows = await db.planOrder.findMany({ where, include, orderBy });
+    return rows.map(attachPlanDerivedStatus);
+  }
+
+  // 派生状态 / 隐藏已完成：难以用 SQL 表达，退化为全量 where 命中 → 内存过滤 → 切片分页。
+  const needsMemoryPaging = !!(opts.dispatchStatus || opts.excludeCompleted);
+  if (needsMemoryPaging) {
+    const allRows = await db.planOrder.findMany({ where, include, orderBy });
+    const enriched = allRows.map(attachPlanDerivedStatus);
+    const filtered = postFilterPlansByDerivedStatus(enriched, opts);
+    const page = Math.max(1, opts.page ?? 1);
+    const pageSize = Math.min(Math.max(1, opts.pageSize ?? 50), 200);
+    const start = (page - 1) * pageSize;
+    return {
+      data: filtered.slice(start, start + pageSize),
+      total: filtered.length,
+      page,
+      pageSize,
+    };
   }
 
   const page = Math.max(1, opts.page ?? 1);
@@ -54,7 +159,7 @@ export async function listPlans(
     db.planOrder.findMany({ where, include, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
     db.planOrder.count({ where }),
   ]);
-  return { data, total, page, pageSize };
+  return { data: data.map(attachPlanDerivedStatus), total, page, pageSize };
 }
 
 export async function getPlan(db: TenantPrismaClient, planId: string) {
@@ -64,10 +169,11 @@ export async function getPlan(db: TenantPrismaClient, planId: string) {
       items: true,
       childPlans: { include: { items: true } },
       parentPlan: true,
+      productionOrders: { select: { id: true, dispatchStatus: true } },
     },
   });
   if (!plan) throw new AppError(404, '计划单不存在');
-  return plan;
+  return attachPlanDerivedStatus(plan);
 }
 
 export async function createPlan(

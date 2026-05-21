@@ -36,7 +36,7 @@
 - **统一下发外协发出单**：读配置时合并内置模版 **`builtin-outsource-dispatch-v2`**（241×140mm；列表显示名含「（颜色尺码）」）；写入 `printTemplates` 时剔除该 id，由读时再次注入，避免与租户 JSON 重复落库。
 - **统一下发外协收回单**：读配置时合并 **`builtin-outsource-receive-v2`**（241×140mm，动态列含单价/金额，表尾合计；显示名含「（颜色尺码）」）；持久化规则同上。
 - **统一下发采购订单 / 销售订单（列表打印）**：读配置时合并 **`builtin-purchase-order-v2`**、**`builtin-sales-order-v2`**（241×140mm；占位符 `采购订单.*` / `销售订单.*`；显示名含「（颜色尺码）」）；持久化规则同上。
-- **统一下发采购单 / 销售单（进销存入库、出库单列表打印）**：读配置时合并 **`builtin-purchase-bill-v2`**、**`builtin-sales-bill-v2`**（241×140mm；占位符 `采购单.*` / `销售单.*`；显示名含「（颜色尺码）」）；持久化规则同上。
+- **统一下发采购入库 / 销售单（进销存入库、出库单列表打印）**：读配置时合并 **`builtin-purchase-bill-v2`**、**`builtin-sales-bill-v2`**（241×140mm；占位符 `采购入库.*` / `销售单.*`，兼容 `采购单.*`；显示名含「（颜色尺码）」）；持久化规则同上。
 - **统一下发生产物料详情打印**：读配置时合并 **`builtin-material-issue-v1`**（领料发出）、**`builtin-material-return-v1`**（生产退料）、**`builtin-outsource-material-issue-v1`**（外协领料发出）、**`builtin-outsource-material-return-v1`**（外协生产退料），241×140mm；占位符分别为 `领料发出.*`、`生产退料.*`、`外协领料发出.*`、`外协生产退料.*`；持久化规则同上。`normalizeMaterialFormSettings` 在未配置 `materialCenterPrint` 或某一子槽为 `undefined` 时，为该槽写入默认白名单（指向对应内置 id）。
 - **统一下发返工管理详情打印**：读配置时合并 **`builtin-rework-defect-treatment-v1`**（处理不良单，版式参考外协发出）、**`builtin-rework-report-flow-v1`**（返工报工单，含工序列与颜色尺码矩阵）；占位符 `处理不良.*`、`返工报工.*`；持久化规则同上。`normalizeReworkFormSettings` 在未配置 `reworkCenterPrint` 或子槽为 `undefined` 时写入对应默认白名单。
 - **统一下发计划单列表 / 单品码与批次码标签**：读配置时合并 **`builtin-plan-list-v1`**（A4，`planList`）、**`builtin-plan-label-v1`**（30×50mm，`planLabel`，单品码行占位符）与 **`builtin-plan-batch-label-v1`**（30×50mm，`planLabel`，`{{批次.*}}` 虚拟批次标签）；与其它锁定内置模版相同：列表标「系统」、不可删、不可直接可视化编辑保存，可复制为自有模版；持久化规则同上。若租户 `labelPrint.allowedTemplateIds` 误只含列表模版，`repairPlanLabelPrintWhitelistMissingPlanLabelTemplates` 会在加载时并入所有 `planLabel` 模版 id。
@@ -92,7 +92,7 @@ PrintRenderContext.virtualBatch
 
 动态列表中列类型为「颜色尺码数量」时，每行 `printListRows` 可携带 `colorSizeMatrixJson`（JSON：`sizes[]` + `colorRows[].quantities[]`），由 `components/print-editor/DynamicListMatrixTable.tsx` 以 HTML 表格 + rowspan 渲染。
 
-会在下列打印上下文的明细行中写入该字段（模板可选用矩阵列）：**销售单**、**计划单列表**、**采购订单 / 采购单 / 销售订单**（与销售单一致为「货号块」一行，不再按规格拆多行；旧模板若依赖 `行.colorName` / `行.sizeName` 分列需改为矩阵列或 `行.qty` 等）、**外协发出与收回**、**返工报工与处理不良**、**生产退料与外协领料发出/外协生产退料**、**生产入库批次**、**报工批次**、**工单详情打印**。例外：**生产领料**（`materialIssuePrint`）仍为扁平行，**不**写入 `colorSizeMatrixJson`。
+会在下列打印上下文的明细行中写入该字段（模板可选用矩阵列）：**销售单**、**计划单列表**、**采购订单 / 采购入库 / 销售订单**（与销售单一致为「货号块」一行，不再按规格拆多行；旧模板若依赖 `行.colorName` / `行.sizeName` 分列需改为矩阵列或 `行.qty` 等）、**外协发出与收回**、**返工报工与处理不良**、**生产退料与外协领料发出/外协生产退料**、**生产入库批次**、**报工批次**、**工单详情打印**。例外：**生产领料**（`materialIssuePrint`）仍为扁平行，**不**写入 `colorSizeMatrixJson`。
 
 实现入口：`utils/buildSalesBillPrintContext.ts`（`buildSalesBillPrintListRowsByProductLine`、`buildMatrixJsonAndTotalQtyFromVariantLine`）、`utils/variantMatrixPrintRows.ts` 及各 `utils/build*PrintContext.ts`。
 

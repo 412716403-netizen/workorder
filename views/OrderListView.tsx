@@ -22,7 +22,9 @@ import {
   ProductMilestoneProgress,
   ProcessSequenceMode,
   Warehouse,
+  OrderDispatchStatus,
 } from '../types';
+import { getOrderDispatchStatusStyle } from '../utils/dispatchStatusStyle';
 import PlanProductDetail from './plan-order-list/PlanProductDetail';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { getRootOrderNumber, reworkRemainingAtNode } from '../utils/orderListHelpers';
@@ -91,6 +93,12 @@ interface OrderListViewProps {
   onUpdateOrderFormSettings: (settings: OrderFormSettings) => void;
   onReportSubmit?: (orderId: string, milestoneId: string, quantity: number, customData: any, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string) => void;
   onUpdateOrder?: (orderId: string, updates: Partial<ProductionOrder>) => void;
+  /**
+   * 关联工单模式：手动切换工单派发完成状态徽章（进行中 ↔ 已完成）。
+   * 调用后端 PATCH /api/orders/:id/dispatch-status，会同时把 `dispatchStatusManual=true`，
+   * 自动入库逻辑不再覆盖该工单。无传入或产品模式下徽章只读，不可点击。
+   */
+  onUpdateOrderDispatchStatus?: (orderId: string, status: OrderDispatchStatus) => void | Promise<void>;
   onDeleteOrder?: (orderId: string) => void;
 }
 
@@ -155,6 +163,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   onUpdateOrderFormSettings,
   onReportSubmit,
   onUpdateOrder,
+  onUpdateOrderDispatchStatus,
   onDeleteOrder,
   onUpdateReport,
   onDeleteReport,
@@ -227,11 +236,15 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   const [fetchedOrders, setFetchedOrders] = useState<ProductionOrder[]>([]);
   const fetchGenRef = useRef(0);
 
-  const fetchPagedOrders = useCallback(async (page: number, searchTerm: string) => {
+  const onlyShowNotCompletedOrders =
+    productionLinkMode === 'order' && orderFormSettings.listDisplay?.onlyShowNotCompleted === true;
+
+  const fetchPagedOrders = useCallback(async (page: number, searchTerm: string, excludeCompleted: boolean) => {
     const gen = ++fetchGenRef.current;
     try {
       const params: Record<string, string> = { page: String(page), pageSize: String(PAGE_SIZE) };
       if (searchTerm) params.search = searchTerm;
+      if (excludeCompleted) params.excludeCompleted = 'true';
       const result = await ordersApi.listPaginated(params);
       if (gen !== fetchGenRef.current) return;
       const data = Array.isArray(result) ? (result as unknown as ProductionOrder[]) : ((result?.data ?? []) as ProductionOrder[]);
@@ -243,11 +256,11 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     }
   }, []);
 
-  useEffect(() => { setCurrentPage(1); }, [debouncedSearch]);
+  useEffect(() => { setCurrentPage(1); }, [debouncedSearch, onlyShowNotCompletedOrders]);
   // 条数变化（下达工单、删单等）须重拉当前页；条数不变时仅依赖下方 displayOrders 与 context 按 id 合并，避免每次报工都触发分页请求
   useEffect(() => {
-    fetchPagedOrders(currentPage, debouncedSearch);
-  }, [currentPage, debouncedSearch, fetchPagedOrders, orders.length]);
+    fetchPagedOrders(currentPage, debouncedSearch, onlyShowNotCompletedOrders);
+  }, [currentPage, debouncedSearch, onlyShowNotCompletedOrders, fetchPagedOrders, orders.length]);
 
   /** 分页接口的工单与上下文 orders 合并：报工后父级会更新 orders，避免列表仍显示旧工序完成量 */
   const displayOrders = useMemo(() => {
@@ -831,6 +844,57 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                         <div className="flex items-center gap-3 mb-1 flex-wrap">
                           <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-widest">{order.orderNumber}</span>
                           {isChild && <span className="text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">子工单</span>}
+                          {/*
+                            关联工单模式专属：派发完成状态徽章。
+                            - dispatchStatus 由后端 STOCK_IN 入库累计自动推进（manual=false 时）。
+                            - 点击切换：进行中 ↔ 已完成；后端会持久化 manual=true，自动逻辑不再覆盖。
+                            - 无 onUpdateOrderDispatchStatus 或无 edit 权限时只读展示。
+                            - 产品模式不展示徽章（与计划单列表保持一致）。
+                          */}
+                          {productionLinkMode === 'order' && (() => {
+                            const dispatchStyle = getOrderDispatchStatusStyle(order.dispatchStatus);
+                            const canToggle = !!onUpdateOrderDispatchStatus && hasOrderPerm('production:orders:edit');
+                            const currentLabel = dispatchStyle.label;
+                            const nextStatus =
+                              order.dispatchStatus === OrderDispatchStatus.COMPLETED
+                                ? OrderDispatchStatus.IN_PROGRESS
+                                : OrderDispatchStatus.COMPLETED;
+                            const nextLabel = getOrderDispatchStatusStyle(nextStatus).label;
+                            const badgeClass = `text-[10px] font-bold px-2 py-0.5 rounded ${dispatchStyle.className}`;
+                            const tooltip = canToggle
+                              ? '点击切换状态（手动覆盖后自动入库不再修改本工单）'
+                              : `派发完成状态：${currentLabel}`;
+                            return canToggle ? (
+                              <button
+                                type="button"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  /**
+                                   * 切换前二次确认：
+                                   * - 手动覆盖将使该工单的「自动入库推进」失效（dispatchStatusManual=true）；
+                                   * - 后续即使继续 STOCK_IN 入库或删除入库记录，系统也不会再自动修改本工单 dispatchStatus。
+                                   *   该行为不可由 UI 撤销（如需恢复自动判定需后端重置 manual 标记）。
+                                   */
+                                  const ok = await confirm({
+                                    title: '切换工单完成状态',
+                                    message: `工单【${order.orderNumber}】将从「${currentLabel}」切换为「${nextLabel}」。\n切换后该工单将被标记为手动状态，后续入库（STOCK_IN）的自动推进逻辑将不再修改本工单状态。是否确认？`,
+                                    confirmText: '确认切换',
+                                    cancelText: '取消',
+                                  });
+                                  if (!ok) return;
+                                  await onUpdateOrderDispatchStatus!(order.id, nextStatus);
+                                }}
+                                className={`${badgeClass} cursor-pointer hover:opacity-80 transition-opacity`}
+                                title={tooltip}
+                              >
+                                {currentLabel}
+                              </button>
+                            ) : (
+                              <span className={badgeClass} title={tooltip}>
+                                {currentLabel}
+                              </span>
+                            );
+                          })()}
                           <button type="button" onClick={(e) => { e.stopPropagation(); product && setViewProductId(product.id); }} className={`text-left font-bold text-slate-800 hover:text-indigo-600 hover:underline transition-colors ${isChild ? 'text-sm' : 'text-base'}`}>
                             {order.productName || '未知产品'}
                           </button>
@@ -1461,6 +1525,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           open={showOrderFormConfigModal}
           onClose={() => setShowOrderFormConfigModal(false)}
           defaultTabWhenOpen={orderFormConfigEntryTab}
+          productionLinkMode={productionLinkMode}
           orderFormSettings={orderFormSettings}
           onUpdateOrderFormSettings={onUpdateOrderFormSettings}
           printTemplates={printTemplates}

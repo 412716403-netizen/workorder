@@ -3,15 +3,22 @@ import { str, optStr } from '../utils/request.js';
 import * as planService from '../services/plans.service.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { listQueryFromRequest, warnListAllFromRequest } from '../utils/listQuery.js';
+import { isPlanDispatchStatus, PlanDispatchStatus } from '../types/index.js';
 
 export const listPlans = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
   const { all, page, pageSize } = listQueryFromRequest(req);
   if (all) warnListAllFromRequest('plans.listPlans', req);
+  // 派生状态白名单：非法值忽略，避免无意义的全量扫描
+  const dispatchStatusRaw = optStr(req.query.dispatchStatus);
+  const dispatchStatus: PlanDispatchStatus | undefined =
+    dispatchStatusRaw && isPlanDispatchStatus(dispatchStatusRaw) ? dispatchStatusRaw : undefined;
   const result = await planService.listPlans(db, {
     status: optStr(req.query.status),
     productId: optStr(req.query.productId),
     search: optStr(req.query.search),
+    dispatchStatus,
+    excludeCompleted: req.query.excludeCompleted === 'true',
     all,
     page,
     pageSize,

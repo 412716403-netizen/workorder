@@ -18,6 +18,9 @@ export function createOrderFormConfigSchema(opts: {
 }): FormConfigSchema<OrderFormSettings> {
   return {
     title: '工单表单配置',
+    subtitle: {
+      list: '以下选项影响工单中心主列表默认筛选（仅关联工单模式显示）。',
+    },
     settingsKey: 'orderFormSettings',
     defaultValue: DEFAULT_ORDER_FORM_SETTINGS,
     normalize: v => normalizeOrderFormSettings(v as OrderFormSettings | null | undefined),
@@ -56,6 +59,49 @@ export function createOrderFormConfigSchema(opts: {
                   去工序节点库
                 </button>
               ) : null,
+          },
+        ],
+      },
+      {
+        id: 'list',
+        label: '列表显示',
+        sections: [
+          {
+            kind: 'customSlot',
+            id: 'orderListOnlyNotCompletedToggle',
+            render: (ctx, extras) => {
+              if (extras?.productionLinkMode !== 'order') return null;
+              const ld = (ctx.get('listDisplay') as OrderFormSettings['listDisplay']) ?? {};
+              const checked = ld.onlyShowNotCompleted === true;
+              return (
+                <div>
+                  <h4 className="mb-3 text-sm font-black uppercase tracking-widest text-slate-600">
+                    列表显示
+                  </h4>
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                    <label className="flex cursor-pointer items-start gap-3 text-sm font-bold text-slate-800">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 h-4 w-4 shrink-0 rounded text-indigo-600"
+                        checked={checked}
+                        onChange={e => {
+                          ctx.set('listDisplay', {
+                            ...ld,
+                            onlyShowNotCompleted: e.target.checked,
+                          });
+                        }}
+                      />
+                      <span>
+                        仅显示未完成
+                        <p className="mt-1 text-xs font-medium text-slate-500">
+                          开启后，工单中心列表隐藏「已完成」的工单，只显示「进行中」。
+                        </p>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              );
+            },
           },
         ],
       },

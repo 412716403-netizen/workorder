@@ -59,11 +59,12 @@
 | planFormSettings | `PlanFormSettings` | 计划单表单配置 |
 | orderFormSettings | `OrderFormSettings` | 工单表单配置 |
 | purchaseOrderFormSettings | `PurchaseOrderFormSettings` | 采购订单表单配置 |
-| purchaseBillFormSettings | `PurchaseBillFormSettings` | 采购单表单配置 |
+| purchaseBillFormSettings | `PurchaseBillFormSettings` | 采购入库表单配置 |
 | printTemplates | `PrintTemplate[]` | 打印模板配置 |
 | productionLinkMode | `ProductionLinkMode` | 生产关联模式 |
 | processSequenceMode | `ProcessSequenceMode` | 工序顺序模式 |
 | allowExceedMaxReportQty | `boolean` | 是否允许超额报工 |
+| allowExceedMaxOutsourceReceiveQty | `boolean` | 是否允许超额外协收货（已派 − 已收） |
 | productMilestoneProgresses | `ProductMilestoneProgress[]` | 关联产品模式进度数据 |
 
 ### 1.4 说明
@@ -98,13 +99,13 @@
 | type | 说明 | 关键字段 |
 |------|------|----------|
 | PURCHASE_ORDER | 采购订单 | docNumber, partner, partnerId, productId, variantId?, quantity, purchasePrice, amount, dueDate, lineGroupId |
-| PURCHASE_BILL | 采购单 | docNumber, partner, warehouseId, productId, variantId?, quantity, purchasePrice, sourceOrderNumber?, sourceLineId?, lineGroupId |
+| PURCHASE_BILL | 采购入库 | docNumber, partner, warehouseId, productId, variantId?, quantity, purchasePrice, sourceOrderNumber?, sourceLineId?, lineGroupId |
 | SALES_BILL | 销售单 | docNumber, warehouseId, productId, variantId?, quantity |
 | STOCKTAKE | 盘点 | warehouseId, productId, actualQuantity |
 | TRANSFER | 调拨 | fromWarehouseId, toWarehouseId, productId, quantity |
 
 **lineGroupId**：同一次添加的明细共用，用于列表/详情按组展示。  
-**sourceOrderNumber / sourceLineId**：采购单引用采购订单时记录来源，用于计算已入库数量。  
+**sourceOrderNumber / sourceLineId**：采购入库引用采购订单时记录来源，用于计算已入库数量。  
 **PURCHASE_ORDER.customData**：生产计划详情生成采购订单时写入 `sourcePlanId`、`sourcePlanNumber`（键名见 `shared/types.ts` 中 `PSI_PO_CUSTOM_DATA_SOURCE_*`），并自动写入 `relatedProductId` 为**该计划单的产品** `productId`（与表单「关联产品」一致，便于进销存列表/详情展示）；手工新建单可另选或留空。
 
 ---
@@ -137,6 +138,13 @@ interface PlanOrder {
   items: PlanItem[];  // { variantId?, quantity }
   startDate: string;
   dueDate?: string;  // 计划交货日期；列表/录入由 planFormSettings.listDisplay.showDeliveryDate 控制
+
+`PlanListDisplaySettings`（`planFormSettings` / `orderFormSettings.listDisplay` 共用形状）：
+
+| 字段 | 说明 |
+|------|------|
+| `showDeliveryDate` | 计划列表/表单/打印交期；工单模式外协与工单中心交期列 |
+| `onlyShowNotCompleted` | 列表默认隐藏已完成：计划单排除派生 `COMPLETED`；工单中心排除 `dispatchStatus=COMPLETED`（仅关联工单模式 UI） |
   status: PlanStatus;
   customer: string;
   priority: 'High' | 'Medium' | 'Low';
@@ -144,6 +152,13 @@ interface PlanOrder {
   customData?: Record<string, any>;
   createdAt?: string;
   nodePricingModes?: Record<string, ProcessPricingMode>;  // 已弃用，仅保留计件（元/件）
+  /**
+   * 派发完成派生状态（响应字段，不落库）。
+   * 由后端 `listPlans` / `getPlan` 注入，基于该计划下 `productionOrders WHERE planOrderId = plan.id`
+   * 的 `dispatchStatus` 聚合：无工单 → NOT_DISPATCHED；全部 COMPLETED → COMPLETED；其他 → IN_PROGRESS。
+   * 仅「关联工单模式」的列表展示徽章；详见 `docs/01-business-rules.md §3.10`。
+   */
+  derivedStatus?: PlanDispatchStatus;
 }
 ```
 
@@ -193,6 +208,13 @@ interface ProductionOrder {
   status: OrderStatus;
   milestones: Milestone[];
   priority: 'High' | 'Medium' | 'Low';
+  /**
+   * 派发完成状态（持久化字段，DB 列 `dispatch_status` / `dispatch_status_manual`）。
+   * 由 STOCK_IN 入库累计自动推进；用户在工单中心点击徽章可手动覆盖。
+   * 仅「关联工单模式」UI 展示徽章；产品模式不展示但字段仍写入。详见 `docs/01-business-rules.md §3.10`。
+   */
+  dispatchStatus?: OrderDispatchStatus;        // 'IN_PROGRESS' | 'COMPLETED'，默认 IN_PROGRESS
+  dispatchStatusManual?: boolean;              // true 时自动入库逻辑跳过该工单
 }
 ```
 

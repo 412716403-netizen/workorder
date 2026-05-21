@@ -19,6 +19,7 @@ import type { PsiListPrintControllerHandle } from '../../components/psi/PsiListP
 import { fmtDT } from '../../utils/formatTime';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { getFinanceRecordFromDetail, isPartnerReconRow, isSettlementReconRow, type DetailTarget } from './financeDetailTypes';
+import { isPurchaseBillDocType } from '../../shared/types';
 
 interface FinanceDetailModalProps {
   detailRecord: DetailTarget | null;
@@ -82,7 +83,7 @@ function FinanceDetailModal({
    */
   const psiDocLookup = (() => {
     if (!detailRecord || !isPartnerReconRow(detailRecord) || detailRecord.source !== 'psi') return null;
-    const docType = detailRecord.docType === '采购单' ? 'PURCHASE_BILL' : 'SALES_BILL';
+    const docType = isPurchaseBillDocType(detailRecord.docType) ? 'PURCHASE_BILL' : 'SALES_BILL';
     return { docNumber: detailRecord.docNo, type: docType };
   })();
   const psiDocQuery = useQuery({
@@ -245,7 +246,7 @@ function FinanceDetailModal({
           {isPartnerReconRow(detailRecord) && detailRecord.source === 'psi' && (() => {
             const row = detailRecord;
             if (row.source !== 'psi') return null;
-            const psiType = row.docType === '采购单' ? 'PURCHASE_BILL' : 'SALES_BILL';
+            const psiType = isPurchaseBillDocType(row.docType) ? 'PURCHASE_BILL' : 'SALES_BILL';
             const lineRecords = (psiDocRecords as any[]).filter((r: any) => r.type === psiType && (r.docNumber === row.docNo || r.docNo === row.docNo));
             return (
               <div className="space-y-5">

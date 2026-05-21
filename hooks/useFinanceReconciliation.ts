@@ -14,6 +14,7 @@ import type {
   PsiRecord,
   Worker,
 } from '../types';
+import { PSI_PURCHASE_BILL_LABEL } from '../shared/types';
 import { toLocalDateYmd } from '../utils/localDateTime';
 import { fetchAllPages, type PaginatedLike } from '../utils/fetchAllPages';
 import {
@@ -273,7 +274,7 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
     const to = reconQueryDateToT;
     const rows: PartnerReconRow[] = [];
     const psiTypes = ['PURCHASE_BILL', 'SALES_BILL'] as const;
-    const psiLabel: Record<string, string> = { PURCHASE_BILL: '采购单', SALES_BILL: '销售单' };
+    const psiLabel: Record<string, string> = { PURCHASE_BILL: PSI_PURCHASE_BILL_LABEL, SALES_BILL: '销售单' };
     const psiFiltered = effectivePsiRecords.filter(
       (r) => psiTypes.includes(r.type as (typeof psiTypes)[number]) && (r.partner === partnerName || r.partnerId === reconQueryPartnerId),
     );

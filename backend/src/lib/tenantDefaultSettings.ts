@@ -6,6 +6,7 @@ export const TENANT_DEFAULT_SETTINGS: Record<string, unknown> = {
   productionLinkMode: 'order',
   processSequenceMode: 'sequential',
   allowExceedMaxReportQty: false,
+  allowExceedMaxOutsourceReceiveQty: false,
   planFormSettings: {
     standardFields: [
       { id: 'planNumber', label: '计划单号', showInList: false, showInCreate: false, showInDetail: true },

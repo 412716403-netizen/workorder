@@ -6,12 +6,15 @@ import { genId } from '../utils/genId.js';
 import { sanitizeUpdate, sanitizeItems, normalizeDates } from '../utils/request.js';
 import { buildReportWeightBreakdown } from './reportWeightBreakdown.service.js';
 import { assertScanNotAlreadyUsed } from './scanValidate.service.js';
+import { OrderDispatchStatus } from '../types/index.js';
 
 export async function listOrders(
   db: TenantPrismaClient,
   opts: {
     status?: string; productId?: string; parentOrderId?: string;
     search?: string; page?: number; pageSize?: number; lite?: boolean;
+    /** 列表仅显示进行中（隐藏 dispatchStatus=COMPLETED） */
+    excludeCompleted?: boolean;
     all?: boolean;
   },
 ) {
@@ -19,6 +22,9 @@ export async function listOrders(
   if (opts.status) where.status = opts.status;
   if (opts.productId) where.productId = opts.productId;
   if (opts.parentOrderId) where.parentOrderId = opts.parentOrderId;
+  if (opts.excludeCompleted) {
+    where.dispatchStatus = OrderDispatchStatus.IN_PROGRESS;
+  }
   if (opts.search) {
     where.OR = [
       { orderNumber: { contains: opts.search, mode: 'insensitive' } },
@@ -90,6 +96,34 @@ export async function updateOrder(
 
   return basePrisma.productionOrder.findUnique({
     where: { id: orderId },
+    include: { items: true, milestones: { include: { reports: true } } },
+  });
+}
+
+/**
+ * 手动切换工单派发完成状态（工单中心徽章点击）。
+ *
+ * 与 `production.service.recalcOrderDispatchStatusByStockIn` 的自动逻辑解耦：
+ * 一旦手动切换，`dispatchStatusManual` 置为 `true`，后续 STOCK_IN 入库/删除不会再自动覆盖。
+ * 走独立接口而非复用 `updateOrder`，避免 `sanitizeUpdate` 误带其他字段且权限语义清晰。
+ */
+export async function updateOrderDispatchStatus(
+  db: TenantPrismaClient,
+  orderId: string,
+  status: OrderDispatchStatus,
+) {
+  const existing = await db.productionOrder.findUnique({
+    where: { id: orderId },
+    select: { id: true },
+  });
+  if (!existing) throw new AppError(404, '工单不存在');
+
+  return db.productionOrder.update({
+    where: { id: orderId },
+    data: {
+      dispatchStatus: status,
+      dispatchStatusManual: true,
+    },
     include: { items: true, milestones: { include: { reports: true } } },
   });
 }

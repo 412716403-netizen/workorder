@@ -29,7 +29,7 @@ const psi = (overrides: Partial<PsiRecord> & Pick<PsiRecord, 'type' | 'productId
 });
 
 describe('lineDeltaFromPsi', () => {
-  it('采购单行减少应收', () => {
+  it('采购入库行减少应收', () => {
     expect(lineDeltaFromPsi(psi({ type: 'PURCHASE_BILL', productId: 'p1', amount: 50 }))).toEqual({ inc: 0, dec: 50 });
   });
 
@@ -39,11 +39,11 @@ describe('lineDeltaFromPsi', () => {
 });
 
 describe('buildPartnerProductLineReconList', () => {
-  it('按单据顺序展开采购单多行，余额逐行累计', () => {
+  it('按单据顺序展开采购入库多行，余额逐行累计', () => {
     const docRows: PartnerReconRow[] = [
       {
         source: 'psi',
-        docType: '采购单',
+        docType: '采购入库',
         docNo: 'PB-1',
         timestamp: '2026-05-10T12:00:00',
         partner: '万新',
@@ -74,11 +74,11 @@ describe('buildPartnerProductLineReconList', () => {
     expect(lines[0]?.detailTarget).toEqual(docRows[0]);
   });
 
-  it('采购单行带出数量与采购单价', () => {
+  it('采购入库行带出数量与采购单价', () => {
     const docRows: PartnerReconRow[] = [
       {
         source: 'psi',
-        docType: '采购单',
+        docType: '采购入库',
         docNo: 'PB-Q',
         timestamp: '2026-05-10T12:00:00',
         partner: '万新',
@@ -199,7 +199,7 @@ describe('buildPartnerProductLineReconList', () => {
     const docRows: PartnerReconRow[] = [
       {
         source: 'psi',
-        docType: '采购单',
+        docType: '采购入库',
         docNo: 'PB-X',
         timestamp: '2026-05-10T12:00:00',
         partner: '万新',
@@ -227,7 +227,7 @@ describe('summarizePartnerProductRowsByProductAndPrice', () => {
     kind: 'line',
     timestamp: '2026-01-01',
     docNo: 'D1',
-    docType: '采购单',
+    docType: '采购入库',
     partner: '万新',
     productName: over.productName,
     quantity: over.quantity ?? null,
@@ -235,7 +235,7 @@ describe('summarizePartnerProductRowsByProductAndPrice', () => {
     receivableInc: over.receivableInc ?? 0,
     receivableDec: over.receivableDec ?? 0,
     balance: over.balance ?? 0,
-    detailTarget: { source: 'psi', docType: '采购单', docNo: 'D1', timestamp: '', partner: '', amount: 0 },
+    detailTarget: { source: 'psi', docType: '采购入库', docNo: 'D1', timestamp: '', partner: '', amount: 0 },
   });
 
   it('同产品两种单价拆成两行', () => {

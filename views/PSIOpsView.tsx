@@ -102,6 +102,7 @@ import {
 } from '../contexts/AppDataContext';
 import {
   purchaseOrderDocHasUnsettled,
+  salesOrderDocFullyShipped,
   salesOrderDocHasNotFullyShippedLine,
 } from '../utils/psiOrderListDisplayFilter';
 import { useAuth } from '../contexts/AuthContext';
@@ -285,7 +286,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
 
   const bizConfig: Record<string, any> = {
     'PURCHASE_ORDER': { label: '采购订单', color: 'bg-indigo-600', partnerLabel: '供应商', prefix: 'PO', hideWarehouse: true },
-    'PURCHASE_BILL': { label: '采购单', color: 'bg-indigo-600', partnerLabel: '供应商', prefix: 'PB' },
+    'PURCHASE_BILL': { label: '采购入库', color: 'bg-indigo-600', partnerLabel: '供应商', prefix: 'PB' },
     'SALES_ORDER': { label: '销售订单', color: 'bg-indigo-600', partnerLabel: '客户', prefix: 'SO', hideWarehouse: true },
     'SALES_BILL': { label: '销售单', color: 'bg-indigo-600', partnerLabel: '客户', prefix: 'XS' },
     'WAREHOUSE_MGMT': { label: '仓库管理', color: 'bg-indigo-600', sub: '全方位的仓库业务控制中心' },
@@ -781,16 +782,16 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           phase={purchaseBillModalPhase}
           editingDocNumber={editingPBDocNumber}
           maxWidthClass="max-w-4xl"
-          detailTitle="采购单详情"
-          editTitle="编辑采购单"
-          newTitle="新建采购单"
+          detailTitle="采购入库详情"
+          editTitle="编辑采购入库"
+          newTitle="新建采购入库"
           showPrint={showPbListPrintButton}
           onPrint={() => {
             void refreshPrintTemplates();
             pbListPrintControllerRef.current?.openPicker(editingPBDocNumber);
           }}
           permSubmodule="purchase_bill"
-          deleteConfirmMessage="确定要删除该采购单吗？"
+          deleteConfirmMessage="确定要删除该采购入库单吗？"
           recordType="PURCHASE_BILL"
           onDeleteRecords={onDeleteRecords}
           onClose={closeOrderBillModal}
@@ -1077,7 +1078,24 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               const totalAmount = (type === 'SALES_ORDER' || type === 'SALES_BILL')
                 ? docItems.reduce((s, i) => s + (i.quantity ?? 0) * (i.salesPrice ?? 0), 0)
                 : docItems.reduce((s, i) => s + (i.quantity ?? 0) * (i.purchasePrice ?? 0), 0);
-              const isConverted = type === 'PURCHASE_ORDER' && docItems.every((item: any) => (item.quantity ?? 0) <= (receivedByOrderLine[`${docNum}::${item.id}`] ?? 0));
+              const isPurchaseOrderFullyReceived =
+                type === 'PURCHASE_ORDER' &&
+                docItems.every((item: any) => (item.quantity ?? 0) <= (receivedByOrderLine[`${docNum}::${item.id}`] ?? 0));
+              const isSalesOrderFullyShipped =
+                type === 'SALES_ORDER' &&
+                salesOrderDocFullyShipped(
+                  docItems as {
+                    id: string;
+                    lineGroupId?: string;
+                    quantity?: number | null;
+                    shippedQuantity?: number | null;
+                  }[],
+                );
+              const poDocNumBadgeClass =
+                'px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest border bg-indigo-50 text-indigo-600 border-indigo-100';
+              const soDocNumBadgeClass = poDocNumBadgeClass;
+              const docCompletedBadgeClass =
+                'text-[10px] font-black text-indigo-600 uppercase tracking-tighter bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 shadow-sm';
               const openSalesOrderDetail = () => {
                 setEditingSODocNumber(docNum);
                 setShowModal('SALES_ORDER');
@@ -1103,45 +1121,48 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                 <div key={docNum} className={psiOrderBillListCardClass}>
                   <div className={psiOrderBillListCardHeaderClass}>
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm border border-slate-100 group-hover:border-indigo-100 transition-all ${isConverted ? 'text-emerald-500' : 'text-slate-400 group-hover:text-indigo-600'}`}>
-                        {isConverted ? <CheckCircle2 className="w-5 h-5" /> : <Building2 className="w-5 h-5" />}
+                      <div
+                        className={`w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm border border-slate-100 group-hover:border-indigo-100 transition-all ${
+                          isPurchaseOrderFullyReceived ? 'text-emerald-500' : 'text-slate-400 group-hover:text-indigo-600'
+                        }`}
+                      >
+                        {isPurchaseOrderFullyReceived ? (
+                          <CheckCircle2 className="w-5 h-5" />
+                        ) : (
+                          <Building2 className="w-5 h-5" />
+                        )}
                       </div>
                       <div>
                         <div className="flex items-center gap-3">
                           {type === 'PURCHASE_ORDER' ? (
                             <>
                               <h3 className="text-sm font-black text-slate-800">{mainInfo.partner || '未指定单位'}</h3>
-                              <span
-                                className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest border ${
-                                  isConverted ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'
-                                }`}
-                              >
+                              <span className={poDocNumBadgeClass}>
                                 {docNum.startsWith('UNGROUPED-') ? '独立单据' : docNum}
                               </span>
-                              {isConverted && (
-                                <span className="text-[10px] font-black text-emerald-500 uppercase tracking-tighter bg-white px-2 py-0.5 rounded-full border border-emerald-50 shadow-sm">
-                                  已入库完成
-                                </span>
+                              {isPurchaseOrderFullyReceived && (
+                                <span className={docCompletedBadgeClass}>已入库完成</span>
+                              )}
+                            </>
+                          ) : type === 'SALES_ORDER' ? (
+                            <>
+                              <h3 className="text-sm font-black text-slate-800">{mainInfo.partner || '未指定单位'}</h3>
+                              <span className={soDocNumBadgeClass}>
+                                {docNum.startsWith('UNGROUPED-') ? '独立单据' : docNum}
+                              </span>
+                              {isSalesOrderFullyShipped && (
+                                <span className={docCompletedBadgeClass}>已完成</span>
                               )}
                             </>
                           ) : (
                             <>
                               <h3 className="text-sm font-black text-slate-800">{mainInfo.partner || '未指定单位'}</h3>
-                              <span
-                                className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest border ${
-                                  isConverted ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'
-                                }`}
-                              >
+                              <span className={poDocNumBadgeClass}>
                                 {docNum.startsWith('UNGROUPED-') ? '独立单据' : docNum}
                               </span>
                               {type === 'SALES_BILL' && totalQty < 0 && (
                                 <span className="text-[10px] font-black text-amber-600 uppercase tracking-tighter bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 shadow-sm">
                                   销售退货
-                                </span>
-                              )}
-                              {isConverted && (
-                                <span className="text-[10px] font-black text-emerald-500 uppercase tracking-tighter bg-white px-2 py-0.5 rounded-full border border-emerald-50 shadow-sm">
-                                  已入库完成
                                 </span>
                               )}
                             </>
@@ -1853,7 +1874,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
             })
           }
           pickerSubtitle={docNumber =>
-            `采购单 ${docNumber.startsWith('UNGROUPED-') ? '独立单据' : docNumber}`
+            `采购入库 ${docNumber.startsWith('UNGROUPED-') ? '独立单据' : docNumber}`
           }
           onAddPrintTemplate={onUpdatePurchaseBillFormSettings ? () => {
             setPbFormConfigEntryTab('print');

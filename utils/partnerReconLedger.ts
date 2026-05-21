@@ -1,6 +1,8 @@
 import type { FinanceRecord, ProductionOpRecord } from '../types';
 
-/** 合作单位对账：统一展示行（采购单/销售单/外协收回/收款单/付款单） */
+import { isPurchaseBillDocType } from '../shared/types';
+
+/** 合作单位对账：统一展示行（采购入库/销售单/外协收回/收款单/付款单） */
 export type PartnerReconRow =
   | { source: 'finance'; rec: FinanceRecord }
   | { source: 'psi'; docType: string; docNo: string; timestamp: string; partner: string; amount: number; operator?: string; note?: string }
@@ -28,7 +30,7 @@ export function computePartnerReconRowDelta(row: PartnerReconRow): { inc: number
     if (row.rec.type === 'RECEIPT') dec = row.rec.amount;
     else if (row.rec.type === 'PAYMENT') inc = row.rec.amount;
   } else if (row.source === 'psi') {
-    if (row.docType === '采购单') dec = Math.abs(row.amount);
+    if (isPurchaseBillDocType(row.docType)) dec = Math.abs(row.amount);
     else if (row.docType === '外协收回') dec = Math.abs(row.amount);
     else if (row.docType === '销售单') {
       if (row.amount >= 0) inc = row.amount;

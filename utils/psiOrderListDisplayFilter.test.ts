@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { purchaseOrderDocHasUnsettled, salesOrderDocHasNotFullyShippedLine } from './psiOrderListDisplayFilter';
+import {
+  purchaseOrderDocHasUnsettled,
+  salesOrderDocFullyShipped,
+  salesOrderDocHasNotFullyShippedLine,
+} from './psiOrderListDisplayFilter';
 
 describe('purchaseOrderDocHasUnsettled', () => {
   it('订货大于已入库时为未交清', () => {
@@ -37,5 +41,23 @@ describe('salesOrderDocHasNotFullyShippedLine', () => {
         { id: 'r2', lineGroupId: 'g1', quantity: 2, shippedQuantity: 2 },
       ]),
     ).toBe(true);
+  });
+});
+
+describe('salesOrderDocFullyShipped', () => {
+  it('全部行组发齐为已完成', () => {
+    expect(
+      salesOrderDocFullyShipped([
+        { id: 'r1', lineGroupId: 'g1', quantity: 5, shippedQuantity: 5 },
+      ]),
+    ).toBe(true);
+  });
+
+  it('尚有未发齐行则未完成', () => {
+    expect(
+      salesOrderDocFullyShipped([
+        { id: 'r1', lineGroupId: 'g1', quantity: 5, shippedQuantity: 1 },
+      ]),
+    ).toBe(false);
   });
 });

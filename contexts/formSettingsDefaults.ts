@@ -136,6 +136,7 @@ export function normalizePlanFormSettings(raw: PlanFormSettings | null | undefin
     customFields: normalizePlanFormFieldConfigArray(s.customFields),
     listDisplay: {
       showDeliveryDate: s.listDisplay?.showDeliveryDate === true,
+      onlyShowNotCompleted: s.listDisplay?.onlyShowNotCompleted === true,
     },
     listPrint: {
       showPrintButton: s.listPrint?.showPrintButton === true,
@@ -271,6 +272,7 @@ export const DEFAULT_ORDER_FORM_SETTINGS: OrderFormSettings = {
   ],
   customFields: [],
   stockInCustomFields: [],
+  listDisplay: { onlyShowNotCompleted: false },
 };
 
 export function normalizeOrderFormSettings(raw: OrderFormSettings | null | undefined): OrderFormSettings {
@@ -287,6 +289,10 @@ export function normalizeOrderFormSettings(raw: OrderFormSettings | null | undef
     stockInCustomFields,
     /** 报工自定义在工序节点维护；入库自定义使用 stockInCustomFields */
     customFields: [],
+    listDisplay: {
+      showDeliveryDate: s.listDisplay?.showDeliveryDate === true,
+      onlyShowNotCompleted: s.listDisplay?.onlyShowNotCompleted === true,
+    },
     orderCenterPrint: s.orderCenterPrint,
   };
   const ocp = base.orderCenterPrint;

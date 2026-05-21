@@ -14,8 +14,20 @@ interface ProductionConfigTabProps {
   onUpdateProcessSequenceMode?: (mode: ProcessSequenceMode) => void;
   allowExceedMaxReportQty: boolean;
   onUpdateAllowExceedMaxReportQty?: (value: boolean) => void;
+  allowExceedMaxOutsourceReceiveQty: boolean;
+  onUpdateAllowExceedMaxOutsourceReceiveQty?: (value: boolean) => void;
   canEdit: boolean;
 }
+
+/** 本页统一字号：区块标题 / 正文 / 辅助说明 */
+const SECTION_TITLE =
+  'mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-800';
+const SECTION_INTRO = 'mb-6 text-sm text-slate-500';
+const OPTION_LABEL = 'text-sm font-bold text-slate-800';
+const OPTION_DESC = 'mt-1 text-sm text-slate-500';
+const FOOTNOTE = 'mt-6 text-xs text-slate-400';
+const TOGGLE_ROW =
+  'flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3';
 
 /**
  * 关联模式切换会改变进度数据的归属语义（详见 docs/05-production-link-mode.md）：
@@ -65,6 +77,8 @@ const ProductionConfigTab: React.FC<ProductionConfigTabProps> = ({
   onUpdateProcessSequenceMode,
   allowExceedMaxReportQty,
   onUpdateAllowExceedMaxReportQty,
+  allowExceedMaxOutsourceReceiveQty,
+  onUpdateAllowExceedMaxOutsourceReceiveQty,
   canEdit,
 }) => {
   const confirm = useConfirm();
@@ -97,13 +111,13 @@ const ProductionConfigTab: React.FC<ProductionConfigTabProps> = ({
   };
 
   return (
-    <div className="max-w-2xl space-y-4">
-      <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm p-8">
-        <h2 className="font-bold text-slate-800 mb-6 flex items-center gap-2 text-sm uppercase tracking-wider">
-          <Link2 className="w-4 h-4 text-indigo-600" />
+    <div className="max-w-2xl space-y-4 text-sm text-slate-800">
+      <div className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
+        <h2 className={SECTION_TITLE}>
+          <Link2 className="h-4 w-4 text-indigo-600" />
           生产关联模式
         </h2>
-        <p className="text-slate-500 text-sm mb-6">
+        <p className={SECTION_INTRO}>
           决定计划单、工单、领料、报工等生产业务以工单维度还是产品维度进行关联和统计。
         </p>
         <div className="space-y-4">
@@ -113,8 +127,8 @@ const ProductionConfigTab: React.FC<ProductionConfigTabProps> = ({
           ].map(opt => (
             <label
               key={opt.id}
-              className={`flex items-start gap-4 p-5 rounded-2xl border-2 transition-all ${
-                !canEdit ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+              className={`flex items-start gap-4 rounded-2xl border-2 p-5 transition-all ${
+                !canEdit ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
               } ${
                 productionLinkMode === opt.id
                   ? 'border-indigo-600 bg-indigo-50/50 shadow-sm'
@@ -127,26 +141,24 @@ const ProductionConfigTab: React.FC<ProductionConfigTabProps> = ({
                 checked={productionLinkMode === opt.id}
                 disabled={!canEdit}
                 onChange={() => { void handleSwitchLinkMode(opt.id); }}
-                className="mt-1 w-4 h-4 text-indigo-600"
+                className="mt-1 h-4 w-4 text-indigo-600"
               />
               <div>
-                <span className="font-bold text-slate-800">{opt.label}</span>
-                <p className="text-xs text-slate-500 mt-1">{opt.desc}</p>
+                <span className={OPTION_LABEL}>{opt.label}</span>
+                <p className={OPTION_DESC}>{opt.desc}</p>
               </div>
             </label>
           ))}
         </div>
-        <p className="text-[10px] text-slate-400 mt-6 italic">
-          配置修改后仅影响新产生的数据，历史数据保持不变。
-        </p>
+        <p className={FOOTNOTE}>配置修改后仅影响新产生的数据，历史数据保持不变。</p>
       </div>
 
-      <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm p-8">
-        <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2 text-sm uppercase tracking-wider">
-          <Link2 className="w-4 h-4 text-indigo-600" />
+      <div className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
+        <h2 className={SECTION_TITLE}>
+          <Link2 className="h-4 w-4 text-indigo-600" />
           工序生产顺序
         </h2>
-        <p className="text-slate-500 text-sm mb-6">
+        <p className={SECTION_INTRO}>
           控制工序是否必须按工序路线依次生产，以及报工弹窗中的默认数量提示规则。
         </p>
         <div className="space-y-4">
@@ -154,18 +166,18 @@ const ProductionConfigTab: React.FC<ProductionConfigTabProps> = ({
             {
               id: 'free' as const,
               label: '不限制工序顺序',
-              desc: '所有工序可独立报工，当前工单中心与报工行为保持不变。'
+              desc: '所有工序可独立报工，当前工单中心与报工行为保持不变。',
             },
             {
               id: 'sequential' as const,
               label: '按工序顺序生产',
-              desc: '前一工序存在报工记录后，后一工序才允许报工；下道工序默认提示数量为上一道工序的已报工数量（按颜色尺码分别提示）。'
+              desc: '前一工序存在报工记录后，后一工序才允许报工；下道工序默认提示数量为上一道工序的已报工数量（按颜色尺码分别提示）。',
             },
           ].map(opt => (
             <label
               key={opt.id}
-              className={`flex items-start gap-4 p-5 rounded-2xl border-2 transition-all ${
-                !canEdit ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+              className={`flex items-start gap-4 rounded-2xl border-2 p-5 transition-all ${
+                !canEdit ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
               } ${
                 processSequenceMode === opt.id
                   ? 'border-indigo-600 bg-indigo-50/50 shadow-sm'
@@ -178,49 +190,64 @@ const ProductionConfigTab: React.FC<ProductionConfigTabProps> = ({
                 checked={processSequenceMode === opt.id}
                 disabled={!canEdit}
                 onChange={() => { void handleSwitchSequenceMode(opt.id); }}
-                className="mt-1 w-4 h-4 text-indigo-600"
+                className="mt-1 h-4 w-4 text-indigo-600"
               />
               <div>
-                <span className="font-bold text-slate-800">{opt.label}</span>
-                <p className="text-xs text-slate-500 mt-1">{opt.desc}</p>
+                <span className={OPTION_LABEL}>{opt.label}</span>
+                <p className={OPTION_DESC}>{opt.desc}</p>
               </div>
             </label>
           ))}
         </div>
-        <p className="text-[10px] text-slate-400 mt-6 italic">
-          工序顺序配置同样仅影响新产生的报工与进度计算，历史数据不会被回溯调整。
-        </p>
+        <p className={FOOTNOTE}>工序顺序配置同样仅影响新产生的报工与进度计算，历史数据不会被回溯调整。</p>
       </div>
 
-      <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm p-8">
-        <h2 className="font-bold text-slate-800 mb-4 flex items-center gap-2 text-sm uppercase tracking-wider">
-          <Link2 className="w-4 h-4 text-indigo-600" />
-          报工数量上限
+      <div className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
+        <h2 className={SECTION_TITLE}>
+          <Link2 className="h-4 w-4 text-indigo-600" />
+          数量上限
         </h2>
-        <p className="text-slate-500 text-sm mb-6">
-          控制报工时是否允许超过系统计算的"最多"数量（如计划剩余数或上一道工序报工数）。
-        </p>
-        <div className="bg-slate-50/60 border border-slate-100 rounded-2xl px-4 py-3 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-bold text-slate-800">
-              允许报工数量超过最大可报数量
-            </p>
-            <p className="text-xs text-slate-500 mt-1">
-              关闭后，报工数量将被限制在弹窗中显示的"最多 N"以内，无法录入更大的数值。
-            </p>
+        <div className="space-y-4">
+          <div className={TOGGLE_ROW}>
+            <div>
+              <p className={OPTION_LABEL}>允许报工数量超过最大可报数量</p>
+              <p className={OPTION_DESC}>
+                关闭后，报工数量将被限制在弹窗中显示的「最多 N」以内，无法录入更大的数值（如计划剩余数或上一道工序报工数）。
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={!canEdit}
+              onClick={() => onUpdateAllowExceedMaxReportQty?.(!allowExceedMaxReportQty)}
+              className={`ml-4 shrink-0 ${!canEdit ? 'cursor-not-allowed opacity-60' : ''}`}
+            >
+              {allowExceedMaxReportQty ? (
+                <ToggleRight className={`h-10 w-10 ${!canEdit ? 'text-slate-400' : 'text-indigo-600'}`} />
+              ) : (
+                <ToggleLeft className="h-10 w-10 text-slate-300" />
+              )}
+            </button>
           </div>
-          <button
-            type="button"
-            disabled={!canEdit}
-            onClick={() => onUpdateAllowExceedMaxReportQty?.(!allowExceedMaxReportQty)}
-            className={`ml-4 ${!canEdit ? 'opacity-60 cursor-not-allowed' : ''}`}
-          >
-            {allowExceedMaxReportQty ? (
-              <ToggleRight className={`w-10 h-10 ${!canEdit ? 'text-slate-400' : 'text-indigo-600'}`} />
-            ) : (
-              <ToggleLeft className="w-10 h-10 text-slate-300" />
-            )}
-          </button>
+          <div className={TOGGLE_ROW}>
+            <div>
+              <p className={OPTION_LABEL}>允许外协收货数量超过最大可收货数量</p>
+              <p className={OPTION_DESC}>
+                关闭后，外协收货录入与扫码累加将被限制在每行的「最多 N」以内，无法录入更大的数值（待收回数量 = 已派 − 已收）。
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={!canEdit}
+              onClick={() => onUpdateAllowExceedMaxOutsourceReceiveQty?.(!allowExceedMaxOutsourceReceiveQty)}
+              className={`ml-4 shrink-0 ${!canEdit ? 'cursor-not-allowed opacity-60' : ''}`}
+            >
+              {allowExceedMaxOutsourceReceiveQty ? (
+                <ToggleRight className={`h-10 w-10 ${!canEdit ? 'text-slate-400' : 'text-indigo-600'}`} />
+              ) : (
+                <ToggleLeft className="h-10 w-10 text-slate-300" />
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

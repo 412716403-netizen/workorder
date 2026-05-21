@@ -102,7 +102,7 @@ export function buildPrintFieldOptions(opts: {
   purchaseOrderCustomFields?: PlanFormFieldConfig[];
   /** 销售订单表单自定义；{{销售订单.custom.<id>}} */
   salesOrderCustomFields?: PlanFormFieldConfig[];
-  /** 采购单（入库）表单自定义；{{采购单.custom.<id>}} */
+  /** 采购入库表单自定义；{{采购入库.custom.<id>}}（兼容 {{采购单.*}}） */
   purchaseBillCustomFields?: PlanFormFieldConfig[];
   /** 销售单表单自定义；{{销售单.custom.<id>}} */
   salesBillCustomFields?: PlanFormFieldConfig[];
@@ -258,14 +258,16 @@ export function buildPrintFieldOptions(opts: {
     { group: '销售订单明细', value: '行.remark', label: '备注' },
   ];
   const purchaseBillHeader: PrintFieldOption[] = [
-    { group: '采购单', value: '采购单.docNumber', label: '单据编号' },
-    { group: '采购单', value: '采购单.partner', label: '供应商' },
-    { group: '采购单', value: '采购单.operator', label: '经办' },
-    { group: '采购单', value: '采购单.warehouseName', label: '入库仓库' },
-    { group: '采购单', value: '采购单.docTotalQty', label: '本单总件数' },
-    { group: '采购单', value: '采购单.docTotalAmount', label: '本单总金额' },
+    { group: '采购入库', value: '采购入库.docNumber', label: '单据编号' },
+    { group: '采购入库', value: '采购入库.partner', label: '供应商' },
+    { group: '采购入库', value: '采购入库.operator', label: '经办' },
+    { group: '采购入库', value: '采购入库.warehouseName', label: '入库仓库' },
+    { group: '采购入库', value: '采购入库.docTotalQty', label: '本单总件数' },
+    { group: '采购入库', value: '采购入库.docTotalAmount', label: '本单总金额' },
   ];
-  const purchaseBillCustom: PrintFieldOption[] = purchaseBillCustomFields.map(f => planFormCustomPrintField('采购单', '采购单', f));
+  const purchaseBillCustom: PrintFieldOption[] = purchaseBillCustomFields.map(f =>
+    planFormCustomPrintField('采购入库', '采购入库', f),
+  );
   const purchaseBillBlock: PrintFieldOption[] = [...purchaseBillHeader, ...purchaseBillCustom];
   const receiptHeader: PrintFieldOption[] = [
     { group: '收款单', value: '收款单.docNo', label: '单据编号' },
@@ -304,16 +306,16 @@ export function buildPrintFieldOptions(opts: {
   const paymentCustom = financeKindCustomPrintOptions(financeCategories, 'PAYMENT', '付款单');
   const paymentBlock: PrintFieldOption[] = [...paymentHeader, ...paymentCustom];
   const purchaseBillDetailRow: PrintFieldOption[] = [
-    { group: '采购单明细', value: '行.lineNo', label: '行序号' },
-    { group: '采购单明细', value: '行.sku', label: '货号' },
-    { group: '采购单明细', value: '行.productName', label: '名称' },
-    { group: '采购单明细', value: '行.colorName', label: '颜色' },
-    { group: '采购单明细', value: '行.sizeName', label: '尺码' },
-    { group: '采购单明细', value: '行.batchNo', label: '批次' },
-    { group: '采购单明细', value: '行.qty', label: '数量' },
-    { group: '采购单明细', value: '行.unitPrice', label: '单价' },
-    { group: '采购单明细', value: '行.amount', label: '金额' },
-    { group: '采购单明细', value: '行.remark', label: '备注' },
+    { group: '采购入库明细', value: '行.lineNo', label: '行序号' },
+    { group: '采购入库明细', value: '行.sku', label: '货号' },
+    { group: '采购入库明细', value: '行.productName', label: '名称' },
+    { group: '采购入库明细', value: '行.colorName', label: '颜色' },
+    { group: '采购入库明细', value: '行.sizeName', label: '尺码' },
+    { group: '采购入库明细', value: '行.batchNo', label: '批次' },
+    { group: '采购入库明细', value: '行.qty', label: '数量' },
+    { group: '采购入库明细', value: '行.unitPrice', label: '单价' },
+    { group: '采购入库明细', value: '行.amount', label: '金额' },
+    { group: '采购入库明细', value: '行.remark', label: '备注' },
   ];
   const salesBillRow: PrintFieldOption[] = [
     { group: '销售单明细', value: '行.lineNo', label: '行序号' },
@@ -708,7 +710,7 @@ const FIELD_GROUPS_BY_DOCUMENT: Record<Exclude<PrintTemplateDocumentType, 'all'>
   ]),
   purchaseOrder: new Set(['系统', '采购订单', '采购订单明细', '产品']),
   salesOrder: new Set(['系统', '销售订单', '销售订单明细', '产品']),
-  purchaseBill: new Set(['系统', '采购单', '采购单明细', '产品']),
+  purchaseBill: new Set(['系统', '采购入库', '采购入库明细', '采购单', '采购单明细', '产品']),
   receipt: new Set(['系统', '收款单']),
   payment: new Set(['系统', '付款单']),
 };
