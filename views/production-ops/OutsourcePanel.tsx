@@ -460,8 +460,13 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
     const rows: { orderId?: string; orderNumber?: string; productId: string; productName: string; nodeId: string; milestoneName: string; orderTotalQty: number; reportedQty: number; dispatchedQty: number; availableQty: number }[] = [];
     const getDr = (oid: string, tid: string) =>
       defectiveReworkByOrderForOutsource.get(`${oid}|${tid}`) ?? { defective: 0, rework: 0 };
-    const parentList = orders.filter(o => !o.parentOrderId);
-    parentList.forEach(order => {
+    /**
+     * 工单模式待发清单：父/子工单都要遍历。
+     * 子工单（parentOrderId 非空）也是独立 ProductionOrder，有自己的 productId / items / milestones，
+     * 若过滤掉子工单，工单中心里子工单上「可外协」工序的产品就进不了待发清单（历史 bug）。
+     * 聚合 key 是 orderId|nodeId，父子 orderId 不同，无双计风险。
+     */
+    orders.forEach(order => {
       const rawOrderTotalQty = order.items.reduce((s, i) => s + i.quantity, 0);
       const product = idx.productsById.get(order.productId);
       order.milestones.forEach(ms => {
