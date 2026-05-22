@@ -833,7 +833,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
                       <tr key={`prod-${rec.id}`} className="hover:bg-slate-50/30 transition-colors">
                         <td className="px-8 py-4 whitespace-nowrap"><div className="flex items-center gap-2"><Clock className="w-3.5 h-3.5 text-slate-300" /><span className="text-xs font-bold text-slate-600">{fmtDT(rec.timestamp)}</span></div></td>
                         <td className="px-8 py-4"><span className="text-xs font-bold text-slate-800">{rec.docNo || rec.id}</span></td>
-                        <td className="px-8 py-4"><span className="text-xs font-bold text-slate-600">外协收回</span></td>
+                        <td className="px-8 py-4"><span className="text-xs font-bold text-slate-600">{rec.sourceReworkId ? '返工收回' : '外协收回'}</span></td>
                         <td className="px-8 py-4"><span className="text-sm font-bold text-slate-800">{rec.partner || '-'}</span></td>
                         <td className="px-8 py-4 text-right"><span className="text-sm font-black text-slate-800">{receivableInc > 0 ? `¥ ${receivableInc.toLocaleString()}` : '—'}</span></td>
                         <td className="px-8 py-4 text-right"><span className="text-sm font-black text-emerald-600">{receivableDec > 0 ? `¥ ${receivableDec.toLocaleString()}` : '—'}</span></td>

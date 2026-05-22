@@ -250,7 +250,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
    * 避免 panel 自身 records 没覆盖到该日期范围时详情打不开。
    */
   const [flowDetailExtraRecords, setFlowDetailExtraRecords] = useState<ProductionOpRecord[] | null>(null);
-  /** 从待发/待收回保存后直接打开单据详情时，不依赖「外协流水」列表弹窗（outsourceModal==='flow'） */
+  /** 从待发送保存后直接打开单据详情时，不依赖「外协流水」列表弹窗（outsourceModal==='flow'） */
   const [flowDetailRevealStandalone, setFlowDetailRevealStandalone] = useState(false);
   const [flowDocPhase, setFlowDocPhase] = useState<'detail' | 'edit'>('detail');
   const [flowOpenSeed, setFlowOpenSeed] = useState<OutsourceFlowOpenSeed>(null);
@@ -1028,7 +1028,6 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       receiveFormWeights,
       nodeId => !!globalNodes.find(n => n.id === nodeId)?.enableWeightOnReport,
     );
-    const createdReceiveBatch: ProductionOpRecord[] = [];
     for (const [key, qty] of entries) {
       const resolved = resolveReceiveEntry(key);
       if (!resolved) continue;
@@ -1057,7 +1056,6 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       };
       if (isProductScope) {
         /** product 维度发出 → product 维度收回；不附 orderId，与发出对称 */
-        createdReceiveBatch.push(baseRecord);
         onAddRecord(baseRecord);
       } else {
         /** order 维度发出 → order 维度收回；附 orderId，写回 milestone，与发出对称 */
@@ -1068,15 +1066,10 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           orderId: row.orderId!,
           productId: order.productId,
         };
-        createdReceiveBatch.push(rowRec);
         onAddRecord(rowRec);
       }
     }
     const receiveTotalQty = entries.reduce((s, [, q]) => s + q, 0);
-    setFlowDetailExtraRecords(createdReceiveBatch);
-    setFlowDetailKey(receiveDocNo);
-    setFlowDocPhase('detail');
-    setFlowDetailRevealStandalone(true);
     toast.success('收货已保存', {
       description: `收回单号 ${receiveDocNo}，${entries.length} 条明细，合计 ${receiveTotalQty} 件`,
     });

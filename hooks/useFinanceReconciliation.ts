@@ -19,6 +19,7 @@ import { toLocalDateYmd } from '../utils/localDateTime';
 import { fetchAllPages, type PaginatedLike } from '../utils/fetchAllPages';
 import {
   buildPartnerReconBalances,
+  partnerReconOutsourceReceiveDocType,
   summarizePartnerReconBalances,
   type PartnerReconRow,
 } from '../utils/partnerReconLedger';
@@ -294,7 +295,7 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
       const docType = (v.type === 'SALES_BILL' && v.amount < 0) ? '销售退货' : (psiLabel[v.type] || v.type);
       rows.push({ source: 'psi', docType, docNo, timestamp: v.timestamp, partner: v.partner, amount: v.amount, operator: v.operator, note: v.note });
     });
-    const prodByDoc = new Map<string, { status: string; timestamp: string; partner: string; amount: number; operator?: string; count: number }>();
+    const prodByDoc = new Map<string, { status: string; timestamp: string; partner: string; amount: number; operator?: string; count: number; hasReworkSource: boolean }>();
     effectivePartnerProdRecords.filter(rec => rec.type === 'OUTSOURCE' && rec.status === '已收回' && rec.partner === partnerName).forEach(rec => {
       const d = rec.timestamp ? toLocalDateYmd(rec.timestamp) : '';
       if (from && d < from) return;
@@ -302,11 +303,33 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
       const docKey = rec.docNo || rec.id;
       const cur = prodByDoc.get(docKey);
       const amt = Number(rec.amount) || 0;
-      if (!cur) prodByDoc.set(docKey, { status: rec.status || '', timestamp: rec.timestamp || '', partner: rec.partner || '', amount: amt, operator: rec.operator ?? undefined, count: 1 });
-      else { cur.amount += amt; cur.count += 1; }
+      const rework = !!rec.sourceReworkId;
+      if (!cur) {
+        prodByDoc.set(docKey, {
+          status: rec.status || '',
+          timestamp: rec.timestamp || '',
+          partner: rec.partner || '',
+          amount: amt,
+          operator: rec.operator ?? undefined,
+          count: 1,
+          hasReworkSource: rework,
+        });
+      } else {
+        cur.amount += amt;
+        cur.count += 1;
+        if (rework) cur.hasReworkSource = true;
+      }
     });
     prodByDoc.forEach((v, docNo) => {
-      rows.push({ source: 'psi', docType: '外协收回', docNo, timestamp: v.timestamp, partner: v.partner, amount: v.amount, operator: v.operator });
+      rows.push({
+        source: 'psi',
+        docType: partnerReconOutsourceReceiveDocType(v.hasReworkSource),
+        docNo,
+        timestamp: v.timestamp,
+        partner: v.partner,
+        amount: v.amount,
+        operator: v.operator,
+      });
     });
     const finByDoc = new Map<string, { rec: FinanceRecord; amount: number; count: number }>();
     effectivePartnerFinanceRecords.filter(rec => (rec.type === 'RECEIPT' || rec.type === 'PAYMENT') && rec.partner === partnerName && inFinanceDateRangeQuery(rec.timestamp, from, to)).forEach(rec => {

@@ -20,6 +20,10 @@ import { fmtDT } from '../../utils/formatTime';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { getFinanceRecordFromDetail, isPartnerReconRow, isSettlementReconRow, type DetailTarget } from './financeDetailTypes';
 import { isPurchaseBillDocType } from '../../shared/types';
+import {
+  isPartnerReconOutsourceReceiveDocType,
+  outsourceReceiveRecordMatchesReconDocType,
+} from '../../utils/partnerReconLedger';
 
 interface FinanceDetailModalProps {
   detailRecord: DetailTarget | null;
@@ -83,6 +87,7 @@ function FinanceDetailModal({
    */
   const psiDocLookup = (() => {
     if (!detailRecord || !isPartnerReconRow(detailRecord) || detailRecord.source !== 'psi') return null;
+    if (isPartnerReconOutsourceReceiveDocType(detailRecord.docType)) return null;
     const docType = isPurchaseBillDocType(detailRecord.docType) ? 'PURCHASE_BILL' : 'SALES_BILL';
     return { docNumber: detailRecord.docNo, type: docType };
   })();
@@ -101,9 +106,15 @@ function FinanceDetailModal({
   const psiDocRecords = (psiDocQuery.data as unknown as PsiRecord[] | undefined) ?? [];
 
   const prodDocLookup = (() => {
-    if (!detailRecord || !isPartnerReconRow(detailRecord) || detailRecord.source !== 'prod') return null;
-    const rec = detailRecord.rec;
-    return rec.docNo ? { docNo: rec.docNo } : null;
+    if (!detailRecord || !isPartnerReconRow(detailRecord)) return null;
+    if (detailRecord.source === 'prod') {
+      const rec = detailRecord.rec;
+      return rec.docNo ? { docNo: rec.docNo, docTypeLabel: rec.sourceReworkId ? '返工收回' : '外协收回' } : null;
+    }
+    if (detailRecord.source === 'psi' && isPartnerReconOutsourceReceiveDocType(detailRecord.docType)) {
+      return { docNo: detailRecord.docNo, docTypeLabel: detailRecord.docType };
+    }
+    return null;
   })();
   const prodDocQuery = useQuery({
     queryKey: ['finance-detail', 'prod', prodDocLookup?.docNo],
@@ -243,7 +254,7 @@ function FinanceDetailModal({
               </div>
             );
           })()}
-          {isPartnerReconRow(detailRecord) && detailRecord.source === 'psi' && (() => {
+          {isPartnerReconRow(detailRecord) && detailRecord.source === 'psi' && !isPartnerReconOutsourceReceiveDocType(detailRecord.docType) && (() => {
             const row = detailRecord;
             if (row.source !== 'psi') return null;
             const psiType = isPurchaseBillDocType(row.docType) ? 'PURCHASE_BILL' : 'SALES_BILL';
@@ -339,17 +350,30 @@ function FinanceDetailModal({
               </div>
             );
           })()}
-          {isPartnerReconRow(detailRecord) && detailRecord.source === 'prod' && (() => {
-            const row = detailRecord;
-            if (row.source !== 'prod') return null;
-            const rec = row.rec;
+          {prodDocLookup && (() => {
+            const docNo = prodDocLookup.docNo;
+            const docTypeLabel = prodDocLookup.docTypeLabel;
+            const anchorRec =
+              detailRecord && isPartnerReconRow(detailRecord) && detailRecord.source === 'prod'
+                ? detailRecord.rec
+                : (prodDocRecords as ProductionOpRecord[]).find(
+                    r => outsourceReceiveRecordMatchesReconDocType(r, docTypeLabel) && r.docNo === docNo,
+                  );
+            const rec = anchorRec ?? (prodDocRecords as ProductionOpRecord[])[0];
+            if (!rec) return null;
             const order = orders.find(o => o.id === rec.orderId);
             const product = productMap.get(rec.productId);
             const node = rec.nodeId ? globalNodes.find(n => n.id === rec.nodeId) : null;
             const unitPrice = rec.unitPrice != null && rec.unitPrice !== undefined ? Number(rec.unitPrice) : null;
-            const amount = Number(rec.amount) || 0;
-            const relatedRecs = (prodDocRecords as ProductionOpRecord[]).filter(r =>
-              r.type === 'OUTSOURCE' && r.status === '已收回' && r.docNo === rec.docNo
+            const listAmount =
+              detailRecord && isPartnerReconRow(detailRecord) && detailRecord.source === 'psi'
+                ? detailRecord.amount
+                : (prodDocRecords as ProductionOpRecord[])
+                    .filter(r => outsourceReceiveRecordMatchesReconDocType(r, docTypeLabel) && r.docNo === docNo)
+                    .reduce((s, r) => s + (Number(r.amount) || 0), 0);
+            const amount = listAmount > 0 ? listAmount : Number(rec.amount) || 0;
+            const relatedRecs = (prodDocRecords as ProductionOpRecord[]).filter(
+              r => outsourceReceiveRecordMatchesReconDocType(r, docTypeLabel) && r.docNo === docNo,
             );
             const category = product ? categories.find(c => c.id === product.categoryId) : null;
             const hasColorSize = productHasColorSizeMatrix(product ?? undefined, category ?? undefined);
@@ -359,10 +383,18 @@ function FinanceDetailModal({
             return (
               <div className="space-y-5">
                 <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-                  <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">单据类型</span><p className="text-sm font-bold text-slate-800 mt-0.5">外协收回</p></div>
-                  <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">单据编号</span><p className="text-sm font-bold text-slate-800 mt-0.5">{rec.docNo || rec.id}</p></div>
-                  <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">业务时间</span><p className="text-sm font-bold text-slate-800 mt-0.5">{fmtDT(rec.timestamp)}</p></div>
-                  <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">合作单位</span><p className="text-sm font-bold text-slate-800 mt-0.5">{rec.partner || '-'}</p></div>
+                  <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">单据类型</span><p className="text-sm font-bold text-slate-800 mt-0.5">{docTypeLabel}</p></div>
+                  <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">单据编号</span><p className="text-sm font-bold text-slate-800 mt-0.5">{docNo}</p></div>
+                  <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">业务时间</span><p className="text-sm font-bold text-slate-800 mt-0.5">{fmtDT(
+                    detailRecord && isPartnerReconRow(detailRecord) && detailRecord.source === 'psi'
+                      ? detailRecord.timestamp
+                      : rec.timestamp,
+                  )}</p></div>
+                  <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">合作单位</span><p className="text-sm font-bold text-slate-800 mt-0.5">{
+                    (detailRecord && isPartnerReconRow(detailRecord) && detailRecord.source === 'psi'
+                      ? detailRecord.partner
+                      : rec.partner) || '-'
+                  }</p></div>
                   {order && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">生产订单</span><p className="text-sm font-bold text-slate-800 mt-0.5">{order.orderNumber}</p></div>}
                   {node && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">工序节点</span><p className="text-sm font-bold text-slate-800 mt-0.5">{node.name}</p></div>}
                   {rec.status != null && rec.status !== '' && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">状态</span><p className="text-sm font-bold text-slate-800 mt-0.5">{rec.status}</p></div>}

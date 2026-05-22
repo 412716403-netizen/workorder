@@ -1,7 +1,11 @@
 import { PSI_PURCHASE_BILL_LABEL, isPurchaseBillDocType } from '../shared/types';
 import type { FinanceRecord, Product, ProductionOpRecord, PsiRecord } from '../types';
 import type { PartnerReconRow } from './partnerReconLedger';
-import { computePartnerReconRowDelta } from './partnerReconLedger';
+import {
+  computePartnerReconRowDelta,
+  isPartnerReconOutsourceReceiveDocType,
+  outsourceReceiveRecordMatchesReconDocType,
+} from './partnerReconLedger';
 
 const PSI_LABEL: Record<string, string> = { PURCHASE_BILL: PSI_PURCHASE_BILL_LABEL, SALES_BILL: '销售单' };
 const UNKNOWN_PRODUCT_ID = '__unknown__';
@@ -173,9 +177,9 @@ export function buildPartnerProductLineReconList(input: BuildPartnerProductLineR
 
     if (docRow.source !== 'psi') continue;
 
-    if (docRow.docType === '外协收回') {
+    if (isPartnerReconOutsourceReceiveDocType(docRow.docType)) {
       const lines = prodRecords
-        .filter(r => r.type === 'OUTSOURCE' && r.status === '已收回' && prodPartner(r))
+        .filter(r => prodPartner(r) && outsourceReceiveRecordMatchesReconDocType(r, docRow.docType))
         .filter(r => (r.docNo || r.id) === docRow.docNo)
         .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
       if (lines.length === 0) {
@@ -185,7 +189,7 @@ export function buildPartnerProductLineReconList(input: BuildPartnerProductLineR
           kind: 'line',
           timestamp: docRow.timestamp,
           docNo: docRow.docNo,
-          docType: '外协收回',
+          docType: docRow.docType,
           partner: docRow.partner || partnerName,
           productName: '—',
           quantity: null,
@@ -204,7 +208,7 @@ export function buildPartnerProductLineReconList(input: BuildPartnerProductLineR
             kind: 'line',
             timestamp: rec.timestamp,
             docNo: docRow.docNo,
-            docType: '外协收回',
+            docType: docRow.docType,
             partner: docRow.partner || partnerName,
             productName: resolveProductName(rec.productId, productMap),
             quantity,

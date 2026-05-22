@@ -66,7 +66,8 @@ import * as apiNs from '../services/api';
 import {
   flowRecordsEarliestMs,
   formatPsiDocListTime,
-  psiDocGroupBusinessCreatedMs,
+  psiDocGroupListSortMs,
+  psiDocNumberSeqSuffix,
   recordDocLineTimeMs,
 } from '../utils/flowDocSort';
 import { nextSalesBillDocNumber } from '../utils/partnerDocNumber';
@@ -298,7 +299,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
   const [showPendingShipmentModal, setShowPendingShipmentModal] = useState(false);
   /** 待发货清单 - 详情弹窗：当前选中的分组 */
   const [pendingShipDetailGroup, setPendingShipDetailGroup] = useState<PendingShipmentGroup | null>(null);
-  /** 待发货清单生成销售单后，在销售订单 tab 上叠加销售单详情（该 tab 的 recordsList 不含销售单行，用 records 合并展示） */
+  /** 待发货清单生成销售单后，在销售订单 tab 上叠加销售单详情（query 刷新前用本地行合并展示） */
   const [salesBillRevealFromPending, setSalesBillRevealFromPending] = useState<{ docNumber: string; records: any[] } | null>(null);
 
   const recordsListForSalesBillRevealMerged = useMemo(() => {
@@ -326,7 +327,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
    */
   const { getStock, getStockVariant, getNullVariantProdStock, getStocktakeAdjust, getVariantDisplayQty } = useStockSnapshot();
   const generateSBDocNumberForPartner = (partnerId: string, partnerName: string): string =>
-    nextSalesBillDocNumber(partners, recordsList, partnerId, partnerName);
+    nextSalesBillDocNumber(partners, recordsListForSalesBillRevealMerged, partnerId, partnerName);
   const allPOByGroups = useMemo(
     () => groupRecordsByDocNumber(recordsList, 'PURCHASE_ORDER'),
     [recordsList],
@@ -381,16 +382,13 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
     [recordsList, type],
   );
 
-  /** 单据列表：销售单优先按业务创建日（行 createdAt）倒序，其余按组内制单时间倒序；无有效时间殿后，再按单号 */
+  /** 单据列表：销售单按真实生成时刻倒序（待发货生成含 timestamp/_savedAtMs）；其余按组内制单时间倒序；同刻再按单号流水 */
   const sortedGroupedEntries = useMemo(() => {
     const entries = Object.entries(groupedRecords);
-    const sortKeyMs = (recs: any[]) => {
-      if (type === 'SALES_BILL') {
-        const b = psiDocGroupBusinessCreatedMs(recs);
-        if (b > 0) return b;
-      }
-      return flowRecordsEarliestMs(recs as { timestamp?: string; createdAt?: string; _savedAtMs?: number }[]);
-    };
+    const sortKeyMs = (recs: any[]) =>
+      type === 'SALES_BILL'
+        ? psiDocGroupListSortMs(recs as { timestamp?: string; createdAt?: string; _savedAtMs?: number }[])
+        : flowRecordsEarliestMs(recs as { timestamp?: string; createdAt?: string; _savedAtMs?: number }[]);
     return entries.sort(([docA, recsA], [docB, recsB]) => {
       const ma = sortKeyMs(recsA as any[]);
       const mb = sortKeyMs(recsB as any[]);
@@ -398,6 +396,10 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
       const hb = mb > 0;
       if (ha !== hb) return ha ? -1 : 1;
       if (ha && hb && mb !== ma) return mb - ma;
+      if (type === 'SALES_BILL') {
+        const seqDiff = psiDocNumberSeqSuffix(docB) - psiDocNumberSeqSuffix(docA);
+        if (seqDiff !== 0) return seqDiff;
+      }
       return (docB || '').localeCompare(docA || '');
     });
   }, [groupedRecords, type]);
@@ -753,10 +755,6 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               getUnitName={getUnitName}
               formatQtyDisplay={formatQtyDisplay}
               onBack={closeOrderBillModal}
-              onAfterNewDocSaved={docNumber => {
-                setEditingPODocNumber(docNumber);
-                setPurchaseOrderModalPhase('detail');
-              }}
               onSave={onAddRecord}
               onSaveBatch={onAddRecordBatch}
               onReplaceRecords={onReplaceRecords}
@@ -834,10 +832,6 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               getUnitName={getUnitName}
               formatQtyDisplay={formatQtyDisplay}
               onBack={closeOrderBillModal}
-              onAfterNewDocSaved={docNumber => {
-                setEditingPBDocNumber(docNumber);
-                setPurchaseBillModalPhase('detail');
-              }}
               onSave={onAddRecord}
               onSaveBatch={onAddRecordBatch}
               onReplaceRecords={onReplaceRecords}
@@ -913,10 +907,6 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               getUnitName={getUnitName}
               formatQtyDisplay={formatQtyDisplay}
               onBack={closeOrderBillModal}
-              onAfterNewDocSaved={docNumber => {
-                setEditingSODocNumber(docNumber);
-                setSalesOrderModalPhase('detail');
-              }}
               onSave={onAddRecord}
               onSaveBatch={onAddRecordBatch}
               onReplaceRecords={onReplaceRecords}
@@ -999,10 +989,6 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               getUnitName={getUnitName}
               formatQtyDisplay={formatQtyDisplay}
               onBack={closeOrderBillModal}
-              onAfterNewDocSaved={docNumber => {
-                setEditingSBDocNumber(docNumber);
-                setSalesBillModalPhase('detail');
-              }}
               onSave={onAddRecord}
               onSaveBatch={onAddRecordBatch}
               onReplaceRecords={onReplaceRecords}

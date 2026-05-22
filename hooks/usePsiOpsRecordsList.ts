@@ -46,6 +46,14 @@ export function usePsiOpsRecordsList(type: string, recordsFromContext: unknown[]
     staleTime: 15_000,
   });
 
+  /** 销售订单 tab：待发货生成销售单时需统计已有销售出库单号，避免重复单号合并到同一单据 */
+  const salesBillsForSoQuery = useQuery({
+    queryKey: ['psiOpsRecords', 'SALES_BILL', 'forSalesOrderTab'],
+    queryFn: () => fetchAllPsiPages({ type: 'SALES_BILL' }),
+    enabled: type === 'SALES_ORDER',
+    staleTime: 15_000,
+  });
+
   /**
    * 采购入库 tab 需要同时拥有「采购订单」记录：
    * - 新建采购入库时支持「引用采购订单生成」勾选并整单转化；
@@ -119,6 +127,15 @@ export function usePsiOpsRecordsList(type: string, recordsFromContext: unknown[]
       }
       return recordsFromContext;
     }
+    if (type === 'SALES_ORDER') {
+      if (mainQuery.isSuccess && salesBillsForSoQuery.isSuccess) {
+        const byId = new Map<string, unknown>();
+        for (const r of mainQuery.data ?? []) byId.set((r as { id: string }).id, r);
+        for (const r of salesBillsForSoQuery.data ?? []) byId.set((r as { id: string }).id, r);
+        return [...byId.values()];
+      }
+      return recordsFromContext;
+    }
     if (DOC_TYPES.has(type) && mainQuery.isSuccess) {
       return mainQuery.data ?? [];
     }
@@ -130,6 +147,8 @@ export function usePsiOpsRecordsList(type: string, recordsFromContext: unknown[]
     mainQuery.data,
     purchaseBillsForPoQuery.isSuccess,
     purchaseBillsForPoQuery.data,
+    salesBillsForSoQuery.isSuccess,
+    salesBillsForSoQuery.data,
     purchaseOrdersForPbQuery.isSuccess,
     purchaseOrdersForPbQuery.data,
     whTransfer.isSuccess,

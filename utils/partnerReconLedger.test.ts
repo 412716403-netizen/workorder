@@ -37,6 +37,10 @@ describe('computePartnerReconRowDelta', () => {
     expect(computePartnerReconRowDelta(psi('外协收回', 300))).toEqual({ inc: 0, dec: 300 });
   });
 
+  it('返工收回减少应收', () => {
+    expect(computePartnerReconRowDelta(psi('返工收回', 300))).toEqual({ inc: 0, dec: 300 });
+  });
+
   it('收款单减少应收', () => {
     expect(computePartnerReconRowDelta(fin('RECEIPT', 500))).toEqual({ inc: 0, dec: 500 });
   });

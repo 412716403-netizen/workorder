@@ -48,6 +48,26 @@ export function flowRecordsEarliestMs(
   return m;
 }
 
+/** 新格式进销存单号末尾流水（如 XS-0001-003 → 3），用于同刻排序 */
+export function psiDocNumberSeqSuffix(docNumber: string | null | undefined): number {
+  const m = (docNumber ?? '').trim().match(/-(\d+)$/);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
+/**
+ * 进销存单据列表排序键：优先真实制单/保存时刻（timestamp、_savedAtMs），
+ * 避免仅用日历日 `createdAt` 导致同日多张销售单（如待发货生成）无法按生成先后排序。
+ */
+export function psiDocGroupListSortMs(
+  docLines: { timestamp?: string | null; createdAt?: string | Date | null; _savedAtMs?: number | null }[],
+): number {
+  const flowMs = flowRecordsEarliestMs(docLines);
+  const businessMs = psiDocGroupBusinessCreatedMs(docLines);
+  if (flowMs > 0 && (businessMs <= 0 || flowMs > businessMs)) return flowMs;
+  if (businessMs > 0) return businessMs;
+  return flowMs;
+}
+
 /** 进销存四类单据列表卡片：统一用组内最早可解析时间做展示，避免取首行 timestamp 为不可解析的本地化字符串 */
 export function formatPsiDocListTime(
   docLines: readonly { timestamp?: string | null; createdAt?: string | Date | null; _savedAtMs?: number | null }[],

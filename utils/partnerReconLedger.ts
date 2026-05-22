@@ -2,7 +2,31 @@ import type { FinanceRecord, ProductionOpRecord } from '../types';
 
 import { isPurchaseBillDocType } from '../shared/types';
 
-/** 合作单位对账：统一展示行（采购入库/销售单/外协收回/收款单/付款单） */
+/** 合作单位对账：外协/返工收回单据类型展示名 */
+export const PARTNER_RECON_DOC_OUTSOURCE_RECEIVE = '外协收回' as const;
+export const PARTNER_RECON_DOC_REWORK_RECEIVE = '返工收回' as const;
+
+export function isPartnerReconOutsourceReceiveDocType(docType: string): boolean {
+  return docType === PARTNER_RECON_DOC_OUTSOURCE_RECEIVE || docType === PARTNER_RECON_DOC_REWORK_RECEIVE;
+}
+
+/** 按单据行是否关联返工（sourceReworkId）区分外协收回与返工收回 */
+export function partnerReconOutsourceReceiveDocType(hasReworkSource: boolean): string {
+  return hasReworkSource ? PARTNER_RECON_DOC_REWORK_RECEIVE : PARTNER_RECON_DOC_OUTSOURCE_RECEIVE;
+}
+
+/** 生产外协收回行是否匹配对账单据类型 */
+export function outsourceReceiveRecordMatchesReconDocType(
+  rec: ProductionOpRecord,
+  docType: string,
+): boolean {
+  if (rec.type !== 'OUTSOURCE' || rec.status !== '已收回') return false;
+  if (docType === PARTNER_RECON_DOC_REWORK_RECEIVE) return !!rec.sourceReworkId;
+  if (docType === PARTNER_RECON_DOC_OUTSOURCE_RECEIVE) return !rec.sourceReworkId;
+  return false;
+}
+
+/** 合作单位对账：统一展示行（采购入库/销售单/外协收回/返工收回/收款单/付款单） */
 export type PartnerReconRow =
   | { source: 'finance'; rec: FinanceRecord }
   | { source: 'psi'; docType: string; docNo: string; timestamp: string; partner: string; amount: number; operator?: string; note?: string }
@@ -31,7 +55,7 @@ export function computePartnerReconRowDelta(row: PartnerReconRow): { inc: number
     else if (row.rec.type === 'PAYMENT') inc = row.rec.amount;
   } else if (row.source === 'psi') {
     if (isPurchaseBillDocType(row.docType)) dec = Math.abs(row.amount);
-    else if (row.docType === '外协收回') dec = Math.abs(row.amount);
+    else if (isPartnerReconOutsourceReceiveDocType(row.docType)) dec = Math.abs(row.amount);
     else if (row.docType === '销售单') {
       if (row.amount >= 0) inc = row.amount;
       else dec = Math.abs(row.amount);

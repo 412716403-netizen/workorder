@@ -102,7 +102,7 @@ interface OrderBillFormPageProps {
   getUnitName: (productId: string) => string;
   formatQtyDisplay: (q: number | string | undefined | null) => number;
   onBack: () => void;
-  /** 进销存四单：仅「新建」保存成功后由父层切到详情阶段；不传则仍 onBack 关闭 */
+  /** 进销存四单：仅「新建」保存成功后由父层处理（如切详情）；不传则 onBack 关闭弹窗 */
   onAfterNewDocSaved?: (docNumber: string) => void;
   /** 单条进销存写入（须传一条记录对象，勿传数组） */
   onSave: (record: Partial<PsiRecord>) => void;
