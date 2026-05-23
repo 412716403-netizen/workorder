@@ -856,7 +856,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
             </div>
           </div>
         </div>
-        <div className="shrink-0 border-t border-slate-100 bg-slate-50/30 px-6 py-4">
+        <div className="shrink-0 border-t border-slate-100 bg-slate-50/30 px-6 py-4 flex justify-end">
           <button type="button" onClick={onSubmit} className="flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-bold text-white transition-all hover:bg-indigo-700">
             <Check className="h-4 w-4" /> 确认收货
           </button>
