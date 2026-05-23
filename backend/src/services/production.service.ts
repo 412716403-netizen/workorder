@@ -629,6 +629,35 @@ export async function deleteRecord(db: TenantPrismaClient, id: string) {
   const record = await db.productionOpRecord.findUnique({ where: { id } });
   if (!record) return null;
 
+  /**
+   * REWORK 删除级联：`ReworkDefectiveActionModal.buildPair` 会原子地写入一对
+   * REWORK + OUTSOURCE(sourceReworkId=REWORK.id) 记录（"委外返工派工"），后续
+   * 收回又写入 OUTSOURCE(sourceReworkId=REWORK.id,status='已收回') 记录。
+   *
+   * 旧版只删 REWORK 本体，会留下一批 sourceReworkId 指向已不存在 REWORK 的孤儿
+   * OUTSOURCE 记录：
+   *   - 外协流水弹窗按 `!sourceReworkId` 过滤，看不到
+   *   - 返工详情按 REWORK 父记录分组，找不到入口
+   *   - 但工单删除校验按 orderId count 全部 OUTSOURCE，仍会拦截
+   * 这里把这批子记录也一并删掉，并对 status='已收回' 的子记录走 removeOutsourceProgress
+   * 回滚 milestone / PMP 报工，保持与单条 OUTSOURCE 收回删除的语义一致。
+   */
+  if (record.type === 'REWORK') {
+    const children = await db.productionOpRecord.findMany({
+      where: { type: 'OUTSOURCE', sourceReworkId: record.id },
+    });
+    for (const child of children) {
+      if (child.status === '已收回' && child.docNo) {
+        await removeOutsourceProgress(child);
+      }
+    }
+    if (children.length > 0) {
+      await db.productionOpRecord.deleteMany({
+        where: { type: 'OUTSOURCE', sourceReworkId: record.id },
+      });
+    }
+  }
+
   await db.productionOpRecord.delete({ where: { id } });
 
   if (record.type === 'OUTSOURCE' && record.status === '已收回' && record.docNo) {

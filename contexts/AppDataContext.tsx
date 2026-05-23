@@ -787,16 +787,18 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       }
       const updated = await api.orders.get(orderId);
       setOrders(prev => prev.map(o => o.id === orderId ? norm1(updated) : o));
+      invalidateAllProdRecords();
     } catch (err: any) { toast.error(err.message || '更新报工失败'); }
-  }, []);
+  }, [invalidateAllProdRecords]);
 
   const onDeleteReport = useCallback(async ({ orderId, milestoneId, reportId }: { orderId: string; milestoneId: string; reportId: string }) => {
     try {
       await api.orders.deleteReport(orderId, milestoneId, reportId);
       const updated = await api.orders.get(orderId);
       setOrders(prev => prev.map(o => o.id === orderId ? norm1(updated) : o));
+      invalidateAllProdRecords();
     } catch (err: any) { toast.error(err.message || '删除报工失败'); }
-  }, []);
+  }, [invalidateAllProdRecords]);
 
   const onUpdateReportProduct = useCallback(async ({ progressId, reportId, quantity, defectiveQuantity, timestamp, operator, newMilestoneTemplateId, customData, weight }: { progressId: string; reportId: string; quantity: number; defectiveQuantity?: number; timestamp?: string; operator?: string; newMilestoneTemplateId?: string; customData?: Record<string, unknown>; weight?: number | null }) => {
     try {
@@ -816,13 +818,17 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         await api.orders.updateProductReport(reportId, payload);
       }
       await refreshPMP();
+      invalidateAllProdRecords();
     } catch (err: any) { toast.error(err.message || '更新报工失败'); }
-  }, [productMilestoneProgresses, refreshPMP]);
+  }, [productMilestoneProgresses, refreshPMP, invalidateAllProdRecords]);
 
   const onDeleteReportProduct = useCallback(async ({ progressId, reportId }: { progressId: string; reportId: string }) => {
-    try { await api.orders.deleteProductReport(reportId); await refreshPMP(); }
-    catch (err: any) { toast.error(err.message || '删除报工失败'); }
-  }, [refreshPMP]);
+    try {
+      await api.orders.deleteProductReport(reportId);
+      await refreshPMP();
+      invalidateAllProdRecords();
+    } catch (err: any) { toast.error(err.message || '删除报工失败'); }
+  }, [refreshPMP, invalidateAllProdRecords]);
 
   const onUpdateOrder = useCallback(async (orderId: string, updates: Partial<ProductionOrder>) => {
     try {
