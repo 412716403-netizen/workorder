@@ -32,6 +32,23 @@ export interface ScanBatchSessionModalProps {
   showScanIntentToggle?: boolean;
   /** 与 `showScanIntentToggle` 配合：每次打开弹窗时的默认扫码方式（未传时组件内默认为「批次码」） */
   defaultScanIntent?: ScanIntent;
+  /**
+   * 自定义头部插槽：渲染在标题/hint 与「扫码方式」之间。
+   * 用于挂载业务上下文选择（如外协收货前先选加工厂）。
+   */
+  headerSlot?: React.ReactNode;
+  /**
+   * 为 true 时禁用扫码枪监听 + 手工粘贴回车 + 「确认应用」按钮，
+   * 但弹窗内容、关闭按钮仍可交互。常用于 `headerSlot` 内必填项未满足时阻断扫码。
+   */
+  scanDisabled?: boolean;
+  /** `scanDisabled=true` 时在「列表为空」占位文案位置展示的提示文字（替换默认引导）。 */
+  scanDisabledHint?: string;
+  /**
+   * 弹窗打开期间该值变化时清空已扫列表（如外协收货切换加工厂）。
+   * 首次打开弹窗时不会因此清空（仅 prev !== current 且 prev 已定义时触发）。
+   */
+  sessionResetKey?: string;
 }
 
 type Row = { id: string; payload: ScanPayload; detail: ScanBatchRowDetail };
@@ -67,6 +84,10 @@ export function ScanBatchSessionModal({
   allowManualPaste = true,
   showScanIntentToggle = false,
   defaultScanIntent = 'BATCH',
+  headerSlot,
+  scanDisabled = false,
+  scanDisabledHint,
+  sessionResetKey,
 }: ScanBatchSessionModalProps) {
   const [rows, setRows] = useState<Row[]>([]);
   const [manual, setManual] = useState('');
@@ -111,6 +132,21 @@ export function ScanBatchSessionModal({
     }
   }, [open, showScanIntentToggle, defaultScanIntent, resetSessionDedup]);
 
+  const prevSessionResetKeyRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!open) {
+      prevSessionResetKeyRef.current = sessionResetKey;
+      return;
+    }
+    const prev = prevSessionResetKeyRef.current;
+    prevSessionResetKeyRef.current = sessionResetKey;
+    if (prev !== undefined && prev !== sessionResetKey) {
+      setRows([]);
+      setManual('');
+      resetSessionDedup();
+    }
+  }, [sessionResetKey, open, resetSessionDedup]);
+
   const pushRow = useCallback((payload: ScanPayload, detail: ScanBatchRowDetail) => {
     if (detail.itemCodeId) sessionItemCodeIdsRef.current.add(detail.itemCodeId);
     if (detail.virtualBatchId) {
@@ -125,6 +161,11 @@ export function ScanBatchSessionModal({
 
   const ingestRaw = useCallback(
     (raw: string) => {
+      if (scanDisabled) {
+        if (scanDisabledHint) toast.warning(scanDisabledHint);
+        playScanErrorSound();
+        return;
+      }
       const parsed = parseScanPayload(raw);
       if (parsed.kind === 'UNKNOWN' || !parsed.token) {
         const preview = `${raw.slice(0, 30)}${raw.length > 30 ? '…' : ''}`;
@@ -219,11 +260,11 @@ export function ScanBatchSessionModal({
         })
         .catch(() => {});
     },
-    [pushRow, showScanIntentToggle, scanIntent],
+    [pushRow, showScanIntentToggle, scanIntent, scanDisabled, scanDisabledHint],
   );
 
   useScanGun({
-    active: open,
+    active: open && !scanDisabled,
     onScan: ingestRaw,
   });
 
@@ -314,6 +355,10 @@ export function ScanBatchSessionModal({
           </button>
         </div>
 
+        {headerSlot ? (
+          <div className="shrink-0 border-b border-slate-100 px-4 py-2.5">{headerSlot}</div>
+        ) : null}
+
         {showScanIntentToggle ? (
           <div className="shrink-0 border-b border-slate-100 px-4 py-2.5">
             <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">扫码方式</div>
@@ -356,7 +401,9 @@ export function ScanBatchSessionModal({
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
           {rows.length === 0 ? (
             <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-3 py-8 text-center text-xs text-slate-500">
-              列表为空。请用扫码枪扫入二维码，或在下方粘贴后按回车。
+              {scanDisabled && scanDisabledHint
+                ? scanDisabledHint
+                : '列表为空。请用扫码枪扫入二维码，或在下方粘贴后按回车。'}
             </p>
           ) : (
             <ul className="space-y-2">
@@ -424,8 +471,9 @@ export function ScanBatchSessionModal({
                   setManual('');
                 }
               }}
-              className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
-              placeholder="粘贴后按回车加入列表"
+              disabled={scanDisabled}
+              className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+              placeholder={scanDisabled ? scanDisabledHint || '已禁用' : '粘贴后按回车加入列表'}
               data-scan-gun-passthrough="true"
             />
           </div>
@@ -451,7 +499,7 @@ export function ScanBatchSessionModal({
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={applying || rows.length === 0}
+            disabled={applying || rows.length === 0 || scanDisabled}
             className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black text-white shadow-sm hover:bg-indigo-700 disabled:opacity-40"
           >
             {applying ? '应用中…' : `确认应用（${rows.length} 条）`}

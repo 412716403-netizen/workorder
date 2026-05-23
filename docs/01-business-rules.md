@@ -354,7 +354,30 @@
   - 外协收货：行级 `pending`（已派 − 已收）；**受 `SystemSetting.allowExceedMaxOutsourceReceiveQty` 控制**——开启后所有 pending clamp（手输、矩阵 cell、扫码累加）以及 `OutsourcePanel.handleReceiveFormSubmit` 的提交校验全部跳过，后端 `enforceOutsourceReceiveQuantity` 同步放行。
 - 历史接口 `addScanQtyToStockInForm` 改为「超上限不修改表单」的兜底行为；新代码统一调用 [`tryAddScanQtyToStockInForm`](../utils/pendingStockScanMatch.ts) 与 [`checkExceedMax`](../utils/scanApplyGuards.ts)。
 
-**实现锚点**：后端 [`backend/src/services/scanValidate.service.ts`](../backend/src/services/scanValidate.service.ts) + `POST /api/item-codes/scan/validate-usage`；前端 `itemCodesApi.validateUsage` 经 [`useReportModalState`](../hooks/useReportModalState.ts)、[`usePendingStockState`](../hooks/usePendingStockState.ts)、[`ReworkReportSubmitModal`](../views/production-ops/ReworkReportSubmitModal.tsx)、[`OutsourceReceiveQuantityModal`](../views/production-ops/OutsourceReceiveQuantityModal.tsx) 调用。
+**实现锚点**：后端 [`backend/src/services/scanValidate.service.ts`](../backend/src/services/scanValidate.service.ts) + `POST /api/item-codes/scan/validate-usage`；前端 `itemCodesApi.validateUsage` 经 [`useReportModalState`](../hooks/useReportModalState.ts)、[`usePendingStockState`](../hooks/usePendingStockState.ts)、[`ReworkReportSubmitModal`](../views/production-ops/ReworkReportSubmitModal.tsx)、[`OutsourceReceiveQuantityModal`](../views/production-ops/OutsourceReceiveQuantityModal.tsx) 调用。外协收货扫码（清单弹窗 / 录入弹窗）统一走 [`useOutsourceReceiveScan`](../hooks/useOutsourceReceiveScan.ts) hook。
+
+### 5.4.2 外协收货：清单弹窗扫码 → 自动跳录入弹窗
+
+**入口**：「外协管理 → 待收回清单」弹窗（[`OutsourceReceiveListModal`](../views/production-ops/OutsourceReceiveListModal.tsx)）底部「扫码收货」按钮，与「收货」按钮并列。
+
+**流程**：
+
+1. 弹出扫码会话（[`ScanBatchSessionModal`](../components/scan/ScanBatchSessionModal.tsx)），顶部 `headerSlot` 内嵌**加工厂下拉**（候选项 = 当前待收回清单中出现过的加工厂去重）。未选加工厂前扫码输入框 + 扫码枪监听全部禁用，hint 提示「请先选择加工厂」。
+2. 选定加工厂后开始扫码，**首条命中码自动锁定该工序**（UI 顶部出现「工序已锁定」徽标）；后续扫到不同工序的码 toast「请分批收货」并拒绝。
+3. 点「确认应用」时，由 [`OutsourcePanel.handleReceiveScanConfirm`](../views/production-ops/OutsourcePanel.tsx) 把命中行 baseKey 合并入 `receiveSelectedKeys`、把每条 entry 的 `{ key, qty }` 累加到 `receiveFormQuantities`，关闭清单弹窗、打开「外协收货 · 录入数量」弹窗供用户复核提交。提交链路与「勾选→收货」完全一致（`onAddRecord` → `POST /api/production/records`）。
+4. 用户在清单里已经手动勾选过的行若与扫码命中行的工厂 / 工序不一致 → toast 报错并拒绝合并，要求先清空已勾选项。
+
+**跨工厂 / 未外发 / 已收完判定**（hook 内 `applyScanPayload` 实现）：扫码命中 `pendingRows`（pending>0）失败时按 `allAggregates`（未过滤 pending<=0）分流：
+
+| 情况 | `allowExceedMaxOutsourceReceiveQty=false`（默认） | `=true`（允许超额） |
+|------|--------------------------------------------------|----------------------|
+| 当前加工厂下从未外发过该产品 | toast「此码对应产品未外发给加工厂 X」 | 同左（**特例不放行**） |
+| 当前加工厂下有外发但 `pending<=0`（已全部收回） | toast「此码对应产品在加工厂 X 已全部收回」 | **特例放行**：注入该聚合行 baseKey，按超额累加处理（行级 pending 校验跳过） |
+| 当前加工厂下有外发且 `pending>0` | 走常规累加；超出行级 pending → toast | 走常规累加（不再做 pending clamp） |
+
+即「开启允许超额时，只判断是否给该加工厂外发过；关闭时同时要求 pending>0」。
+
+**实现锚点**：[`OutsourceReceiveListModal.handleScanApply`](../views/production-ops/OutsourceReceiveListModal.tsx) + [`useOutsourceReceiveScan`](../hooks/useOutsourceReceiveScan.ts) + [`OutsourcePanel.handleReceiveScanConfirm`](../views/production-ops/OutsourcePanel.tsx)。录入弹窗内的扫码按钮（[`OutsourceReceiveQuantityModal`](../views/production-ops/OutsourceReceiveQuantityModal.tsx) 顶部「扫码录入」）保留并复用同一 hook，仅在已勾选行范围内累加（不传 `partner` / `isNodeAllowed`，因为 `receiveSelectedKeys` 已经保证同工厂 + 同工序）。
 
 ### 5.5 协作派发：乙方接收与产品分类
 

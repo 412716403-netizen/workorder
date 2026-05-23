@@ -274,6 +274,21 @@
 UI 在「待收回清单」和「收货录入」两处都增加「维度」徽标（工单级 / 产品级），用户可在任一模式下看到并收回所有未完成发出单，避免模式切换造成的"数据黑洞"。  
 "发出维度 = 收回维度"是核心不变量：工单级发出 → 工单级收回写回工单进度；产品级发出 → 产品级收回写回 PMP。
 
+### 15.1 待收回清单扫码收货（先选加工厂 → 自动跳录入）
+
+清单弹窗底部除「收货」外新增「扫码收货」按钮：选定加工厂、扫码命中后自动勾选对应行 + 累加数量 + 跳到「外协收货 · 录入数量」复核提交。这条路径与勾选→收货完全并行，最终提交链路一致。
+
+为此 `OutsourcePanel` 派生**两份**聚合行：
+
+- `outsourceReceiveRows`：过滤 `pending>0`，仍用于清单弹窗表格展示
+- `outsourceReceiveAllAggregates`：**不过滤** `pending<=0`，用于：
+  - 扫码会话「跨工厂 / 已收完」分流判定（详见 [docs/01-business-rules.md §5.4.2](./01-business-rules.md)）
+  - `resolveOutsourceReceiveEntry` 解析（特例放行时注入的 pending=0 行也能被正确解析）
+  - `OutsourceReceiveQuantityModal` 的 `visibleRows` 计算（确保扫码注入的 pending=0 行能被渲染）
+  - `useEffect` 上次单价预填、`handleReceiveFormSubmit` 首行查找
+
+工序锁定由 [`useOutsourceReceiveScan`](../hooks/useOutsourceReceiveScan.ts) hook 的 `isNodeAllowed` 闭包驱动；调用方（列表弹窗）持有 `scanLockedNodeId` state 并按首条命中码自动写入。
+
 详细数据结构与提交链路见 `docs/02-data-structures.md` 与 `docs/06-current-architecture-and-migration-status.md`。
 
 ---

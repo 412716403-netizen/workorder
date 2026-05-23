@@ -95,7 +95,7 @@ export function BusinessFormConfigModal<TSettings extends Record<string, unknown
 
   useEffect(() => {
     if (open && !wasOpenRef.current) {
-      setDraftState(JSON.parse(JSON.stringify(initialValue)) as TSettings);
+      setDraftState(schema.normalize(JSON.parse(JSON.stringify(initialValue))) as TSettings);
       const tabIds = new Set(schema.tabs.map(t => t.id));
       const fallback = schema.tabs[0]?.id ?? '';
       const want = defaultTabId ?? fallback;

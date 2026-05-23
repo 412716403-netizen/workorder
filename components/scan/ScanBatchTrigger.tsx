@@ -21,6 +21,12 @@ export interface ScanBatchTriggerProps {
   showScanIntentToggle?: boolean;
   /** 每次打开弹窗时的默认扫码方式（默认「批次码」） */
   defaultScanIntent?: ScanIntent;
+  /** 透传给 ScanBatchSessionModal 的头部插槽（用于挂业务上下文，如加工厂选择） */
+  modalHeaderSlot?: React.ReactNode;
+  /** 透传：禁用扫码会话内的扫码输入 + 确认按钮（headerSlot 必填项未满足时使用） */
+  modalScanDisabled?: boolean;
+  /** 透传：禁用时替换「列表为空」占位文案 */
+  modalScanDisabledHint?: string;
 }
 
 /**
@@ -39,6 +45,9 @@ export function ScanBatchTrigger({
   allowManualPaste,
   showScanIntentToggle,
   defaultScanIntent,
+  modalHeaderSlot,
+  modalScanDisabled,
+  modalScanDisabledHint,
 }: ScanBatchTriggerProps) {
   const [open, setOpen] = useState(false);
 
@@ -71,6 +80,9 @@ export function ScanBatchTrigger({
         allowManualPaste={allowManualPaste}
         showScanIntentToggle={showScanIntentToggle}
         defaultScanIntent={defaultScanIntent}
+        headerSlot={modalHeaderSlot}
+        scanDisabled={modalScanDisabled}
+        scanDisabledHint={modalScanDisabledHint}
       />
     </>
   );

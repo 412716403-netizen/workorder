@@ -319,6 +319,7 @@ describe('normalizeOutsourceFormSettings', () => {
   it('injects default outsourceCenterPrint without auto template whitelist', () => {
     const n = normalizeOutsourceFormSettings({});
     expect(n.showOutsourceDispatchDeliveryDate).toBe(false);
+    expect(n.showPartnerFlowDetailOnList).toBe(false);
     expect(n.outsourceCenterPrint?.dispatchFlowDetail?.allowedTemplateIds).toBeUndefined();
     expect(n.outsourceCenterPrint?.receiveFlowDetail?.allowedTemplateIds).toBeUndefined();
     expect(n.outsourceCenterPrint?.dispatchFlowDetail?.showPrintButton).toBe(false);
@@ -361,6 +362,24 @@ describe('normalizeOutsourceFormSettings', () => {
       outsourceCenterPrint: { receiveFlowDetail: { allowedTemplateIds: ['recv-custom'] } },
     });
     expect(n.outsourceCenterPrint?.receiveFlowDetail?.allowedTemplateIds).toEqual(['recv-custom']);
+  });
+
+  it('list display toggles default off when keys are missing (new tenant shape)', () => {
+    const n = normalizeOutsourceFormSettings({
+      outsourceDispatchCustomFields: [],
+      outsourceReceiveCustomFields: [],
+    });
+    expect(n.showOutsourceDispatchDeliveryDate).toBe(false);
+    expect(n.showPartnerFlowDetailOnList).toBe(false);
+  });
+
+  it('list display toggles only stay on when explicitly true', () => {
+    const n = normalizeOutsourceFormSettings({
+      showOutsourceDispatchDeliveryDate: true,
+      showPartnerFlowDetailOnList: true,
+    });
+    expect(n.showOutsourceDispatchDeliveryDate).toBe(true);
+    expect(n.showPartnerFlowDetailOnList).toBe(true);
   });
 });
 

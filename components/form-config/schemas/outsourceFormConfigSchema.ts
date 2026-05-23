@@ -11,6 +11,7 @@ export const outsourceFormConfigSchema: FormConfigSchema<OutsourceFormSettings> 
   settingsKey: 'outsourceFormSettings',
   defaultValue: DEFAULT_OUTSOURCE_FORM_SETTINGS,
   normalize: v => normalizeOutsourceFormSettings(v as OutsourceFormSettings | null | undefined),
+  transformOnSave: v => normalizeOutsourceFormSettings(v),
   tabs: [
     {
       id: 'fields',

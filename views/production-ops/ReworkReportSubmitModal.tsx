@@ -203,13 +203,15 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
   const reworkReportProduct = useMemo(() => products.find(p => p.id === order.productId) ?? null, [order, products]);
   const reworkReportCategory = useMemo(() => reworkReportProduct ? categories.find(c => c.id === reworkReportProduct.categoryId) : null, [reworkReportProduct, categories]);
   const reworkReportHasColorSize = productHasColorSizeMatrix(reworkReportProduct ?? undefined, reworkReportCategory ?? undefined);
+  /** 须保留 colorIds/sizeIds，矩阵列/行顺序与商品资料、处理不良/流水详情一致（勿置 undefined，否则会退化为按尺码名 localeCompare） */
   const reworkReportMatrixProduct = useMemo(
     () =>
       reworkReportProduct && reworkReportProduct.variants?.length
-        ? ({ ...reworkReportProduct, colorIds: undefined, sizeIds: undefined } as Product)
+        ? reworkReportProduct
         : null,
     [reworkReportProduct],
   );
+  const reworkReportDisplayName = reworkReportProduct?.name ?? order.productName ?? '—';
 
   /** 仅一条返工路径且无颜色尺码矩阵时，数量与扫码/单价/金额同一行展示 */
   const reworkSingleSimpleQuantityPath = useMemo(() => {
@@ -573,12 +575,17 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
     let batchDocNo = '';
     let reportSeq = 0;
     let appliedReportQty = 0;
+    /** 本次实际写入返工报工的 REWORK 记录 id，用于反查对应的「委外返工发出」OUTSOURCE 单，
+     *  确保最终生成的「委外返工收回」记录带上 sourceReworkId（避免被识别为普通外协收回，
+     *  误入「外协管理」流水）。 */
+    const appliedReworkSourceIds = new Set<string>();
     const resolveOpName = (fallback?: string) => workers?.find((w: Worker) => w.id === reworkReportWorkerId)?.name ?? fallback ?? docOperatorFallback;
     const collabExtra = reworkReportCollabFromValues(reworkReportCustomData);
     const pushReworkReport = (qty: number, variantId: string | undefined, src: ProductionOpRecord) => {
       if (qty <= 0) return;
       if (!batchDocNo) batchDocNo = getNextReworkReportDocNo();
       appliedReportQty += qty;
+      if (src.id) appliedReworkSourceIds.add(String(src.id));
       const ts = new Date().toLocaleString();
       const opName = isOutsourceRework ? '' : resolveOpName();
       const sid = src.id != null ? String(src.id) : 'x';
@@ -741,9 +748,16 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
         return;
       }
       const ts = new Date().toLocaleString();
+      /**
+       * 反查对应的「委外返工发出」OUTSOURCE 单：
+       * 委外返工时 dispatch.nodeId 写的是不良发生的源工序 (sourceNodeId)，
+       * 而本次报工 currentNodeId 是返工目标工序，两者通常不同。
+       * 因此不能用 nodeId 匹配，应通过 sourceReworkId 关联本次实际写入的 REWORK 记录。
+       */
       const firstDispatch = records.find(r =>
-        r.type === 'OUTSOURCE' && r.status === '加工中' && r.sourceReworkId &&
-        r.nodeId === currentNodeId && (r.partner ?? '') === outsourcePartner
+        r.type === 'OUTSOURCE' && r.sourceReworkId &&
+        appliedReworkSourceIds.has(String(r.sourceReworkId)) &&
+        (r.partner ?? '') === outsourcePartner
       );
       onAddRecord({
         id: `wx-recv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -832,13 +846,13 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
               <p className="text-sm text-slate-600">
                 {productionLinkMode === 'product' ? (
                   <>
-                    <span className="font-bold text-slate-800">{order.productName || '—'}</span>
+                    <span className="font-bold text-slate-800">{reworkReportDisplayName}</span>
                   </>
                 ) : (
                   <>
                     <span className="font-bold text-slate-800">{order.orderNumber}</span>
                     <span className="mx-2">·</span>
-                    <span>{order.productName || '—'}</span>
+                    <span>{reworkReportDisplayName}</span>
                   </>
                 )}
                 {isOutsourceRework && (
@@ -955,7 +969,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
                           )}
                           <div className="min-w-0">
                             <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-                              <span className="font-bold text-slate-700">{order.productName || '—'}</span>
+                              <span className="font-bold text-slate-700">{reworkReportDisplayName}</span>
                               {reworkReportProduct?.sku?.trim() ? (
                                 <span className="text-[9px] font-bold uppercase tracking-tight text-slate-300">{reworkReportProduct.sku.trim()}</span>
                               ) : null}

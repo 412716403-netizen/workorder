@@ -1,11 +1,7 @@
-import React, { useMemo, useCallback, useRef } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { ArrowDownToLine, X, Check, Scale, Package, FileText, Layers } from 'lucide-react';
-import { toast } from 'sonner';
 import { ScanBatchTrigger } from '../../components/scan/ScanBatchTrigger';
-import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
-import { rewriteScanApiErrorForIme, type ScanPayload } from '../../utils/scanPayload';
-import type { ScanBatchRowDetail } from '../../utils/scanBatchRowDetail';
-import { scanItemResultToRowDetail, scanVirtualBatchResultToRowDetail } from '../../utils/scanBatchRowDetail';
+import type { ScanPayload } from '../../utils/scanPayload';
 import type {
   ProductionOpRecord,
   ProductionOrder,
@@ -24,8 +20,8 @@ import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { RECEIVE_VARIANT_SEP, outsourceReceiveBaseKey } from './outsourceReceiveKeys';
 import { calcUsageByWeight } from '../../utils/bomMaterialUsageByWeight';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
-import { checkExceedMax } from '../../utils/scanApplyGuards';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
+import { useOutsourceReceiveScan, type ReceiveScanRow } from '../../hooks/useOutsourceReceiveScan';
 import {
   sectionTitleClass,
   psiOrderBillFormCardClass,
@@ -149,13 +145,56 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
 }) => {
   const productsById = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
 
-  const scannedItemRef = useRef<Set<string>>(new Set());
-  const scannedBatchRef = useRef<Set<string>>(new Set());
-
   const visibleRows = useMemo(
     () =>
       outsourceReceiveRows.filter((row) => receiveSelectedKeys.has(outsourceReceiveBaseKey(row))),
     [outsourceReceiveRows, receiveSelectedKeys],
+  );
+
+  /**
+   * 录入弹窗内的扫码按钮：仅在「已勾选行」范围内累加，复用共享 hook。
+   * 与列表弹窗扫码会话不同的是：此处不需要 partner / nodeLock 参数，
+   * 因为 visibleRows 已由 receiveSelectedKeys 保证同工厂同工序（清单弹窗勾选时的约束）。
+   */
+  const scanPendingRows = useMemo<ReceiveScanRow[]>(
+    () =>
+      visibleRows.map((r) => ({
+        orderId: r.orderId,
+        productId: r.productId,
+        nodeId: r.nodeId,
+        partner: r.partner,
+        pending: r.pending,
+        productName: r.productName,
+        milestoneName: r.milestoneName,
+      })),
+    [visibleRows],
+  );
+  const { applyScanPayload, resolveScanRowPreview } = useOutsourceReceiveScan({
+    pendingRows: scanPendingRows,
+    products,
+    categories,
+    allowExceedMaxOutsourceReceiveQty,
+  });
+
+  const handleReceiveScanBatchConfirm = useCallback(
+    async (payloads: ScanPayload[]): Promise<boolean> => {
+      const localSnapshot: Record<string, number> = { ...receiveFormQuantities };
+      for (const payload of payloads) {
+        const res = await applyScanPayload({ payload, currentQuantities: localSnapshot });
+        if (!res) return false;
+        localSnapshot[res.key] = (localSnapshot[res.key] ?? 0) + res.qty;
+      }
+      // 全部解析成功后再统一写入；任一失败已经在 hook 内 toast 并返回 false
+      setReceiveFormQuantities((prev) => {
+        const next = { ...prev };
+        for (const k of Object.keys(localSnapshot)) {
+          next[k] = localSnapshot[k]!;
+        }
+        return next;
+      });
+      return true;
+    },
+    [applyScanPayload, receiveFormQuantities, setReceiveFormQuantities],
   );
 
   const getUnitName = (productId: string | undefined) => {
@@ -195,248 +234,6 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
     const names = [...new Set(visibleRows.map(r => r.milestoneName).filter(n => n && String(n).trim()))];
     return names.length ? names.join('、') : '';
   }, [visibleRows]);
-
-  /**
-   * 外协收货持久化去重：按 (orderId / productId, partner) 命中已存在 OUTSOURCE 已收回记录拒绝。
-   */
-  const validateReceiveScan = useCallback(
-    async (params: {
-      row: ReceiveRow;
-      itemCodeId: string | null;
-      virtualBatchId: string | null;
-    }): Promise<boolean> => {
-      const { row, itemCodeId, virtualBatchId } = params;
-      if (!itemCodeId && !virtualBatchId) return true;
-      try {
-        const res = await itemCodesApi.validateUsage({
-          purpose: 'OUTSOURCE_RECEIVE',
-          scope: {
-            orderId: row.orderId,
-            productId: row.productId,
-            partner: row.partner,
-          },
-          itemCodeId,
-          virtualBatchId,
-        });
-        if (res.code === 'DUPLICATE_SAVED') {
-          toast.error(res.message || '该码已在本单收货，不可重复扫码');
-          return false;
-        }
-        return true;
-      } catch {
-        return true;
-      }
-    },
-    [],
-  );
-
-  const applyReceiveScanPayload = useCallback(
-    async (payload: ScanPayload): Promise<boolean> => {
-      if (!payload.token || visibleRows.length === 0) return false;
-      try {
-        let productId = '';
-        let variantId: string | null = null;
-        let addQty = 0;
-        let tip = '';
-        let scanItemCodeId: string | null = null;
-        let scanVirtualBatchId: string | null = null;
-        if (payload.kind === 'ITEM') {
-          if (scannedItemRef.current.has(payload.token)) {
-            toast.warning('此单品码已扫描过');
-            return false;
-          }
-          const res = await itemCodesApi.scan(payload.token);
-          if (res.kind !== 'ITEM_CODE') return false;
-          if (res.status !== 'ACTIVE') {
-            toast.error(res.message || '单品码不可用');
-            return false;
-          }
-          productId = res.productId ?? '';
-          variantId = res.variantId ?? null;
-          addQty = 1;
-          scanItemCodeId = res.itemCodeId ?? null;
-          scanVirtualBatchId = res.batchId ?? null;
-          tip = `${res.variantLabel || res.productName || ''}${
-            res.ownerTenantName && res.callerContext?.relation !== 'OWNER' ? ` · 来自 ${res.ownerTenantName}` : ''
-          }`;
-        } else if (payload.kind === 'BATCH') {
-          if (scannedBatchRef.current.has(payload.token)) {
-            toast.warning('此批次码已扫描过');
-            return false;
-          }
-          const res = await planVirtualBatchesApi.scan(payload.token);
-          if (res.kind !== 'VIRTUAL_BATCH') return false;
-          if (res.status !== 'ACTIVE') {
-            toast.error(res.message || '批次码不可用');
-            return false;
-          }
-          productId = res.productId ?? '';
-          variantId = res.variantId ?? null;
-          addQty = res.quantity ?? 0;
-          scanVirtualBatchId = res.batchId ?? null;
-          tip = `${res.variantLabel || res.productName || ''}${
-            res.ownerTenantName && res.callerContext?.relation !== 'OWNER' ? ` · 来自 ${res.ownerTenantName}` : ''
-          }`;
-        }
-        if (!productId) {
-          toast.error('扫码结果缺少产品信息');
-          return false;
-        }
-        const row = visibleRows.find((r) => r.productId === productId);
-        if (!row) {
-          toast.error('此码对应产品不在本次收货列表中');
-          return false;
-        }
-        const baseKey = outsourceReceiveBaseKey(row);
-        const product = products.find((p) => p.id === row.productId);
-        const category = categories.find((c) => c.id === product?.categoryId);
-        const hasColorSizeMatrix = productHasColorSizeMatrix(product, category);
-        /** 跨模式全收（方案 A）：以 row.orderId 决定 scope，与当前 productionLinkMode 无关 */
-        const isProductBlockRecv = row.orderId == null;
-
-        let key = baseKey;
-        if (hasColorSizeMatrix && variantId) {
-          key = isProductBlockRecv ? `${baseKey}${RECEIVE_VARIANT_SEP}${variantId}` : `${baseKey}|${variantId}`;
-        } else if (hasColorSizeMatrix && !variantId) {
-          toast.error('当前产品按规格管理，码未带规格');
-          return false;
-        }
-
-        if (
-          !(await validateReceiveScan({
-            row,
-            itemCodeId: scanItemCodeId,
-            virtualBatchId: scanVirtualBatchId,
-          }))
-        )
-          return false;
-
-        const cur = receiveFormQuantities[key] ?? 0;
-        if (!allowExceedMaxOutsourceReceiveQty) {
-          const ck = checkExceedMax(cur, addQty, row.pending);
-          if (ck.exceeds) {
-            toast.error(ck.message ?? '本次扫入数量超过该行外协待收上限');
-            return false;
-          }
-        }
-
-        setReceiveFormQuantities((prev) => ({
-          ...prev,
-          [key]: (prev[key] ?? 0) + addQty,
-        }));
-        if (payload.kind === 'ITEM') scannedItemRef.current.add(payload.token);
-        if (payload.kind === 'BATCH') scannedBatchRef.current.add(payload.token);
-        toast.success(`外协收货 +${addQty}${tip ? ` ${tip}` : ''}`);
-        return true;
-      } catch (e) {
-        toast.error(rewriteScanApiErrorForIme(payload.raw, (e as Error)?.message || '扫码查询失败'));
-        return false;
-      }
-    },
-    [visibleRows, products, categories, setReceiveFormQuantities, receiveFormQuantities, validateReceiveScan, allowExceedMaxOutsourceReceiveQty],
-  );
-
-  const resolveReceiveScanRowPreview = useCallback(
-    async (payload: ScanPayload): Promise<ScanBatchRowDetail | null> => {
-      if (!payload.token || visibleRows.length === 0) return null;
-      try {
-        let productId = '';
-        if (payload.kind === 'ITEM') {
-          if (scannedItemRef.current.has(payload.token)) {
-            toast.warning('此单品码已扫描过');
-            return null;
-          }
-          const res = await itemCodesApi.scan(payload.token);
-          if (res.status !== 'ACTIVE') {
-            toast.error(res.message || '单品码不可用');
-            return null;
-          }
-          productId = res.productId ?? '';
-          if (!productId) {
-            toast.error('扫码结果缺少产品信息');
-            return null;
-          }
-          const row = visibleRows.find((r) => r.productId === productId);
-          if (!row) {
-            toast.error('此码对应产品不在本次收货列表中');
-            return null;
-          }
-          const product = products.find((p) => p.id === row.productId);
-          const category = categories.find((c) => c.id === product?.categoryId);
-          const hasColorSizeMatrix = productHasColorSizeMatrix(product, category);
-          const variantId = res.variantId ?? null;
-          if (hasColorSizeMatrix && !variantId) {
-            toast.error('当前产品按规格管理，码未带规格');
-            return null;
-          }
-          if (res.kind !== 'ITEM_CODE') return null;
-          if (
-            !(await validateReceiveScan({
-              row,
-              itemCodeId: res.itemCodeId ?? null,
-              virtualBatchId: res.batchId ?? null,
-            }))
-          )
-            return null;
-          return scanItemResultToRowDetail(res);
-        }
-        if (payload.kind === 'BATCH') {
-          if (scannedBatchRef.current.has(payload.token)) {
-            toast.warning('此批次码已扫描过');
-            return null;
-          }
-          const res = await planVirtualBatchesApi.scan(payload.token);
-          if (res.kind !== 'VIRTUAL_BATCH') return null;
-          if (res.status !== 'ACTIVE') {
-            toast.error(res.message || '批次码不可用');
-            return null;
-          }
-          productId = res.productId ?? '';
-          if (!productId) {
-            toast.error('扫码结果缺少产品信息');
-            return null;
-          }
-          const row = visibleRows.find((r) => r.productId === productId);
-          if (!row) {
-            toast.error('此码对应产品不在本次收货列表中');
-            return null;
-          }
-          const product = products.find((p) => p.id === row.productId);
-          const category = categories.find((c) => c.id === product?.categoryId);
-          const hasColorSizeMatrix = productHasColorSizeMatrix(product, category);
-          const variantId = res.variantId ?? null;
-          if (hasColorSizeMatrix && !variantId) {
-            toast.error('当前产品按规格管理，码未带规格');
-            return null;
-          }
-          if (
-            !(await validateReceiveScan({
-              row,
-              itemCodeId: null,
-              virtualBatchId: res.batchId ?? null,
-            }))
-          )
-            return null;
-          return scanVirtualBatchResultToRowDetail(res);
-        }
-      } catch (e) {
-        toast.error(rewriteScanApiErrorForIme(payload.raw, (e as Error)?.message || '扫码查询失败'));
-        return null;
-      }
-      return null;
-    },
-    [visibleRows, products, categories, validateReceiveScan],
-  );
-
-  const handleReceiveScanBatchConfirm = useCallback(
-    async (payloads: ScanPayload[]) => {
-      for (const p of payloads) {
-        if (!(await applyReceiveScanPayload(p))) return false;
-      }
-      return true;
-    },
-    [applyReceiveScanPayload],
-  );
 
   const weightEnabledByNodeId = useMemo(() => {
     const m = new Map<string, boolean>();
@@ -529,7 +326,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                     <span className="text-[10px] font-bold uppercase text-slate-400">扫码录入</span>
                     <ScanBatchTrigger
                       onApply={handleReceiveScanBatchConfirm}
-                      resolveRowPreview={resolveReceiveScanRowPreview}
+                      resolveRowPreview={resolveScanRowPreview}
                       hint="扫码收货"
                       modalTitle="外协收货 · 批量扫码"
                       modalHint="请使用扫码枪；请先切换到英文（半角）输入法。扫入的码显示在列表中，确认后一次性累加收货数量。"

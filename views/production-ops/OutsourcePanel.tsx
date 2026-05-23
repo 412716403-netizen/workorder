@@ -528,7 +528,13 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
    * 收回写入仍按发出单原模式分流（`handleReceiveFormSubmit` 内按 `row.orderId == null` 决定），
    * 保持发出/收回对称的核心不变量。
    */
-  const outsourceReceiveRows = useMemo(() => {
+  /**
+   * 待收回聚合行的两个变体：
+   * - `outsourceReceiveAllAggregates`：未过滤 pending<=0。供扫码会话做「跨工厂判定 + 特例放行」、
+   *   以及录入弹窗在「扫码注入了 pending=0 行」的特例下能找到行数据。
+   * - `outsourceReceiveRows`：过滤 pending>0。供清单弹窗表格展示。
+   */
+  const outsourceReceiveAllAggregates = useMemo(() => {
     const outsourceRecords = records.filter(r => r.type === 'OUTSOURCE' && !r.sourceReworkId);
     const byKey: Record<string, { scope: 'order' | 'product'; orderId?: string; productId: string; nodeId: string; partner: string; dispatched: number; received: number }> = {};
 
@@ -555,7 +561,6 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
     const rows: { orderId?: string; nodeId: string; productId: string; orderNumber?: string; productName: string; milestoneName: string; partner: string; dispatched: number; received: number; pending: number }[] = [];
     Object.values(byKey).forEach(v => {
       const pending = v.dispatched - v.received;
-      if (pending <= 0) return;
       if (v.scope === 'order' && v.orderId) {
         const order = idx.ordersById.get(v.orderId);
         if (!order) return;
@@ -615,6 +620,12 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
     });
   }, [records, orders, products, globalNodes, productMilestoneProgresses, idx]);
 
+  /** 清单弹窗显示用：过滤掉 pending<=0；其它派生（行查找、解析 entry）走 allAggregates */
+  const outsourceReceiveRows = useMemo(
+    () => outsourceReceiveAllAggregates.filter(r => r.pending > 0),
+    [outsourceReceiveAllAggregates],
+  );
+
   /**
    * 外协收货模态框打开时，按「合作单位 + 商品 + 工序」查询上次收回单价；
    * 仅对当前为 0/未定义的 baseKey 预填，不覆盖用户已填的非零价。
@@ -626,7 +637,8 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
     setReceiveFormUnitPrices(prev => {
       const next = { ...prev };
       let changed = false;
-      for (const row of outsourceReceiveRows) {
+      // 用 allAggregates 兼容「扫码注入了 pending=0 行」的特例，确保仍能补单价
+      for (const row of outsourceReceiveAllAggregates) {
         const baseKey = outsourceReceiveBaseKey(row);
         if (!receiveSelectedKeys.has(baseKey)) continue;
         const existing = next[baseKey];
@@ -639,7 +651,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       }
       return changed ? next : prev;
     });
-  }, [receiveFormModalOpen, outsourceReceiveRows, receiveSelectedKeys, records]);
+  }, [receiveFormModalOpen, outsourceReceiveAllAggregates, receiveSelectedKeys, records]);
 
   const outsourceStatsByOrder = useMemo(() => {
     const isProductMode = productionLinkMode === 'product';
@@ -919,8 +931,9 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
    * 详细 key 形态见 `outsourceReceiveKeys.ts`。
    */
   const resolveReceiveEntry = (key: string) =>
-    resolveOutsourceReceiveEntry(key, outsourceReceiveRows) as
-      | { row: typeof outsourceReceiveRows[number]; isProductScope: boolean; baseKey: string; variantId?: string }
+    // 解析 key 时用 allAggregates，否则扫码注入的 pending=0 行无法被解析
+    resolveOutsourceReceiveEntry(key, outsourceReceiveAllAggregates) as
+      | { row: typeof outsourceReceiveAllAggregates[number]; isProductScope: boolean; baseKey: string; variantId?: string }
       | null;
 
   const handleReceiveFormSubmit = async () => {
@@ -1004,7 +1017,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
     }
     const timestamp = new Date().toLocaleString();
     const firstKey = receiveSelectedKeys.values().next().value;
-    const firstRow = firstKey ? outsourceReceiveRows.find(r => outsourceReceiveBaseKey(r) === firstKey) : null;
+    const firstRow = firstKey ? outsourceReceiveAllAggregates.find(r => outsourceReceiveBaseKey(r) === firstKey) : null;
     const partnerName = firstRow?.partner ?? '';
     let receiveDocNo: string;
     try {
@@ -1078,6 +1091,31 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
     setReceiveFormWeights({});
     setReceiveFormModalOpen(false);
     setReceiveSelectedKeys(new Set());
+  };
+
+  /**
+   * 待收回清单弹窗内「扫码收货」会话确认后回调：
+   * 合并 receiveSelectedKeys + receiveFormQuantities，关清单弹窗、开录入弹窗，
+   * 后续提交流程与「勾选→收货」完全一致。详细约束见 OutsourceReceiveListModal.handleScanApply。
+   */
+  const handleReceiveScanConfirm: React.ComponentProps<
+    typeof OutsourceReceiveListModal
+  >['onScanConfirm'] = ({ entries }) => {
+    if (!entries.length) return;
+    setReceiveSelectedKeys(prev => {
+      const next = new Set(prev);
+      entries.forEach(e => next.add(e.baseKey));
+      return next;
+    });
+    setReceiveFormQuantities(prev => {
+      const next = { ...prev };
+      entries.forEach(e => {
+        next[e.key] = (next[e.key] ?? 0) + e.qty;
+      });
+      return next;
+    });
+    setOutsourceModal(null);
+    setReceiveFormModalOpen(true);
   };
 
   return (
@@ -1529,11 +1567,16 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
         <OutsourceReceiveListModal
           productionLinkMode={productionLinkMode}
           outsourceReceiveRows={outsourceReceiveRows}
+          outsourceReceiveAllAggregates={outsourceReceiveAllAggregates}
           products={products}
           partners={partners}
+          categories={categories}
+          allowExceedMaxOutsourceReceiveQty={allowExceedMaxOutsourceReceiveQty}
           receiveSelectedKeys={receiveSelectedKeys}
           setReceiveSelectedKeys={setReceiveSelectedKeys}
+          receiveFormQuantities={receiveFormQuantities}
           onReceiveFormOpen={() => setReceiveFormModalOpen(true)}
+          onScanConfirm={handleReceiveScanConfirm}
           onClose={() => setOutsourceModal(null)}
         />
       )}
@@ -1557,7 +1600,8 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
             <OutsourceReceiveQuantityModal
               embedded
               productionLinkMode={productionLinkMode}
-              outsourceReceiveRows={outsourceReceiveRows}
+              // 用 allAggregates 而非过滤集，确保扫码注入的 pending=0 行也能在 visibleRows 中渲染
+              outsourceReceiveRows={outsourceReceiveAllAggregates}
               receiveSelectedKeys={receiveSelectedKeys}
               receiveFormQuantities={receiveFormQuantities}
               setReceiveFormQuantities={setReceiveFormQuantities}
