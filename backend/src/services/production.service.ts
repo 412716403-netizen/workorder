@@ -643,9 +643,14 @@ export async function deleteRecord(db: TenantPrismaClient, id: string) {
 }
 
 export async function getDefectiveRework(db: TenantPrismaClient) {
+  /**
+   * 多租户隔离：Milestone / MilestoneReport 没有 tenantId 字段，由 lib/prisma.ts 的
+   * RELATION_TENANT_PATH 在 getTenantPrisma 上自动注入父级关系过滤。这里只需要确保
+   * 三个查询都走 `db.*`（tenant prisma），不要落到 basePrisma 上。
+   */
   const [milestones, defectiveAgg, reworkRecords] = await Promise.all([
     db.milestone.findMany({ select: { id: true, templateId: true, productionOrderId: true } }),
-    basePrisma.milestoneReport.groupBy({
+    db.milestoneReport.groupBy({
       by: ['milestoneId'],
       _sum: { defectiveQuantity: true },
       having: { defectiveQuantity: { _sum: { gt: 0 } } },

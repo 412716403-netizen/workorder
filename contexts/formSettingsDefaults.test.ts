@@ -243,7 +243,7 @@ describe('normalizeMaterialFormSettings materialCenterPrint', () => {
     expect(n.materialCenterPrint?.stockOutFlowDetail?.showPrintButton).toBe(false);
   });
 
-  it('strips code-merged material builtin ids from whitelists', () => {
+  it('preserves builtin template ids when user explicitly whitelists them', () => {
     const n = normalizeMaterialFormSettings({
       materialCenterPrint: {
         stockOutFlowDetail: { allowedTemplateIds: [BUILTIN_MATERIAL_ISSUE_PRINT_TEMPLATE_ID, 'tenant-a'] },
@@ -256,10 +256,21 @@ describe('normalizeMaterialFormSettings materialCenterPrint', () => {
         },
       },
     });
-    expect(n.materialCenterPrint?.stockOutFlowDetail?.allowedTemplateIds).toEqual(['tenant-a']);
-    expect(n.materialCenterPrint?.stockReturnFlowDetail?.allowedTemplateIds).toBeUndefined();
-    expect(n.materialCenterPrint?.outsourceStockOutFlowDetail?.allowedTemplateIds).toEqual(['tenant-b']);
-    expect(n.materialCenterPrint?.outsourceStockReturnFlowDetail?.allowedTemplateIds).toEqual(['tenant-c']);
+    expect(n.materialCenterPrint?.stockOutFlowDetail?.allowedTemplateIds).toEqual([
+      BUILTIN_MATERIAL_ISSUE_PRINT_TEMPLATE_ID,
+      'tenant-a',
+    ]);
+    expect(n.materialCenterPrint?.stockReturnFlowDetail?.allowedTemplateIds).toEqual([
+      BUILTIN_MATERIAL_RETURN_PRINT_TEMPLATE_ID,
+    ]);
+    expect(n.materialCenterPrint?.outsourceStockOutFlowDetail?.allowedTemplateIds).toEqual([
+      BUILTIN_OUTSOURCE_MATERIAL_ISSUE_PRINT_TEMPLATE_ID,
+      'tenant-b',
+    ]);
+    expect(n.materialCenterPrint?.outsourceStockReturnFlowDetail?.allowedTemplateIds).toEqual([
+      BUILTIN_OUTSOURCE_MATERIAL_RETURN_PRINT_TEMPLATE_ID,
+      'tenant-c',
+    ]);
   });
 
   it('preserves tenant-only whitelist', () => {
@@ -278,7 +289,7 @@ describe('normalizeReworkFormSettings reworkCenterPrint', () => {
     expect(n.reworkCenterPrint?.defectTreatmentFlowDetail?.showPrintButton).toBe(false);
   });
 
-  it('strips code-merged rework builtin ids from whitelists', () => {
+  it('preserves builtin template ids when user explicitly whitelists them', () => {
     const n = normalizeReworkFormSettings({
       reworkCenterPrint: {
         defectTreatmentFlowDetail: {
@@ -287,8 +298,13 @@ describe('normalizeReworkFormSettings reworkCenterPrint', () => {
         reworkReportFlowDetail: { allowedTemplateIds: [BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID] },
       },
     });
-    expect(n.reworkCenterPrint?.defectTreatmentFlowDetail?.allowedTemplateIds).toEqual(['tenant-x']);
-    expect(n.reworkCenterPrint?.reworkReportFlowDetail?.allowedTemplateIds).toBeUndefined();
+    expect(n.reworkCenterPrint?.defectTreatmentFlowDetail?.allowedTemplateIds).toEqual([
+      BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID,
+      'tenant-x',
+    ]);
+    expect(n.reworkCenterPrint?.reworkReportFlowDetail?.allowedTemplateIds).toEqual([
+      BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
+    ]);
   });
 
   it('preserves tenant-only whitelist', () => {

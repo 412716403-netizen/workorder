@@ -22,14 +22,6 @@ import {
   DEFAULT_OUTSOURCE_FORM_SETTINGS,
   DEFAULT_REWORK_FORM_SETTINGS,
 } from '../types';
-import {
-  BUILTIN_MATERIAL_ISSUE_PRINT_TEMPLATE_ID,
-  BUILTIN_MATERIAL_RETURN_PRINT_TEMPLATE_ID,
-  BUILTIN_OUTSOURCE_MATERIAL_ISSUE_PRINT_TEMPLATE_ID,
-  BUILTIN_OUTSOURCE_MATERIAL_RETURN_PRINT_TEMPLATE_ID,
-  BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID,
-  BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
-} from '../shared/systemPrintTemplates';
 import { normalizePlanFormFieldConfigArray } from '../utils/planFormCustomField';
 // ── Decimal normalizer ──
 
@@ -214,39 +206,19 @@ function normalizePlanListSlot(slot: PlanListPrintSettings | undefined): PlanLis
   };
 }
 
-/** 生产物料四类流水详情打印曾默认塞进白名单的内置模版 id；现改为仅由用户在「增加模版」中自行加入 */
-const MATERIAL_FLOW_DETAIL_BUILTIN_WHITELIST_IDS = new Set<string>([
-  BUILTIN_MATERIAL_ISSUE_PRINT_TEMPLATE_ID,
-  BUILTIN_MATERIAL_RETURN_PRINT_TEMPLATE_ID,
-  BUILTIN_OUTSOURCE_MATERIAL_ISSUE_PRINT_TEMPLATE_ID,
-  BUILTIN_OUTSOURCE_MATERIAL_RETURN_PRINT_TEMPLATE_ID,
-]);
-
 function normalizeMaterialCenterPrintDetailSlot(slot: PlanListPrintSettings | undefined): PlanListPrintSettings {
   const normalized = slot ? normalizePlanListSlot(slot) : undefined;
-  const showPrintButton = normalized?.showPrintButton === true;
-  const rawAllowed = normalized?.allowedTemplateIds?.filter(Boolean) ?? [];
-  const allowed = rawAllowed.filter(id => !MATERIAL_FLOW_DETAIL_BUILTIN_WHITELIST_IDS.has(String(id).trim()));
   return {
-    showPrintButton,
-    allowedTemplateIds: allowed.length > 0 ? allowed : undefined,
+    showPrintButton: normalized?.showPrintButton === true,
+    allowedTemplateIds: normalized?.allowedTemplateIds,
   };
 }
 
-/** 返工管理两类流水详情打印曾默认塞进白名单的内置模版 id；现改为仅由用户在「增加模版」中自行加入 */
-const REWORK_FLOW_DETAIL_BUILTIN_WHITELIST_IDS = new Set<string>([
-  BUILTIN_REWORK_DEFECT_TREATMENT_PRINT_TEMPLATE_ID,
-  BUILTIN_REWORK_REPORT_FLOW_PRINT_TEMPLATE_ID,
-]);
-
 function normalizeReworkCenterPrintDetailSlot(slot: PlanListPrintSettings | undefined): PlanListPrintSettings {
   const normalized = slot ? normalizePlanListSlot(slot) : undefined;
-  const showPrintButton = normalized?.showPrintButton === true;
-  const rawAllowed = normalized?.allowedTemplateIds?.filter(Boolean) ?? [];
-  const allowed = rawAllowed.filter(id => !REWORK_FLOW_DETAIL_BUILTIN_WHITELIST_IDS.has(String(id).trim()));
   return {
-    showPrintButton,
-    allowedTemplateIds: allowed.length > 0 ? allowed : undefined,
+    showPrintButton: normalized?.showPrintButton === true,
+    allowedTemplateIds: normalized?.allowedTemplateIds,
   };
 }
 

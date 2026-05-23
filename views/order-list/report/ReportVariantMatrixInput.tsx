@@ -18,6 +18,10 @@ import { buildVariantQtyMatrixLayout } from '../../../utils/variantQtyMatrix';
 import QtyMatrixTable, { type QtyMatrixTableRow } from '../../../components/variant-matrix/QtyMatrixTable';
 import { variantMaxGoodProductMode } from '../../../utils/productReportAggregates';
 import { reworkMergeBucketOrderId } from '../../../utils/reworkMergeBucketOrderId';
+import {
+  VARIANT_QTY_MATRIX_CONTAINER_ATTR,
+  handleVariantQtyMatrixKeyDown,
+} from '../../../utils/matrixKeyboardNav';
 import type { ScanBatchRowDetail } from '../../../utils/scanBatchRowDetail';
 import type { ScanPayload } from '../../../utils/scanPayload';
 import type { ReportFormState, ReportModalData } from '../../../hooks/useReportModalState';
@@ -112,7 +116,7 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
     variantRemainingBaseMap.set(variant.id, Math.max(0, base + reworkForVariant - outsourcedForVariant));
   }
 
-  const renderVariantCellMatrix = (variant: ProductVariant) => {
+  const renderVariantCellMatrix = (variant: ProductVariant, rowIndex: number, colIndex: number) => {
     const qty = reportForm.variantQuantities?.[variant.id] ?? 0;
     const remaining = Math.max(0, variantRemainingBaseMap.get(variant.id) ?? 0);
     const currentCellQty = reportForm.variantQuantities?.[variant.id] ?? 0;
@@ -125,6 +129,9 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
             type="number"
             min={0}
             value={qty === 0 ? '' : qty}
+            data-matrix-row={rowIndex}
+            data-matrix-col={colIndex}
+            onKeyDown={handleVariantQtyMatrixKeyDown}
             onChange={e => {
               const raw = parseInt(e.target.value) || 0;
               const next = allowExceedMaxReportQty ? raw : Math.min(raw, maxAllowed);
@@ -155,12 +162,12 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
 
   const layout = buildVariantQtyMatrixLayout(product, dictionaries);
   if (!layout) return null;
-  const rows: QtyMatrixTableRow[] = layout.colorRows.map(row => {
+  const rows: QtyMatrixTableRow[] = layout.colorRows.map((row, rowIndex) => {
     let rowSum = 0;
     const cells = row.variantAtSize.map((variant, si) => {
       if (!variant) return <span key={`${row.key}-e-${si}`} className="text-sm text-slate-300">—</span>;
       rowSum += reportForm.variantQuantities?.[variant.id] ?? 0;
-      return renderVariantCellMatrix(variant);
+      return renderVariantCellMatrix(variant, rowIndex, si);
     });
     return {
       key: row.key,
@@ -192,7 +199,7 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
           <span className="text-xs sm:text-sm font-bold text-indigo-600 tabular-nums">合计 {matrixTotalQty} 件</span>
         </div>
       </div>
-      <div className="rounded-xl bg-slate-50/50 p-2 sm:p-2.5 ring-1 ring-slate-100/80">
+      <div className="rounded-xl bg-slate-50/50 p-2 sm:p-2.5 ring-1 ring-slate-100/80" {...{ [VARIANT_QTY_MATRIX_CONTAINER_ATTR]: '' }}>
         <QtyMatrixTable sizeHeaders={layout.sizeColumns.map(c => c.header)} rows={rows} dense />
       </div>
     </div>

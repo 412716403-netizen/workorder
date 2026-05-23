@@ -9,6 +9,7 @@ import type {
 } from '../../types';
 import type { PlanPrintTemplateManageScope } from '../../types';
 import type { CustomFieldEditorColumn } from './CustomFieldsEditorTable';
+import { getByPath, setByPath } from './formConfigPath';
 
 /**
  * 9 个业务 FormConfig Modal 经过抽象后，差异可以压缩成一份「schema 对象」。
@@ -199,6 +200,19 @@ export function writeListPrintSlot(
   const prev = readListPrintSlot(ctx, path) ?? {};
   const next = { ...prev, ...patch };
   ctx.set(path, next);
+}
+
+/** 不可变地把 templateId 合并进 draft[path] 的白名单（供 setState 函数式更新使用，避免 stale closure） */
+export function mergeAllowedTemplateIdInDraft<T extends Record<string, unknown>>(
+  draft: T,
+  path: string,
+  templateId: string,
+): T {
+  const prev = getByPath(draft, path) as PlanListPrintSettings | undefined;
+  const prevIds = prev?.allowedTemplateIds;
+  const allowedTemplateIds = prevIds?.length ? Array.from(new Set([...prevIds, templateId])) : [templateId];
+  const next = { ...(prev ?? {}), allowedTemplateIds };
+  return setByPath(draft, path, next) as T;
 }
 
 /** 合并 PlanPrintTemplateManageDialog 新增的 templateId 到白名单 */

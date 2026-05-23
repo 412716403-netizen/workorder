@@ -16,7 +16,7 @@ import {
   type FormConfigSection,
   type FormConfigSlotContext,
   type FormConfigPrintWhitelistSection,
-  mergeAllowedTemplateId,
+  mergeAllowedTemplateIdInDraft,
 } from './formConfigSchema';
 
 export interface BusinessFormConfigModalProps<TSettings extends Record<string, unknown>>
@@ -261,7 +261,9 @@ export function BusinessFormConfigModal<TSettings extends Record<string, unknown
           // （通过内置的 allowedTemplateIdsForScope），这里直接把 draft 原值传入即可。
           planFormSettings={draft as never}
           onMergePrintWhitelist={id => {
-            mergeAllowedTemplateId(buildCtx(draft), activePrintSection.path, id);
+            setDraftState(d =>
+              d && activePrintSection ? mergeAllowedTemplateIdInDraft(d, activePrintSection.path, id) : d,
+            );
           }}
           onRefreshPrintTemplates={onRefreshPrintTemplates}
           plans={plans}

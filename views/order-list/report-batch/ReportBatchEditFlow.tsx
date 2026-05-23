@@ -31,6 +31,10 @@ import {
 import ReportCustomFieldsEditor from '../../../components/ReportCustomFieldsEditor';
 import { getProductCategoryCustomFieldEntries } from '../../../utils/reportCustomDocField';
 import QtyMatrixTable, { type QtyMatrixTableRow } from '../../../components/variant-matrix/QtyMatrixTable';
+import {
+  VARIANT_QTY_MATRIX_CONTAINER_ATTR,
+  handleVariantQtyMatrixKeyDown,
+} from '../../../utils/matrixKeyboardNav';
 import { Package } from 'lucide-react';
 import type { EditingReportState, ReportDetailBatch } from '../../../hooks/useReportBatchDetail';
 import type { BatchDetailMatrix } from './ReportBatchItemsTable';
@@ -340,7 +344,7 @@ const MatrixEditTable: React.FC<MatrixEditTableProps> = ({
   const matrixColSpan = 4 + (editNodeUsesWeight ? 1 : 0);
   const isOrderBatch = reportDetailBatch.source === 'order';
 
-  const rows: QtyMatrixTableRow[] = layout.colorRows.map(row => {
+  const rows: QtyMatrixTableRow[] = layout.colorRows.map((row, rowIndex) => {
     let rowSum = 0;
     const cells = row.variantAtSize.map((variant: ProductVariant | null, si: number) => {
       if (!variant) return <span key={`${row.key}-e-${si}`} className="text-sm text-slate-300">—</span>;
@@ -358,6 +362,9 @@ const MatrixEditTable: React.FC<MatrixEditTableProps> = ({
               max={isOrderBatch && maxBatchGood >= 0 ? maxThisRow : undefined}
               title={isOrderBatch && maxBatchGood >= 0 ? `本批良品合计最多 ${maxBatchGood} 件` : undefined}
               value={rowEdit.quantity}
+              data-matrix-row={rowIndex}
+              data-matrix-col={si}
+              onKeyDown={handleVariantQtyMatrixKeyDown}
               onChange={e => {
                 const raw = parseInt(e.target.value, 10) || 0;
                 const v = isOrderBatch && maxBatchGood >= 0 ? Math.min(raw, maxThisRow) : raw;
@@ -539,7 +546,7 @@ const MatrixEditTable: React.FC<MatrixEditTableProps> = ({
               ) : null}
             </tr>
             <tr className="bg-slate-50/70">
-              <td colSpan={matrixColSpan} className="border-t border-slate-100 px-3 pb-3 pt-2 align-top">
+              <td colSpan={matrixColSpan} className="border-t border-slate-100 px-3 pb-3 pt-2 align-top" {...{ [VARIANT_QTY_MATRIX_CONTAINER_ATTR]: '' }}>
                 <QtyMatrixTable sizeHeaders={layout.sizeColumns.map(c => c.header)} rows={rows} dense />
               </td>
             </tr>

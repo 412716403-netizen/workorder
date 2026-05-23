@@ -175,6 +175,8 @@ export async function listReportHistory(
     if (!Number.isNaN(d.getTime())) range.lt = d;
   }
 
+  // 多租户隔离由 getTenantPrisma 通过 RELATION_TENANT_PATH 自动注入到 milestoneReport
+  // / productProgressReport，这里不再手工带 tenant 过滤。
   const orderWhere: Record<string, unknown> = {};
   if (range.gte || range.lt) orderWhere.timestamp = range;
   if (opts.orderIds && opts.orderIds.length > 0) {

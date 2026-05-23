@@ -4,6 +4,10 @@ import { buildVariantQtyMatrixLayout } from '../../utils/variantQtyMatrix';
 import QtyMatrixTable from './QtyMatrixTable';
 import { VariantQtyMatrixHint } from './VariantQtyMatrixHint';
 import { psiOrderBillCompactLineInputClass } from '../../styles/uiDensity';
+import {
+  VARIANT_QTY_MATRIX_CONTAINER_ATTR,
+  handleVariantQtyMatrixKeyDown,
+} from '../../utils/matrixKeyboardNav';
 
 export type VariantQtyMatrixCellExtras = {
   max?: number;
@@ -26,6 +30,8 @@ export type VariantQtyMatrixInputsProps = {
   /** 与 {@link QtyMatrixTable} 的 balancedNumericLayout 一致：通栏、尺码列居中、行斑马纹 */
   balancedNumericLayout?: boolean;
   inputClassName?: string;
+  /** 启用方向键在矩阵格间切换焦点（Excel 风格）；默认可编辑矩阵开启，readOnly 时自动关闭 */
+  arrowKeyNav?: boolean;
 };
 
 const defaultInputClass = `${psiOrderBillCompactLineInputClass} w-[3.25rem] shrink-0 text-left shadow-sm focus:ring-indigo-200`;
@@ -41,11 +47,14 @@ const VariantQtyMatrixInputs: React.FC<VariantQtyMatrixInputsProps> = ({
   compactSizeColumns,
   balancedNumericLayout = false,
   inputClassName = defaultInputClass,
+  arrowKeyNav = true,
 }) => {
   const layout = useMemo(() => buildVariantQtyMatrixLayout(product, dictionaries), [product, dictionaries]);
   if (!layout) return null;
 
-  const rows = layout.colorRows.map(row => {
+  const navActive = arrowKeyNav && !readOnly;
+
+  const rows = layout.colorRows.map((row, rowIndex) => {
     let sum = 0;
     const cells = row.variantAtSize.map((v, ci) => {
       if (!v) {
@@ -88,6 +97,13 @@ const VariantQtyMatrixInputs: React.FC<VariantQtyMatrixInputsProps> = ({
               disabled={extras?.disabled}
               value={q === 0 ? '' : q}
               placeholder={extras?.placeholder ?? '0'}
+              {...(navActive
+                ? {
+                    'data-matrix-row': rowIndex,
+                    'data-matrix-col': ci,
+                    onKeyDown: handleVariantQtyMatrixKeyDown,
+                  }
+                : {})}
               onChange={e => {
                 const raw = parseInt(e.target.value, 10) || 0;
                 const cap = extras?.max;
@@ -123,7 +139,7 @@ const VariantQtyMatrixInputs: React.FC<VariantQtyMatrixInputsProps> = ({
     };
   });
 
-  return (
+  const table = (
     <QtyMatrixTable
       sizeHeaders={layout.sizeColumns.map(c => c.header)}
       rows={rows}
@@ -131,6 +147,10 @@ const VariantQtyMatrixInputs: React.FC<VariantQtyMatrixInputsProps> = ({
       balancedNumericLayout={balancedNumericLayout}
     />
   );
+
+  if (!navActive) return table;
+
+  return <div {...{ [VARIANT_QTY_MATRIX_CONTAINER_ATTR]: '' }}>{table}</div>;
 };
 
 export default React.memo(VariantQtyMatrixInputs);
