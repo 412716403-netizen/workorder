@@ -130,6 +130,18 @@ function tenantCacheKey(userId: string, tenantId?: string): string {
   return `cache:auth:tenant-payload:${userId}:${tenantId ?? '_'}`;
 }
 
+/**
+ * 给 `requirePermission` / `requireSubPermission` 用：根据 userId+tenantId
+ * 拿当前生效的权限数组。命中 5s Redis 缓存就走缓存，否则查 DB。
+ *
+ * 调用方应先用 `isTenantElevatedRole(tenantRole)` 走快路径，
+ * 只有非 owner/admin 才需要调本函数。
+ */
+export async function loadEffectivePermissions(userId: string, tenantId: string): Promise<string[]> {
+  const payload = await buildTenantPayload(userId, tenantId);
+  return payload.permissions ?? [];
+}
+
 async function buildTenantPayload(userId: string, tenantId?: string): Promise<TenantPayloadResult> {
   const cacheKey = tenantCacheKey(userId, tenantId);
   if (getRedis()) {
@@ -248,6 +260,7 @@ export async function registerByPhone(phone: string, password: string, displayNa
     },
     isEnterprise: false,
     tenants: [],
+    permissions: [] as string[],
     ...tokens,
   };
 }
@@ -277,7 +290,6 @@ export async function login(username: string, password: string) {
     isEnterprise: user.isEnterprise,
     tenantId: tenantInfo.tenantId,
     tenantRole: tenantInfo.tenantRole,
-    permissions: tenantInfo.permissions,
   };
   const tokens = generateTokens(payload);
 
@@ -300,6 +312,7 @@ export async function login(username: string, password: string) {
     isEnterprise: user.isEnterprise,
     tenants: tenantInfo.tenants,
     tenantId: tenantInfo.tenantId ?? null,
+    permissions: tenantInfo.permissions ?? [],
     ...tokens,
   };
 }
@@ -328,7 +341,6 @@ export async function selectTenant(userId: string, tenantId: string) {
     isEnterprise: user.isEnterprise,
     tenantId: membership.tenantId,
     tenantRole: membership.role,
-    permissions,
   };
 
   const deletedCount = await prisma.refreshToken.deleteMany({ where: { userId } });
@@ -373,6 +385,8 @@ export async function refresh(oldRefreshToken: string) {
     await assertTenantActive(decoded.tenantId);
   }
 
+  // 仍然刷一下 tenantRole（owner/admin → member 这种降级，旧 access token 内
+  // 的 tenantRole 必须随刷新失效）。permissions 不再放 JWT，无需在此加载。
   const tenantInfo = decoded.tenantId
     ? await buildTenantPayload(user.id, decoded.tenantId)
     : await buildTenantPayload(user.id);
@@ -385,7 +399,6 @@ export async function refresh(oldRefreshToken: string) {
     isEnterprise: user.isEnterprise,
     tenantId: tenantInfo.tenantId,
     tenantRole: tenantInfo.tenantRole,
-    permissions: tenantInfo.permissions,
   };
 
   // Only issue a new access token; keep the same refresh token to avoid
@@ -517,7 +530,6 @@ export async function updateProfile(
       isEnterprise: updated.isEnterprise,
       tenantId: tenantInfo.tenantId,
       tenantRole: tenantInfo.tenantRole,
-      permissions: tenantInfo.permissions,
     };
     const tokens = generateTokens(payload);
     await prisma.refreshToken.create({
@@ -695,7 +707,6 @@ export async function phoneChangeComplete(
     isEnterprise: updated.isEnterprise,
     tenantId: tenantInfo.tenantId,
     tenantRole: tenantInfo.tenantRole,
-    permissions: tenantInfo.permissions,
   };
   const tokens = generateTokens(payload);
   await prisma.refreshToken.create({

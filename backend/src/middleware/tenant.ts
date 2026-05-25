@@ -1,5 +1,6 @@
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import { hasSubPermission, isTenantElevatedRole } from '../types/index.js';
+import { loadEffectivePermissions } from '../services/auth.service.js';
 
 /**
  * 权限中间件分层（约定）：
@@ -13,6 +14,13 @@ import { hasSubPermission, isTenantElevatedRole } from '../types/index.js';
  *
  * 3. 渐进迁移：计划单、单品码、虚拟批次相关路由已改为仅依赖 `requireSubPermission`（`app.ts` 不再对这三条 path 叠 `requirePermission`）。
  *    工单 / 生产报工 / 进销存 / 财务 等路由仍使用入口级 `requirePermission` + 前端细粒度控制；后续可按资源域拆到各 `routes/*.ts`。
+ *
+ * 实现说明（2026-05 重构）：
+ * - JWT 不再携带 `permissions`（owner/admin 全权时 ALL_PERMISSIONS 上百条会撑爆 nginx
+ *   `proxy_buffer_size`，导致 502 "upstream sent too big header"）。
+ * - owner/admin 走 `isTenantElevatedRole` 快路径，零 IO 直接放行。
+ * - 其他角色按需调 `loadEffectivePermissions(userId, tenantId)`，命中 Redis 5s
+ *   缓存（`buildTenantPayload`）时不查 DB；缓存失效后查一次 DB 再缓存。
  */
 
 export function requireTenant(req: Request, res: Response, next: NextFunction) {
@@ -24,14 +32,29 @@ export function requireTenant(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-export function requirePermission(module: string) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const { tenantRole, permissions } = req.user || {};
-    if (isTenantElevatedRole(tenantRole)) return next();
-    if (permissions?.includes(module) || permissions?.some(p => p.startsWith(`${module}:`))) {
-      return next();
+async function resolvePermissions(req: Request): Promise<string[]> {
+  const userId = req.user?.userId;
+  const tenantId = req.user?.tenantId;
+  if (!userId || !tenantId) return [];
+  return loadEffectivePermissions(userId, tenantId);
+}
+
+export function requirePermission(module: string): RequestHandler {
+  return (req, res, next) => {
+    const { tenantRole } = req.user || {};
+    if (isTenantElevatedRole(tenantRole)) {
+      next();
+      return;
     }
-    res.status(403).json({ error: '无权访问该功能模块' });
+    resolvePermissions(req)
+      .then(perms => {
+        if (perms.includes(module) || perms.some(p => p.startsWith(`${module}:`))) {
+          next();
+          return;
+        }
+        res.status(403).json({ error: '无权访问该功能模块' });
+      })
+      .catch(next);
   };
 }
 
@@ -41,27 +64,29 @@ export function requirePermission(module: string) {
  * they are treated as having all sub-permissions under that module.
  * For create/edit/delete actions, the corresponding 'view' permission is also required.
  */
-export function requireSubPermission(required: string) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const { tenantRole, permissions } = req.user || {};
-    if (isTenantElevatedRole(tenantRole)) return next();
+export function requireSubPermission(required: string): RequestHandler {
+  const parts = required.split(':');
+  const action = parts[2];
+  const viewPerm = action && action !== 'view' ? `${parts[0]}:${parts[1]}:view` : null;
 
-    const userPerms = permissions || [];
-
-    const parts = required.split(':');
-    const action = parts[2];
-    if (action && action !== 'view') {
-      const viewPerm = `${parts[0]}:${parts[1]}:view`;
-      if (!hasSubPermission(userPerms, viewPerm)) {
-        res.status(403).json({ error: '无权访问该功能模块' });
-        return;
-      }
-    }
-
-    if (!hasSubPermission(userPerms, required)) {
-      res.status(403).json({ error: '无权执行该操作' });
+  return (req, res, next) => {
+    const { tenantRole } = req.user || {};
+    if (isTenantElevatedRole(tenantRole)) {
+      next();
       return;
     }
-    next();
+    resolvePermissions(req)
+      .then(userPerms => {
+        if (viewPerm && !hasSubPermission(userPerms, viewPerm)) {
+          res.status(403).json({ error: '无权访问该功能模块' });
+          return;
+        }
+        if (!hasSubPermission(userPerms, required)) {
+          res.status(403).json({ error: '无权执行该操作' });
+          return;
+        }
+        next();
+      })
+      .catch(next);
   };
 }

@@ -42,6 +42,20 @@ export {
   type ProductionOpCollabData,
 } from '../../../shared/types.js';
 
+/**
+ * JWT payload 只承载身份与少量上下文。
+ *
+ * 重要：`permissions` 不再放入 JWT。owner/admin 之外的细粒度权限在请求时
+ * 由 `requirePermission` / `requireSubPermission` 通过 `auth.service` 的
+ * `loadEffectivePermissions(userId, tenantId)` 按需加载（Redis 5s 缓存）。
+ *
+ * 历史背景：早期把 ALL_PERMISSIONS（数百条）塞 JWT，导致 owner/admin 登录后
+ * Set-Cookie 头超过 nginx 默认 `proxy_buffer_size`（8K），nginx 报
+ * "upstream sent too big header" 直接 502。
+ *
+ * `tenantRole` 保留：owner/admin 走 `isTenantElevatedRole` 快路径，
+ * 完全不必触发权限加载。
+ */
 export interface JwtPayload {
   userId: string;
   username: string;
@@ -50,7 +64,6 @@ export interface JwtPayload {
   isEnterprise: boolean;
   tenantId?: string;
   tenantRole?: string;
-  permissions?: string[];
 }
 
 export const ALL_PERMISSIONS = [
