@@ -236,11 +236,12 @@
 
 | 状态 | 中文 | 判定 |
 |------|------|------|
-| `NOT_DISPATCHED` | 未下单 | 该计划无直接关联工单 |
-| `IN_PROGRESS`    | 未完成 | 有工单但未全部完成 |
+| `NOT_DISPATCHED` | 未下单 | 该计划**未下达**（`status !== CONVERTED`）且无直接关联工单 |
+| `IN_PROGRESS`    | 未完成 | 有工单但未全部完成；**或**计划已下达（`status === CONVERTED`）但当前查不到关联工单 |
 | `COMPLETED`      | 已完成 | 所有 `planOrderId = plan.id` 工单 `dispatchStatus === COMPLETED` |
 
 - 由后端 `plans.service.listPlans` / `getPlan` 注入；前端不再二次算。
+- **已下达兜底**：只要 `status === CONVERTED`（确实点过「下达工单」），即使关联工单被删除 / 历史数据 `planOrderId` 未关联 / 经委外等非下达途径产生，也**不会回退成「未下单」**，而按「未完成」展示，避免「明明下了单却显示未下单」。
 - **父子计划独立**：父和子计划各自是独立的 `PlanOrder` 行，徽章互不影响。
 - **多工单的计划**（如「补充下达子工单」）：所有工单都 COMPLETED 才算计划完成；任何一张退回，计划单也回到 IN_PROGRESS。
 

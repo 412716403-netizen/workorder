@@ -34,7 +34,7 @@ export interface OutsourcePartnerFlowDetailModalProps {
   outsourceFormSettings?: OutsourceFormSettings;
 }
 
-type DetailDocTypeFilter = 'all' | 'dispatch' | 'receive' | 'mixed';
+type DetailDocTypeFilter = 'all' | 'dispatch' | 'receive';
 
 function startOfLocalDayMs(ymd: string): number {
   const p = ymd.trim().split('-').map(Number);
@@ -73,7 +73,6 @@ function rowMatchesDetailFilters(
   const lab = row.typeLabel;
   if (docType === 'dispatch') return lab === '外协发出';
   if (docType === 'receive') return lab === '外协收回';
-  if (docType === 'mixed') return lab === '发出、收回';
   return true;
 }
 
@@ -231,7 +230,6 @@ const OutsourcePartnerFlowDetailModal: React.FC<OutsourcePartnerFlowDetailModalP
                 <option value="all">全部</option>
                 <option value="dispatch">外协发出</option>
                 <option value="receive">外协收回</option>
-                <option value="mixed">发出与收回（同单）</option>
               </select>
             </div>
             <button

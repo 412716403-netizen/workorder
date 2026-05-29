@@ -6,7 +6,7 @@ import { getNextPlanNumber } from '../utils/docNumber.js';
 import { genId } from '../utils/genId.js';
 import { sanitizeCreate, sanitizeUpdate, sanitizeItems, normalizeDates } from '../utils/request.js';
 import { deleteItemCodesAndVirtualBatchesForPlan } from './itemCodes.service.js';
-import { PlanDispatchStatus } from '../types/index.js';
+import { PlanDispatchStatus, PlanStatus } from '../types/index.js';
 
 type PlanWithItems = PlanOrder & { items: PlanItem[] };
 
@@ -35,23 +35,32 @@ async function getAllDescendantPlans(planId: string, tenantId: string, depth = 0
  * 后端无论模式都会在 listPlans/getPlan 返回中附带 `derivedStatus`，避免切换模式数据丢失。
  *
  * 规则：基于该计划下直接关联工单 `productionOrders WHERE planOrderId = plan.id` 的 `dispatchStatus` 聚合：
- * - 无工单 → `NOT_DISPATCHED`
  * - 全部 `COMPLETED` → `COMPLETED`
- * - 其他 → `IN_PROGRESS`
+ * - 有工单但未全部完成 → `IN_PROGRESS`
+ * - 无关联工单：
+ *   - 计划已下达（`status === CONVERTED`）→ `IN_PROGRESS`
+ *     （已点过下达，工单可能被删 / 历史数据 planOrderId 未关联 / 经委外等非下达途径产生，
+ *      此时不能回退成「未下单」，否则与持久化的已下达状态矛盾，表现为「明明下了单却显示未下单」）
+ *   - 计划未下达 → `NOT_DISPATCHED`
  *
  * 父子计划在列表里各自是独立 PlanOrder 行，互不影响。
  */
 function computePlanDispatchStatus(plan: {
+  status?: string | null;
   productionOrders?: { dispatchStatus: string }[] | null;
 }): PlanDispatchStatus {
   const linked = plan.productionOrders ?? [];
-  if (linked.length === 0) return PlanDispatchStatus.NOT_DISPATCHED;
+  if (linked.length === 0) {
+    return plan.status === PlanStatus.CONVERTED
+      ? PlanDispatchStatus.IN_PROGRESS
+      : PlanDispatchStatus.NOT_DISPATCHED;
+  }
   const allCompleted = linked.every(o => o.dispatchStatus === PlanDispatchStatus.COMPLETED);
   return allCompleted ? PlanDispatchStatus.COMPLETED : PlanDispatchStatus.IN_PROGRESS;
 }
 
 /** 给 plan 注入 derivedStatus 并剥离 productionOrders 子集，避免响应膨胀。 */
-function attachPlanDerivedStatus<T extends { productionOrders?: { dispatchStatus: string }[] | null }>(
+function attachPlanDerivedStatus<T extends { status?: string | null; productionOrders?: { dispatchStatus: string }[] | null }>(
   plan: T,
 ): Omit<T, 'productionOrders'> & { derivedStatus: PlanDispatchStatus } {
   const derivedStatus = computePlanDispatchStatus(plan);

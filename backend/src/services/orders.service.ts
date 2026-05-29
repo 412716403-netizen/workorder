@@ -96,7 +96,10 @@ export async function updateOrder(
 
   return basePrisma.productionOrder.findUnique({
     where: { id: orderId },
-    include: { items: true, milestones: { include: { reports: true } } },
+    include: {
+      items: true,
+      milestones: { include: { reports: true }, orderBy: { sortOrder: 'asc' } },
+    },
   });
 }
 
@@ -124,7 +127,10 @@ export async function updateOrderDispatchStatus(
       dispatchStatus: status,
       dispatchStatusManual: true,
     },
-    include: { items: true, milestones: { include: { reports: true } } },
+    include: {
+      items: true,
+      milestones: { include: { reports: true }, orderBy: { sortOrder: 'asc' } },
+    },
   });
 }
 
