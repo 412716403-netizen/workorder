@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../controllers/psi.controller.js';
 import { validate } from '../middleware/validate.js';
-import { requireSubPermission } from '../middleware/tenant.js';
+import { requireSubPermission, requireStockReadAccess } from '../middleware/tenant.js';
 
 const router = Router();
 
@@ -57,9 +57,11 @@ router.delete(
 );
 router.delete('/records/:id', requireSubPermission('psi:records:delete'), ctrl.deleteRecord);
 
-router.get('/stock', requireSubPermission('psi:records:view'), ctrl.getStock);
-router.get('/stock/batches', requireSubPermission('psi:records:view'), ctrl.getStockBatches);
-router.get('/stock-snapshot', requireSubPermission('psi:records:view'), ctrl.getStockSnapshot);
+// 只读库存聚合：生产计划/工单/物料/进销存多处面板共用，放宽到「PSI 或 生产模块任意权限」。
+// 详见 middleware/tenant.ts requireStockReadAccess 说明。
+router.get('/stock', requireStockReadAccess(), ctrl.getStock);
+router.get('/stock/batches', requireStockReadAccess(), ctrl.getStockBatches);
+router.get('/stock-snapshot', requireStockReadAccess(), ctrl.getStockSnapshot);
 
 /**
  * Phase 3.D follow-up：

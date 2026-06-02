@@ -90,3 +90,37 @@ export function requireSubPermission(required: string): RequestHandler {
       .catch(next);
   };
 }
+
+/**
+ * 只读库存聚合接口（`/psi/stock`、`/psi/stock/batches`、`/psi/stock-snapshot`）的访问判断。
+ *
+ * 背景（修复"子账号查看生产计划报无权 + 库存不显示"）：
+ * - 这些路由历史上要求 `psi:records:view`，但权限树 `PSI_SUB_MODULES` 里并没有 `records`
+ *   这个可勾选子模块，任何细粒度配置都产生不出 `psi:records:*` 键。
+ * - 唯一能满足 `psi:records:view` 的（非 owner/admin）只有裸的顶级 `psi` 键，而角色编辑器
+ *   在存在任意 `psi:*` 细粒度键时会主动剥离裸 `psi`，导致细粒度 PSI 角色拿不到库存。
+ * - 库存聚合是生产计划 / 工单 / 物料 / PSI 等多处面板共用的**只读基础数据**（仅数量，不含流水明细），
+ *   因此放宽为：拥有进销存任意权限，或生产模块任意权限即可读取。
+ */
+export function requireStockReadAccess(): RequestHandler {
+  return (req, res, next) => {
+    const { tenantRole } = req.user || {};
+    if (isTenantElevatedRole(tenantRole)) {
+      next();
+      return;
+    }
+    resolvePermissions(req)
+      .then(userPerms => {
+        const canRead =
+          userPerms.includes('psi') ||
+          userPerms.includes('production') ||
+          userPerms.some(p => p.startsWith('psi:') || p.startsWith('production:'));
+        if (canRead) {
+          next();
+          return;
+        }
+        res.status(403).json({ error: '无权执行该操作' });
+      })
+      .catch(next);
+  };
+}
