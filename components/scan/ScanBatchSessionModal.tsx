@@ -263,8 +263,10 @@ export function ScanBatchSessionModal({
     [pushRow, showScanIntentToggle, scanIntent, scanDisabled, scanDisabledHint],
   );
 
+  // 弹窗打开时始终监听扫码枪；`scanDisabled` 时在 ingestRaw 内 toast 提示（如外协收货未选加工厂），
+  // 而非静默丢弃——否则用户直接扫码得不到任何反馈。
   useScanGun({
-    active: open && !scanDisabled,
+    active: open,
     onScan: ingestRaw,
   });
 

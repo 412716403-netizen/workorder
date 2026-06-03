@@ -363,7 +363,7 @@
 
 **流程**：
 
-1. 弹出扫码会话（[`ScanBatchSessionModal`](../components/scan/ScanBatchSessionModal.tsx)），顶部 `headerSlot` 内嵌**加工厂下拉**（候选项 = 当前待收回清单中出现过的加工厂去重）。未选加工厂前扫码输入框 + 扫码枪监听全部禁用，hint 提示「请先选择加工厂」。
+1. 弹出扫码会话（[`ScanBatchSessionModal`](../components/scan/ScanBatchSessionModal.tsx)），顶部 `headerSlot` 内嵌**加工厂下拉**（候选项 = 当前待收回清单中出现过的加工厂去重）。未选加工厂前手工粘贴区与「确认应用」禁用；若用户仍用扫码枪扫入，toast 提示「请先在上方选择加工厂后再开始扫码」并播放错误音。
 2. 选定加工厂后开始扫码，**首条命中码自动锁定该工序**（UI 顶部出现「工序已锁定」徽标）；后续扫到不同工序的码 toast「请分批收货」并拒绝。
 3. 点「确认应用」时，由 [`OutsourcePanel.handleReceiveScanConfirm`](../views/production-ops/OutsourcePanel.tsx) 把命中行 baseKey 合并入 `receiveSelectedKeys`、把每条 entry 的 `{ key, qty }` 累加到 `receiveFormQuantities`，关闭清单弹窗、打开「外协收货 · 录入数量」弹窗供用户复核提交。提交链路与「勾选→收货」完全一致（`onAddRecord` → `POST /api/production/records`）。
 4. 用户在清单里已经手动勾选过的行若与扫码命中行的工厂 / 工序不一致 → toast 报错并拒绝合并，要求先清空已勾选项。
