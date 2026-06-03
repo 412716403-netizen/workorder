@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../controllers/orders.controller.js';
 import { validate } from '../middleware/validate.js';
-import { requireSubPermission } from '../middleware/tenant.js';
+import { requireSubPermission, requireProductionRead, requireProductionWrite } from '../middleware/tenant.js';
 
 const router = Router();
 
@@ -67,11 +67,13 @@ const updateProductReportSchema = z.object({
 }).passthrough();
 
 /**
- * Phase 3.E follow-up：工单 / 订单报工路由收紧到细粒度。
- * 持有顶级 `production` 模块码的用户通过 `hasSubPermission` fallback 自动覆盖，
- * 不会引起现有用户被拒。但能让前端按钮级（仅查看 / 可改 / 可删）真正落到后端拦截。
+ * 工单 / 报工路由权限：
+ * - 历史挂 `production:orders:*`，但权限树无 `orders` 资源（仅 `orders_list`/`orders_detail`…），
+ *   细粒度生产角色拿不到 → 连工单列表都 403。
+ * - 改为生产域能力判断：view → requireProductionRead；create/edit（含报工）→ requireProductionWrite('write')；
+ *   删除工单 → requireProductionWrite('delete')。报工流水查看仍用可达的 `orders_report_records:view`。
  */
-router.get('/', requireSubPermission('production:orders:view'), ctrl.listOrders);
+router.get('/', requireProductionRead(), ctrl.listOrders);
 
 router.get(
   '/report-history',
@@ -81,69 +83,69 @@ router.get(
 
 router.get(
   '/product-progress',
-  requireSubPermission('production:orders:view'),
+  requireProductionRead(),
   ctrl.listProductProgress,
 );
 router.post(
   '/product-progress/report',
-  requireSubPermission('production:orders:edit'),
+  requireProductionWrite('write'),
   validate(createProductReportSchema),
   ctrl.createProductReport,
 );
 router.put(
   '/product-progress/report/:reportId',
-  requireSubPermission('production:orders:edit'),
+  requireProductionWrite('write'),
   validate(updateProductReportSchema),
   ctrl.updateProductReport,
 );
 router.delete(
   '/product-progress/report/:reportId',
-  requireSubPermission('production:orders:edit'),
+  requireProductionWrite('write'),
   ctrl.deleteProductReport,
 );
 
-router.get('/:id', requireSubPermission('production:orders:view'), ctrl.getOrder);
+router.get('/:id', requireProductionRead(), ctrl.getOrder);
 router.put(
   '/:id',
-  requireSubPermission('production:orders:edit'),
+  requireProductionWrite('write'),
   validate(updateOrderSchema),
   ctrl.updateOrder,
 );
 router.delete(
   '/:id',
-  requireSubPermission('production:orders:delete'),
+  requireProductionWrite('delete'),
   ctrl.deleteOrder,
 );
 
 /** 手动切换工单派发完成状态（关联工单模式下工单中心徽章使用） */
 router.patch(
   '/:id/dispatch-status',
-  requireSubPermission('production:orders:edit'),
+  requireProductionWrite('write'),
   validate(dispatchStatusSchema),
   ctrl.updateDispatchStatus,
 );
 
 router.post(
   '/:id/milestones/:milestoneId/reports',
-  requireSubPermission('production:orders:edit'),
+  requireProductionWrite('write'),
   validate(createReportSchema),
   ctrl.createReport,
 );
 router.put(
   '/:id/milestones/:milestoneId/reports/:reportId',
-  requireSubPermission('production:orders:edit'),
+  requireProductionWrite('write'),
   validate(updateReportSchema),
   ctrl.updateReport,
 );
 router.delete(
   '/:id/milestones/:milestoneId/reports/:reportId',
-  requireSubPermission('production:orders:edit'),
+  requireProductionWrite('write'),
   ctrl.deleteReport,
 );
 
 router.get(
   '/:id/reportable',
-  requireSubPermission('production:orders:view'),
+  requireProductionRead(),
   ctrl.getReportable,
 );
 

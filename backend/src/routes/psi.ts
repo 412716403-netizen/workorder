@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../controllers/psi.controller.js';
 import { validate } from '../middleware/validate.js';
-import { requireSubPermission, requireStockReadAccess } from '../middleware/tenant.js';
+import { requireSubPermission, requirePsiOrProductionRead, requirePsiRecordWrite } from '../middleware/tenant.js';
 
 const router = Router();
 
@@ -25,48 +25,51 @@ const deleteBatchSchema = z.object({
 });
 
 /**
- * Phase 3.E follow-up：进销存路由收紧到细粒度。
- * - `/records/*`：CRUD → `psi:records:*`（持有顶级 `psi` 模块码的用户自动覆盖，全部子权限）。
- * - `/stock*`：只读库存视图 → `psi:records:view`（与列表相同口径，避免再造一个细分权限码）。
+ * 通用 `/psi/records*` 端点的权限：
+ * - 这些端点承载所有 PSI 单据（采购/销售订单、采购入库、销售单、调拨、盘点）与订单待入库的落库。
+ * - 历史挂 `psi:records:*`，但权限树无 `records` 子模块，细粒度角色拿不到，导致保存/列表 403。
+ * - 改为：读 → `requirePsiOrProductionRead`；写 → `requirePsiRecordWrite` 按单据 type 映射到
+ *   实际子模块权限（详见 middleware/tenant.ts 说明）。
  */
-router.get('/records', requireSubPermission('psi:records:view'), ctrl.listRecords);
+router.get('/records', requirePsiOrProductionRead(), ctrl.listRecords);
 router.post(
   '/records/batch',
-  requireSubPermission('psi:records:create'),
+  requirePsiRecordWrite('create'),
   validate(createBatchSchema),
   ctrl.createBatchRecords,
 );
 router.post(
   '/records',
-  requireSubPermission('psi:records:create'),
+  requirePsiRecordWrite('create'),
   validate(psiRecordSchema),
   ctrl.createRecord,
 );
 router.put(
   '/records/replace',
-  requireSubPermission('psi:records:edit'),
+  requirePsiRecordWrite('edit'),
   validate(replaceSchema),
   ctrl.replaceRecords,
 );
-router.put('/records/:id', requireSubPermission('psi:records:edit'), ctrl.updateRecord);
+router.put('/records/:id', requirePsiRecordWrite('edit'), ctrl.updateRecord);
 router.delete(
   '/records',
-  requireSubPermission('psi:records:delete'),
+  requirePsiRecordWrite('delete'),
   validate(deleteBatchSchema),
   ctrl.deleteBatchRecords,
 );
-router.delete('/records/:id', requireSubPermission('psi:records:delete'), ctrl.deleteRecord);
+router.delete('/records/:id', requirePsiRecordWrite('delete'), ctrl.deleteRecord);
 
 // 只读库存聚合：生产计划/工单/物料/进销存多处面板共用，放宽到「PSI 或 生产模块任意权限」。
-// 详见 middleware/tenant.ts requireStockReadAccess 说明。
-router.get('/stock', requireStockReadAccess(), ctrl.getStock);
-router.get('/stock/batches', requireStockReadAccess(), ctrl.getStockBatches);
-router.get('/stock-snapshot', requireStockReadAccess(), ctrl.getStockSnapshot);
+// 详见 middleware/tenant.ts requirePsiOrProductionRead 说明。
+router.get('/stock', requirePsiOrProductionRead(), ctrl.getStock);
+router.get('/stock/batches', requirePsiOrProductionRead(), ctrl.getStockBatches);
+router.get('/stock-snapshot', requirePsiOrProductionRead(), ctrl.getStockSnapshot);
 
 /**
  * Phase 3.D follow-up：
  * - 计划详情面板"计划相关 PSI"窄查；需有计划查看权限（read 即可）。
- * - 单号生成 / 上次单价：只需 PSI 列表可见即可（PO/PB/SO/SB 默认 view 权限）。
+ * - 单号生成 / 上次单价：PO/PB/SO/SB 共用的只读辅助查询；放宽到「PSI 或 生产模块任意权限」，
+ *   原 `psi:purchase_order:view` 对只配销售订单等单一单据的角色过窄（会卡住保存前取号）。
  */
 const lastPurchasePriceSchema = z.object({
   items: z.array(
@@ -79,10 +82,10 @@ const lastPurchasePriceSchema = z.object({
 });
 
 router.get('/plan-related', requireSubPermission('production:plans:view'), ctrl.listPlanRelated);
-router.get('/next-doc-number', requireSubPermission('psi:purchase_order:view'), ctrl.nextDocNumber);
+router.get('/next-doc-number', requirePsiOrProductionRead(), ctrl.nextDocNumber);
 router.post(
   '/last-purchase-prices',
-  requireSubPermission('psi:purchase_order:view'),
+  requirePsiOrProductionRead(),
   validate(lastPurchasePriceSchema),
   ctrl.batchLastPurchasePrices,
 );

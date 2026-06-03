@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../controllers/finance.controller.js';
 import { validate } from '../middleware/validate.js';
-import { requireSubPermission } from '../middleware/tenant.js';
+import { requireSubPermission, requireFinanceRead, requireFinanceRecordWrite } from '../middleware/tenant.js';
 
 const router = Router();
 
@@ -14,11 +14,12 @@ const createRecordSchema = z.object({
 const updateRecordSchema = z.object({}).passthrough();
 
 /**
- * Phase 3.E follow-up：财务路由收紧到细粒度。
- * 持有顶级 `finance` 模块码的用户会通过 `hasSubPermission` 兜底覆盖全部子权限，
- * 无 breaking change；但能让前端按钮级权限真正在后端拦下。
+ * 通用 `/finance/records*` 端点：承载收款单/付款单（及对账核销）落库。
+ * 历史挂 `finance:records:*`，但权限树无 `records` 子模块，细粒度财务角色（如只勾收款单）
+ * 拿不到 → 保存/列表 403。改为：读 → `requireFinanceRead`；写 → `requireFinanceRecordWrite`
+ * 按记录 type（RECEIPT→finance:receipt、PAYMENT→finance:payment）映射真实子模块权限。
  */
-router.get('/records', requireSubPermission('finance:records:view'), ctrl.listRecords);
+router.get('/records', requireFinanceRead(), ctrl.listRecords);
 router.get('/summary', requireSubPermission('finance:reconciliation:allow'), ctrl.summary);
 /**
  * Phase 3.D follow-up：销售单打印应收 ledger 窄查；
@@ -35,22 +36,22 @@ router.get(
   requireSubPermission('finance:reconciliation:allow'),
   ctrl.partnerReceivable,
 );
-router.get('/records/:id', requireSubPermission('finance:records:view'), ctrl.getRecord);
+router.get('/records/:id', requireFinanceRead(), ctrl.getRecord);
 router.post(
   '/records',
-  requireSubPermission('finance:records:create'),
+  requireFinanceRecordWrite('create'),
   validate(createRecordSchema),
   ctrl.createRecord,
 );
 router.put(
   '/records/:id',
-  requireSubPermission('finance:records:edit'),
+  requireFinanceRecordWrite('edit'),
   validate(updateRecordSchema),
   ctrl.updateRecord,
 );
 router.delete(
   '/records/:id',
-  requireSubPermission('finance:records:delete'),
+  requireFinanceRecordWrite('delete'),
   ctrl.deleteRecord,
 );
 
