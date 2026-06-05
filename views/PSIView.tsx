@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, Suspense, lazy } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, Suspense } from 'react';
 import { 
   ClipboardList, 
   Receipt, 
@@ -7,7 +7,8 @@ import {
   Warehouse
 } from 'lucide-react';
 import { Product, Warehouse as WarehouseType, ProductCategory, Partner, PartnerCategory, AppDictionaries } from '../types';
-const PSIOpsView = lazy(() => import('./PSIOpsView'));
+import { lazyWithReloadOnChunkError } from '../utils/lazyWithReloadOnChunkError';
+const PSIOpsView = lazyWithReloadOnChunkError(() => import('./PSIOpsView'));
 
 const PsiPanelFallback = () => (
   <div className="flex min-h-[320px] items-center justify-center text-sm font-medium text-slate-400">

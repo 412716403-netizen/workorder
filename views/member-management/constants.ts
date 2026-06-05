@@ -1,6 +1,7 @@
 import type { RoleRow } from '../../services/api';
 
 export const ALL_PERMISSIONS = [
+  { id: 'development', label: '开发管理' },
   { id: 'production', label: '生产管理' },
   { id: 'process_report', label: '工序报工' },
   { id: 'psi', label: '进销存' },
@@ -18,6 +19,11 @@ export const SETTINGS_SUB_MODULES: { key: string; label: string; actions: string
   { key: 'finance_categories',    label: '收付款分类设置', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'finance_account_types', label: '收支账户类型',   actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'config',                label: '业务配置',       actions: ['view', 'edit'] },
+];
+
+export const DEVELOPMENT_SUB_MODULES: { key: string; label: string; actions: string[] }[] = [
+  { key: 'styles', label: '款式开发', actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'templates', label: '开发流程模板', actions: ['view', 'create', 'edit', 'delete'] },
 ];
 
 export const BASIC_SUB_MODULES: { key: string; label: string; actions: string[] }[] = [
@@ -111,6 +117,7 @@ export function memberHasReportPerm(m: Member, rolesList: RoleRow[]): boolean {
 
 export function permSummary(perms: string[]): string {
   const settingsCount = SETTINGS_SUB_MODULES.filter(sm => perms.some(p => p.startsWith(`settings:${sm.key}:`))).length;
+  const developmentCount = DEVELOPMENT_SUB_MODULES.filter(sm => perms.some(p => p.startsWith(`development:${sm.key}:`))).length;
   const basicCount = BASIC_SUB_MODULES.filter(sm => perms.some(p => p.startsWith(`basic:${sm.key}:`))).length;
   const productionCount = PRODUCTION_SUB_MODULES.filter(sm => perms.some(p => p.startsWith(`production:${sm.key}:`))).length;
   const psiCount = PSI_SUB_MODULES.filter(sm => perms.some(p => p.startsWith(`psi:${sm.key}:`))).length;
@@ -119,6 +126,7 @@ export function permSummary(perms: string[]): string {
     .filter(p => perms.includes(p.id))
     .map(p => {
       if (p.id === 'settings' && settingsCount > 0) return `${p.label}(${settingsCount}项)`;
+      if (p.id === 'development' && developmentCount > 0) return `${p.label}(${developmentCount}项)`;
       if (p.id === 'basic' && basicCount > 0) return `${p.label}(${basicCount}项)`;
       if (p.id === 'production' && productionCount > 0) return `${p.label}(${productionCount}项)`;
       if (p.id === 'psi' && psiCount > 0) return `${p.label}(${psiCount}项)`;
@@ -126,6 +134,7 @@ export function permSummary(perms: string[]): string {
       return p.label;
     });
   if (!perms.includes('settings') && settingsCount > 0) modules.push(`系统设置(${settingsCount}项)`);
+  if (!perms.includes('development') && developmentCount > 0) modules.push(`开发管理(${developmentCount}项)`);
   if (!perms.includes('basic') && basicCount > 0) modules.push(`基础信息(${basicCount}项)`);
   if (!perms.includes('production') && productionCount > 0) modules.push(`生产管理(${productionCount}项)`);
   if (!perms.includes('psi') && psiCount > 0) modules.push(`进销存(${psiCount}项)`);

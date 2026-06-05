@@ -303,3 +303,142 @@ export interface ScanValidateResponse {
   message?: string;
   remaining?: number;
 }
+
+/** 款式开发：款式状态 */
+export enum DevStyleStatus {
+  DEVELOPING = 'developing',
+  ARCHIVED = 'archived',
+  PUBLISHED = 'published',
+}
+
+export const DEV_STYLE_STATUS_LABEL: Record<DevStyleStatus, string> = {
+  [DevStyleStatus.DEVELOPING]: '开发中',
+  [DevStyleStatus.ARCHIVED]: '已归档',
+  [DevStyleStatus.PUBLISHED]: '已发布大货',
+};
+
+/** 款式开发：样品轮次内开发节点状态 */
+export enum DevStageStatus {
+  PENDING = 'pending',
+  IN_PROGRESS = 'in_progress',
+  COMPLETED = 'completed',
+  EXCEPTION = 'exception',
+}
+
+export const DEV_STAGE_STATUS_LABEL: Record<DevStageStatus, string> = {
+  [DevStageStatus.PENDING]: '待开始',
+  [DevStageStatus.IN_PROGRESS]: '进行中',
+  [DevStageStatus.COMPLETED]: '已完成',
+  [DevStageStatus.EXCEPTION]: '异常/退回',
+};
+
+export interface DevStageFieldDto {
+  id: string;
+  label: string;
+  value: string;
+  type: string;
+}
+
+export interface DevAttachmentDto {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  fileType?: string;
+}
+
+export interface DevStageDto {
+  id: string;
+  name: string;
+  status: DevStageStatus;
+  order: number;
+  updatedAt: string;
+  fields: DevStageFieldDto[];
+  attachments: DevAttachmentDto[];
+}
+
+export interface DevLogDto {
+  id: string;
+  user: string;
+  action: string;
+  detail: string;
+  time: string;
+}
+
+export interface DevSampleDto {
+  id: string;
+  name: string;
+  createdAt: string;
+  stages: DevStageDto[];
+  logs: DevLogDto[];
+}
+
+export interface DevStyleVariantDto {
+  id: string;
+  colorId: string;
+  sizeId: string;
+  skuSuffix: string;
+  nodeBoms?: Record<string, string>;
+}
+
+export interface DevBomItemDto {
+  id?: number;
+  categoryId?: string;
+  productId: string;
+  quantity: number;
+  note?: string;
+  useShortageOnly?: boolean;
+  excludeFromWeightShare?: boolean;
+  sortOrder?: number;
+}
+
+export interface DevBomDto {
+  id: string;
+  parentStyleId: string;
+  variantId?: string;
+  nodeId?: string;
+  name?: string;
+  items: DevBomItemDto[];
+}
+
+export interface DevStyleDto {
+  id: string;
+  code: string;
+  name: string;
+  customerName?: string;
+  imageUrl?: string;
+  categoryId?: string;
+  categoryCustomData?: Record<string, unknown>;
+  colorIds: string[];
+  sizeIds: string[];
+  milestoneNodeIds: string[];
+  salesPrice?: number;
+  purchasePrice?: number;
+  unitId?: string;
+  supplierId?: string;
+  status: DevStyleStatus;
+  publishedProductId?: string;
+  variants: DevStyleVariantDto[];
+  samples: DevSampleDto[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DevStageTemplateFieldDto {
+  id: string;
+  label: string;
+  type: CustomDocFieldType;
+  required: boolean;
+  order: number;
+  options?: string[];
+  /** type=date：登记时使用日期时间控件 */
+  dateWithTime?: boolean;
+  /** type=date：打开登记表单时自动填入当前日期/时间 */
+  dateAutoFill?: boolean;
+}
+
+export interface DevStageTemplateDto {
+  id: string;
+  name: string;
+  order: number;
+  fields: DevStageTemplateFieldDto[];
+}

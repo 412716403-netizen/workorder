@@ -67,6 +67,8 @@ interface BomEditorPortalProps {
   availableBOMSources: ProductVariant[];
   bomBlockedProductIds: string[];
   embeddedInQuickCreateModal: boolean;
+  /** 物料选择框是否显示「新增产品」；默认在 embedded 新建产品弹窗内为 false，避免多层叠窗 */
+  allowQuickCreate?: boolean;
   nestedOverlayZ: string;
   BomBatchAddPanelComponent: React.ComponentType<any>;
   copyBOMTriggerRef: React.RefObject<HTMLButtonElement | null>;
@@ -88,6 +90,7 @@ const BomEditorPortal: React.FC<BomEditorPortalProps> = ({
   availableBOMSources,
   bomBlockedProductIds,
   embeddedInQuickCreateModal,
+  allowQuickCreate: allowQuickCreateProp,
   nestedOverlayZ,
   BomBatchAddPanelComponent,
   copyBOMTriggerRef,
@@ -108,6 +111,8 @@ const BomEditorPortal: React.FC<BomEditorPortalProps> = ({
     copyBOMDropdownStyle,
     bomSaving,
   } = state;
+
+  const allowQuickCreate = allowQuickCreateProp ?? !embeddedInQuickCreateModal;
 
   if (
     enabledBOMNodes.length <= 0 ||
@@ -238,7 +243,7 @@ const BomEditorPortal: React.FC<BomEditorPortalProps> = ({
                       value={item.productId}
                       unavailableProductIds={unavailableProductIds}
                       disabledProductIds={bomBlockedProductIds}
-                      allowQuickCreate={!embeddedInQuickCreateModal}
+                      allowQuickCreate={allowQuickCreate}
                       onChange={val => {
                         const p = products.find(x => x.id === val);
                         onUpdateBOMItem(idx, { productId: val, categoryId: p?.categoryId });
@@ -321,7 +326,7 @@ const BomEditorPortal: React.FC<BomEditorPortalProps> = ({
             alreadyUsedProductIds={workingBOM.items.map(i => i.productId).filter(Boolean)}
             blockedProductIds={bomBlockedProductIds}
             parentProductId={product?.id ?? ''}
-            allowQuickCreate={!embeddedInQuickCreateModal}
+            allowQuickCreate={allowQuickCreate}
             onConfirm={rows => {
               setWorkingBOM({
                 ...workingBOM,

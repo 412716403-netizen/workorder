@@ -3,7 +3,7 @@ import { prisma as basePrisma } from '../lib/prisma.js';
 import { genId } from '../utils/genId.js';
 import { sanitizeUpdate, sanitizeCreate } from '../utils/request.js';
 import { AppError } from '../middleware/errorHandler.js';
-import { assertCategoryBatchColorMutex } from '../utils/categoryMutex.js';
+import { assertCategoryBatchColorMutex, applyCategoryPurchasePartnerRule, assertCategoryPurchasePartnerRule } from '../utils/categoryMutex.js';
 import {
   mergePrintTemplatesForTenantConfig,
   stripSystemPrintTemplatesForPersistence,
@@ -61,6 +61,8 @@ export async function createCategory(
   const data = sanitizeCreate(body) as Record<string, unknown>;
   maybeParseReportFields(data, 'customFields');
   assertCategoryBatchColorMutex(data);
+  applyCategoryPurchasePartnerRule(data);
+  assertCategoryPurchasePartnerRule(data);
   if (!data.id) data.id = genId('cat');
   const maxRow = await db.productCategory.aggregate({ _max: { sortOrder: true } });
   data.sortOrder = (maxRow._max.sortOrder ?? -1) + 1;
@@ -86,6 +88,27 @@ export async function updateCategory(
       ? Boolean(data.hasBatchManagement)
       : existing.hasBatchManagement;
   assertCategoryBatchColorMutex({ hasColorSize: nextHasColor, hasBatchManagement: nextHasBatch });
+  const nextHasPurchase =
+    Object.prototype.hasOwnProperty.call(data, 'hasPurchasePrice')
+      ? Boolean(data.hasPurchasePrice)
+      : existing.hasPurchasePrice;
+  let nextLinkPartner =
+    Object.prototype.hasOwnProperty.call(data, 'linkPartner')
+      ? Boolean(data.linkPartner)
+      : existing.linkPartner;
+  if (nextHasPurchase) {
+    nextLinkPartner = true;
+    if (
+      Object.prototype.hasOwnProperty.call(data, 'hasPurchasePrice') ||
+      Object.prototype.hasOwnProperty.call(data, 'linkPartner')
+    ) {
+      data.linkPartner = true;
+    }
+  }
+  assertCategoryPurchasePartnerRule({
+    hasPurchasePrice: nextHasPurchase,
+    linkPartner: nextLinkPartner,
+  });
   return db.productCategory.update({ where: { id }, data });
 }
 

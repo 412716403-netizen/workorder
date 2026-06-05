@@ -11,7 +11,7 @@
 - 前端：React + Vite + TypeScript
 - 后端：Express + TypeScript + Prisma + PostgreSQL
 - 数据层：Prisma schema 已覆盖主要业务域
-- 业务域：认证、多租户、系统设置、基础资料、计划、工单、报工、生产操作、进销存、财务、协作、单品码、虚拟批次、打印
+- 业务域：认证、多租户、系统设置、基础资料、**款式开发**、计划、工单、报工、生产操作、进销存、财务、协作、单品码、虚拟批次、打印
 
 ### 当前不是的状态
 
@@ -23,7 +23,8 @@
 
 ### 2.1 前端
 
-- 入口：`App.tsx`
+- 入口：`App.tsx`（侧栏「开发管理」位于「生产管理」之上，路由 `/development`）
+- 款式开发：`views/development/DevManagementView.tsx`、`hooks/useDevStyles.ts`、`services/api/development.ts`
 - 认证与租户：`contexts/AuthContext.tsx`
 - 聚合数据：`contexts/AppDataContext.tsx`
 - 主要页面：`views/`

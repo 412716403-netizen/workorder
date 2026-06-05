@@ -392,7 +392,58 @@
 
 ---
 
-## 6. 待持续补充
+## 6. 款式开发管理
+
+开发管理「款式 / 商品信息」与「基础信息 → 产品与 BOM」共用 `ProductCategoryInfoFields`：按产品分类的 `hasSalesPrice`、`hasPurchasePrice`、`linkPartner`、`hasColorSize`、分类扩展字段等开关显示相同表单项；发布大货时字段一一写入 `Product`（`customerName` 为开发专属，不写入产品档案）。
+
+**产品分类开关（设置 → 产品分类）**：
+
+| 开关 | 字段 | 说明 |
+|------|------|------|
+| 启用采购价 | `hasPurchasePrice` | 产品档案 / 开发款式可录入参考采购单价；开启时**自动**开启「关联合作单位」 |
+| 关联合作单位 | `linkPartner` | 产品档案可关联首选供应商；开发管理按客户排序/搜索由首选供应商名称推导 |
+| 互斥 | — | 已启用采购价时不可单独关闭「关联合作单位」 |
+
+**开发管理按客户排序**：左侧「按客户」由款式的首选供应商（`supplierId` → 合作单位名称）分组；`customerName` 在保存时自动同步，兼容历史数据。须至少一个产品分类启用 `linkPartner`。
+
+**款号 / 品名唯一性**：创建或编辑开发款式时，`code`（款号，对应产品 `sku`）与 `name`（品名）须在租户内与已有 **产品档案**（`products` 表）不重复；与产品档案新建校验口径一致。另仍校验开发款式表内 `code` 不重复。
+
+**路由**：前端 `/development`；API `/api/dev/*`。权限 `development:styles:*`、`development:templates:*`。
+
+### 6.1 两套节点
+
+| 类型 | 数据 | 用途 |
+|------|------|------|
+| 开发进度节点 | `DevStage`（按样品轮次） | 打样流程跟踪：设计、横机编程等；含工艺参数、附件、日志 |
+| 大货生产工序 | `DevStyle.milestoneNodeIds` → `GlobalNodeTemplate` | 发布后的报工路线；BOM 的 `nodeId` 键与此一致 |
+
+### 6.2 BOM 与发布大货
+
+- 开发期 BOM 存 `dev_boms` / `dev_bom_items`；维度与产品档案一致：**一条 BOM = 父款式 × 变体（颜色×尺码）× 工序 `nodeId`**；子件为 `dev_bom_items` 行。
+- 变体索引 `DevStyleVariant.nodeBoms`：`{ [nodeId]: devBomId }`，保存 BOM 后通过 `PUT /api/dev/styles/:id/variants/:variantId/node-boms` 同步（形状同 `ProductVariant.nodeBoms`）。
+- **录入 UI**：`DevBomConfigSection` + `BomVariantMatrix`（与「基础信息 → 产品与 BOM」矩阵一致）；创建款式弹窗可预配 `pendingBoms`，保存款式后批量写入 `dev_boms`。单 SKU（无颜色尺码变体）时 `dev_boms.variant_id` 为空。
+- **发布**（`POST /api/dev/styles/:id/publish`）：须先将开发产品 **归档**（`status=archived`）；事务内创建 `Product`、`ProductVariant`、`Bom`；预生成新产品 `bom-*` id，`nodeBoms` 与 `boms` 表 id 一致重映射；单 SKU 虚拟变体 `dvar-single-*` 映射到默认 `ProductVariant`；`Bom.nodeId` **原样拷贝**，不做工序名称映射。
+- 已发布款式（`status=published`）不可再编辑；`publishedProductId` 指向产品档案。
+
+### 6.3 安全删除
+
+- 款式：所有样品下全部 `DevStage` 均为 `pending` 方可删除。
+- 样品轮次：该轮次下无已开始的节点方可删除。
+- 新增样品轮次（如二样）：开发节点流程**与头样（首个轮次）相同**，按头样节点名称与顺序复制；无头样时回退节点库默认顺序。
+
+### 6.4 附件
+
+- `DevAttachment.fileUrl` 存 **data URL（base64）**，与产品路线报工附件、自定义字段文件上传一致，查询时直接从库取回。
+
+### 6.5 开发节点库自定义内容
+
+- **开发节点库**（`DevStageTemplate` + `DevStageTemplateField`）中每个节点的「节点登记自定义内容」与 **系统设置 → 工序节点库 → 报工自定义单据内容** 对齐：支持字段类型 `text | date | select | file`、下拉选项、日期（含时分 / 自动填入）、必填。
+- 配置 UI 复用 `ReportCustomFieldsConfigTable`；节点登记弹窗对模板字段复用 `ReportCustomFieldsEditor`，按类型渲染控件；登记值写入 `DevStageField.value`（字符串）与 `DevStageField.type`。
+- 模板外仍可添加「附加参数」（自由 label + 文本值），与模板字段一并保存。
+
+---
+
+## 7. 待持续补充
 
 - 生产报工更细粒度规则
 - 打印 / 码管理的业务规则补充
@@ -400,4 +451,4 @@
 
 ---
 
-*最后更新：补充扫码去重与单据数量上限校验规则（§5.4.1）。*
+*最后更新：新增款式开发管理规则（§6）。*

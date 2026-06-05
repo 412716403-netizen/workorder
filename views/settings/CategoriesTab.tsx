@@ -12,6 +12,7 @@ import {
   Maximize,
   ListPlus,
   Trash2,
+  Building2,
 } from 'lucide-react';
 import { ProductCategory } from '../../types';
 import { toast } from 'sonner';
@@ -45,7 +46,7 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
       try {
         const created = await api.settings.categories.create({
           name: newCatName, color: 'bg-indigo-600', hasProcess: false,
-          hasSalesPrice: false, hasPurchasePrice: false, hasColorSize: false,
+          hasSalesPrice: false, hasPurchasePrice: false, linkPartner: false, hasColorSize: false,
           hasBatchManagement: false, customFields: []
         }) as ProductCategory;
         setNewCatName('');
@@ -79,6 +80,18 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
       await api.settings.categories.update(id, updates);
       await onRefreshCategories();
     } catch (err: any) { toast.error(err.message || '操作失败'); }
+  };
+
+  const handleCategoryToggle = (cat: ProductCategory, key: string, nextVal: boolean) => {
+    if (key === 'hasPurchasePrice' && nextVal) {
+      void updateCategoryConfig(cat.id, { hasPurchasePrice: true, linkPartner: true });
+      return;
+    }
+    if (key === 'linkPartner' && !nextVal && cat.hasPurchasePrice) {
+      toast.warning('已启用采购价时需保持关联合作单位');
+      return;
+    }
+    void updateCategoryConfig(cat.id, { [key]: nextVal } as Partial<ProductCategory>);
   };
 
   return (
@@ -174,7 +187,8 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
                       {[
                         { label: '启用工序设置', key: 'hasProcess', desc: '开启后支持配置生产工序路线。', icon: Info },
                         { label: '启用销售价格', key: 'hasSalesPrice', desc: '是否在该类产品中录入销售标价。', icon: DollarSign },
-                        { label: '启用采购价和供应商', key: 'hasPurchasePrice', desc: '开启后可维护参考采购单价并关联首选供应商。', icon: ShoppingCart },
+                        { label: '启用采购价', key: 'hasPurchasePrice', desc: '开启后可在产品档案中维护参考采购单价。', icon: ShoppingCart },
+                        { label: '关联合作单位', key: 'linkPartner', desc: '开启后可关联首选供应商；开发管理可录入客户并按客户排序。', icon: Building2 },
                         { label: '启用颜色尺码', key: 'hasColorSize', desc: '开启后支持颜色、尺码库选择。', icon: Maximize },
                         { label: '启用批次管理', key: 'hasBatchManagement', desc: '开启后该类产品在采购、出入库和生产入库中按批次记录库存。', icon: Tag },
                       ].map(toggle => {
@@ -182,7 +196,8 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
                         const nextVal = !curVal;
                         const toggleBlocked =
                           (toggle.key === 'hasColorSize' && nextVal && Boolean(cat.hasBatchManagement)) ||
-                          (toggle.key === 'hasBatchManagement' && nextVal && cat.hasColorSize);
+                          (toggle.key === 'hasBatchManagement' && nextVal && cat.hasColorSize) ||
+                          (toggle.key === 'linkPartner' && !nextVal && cat.hasPurchasePrice);
                         return (
                         <div key={toggle.key} className={`bg-slate-50/50 p-4 rounded-2xl border border-slate-100 ${toggleBlocked ? 'opacity-60' : ''}`}>
                           <div className="flex items-center justify-between mb-2">
@@ -192,14 +207,24 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
                             </div>
                             <button
                               type="button"
-                              title={toggleBlocked ? '与另一项特性互斥，请先关闭对方开关' : undefined}
+                              title={
+                                toggleBlocked
+                                  ? toggle.key === 'linkPartner'
+                                    ? '已启用采购价时需保持关联合作单位'
+                                    : '与另一项特性互斥，请先关闭对方开关'
+                                  : undefined
+                              }
                               disabled={toggleBlocked}
                               onClick={() => {
                                 if (toggleBlocked) {
-                                  toast.warning('颜色尺码与批次管理互斥，请先关闭另一项后再开启');
+                                  if (toggle.key === 'linkPartner') {
+                                    toast.warning('已启用采购价时需保持关联合作单位');
+                                  } else {
+                                    toast.warning('颜色尺码与批次管理互斥，请先关闭另一项后再开启');
+                                  }
                                   return;
                                 }
-                                void updateCategoryConfig(cat.id, { [toggle.key]: nextVal } as Partial<ProductCategory>);
+                                handleCategoryToggle(cat, toggle.key, nextVal);
                               }}
                             >
                               {curVal ? <ToggleRight className="w-8 h-8 text-indigo-600" /> : <ToggleLeft className="w-8 h-8 text-slate-300" />}
@@ -211,6 +236,9 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
                           ) : null}
                           {toggle.key === 'hasColorSize' && Boolean(cat.hasBatchManagement) ? (
                             <p className="text-[10px] text-amber-600 font-bold mt-1">已启用批次管理时不可开启颜色尺码</p>
+                          ) : null}
+                          {toggle.key === 'linkPartner' && cat.hasPurchasePrice ? (
+                            <p className="text-[10px] text-amber-600 font-bold mt-1">已启用采购价时需保持开启</p>
                           ) : null}
                         </div>
                         );

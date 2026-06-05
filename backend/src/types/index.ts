@@ -67,7 +67,7 @@ export interface JwtPayload {
 }
 
 export const ALL_PERMISSIONS = [
-  'production', 'process_report', 'psi', 'finance', 'basic', 'settings', 'members', 'collaboration',
+  'production', 'process_report', 'psi', 'finance', 'basic', 'settings', 'members', 'collaboration', 'development',
 ] as const;
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];
@@ -115,6 +115,21 @@ export function allBasicPermissions(): string[] {
   for (const [mod, def] of Object.entries(BASIC_SUB_MODULES)) {
     for (const action of def.actions) {
       perms.push(`basic:${mod}:${action}`);
+    }
+  }
+  return perms;
+}
+
+export const DEVELOPMENT_SUB_MODULES = {
+  styles: { label: '款式开发', actions: ['view', 'create', 'edit', 'delete'] as const },
+  templates: { label: '开发流程模板', actions: ['view', 'create', 'edit', 'delete'] as const },
+} as const;
+
+export function allDevelopmentPermissions(): string[] {
+  const perms: string[] = [];
+  for (const [mod, def] of Object.entries(DEVELOPMENT_SUB_MODULES)) {
+    for (const action of def.actions) {
+      perms.push(`development:${mod}:${action}`);
     }
   }
   return perms;

@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import {
   ALL_PERMISSIONS,
   SETTINGS_SUB_MODULES,
+  DEVELOPMENT_SUB_MODULES,
   BASIC_SUB_MODULES,
   PRODUCTION_SUB_MODULES,
   PSI_SUB_MODULES,
@@ -24,6 +25,9 @@ function computeInitialPerms(role: RoleRow | null): string[] {
   const perms = Array.isArray(role.permissions) ? [...role.permissions as string[]] : [];
   if (!perms.includes('settings') && perms.some(p => p.startsWith('settings:'))) {
     perms.push('settings');
+  }
+  if (!perms.includes('development') && perms.some(p => p.startsWith('development:'))) {
+    perms.push('development');
   }
   if (!perms.includes('basic') && perms.some(p => p.startsWith('basic:'))) {
     perms.push('basic');
@@ -46,12 +50,14 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
   const [rolePerms, setRolePerms] = useState<string[]>(() => computeInitialPerms(editingRole));
 
   const [settingsExpanded, setSettingsExpanded] = useState(false);
+  const [developmentExpanded, setDevelopmentExpanded] = useState(false);
   const [basicExpanded, setBasicExpanded] = useState(false);
   const [productionExpanded, setProductionExpanded] = useState(false);
   const [psiExpanded, setPsiExpanded] = useState(false);
   const [financeExpanded, setFinanceExpanded] = useState(false);
 
   const settingsModuleChecked = rolePerms.includes('settings');
+  const developmentModuleChecked = rolePerms.includes('development');
   const basicModuleChecked = rolePerms.includes('basic');
   const productionModuleChecked = rolePerms.includes('production');
   const psiModuleChecked = rolePerms.includes('psi');
@@ -62,6 +68,9 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
     let permsToSave = [...rolePerms];
     if (permsToSave.some(p => p.startsWith('settings:'))) {
       permsToSave = permsToSave.filter(p => p !== 'settings');
+    }
+    if (permsToSave.some(p => p.startsWith('development:'))) {
+      permsToSave = permsToSave.filter(p => p !== 'development');
     }
     if (permsToSave.some(p => p.startsWith('basic:'))) {
       permsToSave = permsToSave.filter(p => p !== 'basic');
@@ -108,6 +117,42 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
         return next;
       }
     });
+  }
+
+  function toggleDevelopmentPerm(perm: string) {
+    setRolePerms(prev => {
+      const parts = perm.split(':');
+      const mod = `${parts[0]}:${parts[1]}`;
+      const action = parts[2];
+      if (prev.includes(perm)) {
+        if (action === 'view') return prev.filter(p => !p.startsWith(`${mod}:`));
+        return prev.filter(p => p !== perm);
+      }
+      const next = [...prev, perm];
+      if (action !== 'view') {
+        const viewPerm = `${mod}:view`;
+        if (!next.includes(viewPerm)) next.push(viewPerm);
+      }
+      return next;
+    });
+  }
+
+  function toggleDevelopmentAll() {
+    const all = DEVELOPMENT_SUB_MODULES.flatMap(sm => sm.actions.map(a => `development:${sm.key}:${a}`));
+    const hasAll = all.every(p => rolePerms.includes(p));
+    setRolePerms(prev =>
+      hasAll ? prev.filter(p => !p.startsWith('development:')) : [...new Set([...prev.filter(p => !p.startsWith('development:')), ...all])],
+    );
+  }
+
+  function toggleDevelopmentSubModuleAll(smKey: string) {
+    const sm = DEVELOPMENT_SUB_MODULES.find(s => s.key === smKey);
+    if (!sm) return;
+    const perms = sm.actions.map(a => `development:${smKey}:${a}`);
+    const hasAll = perms.every(p => rolePerms.includes(p));
+    setRolePerms(prev =>
+      hasAll ? prev.filter(p => !p.startsWith(`development:${smKey}:`)) : [...prev.filter(p => !p.startsWith(`development:${smKey}:`)), ...perms],
+    );
   }
 
   function toggleBasicPerm(perm: string) {
@@ -387,6 +432,83 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
               ))}
             </div>
           </div>
+
+          {developmentModuleChecked && (
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setDevelopmentExpanded(v => !v)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+              >
+                <span className="text-sm font-bold text-slate-700">开发管理 - 细粒度权限</span>
+                <div className="flex items-center gap-2">
+                  {!developmentExpanded && rolePerms.some(p => p.startsWith('development:')) && (
+                    <span className="text-xs text-indigo-500 font-medium">
+                      已配置 {DEVELOPMENT_SUB_MODULES.filter(sm => rolePerms.some(p => p.startsWith(`development:${sm.key}:`))).length} 项
+                    </span>
+                  )}
+                  {developmentExpanded
+                    ? <ChevronDown className="w-4 h-4 text-slate-400" />
+                    : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                </div>
+              </button>
+              {developmentExpanded && (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-t border-slate-100">
+                      <th className="text-left px-4 py-2 font-medium text-slate-600 w-[40%]">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={DEVELOPMENT_SUB_MODULES.flatMap(sm => sm.actions.map(a => `development:${sm.key}:${a}`)).every(p => rolePerms.includes(p))}
+                            onChange={toggleDevelopmentAll}
+                            className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
+                          />
+                          全选
+                        </label>
+                      </th>
+                      {['view', 'create', 'edit', 'delete'].map(a => (
+                        <th key={a} className="text-center px-2 py-2 font-medium text-slate-600">{ACTION_LABELS[a]}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {DEVELOPMENT_SUB_MODULES.map(sm => (
+                      <tr key={sm.key} className="hover:bg-slate-50/50">
+                        <td className="px-4 py-2.5 text-slate-700 font-medium">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={sm.actions.every(a => rolePerms.includes(`development:${sm.key}:${a}`))}
+                              onChange={() => toggleDevelopmentSubModuleAll(sm.key)}
+                              className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
+                            />
+                            {sm.label}
+                          </label>
+                        </td>
+                        {['view', 'create', 'edit', 'delete'].map(action => {
+                          const perm = `development:${sm.key}:${action}`;
+                          const available = sm.actions.includes(action);
+                          return (
+                            <td key={action} className="text-center px-2 py-2.5">
+                              {available ? (
+                                <input
+                                  type="checkbox"
+                                  checked={rolePerms.includes(perm)}
+                                  onChange={() => toggleDevelopmentPerm(perm)}
+                                  className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
+                                />
+                              ) : <span className="text-slate-200">—</span>}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
 
           {/* 基础信息细粒度权限矩阵 */}
           {basicModuleChecked && (

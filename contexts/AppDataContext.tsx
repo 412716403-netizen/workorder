@@ -504,7 +504,15 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     setOrders(prev => ts ? mergeById(prev, data) : data);
     markFetched('orders');
   }, []);
-  const refreshProducts = useCallback(async () => { setProducts(normalizeDecimals(await api.products.list() as Product[])); markFetched('products'); }, []);
+  const refreshProducts = useCallback(async () => {
+    const [prods, bomList] = await Promise.all([
+      api.products.list() as Promise<Product[]>,
+      api.boms.list() as Promise<BOM[]>,
+    ]);
+    setProducts(normalizeDecimals(prods));
+    setBoms(normalizeDecimals(bomList));
+    markFetched('products');
+  }, []);
   const refreshBoms = useCallback(async () => setBoms(normalizeDecimals(await api.boms.list() as BOM[])), []);
   /**
    * Phase 3.D follow-up：`refreshProdRecords / refreshPsiRecords / refreshFinanceRecords`

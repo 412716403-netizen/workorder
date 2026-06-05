@@ -39,6 +39,8 @@ export { partners, workers, equipment, dictionaries } from './api/masterData';
 
 export { products, boms } from './api/products';
 
+export { devStyles, devBoms, devTemplates } from './api/development';
+
 export { plans } from './api/plans';
 
 export { orders, production } from './api/orders';

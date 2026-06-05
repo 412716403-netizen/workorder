@@ -13,6 +13,7 @@ const TENANT_MODELS = new Set([
   'PlanOrder', 'ProductionOrder', 'ProductMilestoneProgress',
   'ProductionOpRecord', 'PsiRecord', 'FinanceRecord',
   'Role', 'ItemCode', 'PlanVirtualBatch',
+  'DevStyle', 'DevBom', 'DevStageTemplate',
 ]);
 
 /**
@@ -39,6 +40,14 @@ const RELATION_TENANT_PATH: Record<string, string[]> = {
   BomItem: ['bom'],
   PlanItem: ['planOrder'],
   ProductVariant: ['product'],
+  DevStyleVariant: ['style'],
+  DevSample: ['style'],
+  DevStage: ['sample', 'style'],
+  DevStageField: ['stage', 'sample', 'style'],
+  DevAttachment: ['stage', 'sample', 'style'],
+  DevLog: ['sample', 'style'],
+  DevBomItem: ['bom'],
+  DevStageTemplateField: ['template'],
 };
 
 function injectTenantWhere(args: any, tenantId: string) {

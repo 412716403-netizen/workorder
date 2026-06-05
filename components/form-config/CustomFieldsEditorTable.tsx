@@ -382,6 +382,8 @@ export interface ReportCustomFieldsConfigTableProps {
   allowedTypes?: readonly CustomDocFieldType[];
   /** 为 false 时不显示「表单中」列（如工序展示模板） */
   showShowInFormColumn?: boolean;
+  /** 为 false 时不渲染标题行（含增加按钮）；由外层卡片提供标题与操作 */
+  showHeader?: boolean;
 }
 
 /** 产品分类 / 合作单位分类 / 财务分类 / 工序报工模板等 `ReportFieldDefinition[]` 配置表 */
@@ -397,6 +399,7 @@ export const ReportCustomFieldsConfigTable: React.FC<ReportCustomFieldsConfigTab
   showRequiredColumn = false,
   allowedTypes = DEFAULT_REPORT_ALLOWED_TYPES,
   showShowInFormColumn = true,
+  showHeader = true,
 }) => {
   const typeOptions = (allowedTypes?.length ? allowedTypes : DEFAULT_REPORT_ALLOWED_TYPES) as CustomDocFieldType[];
 
@@ -434,7 +437,7 @@ export const ReportCustomFieldsConfigTable: React.FC<ReportCustomFieldsConfigTab
 
   return (
     <div>
-      {(title || headerExtra) && (
+      {showHeader && (title || headerExtra) && (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0 flex-1">
             {title && <div className="text-sm font-black uppercase tracking-widest text-slate-600">{title}</div>}
@@ -488,7 +491,7 @@ export const ReportCustomFieldsConfigTable: React.FC<ReportCustomFieldsConfigTab
             <tbody className="divide-y divide-slate-100">
               {fields.map(cf => (
                 <tr key={cf.id} className="hover:bg-slate-50/50">
-                  <td className="px-4 py-2">
+                  <td className="align-top px-4 py-2">
                     <BlurPersistLabelInput
                       inputKey={`${idPrefix}${cf.id}`}
                       label={cf.label}
@@ -498,7 +501,7 @@ export const ReportCustomFieldsConfigTable: React.FC<ReportCustomFieldsConfigTab
                       className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm font-bold outline-none"
                     />
                   </td>
-                  <td className="px-4 py-2">
+                  <td className="align-top px-4 py-2">
                     <select
                       value={
                         typeOptions.includes(effectiveCustomDocFieldType(cf))
@@ -564,26 +567,26 @@ export const ReportCustomFieldsConfigTable: React.FC<ReportCustomFieldsConfigTab
                     )}
                   </td>
                   {showRequiredColumn && (
-                    <td className="px-4 py-2 text-center">
+                    <td className="align-top px-4 py-2 text-center">
                       <input
                         type="checkbox"
                         checked={!!cf.required}
                         onChange={e => patch(cf.id, c => ({ ...c, required: e.target.checked }))}
-                        className="h-4 w-4 rounded text-indigo-600"
+                        className="mt-2 h-4 w-4 rounded text-indigo-600"
                       />
                     </td>
                   )}
                   {showShowInFormColumn && (
-                    <td className="px-4 py-2 text-center">
+                    <td className="align-top px-4 py-2 text-center">
                       <input
                         type="checkbox"
                         checked={cf.showInForm !== false}
                         onChange={e => patch(cf.id, c => ({ ...c, showInForm: e.target.checked }))}
-                        className="h-4 w-4 rounded text-indigo-600"
+                        className="mt-2 h-4 w-4 rounded text-indigo-600"
                       />
                     </td>
                   )}
-                  <td className="px-4 py-2">
+                  <td className="align-top px-4 py-2">
                     <button
                       type="button"
                       onClick={() => onChange(fields.filter(c => c.id !== cf.id))}

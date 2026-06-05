@@ -12,11 +12,12 @@
  * - PRODUCTS / MEMBERS 的 Suspense lazy 装配
  * - 详情可见性桥接 (productDetailVisible) 与路由 state (editProductId)
  */
-import React, { useState, useLayoutEffect, useCallback, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useLayoutEffect, useCallback, useEffect, Suspense } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Boxes, Building2, Cpu, ShieldCheck, Library } from 'lucide-react';
-const ProductManagementView = lazy(() => import('./ProductManagementView'));
-const MemberManagementView = lazy(() => import('./MemberManagementView'));
+import { lazyWithReloadOnChunkError } from '../utils/lazyWithReloadOnChunkError';
+const ProductManagementView = lazyWithReloadOnChunkError(() => import('./ProductManagementView'));
+const MemberManagementView = lazyWithReloadOnChunkError(() => import('./MemberManagementView'));
 
 const BasicInfoPanelFallback = () => (
   <div className="flex min-h-[320px] items-center justify-center text-sm font-medium text-slate-400">

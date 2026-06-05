@@ -9,10 +9,39 @@
  *    崩溃就要手动重来。
  *  - 按 Ctrl+C 时，一次性干净地把所有子进程都收掉。
  */
+import { execSync } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import process from 'node:process';
 
 const isMac = process.platform === 'darwin';
+const projectRoot = process.cwd();
+
+/** 3001 被其它目录的旧后端占用时，本仓库 API 绑不上端口，Vite 代理仍会打到旧服务 → /api/dev/* 404 */
+function warnIfForeignListener(port) {
+  try {
+    const pids = execSync(`lsof -i :${port} -sTCP:LISTEN -t 2>/dev/null`, { encoding: 'utf8' })
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+    for (const pid of pids) {
+      let cwd = '';
+      try {
+        cwd = execSync(`lsof -p ${pid} 2>/dev/null | awk '/cwd/ {print $9; exit}'`, { encoding: 'utf8' }).trim();
+      } catch {
+        cwd = '';
+      }
+      if (cwd && !cwd.startsWith(projectRoot)) {
+        console.warn(
+          `\n\u001b[33m[dev-all] 警告: 端口 ${port} 已被其它项目占用 (PID ${pid})。\n` +
+            `  目录: ${cwd}\n` +
+            `  请先结束旧进程 (kill ${pid})，否则本仓库 API 无法监听 ${port}，开发管理等新接口会 404。\u001b[0m\n`,
+        );
+      }
+    }
+  } catch {
+    /* 无占用或 lsof 不可用 */
+  }
+}
 
 const MAX_RESTARTS = 5;
 const RESTART_DELAY_MS = 1000;
@@ -133,5 +162,8 @@ if (isMac) {
 
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+warnIfForeignListener(3001);
+warnIfForeignListener(3000);
 
 for (const s of services) start(s);

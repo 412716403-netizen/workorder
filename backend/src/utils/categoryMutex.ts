@@ -18,3 +18,26 @@ export function assertCategoryColorSizeUpgradeAllowed(
   if (!category) return;
   assertCategoryBatchColorMutex({ hasColorSize: true, hasBatchManagement: category.hasBatchManagement });
 }
+
+/** 产品分类：启用采购价时须保持关联合作单位；开启采购价时自动开启关联合作单位 */
+export function applyCategoryPurchasePartnerRule(data: {
+  hasPurchasePrice?: unknown;
+  linkPartner?: unknown;
+}): void {
+  const hasPurchase = Boolean(data.hasPurchasePrice);
+  const linkPartner = Boolean(data.linkPartner);
+  if (hasPurchase && !linkPartner) {
+    data.linkPartner = true;
+  }
+}
+
+export function assertCategoryPurchasePartnerRule(data: {
+  hasPurchasePrice?: unknown;
+  linkPartner?: unknown;
+}): void {
+  const hasPurchase = Boolean(data.hasPurchasePrice);
+  const linkPartner = Boolean(data.linkPartner);
+  if (hasPurchase && !linkPartner) {
+    throw new AppError(400, '已启用采购价时需保持关联合作单位');
+  }
+}

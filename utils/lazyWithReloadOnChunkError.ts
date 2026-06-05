@@ -12,7 +12,12 @@ export function lazyWithReloadOnChunkError<T extends ComponentType<unknown>>(
 ) {
   return lazy(async () => {
     try {
-      return await importer();
+      const mod = await importer();
+      // 加载成功说明已是最新版本，清掉重载标记，便于下次发布后再次自愈。
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem(SESSION_KEY);
+      }
+      return mod;
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       const chunkFailed =

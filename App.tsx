@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Link, Navigate, useParams, useLocation } 
 import {
   ClipboardList, Settings as SettingsIcon,
   Boxes, ShoppingCart, Wallet, LogOut, User, UserCog, Building2, Loader2, Inbox, ScanLine,
+  FlaskConical,
 } from 'lucide-react';
 
 import LoginView from './views/LoginView';
@@ -11,6 +12,7 @@ import TenantSelectView from './views/TenantSelectView';
 import ProfileModal from './views/ProfileModal';
 import { lazyWithReloadOnChunkError } from './utils/lazyWithReloadOnChunkError';
 
+const DevManagementView = lazyWithReloadOnChunkError(() => import('./views/development/DevManagementView'));
 const ProductionManagementView = lazyWithReloadOnChunkError(() => import('./views/ProductionManagementView'));
 const PSIView = lazyWithReloadOnChunkError(() => import('./views/PSIView'));
 const FinanceView = lazyWithReloadOnChunkError(() => import('./views/FinanceView'));
@@ -199,6 +201,11 @@ function AppLayout() {
         </div>
 
         <nav className="flex flex-col gap-1.5">
+          {hasPerm('development') && (
+            <Link to="/development" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+              <FlaskConical className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 开发管理
+            </Link>
+          )}
           {hasPerm('production') && (
             <Link to="/production" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
               <ClipboardList className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 生产管理
@@ -304,12 +311,17 @@ function AppLayout() {
 /** 根路径与通配：进入首个有模块权限的业务页 */
 function DefaultHomeRedirect() {
   const { hasPerm } = useAuth();
+  if (hasPerm('development')) return <Navigate to="/development" replace />;
   if (hasPerm('production')) return <Navigate to="/production" replace />;
   if (hasPerm('psi')) return <Navigate to="/psi" replace />;
   if (hasPerm('finance')) return <Navigate to="/finance" replace />;
   if (hasPerm('basic')) return <Navigate to="/basic" replace />;
   if (hasPerm('settings')) return <Navigate to="/settings" replace />;
   return <Navigate to="/collaboration" replace />;
+}
+
+function DevelopmentRoute() {
+  return <DevManagementView />;
 }
 
 function ProductionRoute() {
@@ -343,6 +355,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<DefaultHomeRedirect />} />
+      <Route path="/development" element={<DevelopmentRoute />} />
       <Route path="/production" element={<ProductionRoute />} />
       <Route path="/psi" element={<PsiRoute />} />
       <Route path="/finance" element={<FinanceRoute />} />

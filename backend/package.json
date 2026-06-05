@@ -6,7 +6,7 @@
   "scripts": {
     "setup": "bash scripts/setup-db.sh",
     "setup:homebrew": "bash scripts/setup-homebrew-pg.sh",
-    "dev": "tsx watch src/index.ts",
+    "dev": "prisma generate && tsx watch src/index.ts",
     "build": "rm -rf dist && tsc",
     "start": "node dist/backend/src/index.js",
     "db:generate": "prisma generate",
@@ -14,7 +14,8 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "postinstall": "prisma generate"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, Package, ChevronRight, Plus } from 'lucide-react';
 import type { Product, ProductCategory } from '../types';
@@ -11,9 +11,10 @@ import {
 } from '../utils/reportCustomDocField';
 import { compareProductsArchiveOrder } from '../utils/productSort';
 import { productMatchesSearchQuery } from '../utils/productSearchMatch';
+import { lazyWithReloadOnChunkError } from '../utils/lazyWithReloadOnChunkError';
 
 /** 动态加载，避免与 ProductEditForm 形成静态循环依赖（否则 BOM 内 SearchableProductSelect 会整段挂掉） */
-const ProductArchiveCreateModal = lazy(() => import('./ProductArchiveCreateModal'));
+const ProductArchiveCreateModal = lazyWithReloadOnChunkError(() => import('./ProductArchiveCreateModal'));
 
 function getFileExtFromDataUrl(dataUrl: string): string {
   const m = dataUrl.match(/^data:[^/]+\/([^;]+)/);

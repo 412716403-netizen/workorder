@@ -47,6 +47,7 @@ export async function seedTenantIndustryPresetForKind(
       hasProcess: false,
       hasSalesPrice: false,
       hasPurchasePrice: true,
+      linkPartner: true,
       hasColorSize: false,
       hasBatchManagement: true,
       customFields: EMPTY_JSON,

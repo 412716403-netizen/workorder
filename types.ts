@@ -49,7 +49,26 @@ export {
   type ScanValidateRequest,
   type ScanValidateResponse,
   type ScanValidateCode,
+  DevStyleStatus,
+  DevStageStatus,
+  DEV_STYLE_STATUS_LABEL,
+  DEV_STAGE_STATUS_LABEL,
+  type DevStyleDto,
+  type DevStyleVariantDto,
+  type DevSampleDto,
+  type DevStageDto,
+  type DevStageFieldDto,
+  type DevAttachmentDto,
+  type DevLogDto,
+  type DevBomDto,
+  type DevBomItemDto,
+  type DevStageTemplateDto,
+  type DevStageTemplateFieldDto,
 } from './shared/types';
+
+/** 开发管理 BOM（与 BOM 结构对齐，parent 为款式 id） */
+export type DevBOM = DevBomDto;
+export type DevBOMItem = DevBomItemDto;
 
 /** 与 CustomDocFieldType 相同，保留别名供计划单单据配置等既有命名 */
 export type PlanFormCustomFieldType = CustomDocFieldType;
@@ -284,6 +303,8 @@ export interface ProductCategory {
   hasProcess: boolean;
   hasSalesPrice: boolean;
   hasPurchasePrice: boolean;
+  /** 是否关联合作单位（首选供应商；开发管理客户字段与按客户排序） */
+  linkPartner?: boolean;
   hasColorSize: boolean;
   /** 是否启用批次管理：启用后相关产品在采购、出入库和生产入库中按批次记录 */
   hasBatchManagement?: boolean;

@@ -21,6 +21,7 @@
 | 财务 | FinanceRecord |
 | 协作 | TenantCollaboration, InterTenantSubcontractTransfer, CollaborationProductMap, OutsourceRoute |
 | 码管理 | ItemCode, PlanVirtualBatch |
+| 款式开发 | DevStyle, DevStyleVariant, DevBom, DevBomItem, DevSample, DevStage, DevStageField, DevAttachment, DevStageTemplate, DevLog |
 
 ### 1.2 客户端会话 / 租户缓存
 
@@ -180,11 +181,53 @@ interface BOM {
 
 **关联**：`Product.variants[].nodeBOMs` 为 `{ [nodeId]: bomId }`，按工序绑定 BOM。
 
+### 5.1 开发款式 BOM（DevBom）
+
+与产品 BOM 同形，见 `shared/types.ts` 中 `DevBomDto` / `DevBomItemDto`：
+
+| 字段 | 说明 |
+|------|------|
+| `parentStyleId` | 开发款式 id |
+| `variantId` | 可选；多变体时为 `DevStyleVariant.id`；单 SKU 时为空 |
+| `nodeId` | 大货工序节点 id（`GlobalNodeTemplate`，非样品开发 `DevStage`） |
+| `items` | 子件物料行 |
+
+`DevStyleVariant.nodeBoms` 与 `ProductVariant.nodeBoms` 同形。发布大货时拷贝为 `Bom`，并重新生成 `bom-*` id 写入产品变体 `nodeBoms`。
+
+### 5.2 开发节点模板字段（DevStageTemplateField）
+
+与工序节点库 `GlobalNodeTemplate.reportTemplate`（`ReportFieldDefinition`）同形，持久化于关系表 `dev_stage_template_fields`：
+
+| 字段 | 说明 |
+|------|------|
+| `label` | 登记项标签 |
+| `type` | `text \| date \| select \| file`，默认 `text` |
+| `options` | 下拉选项 JSON 数组（`type=select`） |
+| `dateWithTime` | 日期含时分（`type=date`） |
+| `dateAutoFill` | 打开登记表单自动填入当前日期/时间 |
+| `required` | 是否必填 |
+| `order` | 排序 |
+
+样品节点登记时按节点名匹配模板，渲染对应控件；值落 `dev_stage_fields.value` + `type`。
+
 ---
 
 ## 6. 产品 (Product)
 
 详见 `types.ts`。核心：`categoryId`、`variants`、`nodeRates`（仅对工序节点开启计件工价的工序）、`categoryCustomData`。工价单位为元/件，仅当工序 `enablePieceRate` 为 true 时在产品与 BOM、计划详情中显示。
+
+### 6.1 产品分类 (ProductCategory)
+
+| 字段 | 说明 |
+|------|------|
+| `hasSalesPrice` | 是否录入标准销售单价 |
+| `hasPurchasePrice` | 是否录入参考采购单价；开启时须同时 `linkPartner=true` |
+| `linkPartner` | 是否关联合作单位（产品档案首选供应商；开发款式 `customerName`） |
+| `hasColorSize` | 颜色尺码（与 `hasBatchManagement` 互斥） |
+| `hasBatchManagement` | 批次管理 |
+| `customFields` | 分类扩展字段 |
+
+历史数据：`hasPurchasePrice=true` 的分类在 migration 中回填 `linkPartner=true`。
 
 ---
 

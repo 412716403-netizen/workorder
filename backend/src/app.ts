@@ -26,6 +26,7 @@ import rolesRoutes from './routes/roles.js';
 import collaborationRoutes from './routes/collaboration.js';
 import itemCodesRoutes from './routes/item-codes.js';
 import planVirtualBatchesRoutes from './routes/plan-virtual-batches.js';
+import devRoutes from './routes/dev.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -95,6 +96,7 @@ app.use('/api/roles',      authMiddleware, requireTenant, apiLimiter, rolesRoute
 app.use('/api/settings',   authMiddleware, requireTenant, apiLimiter, cacheControl(60), settingsRoutes);
 app.use('/api/master',     authMiddleware, requireTenant, apiLimiter, cacheControl(60), masterDataRoutes);
 app.use('/api/products',   authMiddleware, requireTenant, apiLimiter, cacheControl(60), productsRoutes);
+app.use('/api/dev',        authMiddleware, requireTenant, apiLimiter, devRoutes);
 app.use('/api/plans',      authMiddleware, requireTenant, apiLimiter, plansRoutes);
 app.use('/api/orders',     authMiddleware, requireTenant, requirePermission('production'), apiLimiter, ordersRoutes);
 app.use('/api/production', authMiddleware, requireTenant, requirePermission('production'), apiLimiter, productionRoutes);
