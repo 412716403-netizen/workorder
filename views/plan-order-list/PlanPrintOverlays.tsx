@@ -1,8 +1,10 @@
-import React from 'react';
-import { Plus, Printer, X } from 'lucide-react';
+import React, { useCallback, useState } from 'react';
+import { FileDown, Plus, Printer, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '../../contexts/AuthContext';
 import { buildPrintListRowsFromItemCodes, type ItemCodePrintContext } from '../../utils/printItemCodeRows';
 import { buildVirtualBatchPrintRow } from '../../utils/printVirtualBatch';
+import { mergeTenantPrintContext } from '../../utils/mergeTenantPrintContext';
 import { formatBatchSerialLabel, formatItemCodeSerialLabelFromCode } from '../../utils/serialLabels';
 import { AppDictionaries, ItemCode, PlanOrder, PlanVirtualBatch, PrintTemplate, Product, ProductionOrder } from '../../types';
 
@@ -78,32 +80,85 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
   batchPrintModal,
   setBatchPrintModal,
 }) => {
+  const { tenantCtx } = useAuth();
+  const [itemCodePdfExportingId, setItemCodePdfExportingId] = useState<string | null>(null);
+
+  const buildItemCodeLabelRows = useCallback(
+    (pickerPlan: PlanOrder) => {
+      const pickerProduct = products.find(p => p.id === pickerPlan.productId);
+      const orders2 = (orders ?? []).filter((o: ProductionOrder) => o.planOrderId === pickerPlan.id);
+      const ctx2: ItemCodePrintContext = {
+        planNumber: pickerPlan.planNumber,
+        productName: pickerProduct?.name ?? '',
+        orderNumbers: orders2.map(o => o.orderNumber),
+        variants: pickerProduct?.variants ?? [],
+      };
+      const rows = buildPrintListRowsFromItemCodes(
+        itemCodePrintCodes,
+        ctx2,
+        dictionaries,
+        window.location.origin,
+      );
+      return { pickerProduct, rows };
+    },
+    [products, orders, itemCodePrintCodes, dictionaries],
+  );
+
   return (
     <>
       {itemCodePrintOpen && itemCodePrintPlan && (() => {
         const pickerPlan = itemCodePrintPlan;
-        const pickerProduct = products.find(p => p.id === pickerPlan.productId);
 
         const handleItemCodeTemplatePick = (t: PrintTemplate) => {
           if (itemCodePrintCodes.length === 0) {
             toast.error('没有可打印的单品码');
             return;
           }
-          const orders2 = (orders ?? []).filter((o: any) => o.planOrderId === pickerPlan.id);
-          const ctx2: ItemCodePrintContext = {
-            planNumber: pickerPlan.planNumber,
-            productName: pickerProduct?.name ?? '',
-            orderNumbers: orders2.map((o: any) => o.orderNumber),
-            variants: pickerProduct?.variants ?? [],
-          };
-          const baseUrl = window.location.origin;
-          const rows = buildPrintListRowsFromItemCodes(itemCodePrintCodes, ctx2, dictionaries, baseUrl);
+          const { rows } = buildItemCodeLabelRows(pickerPlan);
           onPrintRun({
             template: t,
             plan: { ...pickerPlan, _printListRows: rows, _labelPerRow: true } as any,
           });
           setItemCodePrintOpen(false);
           setItemCodePrintPlan(null);
+        };
+
+        const handleItemCodeExportPdf = async (t: PrintTemplate) => {
+          if (itemCodePrintCodes.length === 0) {
+            toast.error('没有可导出的单品码');
+            return;
+          }
+          if (itemCodePdfExportingId) return;
+          const { pickerProduct, rows } = buildItemCodeLabelRows(pickerPlan);
+          setItemCodePdfExportingId(t.id);
+          const toastId = 'item-code-pdf-export';
+          toast.loading(`正在生成 PDF（0/${rows.length}）…`, { id: toastId });
+          try {
+            const { exportPrintLabelsPdf } = await import('../../utils/exportPrintLabelsPdf');
+            await exportPrintLabelsPdf({
+              template: t,
+              ctx: mergeTenantPrintContext(
+                {
+                  plan: pickerPlan,
+                  product: pickerProduct,
+                  printListRows: rows,
+                  labelPerRow: true,
+                },
+                tenantCtx?.tenantName,
+              ),
+              filename: `${pickerPlan.planNumber}-单品码标签.pdf`,
+              onProgress: (done, total) => {
+                toast.loading(`正在生成 PDF（${done}/${total}）…`, { id: toastId });
+              },
+            });
+            toast.success('PDF 已下载到本地', { id: toastId });
+          } catch (err) {
+            console.error('[item-code-pdf-export]', err);
+            const msg = err instanceof Error ? err.message : '';
+            toast.error(msg ? `导出 PDF 失败：${msg}` : '导出 PDF 失败，请稍后重试', { id: toastId });
+          } finally {
+            setItemCodePdfExportingId(null);
+          }
         };
 
         return (
@@ -152,7 +207,7 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
                     共{' '}
                     <span className="font-black text-indigo-600">{itemCodePrintCodes.length}</span> 条有效单品码，各 1
                     张，合计{' '}
-                    <span className="font-black text-indigo-600">{itemCodePrintCodes.length}</span> 张。全量加载，量多可能稍慢。
+                    <span className="font-black text-indigo-600">{itemCodePrintCodes.length}</span> 张。导出 PDF 为矢量生成，通常比浏览器批量打印更快。
                   </p>
                 )}
               </div>
@@ -174,14 +229,26 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
                             {t.paperSize.widthMm}×{t.paperSize.heightMm} mm
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => handleItemCodeTemplatePick(t)}
-                          className="flex shrink-0 items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700"
-                        >
-                          <Printer className="h-3.5 w-3.5" />
-                          打印
-                        </button>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleItemCodeTemplatePick(t)}
+                            disabled={itemCodePdfExportingId != null}
+                            className="flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Printer className="h-3.5 w-3.5" />
+                            打印
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleItemCodeExportPdf(t)}
+                            disabled={itemCodePdfExportingId != null}
+                            className="flex items-center gap-1 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-bold text-indigo-600 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <FileDown className="h-3.5 w-3.5" />
+                            {itemCodePdfExportingId === t.id ? '导出中…' : '导出 PDF'}
+                          </button>
+                        </div>
                       </div>
                     </li>
                   ))}
