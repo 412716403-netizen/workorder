@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { TableVirtuoso } from 'react-virtuoso';
-import { X, Filter, FileText, ScrollText, Loader2 } from 'lucide-react';
+import { X, Filter, FileText, ScrollText } from 'lucide-react';
 import type { Product, ProductionOpRecord, PsiRecord, Warehouse } from '../../types';
 import {
   fetchProductionByFilter,
@@ -11,6 +11,9 @@ import {
   getTodayRangeIso,
   isoToDateInput,
 } from '../production-ops/sharedFlowListHelpers';
+import { computeWarehouseFlowTotals, formatWarehouseFlowQty } from './warehouseFlowHelpers';
+import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
+import FlowListProductCell from '../../components/flow/FlowListProductCell';
 
 const WAREHOUSE_FLOW_TYPES = ['PURCHASE_BILL', 'SALES_BILL', 'TRANSFER', 'STOCKTAKE', 'STOCK_IN', 'STOCK_RETURN', 'STOCK_OUT'] as const;
 const warehouseFlowTypeLabel: Record<string, string> = { PURCHASE_BILL: '采购入库', SALES_BILL: '销售出库', SALES_RETURN: '销售退货', TRANSFER: '调拨', STOCKTAKE: '盘点', STOCK_IN: '生产入库', STOCK_RETURN: '生产退料', STOCK_OUT: '领料发出' };
@@ -138,7 +141,6 @@ const WarehouseFlowModal: React.FC<WarehouseFlowModalProps> = ({
   });
 
   const isLoading = queries.some(q => q.isLoading);
-  const isFetching = queries.some(q => q.isFetching);
   const psiAll = useMemo<PsiRecord[]>(
     () => [
       ...((queries[0].data as PsiRecord[] | undefined) ?? []),
@@ -271,6 +273,11 @@ const WarehouseFlowModal: React.FC<WarehouseFlowModalProps> = ({
     return rows;
   }, [warehouseFlowRows, dateFrom, dateTo, flowType, flowWarehouse, docNo, product]);
 
+  const flowTotals = useMemo(
+    () => computeWarehouseFlowTotals(filteredRows),
+    [filteredRows],
+  );
+
   const handleViewDetail = (key: string) => {
     onViewDetail(key, { psiRecords: psiAll, prodRecords: prodAll });
   };
@@ -328,15 +335,8 @@ const WarehouseFlowModal: React.FC<WarehouseFlowModalProps> = ({
               <input type="text" value={product} onChange={e => setProduct(e.target.value)} placeholder="模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
             </div>
           </div>
-          <div className="mt-2 flex items-center gap-4">
-            <button type="button" onClick={() => { setDateFrom(todayDate); setDateTo(todayDate); setFlowType('all'); setFlowWarehouse('all'); setDocNo(''); setProduct(''); }} className="text-xs font-bold text-slate-500 hover:text-slate-700">重置为当天</button>
-            <span className="text-xs text-slate-400">共 {filteredRows.length} 条</span>
-            {isFetching && (
-              <span className="text-xs text-indigo-500 inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />加载中</span>
-            )}
-          </div>
         </div>
-        <div className="flex-1 overflow-auto p-4">
+        <div className="flex-1 min-h-0 flex flex-col p-4">
           {isLoading ? (
             <p className="text-slate-500 text-center py-12">加载中…</p>
           ) : filteredRows.length === 0 ? (
@@ -344,7 +344,7 @@ const WarehouseFlowModal: React.FC<WarehouseFlowModalProps> = ({
           ) : (
             <div className="border border-slate-200 rounded-2xl overflow-hidden">
               <TableVirtuoso
-                style={{ height: Math.min(filteredRows.length * 48 + 48, 520) }}
+                style={{ height: Math.min(filteredRows.length * 48 + 48 + 44, 560) }}
                 data={filteredRows}
                 fixedHeaderContent={() => (
                  <tr className="bg-slate-50 border-b border-slate-200">
@@ -357,13 +357,36 @@ const WarehouseFlowModal: React.FC<WarehouseFlowModalProps> = ({
                    <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap w-24">操作</th>
                  </tr>
                 )}
+                fixedFooterContent={() => (
+                  <FlowListSummaryFooter
+                    mode="tableRow"
+                    count={filteredRows.length}
+                    colSpan={6}
+                    trailingEmptyCols={1}
+                    metrics={[
+                      { label: '入库', value: `${formatWarehouseFlowQty(flowTotals.inboundTotal)} 件`, className: 'text-indigo-600' },
+                      { label: '出库', value: `${formatWarehouseFlowQty(flowTotals.outboundTotal)} 件`, className: 'text-amber-600' },
+                      {
+                        label: '净变化',
+                        value: `${flowTotals.netChange >= 0 ? '+' : ''}${formatWarehouseFlowQty(flowTotals.netChange)} 件`,
+                        className: flowTotals.netChange < 0 ? 'text-rose-600' : 'text-slate-700',
+                      },
+                    ]}
+                  />
+                )}
                 itemContent={(_idx, row) => (
                   <>
                      <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{row.displayDateTime ?? row.dateStr}</td>
                      <td className="px-4 py-3"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">{row.typeLabel}</span></td>
                      <td className="px-4 py-3 text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">{row.docNumber}</td>
                      <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{row.warehouseName}</td>
-                     <td className="px-4 py-3 font-bold text-slate-800">{row.productName} <span className="text-[10px] font-bold text-slate-500">{row.productSku}</span></td>
+                     <td className="px-4 py-3">
+                       <FlowListProductCell
+                         product={productMap.get(row.productId)}
+                         name={row.productName}
+                         sku={row.productSku}
+                       />
+                     </td>
                      <td className="px-4 py-3 text-right font-black text-indigo-600">{row.quantity}</td>
                      <td className="px-4 py-3">
                         <button type="button" onClick={() => handleViewDetail(`${row.type}|${row.docNumber}`)} className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all whitespace-nowrap">

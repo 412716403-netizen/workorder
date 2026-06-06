@@ -765,7 +765,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
         orderId: productionLinkMode === 'product' ? undefined : order.id,
         productId: order.productId,
         quantity: appliedReportQty,
-        operator: '',
+        operator: resolveOpName(),
         timestamp: ts,
         status: '已收回',
         partner: outsourcePartner,

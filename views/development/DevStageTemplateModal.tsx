@@ -19,7 +19,13 @@ import {
 } from '../../utils/devStageTemplateFields';
 import { normalizeReportFieldDefinition } from '../../utils/reportCustomDocField';
 import DevCreateSectionCard from './DevCreateSectionCard';
-import { formStandardControlClass } from '../../styles/uiDensity';
+import {
+  formStandardControlClass,
+  outlineToolbarButtonClass,
+  pageSubtitleClass,
+  primaryToolbarButtonClass,
+  sectionTitleClass,
+} from '../../styles/uiDensity';
 
 /** 开发流程模板的细粒度写权限，与后端 development:templates:{create|edit|delete} 对齐 */
 export interface DevTemplatePerms {
@@ -219,10 +225,10 @@ const DevStageTemplateModal: React.FC<DevStageTemplateModalProps> = ({
               <GitBranch className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <h2 id="dev-stage-template-title" className="truncate text-base font-bold text-slate-900">
+              <h2 id="dev-stage-template-title" className={`truncate ${sectionTitleClass}`}>
                 开发节点管理
               </h2>
-              <p className="truncate text-[11px] font-medium text-slate-500">
+              <p className={`truncate ${pageSubtitleClass} mt-0 max-w-none`}>
                 配置样品开发流程节点及登记时的自定义填报内容
               </p>
             </div>
@@ -314,7 +320,7 @@ const DevStageTemplateModal: React.FC<DevStageTemplateModalProps> = ({
                                 if (e.key === 'Enter') void handleSaveTemplateName();
                                 if (e.key === 'Escape') setEditingTemplateId(null);
                               }}
-                              className={`min-w-0 flex-1 ${formStandardControlClass} !h-8 !py-1 text-xs font-bold`}
+                              className={`min-w-0 flex-1 ${formStandardControlClass} !h-8 !py-1`}
                             />
                             <button
                               type="button"
@@ -333,8 +339,8 @@ const DevStageTemplateModal: React.FC<DevStageTemplateModalProps> = ({
                           </div>
                         ) : (
                           <div className="flex min-w-0 items-center gap-2">
-                            <span className="truncate text-sm font-bold text-slate-800">{template.name}</span>
-                            <span className="shrink-0 text-[10px] font-medium text-slate-400">
+                            <span className="truncate text-sm font-semibold text-slate-800">{template.name}</span>
+                            <span className="shrink-0 text-xs font-medium text-slate-400">
                               {paramCount} 项
                             </span>
                           </div>
@@ -418,7 +424,7 @@ const DevStageTemplateModal: React.FC<DevStageTemplateModalProps> = ({
                       type="button"
                       disabled={busy}
                       onClick={handleAddReportField}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50"
+                      className={`inline-flex items-center gap-1.5 bg-indigo-600 text-white hover:bg-indigo-700 ${primaryToolbarButtonClass} !px-3 !py-1.5 !text-xs disabled:opacity-50`}
                     >
                       <Plus className="h-3.5 w-3.5" /> 增加填报项
                     </button>
@@ -448,14 +454,14 @@ const DevStageTemplateModal: React.FC<DevStageTemplateModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 transition-all hover:bg-slate-50"
+            className={outlineToolbarButtonClass}
           >
             取消
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-indigo-600/20 transition-all hover:bg-indigo-700 active:scale-[0.98]"
+            className={`bg-indigo-600 text-white hover:bg-indigo-700 ${primaryToolbarButtonClass}`}
           >
             完成配置
           </button>

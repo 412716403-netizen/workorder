@@ -13,6 +13,7 @@ import ProductCategoryInfoFields from '../../components/product/ProductCategoryI
 import { devStyleToProductInfo, patchDevStyleFromProduct, resolveDevStyleWithPublishedProduct } from '../../utils/productInfoDevStyleBridge';
 import DevFlowNodePicker from './DevFlowNodePicker';
 import DevCreateSectionCard from './DevCreateSectionCard';
+import { outlineAccentToolbarButtonClass } from '../../styles/uiDensity';
 
 export interface DevStyleProductFieldsProps {
   working: DevStyleDto;
@@ -87,7 +88,7 @@ const DevStyleProductFields: React.FC<DevStyleProductFieldsProps> = ({
       <button
         type="button"
         onClick={onOpenTemplateSettings}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[10px] font-bold text-slate-500 hover:border-indigo-200 hover:text-indigo-600 shadow-sm transition-colors"
+        className={outlineAccentToolbarButtonClass}
       >
         <Settings2 className="w-3.5 h-3.5" />
         开发节点库

@@ -14,7 +14,7 @@
  */
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Filter, FileText, Clock, User, Package, Loader2 } from 'lucide-react';
+import { Check, Filter, FileText, Clock, User, Package, Loader2, ScrollText, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import type {
   ProductionOrder,
@@ -49,6 +49,9 @@ import {
   dateInputToIsoStart,
   dateInputToIsoEndExclusive,
 } from '../production-ops/sharedFlowListHelpers';
+import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
+import FlowListProductCell from '../../components/flow/FlowListProductCell';
+import FlowListTableShell from '../../components/flow/FlowListTableShell';
 
 function StockInFlowEditSavePortal({ active, onSave }: { active: boolean; onSave: () => void }) {
   const host = React.useContext(DocPhaseEditToolbarPortalContext);
@@ -276,79 +279,90 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
 
   return (
     <>
-      <DocPhaseModal
-        open
-        phase="detail"
-        editingDocNumber={null}
-        maxWidthClass="max-w-6xl"
-        zIndexClass="z-[86]"
-        detailTitle=""
-        editTitle=""
-        newTitle="生产入库流水"
-        hasPerm={() => false}
-        viewPerm=""
-        editPerm=""
-        onClose={() => { onClose(); setStockInFlowDetailDocNo(null); }}
-        onEnterEdit={() => {}}
-        onCancelEdit={() => {}}
-        renderContent={() => (
-          <>
-            <div className="-mx-4 -mt-4 sm:-mx-6 sm:-mt-6 mb-4 px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-              <div className="flex items-center gap-2 mb-3">
-                <Filter className="w-4 h-4 text-slate-500" />
-                <span className="text-xs font-bold text-slate-500 uppercase">筛选</span>
-                <span className="text-[10px] text-slate-400">默认显示当天，扩大日期范围需手动改</span>
+      <div className="fixed inset-0 z-[86] flex items-center justify-center p-4">
+        <div
+          className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
+          onClick={() => { onClose(); setStockInFlowDetailDocNo(null); }}
+          aria-hidden
+        />
+        <div
+          className="relative bg-white w-full max-w-6xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+              <ScrollText className="w-5 h-5 text-indigo-600 shrink-0" /> 生产入库流水
+            </h3>
+            <button
+              type="button"
+              onClick={() => { onClose(); setStockInFlowDetailDocNo(null); }}
+              className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50 shrink-0"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
+            <div className="flex items-center gap-2 mb-3">
+              <Filter className="w-4 h-4 text-slate-500" />
+              <span className="text-xs font-bold text-slate-500 uppercase">筛选</span>
+              <span className="text-[10px] text-slate-400">默认显示当天，扩大日期范围需手动改</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 block mb-1">开始时间</label>
+                <input type="date" value={sf.dateFrom} onChange={e => setStockInFlowFilter(prev => ({ ...prev, dateFrom: e.target.value }))} className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 block mb-1">开始时间</label>
-                  <input type="date" value={sf.dateFrom} onChange={e => setStockInFlowFilter(prev => ({ ...prev, dateFrom: e.target.value }))} className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 block mb-1">结束时间</label>
-                  <input type="date" value={sf.dateTo} onChange={e => setStockInFlowFilter(prev => ({ ...prev, dateTo: e.target.value }))} className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 block mb-1">单据号</label>
-                  <input type="text" value={sf.docNo} onChange={e => setStockInFlowFilter(prev => ({ ...prev, docNo: e.target.value }))} placeholder="RK2026... 模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
-                </div>
-                {productionLinkMode !== 'product' && (
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 block mb-1">结束时间</label>
+                <input type="date" value={sf.dateTo} onChange={e => setStockInFlowFilter(prev => ({ ...prev, dateTo: e.target.value }))} className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 block mb-1">单据号</label>
+                <input type="text" value={sf.docNo} onChange={e => setStockInFlowFilter(prev => ({ ...prev, docNo: e.target.value }))} placeholder="RK2026... 模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
+              </div>
+              {productionLinkMode !== 'product' && (
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 block mb-1">工单号</label>
                   <input type="text" value={sf.orderNumber} onChange={e => setStockInFlowFilter(prev => ({ ...prev, orderNumber: e.target.value }))} placeholder="模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
                 </div>
-                )}
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 block mb-1">产品名称</label>
-                  <input type="text" value={sf.productName} onChange={e => setStockInFlowFilter(prev => ({ ...prev, productName: e.target.value }))} placeholder="产品名称模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 block mb-1">入库仓库</label>
-                  <select value={sf.warehouseId} onChange={e => setStockInFlowFilter(prev => ({ ...prev, warehouseId: e.target.value }))} className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200">
-                    <option value="">全部</option>
-                    {uniqueWarehouses.map(wid => {
-                      const w = warehouses.find(x => x.id === wid);
-                      return <option key={wid} value={wid}>{w?.name ?? wid}</option>;
-                    })}
-                  </select>
-                </div>
+              )}
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 block mb-1">产品名称</label>
+                <input type="text" value={sf.productName} onChange={e => setStockInFlowFilter(prev => ({ ...prev, productName: e.target.value }))} placeholder="产品名称模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" />
               </div>
-              <div className="mt-2 flex items-center gap-4">
-                <button onClick={() => setStockInFlowFilter({ dateFrom: todayDate, dateTo: todayDate, docNo: '', orderNumber: '', productName: '', warehouseId: '' })} className="text-xs font-bold text-slate-500 hover:text-slate-700">重置为当天</button>
-                <span className="text-xs text-slate-400">
-                  共 {batches.length} 次入库、{flowListRows.length} 条明细，合计 {totalQtyAll} 件
-                </span>
-                {stockInFlowQuery.isFetching && (
-                  <span className="text-xs text-indigo-500 inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />加载中</span>
-                )}
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 block mb-1">入库仓库</label>
+                <select value={sf.warehouseId} onChange={e => setStockInFlowFilter(prev => ({ ...prev, warehouseId: e.target.value }))} className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200 bg-white">
+                  <option value="">全部</option>
+                  {uniqueWarehouses.map(wid => {
+                    const w = warehouses.find(x => x.id === wid);
+                    return <option key={wid} value={wid}>{w?.name ?? wid}</option>;
+                  })}
+                </select>
               </div>
             </div>
+            {stockInFlowQuery.isFetching && (
+              <div className="mt-2 flex items-center gap-4">
+                <span className="text-xs text-indigo-500 inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />加载中</span>
+              </div>
+            )}
+          </div>
+          <div className="flex-1 min-h-0 flex flex-col p-4">
             {stockInFlowQuery.isLoading ? (
               <p className="text-slate-500 text-center py-12">加载中…</p>
             ) : flowListRows.length === 0 ? (
               <p className="text-slate-500 text-center py-12">暂无生产入库流水</p>
             ) : (
-              <div className="border border-slate-200 rounded-2xl overflow-hidden">
+              <FlowListTableShell
+                className="flex-1 min-h-0"
+                footer={
+                  <FlowListSummaryFooter
+                    mode="bar"
+                    count={flowListRows.length}
+                    metrics={[{ label: '入库', value: `${totalQtyAll} 件`, className: 'text-emerald-600' }]}
+                  />
+                }
+              >
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200">
@@ -361,7 +375,7 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
                       <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">入库仓库</th>
                       <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">数量</th>
                       <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">经办人</th>
-                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase w-24"></th>
+                      <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap w-24">操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -372,16 +386,22 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
                       return (
                         <tr key={`${row.docNo}-${row.productId}`} className="border-b border-slate-100 hover:bg-slate-50/50">
                           <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{fmtDT(row.first.timestamp)}</td>
-                          <td className="px-4 py-3 font-bold text-slate-800 whitespace-nowrap">{row.docNo}</td>
-                          <td className="px-4 py-3 text-slate-800 whitespace-nowrap">{row.productName}</td>
+                          <td className="px-4 py-3 text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">{row.docNo}</td>
+                          <td className="px-4 py-3">
+                            <FlowListProductCell
+                              product={rowProduct}
+                              name={row.productName}
+                              sku={rowProduct?.sku}
+                            />
+                          </td>
                           {productionLinkMode !== 'product' && (
-                            <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{row.orderNumber}</td>
+                            <td className="px-4 py-3 text-[10px] font-black text-indigo-600 whitespace-nowrap">{row.orderNumber || '—'}</td>
                           )}
                           <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{row.warehouseName || '—'}</td>
-                          <td className="px-4 py-3 font-bold text-emerald-600 text-right whitespace-nowrap">
+                          <td className="px-4 py-3 text-right font-black text-emerald-600 whitespace-nowrap">
                             {row.totalQty} {rowUnit}
                           </td>
-                          <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{row.first.operator}</td>
+                          <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{row.first.operator || '—'}</td>
                           <td className="px-4 py-3">
                             <button
                               type="button"
@@ -394,18 +414,13 @@ export const StockInFlowModal: React.FC<StockInFlowModalProps> = ({
                         </tr>
                       );
                     })}
-                    <tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold">
-                      <td className="px-4 py-3" colSpan={productionLinkMode === 'product' ? 4 : 5}></td>
-                      <td className="px-4 py-3 text-emerald-600 text-right">{totalQtyAll} 件</td>
-                      <td className="px-4 py-3" colSpan={2}></td>
-                    </tr>
                   </tbody>
                 </table>
-              </div>
+              </FlowListTableShell>
             )}
-          </>
-        )}
-      />
+          </div>
+        </div>
+      </div>
 
       {/* 入库流水详情弹窗 */}
       {detailBatch && (() => {

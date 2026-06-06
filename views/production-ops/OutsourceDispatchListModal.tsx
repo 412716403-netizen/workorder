@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ClipboardList, X, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Product } from '../../types';
+import FlowListProductCell from '../../components/flow/FlowListProductCell';
 
 export interface DispatchRow {
   orderId?: string;
@@ -140,9 +141,10 @@ const OutsourceDispatchListModal: React.FC<OutsourceDispatchListModalProps> = ({
                       </td>
                       {productionLinkMode !== 'product' && <td className="px-6 py-3 text-sm font-bold text-slate-800 align-middle truncate" title={row.orderNumber}>{row.orderNumber}</td>}
                       <td className="px-6 py-3 align-middle min-w-0">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-sm font-bold text-slate-800 truncate" title={row.productName}>{row.productName}</span>
-                        </div>
+                        <FlowListProductCell
+                          product={products.find(p => p.id === row.productId)}
+                          name={row.productName}
+                        />
                       </td>
                       <td className="px-6 py-3 text-sm font-bold text-indigo-600 align-middle truncate" title={row.milestoneName}>{row.milestoneName}</td>
                       <td className="px-6 py-3 text-right text-sm font-bold text-slate-700 align-middle">{row.availableQty}</td>

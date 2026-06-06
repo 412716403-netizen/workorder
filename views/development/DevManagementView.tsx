@@ -5,7 +5,7 @@ import { useDevStyles } from '../../hooks/useDevStyles';
 import { useDevTemplates } from '../../hooks/useDevTemplates';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { useAuthOptional } from '../../contexts/AuthContext';
-import { hasSubPermission } from '../../utils/hasSubPermission';
+import { hasModulePerm } from '../../utils/hasModulePerm';
 import type { DevStyleDto } from '../../types';
 import { DevStyleStatus } from '../../types';
 import DevCreateStyleModal from './DevCreateStyleModal';
@@ -39,17 +39,22 @@ const DevManagementView: React.FC = () => {
     moveTemplate,
   } = useDevTemplates(true);
   const auth = useAuthOptional();
-  const perms = auth?.tenantCtx?.permissions as string[] | undefined;
-  const canCreate = hasSubPermission(perms, 'development:styles:create');
-  const canEdit = hasSubPermission(perms, 'development:styles:edit');
-  const canDeleteStyle = hasSubPermission(perms, 'development:styles:delete');
+  const tenantRole = auth?.tenantCtx?.tenantRole;
+  const perms = auth?.tenantCtx?.permissions;
+  const hasDevPerm = useCallback(
+    (perm: string) => hasModulePerm(tenantRole, perms, 'development', perm),
+    [tenantRole, perms],
+  );
+  const canCreate = hasDevPerm('development:styles:create');
+  const canEdit = hasDevPerm('development:styles:edit');
+  const canDeleteStyle = hasDevPerm('development:styles:delete');
   const templatePerms = useMemo(
     () => ({
-      canCreate: hasSubPermission(perms, 'development:templates:create'),
-      canEdit: hasSubPermission(perms, 'development:templates:edit'),
-      canDelete: hasSubPermission(perms, 'development:templates:delete'),
+      canCreate: hasDevPerm('development:templates:create'),
+      canEdit: hasDevPerm('development:templates:edit'),
+      canDelete: hasDevPerm('development:templates:delete'),
     }),
-    [perms],
+    [hasDevPerm],
   );
   // 能否打开模板管理 UI：拥有任一写权限即可，进入后按 templatePerms 细分按钮
   const canManageTemplates = templatePerms.canCreate || templatePerms.canEdit || templatePerms.canDelete;

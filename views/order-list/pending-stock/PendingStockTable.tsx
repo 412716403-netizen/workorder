@@ -13,6 +13,7 @@ import { ScanBatchTrigger } from '../../../components/scan/ScanBatchTrigger';
 import type { Product, ProductCategory } from '../../../types';
 import { buildStockInFormDefaultsForPending, type PendingStockItem } from '../pendingStockStockInHelpers';
 import type { usePendingStockState } from '../../../hooks/usePendingStockState';
+import FlowListProductCell from '../../../components/flow/FlowListProductCell';
 
 type Helper = ReturnType<typeof usePendingStockState>;
 
@@ -183,7 +184,13 @@ const PendingStockTable: React.FC<Props> = ({ helper, productionLinkMode, produc
                     {productionLinkMode !== 'product' && (
                       <td className="px-4 py-3 font-bold text-slate-800">{item.order.orderNumber}</td>
                     )}
-                    <td className="px-4 py-3 text-slate-700">{item.order.productName}</td>
+                    <td className="px-4 py-3">
+                      <FlowListProductCell
+                        product={productMap.get(item.order.productId)}
+                        name={item.order.productName}
+                        sku={item.order.sku}
+                      />
+                    </td>
                     <td className="px-4 py-3 text-slate-600 text-right">
                       {productionLinkMode === 'product' ? item.productBlockOrderTotal : item.orderTotal} {unitName}
                     </td>

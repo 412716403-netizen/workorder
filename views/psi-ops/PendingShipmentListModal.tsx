@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { X, Filter, PackageCheck, FileText, ArrowDownToLine } from 'lucide-react';
 import { toast } from 'sonner';
-import { Partner } from '../../types';
+import { Partner, Product } from '../../types';
 import { localTodayYmd } from '../../utils/localDateTime';
 import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
+import FlowListProductCell from '../../components/flow/FlowListProductCell';
 
 export interface PendingShipmentGroup {
   groupKey: string;
@@ -22,6 +23,7 @@ export interface PendingShipmentGroup {
 interface PendingShipmentListModalProps {
   pendingShipmentGroups: PendingShipmentGroup[];
   partners: Partner[];
+  products: Product[];
   recordsList: any[];
   onClose: () => void;
   onOpenDetail: (group: PendingShipmentGroup) => void;
@@ -36,6 +38,7 @@ interface PendingShipmentListModalProps {
 const PendingShipmentListModal: React.FC<PendingShipmentListModalProps> = ({
   pendingShipmentGroups,
   partners,
+  products,
   recordsList,
   onClose,
   onOpenDetail,
@@ -162,7 +165,13 @@ const PendingShipmentListModal: React.FC<PendingShipmentListModalProps> = ({
                           />
                         </td>
                         <td className="px-4 py-3 text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">{group.docNumber}</td>
-                        <td className="px-4 py-3 font-bold text-slate-800 truncate" title={group.productName}>{group.productName}</td>
+                        <td className="px-4 py-3">
+                          <FlowListProductCell
+                            product={products.find(p => p.id === group.productId)}
+                            name={group.productName}
+                            sku={group.productSku}
+                          />
+                        </td>
                         <td className="px-4 py-3 font-bold text-slate-800 truncate" title={group.partner}>{group.partner}</td>
                         <td className="px-4 py-3 text-right font-black text-indigo-600">{group.totalQuantity.toLocaleString()}</td>
                         <td className="px-4 py-3 font-bold text-slate-700 truncate" title={group.warehouseName}>{group.warehouseName}</td>

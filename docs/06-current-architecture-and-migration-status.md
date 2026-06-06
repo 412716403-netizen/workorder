@@ -209,7 +209,9 @@
 - **Phase 3.E（已完成）流水弹窗默认当天 + 删 12000 上限**：
   - `ProductionMgmtOpsView` 不再 `fetchAllProductionByTypes`（旧 12000 客户端硬上限已移除），`StockMaterialPanel / OutsourcePanel / ReworkPanel` 各自按 `activeOrderIds / 今日窗口` 多条 `useQuery` 窄拉。
   - 7 个流水弹窗（领退料 / 外协 / 返工报工 / 不良品处理 / 仓库 / 报工流水 / 生产入库流水）内部独立 `useQuery`，默认 `dateFrom = dateTo = today`，无上限分页。
-  - 新 queryKey 前缀：`stockPanel.* / outsourcePanel.* / reworkPanel.records / flow.stock / flow.stockIn / flow.outsource / flow.reworkReport / flow.defect / flow.warehouse.psi.* / flow.warehouse.prod / flow.reportHistory`。
+  - **进销存四 Tab 业务流水**（采购订单 / 采购入库 / 销售订单 / 销售单）：`PsiOrderBillFlowListModal` 按当前 Tab `type` 窄拉，`queryKey` 前缀 `flow.psi.<PURCHASE_ORDER|PURCHASE_BILL|SALES_ORDER|SALES_BILL>`，工具栏「订单流水 / 采购流水 / 销售流水」入口，按单号→行组聚合 + 冻结合计。
+  - **财务收款/付款流水**：`FinanceDocFlowListModal` 按 Tab `RECEIPT|PAYMENT` 窄拉 `finance.listPage`，`queryKey` 前缀 `flow.finance.<RECEIPT|PAYMENT>`，工具栏「收款流水 / 付款流水」入口，一行一单 + 金额合计。
+  - 新 queryKey 前缀：`stockPanel.* / outsourcePanel.* / reworkPanel.records / flow.stock / flow.stockIn / flow.outsource / flow.reworkReport / flow.defect / flow.warehouse.psi.* / flow.warehouse.prod / flow.reportHistory / flow.psi.* / flow.finance.*`。
   - 新后端接口：`psi.listRecords` 加 `startDate/endDate/search/types`；新增 `GET /api/orders/report-history`。
   - `PendingStockPanel` 内嵌的「生产入库流水」与 `OrderListView.orderCenterProdQuery` 脱钩，绕过其 40 页/8000 条客户端硬上限；主面板「待入库清单」跨日累计逻辑仍沿用 props.prodRecords。
   - `AppDataContext.invalidateAll{Prod,Psi}Records` 改 predicate 风格批量匹配 queryKey 前缀，修复旧 `psiOps.warehouseStockProd` 与实际 key 不一致的 invalidate bug。

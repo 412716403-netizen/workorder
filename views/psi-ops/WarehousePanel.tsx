@@ -1377,6 +1377,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                    onClose={() => { setProductFlowDetail(null); setWarehouseFlowDetailKey(null); }}
                    warehouseFlowRows={warehouseFlowRows}
                    warehouses={warehouses}
+                   products={products}
                    parseRecordTime={parseRecordTime}
                    onViewDetail={setWarehouseFlowDetailKey}
                  />

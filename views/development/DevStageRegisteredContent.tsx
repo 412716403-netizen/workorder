@@ -6,6 +6,7 @@ import { effectiveCustomDocFieldType } from '../../utils/reportCustomDocField';
 import { getFileExtFromDataUrl } from '../../utils/fileHelpers';
 import { formatLocalDateTimeZh } from '../../utils/localDateTime';
 import { getStageRegisteredDisplayFields } from '../../utils/devStageDisplay';
+import { formStandardLabelClass } from '../../styles/uiDensity';
 
 interface DevStageRegisteredContentProps {
   stage: DevStageDto;
@@ -97,7 +98,7 @@ function DevStageFieldValue({
           <FileText className={`h-6 w-6 ${isPdf ? 'text-red-400' : 'text-indigo-500'}`} />
         </div>
         <div className="flex min-w-0 flex-col gap-1">
-          <span className="text-[10px] font-medium text-slate-400">{isPdf ? 'PDF 文档' : '附件'}</span>
+          <span className="text-xs font-medium text-slate-400">{isPdf ? 'PDF 文档' : '附件'}</span>
           <a
             href={str}
             download={`${label}.${ext}`}
@@ -111,7 +112,7 @@ function DevStageFieldValue({
   }
 
   return (
-    <p className="break-words text-sm font-bold leading-snug text-slate-900">
+    <p className="break-words text-sm font-medium leading-snug text-slate-900">
       {formatStageFieldDisplayValue(type, str, dateWithTime)}
     </p>
   );
@@ -133,7 +134,7 @@ const DevStageRegisteredContent: React.FC<DevStageRegisteredContentProps> = ({ s
     <div className="mb-6">
       <div className="mb-3 flex items-center gap-1.5">
         <ListChecks className="h-3.5 w-3.5 text-indigo-500" strokeWidth={2.5} />
-        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">登记内容</span>
+        <span className={formStandardLabelClass}>登记内容</span>
       </div>
       <div className="flex flex-wrap gap-4">
         {rows.map(({ field, tplField }) => {
@@ -148,7 +149,7 @@ const DevStageRegisteredContent: React.FC<DevStageRegisteredContentProps> = ({ s
                 isFile ? 'min-w-[200px]' : 'min-w-[140px]'
               }`}
             >
-              <div className="mb-1.5 truncate text-[10px] font-bold uppercase tracking-wide text-slate-400">
+              <div className={`mb-1.5 truncate ${formStandardLabelClass}`}>
                 {field.label}
               </div>
               <DevStageFieldValue

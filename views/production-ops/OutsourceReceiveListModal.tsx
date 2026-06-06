@@ -11,6 +11,7 @@ import {
 } from '../../hooks/useOutsourceReceiveScan';
 import type { ScanPayload } from '../../utils/scanPayload';
 import type { ScanBatchRowDetail } from '../../utils/scanBatchRowDetail';
+import FlowListProductCell from '../../components/flow/FlowListProductCell';
 
 export interface ReceiveRow {
   orderId?: string;
@@ -539,8 +540,11 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
                           </span>
                         </td>
                       ) : null}
-                      <td className="max-w-0 px-2 py-2.5 align-middle sm:px-3" title={row.productName}>
-                        <span className="block truncate text-sm font-bold text-slate-800">{row.productName}</span>
+                      <td className="max-w-0 px-2 py-2.5 align-middle sm:px-3">
+                        <FlowListProductCell
+                          product={products.find(p => p.id === row.productId)}
+                          name={row.productName}
+                        />
                       </td>
                       <td className="max-w-0 px-2 py-2.5 align-middle sm:px-3" title={row.milestoneName}>
                         <span className="block truncate text-sm font-bold text-indigo-600">{row.milestoneName}</span>

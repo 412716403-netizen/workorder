@@ -21,6 +21,9 @@ import {
   isoToDateInput,
   getTodayRangeIso,
 } from './sharedFlowListHelpers';
+import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
+import FlowListTableShell from '../../components/flow/FlowListTableShell';
+import FlowListProductCell from '../../components/flow/FlowListProductCell';
 
 type StockFlowBizType =
   | 'all'
@@ -94,7 +97,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
     return entries.flatMap(([, rs]) => [...rs].sort((a, b) => (a.id || '').localeCompare(b.id || '')));
   }, [records]);
 
-  const { filteredStockFlowRecords, totalIssueQty, totalReturnQty, countIssue, countReturn } = useMemo(() => {
+  const { filteredStockFlowRecords, totalIssueQty, totalReturnQty } = useMemo(() => {
     let list = stockFlowRecords;
     if (stockFlowFilterType !== 'all') list = list.filter(r => getStockFlowBizType(r) === stockFlowFilterType);
     if (stockFlowFilterOrderKeyword.trim()) {
@@ -151,8 +154,6 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
       filteredStockFlowRecords: list,
       totalIssueQty,
       totalReturnQty,
-      countIssue: issueList.length,
-      countReturn: returnList.length
     };
   }, [stockFlowRecords, stockFlowFilterType, stockFlowFilterOrderKeyword, stockFlowFilterProductKeyword, stockFlowFilterDocNo, stockFlowFilterDateFrom, stockFlowFilterDateTo, orders, products, productionLinkMode]);
 
@@ -173,7 +174,7 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
         ...(r.batchNo ? { batchNo: r.batchNo } : {}),
       })),
       reason: first.reason,
-      operator: '',
+      operator: first.operator ?? '',
       partner: first.partner,
     };
   };
@@ -271,27 +272,36 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
               />
             </div>
           </div>
+          {stockFlowQuery.isFetching && (
           <div className="mt-2 flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => { setStockFlowFilterType('all'); setStockFlowFilterOrderKeyword(''); setStockFlowFilterProductKeyword(''); setStockFlowFilterDocNo(''); setStockFlowFilterDateFrom(todayDate); setStockFlowFilterDateTo(todayDate); }}
-              className="text-xs font-bold text-slate-500 hover:text-slate-700"
-            >
-              重置为当天
-            </button>
-            <span className="text-xs text-slate-400">共 {filteredStockFlowRecords.length} 条</span>
-            {stockFlowQuery.isFetching && (
               <span className="text-xs text-indigo-500 inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />加载中</span>
-            )}
           </div>
+          )}
         </div>
-        <div className="flex-1 overflow-auto p-4">
+        <div className="flex-1 min-h-0 flex flex-col p-4">
           {stockFlowQuery.isLoading ? (
             <p className="text-slate-500 text-center py-12">加载中…</p>
           ) : filteredStockFlowRecords.length === 0 ? (
             <p className="text-slate-500 text-center py-12">暂无领料/退料流水</p>
           ) : (
-            <div className="border border-slate-200 rounded-2xl overflow-hidden">
+            <FlowListTableShell
+              className="flex-1 min-h-0"
+              footer={
+                <FlowListSummaryFooter
+                  mode="bar"
+                  count={filteredStockFlowRecords.length}
+                  metrics={[
+                    { label: '领料', value: `${totalIssueQty} 件`, className: 'text-indigo-600' },
+                    { label: '退料', value: `${totalReturnQty} 件`, className: 'text-amber-600' },
+                    {
+                      label: '净领料',
+                      value: `${Math.round((totalIssueQty - totalReturnQty) * 100) / 100} 件`,
+                      className: 'text-slate-700',
+                    },
+                  ]}
+                />
+              }
+            >
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200">
@@ -361,8 +371,16 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
                             return raw || '—';
                           })()}
                         </td>
-                        <td className="px-4 py-3 text-[10px] font-black text-indigo-600">{linkCol}</td>
-                        <td className="px-4 py-3 font-bold text-slate-800">{matProduct?.name ?? '未知物料'}</td>
+                        <td className="px-4 py-3">
+                          {productionLinkMode === 'product' && sourceProd ? (
+                            <FlowListProductCell product={sourceProd} />
+                          ) : (
+                            <span className="text-[10px] font-black text-indigo-600">{linkCol}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <FlowListProductCell product={matProduct} emptyNameLabel="未知物料" />
+                        </td>
                         <td className="px-4 py-3 text-right font-black text-indigo-600">{rec.quantity}</td>
                         <td className="px-4 py-3 text-xs font-bold text-teal-700 whitespace-nowrap">{rec.partner ?? '—'}</td>
                         <td className="px-4 py-3 text-xs text-slate-500 max-w-[180px] truncate">{rec.reason ?? '—'}</td>
@@ -380,19 +398,9 @@ const StockFlowListModal: React.FC<StockFlowListModalProps> = ({
                       </tr>
                     );
                   })}
-                  <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold">
-                    <td className="px-4 py-3" colSpan={10}>
-                      <span className="text-[10px] text-slate-500 uppercase mr-3">合计</span>
-                      <span className="text-xs text-indigo-600">领料 {countIssue} 条，{totalIssueQty}</span>
-                      <span className="text-slate-300 mx-2">|</span>
-                      <span className="text-xs text-amber-600">退料 {countReturn} 条，{totalReturnQty}</span>
-                      <span className="text-slate-300 mx-2">|</span>
-                      <span className="text-xs text-slate-700">净领料 {Math.round((totalIssueQty - totalReturnQty) * 100) / 100}</span>
-                    </td>
-                  </tr>
                 </tbody>
               </table>
-            </div>
+            </FlowListTableShell>
           )}
         </div>
       </div>

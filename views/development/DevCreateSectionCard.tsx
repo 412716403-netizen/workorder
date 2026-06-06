@@ -1,5 +1,6 @@
 import React from 'react';
 import type { LucideIcon } from 'lucide-react';
+import { pageSubtitleClass, sectionTitleClass } from '../../styles/uiDensity';
 
 export interface DevCreateSectionCardProps {
   title: string;
@@ -38,9 +39,9 @@ const DevCreateSectionCard: React.FC<DevCreateSectionCardProps> = ({
           <Icon className="w-4 h-4" />
         </div>
         <div className="min-w-0 pt-0.5">
-          <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+          <h3 className={sectionTitleClass}>{title}</h3>
           {description ? (
-            <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{description}</p>
+            <p className={`${pageSubtitleClass} mt-0.5 max-w-none`}>{description}</p>
           ) : null}
         </div>
       </div>

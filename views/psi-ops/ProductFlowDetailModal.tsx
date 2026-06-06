@@ -1,12 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { X, Filter, FileText, ScrollText } from 'lucide-react';
-import { Warehouse } from '../../types';
+import { Warehouse, Product } from '../../types';
+import { computeWarehouseFlowTotals, formatWarehouseFlowQty } from './warehouseFlowHelpers';
+import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
+import FlowListTableShell from '../../components/flow/FlowListTableShell';
+import FlowListProductCell from '../../components/flow/FlowListProductCell';
 
 export interface ProductFlowDetailModalProps {
   productFlowDetail: { productId: string; productName: string; warehouseId: string | null; warehouseName: string | null };
   onClose: () => void;
   warehouseFlowRows: any[];
   warehouses: Warehouse[];
+  products?: Product[];
   parseRecordTime: (r: any) => number;
   onViewDetail: (key: string) => void;
 }
@@ -16,6 +21,7 @@ const ProductFlowDetailModal: React.FC<ProductFlowDetailModalProps> = ({
   onClose,
   warehouseFlowRows,
   warehouses,
+  products = [],
   parseRecordTime,
   onViewDetail,
 }) => {
@@ -55,7 +61,7 @@ const ProductFlowDetailModal: React.FC<ProductFlowDetailModalProps> = ({
     return rows;
   }, [detailRows, dateFrom, dateTo, flowType, warehouseId]);
 
-  const totalQuantity = useMemo(() => filteredRows.reduce((s: number, r: any) => s + (r.quantity ?? 0), 0), [filteredRows]);
+  const flowTotals = useMemo(() => computeWarehouseFlowTotals(filteredRows), [filteredRows]);
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
@@ -133,17 +139,32 @@ const ProductFlowDetailModal: React.FC<ProductFlowDetailModalProps> = ({
             >
               清空筛选
             </button>
-            <span className="text-xs text-slate-400">共 {filteredRows.length} 条</span>
-            <span className="text-xs font-bold text-indigo-600">合计数量：{Math.round(totalQuantity * 100) / 100}</span>
           </div>
         </div>
-        <div className="flex-1 overflow-auto p-4">
+        <div className="flex-1 min-h-0 flex flex-col p-4">
           {detailRows.length === 0 ? (
             <p className="text-slate-500 text-center py-12">暂无该产品{productFlowDetail.warehouseName ? '在该仓库' : ''}的流水记录</p>
           ) : filteredRows.length === 0 ? (
             <p className="text-slate-500 text-center py-12">无符合筛选条件的记录</p>
           ) : (
-            <div className="border border-slate-200 rounded-2xl overflow-hidden">
+            <FlowListTableShell
+              className="flex-1 min-h-0"
+              footer={
+                <FlowListSummaryFooter
+                  mode="bar"
+                  count={filteredRows.length}
+                  metrics={[
+                    { label: '入库', value: `${formatWarehouseFlowQty(flowTotals.inboundTotal)} 件`, className: 'text-indigo-600' },
+                    { label: '出库', value: `${formatWarehouseFlowQty(flowTotals.outboundTotal)} 件`, className: 'text-amber-600' },
+                    {
+                      label: '净变化',
+                      value: `${flowTotals.netChange >= 0 ? '+' : ''}${formatWarehouseFlowQty(flowTotals.netChange)} 件`,
+                      className: flowTotals.netChange < 0 ? 'text-rose-600' : 'text-slate-700',
+                    },
+                  ]}
+                />
+              }
+            >
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200">
@@ -163,7 +184,13 @@ const ProductFlowDetailModal: React.FC<ProductFlowDetailModalProps> = ({
                       <td className="px-4 py-3"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">{row.typeLabel}</span></td>
                       <td className="px-4 py-3 text-[10px] font-mono font-bold text-slate-600 whitespace-nowrap">{row.docNumber}</td>
                       <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{row.warehouseName}</td>
-                      <td className="px-4 py-3 font-bold text-slate-800">{row.productName} <span className="text-[10px] font-bold text-slate-500">{row.productSku}</span></td>
+                      <td className="px-4 py-3">
+                        <FlowListProductCell
+                          product={products.find(p => p.id === row.productId)}
+                          name={row.productName}
+                          sku={row.productSku}
+                        />
+                      </td>
                       <td className="px-4 py-3 text-right font-black text-indigo-600">{row.quantity}</td>
                       <td className="px-4 py-3">
                         <button type="button" onClick={() => onViewDetail(`${row.type}|${row.docNumber}`)} className="inline-flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all whitespace-nowrap">
@@ -174,7 +201,7 @@ const ProductFlowDetailModal: React.FC<ProductFlowDetailModalProps> = ({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </FlowListTableShell>
           )}
         </div>
       </div>

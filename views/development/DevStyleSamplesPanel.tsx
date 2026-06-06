@@ -107,8 +107,8 @@ const DevStyleSamplesPanel: React.FC<DevStyleSamplesPanelProps> = ({
                 <div className="flex items-center gap-3">
                   <span className={`h-3 w-3 rounded-full ${STATUS_COLOR[st.status] ?? 'bg-slate-300'}`} />
                   <div>
-                    <p className="text-sm font-black text-slate-800">{st.name}</p>
-                    <p className="text-[10px] text-slate-400">
+                    <p className="text-sm font-semibold text-slate-800">{st.name}</p>
+                    <p className="text-xs text-slate-400">
                       {DEV_STAGE_STATUS_LABEL[st.status as DevStageStatus] ?? st.status}
                       {st.fields.length > 0 ? ` · ${st.fields.length} 项参数` : ''}
                       {st.attachments.length > 0 ? ` · ${st.attachments.length} 个附件` : ''}
@@ -119,7 +119,7 @@ const DevStyleSamplesPanel: React.FC<DevStyleSamplesPanelProps> = ({
                   <button
                     type="button"
                     onClick={() => setRegisterStage(st)}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-indigo-50 text-xs font-bold text-indigo-700"
+                    className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
                   >
                     <ClipboardCheck className="h-3.5 w-3.5" /> 登记
                   </button>

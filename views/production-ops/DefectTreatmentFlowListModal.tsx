@@ -13,6 +13,9 @@ import {
   getTodayRangeIso,
   isoToDateInput,
 } from './sharedFlowListHelpers';
+import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
+import FlowListTableShell from '../../components/flow/FlowListTableShell';
+import FlowListProductCell from '../../components/flow/FlowListProductCell';
 
 export interface DefectTreatmentFlowListModalProps {
   productionLinkMode: 'order' | 'product';
@@ -108,7 +111,6 @@ const DefectTreatmentFlowListModal: React.FC<DefectTreatmentFlowListModalProps> 
           <h3 className="font-bold text-slate-800 flex items-center gap-2"><ScrollText className="w-5 h-5 text-indigo-600" /> 处理不良品流水</h3>
           <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
         </div>
-        <div className="px-6 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0"><p className="text-xs text-slate-500">生成返工、报损等处理不良品的记录。按单据创建时间倒序，编辑不改变顺序。</p></div>
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 shrink-0">
           <div className="flex items-center gap-2 mb-3"><Filter className="w-4 h-4 text-slate-500" /><span className="text-xs font-bold text-slate-500 uppercase">筛选</span></div>
           <div className={`grid grid-cols-2 sm:grid-cols-3 gap-3 ${productionLinkMode === 'product' ? 'md:grid-cols-7' : 'md:grid-cols-8'}`}>
@@ -120,17 +122,24 @@ const DefectTreatmentFlowListModal: React.FC<DefectTreatmentFlowListModalProps> 
             <div><label className="text-[10px] font-bold text-slate-400 block mb-1">类型</label><select value={f.recordType} onChange={e => setDefectFlowFilter(prev => ({ ...prev, recordType: e.target.value }))} className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"><option value="">全部</option><option value="REWORK">返工</option><option value="REWORK_OUTSOURCE">委外返工</option><option value="SCRAP">报损</option></select></div>
             <div><label className="text-[10px] font-bold text-slate-400 block mb-1">操作人</label><input type="text" value={f.operator} onChange={e => setDefectFlowFilter(prev => ({ ...prev, operator: e.target.value }))} placeholder="操作人模糊搜索" className="w-full text-sm py-1.5 px-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200" /></div>
           </div>
+          {flowQuery.isFetching && (
           <div className="mt-2 flex items-center gap-4">
-            <button type="button" onClick={() => setDefectFlowFilter({ dateFrom: todayDate, dateTo: todayDate, orderNumber: '', productId: '', nodeName: '', operator: '', recordType: '' })} className="text-xs font-bold text-slate-500 hover:text-slate-700">重置为当天</button>
-            <span className="text-xs text-slate-400">共 {groupedRows.length} 条记录{groupedRows.length !== sorted.length ? `（${sorted.length} 笔明细）` : ''}</span>
-            {flowQuery.isFetching && (
               <span className="text-xs text-indigo-500 inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />加载中</span>
-            )}
           </div>
+          )}
         </div>
-        <div className="flex-1 overflow-auto p-4">
+        <div className="flex-1 min-h-0 flex flex-col p-4">
           {flowQuery.isLoading ? (<p className="text-slate-500 text-center py-12">加载中…</p>) : groupedRows.length === 0 ? (<p className="text-slate-500 text-center py-12">暂无处理不良品流水</p>) : (
-            <div className="border border-slate-200 rounded-2xl overflow-hidden">
+            <FlowListTableShell
+              className="flex-1 min-h-0"
+              footer={
+                <FlowListSummaryFooter
+                  mode="bar"
+                  count={groupedRows.length}
+                  metrics={[{ label: '数量', value: `${totalQuantity} 件`, className: 'text-indigo-600' }]}
+                />
+              }
+            >
               <table className="w-full text-left text-sm">
                 <thead><tr className="bg-slate-50 border-b border-slate-200">
                   <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">时间</th>
@@ -169,7 +178,9 @@ const DefectTreatmentFlowListModal: React.FC<DefectTreatmentFlowListModalProps> 
                           </td>
                         )}
                         <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{getDocNo(r)}</td>
-                        <td className="px-4 py-3 text-slate-800 whitespace-nowrap">{product?.name ?? r.productId ?? '—'}</td>
+                        <td className="px-4 py-3">
+                          <FlowListProductCell product={product} />
+                        </td>
                         <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{getSourceNodeName(r)}</td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <span className={r.type === 'REWORK' ? 'text-indigo-600 font-bold' : 'text-rose-600 font-bold'}>{typeLabel}</span>
@@ -185,14 +196,9 @@ const DefectTreatmentFlowListModal: React.FC<DefectTreatmentFlowListModalProps> 
                       </tr>
                     );
                   })}
-                  <tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold">
-                    <td className="px-4 py-3" colSpan={productionLinkMode === 'product' ? 6 : 7}></td>
-                    <td className="px-4 py-3 text-indigo-600 text-right">{totalQuantity} 件</td>
-                    <td className="px-4 py-3" colSpan={2}></td>
-                  </tr>
                 </tbody>
               </table>
-            </div>
+            </FlowListTableShell>
           )}
         </div>
       </div>

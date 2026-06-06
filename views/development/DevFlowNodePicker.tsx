@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, Settings2, Check, ArrowRight } from 'lucide-react';
+import { formStandardCategoryPillClass, formStandardLabelClass, outlineAccentToolbarButtonClass } from '../../styles/uiDensity';
 
 export interface DevFlowNodePickerOption {
   id: string;
@@ -55,7 +56,7 @@ const DevFlowNodePicker: React.FC<DevFlowNodePickerProps> = ({
     <button
       type="button"
       onClick={onOpenSettings}
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[10px] font-bold text-slate-500 hover:border-indigo-200 hover:text-indigo-600 shadow-sm transition-colors"
+      className={outlineAccentToolbarButtonClass}
     >
       <Settings2 className="w-3.5 h-3.5" />
       {settingsLabel}
@@ -68,7 +69,7 @@ const DevFlowNodePicker: React.FC<DevFlowNodePickerProps> = ({
         <div className="flex items-center justify-between gap-3 mb-4 pl-0.5 pr-0.5">
           <div className="flex items-center gap-3">
             <div className="w-1 h-5 bg-indigo-600 rounded-full" />
-            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">{title}</h4>
+            <h4 className={formStandardLabelClass}>{title}</h4>
           </div>
           {settingsBtn}
         </div>
@@ -83,7 +84,7 @@ const DevFlowNodePicker: React.FC<DevFlowNodePickerProps> = ({
       >
         {!readOnly && (
           <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">
+            <p className={`mb-3 ${formStandardLabelClass}`}>
               可选节点
             </p>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
@@ -95,10 +96,10 @@ const DevFlowNodePicker: React.FC<DevFlowNodePickerProps> = ({
                     type="button"
                     disabled={picked}
                     onClick={() => addNode(opt.id)}
-                    className={`relative px-3 py-2 rounded-xl text-[11px] font-bold transition-all active:scale-95 ${
+                    className={`relative active:scale-95 ${
                       picked
-                        ? 'bg-indigo-50 border border-indigo-200 text-indigo-600 cursor-default'
-                        : 'bg-white border border-slate-100 text-slate-600 hover:border-indigo-300 hover:text-indigo-600 shadow-sm'
+                        ? `${formStandardCategoryPillClass(true)} cursor-default`
+                        : `${formStandardCategoryPillClass(false)} shadow-sm hover:border-indigo-300 hover:text-indigo-600`
                     }`}
                   >
                     {opt.label}
@@ -118,7 +119,7 @@ const DevFlowNodePicker: React.FC<DevFlowNodePickerProps> = ({
         )}
 
         <div className={!readOnly && options.length > 0 ? 'pt-1' : ''}>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">
+          <p className={`mb-3 ${formStandardLabelClass}`}>
             已选流程 {selectedIds.length > 0 ? `（${selectedIds.length} 步）` : ''}
           </p>
           {selectedIds.length > 0 ? (
@@ -132,13 +133,13 @@ const DevFlowNodePicker: React.FC<DevFlowNodePickerProps> = ({
                       <ArrowRight className="w-3.5 h-3.5 text-slate-300 shrink-0 hidden sm:block" aria-hidden />
                     )}
                     <div className="group/tag relative flex items-center gap-2 bg-white border border-slate-200 px-3.5 py-2 rounded-xl shadow-sm">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-md bg-indigo-600 text-[10px] font-black text-white">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-md bg-indigo-600 text-[10px] font-semibold text-white">
                         {i + 1}
                       </span>
-                      <span className="text-xs font-bold text-slate-700">
+                      <span className="text-xs font-medium text-slate-700">
                         {label}
                         {opt?.chipSuffix ? (
-                          <span className="text-[10px] font-medium text-slate-400 ml-1">{opt.chipSuffix}</span>
+                          <span className="ml-1 text-xs font-medium text-slate-400">{opt.chipSuffix}</span>
                         ) : null}
                       </span>
                       {!readOnly && (

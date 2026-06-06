@@ -198,3 +198,60 @@ export function computeWarehouseFlowRows(input: ComputeWarehouseFlowRowsInput): 
       (a, b) => (b._sortTs ?? 0) - (a._sortTs ?? 0) || String(a.id).localeCompare(String(b.id)),
     );
 }
+
+export interface WarehouseFlowTotals {
+  inboundTotal: number;
+  outboundTotal: number;
+  netChange: number;
+}
+
+/** 流水数量展示：保留至多 2 位小数，去掉无意义尾零。 */
+export function formatWarehouseFlowQty(n: number): string {
+  const rounded = Math.round(n * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/\.?0+$/, '');
+}
+
+/**
+ * 对仓库流水展示行按库存口径汇总「入库 / 出库 / 净变化」。
+ * 与 `docs/01-business-rules.md` 库存方向一致；盘点用 `diffQuantity`（非实盘数量）。
+ */
+export function computeWarehouseFlowTotals(
+  rows: ReadonlyArray<Pick<WarehouseFlowRow, 'type' | 'quantity' | 'record'>>,
+): WarehouseFlowTotals {
+  let inboundTotal = 0;
+  let outboundTotal = 0;
+
+  for (const row of rows) {
+    const qty = Number(row.quantity) || 0;
+    switch (row.type) {
+      case 'PURCHASE_BILL':
+      case 'STOCK_IN':
+      case 'STOCK_RETURN':
+      case 'TRANSFER':
+        inboundTotal += Math.abs(qty);
+        break;
+      case 'STOCK_OUT':
+        outboundTotal += Math.abs(qty);
+        break;
+      case 'SALES_BILL':
+        if (qty >= 0) outboundTotal += qty;
+        else inboundTotal += Math.abs(qty);
+        break;
+      case 'STOCKTAKE': {
+        const rec = row.record as { diffQuantity?: number | string | null; diff_quantity?: number | string | null };
+        const diff = Number(rec?.diffQuantity ?? rec?.diff_quantity ?? 0);
+        if (diff > 0) inboundTotal += diff;
+        else if (diff < 0) outboundTotal += Math.abs(diff);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  return {
+    inboundTotal,
+    outboundTotal,
+    netChange: inboundTotal - outboundTotal,
+  };
+}

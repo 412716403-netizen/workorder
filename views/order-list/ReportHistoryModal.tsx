@@ -21,6 +21,9 @@ import {
   isoToDateInput,
 } from '../production-ops/sharedFlowListHelpers';
 import { resolveReportDisplayEconomics } from '../../utils/outsourceReceiveReportDisplay';
+import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
+import FlowListTableShell from '../../components/flow/FlowListTableShell';
+import FlowListProductCell from '../../components/flow/FlowListProductCell';
 
 interface ReportHistoryModalProps {
   open: boolean;
@@ -377,21 +380,35 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
               />
             </div>
           </div>
+          {historyQuery.isFetching && (
           <div className="mt-2 flex items-center gap-4">
-            <button onClick={() => setReportHistoryFilter({ productId: '', orderNumber: '', milestoneName: '', operator: '', dateFrom: todayDate, dateTo: todayDate, reportNo: '' })} className="text-xs font-bold text-slate-500 hover:text-slate-700">重置为当天</button>
-            <span className="text-xs text-slate-400">共 {batches.length} 次报工</span>
-            {historyQuery.isFetching && (
               <span className="text-xs text-indigo-500 inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />加载中</span>
-            )}
           </div>
+          )}
         </div>
-        <div className="flex-1 overflow-auto p-4">
+        <div className="flex-1 min-h-0 flex flex-col p-4">
           {historyQuery.isLoading ? (
             <p className="text-slate-500 text-center py-12">加载中…</p>
           ) : batches.length === 0 ? (
             <p className="text-slate-500 text-center py-12">暂无报工流水</p>
           ) : (
-            <div className="border border-slate-200 rounded-2xl overflow-hidden">
+            <FlowListTableShell
+              className="flex-1 min-h-0"
+              footer={
+                <FlowListSummaryFooter
+                  mode="bar"
+                  count={batches.length}
+                  metrics={[
+                    { label: '良品', value: `${totalGood} ${summaryUnit}`, className: 'text-emerald-600' },
+                    {
+                      label: '不良品',
+                      value: totalDefective > 0 ? `${totalDefective} ${summaryUnit}` : '—',
+                      className: 'text-amber-600',
+                    },
+                  ]}
+                />
+              }
+            >
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200">
@@ -411,6 +428,11 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
                 <tbody>
                   {batches.map(batch => {
                     const batchUnit = getUnitName(batch.source === 'order' ? batch.first.order.productId : batch.productId);
+                    const batchProductId = batch.source === 'order' ? batch.first.order.productId : batch.productId;
+                    const batchProduct = products.find(p => p.id === batchProductId);
+                    const batchProductName =
+                      batch.source === 'order' ? batch.first.order.productName : batch.productName;
+                    const batchProductSku = batch.source === 'order' ? batch.first.order.sku : batchProduct?.sku;
                     const rawKey = batch.source === 'product' && batch.key.startsWith('product-') ? batch.key.slice('product-'.length) : batch.key;
                     const reportNoRaw = batch.reportNo || rawKey;
                     const reportNo = reportNoRaw.startsWith('外协收回·') ? reportNoRaw.slice(5) : reportNoRaw;
@@ -423,7 +445,13 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
                           </td>
                         )}
                         <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{reportNo}</td>
-                        <td className="px-4 py-3 text-slate-800 whitespace-nowrap">{batch.source === 'order' ? batch.first.order.productName : batch.productName}</td>
+                        <td className="px-4 py-3">
+                          <FlowListProductCell
+                            product={batchProduct}
+                            name={batchProductName}
+                            sku={batchProductSku}
+                          />
+                        </td>
                         <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
                           {batch.source === 'order' ? batch.first.milestone.name : batch.milestoneName}
                         </td>
@@ -442,15 +470,9 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
                       </tr>
                     );
                   })}
-                  <tr className="bg-indigo-50/80 border-t-2 border-indigo-200 font-bold">
-                    <td className="px-4 py-3" colSpan={productionLinkMode !== 'product' ? 5 : 4}></td>
-                    <td className="px-4 py-3 text-emerald-600 text-right">{totalGood} {summaryUnit}</td>
-                    <td className="px-4 py-3 text-amber-600 text-right">{totalDefective > 0 ? `${totalDefective} ${summaryUnit}` : '—'}</td>
-                    <td className="px-4 py-3" colSpan={2}></td>
-                  </tr>
                 </tbody>
               </table>
-            </div>
+            </FlowListTableShell>
           )}
         </div>
       </div>

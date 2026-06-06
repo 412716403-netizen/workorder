@@ -91,7 +91,9 @@ const Shell: React.FC<{
   max: 'sm' | 'md' | 'lg' | 'xl';
   onClose: () => void;
   children: React.ReactNode;
-}> = ({ title, icon, max, onClose, children }) => {
+  /** 默认整页滚动；流水类弹窗传 flex 布局使筛选/合计固定 */
+  contentClassName?: string;
+}> = ({ title, icon, max, onClose, children, contentClassName }) => {
   const maxCls = { sm: 'max-w-2xl', md: 'max-w-3xl', lg: 'max-w-4xl', xl: 'max-w-6xl' }[max];
   return (
     <div className="fixed inset-0 z-[85] flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true">
@@ -119,7 +121,7 @@ const Shell: React.FC<{
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4">{children}</div>
+        <div className={contentClassName ?? 'flex-1 min-h-0 overflow-y-auto p-3 sm:p-4'}>{children}</div>
       </div>
     </div>
   );
@@ -185,6 +187,7 @@ const InboxUtilityModals: React.FC<Props> = props => {
           title="协作流水"
           icon={<Truck className="w-5 h-5 text-emerald-600 shrink-0" />}
           max="xl"
+          contentClassName="flex-1 min-h-0 flex flex-col overflow-hidden bg-white"
           onClose={() => setReturnFlowModalOpen(false)}
         >
           <CollabReturnFlowPanel
@@ -192,11 +195,16 @@ const InboxUtilityModals: React.FC<Props> = props => {
             onBack={() => setReturnFlowModalOpen(false)}
             transfers={transfers}
             myTenantId={myTenantId}
-            prodRecords={prodRecords}
             products={products}
+            partners={partners}
+            categories={categories}
             warehouses={warehouses}
             dictionaries={dictionaries}
+            onRefreshList={refresh}
             onRefreshProdRecords={onRefreshProdRecords}
+            onRefreshOrders={onRefreshOrders}
+            onRefreshPMP={onRefreshPMP}
+            onRefreshProducts={onRefreshProducts}
           />
         </Shell>
       )}

@@ -20,6 +20,12 @@ import DevStyleProductFields from './DevStyleProductFields';
 import DevBomConfigSection from './DevBomConfigSection';
 import DevStageTemplateModal, { type DevTemplatePerms } from './DevStageTemplateModal';
 import { toast } from 'sonner';
+import {
+  outlineToolbarButtonClass,
+  pageSubtitleClass,
+  primaryToolbarButtonClass,
+  sectionTitleClass,
+} from '../../styles/uiDensity';
 
 interface DevCreateStyleModalProps {
   open: boolean;
@@ -177,10 +183,10 @@ const DevCreateStyleModal: React.FC<DevCreateStyleModalProps> = ({
                 <Shirt className="w-5 h-5" />
               </div>
               <div className="min-w-0">
-                <h2 id="dev-create-style-title" className="text-base font-bold text-slate-900 truncate">
+                <h2 id="dev-create-style-title" className={`truncate ${sectionTitleClass}`}>
                   {isEdit ? '编辑款式信息' : '创建开发款式'}
                 </h2>
-                <p className="text-[11px] text-slate-500 font-medium truncate">
+                <p className={`truncate ${pageSubtitleClass} mt-0 max-w-none`}>
                   {isNew
                     ? '填写款式档案、开发流程与生产 BOM，创建后进入样品开发'
                     : '修改款式基础信息与生产配置'}
@@ -238,7 +244,7 @@ const DevCreateStyleModal: React.FC<DevCreateStyleModalProps> = ({
 
           <div className="shrink-0 flex items-center justify-between gap-3 px-5 sm:px-6 py-4 border-t border-slate-100 bg-white">
             {isNew && pendingBoms.length > 0 ? (
-              <p className="text-[11px] text-amber-700 font-medium hidden sm:block">
+              <p className="hidden text-xs font-medium text-amber-700 sm:block">
                 已配置 {pendingBoms.filter((b) => b.items?.some((i) => i.productId)).length} 条 BOM，将与款式一并保存
               </p>
             ) : (
@@ -249,14 +255,14 @@ const DevCreateStyleModal: React.FC<DevCreateStyleModalProps> = ({
                 type="button"
                 onClick={onClose}
                 disabled={saving}
-                className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50"
+                className={`${outlineToolbarButtonClass} disabled:opacity-50`}
               >
                 取消
               </button>
               <button
                 type="button"
                 disabled={saving}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-50"
+                className={`inline-flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 ${primaryToolbarButtonClass} disabled:opacity-50`}
                 onClick={() => void handleSave()}
               >
                 <Save className="h-4 w-4" />

@@ -23,7 +23,7 @@ import BomVariantMatrix from '../../components/product/BomVariantMatrix';
 import BomEditorPortal, { useBomEditorPortalState } from '../product-management/BomEditorPortal';
 import DevFlowNodePicker from './DevFlowNodePicker';
 import DevCreateSectionCard from './DevCreateSectionCard';
-import { sectionTitleClass } from '../../styles/uiDensity';
+import { pageSubtitleClass, sectionTitleClass } from '../../styles/uiDensity';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
 
@@ -308,11 +308,11 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
       {!embeddedInCreateModal && (
         <section className="rounded-2xl border-2 border-indigo-100 bg-indigo-50/20 p-4 space-y-3">
           <h3 className={sectionTitleClass}>生产BOM配置</h3>
-          <p className="text-[10px] text-slate-500">
+          <p className={`${pageSubtitleClass} mt-0 max-w-none`}>
             开发进度节点在「样品开发」页登记；此处为发布大货后的报工工序，并用于 BOM 按工序配置。
           </p>
           {mode === 'pending' && pendingBoms.length > 0 && (
-            <p className="text-[10px] text-amber-600 font-bold">
+            <p className="text-xs font-medium text-amber-600">
               已配置 {pendingBoms.filter((b) => b.items?.some((i) => i.productId)).length} 条 BOM，创建款式后将一并保存
             </p>
           )}
@@ -337,7 +337,7 @@ const DevBomConfigSection: React.FC<DevBomConfigSectionProps> = ({
           iconTone="amber"
         >
           {mode === 'pending' && pendingBoms.length > 0 && (
-            <p className="text-[11px] text-amber-700 font-medium mb-4 px-3 py-2 rounded-lg bg-amber-50 border border-amber-100">
+            <p className="mb-4 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
               已配置 {pendingBoms.filter((b) => b.items?.some((i) => i.productId)).length} 条 BOM，创建款式后将一并保存
             </p>
           )}

@@ -2,6 +2,7 @@ import React from 'react';
 import { ClipboardList, ScrollText, X } from 'lucide-react';
 import { Product, ProductMilestoneProgress, ProductionOrder } from '../../types';
 import { ReworkPendingRow } from './types';
+import FlowListProductCell from '../../components/flow/FlowListProductCell';
 
 function reworkReportsMatchDocSearch(
   reports: { reportNo?: string; reportBatchId?: string; id: string }[] | undefined,
@@ -245,8 +246,7 @@ const ReworkPendingDefectiveModal: React.FC<ReworkPendingDefectiveModalProps> = 
                         </td>
                       )}
                       <td className="px-4 sm:px-5 py-3 align-top min-w-0">
-                        <p className="text-sm font-bold text-slate-900 leading-snug line-clamp-2" title={row.productName}>{row.productName}</p>
-                        {p?.sku ? <p className="text-[11px] text-slate-400 font-medium mt-0.5 truncate" title={p.sku}>{p.sku}</p> : null}
+                        <FlowListProductCell product={p} name={row.productName} sku={p?.sku} />
                       </td>
                       <td className="px-4 sm:px-5 py-3 align-middle">
                         <span className="inline-flex items-center text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded-lg max-w-full truncate" title={row.milestoneName}>

@@ -9,9 +9,9 @@
  *   （orderIds / status 等）将数据收窄；helper 内部在循环 > 20 页时打 warn 提醒。
  */
 
-import { production as productionApi, psi as psiApi } from '../../services/api';
+import { production as productionApi, psi as psiApi, finance as financeApi } from '../../services/api';
 import { normalizeDecimals } from '../../contexts/formSettingsDefaults';
-import type { Partner, ProductionOpRecord, PsiRecord } from '../../types';
+import type { FinanceRecord, Partner, ProductionOpRecord, PsiRecord } from '../../types';
 import { partnerListNoToSegment, nextOutsourceDocNumber, type OutsourceDocKind } from '../../utils/partnerDocNumber';
 import { fetchAllPages, type PaginatedLike } from '../../utils/fetchAllPages';
 
@@ -43,6 +43,12 @@ export function dateInputToIsoEndExclusive(value: string | undefined | null): st
   if (Number.isNaN(d.getTime())) return undefined;
   d.setDate(d.getDate() + 1);
   return d.toISOString();
+}
+
+/** 财务列表 API 的 endDate 为 timestamp lte（含当日全天）。 */
+export function dateInputToFinanceEndInclusive(value: string | undefined | null): string | undefined {
+  if (!value) return undefined;
+  return `${value}T23:59:59.999`;
 }
 
 /** 本地日期 -> 'YYYY-MM-DD'。 */
@@ -116,6 +122,27 @@ export interface PsiFlowFilter {
   startDate?: string;
   endDate?: string;
   search?: string;
+}
+
+export interface FinanceFlowFilter {
+  type: 'RECEIPT' | 'PAYMENT';
+  startDate?: string;
+  endDate?: string;
+}
+
+export async function fetchFinanceByFilter(filter: FinanceFlowFilter): Promise<FinanceRecord[]> {
+  const all = await fetchAllPages<FinanceRecord>(
+    page =>
+      financeApi.listPage({
+        type: filter.type,
+        startDate: filter.startDate,
+        endDate: filter.endDate,
+        page,
+        pageSize: FLOW_FETCH_PAGE_SIZE,
+      }) as Promise<FinanceRecord[] | PaginatedLike<FinanceRecord>>,
+    { maxPages: FLOW_FETCH_MAX_PAGES, warnTag: 'fetchFinanceByFilter' },
+  );
+  return all;
 }
 
 export async function fetchPsiByFilter(filter: PsiFlowFilter): Promise<PsiRecord[]> {

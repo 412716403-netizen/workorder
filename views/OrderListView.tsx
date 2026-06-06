@@ -1496,7 +1496,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
       {showOrderFlowModal && (
         <div className="fixed inset-0 z-[75] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => { setShowOrderFlowModal(false); setOrderFlowProductId(null); }} />
-          <div className="relative bg-white w-full max-w-5xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
+          <div className="relative bg-white w-full max-w-6xl rounded-[32px] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
               <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
                 <ScrollText className="w-5 h-5 text-indigo-500" /> 工单流水
@@ -1505,17 +1505,15 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="flex-1 overflow-auto p-4">
-              <OrderFlowView
-                orders={orders}
-                products={products}
-                embedded
-                productionLinkMode={productionLinkMode}
-                planFormSettings={planFormSettings}
-                initialProductId={orderFlowProductId}
-                onOpenOrderDetail={(id) => openOrderDetail(id, true)}
-              />
-            </div>
+            <OrderFlowView
+              orders={orders}
+              products={products}
+              embedded
+              productionLinkMode={productionLinkMode}
+              planFormSettings={planFormSettings}
+              initialProductId={orderFlowProductId}
+              onOpenOrderDetail={(id) => openOrderDetail(id, true)}
+            />
           </div>
         </div>
       )}

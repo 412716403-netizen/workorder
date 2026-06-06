@@ -6,7 +6,15 @@ import { useAuthOptional } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
 import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
 import { effectiveCustomDocFieldType } from '../../utils/reportCustomDocField';
-import { formStandardControlClass } from '../../styles/uiDensity';
+import {
+  formStandardCategoryPillClass,
+  formStandardControlClass,
+  outlineAccentToolbarButtonClass,
+  outlineToolbarButtonClass,
+  pageSubtitleClass,
+  primaryToolbarButtonClass,
+  sectionTitleClass,
+} from '../../styles/uiDensity';
 import DevCreateSectionCard from './DevCreateSectionCard';
 import DevStageTemplateModal, { type DevTemplatePerms } from './DevStageTemplateModal';
 
@@ -102,7 +110,7 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
     <button
       type="button"
       onClick={() => setTemplateModalOpen(true)}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold text-slate-500 shadow-sm transition-colors hover:border-indigo-200 hover:text-indigo-600"
+      className={outlineAccentToolbarButtonClass}
     >
       <Settings2 className="h-3.5 w-3.5" />
       开发节点库
@@ -172,10 +180,10 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
               <ClipboardCheck className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <h2 id="dev-stage-register-title" className="truncate text-base font-bold text-slate-900">
+              <h2 id="dev-stage-register-title" className={`truncate ${sectionTitleClass}`}>
                 节点登记 · {stage.name}
               </h2>
-              <p className="truncate text-[11px] font-medium text-slate-500">
+              <p className={`truncate ${pageSubtitleClass} mt-0 max-w-none`}>
                 更新节点状态并录入登记自定义内容
               </p>
             </div>
@@ -208,10 +216,10 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
                   key={s}
                   type="button"
                   onClick={() => setStatus(s)}
-                  className={`rounded-xl border px-4 py-2 text-xs font-bold transition-all ${
+                  className={`transition-all ${
                     status === s
                       ? STATUS_ACTIVE_CLASS[s]
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300'
+                      : formStandardCategoryPillClass(false)
                   }`}
                 >
                   {DEV_STAGE_STATUS_LABEL[s]}
@@ -245,7 +253,7 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 transition-all hover:bg-slate-50 disabled:opacity-50"
+            className={`${outlineToolbarButtonClass} disabled:opacity-50`}
           >
             取消
           </button>
@@ -253,7 +261,7 @@ const DevStageRegisterModal: React.FC<DevStageRegisterModalProps> = ({
             type="button"
             disabled={saving}
             onClick={() => void handleSave()}
-            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-indigo-600/20 transition-all hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-50"
+            className={`inline-flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 ${primaryToolbarButtonClass} disabled:opacity-50`}
           >
             <Save className="h-4 w-4" />
             {saving ? '保存中…' : '保存登记'}

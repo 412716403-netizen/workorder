@@ -12,6 +12,7 @@ import {
   Printer,
   Search,
   Sliders,
+  ScrollText,
   X,
 } from 'lucide-react';
 import {
@@ -31,6 +32,7 @@ import {
   PrintRenderContext,
   ProductionOrder,
   PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER,
+  PsiRecordType,
 } from '../types';
 import {
   formConfigToolbarButtonClass,
@@ -49,6 +51,8 @@ import WarehousePanel from './psi-ops/WarehousePanel';
 import OrderBillFormPage from './psi-ops/OrderBillFormPage';
 import PsiDocDetailSummary from './psi-ops/PsiDocDetailSummary';
 import PsiOrderBillDocModal from './psi-ops/PsiOrderBillDocModal';
+import PsiOrderBillFlowListModal from './psi-ops/PsiOrderBillFlowListModal';
+import { PSI_ORDER_BILL_FLOW_LABELS } from './psi-ops/psiOrderBillFlowHelpers';
 import PendingShipmentListModal, { PendingShipmentGroup } from './psi-ops/PendingShipmentListModal';
 import PendingShipDetailModal from './psi-ops/PendingShipDetailModal';
 import AllocationModal from './psi-ops/AllocationModal';
@@ -276,6 +280,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
     setEditingSODocNumber(null);
     setEditingSBDocNumber(null);
     setShowPendingShipmentModal(false);
+    setPsiOrderBillFlowOpen(false);
     setPurchaseOrderModalPhase(null);
     setPurchaseBillModalPhase(null);
     setSalesOrderModalPhase(null);
@@ -297,6 +302,8 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
 
   /** 销售订单下：待发货清单是否以弹窗形式打开 */
   const [showPendingShipmentModal, setShowPendingShipmentModal] = useState(false);
+  /** 采购/销售订单与入库/出库单业务流水弹窗 */
+  const [psiOrderBillFlowOpen, setPsiOrderBillFlowOpen] = useState(false);
   /** 待发货清单 - 详情弹窗：当前选中的分组 */
   const [pendingShipDetailGroup, setPendingShipDetailGroup] = useState<PendingShipmentGroup | null>(null);
   /** 待发货清单生成销售单后，在销售订单 tab 上叠加销售单详情（query 刷新前用本地行合并展示） */
@@ -547,6 +554,41 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
     setSalesBillRevealFromPending(null);
   }, []);
 
+  const handlePsiOrderBillFlowDetail = useCallback(
+    (docNumber: string) => {
+      setPsiOrderBillFlowOpen(false);
+      if (type === 'PURCHASE_ORDER') {
+        setEditingPODocNumber(docNumber);
+        setShowModal('PURCHASE_ORDER');
+        setPurchaseOrderModalPhase('detail');
+      } else if (type === 'PURCHASE_BILL') {
+        setEditingPBDocNumber(docNumber);
+        setShowModal('PURCHASE_BILL');
+        setPurchaseBillModalPhase('detail');
+      } else if (type === 'SALES_ORDER') {
+        setEditingSODocNumber(docNumber);
+        setShowModal('SALES_ORDER');
+        setSalesOrderModalPhase('detail');
+      } else if (type === 'SALES_BILL') {
+        setEditingSBDocNumber(docNumber);
+        setShowModal('SALES_BILL');
+        setSalesBillModalPhase('detail');
+      }
+    },
+    [type],
+  );
+
+  const psiTabViewPerm =
+    type === 'PURCHASE_ORDER'
+      ? 'psi:purchase_order:view'
+      : type === 'PURCHASE_BILL'
+        ? 'psi:purchase_bill:view'
+        : type === 'SALES_ORDER'
+          ? 'psi:sales_order:view'
+          : type === 'SALES_BILL'
+            ? 'psi:sales_bill:view'
+            : '';
+
   const salesBillRevealOpen = salesBillRevealFromPending != null;
   const salesBillStdModalOpen = type === 'SALES_BILL' && showModal === 'SALES_BILL' && salesBillModalPhase;
   const salesBillOverlayOpen = salesBillStdModalOpen || salesBillRevealOpen;
@@ -629,6 +671,17 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               <Sliders className="w-4 h-4 shrink-0" /> 表单配置
             </button>
           )}
+          {['PURCHASE_ORDER', 'PURCHASE_BILL', 'SALES_ORDER', 'SALES_BILL'].includes(type) &&
+            !(showModal && showModal === type) &&
+            hasPsiPerm(psiTabViewPerm) && (
+            <button
+              type="button"
+              onClick={() => setPsiOrderBillFlowOpen(true)}
+              className={outlineToolbarButtonClass}
+            >
+              <ScrollText className="w-4 h-4 shrink-0" /> {PSI_ORDER_BILL_FLOW_LABELS[type as keyof typeof PSI_ORDER_BILL_FLOW_LABELS]}
+            </button>
+          )}
           {type === 'SALES_ORDER' && !showModal && hasPsiPerm('psi:sales_order_pending_shipment:allow') && (
             <button
               type="button"
@@ -670,6 +723,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
         <PendingShipmentListModal
           pendingShipmentGroups={pendingShipmentGroups}
           partners={partners}
+          products={products}
           recordsList={recordsList}
           onClose={() => setShowPendingShipmentModal(false)}
           onOpenDetail={group => setPendingShipDetailGroup(group)}
@@ -2006,6 +2060,19 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           plans={[]}
           orders={ordersList as ProductionOrder[]}
           products={products}
+        />
+      )}
+
+      {['PURCHASE_ORDER', 'PURCHASE_BILL', 'SALES_ORDER', 'SALES_BILL'].includes(type) &&
+        psiOrderBillFlowOpen && (
+        <PsiOrderBillFlowListModal
+          recordType={type as PsiRecordType}
+          open={psiOrderBillFlowOpen}
+          onClose={() => setPsiOrderBillFlowOpen(false)}
+          onOpenDetail={handlePsiOrderBillFlowDetail}
+          products={products}
+          warehouses={warehouses}
+          receivedByOrderLine={type === 'PURCHASE_ORDER' ? receivedByOrderLine : undefined}
         />
       )}
 

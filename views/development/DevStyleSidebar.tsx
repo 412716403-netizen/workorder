@@ -16,6 +16,13 @@ import {
   type DevStyleListFilters,
 } from '../../utils/devStyleListFilter';
 import { getDevSampleSidebarProgress, resolveDevStyleCustomerName } from '../../utils/devStyleDisplay';
+import {
+  formStandardCategoryPillClass,
+  formStandardControlClass,
+  formStandardLabelClass,
+  primaryToolbarButtonClass,
+  subModuleTabButtonClass,
+} from '../../styles/uiDensity';
 
 export type DevListTab = 'developing' | 'archived';
 export type DevSortMode = 'time' | 'customer';
@@ -74,9 +81,9 @@ function StyleListCard({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-1 mb-0.5">
-            <h4 className="min-w-0 flex-1 truncate text-sm font-bold text-slate-900">{style.name}</h4>
+            <h4 className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900">{style.name}</h4>
             {style.status === DevStyleStatus.PUBLISHED && (
-              <span className="shrink-0 rounded bg-emerald-500 px-1.5 py-0.5 text-[9px] text-white">已发布</span>
+              <span className="shrink-0 rounded bg-emerald-500 px-1.5 py-0.5 text-[10px] font-medium text-white">已发布</span>
             )}
           </div>
           <p className="mb-2 truncate text-xs font-medium text-slate-500">{style.code}</p>
@@ -98,7 +105,7 @@ function StyleListCard({
                     ? 'text-emerald-600 font-bold'
                     : '';
               return (
-                <div key={sample.id} className="flex items-center gap-2 text-[10px] text-slate-400">
+                <div key={sample.id} className="flex items-center gap-2 text-xs text-slate-400">
                   <span className={`w-1 h-1 rounded-full shrink-0 ${dotClass}`} />
                   <span className={`truncate ${textClass}`}>
                     {sample.name}: {progress.label}
@@ -191,18 +198,18 @@ const DevStyleSidebar: React.FC<DevStyleSidebarProps> = ({
 
   return (
     <aside className="w-[340px] shrink-0 bg-white border-r border-slate-200 flex flex-col h-full">
-      <div className="p-6 border-b border-slate-50 space-y-3">
-        {canCreate && (
+      {canCreate && (
+        <div className="p-6 border-b border-slate-50">
           <button
             type="button"
             onClick={onCreate}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-100"
+            className={`w-full flex items-center justify-center gap-2 ${primaryToolbarButtonClass}`}
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4 shrink-0" />
             录入新产品
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="px-6 py-4 flex gap-2">
         {(['developing', 'archived'] as const).map((tab) => (
@@ -210,13 +217,11 @@ const DevStyleSidebar: React.FC<DevStyleSidebarProps> = ({
             key={tab}
             type="button"
             onClick={() => onTabChange(tab)}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 ${
-              activeTab === tab ? 'bg-indigo-50 text-indigo-600' : 'text-slate-400 hover:bg-slate-50'
-            }`}
+            className={`flex-1 flex items-center justify-center gap-2 ${subModuleTabButtonClass(activeTab === tab)}`}
           >
             {tab === 'developing' ? '开发中' : '已归档'}
             <span
-              className={`px-1.5 py-0.5 rounded-md text-[9px] ${
+              className={`px-1.5 py-0.5 rounded-md text-[10px] font-medium ${
                 activeTab === tab ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'
               }`}
             >
@@ -235,7 +240,7 @@ const DevStyleSidebar: React.FC<DevStyleSidebarProps> = ({
               placeholder="搜索款号、品名、客户…"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500"
+              className={`${formStandardControlClass} pl-10`}
             />
           </div>
           <button
@@ -256,31 +261,27 @@ const DevStyleSidebar: React.FC<DevStyleSidebarProps> = ({
       {filterOpen && (
         <div className="mx-6 mb-4 rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-4">
           <div className="flex items-center justify-between border-b border-slate-200/50 pb-2">
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-900">筛选与排序</span>
+            <span className="text-xs font-semibold text-slate-900">筛选与排序</span>
             <button
               type="button"
               onClick={() => {
                 onFiltersChange({ stageName: 'all', syncStatus: 'all' });
                 onSortModeChange('time');
               }}
-              className="text-[10px] font-bold text-indigo-600 hover:underline"
+              className="text-xs font-medium text-indigo-600 hover:underline"
             >
               重置
             </button>
           </div>
           <div>
-            <label className="mb-2 block text-[9px] font-bold uppercase tracking-widest text-slate-400">
+            <label className={`mb-2 ${formStandardLabelClass}`}>
               排列方式
             </label>
             <div className="grid grid-cols-2 gap-1.5">
               <button
                 type="button"
                 onClick={() => onSortModeChange('time')}
-                className={`flex items-center justify-center gap-1.5 rounded-lg border py-2 text-[9px] font-bold transition-all ${
-                  sortMode === 'time'
-                    ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm'
-                    : 'border-slate-100 bg-white text-slate-500 hover:border-indigo-200'
-                }`}
+                className={`flex items-center justify-center gap-1.5 ${formStandardCategoryPillClass(sortMode === 'time')}`}
               >
                 <Clock className="h-3.5 w-3.5" />
                 按时间
@@ -289,11 +290,7 @@ const DevStyleSidebar: React.FC<DevStyleSidebarProps> = ({
                 <button
                   type="button"
                   onClick={() => onSortModeChange('customer')}
-                  className={`flex items-center justify-center gap-1.5 rounded-lg border py-2 text-[9px] font-bold transition-all ${
-                    sortMode === 'customer'
-                      ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm'
-                      : 'border-slate-100 bg-white text-slate-500 hover:border-indigo-200'
-                  }`}
+                  className={`flex items-center justify-center gap-1.5 ${formStandardCategoryPillClass(sortMode === 'customer')}`}
                 >
                   <Users className="h-3.5 w-3.5" />
                   按客户
@@ -303,7 +300,7 @@ const DevStyleSidebar: React.FC<DevStyleSidebarProps> = ({
                   type="button"
                   disabled
                   title="请先在设置 → 产品分类中启用「关联合作单位」"
-                  className="flex cursor-not-allowed items-center justify-center gap-1.5 rounded-lg border border-slate-100 bg-slate-50 py-2 text-[9px] font-bold text-slate-300"
+                  className="flex cursor-not-allowed items-center justify-center gap-1.5 rounded-lg border border-slate-100 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-300"
                 >
                   <Users className="h-3.5 w-3.5" />
                   按客户
@@ -313,18 +310,14 @@ const DevStyleSidebar: React.FC<DevStyleSidebarProps> = ({
           </div>
           {activeTab === 'developing' ? (
             <div>
-              <label className="mb-2 block text-[9px] font-bold uppercase tracking-widest text-slate-400">
+              <label className={`mb-2 ${formStandardLabelClass}`}>
                 当前进度节点
               </label>
               <div className="flex flex-wrap gap-1.5">
                 <button
                   type="button"
                   onClick={() => onFiltersChange({ ...filters, stageName: 'all' })}
-                  className={`rounded-lg border px-2 py-1 text-[9px] font-bold transition-all ${
-                    filters.stageName === 'all'
-                      ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm'
-                      : 'border-slate-100 bg-white text-slate-500 hover:border-indigo-200'
-                  }`}
+                  className={formStandardCategoryPillClass(filters.stageName === 'all')}
                 >
                   全部节点
                 </button>
@@ -333,11 +326,7 @@ const DevStyleSidebar: React.FC<DevStyleSidebarProps> = ({
                     key={name}
                     type="button"
                     onClick={() => onFiltersChange({ ...filters, stageName: name })}
-                    className={`rounded-lg border px-2 py-1 text-[9px] font-bold transition-all ${
-                      filters.stageName === name
-                        ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm'
-                        : 'border-slate-100 bg-white text-slate-500 hover:border-indigo-200'
-                    }`}
+                    className={formStandardCategoryPillClass(filters.stageName === name)}
                   >
                     {name}
                   </button>
@@ -346,7 +335,7 @@ const DevStyleSidebar: React.FC<DevStyleSidebarProps> = ({
             </div>
           ) : (
             <div>
-              <label className="mb-2 block text-[9px] font-bold uppercase tracking-widest text-slate-400">
+              <label className={`mb-2 ${formStandardLabelClass}`}>
                 同步状态
               </label>
               <div className="grid grid-cols-3 gap-1.5">
@@ -361,11 +350,7 @@ const DevStyleSidebar: React.FC<DevStyleSidebarProps> = ({
                     key={value}
                     type="button"
                     onClick={() => onFiltersChange({ ...filters, syncStatus: value })}
-                    className={`rounded-lg border py-1.5 text-[9px] font-bold transition-all ${
-                      filters.syncStatus === value
-                        ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm'
-                        : 'border-slate-100 bg-white text-slate-500 hover:border-indigo-200'
-                    }`}
+                    className={`justify-center ${formStandardCategoryPillClass(filters.syncStatus === value)}`}
                   >
                     {label}
                   </button>
@@ -391,7 +376,7 @@ const DevStyleSidebar: React.FC<DevStyleSidebarProps> = ({
                 <button
                   type="button"
                   onClick={() => toggleCustomer(customer)}
-                  className="w-full flex items-center gap-2 px-2 py-2 text-[10px] font-black text-slate-400 uppercase tracking-wider hover:text-indigo-600"
+                  className="w-full flex items-center gap-2 px-2 py-2 text-xs font-semibold text-slate-400 hover:text-indigo-600"
                 >
                   <ChevronRight className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-90' : ''}`} />
                   {customer}

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Clock, Search, Building2, User, FileText, Sliders, Printer, FileSpreadsheet } from 'lucide-react';
+import { Plus, Clock, Search, Building2, User, FileText, Sliders, Printer, FileSpreadsheet, ScrollText } from 'lucide-react';
 import { toast } from 'sonner';
 import * as api from '../services/api';
 import {
@@ -27,6 +27,7 @@ import { PartnerSelect } from '../components/PartnerSelect';
 import {
   formConfigToolbarButtonClass,
   moduleHeaderRowClass,
+  outlineToolbarButtonClass,
   pageSubtitleClass,
   pageTitleClass,
   primaryToolbarButtonClass,
@@ -43,6 +44,8 @@ import PaymentFormConfigModal from './finance/PaymentFormConfigModal';
 import FinanceDetailModal from './finance/FinanceDetailModal';
 import PartnerProductReconTable from './finance/PartnerProductReconTable';
 import FinanceRecordFormModal, { type FinanceRecordFormValues } from './finance/FinanceRecordFormModal';
+import FinanceDocFlowListModal from './finance/FinanceDocFlowListModal';
+import { FINANCE_FLOW_LABELS } from './finance/financeFlowHelpers';
 import WorkerSelectWithTabs from './finance/WorkerSelectWithTabs';
 import { type DetailTarget } from './finance/financeDetailTypes';
 import { DEFAULT_RECEIPT_FORM_SETTINGS, DEFAULT_PAYMENT_FORM_SETTINGS } from '../contexts/AppDataContext';
@@ -53,6 +56,8 @@ import { useFinanceReconciliation } from '../hooks/useFinanceReconciliation';
 import { downloadPartnerReconciliationXlsx } from '../utils/downloadPartnerReconciliationXlsx';
 import { fmtDT } from '../utils/formatTime';
 import { hasModulePerm } from '../utils/hasModulePerm';
+import { useAuth } from '../contexts/AuthContext';
+import { currentOperatorDisplayName } from '../utils/currentOperatorDisplayName';
 
 interface FinanceOpsViewProps {
   type: FinanceOpType;
@@ -127,6 +132,8 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
   onUpdatePrintTemplates,
   onRefreshPrintTemplates,
 }) => {
+  const { currentUser } = useAuth();
+  const docOperator = currentOperatorDisplayName(currentUser);
   const _isOwner = tenantRole === 'owner';
   const hasFinancePerm = (permKey: string) => hasModulePerm(tenantRole, userPermissions, 'finance', permKey);
   const financePermModule = type === 'RECEIPT' ? 'receipt' : type === 'PAYMENT' ? 'payment' : 'reconciliation';
@@ -148,6 +155,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
     setDetailRecord(null);
     setEditingRecordId(null);
     setEditingRecordSnapshot(null);
+    setFinanceFlowOpen(false);
   }, [type]);
   const [financeListSearch, setFinanceListSearch] = useState('');
   const debouncedFinanceListSearch = useDebouncedValue(financeListSearch, 300);
@@ -251,6 +259,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
   const [showReceiptFormConfig, setShowReceiptFormConfig] = useState(false);
   const [showPaymentFormConfig, setShowPaymentFormConfig] = useState(false);
   const [financeFormConfigTab, setFinanceFormConfigTab] = useState<'fields' | 'print'>('fields');
+  const [financeFlowOpen, setFinanceFlowOpen] = useState(false);
 
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const orderMap = useMemo(() => new Map(orders.map(o => [o.id, o])), [orders]);
@@ -416,7 +425,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
       relatedId: form.relatedId || undefined,
       partner: form.partner,
       note: form.note,
-      operator: '财务办-陈会计',
+      operator: docOperator,
       status: 'COMPLETED',
     };
     if (isReceiptOrPayment) {
@@ -499,7 +508,8 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
               </div>
             )}
             {type !== 'RECONCILIATION' &&
-              (canCreate ||
+              ((isReceiptOrPayment && canView) ||
+                canCreate ||
                 (isReceiptOrPayment &&
                   canEdit &&
                   (type === 'RECEIPT' ? onUpdateReceiptFormSettings : onUpdatePaymentFormSettings))) && (
@@ -526,6 +536,16 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
                       className={formConfigToolbarButtonClass}
                     >
                       <Sliders className="w-4 h-4 shrink-0" /> 表单配置
+                    </button>
+                  )}
+                  {isReceiptOrPayment && canView && (
+                    <button
+                      type="button"
+                      onClick={() => setFinanceFlowOpen(true)}
+                      className={outlineToolbarButtonClass}
+                    >
+                      <ScrollText className="w-4 h-4 shrink-0" />{' '}
+                      {FINANCE_FLOW_LABELS[type]}
                     </button>
                   )}
                   {canCreate && (
@@ -1048,6 +1068,20 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
                   }
                 : undefined
           }
+        />
+      )}
+
+      {isReceiptOrPayment && financeFlowOpen && (
+        <FinanceDocFlowListModal
+          recordType={type}
+          open={financeFlowOpen}
+          onClose={() => setFinanceFlowOpen(false)}
+          onOpenDetail={rec => {
+            setFinanceFlowOpen(false);
+            setDetailRecord(rec);
+          }}
+          products={products}
+          financeCategories={financeCategories}
         />
       )}
     </div>

@@ -76,6 +76,7 @@ import StockFlowListModal from './StockFlowListModal';
 import StockMaterialFormModal from './StockMaterialFormModal';
 import MaterialFormConfigModal from './MaterialFormConfigModal';
 import { useAuth } from '../../contexts/AuthContext';
+import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import {
   readWarehousePreference,
   writeWarehousePreference,
@@ -110,7 +111,8 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   onRefreshPrintTemplates,
   psiRecords = [],
 }) => {
-  const { tenantCtx, userId } = useAuth();
+  const { tenantCtx, userId, currentUser } = useAuth();
+  const docOperator = currentOperatorDisplayName(currentUser);
 
   /**
    * Phase 3.E：StockMaterialPanel 自取数据，按当前 tab 的活动工单 ids 收窄拉取 STOCK_OUT / STOCK_RETURN / OUTSOURCE。
@@ -783,6 +785,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
           status: '已完成',
           warehouseId: stockConfirmWarehouseId || undefined,
           partner: partnerForRecord,
+          operator: docOperator,
           ...(bn ? { batchNo: bn } : {}),
           ...collabExtra,
         } as ProductionOpRecord;
@@ -818,7 +821,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         return { productId: pid, quantity: stockConfirmQuantities[pid], ...(bn ? { batchNo: bn } : {}) };
       }),
       reason: stockConfirmReason || undefined,
-      operator: '',
+      operator: docOperator,
       partner: partnerForRecord,
     });
 
