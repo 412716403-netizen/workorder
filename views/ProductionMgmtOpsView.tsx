@@ -47,7 +47,8 @@ interface ProductionMgmtOpsViewProps {
   onAddRecord: (record: ProductionOpRecord) => void;
   onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
   onUpdateRecord?: (record: ProductionOpRecord) => void;
-  onDeleteRecord?: (recordId: string) => void;
+  onDeleteRecord?: (recordId: string) => void | Promise<void>;
+  onDeleteRecordBatch?: (recordIds: string[]) => Promise<void>;
   limitType?: ProdOpType;
   excludeType?: ProdOpType;
   globalNodes?: GlobalNodeTemplate[];
@@ -91,6 +92,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
   onAddRecordBatch,
   onUpdateRecord,
   onDeleteRecord,
+  onDeleteRecordBatch,
   limitType,
   globalNodes = [],
   partners = [],
@@ -128,6 +130,7 @@ const ProductionMgmtOpsView: React.FC<ProductionMgmtOpsViewProps> = ({
     onAddRecordBatch,
     onUpdateRecord,
     onDeleteRecord,
+    onDeleteRecordBatch,
     globalNodes,
     partners,
     categories,

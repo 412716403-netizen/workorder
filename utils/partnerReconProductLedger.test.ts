@@ -11,8 +11,8 @@ import type { FinanceRecord, ProductionOpRecord, PsiRecord } from '../types';
 import type { PartnerReconRow } from './partnerReconLedger';
 
 const productMap = new Map([
-  ['p1', { id: 'p1', name: '产品A' } as never],
-  ['p2', { id: 'p2', name: '产品B' } as never],
+  ['p1', { id: 'p1', name: '产品A', sku: 'SKU-A', imageUrl: 'http://img/a.png' } as never],
+  ['p2', { id: 'p2', name: '产品B', sku: 'SKU-B' } as never],
 ]);
 
 const psi = (overrides: Partial<PsiRecord> & Pick<PsiRecord, 'type' | 'productId'>): PsiRecord => ({
@@ -64,6 +64,8 @@ describe('buildPartnerProductLineReconList', () => {
     });
     expect(lines).toHaveLength(2);
     expect(lines[0]?.productName).toBe('产品A');
+    expect(lines[0]?.product).toEqual({ name: '产品A', sku: 'SKU-A', imageUrl: 'http://img/a.png' });
+    expect(lines[1]?.product).toEqual({ name: '产品B', sku: 'SKU-B', imageUrl: null });
     expect(lines[0]?.quantity).toBeNull();
     expect(lines[0]?.unitPrice).toBeNull();
     expect(lines[0]?.receivableDec).toBe(24.4);
@@ -217,6 +219,7 @@ describe('buildPartnerProductLineReconList', () => {
     });
     expect(lines).toHaveLength(1);
     expect(lines[0]?.productName).toBe('—');
+    expect(lines[0]?.product).toBeNull();
     expect(lines[0]?.receivableDec).toBe(99);
     expect(lines[0]?.balance).toBe(-89);
   });
@@ -230,6 +233,7 @@ describe('summarizePartnerProductRowsByProductAndPrice', () => {
     docType: '采购入库',
     partner: '万新',
     productName: over.productName,
+    product: over.product ?? null,
     quantity: over.quantity ?? null,
     unitPrice: over.unitPrice ?? null,
     receivableInc: over.receivableInc ?? 0,

@@ -13,6 +13,13 @@ const UNKNOWN_PRODUCT_ID = '__unknown__';
 /** 按产品明细行：详情仍走 FinanceDetailModal，与对账详情类型一致 */
 export type PartnerProductLineDetail = PartnerReconRow | FinanceRecord;
 
+/** 产品列展示元数据：与流水「产品」列（FlowListProductCell）口径一致：名称 + SKU + 缩略图 */
+export type ReconProductCellMeta = {
+  name: string;
+  sku: string | null;
+  imageUrl: string | null;
+};
+
 /**
  * 按产品视图的一行 = 单据顺序下的「一条产品级明细」（非按产品汇总）。
  * 外协/采购/销售按 PSI/生产行展开；收付款按单据行（与按单据视图一致，不拆行）。
@@ -24,6 +31,8 @@ export type PartnerProductReconRow = {
   docType: string;
   partner: string;
   productName: string;
+  /** 产品行（采购/销售/外协，及关联产品的收付款）有值；纯单据级回退为 null */
+  product: ReconProductCellMeta | null;
   /** 采购/销售/外协行有值；收付款或整单回退为 null */
   quantity: number | null;
   unitPrice: number | null;
@@ -45,6 +54,20 @@ function resolveProductName(
 ): string {
   if (productId === UNKNOWN_PRODUCT_ID) return fallback?.trim() || '—';
   return productMap.get(productId)?.name ?? fallback?.trim() ?? productId;
+}
+
+/** 解析产品行的展示元数据（名称/SKU/缩略图），口径与流水「产品」列一致 */
+function resolveProductMeta(
+  productId: string,
+  productMap: Map<string, Product>,
+  fallback?: string | null,
+): ReconProductCellMeta {
+  const p = productId === UNKNOWN_PRODUCT_ID ? undefined : productMap.get(productId);
+  return {
+    name: resolveProductName(productId, productMap, fallback),
+    sku: (p?.sku ?? '').trim() || null,
+    imageUrl: (p?.imageUrl ?? '').trim() || null,
+  };
 }
 
 function lineAmount(r: PsiRecord): number {
@@ -98,7 +121,10 @@ function outsourceLineQtyPrice(rec: ProductionOpRecord): { quantity: number | nu
 /** PSI 行级应收增减（与单据口径一致） */
 export function lineDeltaFromPsi(r: PsiRecord): { inc: number; dec: number } {
   const amount = lineAmount(r);
-  if (r.type === 'PURCHASE_BILL') return { inc: 0, dec: Math.abs(amount) };
+  if (r.type === 'PURCHASE_BILL') {
+    if (amount >= 0) return { inc: 0, dec: Math.abs(amount) };
+    return { inc: Math.abs(amount), dec: 0 };
+  }
   if (r.type === 'SALES_BILL') {
     if (amount >= 0) return { inc: amount, dec: 0 };
     return { inc: 0, dec: Math.abs(amount) };
@@ -157,7 +183,8 @@ export function buildPartnerProductLineReconList(input: BuildPartnerProductLineR
       const { inc, dec } = computePartnerReconRowDelta(docRow);
       running += inc - dec;
       const rec = docRow.rec;
-      const pName = rec.productId ? resolveProductName(rec.productId, productMap) : '—';
+      const meta = rec.productId ? resolveProductMeta(rec.productId, productMap) : null;
+      const pName = meta?.name ?? '—';
       out.push({
         kind: 'line',
         timestamp: rec.timestamp,
@@ -165,6 +192,7 @@ export function buildPartnerProductLineReconList(input: BuildPartnerProductLineR
         docType: rec.type === 'RECEIPT' ? '收款单' : '付款单',
         partner: rec.partner || partnerName,
         productName: pName,
+        product: meta,
         quantity: null,
         unitPrice: null,
         receivableInc: inc,
@@ -192,6 +220,7 @@ export function buildPartnerProductLineReconList(input: BuildPartnerProductLineR
           docType: docRow.docType,
           partner: docRow.partner || partnerName,
           productName: '—',
+          product: null,
           quantity: null,
           unitPrice: null,
           receivableInc: inc,
@@ -211,6 +240,7 @@ export function buildPartnerProductLineReconList(input: BuildPartnerProductLineR
             docType: docRow.docType,
             partner: docRow.partner || partnerName,
             productName: resolveProductName(rec.productId, productMap),
+            product: resolveProductMeta(rec.productId, productMap),
             quantity,
             unitPrice,
             receivableInc: inc,
@@ -245,6 +275,7 @@ export function buildPartnerProductLineReconList(input: BuildPartnerProductLineR
         docType: docRow.docType,
         partner: docRow.partner || partnerName,
         productName: '—',
+        product: null,
         quantity: null,
         unitPrice: null,
         receivableInc: inc,
@@ -265,6 +296,7 @@ export function buildPartnerProductLineReconList(input: BuildPartnerProductLineR
           docType: lineDocTypeLabel(r),
           partner: docRow.partner || partnerName,
           productName: resolveProductName(resolveProductId(r.productId), productMap, r.productName),
+          product: resolveProductMeta(resolveProductId(r.productId), productMap, r.productName),
           quantity,
           unitPrice,
           receivableInc: inc,

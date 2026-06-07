@@ -218,6 +218,8 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
   }
 
   const isSalesBill = docType === 'SALES_BILL';
+  const isPurchaseBill = docType === 'PURCHASE_BILL';
+  const isReturnDoc = (isSalesBill || isPurchaseBill) && totalQty < 0;
 
   return (
     <div className="space-y-5">
@@ -279,6 +281,11 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
                   销售退货
                 </span>
               )}
+              {isPurchaseBill && totalQty < 0 && (
+                <span className="text-[10px] font-black text-amber-600 uppercase tracking-tighter bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                  采购退货
+                </span>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] font-bold text-slate-400 uppercase">
               <span className="flex items-center gap-1">
@@ -315,13 +322,13 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
           <div className="flex shrink-0 flex-wrap gap-6 border-t border-slate-200/80 pt-3 text-sm md:border-t-0 md:border-l md:border-slate-200/80 md:pt-0 md:pl-6">
             <div className="min-w-[6.5rem] md:text-right">
               <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">合计数量</p>
-              <p className={`font-black tabular-nums ${isSalesBill && totalQty < 0 ? 'text-amber-600' : 'text-slate-800'}`}>
+              <p className={`font-black tabular-nums ${isReturnDoc ? 'text-amber-600' : 'text-slate-800'}`}>
                 {totalQty.toLocaleString()} PCS
               </p>
             </div>
             <div className="min-w-[6.5rem] md:text-right">
               <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">合计金额</p>
-              <p className={`font-black tabular-nums ${isSalesBill && totalAmount < 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+              <p className={`font-black tabular-nums ${isReturnDoc || totalAmount < 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                 ¥{totalAmount.toFixed(2)}
               </p>
             </div>

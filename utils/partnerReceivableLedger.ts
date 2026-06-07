@@ -57,7 +57,8 @@ export function computePartnerReceivableBeforeDoc(
       if (amount >= 0) docs.push({ key, t, inc: amount, dec: 0 });
       else docs.push({ key, t, inc: 0, dec: Math.abs(amount) });
     } else if (type === 'PURCHASE_BILL') {
-      docs.push({ key, t, inc: 0, dec: Math.abs(amount) });
+      if (amount >= 0) docs.push({ key, t, inc: 0, dec: Math.abs(amount) });
+      else docs.push({ key, t, inc: Math.abs(amount), dec: 0 });
     }
   });
 

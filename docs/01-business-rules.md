@@ -13,7 +13,7 @@
 
 ## 1. 进销存 (PSI)
 
-采购订单、采购入库、调拨、盘点：**无颜色尺码**（单行数量、非规格矩阵）时，数量允许为**非负小数，至多 2 位小数**（与 `PsiRecord.quantity` Decimal(12,2) 一致）；有颜色尺码时规格格仍为**整数**件数。
+采购订单、调拨、盘点：**无颜色尺码**（单行数量、非规格矩阵）时，数量允许为**非负小数，至多 2 位小数**（与 `PsiRecord.quantity` Decimal(12,2) 一致）。**采购入库（`PURCHASE_BILL`）与销售单（`SALES_BILL`）** 无变体时允许**带符号小数**（负数表示退货，见 §1.1.1）；有颜色尺码时规格格仍为**整数**件数。
 
 ### 1.1 库存计算
 
@@ -35,6 +35,20 @@
 - 历史 mock 公式只保留为旧实现兼容说明，不应继续扩散为业务真相
 
 **代表性实现锚点**：`views/PSIOpsView.tsx`、`services/api.ts`
+
+### 1.1.1 销售退货 / 采购退货（负数结算单）
+
+无独立退货单据类型；负数量的结算单行在库存、财务、仓库流水中统一解释：
+
+| 单据类型 | 正数量 | 负数量（退货） |
+|----------|--------|----------------|
+| `SALES_BILL`（销售单） | 出库，应收增 | 入库回冲，应收减；UI/流水标注「销售退货」 |
+| `PURCHASE_BILL`（采购入库） | 入库，应付增（对账 `dec`） | 出库回冲，应付减（对账 `inc`）；UI/流水标注「采购退货」 |
+
+- **录入**：手动创建结算单时，无变体明细行数量可填负数；「引用采购订单生成」入库路径仍仅正数。
+- **库存**：`PURCHASE_BILL` 负数量减少 `psiIn` 累计（净库存减少）；`SALES_BILL` 负数量减少 `psiOut` 累计（净库存增加）。
+- **财务对账**：`utils/partnerReconLedger.ts`、`backend/src/services/finance.service.ts` 按单据签名金额区分增减。
+- **仓库流水筛选**：虚拟类型 `PURCHASE_RETURN` / `SALES_RETURN` 仅用于 UI 筛选，存储类型仍为 `PURCHASE_BILL` / `SALES_BILL`。
 
 ### 1.2 采购订单已入库数量 (`receivedByOrderLine`)
 
@@ -268,12 +282,23 @@
 
 ### 4.3 合作单位对账 Excel 导出
 
-- **入口**：财务 → 对账 → 合作单位，在已选择合作单位并点击「查询」后，工具栏「导出 Excel」可用（数据加载中禁用）。
-- **汇总区**（表头前几行）：对账时间范围、合作单位名称；**上期结余、本期累计增加、本期累计减少、本期应收余额**与页面上方汇总条一致，按**整次查询**（所选日期区间 + 合作单位）的全量对账结果计算，**不受**列表上方搜索框过滤影响。
+- **入口**：财务 → 对账 → 合作单位，在已选择合作单位并点击「查询」后，工具栏「导出 Excel」可用（数据加载中禁用）。**开始/结束日期可不填**；未填开始日期时「上期结余」为 0，明细为与该合作单位相关的全部对账单据。
+- **汇总区**（表头前几行）：对账时间范围、合作单位名称；**上期结余、本期累计增加、本期累计减少、本期应收余额**与页面上方汇总条一致，按**整次查询**（所选日期区间 + 合作单位；日期为空则视为全量）的全量对账结果计算，**不受**「在当前对账结果中搜索…」过滤影响。
 - **明细表**：导出**当前搜索过滤后**的列表——「按单据」导出 `partnerReconWithBalance`；「按产品」导出 `partnerProductReconListFiltered`。
 - **按产品模式表尾**：在明细下方追加「产品汇总（按单价）」：按「产品名称 + 单价」分组汇总数量与金额；同一产品若存在多个不同单价，各占一行。
 
 **实现锚点**：`utils/buildPartnerReconciliationExportSheet.ts`、`utils/downloadPartnerReconciliationXlsx.ts`、`utils/partnerReconProductLedger.ts`（`summarizePartnerProductRowsByProductAndPrice`）、`views/FinanceOpsView.tsx`。
+
+### 4.4 报工结算对账 Excel 导出
+
+与合作单位对账（§4.3）交互一致：
+
+- **入口**：财务 → 对账 → 报工结算，选择工人并点击「查询」后可用「导出 Excel」；日期可不填，未填开始日期时「上期结余」为 0。
+- **汇总区**：对账时间范围、工人名称；**上期结余、本期累计增加、本期累计减少、本期应收余额**按整次查询全量计算，不受搜索框影响。
+- **视图**：支持「按单据 / 按产品」；按产品时将报工单展开为产品×工序明细行（含数量、工价），表尾按「产品 + 单价」汇总。
+- **明细**：导出当前搜索过滤后的列表。
+
+**实现锚点**：`utils/settlementReconLedger.ts`、`utils/settlementReconProductLedger.ts`、`utils/buildSettlementReconciliationExportSheet.ts`、`utils/downloadSettlementReconciliationXlsx.ts`、`hooks/useFinanceReconciliation.ts`、`views/FinanceOpsView.tsx`。
 
 ---
 

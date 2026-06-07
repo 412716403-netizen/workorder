@@ -8,6 +8,7 @@ import type { PrintFieldOption } from './printFieldOptions';
 import { FieldPicker } from './FieldPicker';
 import { FontSizePtInput } from './FontSizePtInput';
 import { Labeled } from './Labeled';
+import { NumericDraftInput } from '../NumericDraftInput';
 
 function HeaderFooterEditorInner({
   title,
@@ -53,11 +54,12 @@ function HeaderFooterEditorInner({
     <div className="space-y-4">
       <h3 className="text-sm font-black text-slate-800">{title}</h3>
       <Labeled label="高度 (mm)">
-        <input
-          type="number"
-          step={0.1}
+        <NumericDraftInput
+          id={`hf-${title}-height`}
           value={config.heightMm}
-          onChange={e => onChange({ ...config, heightMm: Number(e.target.value) || 0 })}
+          min={0}
+          emptyFallback={0}
+          onCommit={heightMm => onChange({ ...config, heightMm })}
           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold"
         />
       </Labeled>
@@ -80,11 +82,12 @@ function HeaderFooterEditorInner({
         </Labeled>
       </div>
       <Labeled label="边框粗细 (mm)">
-        <input
-          type="number"
-          step={0.1}
+        <NumericDraftInput
+          id={`hf-${title}-border`}
           value={config.borderWidthMm}
-          onChange={e => onChange({ ...config, borderWidthMm: Number(e.target.value) || 0 })}
+          min={0}
+          emptyFallback={0}
+          onCommit={borderWidthMm => onChange({ ...config, borderWidthMm })}
           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold"
         />
       </Labeled>

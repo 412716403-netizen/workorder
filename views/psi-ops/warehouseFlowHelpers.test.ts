@@ -7,6 +7,14 @@ describe('computeWarehouseFlowTotals', () => {
     expect(t).toEqual({ inboundTotal: 100, outboundTotal: 0, netChange: 100 });
   });
 
+  it('采购入库与采购退货分别计入入/出', () => {
+    const t = computeWarehouseFlowTotals([
+      { type: 'PURCHASE_BILL', quantity: 50, record: {} },
+      { type: 'PURCHASE_BILL', quantity: -8, record: {} },
+    ]);
+    expect(t).toEqual({ inboundTotal: 50, outboundTotal: 8, netChange: 42 });
+  });
+
   it('销售出库与销售退货分别计入出/入', () => {
     const t = computeWarehouseFlowTotals([
       { type: 'SALES_BILL', quantity: 30, record: {} },

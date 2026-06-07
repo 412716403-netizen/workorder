@@ -16,7 +16,7 @@ import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
 
 const WAREHOUSE_FLOW_TYPES = ['PURCHASE_BILL', 'SALES_BILL', 'TRANSFER', 'STOCKTAKE', 'STOCK_IN', 'STOCK_RETURN', 'STOCK_OUT'] as const;
-const warehouseFlowTypeLabel: Record<string, string> = { PURCHASE_BILL: '采购入库', SALES_BILL: '销售出库', SALES_RETURN: '销售退货', TRANSFER: '调拨', STOCKTAKE: '盘点', STOCK_IN: '生产入库', STOCK_RETURN: '生产退料', STOCK_OUT: '领料发出' };
+const warehouseFlowTypeLabel: Record<string, string> = { PURCHASE_BILL: '采购入库', PURCHASE_RETURN: '采购退货', SALES_BILL: '销售出库', SALES_RETURN: '销售退货', TRANSFER: '调拨', STOCKTAKE: '盘点', STOCK_IN: '生产入库', STOCK_RETURN: '生产退料', STOCK_OUT: '领料发出' };
 
 interface FlowRow {
   id: string;
@@ -176,10 +176,11 @@ const WarehouseFlowModal: React.FC<WarehouseFlowModalProps> = ({
           : (warehouseMap.get(rec.warehouseId)?.name ?? '—');
       const qty = rec.quantity ?? 0;
       const isSalesReturn = rec.type === 'SALES_BILL' && qty < 0;
+      const isPurchaseReturn = rec.type === 'PURCHASE_BILL' && qty < 0;
       return {
         id: rec.id,
         type: rec.type,
-        typeLabel: isSalesReturn ? '销售退货' : (warehouseFlowTypeLabel[rec.type] || rec.type),
+        typeLabel: isSalesReturn ? '销售退货' : isPurchaseReturn ? '采购退货' : (warehouseFlowTypeLabel[rec.type] || rec.type),
         docNumber: rec.docNumber || '—',
         dateStr: dateStr || (rec.timestamp ?? '—'),
         displayDateTime: formatFlowDateTime(rec.timestamp || rec.createdAt || ''),
@@ -189,7 +190,7 @@ const WarehouseFlowModal: React.FC<WarehouseFlowModalProps> = ({
         quantity: qty,
         warehouseId: warehouseId || rec.warehouseId,
         warehouseName,
-        isOutbound: rec.type === 'SALES_BILL',
+        isOutbound: rec.type === 'SALES_BILL' || isPurchaseReturn,
         partner: rec.partner ?? '—',
         record: r,
         _sortTs: parseRecordMs(r),
@@ -257,6 +258,8 @@ const WarehouseFlowModal: React.FC<WarehouseFlowModalProps> = ({
     if (flowType !== 'all') {
       if (flowType === 'SALES_RETURN') rows = rows.filter(r => r.type === 'SALES_BILL' && r.quantity < 0);
       else if (flowType === 'SALES_BILL') rows = rows.filter(r => r.type === 'SALES_BILL' && r.quantity >= 0);
+      else if (flowType === 'PURCHASE_RETURN') rows = rows.filter(r => r.type === 'PURCHASE_BILL' && r.quantity < 0);
+      else if (flowType === 'PURCHASE_BILL') rows = rows.filter(r => r.type === 'PURCHASE_BILL' && r.quantity >= 0);
       else rows = rows.filter(r => r.type === flowType);
     }
     if (flowWarehouse !== 'all') {
@@ -314,6 +317,7 @@ const WarehouseFlowModal: React.FC<WarehouseFlowModalProps> = ({
                {WAREHOUSE_FLOW_TYPES.map(t => (
                  <option key={t} value={t}>{warehouseFlowTypeLabel[t]}</option>
                ))}
+               <option value="PURCHASE_RETURN">采购退货</option>
                <option value="SALES_RETURN">销售退货</option>
              </select>
            </div>

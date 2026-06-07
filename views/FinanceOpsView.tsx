@@ -54,6 +54,8 @@ import { toLocalCompactYmd, toLocalDateYmd } from '../utils/localDateTime';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useFinanceReconciliation } from '../hooks/useFinanceReconciliation';
 import { downloadPartnerReconciliationXlsx } from '../utils/downloadPartnerReconciliationXlsx';
+import { downloadSettlementReconciliationXlsx } from '../utils/downloadSettlementReconciliationXlsx';
+import { toPartnerStyleProductRows } from '../utils/settlementReconProductLedger';
 import { fmtDT } from '../utils/formatTime';
 import { hasModulePerm } from '../utils/hasModulePerm';
 import { useAuth } from '../contexts/AuthContext';
@@ -315,6 +317,11 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
     partnerProductReconList,
     partnerProductReconListFiltered,
     settlementReconWithBalance,
+    settlementReconSummary,
+    settlementReconViewMode,
+    setSettlementReconViewMode,
+    settlementProductReconList,
+    settlementProductReconListFiltered,
     displayRecords,
     tableSourceRecords,
     reconLoading,
@@ -323,6 +330,11 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
   const partnerQueryDisplayName = useMemo(
     () => partners.find(p => p.id === reconQueryPartnerId)?.name?.trim() ?? '',
     [partners, reconQueryPartnerId],
+  );
+
+  const workerQueryDisplayName = useMemo(
+    () => workers.find(w => w.id === reconQueryWorkerId)?.name?.trim() ?? '',
+    [workers, reconQueryWorkerId],
   );
 
   const canExportPartnerReconciliation =
@@ -363,9 +375,51 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
     partnerProductReconListFiltered,
   ]);
 
+  const canExportSettlementReconciliation =
+    type === 'RECONCILIATION' &&
+    reconciliationSubTab === 'settlement' &&
+    reconHasFilter &&
+    !!settlementReconSummary &&
+    !reconLoading;
+
+  const handleExportSettlementReconciliation = useCallback(async () => {
+    if (!settlementReconSummary) {
+      toast.warning('请先完成查询后再导出');
+      return;
+    }
+    try {
+      await downloadSettlementReconciliationXlsx({
+        dateFrom: reconQueryDateFromT,
+        dateTo: reconQueryDateToT,
+        workerName: workerQueryDisplayName || reconQueryWorkerId || '工人',
+        summary: settlementReconSummary,
+        viewMode: settlementReconViewMode,
+        documentRows: settlementReconWithBalance,
+        productRows: settlementProductReconListFiltered,
+      });
+      toast.success('已导出 Excel');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '导出失败');
+    }
+  }, [
+    settlementReconSummary,
+    reconQueryDateFromT,
+    reconQueryDateToT,
+    workerQueryDisplayName,
+    reconQueryWorkerId,
+    settlementReconViewMode,
+    settlementReconWithBalance,
+    settlementProductReconListFiltered,
+  ]);
+
+  const settlementProductRowsForTable = useMemo(
+    () => toPartnerStyleProductRows(settlementProductReconListFiltered),
+    [settlementProductReconListFiltered],
+  );
+
   useEffect(() => {
     setFinanceListSearch('');
-  }, [type, reconciliationSubTab, partnerReconViewMode]);
+  }, [type, reconciliationSubTab, partnerReconViewMode, settlementReconViewMode]);
 
   const categoriesForType = useMemo(() =>
     financeCategories.filter(c => c.kind === type),
@@ -472,7 +526,10 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
                 <div className="flex bg-slate-100 p-1 rounded-xl w-fit justify-self-center">
                   <button
                     type="button"
-                    onClick={() => setReconciliationSubTab('partner')}
+                    onClick={() => {
+                      setReconciliationSubTab('partner');
+                      setSettlementReconViewMode('document');
+                    }}
                     className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${reconciliationSubTab === 'partner' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                   >
                     <Building2 className="w-3.5 h-3.5" /> 合作单位
@@ -482,6 +539,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
                     onClick={() => {
                       setReconciliationSubTab('settlement');
                       setPartnerReconViewMode('document');
+                      setSettlementReconViewMode('document');
                     }}
                     className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${reconciliationSubTab === 'settlement' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                   >
@@ -495,7 +553,7 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
             )}
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 shrink-0 w-full sm:w-auto">
-            {(type !== 'RECONCILIATION' || reconHasFilter) && (
+            {(type !== 'RECONCILIATION') && (
               <div className="relative w-full sm:w-56 sm:max-w-xs">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                 <input
@@ -623,6 +681,18 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" /> 导出 Excel
                 </button>
+                {reconHasFilter && (
+                  <div className="relative w-full sm:w-56 sm:max-w-xs">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    <input
+                      type="search"
+                      placeholder="在当前对账结果中搜索…"
+                      value={financeListSearch}
+                      onChange={e => setFinanceListSearch(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl py-2 pl-10 pr-3 text-xs font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                    />
+                  </div>
+                )}
               </>
             ) : (
               <>
@@ -643,13 +713,49 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
                 >
                   查询
                 </button>
+                <div className="flex bg-slate-100 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setSettlementReconViewMode('document')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${settlementReconViewMode === 'document' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    按单据
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSettlementReconViewMode('product')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${settlementReconViewMode === 'product' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    按产品
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  disabled={!canExportSettlementReconciliation}
+                  onClick={() => void handleExportSettlementReconciliation()}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" /> 导出 Excel
+                </button>
+                {reconHasFilter && (
+                  <div className="relative w-full sm:w-56 sm:max-w-xs">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    <input
+                      type="search"
+                      placeholder="在当前对账结果中搜索…"
+                      value={financeListSearch}
+                      onChange={e => setFinanceListSearch(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl py-2 pl-10 pr-3 text-xs font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                    />
+                  </div>
+                )}
               </>
             )}
           </div>
         )}
       </div>
 
-      {type === 'RECONCILIATION' && reconciliationSubTab === 'partner' && reconHasFilter && reconQueryDateFromT && (
+      {type === 'RECONCILIATION' && reconciliationSubTab === 'partner' && reconHasFilter && (
         <div className={`${psiOrderBillCompactSummaryBarClass} grid grid-cols-2 sm:grid-cols-4 gap-4`}>
           {partnerOpeningBalanceLoading || reconLoading ? (
             <p className="col-span-full text-center text-sm font-bold text-white/90 py-1">计算中…</p>
@@ -688,10 +794,51 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
         </div>
       )}
 
+      {type === 'RECONCILIATION' && reconciliationSubTab === 'settlement' && reconHasFilter && (
+        <div className={`${psiOrderBillCompactSummaryBarClass} grid grid-cols-2 sm:grid-cols-4 gap-4`}>
+          {reconLoading ? (
+            <p className="col-span-full text-center text-sm font-bold text-white/90 py-1">计算中…</p>
+          ) : settlementReconSummary ? (
+            <>
+              <div>
+                <p className={psiOrderBillCompactSummaryLabelClass}>上期余额</p>
+                <p className={`${psiOrderBillCompactSummaryValueClass} text-white`}>
+                  ¥ {settlementReconSummary.openingBalance.toLocaleString()}
+                </p>
+              </div>
+              <div>
+                <p className={psiOrderBillCompactSummaryLabelClass}>本期累计增加</p>
+                <p className={`${psiOrderBillCompactSummaryValueClass} text-white`}>
+                  {settlementReconSummary.periodInc > 0
+                    ? `¥ ${settlementReconSummary.periodInc.toLocaleString()}`
+                    : '—'}
+                </p>
+              </div>
+              <div>
+                <p className={psiOrderBillCompactSummaryLabelClass}>本期累计减少</p>
+                <p className={`${psiOrderBillCompactSummaryValueClass} text-white`}>
+                  {settlementReconSummary.periodDec > 0
+                    ? `¥ ${settlementReconSummary.periodDec.toLocaleString()}`
+                    : '—'}
+                </p>
+              </div>
+              <div>
+                <p className={psiOrderBillCompactSummaryLabelClass}>本期应收余额</p>
+                <p className={`${psiOrderBillCompactSummaryValueClass} text-white`}>
+                  ¥ {settlementReconSummary.closingBalance.toLocaleString()}
+                </p>
+              </div>
+            </>
+          ) : null}
+        </div>
+      )}
+
       {/* 数据列表 */}
       <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          {type === 'RECONCILIATION' && reconciliationSubTab === 'partner' && partnerReconViewMode === 'product' ? (
+          {type === 'RECONCILIATION' &&
+          reconciliationSubTab === 'partner' &&
+          partnerReconViewMode === 'product' ? (
             !reconHasFilter ? (
               <div className="px-8 py-20 text-center text-slate-300 italic text-sm">请选择合作单位后点击查询</div>
             ) : reconLoading ? (
@@ -703,6 +850,25 @@ const FinanceOpsView: React.FC<FinanceOpsViewProps> = ({
                   debouncedFinanceListSearch.trim() &&
                   partnerProductReconList.length > 0 &&
                   partnerProductReconListFiltered.length === 0
+                    ? '无匹配项，请调整搜索关键词'
+                    : '该条件下暂无对账单据'
+                }
+              />
+            )
+          ) : type === 'RECONCILIATION' &&
+            reconciliationSubTab === 'settlement' &&
+            settlementReconViewMode === 'product' ? (
+            !reconHasFilter ? (
+              <div className="px-8 py-20 text-center text-slate-300 italic text-sm">请选择工人后点击查询</div>
+            ) : reconLoading ? (
+              <div className="px-8 py-20 text-center text-slate-300 text-sm">加载中…</div>
+            ) : (
+              <PartnerProductReconTable
+                rows={settlementProductRowsForTable}
+                emptyMessage={
+                  debouncedFinanceListSearch.trim() &&
+                  settlementProductReconList.length > 0 &&
+                  settlementProductReconListFiltered.length === 0
                     ? '无匹配项，请调整搜索关键词'
                     : '该条件下暂无对账单据'
                 }

@@ -74,7 +74,9 @@ export interface PanelProps {
   onAddRecord: (record: ProductionOpRecord) => void | Promise<ProductionOpRecord | null | void>;
   onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<ProductionOpRecord[] | void>;
   onUpdateRecord?: (record: ProductionOpRecord) => void;
-  onDeleteRecord?: (recordId: string) => void;
+  onDeleteRecord?: (recordId: string) => void | Promise<void>;
+  /** 批量删除：全部完成后只 invalidate 一次，供外协单据整单删除等场景 */
+  onDeleteRecordBatch?: (recordIds: string[]) => Promise<void>;
   globalNodes: GlobalNodeTemplate[];
   partners: Partner[];
   categories: ProductCategory[];

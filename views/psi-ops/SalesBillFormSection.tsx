@@ -26,6 +26,7 @@ import { PsiListPrintPicker } from '../../components/psi/PsiListPrintPicker';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
+import { parsePsiSignedIntegerQuantityInputOptional } from '../../utils/psiQtyInput';
 import {
   sectionTitleClass,
   psiOrderBillFormShellClass,
@@ -272,7 +273,7 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
                         onUpdateItem(line.id, {
                           productId: id,
                           salesPrice: price,
-                          quantity: hv ? undefined : 0,
+                          quantity: undefined,
                           variantQuantities: hv ? {} : undefined,
                           batch: undefined,
                         });
@@ -319,7 +320,7 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
                       <div className="w-[5.5rem] sm:w-24 shrink-0 space-y-0.5">
                         <label className={psiOrderBillCompactLineLabelClass}>数量</label>
                         <div className="flex h-9 min-h-9 items-stretch gap-1">
-                          <input type="number" value={line.quantity ?? ''} onChange={e => { const v = parseInt(e.target.value, 10); onUpdateItem(line.id, { quantity: Number.isNaN(v) ? 0 : v }); }} className={`${psiOrderBillCompactLineInputClass} min-w-0 flex-1`} placeholder="0" />
+                          <input type="number" value={line.quantity ?? ''} onChange={e => onUpdateItem(line.id, { quantity: parsePsiSignedIntegerQuantityInputOptional(e.target.value) })} className={`${psiOrderBillCompactLineInputClass} min-w-0 flex-1`} placeholder="0" />
                           <span className="flex shrink-0 items-center text-[9px] font-bold text-slate-400">{line.productId ? getUnitName(line.productId) : '—'}</span>
                         </div>
                       </div>

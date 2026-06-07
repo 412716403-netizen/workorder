@@ -93,6 +93,7 @@ const ProductionManagementView: React.FC = () => {
   const onAddRecordBatch = a.onAddProdRecordBatch;
   const onUpdateRecord = a.onUpdateProdRecord;
   const onDeleteRecord = a.onDeleteProdRecord;
+  const onDeleteRecordBatch = a.onDeleteProdRecordBatch;
   const onAddPSIRecord = a.onAddPSIRecord;
   const onAddPSIRecordBatch = a.onAddPSIRecordBatch;
   const onReportSubmit = a.onReportSubmit;
@@ -346,6 +347,7 @@ const ProductionManagementView: React.FC = () => {
             onAddRecordBatch={onAddRecordBatch}
             onUpdateRecord={onUpdateRecord}
             onDeleteRecord={onDeleteRecord}
+            onDeleteRecordBatch={onDeleteRecordBatch}
             limitType={activeTab as ProdOpType}
             globalNodes={globalNodes}
             partners={partners}

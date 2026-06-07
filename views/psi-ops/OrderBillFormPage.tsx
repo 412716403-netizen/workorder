@@ -559,7 +559,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
 
   // ── Item CRUD helpers ──
   const addPurchaseOrderItem = () =>
-    setPurchaseOrderItems(prev => [...prev, { id: `line-${Date.now()}`, productId: '', quantity: 0, purchasePrice: 0 }]);
+    setPurchaseOrderItems(prev => [...prev, { id: `line-${Date.now()}`, productId: '', quantity: undefined, purchasePrice: 0 }]);
   const updatePurchaseOrderItem = (
     id: string,
     updates: Partial<{
@@ -580,7 +580,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   };
   const removePurchaseOrderItem = (id: string) => setPurchaseOrderItems(prev => prev.filter(i => i.id !== id));
 
-  const addSalesOrderItem = () => setSalesOrderItems(prev => [...prev, { id: `so-line-${Date.now()}`, productId: '', quantity: 0, salesPrice: 0 }]);
+  const addSalesOrderItem = () => setSalesOrderItems(prev => [...prev, { id: `so-line-${Date.now()}`, productId: '', quantity: undefined, salesPrice: 0 }]);
   const updateSalesOrderItem = (id: string, updates: Partial<{ productId: string; quantity?: number; salesPrice: number; variantQuantities?: Record<string, number> }>) => {
     setSalesOrderItems(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i));
   };
@@ -621,7 +621,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   );
 
   const addSalesBillItem = () =>
-    setSalesBillItems(prev => [...prev, { id: `sb-line-${Date.now()}`, productId: '', quantity: 0, salesPrice: 0, batch: undefined }]);
+    setSalesBillItems(prev => [...prev, { id: `sb-line-${Date.now()}`, productId: '', quantity: undefined, salesPrice: 0, batch: undefined }]);
   const updateSalesBillItem = (
     id: string,
     updates: Partial<{
@@ -675,7 +675,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   );
 
   const addPurchaseBillItem = () =>
-    setPurchaseBillItems(prev => [...prev, { id: `pb-line-${Date.now()}`, productId: '', quantity: 0, purchasePrice: 0 }]);
+    setPurchaseBillItems(prev => [...prev, { id: `pb-line-${Date.now()}`, productId: '', quantity: undefined, purchasePrice: 0 }]);
   const updatePurchaseBillItem = (
     id: string,
     updates: Partial<{
@@ -860,7 +860,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       const hasValidBillLine = purchaseBillItems.some(i => {
         if (!i.productId) return false;
         const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((s, v) => s + v, 0) : (i.quantity ?? 0);
-        return q > 0;
+        return q !== 0;
       });
       if (!form.partner || !form.warehouseId || purchaseBillItems.length === 0 || !hasValidBillLine) return;
       const originalDocNumber = editingDocNumber || '';
@@ -932,7 +932,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         const lineCustom = buildPurchaseBillLineCustomData(item.relatedProductId);
         if (item.variantQuantities && Object.keys(item.variantQuantities).length > 0) {
           Object.entries(item.variantQuantities).forEach(([variantId, qty]: [string, number]) => {
-            if (!qty || qty <= 0) return;
+            if (!qty) return;
             newRecords.push({
               id: `psi-pb-${Date.now()}-${pbIdx++}`,
               type: 'PURCHASE_BILL',
@@ -956,7 +956,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
               ...(item.batch != null && item.batch !== '' && { batch: item.batch })
             });
           });
-        } else if ((item.quantity ?? 0) > 0) {
+        } else if ((item.quantity ?? 0) !== 0) {
           newRecords.push({
             id: `psi-pb-${Date.now()}-${pbIdx++}`,
             type: 'PURCHASE_BILL',

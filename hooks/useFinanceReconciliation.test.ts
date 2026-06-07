@@ -102,6 +102,53 @@ describe('useFinanceReconciliation', () => {
     expect(result.current.partnerReconSummary).toBeNull();
   });
 
+  it('RECONCILIATION + partner 已选但未填日期：仍计算 summary（上期余额为 0）', () => {
+    const { result } = renderHook(
+      () =>
+        useFinanceReconciliation(
+          baseParams({
+            type: 'RECONCILIATION',
+            partners: [{ id: 'p1', name: '万新', categoryId: 'c1' } as never],
+          }),
+        ),
+      { wrapper: makeWrapper() },
+    );
+    act(() => {
+      result.current.setReconQueryPartnerId('p1');
+    });
+    expect(result.current.reconHasFilter).toBe(true);
+    expect(result.current.partnerReconSummary).toEqual({
+      openingBalance: 0,
+      periodInc: 0,
+      periodDec: 0,
+      closingBalance: 0,
+    });
+  });
+
+  it('RECONCILIATION + settlement 已选工人：计算 summary 且默认按单据视图', () => {
+    const { result } = renderHook(
+      () =>
+        useFinanceReconciliation(
+          baseParams({
+            type: 'RECONCILIATION',
+          }),
+        ),
+      { wrapper: makeWrapper() },
+    );
+    act(() => {
+      result.current.setReconciliationSubTab('settlement');
+      result.current.setReconQueryWorkerId('w1');
+    });
+    expect(result.current.reconHasFilter).toBe(true);
+    expect(result.current.settlementReconViewMode).toBe('document');
+    expect(result.current.settlementReconSummary).toEqual({
+      openingBalance: 0,
+      periodInc: 0,
+      periodDec: 0,
+      closingBalance: 0,
+    });
+  });
+
   it('RECONCILIATION 模式 displayRecords：partner/settlement 子 tab 始终返回空数组', () => {
     const records: FinanceRecord[] = [
       { id: 'f1', type: 'RECEIPT', amount: 100 } as FinanceRecord,

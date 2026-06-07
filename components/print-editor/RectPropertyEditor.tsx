@@ -1,6 +1,7 @@
 import React from 'react';
 import type { PrintBodyElement, PrintRectElementConfig } from '../../types';
 import { Labeled } from './Labeled';
+import { NumericDraftInput } from '../NumericDraftInput';
 
 function RectPropertyEditorInner({
   el,
@@ -14,20 +15,22 @@ function RectPropertyEditorInner({
   return (
     <div className="space-y-3">
       <Labeled label="边框 (mm)">
-        <input
-          type="number"
-          step={0.05}
+        <NumericDraftInput
+          id={`${el.id}-rect-border`}
           value={c.borderWidthMm}
-          onChange={e => onUpdateElementConfig(el.id, { ...c, borderWidthMm: Number(e.target.value) || 0 })}
+          min={0}
+          emptyFallback={0}
+          onCommit={borderWidthMm => onUpdateElementConfig(el.id, { ...c, borderWidthMm })}
           className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
         />
       </Labeled>
       <Labeled label="圆角 (mm)">
-        <input
-          type="number"
-          step={0.1}
+        <NumericDraftInput
+          id={`${el.id}-rect-radius`}
           value={c.cornerRadiusMm}
-          onChange={e => onUpdateElementConfig(el.id, { ...c, cornerRadiusMm: Number(e.target.value) || 0 })}
+          min={0}
+          emptyFallback={0}
+          onCommit={cornerRadiusMm => onUpdateElementConfig(el.id, { ...c, cornerRadiusMm })}
           className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
         />
       </Labeled>

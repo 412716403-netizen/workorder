@@ -117,6 +117,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   onAddRecordBatch,
   onUpdateRecord,
   onDeleteRecord,
+  onDeleteRecordBatch,
   globalNodes,
   partners,
   categories,
@@ -1681,9 +1682,14 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           deletePerm={onDeleteRecord ? 'production:outsource_records:delete' : undefined}
           deleteConfirmMessage="确定要删除该张外协单的所有记录吗？此操作不可恢复。"
           onDelete={
-            onDeleteRecord && flowDetailRecordsForPrint.length > 0
-              ? () => {
-                  flowDetailRecordsForPrint.forEach(r => onDeleteRecord(r.id));
+            (onDeleteRecordBatch || onDeleteRecord) && flowDetailRecordsForPrint.length > 0
+              ? async () => {
+                  const ids = flowDetailRecordsForPrint.map(r => r.id).filter(Boolean);
+                  if (onDeleteRecordBatch) {
+                    await onDeleteRecordBatch(ids);
+                  } else if (onDeleteRecord) {
+                    await Promise.all(ids.map(id => Promise.resolve(onDeleteRecord(id))));
+                  }
                   setFlowDetailKey(null);
                   setFlowDocPhase('detail');
                 }
@@ -1745,6 +1751,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
               onAddRecordBatch={onAddRecordBatch}
               onUpdateRecord={onUpdateRecord}
               onDeleteRecord={onDeleteRecord}
+              onDeleteRecordBatch={onDeleteRecordBatch}
               outsourceFormSettings={outsourceFormSettings}
               printTemplates={printTemplates}
               onOpenOutsourceFormPrintTab={() => {

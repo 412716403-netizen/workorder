@@ -172,6 +172,8 @@ export interface AppDataContextValue {
   onAddProdRecordBatch: (records: ProductionOpRecord[]) => Promise<ProductionOpRecord[]>;
   onUpdateProdRecord: (r: ProductionOpRecord) => Promise<void>;
   onDeleteProdRecord: (id: string) => Promise<void>;
+  /** 批量删除生产记录：全部 API 完成后再 invalidate 一次，避免并行单删触发多次 refetch 竞态 */
+  onDeleteProdRecordBatch: (ids: string[]) => Promise<void>;
   // PSI records
   onAddPSIRecord: (record: any) => Promise<void>;
   onAddPSIRecordBatch: (records: any[]) => Promise<void>;
@@ -920,6 +922,16 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     } catch (err: any) { toast.error(err.message || '删除记录失败'); }
   }, [refreshOrders, refreshPMP, invalidateAllProdRecords]);
 
+  const onDeleteProdRecordBatch = useCallback(async (ids: string[]) => {
+    const uniqueIds = [...new Set(ids.map(id => id.trim()).filter(Boolean))];
+    if (uniqueIds.length === 0) return;
+    try {
+      await Promise.all(uniqueIds.map(id => api.production.delete(id)));
+      invalidateAllProdRecords();
+      void Promise.allSettled([refreshOrders(), refreshPMP()]);
+    } catch (err: any) { toast.error(err.message || '删除记录失败'); }
+  }, [refreshOrders, refreshPMP, invalidateAllProdRecords]);
+
   // ── PSI record handlers ──
   // Phase 3.D follow-up：不再维护 context 的 psiRecords 全量；调用方应在写入后用
   // `queryClient.invalidateQueries({ queryKey: ['psi.*'] })` 触发自身 react-query 重拉。
@@ -1022,7 +1034,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     onReportSubmit, onReportSubmitProduct,
     onUpdateReport, onDeleteReport, onUpdateReportProduct, onDeleteReportProduct,
     onUpdateOrder, onUpdateOrderDispatchStatus, onDeleteOrder,
-    onAddProdRecord, onAddProdRecordBatch, onUpdateProdRecord, onDeleteProdRecord,
+    onAddProdRecord, onAddProdRecordBatch, onUpdateProdRecord, onDeleteProdRecord, onDeleteProdRecordBatch,
     onAddPSIRecord, onAddPSIRecordBatch, onReplacePSIRecords, onDeletePSIRecords,
     onAddFinanceRecord, onUpdateFinanceRecord, onDeleteFinanceRecord,
     refreshDictionaries, refreshWorkers, refreshEquipment, refreshPartners,
@@ -1044,7 +1056,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     onReportSubmit, onReportSubmitProduct,
     onUpdateReport, onDeleteReport, onUpdateReportProduct, onDeleteReportProduct,
     onUpdateOrder, onUpdateOrderDispatchStatus, onDeleteOrder,
-    onAddProdRecord, onAddProdRecordBatch, onUpdateProdRecord, onDeleteProdRecord,
+    onAddProdRecord, onAddProdRecordBatch, onUpdateProdRecord, onDeleteProdRecord, onDeleteProdRecordBatch,
     onAddPSIRecord, onAddPSIRecordBatch, onReplacePSIRecords, onDeletePSIRecords,
     onAddFinanceRecord, onUpdateFinanceRecord, onDeleteFinanceRecord,
     refreshDictionaries, refreshWorkers, refreshEquipment, refreshPartners,

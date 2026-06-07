@@ -1205,6 +1205,11 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                   销售退货
                                 </span>
                               )}
+                              {type === 'PURCHASE_BILL' && totalQty < 0 && (
+                                <span className="text-[10px] font-black text-amber-600 uppercase tracking-tighter bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 shadow-sm">
+                                  采购退货
+                                </span>
+                              )}
                             </>
                           )}
                         </div>
@@ -1351,12 +1356,12 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                     <div className="flex items-center gap-3">
                       <div className="text-right mr-1">
                         <p className="text-[9px] text-slate-300 font-black uppercase tracking-tighter">单据总量</p>
-                        <p className={`text-base font-black ${type === 'SALES_BILL' && totalQty < 0 ? 'text-amber-600' : 'text-slate-900'}`}>{totalQty.toLocaleString()} <span className="text-xs font-medium text-slate-400">PCS</span></p>
+                        <p className={`text-base font-black ${(type === 'SALES_BILL' || type === 'PURCHASE_BILL') && totalQty < 0 ? 'text-amber-600' : 'text-slate-900'}`}>{totalQty.toLocaleString()} <span className="text-xs font-medium text-slate-400">PCS</span></p>
                       </div>
                       {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL' || type === 'SALES_ORDER' || type === 'SALES_BILL') && (
                         <div className="text-right mr-1">
                           <p className="text-[9px] text-slate-300 font-black uppercase tracking-tighter">单据金额</p>
-                          <p className={`text-base font-black ${type === 'SALES_BILL' && totalAmount < 0 ? 'text-amber-600' : 'text-emerald-600'}`}>¥{totalAmount.toFixed(2)}</p>
+                          <p className={`text-base font-black ${(type === 'SALES_BILL' || type === 'PURCHASE_BILL') && totalAmount < 0 ? 'text-amber-600' : 'text-emerald-600'}`}>¥{totalAmount.toFixed(2)}</p>
                         </div>
                       )}
                       {type === 'PURCHASE_ORDER' && hasPsiPerm('psi:purchase_order:view') && (

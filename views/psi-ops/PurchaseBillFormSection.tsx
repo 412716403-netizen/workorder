@@ -33,7 +33,7 @@ import {
 import { PsiListPrintPicker } from '../../components/psi/PsiListPrintPicker';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { localTodayYmd, localCalendarYmdStartToIso } from '../../utils/localDateTime';
-import { parsePsiNonVariantQuantityInput } from '../../utils/psiQtyInput';
+import { parsePsiNonVariantQuantityInput, parsePsiSignedQuantityInputOptional } from '../../utils/psiQtyInput';
 import {
   sectionTitleClass,
   psiOrderBillFormShellClass,
@@ -384,7 +384,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
               disabled={!form.partner || !form.warehouseId || purchaseBillItems.length === 0 || !purchaseBillItems.some(i => {
               if (!i.productId) return false;
               const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((s, v) => s + v, 0) : (i.quantity ?? 0);
-              return q > 0;
+              return q !== 0;
             })}
               className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
             >
@@ -497,7 +497,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                             onUpdateItem(line.id, {
                               productId: id,
                               purchasePrice: price,
-                              quantity: hv ? undefined : 0,
+                              quantity: undefined,
                               variantQuantities: hv ? {} : undefined,
                               batch: undefined
                             });
@@ -545,7 +545,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                           <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
                             <label className={psiOrderBillCompactLineLabelClass}>数量</label>
                             <div className="flex h-9 min-h-9 items-stretch gap-1">
-                              <input type="number" min={0} step={0.01} value={line.quantity || ''} onChange={e => onUpdateItem(line.id, { quantity: parsePsiNonVariantQuantityInput(e.target.value) })} className={`${psiOrderBillCompactLineInputClass} min-w-0 flex-1`} placeholder="0" />
+                              <input type="number" step={0.01} value={line.quantity ?? ''} onChange={e => onUpdateItem(line.id, { quantity: parsePsiSignedQuantityInputOptional(e.target.value) })} className={`${psiOrderBillCompactLineInputClass} min-w-0 flex-1`} placeholder="0" />
                               <span className="flex shrink-0 items-center text-[9px] font-bold text-slate-400">{line.productId ? getUnitName(line.productId) : '—'}</span>
                             </div>
                           </div>
@@ -592,7 +592,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                 {purchaseBillItems.length === 0 && (
                   <div className="py-8 border-2 border-dashed border-slate-100 rounded-xl text-center">
                     <Layers className="w-8 h-8 text-slate-200 mx-auto mb-2" />
-                    <p className="text-slate-400 text-sm font-medium">点击「添加明细行」开始录入入库明细</p>
+                    <p className="text-slate-400 text-sm font-medium">点击「添加明细行」开始录入入库明细（数量可填负数表示采购退货）</p>
                   </div>
                 )}
               </div>

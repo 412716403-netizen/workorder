@@ -54,8 +54,10 @@ export function computePartnerReconRowDelta(row: PartnerReconRow): { inc: number
     if (row.rec.type === 'RECEIPT') dec = row.rec.amount;
     else if (row.rec.type === 'PAYMENT') inc = row.rec.amount;
   } else if (row.source === 'psi') {
-    if (isPurchaseBillDocType(row.docType)) dec = Math.abs(row.amount);
-    else if (isPartnerReconOutsourceReceiveDocType(row.docType)) dec = Math.abs(row.amount);
+    if (isPurchaseBillDocType(row.docType) || row.docType === '采购退货') {
+      if (row.amount >= 0) dec = Math.abs(row.amount);
+      else inc = Math.abs(row.amount);
+    } else if (isPartnerReconOutsourceReceiveDocType(row.docType)) dec = Math.abs(row.amount);
     else if (row.docType === '销售单') {
       if (row.amount >= 0) inc = row.amount;
       else dec = Math.abs(row.amount);

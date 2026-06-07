@@ -55,6 +55,9 @@ const ProductFlowDetailModal: React.FC<ProductFlowDetailModalProps> = ({
     if (dateTo) rows = rows.filter((r: any) => (r.dateStr || '') <= dateTo);
     if (flowType !== 'all') {
       if (flowType === 'SALES_RETURN') rows = rows.filter((r: any) => r.type === 'SALES_BILL' && r.quantity < 0);
+      else if (flowType === 'SALES_BILL') rows = rows.filter((r: any) => r.type === 'SALES_BILL' && r.quantity >= 0);
+      else if (flowType === 'PURCHASE_RETURN') rows = rows.filter((r: any) => r.type === 'PURCHASE_BILL' && r.quantity < 0);
+      else if (flowType === 'PURCHASE_BILL') rows = rows.filter((r: any) => r.type === 'PURCHASE_BILL' && r.quantity >= 0);
       else rows = rows.filter((r: any) => r.type === flowType);
     }
     if (warehouseId !== 'all') rows = rows.filter((r: any) => (r.warehouseId || '') === warehouseId);
@@ -108,6 +111,7 @@ const ProductFlowDetailModal: React.FC<ProductFlowDetailModalProps> = ({
               >
                 <option value="all">全部</option>
                 <option value="PURCHASE_BILL">采购入库</option>
+                <option value="PURCHASE_RETURN">采购退货</option>
                 <option value="SALES_BILL">销售出库</option>
                 <option value="SALES_RETURN">销售退货</option>
                 <option value="TRANSFER">调拨</option>

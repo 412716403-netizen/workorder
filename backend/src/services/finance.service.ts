@@ -301,9 +301,11 @@ export async function getPartnerReceivableBefore(
     if (amount >= 0) docs.push({ key, inc: amount, dec: 0 });
     else docs.push({ key, inc: 0, dec: Math.abs(amount) });
   }
-  // PURCHASE_BILL：减应收
+  // PURCHASE_BILL：金额≥0 减应收；<0 退货视为应收增
   for (const [key, rows] of groupByDoc(psiPurchase, 'PURCHASE_BILL')) {
-    docs.push({ key, inc: 0, dec: Math.abs(sumAmount(rows)) });
+    const amount = sumAmount(rows);
+    if (amount >= 0) docs.push({ key, inc: 0, dec: Math.abs(amount) });
+    else docs.push({ key, inc: Math.abs(amount), dec: 0 });
   }
 
   // 财务

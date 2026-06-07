@@ -69,7 +69,8 @@ export interface OutsourceFlowDocumentDetailModalProps {
   onAddRecord: (record: ProductionOpRecord) => void;
   onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
   onUpdateRecord?: (record: ProductionOpRecord) => void;
-  onDeleteRecord?: (recordId: string) => void;
+  onDeleteRecord?: (recordId: string) => void | Promise<void>;
+  onDeleteRecordBatch?: (recordIds: string[]) => Promise<void>;
   onClose: () => void;
   outsourceFormSettings?: OutsourceFormSettings;
   printTemplates?: PrintTemplate[];
@@ -102,6 +103,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   onAddRecordBatch,
   onUpdateRecord,
   onDeleteRecord,
+  onDeleteRecordBatch,
   onClose,
   outsourceFormSettings = DEFAULT_OUTSOURCE_FORM_SETTINGS,
   printTemplates = [],
@@ -285,7 +287,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   }, [layout, phase, flowDetailKey, docRecords, beginFlowDetailEdit]);
 
   const handleSaveDetailEdit = useCallback(async () => {
-    if (!onDeleteRecord || docRecords.length === 0) return;
+    if ((!onDeleteRecordBatch && !onDeleteRecord) || docRecords.length === 0) return;
     const firstSave = docRecords[0];
     const isReceiveDocSave = firstSave.status === '已收回';
     const isProductModeSave = productionLinkMode === 'product' && docRecords.some(r => !r.orderId);
@@ -325,7 +327,12 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
           !isReceiveDocSave && outsourceFormSettings.showOutsourceDispatchDeliveryDate === true,
         dispatchDeliveryDate: flowDetailDeliveryDate,
       });
-    for (const rec of toDelete) await onDeleteRecord(rec.id);
+    const deleteIds = toDelete.map(rec => rec.id).filter(Boolean);
+    if (onDeleteRecordBatch) {
+      await onDeleteRecordBatch(deleteIds);
+    } else {
+      for (const rec of toDelete) await onDeleteRecord(rec.id);
+    }
     const timestamp = firstSave.timestamp || new Date().toLocaleString();
     const newStatus = isReceiveDocSave ? '已收回' : '加工中';
     const resolveReceiveUnitPrice = (entryKey: string, baseKey: string): number | undefined => {
@@ -451,6 +458,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
     flowDetailUnitPrices,
     flowDetailLineWeights,
     onDeleteRecord,
+    onDeleteRecordBatch,
     onAddRecordBatch,
     onAddRecord,
     orders,
@@ -597,11 +605,16 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                     <Pencil className="w-4 h-4" /> 编辑
                   </button>
                 )}
-                {onDeleteRecord && hasOpsPerm(tenantRole, userPermissions, 'production:outsource_records:delete') && (
+                {(onDeleteRecordBatch || onDeleteRecord) && hasOpsPerm(tenantRole, userPermissions, 'production:outsource_records:delete') && (
                   <button type="button" onClick={() => {
-                    void confirm({ message: '确定要删除该张外协单的所有记录吗？此操作不可恢复。', danger: true }).then((ok) => {
+                    void confirm({ message: '确定要删除该张外协单的所有记录吗？此操作不可恢复。', danger: true }).then(async (ok) => {
                       if (!ok) return;
-                      docRecords.forEach(rec => onDeleteRecord(rec.id));
+                      const ids = docRecords.map(rec => rec.id).filter(Boolean);
+                      if (onDeleteRecordBatch) {
+                        await onDeleteRecordBatch(ids);
+                      } else if (onDeleteRecord) {
+                        await Promise.all(ids.map(id => Promise.resolve(onDeleteRecord(id))));
+                      }
                       onClose();
                       setFlowDetailEditMode(false);
                       setFlowDetailEditCustom({});

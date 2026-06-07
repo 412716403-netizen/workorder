@@ -25,6 +25,10 @@ describe('computePartnerReconRowDelta', () => {
     expect(computePartnerReconRowDelta(psi('采购入库', 24.4))).toEqual({ inc: 0, dec: 24.4 });
   });
 
+  it('采购入库负数（退货）增加应收', () => {
+    expect(computePartnerReconRowDelta(psi('采购退货', -50))).toEqual({ inc: 50, dec: 0 });
+  });
+
   it('销售单正数增加应收', () => {
     expect(computePartnerReconRowDelta(psi('销售单', 1000))).toEqual({ inc: 1000, dec: 0 });
   });

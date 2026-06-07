@@ -20,6 +20,7 @@ export const WAREHOUSE_FLOW_TYPES = [
 
 export const warehouseFlowTypeLabel: Record<string, string> = {
   PURCHASE_BILL: '采购入库',
+  PURCHASE_RETURN: '采购退货',
   SALES_BILL: '销售出库',
   SALES_RETURN: '销售退货',
   TRANSFER: '调拨',
@@ -114,10 +115,11 @@ export function computeWarehouseFlowRows(input: ComputeWarehouseFlowRowsInput): 
           : warehouseMapPSI.get(r.warehouseId)?.name ?? '—';
     const qty = r.quantity ?? 0;
     const isSalesReturn = r.type === 'SALES_BILL' && qty < 0;
+    const isPurchaseReturn = r.type === 'PURCHASE_BILL' && qty < 0;
     return {
       id: r.id,
       type: r.type,
-      typeLabel: isSalesReturn ? '销售退货' : warehouseFlowTypeLabel[r.type] || r.type,
+      typeLabel: isSalesReturn ? '销售退货' : isPurchaseReturn ? '采购退货' : warehouseFlowTypeLabel[r.type] || r.type,
       docNumber: r.docNumber || '—',
       dateStr: displayDate,
       displayDateTime,
@@ -127,7 +129,7 @@ export function computeWarehouseFlowRows(input: ComputeWarehouseFlowRowsInput): 
       quantity: qty,
       warehouseId: inboundWarehouseId || r.warehouseId,
       warehouseName,
-      isOutbound: r.type === 'SALES_BILL',
+      isOutbound: r.type === 'SALES_BILL' || isPurchaseReturn,
       partner: r.partner ?? '—',
       record: r,
     };
@@ -225,6 +227,9 @@ export function computeWarehouseFlowTotals(
     const qty = Number(row.quantity) || 0;
     switch (row.type) {
       case 'PURCHASE_BILL':
+        if (qty >= 0) inboundTotal += qty;
+        else outboundTotal += Math.abs(qty);
+        break;
       case 'STOCK_IN':
       case 'STOCK_RETURN':
       case 'TRANSFER':

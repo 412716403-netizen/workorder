@@ -28,10 +28,24 @@ import {
   filterPartnerProductReconList,
   type PartnerProductReconRow,
 } from '../utils/partnerReconProductLedger';
+import {
+  buildSettlementReconBalances,
+  buildSettlementReconList,
+  computeSettlementOpeningBalance,
+  filterSettlementReconListWithWorkerNames,
+  summarizeSettlementReconBalances,
+  type SettlementReconRow,
+} from '../utils/settlementReconLedger';
+import {
+  buildSettlementProductLineReconList,
+  filterSettlementProductReconList,
+  type SettlementProductReconRow,
+} from '../utils/settlementReconProductLedger';
 import * as api from '../services/api';
 
-export type { PartnerReconRow, PartnerProductReconRow };
+export type { PartnerReconRow, PartnerProductReconRow, SettlementReconRow, SettlementProductReconRow };
 export type PartnerReconViewMode = 'document' | 'product';
+export type SettlementReconViewMode = PartnerReconViewMode;
 
 /**
  * Phase 3.A：对账场景按 partner/worker + 日期范围窄拉后端数据，避免依赖
@@ -51,12 +65,6 @@ function unwrapList<T>(resp: T[] | PaginatedLike<T> | null | undefined, fallback
   return fallback;
 }
 
-
-/** 报工结算对账：统一展示行（报工单、返工报工、收款单、付款单） */
-export type SettlementReconRow =
-  | { source: 'work_report'; reportNo: string; timestamp: string; workerId: string; workerName: string; amount: number; items: { orderNumber: string; productName: string; milestoneName: string; quantity: number; rate: number; amount: number }[] }
-  | { source: 'rework_report'; rec: ProductionOpRecord }
-  | { source: 'settlement_finance'; rec: FinanceRecord };
 
 export interface UseFinanceReconciliationParams {
   type: FinanceOpType;
@@ -103,6 +111,7 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
   const [reconQueryPartnerId, setReconQueryPartnerId] = useState('');
   const [reconQueryWorkerId, setReconQueryWorkerId] = useState('');
   const [partnerReconViewMode, setPartnerReconViewMode] = useState<PartnerReconViewMode>('document');
+  const [settlementReconViewMode, setSettlementReconViewMode] = useState<SettlementReconViewMode>('document');
 
   const reconHasFilter = type === 'RECONCILIATION' && (reconciliationSubTab === 'partner' ? !!reconQueryPartnerId : !!reconQueryWorkerId);
   const reconQueryDateFromT = reconQueryDateFrom.trim();
@@ -292,7 +301,9 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
     });
     psiByDoc.forEach((v, docKey) => {
       const docNo = docKey.split('|')[1] || '';
-      const docType = (v.type === 'SALES_BILL' && v.amount < 0) ? '销售退货' : (psiLabel[v.type] || v.type);
+      const docType = (v.type === 'SALES_BILL' && v.amount < 0) ? '销售退货'
+        : (v.type === 'PURCHASE_BILL' && v.amount < 0) ? '采购退货'
+        : (psiLabel[v.type] || v.type);
       rows.push({ source: 'psi', docType, docNo, timestamp: v.timestamp, partner: v.partner, amount: v.amount, operator: v.operator, note: v.note });
     });
     const prodByDoc = new Map<string, { status: string; timestamp: string; partner: string; amount: number; operator?: string; count: number; hasReworkSource: boolean }>();
@@ -353,107 +364,44 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
     inFinanceDateRangeQuery,
   ]);
 
-  const settlementReconList = useMemo((): SettlementReconRow[] => {
-    if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'settlement' || !reconQueryWorkerId) return [];
-    const from = reconQueryDateFromT;
-    const to = reconQueryDateToT;
-    const workerName = workerMap.get(reconQueryWorkerId)?.name ?? '';
-    const rows: SettlementReconRow[] = [];
-    const reportToWorkerId = (r: { workerId?: string; customData?: Record<string, unknown> }) =>
-      (r.workerId ?? (r.customData?.workerId as string | undefined) ?? '') as string;
-    const workReportGroups = new Map<string, { timestamp: string; workerId: string; workerName: string; amount: number; items: { orderNumber: string; productName: string; milestoneName: string; quantity: number; rate: number; amount: number }[] }>();
-    const variantDisplay = (product: Product | undefined, variantId?: string) => {
-      if (!variantId || !product?.variants?.length) return '';
-      const v = product.variants.find(x => x.id === variantId);
-      if (!v) return variantId;
-      const color = dictionaries?.colors?.find(c => c.id === v.colorId)?.name;
-      const size = dictionaries?.sizes?.find(s => s.id === v.sizeId)?.name;
-      return [color, size].filter(Boolean).join(' / ') || v.skuSuffix || variantId;
+  const settlementListInput = useMemo(() => {
+    if (!reconQueryWorkerId) return null;
+    return {
+      workerId: reconQueryWorkerId,
+      workerName: workerMap.get(reconQueryWorkerId)?.name ?? '',
+      dateFrom: reconQueryDateFromT,
+      dateTo: reconQueryDateToT,
+      orders,
+      productMilestoneProgresses,
+      productMap,
+      workerProdRecords: effectiveWorkerProdRecords,
+      workerFinanceRecords: effectiveWorkerFinanceRecords,
+      globalNodes,
+      dictionaries,
     };
-    orders.forEach(order => {
-      const nodeRates = productMap.get(order.productId)?.nodeRates;
-      order.milestones?.forEach(milestone => {
-        const rate = nodeRates?.[milestone.templateId] ?? 0;
-        (milestone.reports || []).forEach((r: { workerId?: string; customData?: Record<string, unknown>; timestamp?: string; quantity?: number; rate?: number; reportNo?: string; reportBatchId?: string; id: string }) => {
-          const wid = reportToWorkerId(r);
-          if (wid !== reconQueryWorkerId) return;
-          const dateStr = r.timestamp ? toLocalDateYmd(r.timestamp) : '';
-          if (from && dateStr < from) return;
-          if (to && dateStr > to) return;
-          const qty = Number(r.quantity) || 0;
-          const unitRate = r.rate != null ? Number(r.rate) : rate;
-          const amt = qty * unitRate;
-          const key = r.reportNo || r.reportBatchId || r.id;
-          const existing = workReportGroups.get(key);
-          const item = { orderNumber: order.orderNumber, productName: order.productName ?? '', milestoneName: milestone.name ?? '', quantity: qty, rate: unitRate, amount: amt };
-          if (!existing) {
-            workReportGroups.set(key, { timestamp: r.timestamp || '', workerId: wid, workerName, amount: amt, items: [item] });
-          } else {
-            existing.amount += amt;
-            existing.items.push(item);
-          }
-        });
-      });
-    });
-    productMilestoneProgresses.forEach(pmp => {
-      const prod = productMap.get(pmp.productId);
-      const nodeRates = prod?.nodeRates;
-      const milestoneName = globalNodes.find(n => n.id === pmp.milestoneTemplateId)?.name ?? '';
-      const defaultRate = nodeRates?.[pmp.milestoneTemplateId] ?? 0;
-      const baseProductName = prod?.name ?? '';
-      (pmp.reports || []).forEach((r: { workerId?: string; customData?: Record<string, unknown>; timestamp?: string; quantity?: number; rate?: number; reportNo?: string; reportBatchId?: string; id: string; variantId?: string }) => {
-        const wid = reportToWorkerId(r);
-        if (wid !== reconQueryWorkerId) return;
-        const dateStr = r.timestamp ? toLocalDateYmd(r.timestamp) : '';
-        if (from && dateStr < from) return;
-        if (to && dateStr > to) return;
-        const qty = Number(r.quantity) || 0;
-        const unitRate = r.rate != null ? Number(r.rate) : defaultRate;
-        const amt = qty * unitRate;
-        const key = r.reportNo || r.reportBatchId || r.id;
-        const existing = workReportGroups.get(key);
-        const vid = (r.variantId ?? pmp.variantId) as string | undefined;
-        const vLabel = variantDisplay(prod, vid);
-        const item = {
-          orderNumber: '关联产品',
-          productName: vLabel ? `${baseProductName}（${vLabel}）` : baseProductName,
-          milestoneName,
-          quantity: qty,
-          rate: unitRate,
-          amount: amt,
-        };
-        if (!existing) {
-          workReportGroups.set(key, { timestamp: r.timestamp || '', workerId: wid, workerName, amount: amt, items: [item] });
-        } else {
-          existing.amount += amt;
-          existing.items.push(item);
-        }
-      });
-    });
-    workReportGroups.forEach((v, reportNo) => {
-      rows.push({ source: 'work_report', reportNo: reportNo || '—', timestamp: v.timestamp, workerId: v.workerId, workerName: v.workerName, amount: v.amount, items: v.items });
-    });
-    effectiveWorkerProdRecords.filter(r => r.type === 'REWORK_REPORT' && r.workerId === reconQueryWorkerId).forEach(rec => {
-      const d = rec.timestamp ? toLocalDateYmd(rec.timestamp) : '';
-      if (from && d < from) return;
-      if (to && d > to) return;
-      rows.push({ source: 'rework_report', rec });
-    });
-    effectiveWorkerFinanceRecords.filter(rec => (rec.type === 'RECEIPT' || rec.type === 'PAYMENT') && rec.workerId === reconQueryWorkerId && inFinanceDateRangeQuery(rec.timestamp, from, to)).forEach(rec => {
-      rows.push({ source: 'settlement_finance', rec });
-    });
-    rows.sort((a, b) => {
-      const ta = a.source === 'settlement_finance' ? a.rec.timestamp : a.source === 'rework_report' ? a.rec.timestamp : a.timestamp;
-      const tb = b.source === 'settlement_finance' ? b.rec.timestamp : b.source === 'rework_report' ? b.rec.timestamp : b.timestamp;
-      return new Date(ta).getTime() - new Date(tb).getTime();
-    });
-    return rows;
   }, [
-    type, reconciliationSubTab, reconQueryWorkerId, reconQueryDateFromT, reconQueryDateToT,
-    orders, productMilestoneProgresses, productMap, workerMap,
-    effectiveWorkerProdRecords, effectiveWorkerFinanceRecords,
-    inFinanceDateRangeQuery, globalNodes, dictionaries,
+    reconQueryWorkerId,
+    workerMap,
+    reconQueryDateFromT,
+    reconQueryDateToT,
+    orders,
+    productMilestoneProgresses,
+    productMap,
+    effectiveWorkerProdRecords,
+    effectiveWorkerFinanceRecords,
+    globalNodes,
+    dictionaries,
   ]);
+
+  const settlementOpeningBalance = useMemo(() => {
+    if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'settlement' || !settlementListInput) return 0;
+    return computeSettlementOpeningBalance(settlementListInput);
+  }, [type, reconciliationSubTab, settlementListInput]);
+
+  const settlementReconList = useMemo((): SettlementReconRow[] => {
+    if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'settlement' || !settlementListInput) return [];
+    return buildSettlementReconList(settlementListInput);
+  }, [type, reconciliationSubTab, settlementListInput]);
 
   const partnerReconListFiltered = useMemo(() => {
     const q = debouncedFinanceListSearch.trim().toLowerCase();
@@ -473,26 +421,10 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
     });
   }, [partnerReconList, debouncedFinanceListSearch]);
 
-  const settlementReconListFiltered = useMemo(() => {
-    const q = debouncedFinanceListSearch.trim().toLowerCase();
-    if (!q) return settlementReconList;
-    return settlementReconList.filter(row => {
-      const parts: string[] = [];
-      if (row.source === 'work_report') {
-        parts.push(row.reportNo, row.workerName, String(row.amount));
-        row.items.forEach(i => {
-          parts.push(i.orderNumber, i.productName, i.milestoneName, String(i.quantity), String(i.amount));
-        });
-      } else if (row.source === 'rework_report') {
-        const r = row.rec;
-        parts.push(r.docNo ?? '', r.id, String(r.amount), r.workerId ?? '', workerMap.get(r.workerId ?? '')?.name ?? '');
-      } else {
-        const r = row.rec;
-        parts.push(r.docNo ?? '', r.id, r.partner ?? '', r.note ?? '', r.type, String(r.amount), workerMap.get(r.workerId ?? '')?.name ?? '');
-      }
-      return parts.filter(Boolean).join('\0').toLowerCase().includes(q);
-    });
-  }, [settlementReconList, debouncedFinanceListSearch, workerMap]);
+  const settlementReconListFiltered = useMemo(
+    () => filterSettlementReconListWithWorkerNames(settlementReconList, debouncedFinanceListSearch, workerMap),
+    [settlementReconList, debouncedFinanceListSearch, workerMap],
+  );
 
   const displayRecords = useMemo(() => {
     if (type !== 'RECONCILIATION') return records;
@@ -526,22 +458,47 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
     });
   }, [type, displayRecords, debouncedFinanceListSearch, financeCatMap, workerMap]);
 
+  const settlementReconAllWithBalance = useMemo(() => {
+    if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'settlement' || settlementReconList.length === 0) return [];
+    return buildSettlementReconBalances(settlementReconList, settlementOpeningBalance);
+  }, [type, reconciliationSubTab, settlementReconList, settlementOpeningBalance]);
+
   const settlementReconWithBalance = useMemo(() => {
-    if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'settlement' || settlementReconListFiltered.length === 0) return [];
-    let running = 0;
-    return settlementReconListFiltered.map(row => {
-      let inc = 0;
-      let dec = 0;
-      if (row.source === 'work_report') dec = row.amount;
-      else if (row.source === 'rework_report') dec = Number(row.rec.amount) || 0;
-      else if (row.source === 'settlement_finance') {
-        if (row.rec.type === 'RECEIPT') dec = row.rec.amount;
-        else if (row.rec.type === 'PAYMENT') inc = row.rec.amount;
-      }
-      running += inc - dec;
-      return { row, receivableInc: inc, receivableDec: dec, balance: running };
+    if (settlementReconAllWithBalance.length === 0) return [];
+    const q = debouncedFinanceListSearch.trim();
+    if (!q) return settlementReconAllWithBalance;
+    const filtered = new Set(settlementReconListFiltered);
+    return settlementReconAllWithBalance.filter(({ row }) => filtered.has(row));
+  }, [settlementReconAllWithBalance, settlementReconListFiltered, debouncedFinanceListSearch]);
+
+  const settlementReconSummary = useMemo(() => {
+    if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'settlement' || !reconHasFilter) return null;
+    return summarizeSettlementReconBalances(settlementReconList, settlementOpeningBalance);
+  }, [type, reconciliationSubTab, reconHasFilter, settlementReconList, settlementOpeningBalance]);
+
+  const settlementProductReconList = useMemo((): SettlementProductReconRow[] => {
+    if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'settlement' || !reconQueryWorkerId) return [];
+    const workerName = workerMap.get(reconQueryWorkerId)?.name ?? '';
+    return buildSettlementProductLineReconList({
+      documentRows: settlementReconList,
+      productMap,
+      workerName,
+      openingBalance: settlementOpeningBalance,
     });
-  }, [type, reconciliationSubTab, settlementReconListFiltered]);
+  }, [
+    type,
+    reconciliationSubTab,
+    reconQueryWorkerId,
+    settlementReconList,
+    productMap,
+    workerMap,
+    settlementOpeningBalance,
+  ]);
+
+  const settlementProductReconListFiltered = useMemo(
+    () => filterSettlementProductReconList(settlementProductReconList, debouncedFinanceListSearch),
+    [settlementProductReconList, debouncedFinanceListSearch],
+  );
 
   const partnerReconAllWithBalance = useMemo(() => {
     if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'partner' || partnerReconList.length === 0) return [];
@@ -557,7 +514,7 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
   }, [partnerReconAllWithBalance, partnerReconListFiltered, debouncedFinanceListSearch]);
 
   const partnerReconSummary = useMemo(() => {
-    if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'partner' || !reconHasFilter || !reconQueryDateFromT) {
+    if (type !== 'RECONCILIATION' || reconciliationSubTab !== 'partner' || !reconHasFilter) {
       return null;
     }
     return summarizePartnerReconBalances(partnerReconList, partnerOpeningBalance);
@@ -565,7 +522,6 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
     type,
     reconciliationSubTab,
     reconHasFilter,
-    reconQueryDateFromT,
     partnerReconList,
     partnerOpeningBalance,
   ]);
@@ -633,6 +589,11 @@ export function useFinanceReconciliation(p: UseFinanceReconciliationParams) {
     partnerProductReconList,
     partnerProductReconListFiltered,
     settlementReconWithBalance,
+    settlementReconSummary,
+    settlementReconViewMode,
+    setSettlementReconViewMode,
+    settlementProductReconList,
+    settlementProductReconListFiltered,
     displayRecords,
     tableSourceRecords,
     /** Phase 3.A：对账 react-query 正在窄拉时 true，方便 UI 显示 loading 状态 */

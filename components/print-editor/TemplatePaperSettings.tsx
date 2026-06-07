@@ -4,6 +4,7 @@ import type { PrintTemplate, PrintTemplateDocumentType } from '../../types';
 import { getPaperMarginsMm } from './layoutMetrics';
 import { PRINT_PAPER_A4_MM, PRINT_PAPER_A5_MM } from '../../utils/printTemplateDefaults';
 import { Labeled } from './Labeled';
+import { NumericDraftInput } from '../NumericDraftInput';
 
 const PAPER_PRESETS: { label: string; w: number; h: number }[] = [
   { label: 'A4 (210×297 mm)', w: PRINT_PAPER_A4_MM.widthMm, h: PRINT_PAPER_A4_MM.heightMm },
@@ -120,22 +121,22 @@ function TemplatePaperSettingsInner({
 
       <div className="grid grid-cols-2 gap-2">
         <Labeled label="宽度 (mm)">
-          <input
-            type="number"
-            step={0.1}
-            min={1}
+          <NumericDraftInput
+            id={`${template.id}-paper-w`}
             value={w}
-            onChange={e => setPaperSize(Math.max(1, Number(e.target.value) || 1), h)}
+            min={1}
+            emptyFallback={1}
+            onCommit={next => setPaperSize(next, h)}
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold"
           />
         </Labeled>
         <Labeled label="高度 (mm)">
-          <input
-            type="number"
-            step={0.1}
-            min={1}
+          <NumericDraftInput
+            id={`${template.id}-paper-h`}
             value={h}
-            onChange={e => setPaperSize(w, Math.max(1, Number(e.target.value) || 1))}
+            min={1}
+            emptyFallback={1}
+            onCommit={next => setPaperSize(w, next)}
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold"
           />
         </Labeled>
@@ -145,45 +146,45 @@ function TemplatePaperSettingsInner({
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
             <span className="text-[10px] font-bold text-slate-400">上</span>
-            <input
-              type="number"
-              step={0.1}
-              min={0}
+            <NumericDraftInput
+              id={`${template.id}-margin-top`}
               value={margins.top}
-              onChange={e => setPaperMarginsMm({ top: Math.max(0, Number(e.target.value) || 0) })}
+              min={0}
+              emptyFallback={0}
+              onCommit={next => setPaperMarginsMm({ top: next })}
               className="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs font-bold"
             />
           </div>
           <div className="space-y-1">
             <span className="text-[10px] font-bold text-slate-400">下</span>
-            <input
-              type="number"
-              step={0.1}
-              min={0}
+            <NumericDraftInput
+              id={`${template.id}-margin-bottom`}
               value={margins.bottom}
-              onChange={e => setPaperMarginsMm({ bottom: Math.max(0, Number(e.target.value) || 0) })}
+              min={0}
+              emptyFallback={0}
+              onCommit={next => setPaperMarginsMm({ bottom: next })}
               className="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs font-bold"
             />
           </div>
           <div className="space-y-1">
             <span className="text-[10px] font-bold text-slate-400">左</span>
-            <input
-              type="number"
-              step={0.1}
-              min={0}
+            <NumericDraftInput
+              id={`${template.id}-margin-left`}
               value={margins.left}
-              onChange={e => setPaperMarginsMm({ left: Math.max(0, Number(e.target.value) || 0) })}
+              min={0}
+              emptyFallback={0}
+              onCommit={next => setPaperMarginsMm({ left: next })}
               className="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs font-bold"
             />
           </div>
           <div className="space-y-1">
             <span className="text-[10px] font-bold text-slate-400">右</span>
-            <input
-              type="number"
-              step={0.1}
-              min={0}
+            <NumericDraftInput
+              id={`${template.id}-margin-right`}
               value={margins.right}
-              onChange={e => setPaperMarginsMm({ right: Math.max(0, Number(e.target.value) || 0) })}
+              min={0}
+              emptyFallback={0}
+              onCommit={next => setPaperMarginsMm({ right: next })}
               className="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs font-bold"
             />
           </div>

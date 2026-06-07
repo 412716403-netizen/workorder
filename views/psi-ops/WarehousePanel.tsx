@@ -283,7 +283,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   };
 
   // ── 调拨明细行操作 ──
-  const addTransferItem = () => setTransferItems(prev => [...prev, { id: `tr-line-${Date.now()}`, productId: '', quantity: 0, batchNo: undefined }]);
+  const addTransferItem = () => setTransferItems(prev => [...prev, { id: `tr-line-${Date.now()}`, productId: '', quantity: undefined, batchNo: undefined }]);
   const updateTransferItem = (id: string, updates: Partial<TransferLineDraft>) => {
     setTransferItems(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i));
   };
@@ -297,7 +297,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   const removeTransferItem = (id: string) => setTransferItems(prev => prev.filter(i => i.id !== id));
 
   // ── 盘点明细行操作 ──
-  const addStocktakeItem = () => setStocktakeItems(prev => [...prev, { id: `st-line-${Date.now()}`, productId: '', quantity: 0, batchNo: undefined }]);
+  const addStocktakeItem = () => setStocktakeItems(prev => [...prev, { id: `st-line-${Date.now()}`, productId: '', quantity: undefined, batchNo: undefined }]);
   const updateStocktakeItem = (id: string, updates: Partial<StocktakeLineDraft>) => {
     setStocktakeItems(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i));
   };

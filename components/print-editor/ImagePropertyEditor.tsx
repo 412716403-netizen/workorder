@@ -3,6 +3,7 @@ import type { PrintBodyElement, PrintImageElementConfig } from '../../types';
 import type { PrintFieldOption } from './printFieldOptions';
 import { FieldPicker } from './FieldPicker';
 import { Labeled } from './Labeled';
+import { NumericDraftInput } from '../NumericDraftInput';
 
 function ImagePropertyEditorInner({
   el,
@@ -122,12 +123,13 @@ function ImagePropertyEditorInner({
         </div>
       )}
       <Labeled label="透明度 (%)">
-        <input
-          type="number"
+        <NumericDraftInput
+          id={`${el.id}-opacity`}
+          value={c.opacityPct ?? 100}
           min={0}
           max={100}
-          value={c.opacityPct ?? 100}
-          onChange={e => onUpdateElementConfig(el.id, { ...c, opacityPct: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })}
+          emptyFallback={100}
+          onCommit={opacityPct => onUpdateElementConfig(el.id, { ...c, opacityPct })}
           className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
         />
       </Labeled>

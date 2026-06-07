@@ -2,6 +2,7 @@ import React from 'react';
 import { ChevronsUp, ChevronsDown } from 'lucide-react';
 import type { PrintBodyElement, PrintImageElementConfig } from '../../types';
 import { Labeled } from './Labeled';
+import { NumericDraftInput } from '../NumericDraftInput';
 
 function ElementCommonPropertiesInner({
   el,
@@ -29,13 +30,11 @@ function ElementCommonPropertiesInner({
       <p className="text-[10px] font-black uppercase text-slate-400">通用配置</p>
       <div className="grid grid-cols-2 gap-2">
         <Labeled label={el.type === 'line' ? '线长 (mm)' : '宽 (mm)'}>
-          <input
-            type="number"
-            step={0.1}
+          <NumericDraftInput
+            id={`${el.id}-width`}
             value={el.width}
-            onChange={e => {
-              const minW = el.type === 'line' ? 2 : el.type === 'image' ? 2 : 0.5;
-              const w = Math.max(minW, Number(e.target.value) || 0);
+            min={el.type === 'line' ? 2 : el.type === 'image' ? 2 : 0.5}
+            onCommit={w => {
               if (el.type === 'image' && imageLockedAspectR) {
                 const h = w / imageLockedAspectR;
                 onUpdateElement(el.id, { width: w, height: Math.max(0.5, h) });
@@ -47,12 +46,11 @@ function ElementCommonPropertiesInner({
           />
         </Labeled>
         <Labeled label={el.type === 'line' ? '线粗占位 (mm)' : '高 (mm)'}>
-          <input
-            type="number"
-            step={0.1}
+          <NumericDraftInput
+            id={`${el.id}-height`}
             value={el.height}
-            onChange={e => {
-              const h = Math.max(0.5, Number(e.target.value) || 0);
+            min={0.5}
+            onCommit={h => {
               if (el.type === 'image' && imageLockedAspectR) {
                 const w = h * imageLockedAspectR;
                 onUpdateElement(el.id, { width: Math.max(2, w), height: h });
@@ -64,20 +62,18 @@ function ElementCommonPropertiesInner({
           />
         </Labeled>
         <Labeled label="X (mm)">
-          <input
-            type="number"
-            step={0.1}
+          <NumericDraftInput
+            id={`${el.id}-x`}
             value={el.x}
-            onChange={e => onUpdateElement(el.id, { x: Number(e.target.value) || 0 })}
+            onCommit={x => onUpdateElement(el.id, { x })}
             className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-bold"
           />
         </Labeled>
         <Labeled label="Y (mm)">
-          <input
-            type="number"
-            step={0.1}
+          <NumericDraftInput
+            id={`${el.id}-y`}
             value={el.y}
-            onChange={e => onUpdateElement(el.id, { y: Number(e.target.value) || 0 })}
+            onCommit={y => onUpdateElement(el.id, { y })}
             className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-bold"
           />
         </Labeled>

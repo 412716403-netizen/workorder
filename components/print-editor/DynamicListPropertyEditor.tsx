@@ -8,6 +8,7 @@ import type {
 import { printListDataSourceFromTemplate, type PrintFieldOption } from './printFieldOptions';
 import { FieldPicker } from './FieldPicker';
 import { FontSizePtInput } from './FontSizePtInput';
+import { NumericDraftInput } from '../NumericDraftInput';
 import { Labeled } from './Labeled';
 import { newElementId } from '../../utils/printTemplateDefaults';
 
@@ -214,12 +215,13 @@ function DynamicListPropertyEditorInner({
     <div className="space-y-3">
       <p className="text-[10px] font-black uppercase text-slate-400">组件配置</p>
       <Labeled label="表格列数（不含序号列）">
-        <input
-          type="number"
+        <NumericDraftInput
+          id={`${el.id}-col-count`}
+          value={c.dataColumnCount}
           min={1}
           max={12}
-          value={c.dataColumnCount}
-          onChange={e => syncColumnCount(Number(e.target.value) || 1)}
+          emptyFallback={1}
+          onCommit={syncColumnCount}
           className="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs font-bold"
         />
       </Labeled>

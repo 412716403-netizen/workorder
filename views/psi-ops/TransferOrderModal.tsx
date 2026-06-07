@@ -12,7 +12,7 @@ import { Product, Warehouse, ProductCategory, AppDictionaries } from '../../type
 import { categoryUsesBatchManagement, normalizeBatchNo } from '../../types';
 import { MaterialIssueBatchSelect } from '../../components/MaterialIssueBatchSelect';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
-import { parsePsiNonVariantQuantityInput } from '../../utils/psiQtyInput';
+import { parsePsiNonVariantQuantityInputOptional } from '../../utils/psiQtyInput';
 import { formStandardLabelClass } from '../../styles/uiDensity';
 
 interface TransferItem {
@@ -132,7 +132,7 @@ const TransferOrderModal: React.FC<TransferOrderModalProps> = ({
                           const hv = p?.variants && p.variants.length > 0;
                           updateTransferItem(line.id, {
                             productId: id,
-                            quantity: hv ? undefined : 0,
+                            quantity: undefined,
                             variantQuantities: hv ? {} : undefined,
                             batchNo: undefined,
                           });
@@ -165,7 +165,7 @@ const TransferOrderModal: React.FC<TransferOrderModalProps> = ({
                         <div className="w-28 space-y-1">
                           <label className="text-[10px] font-bold text-slate-500 block">数量</label>
                           <div className="flex items-center gap-1.5">
-                            <input type="number" min={0} step={0.01} value={line.quantity ?? ''} onChange={e => updateTransferItem(line.id, { quantity: parsePsiNonVariantQuantityInput(e.target.value) })} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="0" />
+                            <input type="number" min={0} step={0.01} value={line.quantity ?? ''} onChange={e => updateTransferItem(line.id, { quantity: parsePsiNonVariantQuantityInputOptional(e.target.value) })} className="w-full bg-white border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="0" />
                             <span className="text-[10px] font-bold text-slate-400 shrink-0">{line.productId ? getUnitName(line.productId) : '—'}</span>
                           </div>
                         </div>

@@ -1,6 +1,7 @@
 import React from 'react';
 import type { PrintBodyElement, PrintLineElementConfig } from '../../types';
 import { Labeled } from './Labeled';
+import { NumericDraftInput } from '../NumericDraftInput';
 
 function LinePropertyEditorInner({
   el,
@@ -14,20 +15,21 @@ function LinePropertyEditorInner({
   return (
     <div className="space-y-3">
       <Labeled label="角度 (°)">
-        <input
-          type="number"
-          step={1}
+        <NumericDraftInput
+          id={`${el.id}-line-angle`}
           value={c.angleDeg ?? 0}
-          onChange={e => onUpdateElementConfig(el.id, { ...c, angleDeg: Number(e.target.value) || 0 })}
+          emptyFallback={0}
+          onCommit={angleDeg => onUpdateElementConfig(el.id, { ...c, angleDeg })}
           className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
         />
       </Labeled>
       <Labeled label="粗细 (mm)">
-        <input
-          type="number"
-          step={0.05}
+        <NumericDraftInput
+          id={`${el.id}-line-thickness`}
           value={c.thicknessMm}
-          onChange={e => onUpdateElementConfig(el.id, { ...c, thicknessMm: Number(e.target.value) || 0.1 })}
+          min={0.05}
+          emptyFallback={0.1}
+          onCommit={thicknessMm => onUpdateElementConfig(el.id, { ...c, thicknessMm })}
           className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
         />
       </Labeled>

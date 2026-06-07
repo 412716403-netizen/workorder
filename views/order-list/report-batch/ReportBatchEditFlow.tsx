@@ -361,7 +361,7 @@ const MatrixEditTable: React.FC<MatrixEditTableProps> = ({
               min={0}
               max={isOrderBatch && maxBatchGood >= 0 ? maxThisRow : undefined}
               title={isOrderBatch && maxBatchGood >= 0 ? `本批良品合计最多 ${maxBatchGood} 件` : undefined}
-              value={rowEdit.quantity}
+              value={rowEdit.quantity === 0 ? '' : rowEdit.quantity}
               data-matrix-row={rowIndex}
               data-matrix-col={si}
               onKeyDown={handleVariantQtyMatrixKeyDown}
@@ -391,7 +391,7 @@ const MatrixEditTable: React.FC<MatrixEditTableProps> = ({
               type="number"
               min={0}
               tabIndex={-1}
-              value={rowEdit.defectiveQuantity}
+              value={rowEdit.defectiveQuantity === 0 ? '' : rowEdit.defectiveQuantity}
               onChange={e => {
                 const v = Math.max(0, parseInt(e.target.value, 10) || 0);
                 setEditingReport(prev => {
@@ -624,7 +624,7 @@ const FlatEditTable: React.FC<FlatEditTableProps> = ({
                               min={0}
                               max={maxThisRow || undefined}
                               title={maxBatchGood >= 0 ? `本批良品合计最多 ${maxBatchGood} 件` : ''}
-                              value={rowEdit.quantity}
+                              value={rowEdit.quantity === 0 ? '' : rowEdit.quantity}
                               onChange={e => {
                                 const raw = parseInt(e.target.value) || 0;
                                 const v = maxBatchGood >= 0 ? Math.min(raw, maxThisRow) : raw;
@@ -644,7 +644,7 @@ const FlatEditTable: React.FC<FlatEditTableProps> = ({
                               type="number"
                               min={0}
                               tabIndex={-1}
-                              value={rowEdit.defectiveQuantity}
+                              value={rowEdit.defectiveQuantity === 0 ? '' : rowEdit.defectiveQuantity}
                               onChange={e => {
                                 const v = Math.max(0, parseInt(e.target.value) || 0);
                                 setEditingReport(prev => {
@@ -720,7 +720,7 @@ const FlatEditTable: React.FC<FlatEditTableProps> = ({
                             <input
                               type="number"
                               min={0}
-                              value={rowEdit.quantity}
+                              value={rowEdit.quantity === 0 ? '' : rowEdit.quantity}
                               onChange={e => {
                                 const v = parseInt(e.target.value) || 0;
                                 setEditingReport(prev => prev ? {
@@ -736,7 +736,7 @@ const FlatEditTable: React.FC<FlatEditTableProps> = ({
                               type="number"
                               min={0}
                               tabIndex={-1}
-                              value={rowEdit.defectiveQuantity}
+                              value={rowEdit.defectiveQuantity === 0 ? '' : rowEdit.defectiveQuantity}
                               onChange={e => {
                                 const v = parseInt(e.target.value) || 0;
                                 setEditingReport(prev => prev ? {

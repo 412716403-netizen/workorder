@@ -2,6 +2,7 @@ import React from 'react';
 import { Clock } from 'lucide-react';
 import type { PartnerProductReconRow } from '../../utils/partnerReconProductLedger';
 import { fmtDT } from '../../utils/formatTime';
+import FlowListProductCell from '../../components/flow/FlowListProductCell';
 
 interface PartnerProductReconTableProps {
   rows: PartnerProductReconRow[];
@@ -65,8 +66,12 @@ const PartnerProductReconTable: React.FC<PartnerProductReconTableProps> = ({
               <td className="px-8 py-4">
                 <span className="text-xs font-bold text-slate-800">{row.docNo}</span>
               </td>
-              <td className="px-8 py-4">
-                <span className="text-sm font-bold text-slate-800">{row.productName}</span>
+              <td className="px-8 py-4 text-sm">
+                {row.product ? (
+                  <FlowListProductCell product={row.product} name={row.productName} />
+                ) : (
+                  <span className="text-sm font-bold text-slate-800">{row.productName}</span>
+                )}
               </td>
               <td className="px-8 py-4 text-right">
                 <span className="text-sm font-bold text-slate-800">{formatQty(row.quantity)}</span>
