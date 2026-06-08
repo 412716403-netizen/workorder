@@ -42,6 +42,21 @@ export {
   type ProductionOpCollabData,
 } from '../../../shared/types.js';
 
+export {
+  WORKBENCH_BUILTIN_DEFAULT,
+  WORKBENCH_WIDGET_CATALOG,
+  FEATURE_PLUGIN_CATALOG,
+  defaultFeaturePlugins,
+  type WorkbenchConfig,
+  type FeaturePluginsConfig,
+} from '../../../shared/workbench.js';
+
+export {
+  normalizeWorkbenchConfig,
+  filterWorkbenchByAccess,
+  canUseWidget,
+} from '../../../shared/workbenchValidate.js';
+
 /**
  * JWT payload 只承载身份与少量上下文。
  *

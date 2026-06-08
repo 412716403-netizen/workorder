@@ -104,6 +104,7 @@ export const TENANT_DEFAULT_SETTINGS: Record<string, unknown> = {
       reworkReportFlowDetail: { showPrintButton: false },
     },
   },
+  featurePlugins: null as unknown,
 };
 
 type SettingsDb = {
@@ -117,12 +118,14 @@ type SettingsDb = {
 
 /** 为新租户写入默认 systemSetting（已存在 key 则跳过）。 */
 export async function seedTenantDefaultSettings(tenantId: string, db: SettingsDb) {
+  const { defaultFeaturePlugins } = await import('../../../shared/workbench.js');
+  const entries = Object.entries(TENANT_DEFAULT_SETTINGS).map(([key, value]) => {
+    let v = value;
+    if (key === 'featurePlugins' && v == null) v = defaultFeaturePlugins();
+    return { tenantId, key, value: v as object };
+  });
   await db.systemSetting.createMany({
-    data: Object.entries(TENANT_DEFAULT_SETTINGS).map(([key, value]) => ({
-      tenantId,
-      key,
-      value: value as object,
-    })),
+    data: entries,
     skipDuplicates: true,
   });
 }

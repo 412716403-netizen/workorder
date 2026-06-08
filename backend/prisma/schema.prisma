@@ -78,6 +78,7 @@ model TenantMembership {
   permissions          Json     @default("[]")
   roleId               String?  @map("role_id") @db.VarChar(50)
   assignedMilestoneIds Json     @default("[]") @map("assigned_milestone_ids")
+  preferences          Json     @default("{}")
   createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
@@ -259,6 +260,17 @@ model SystemSetting {
 
   @@id([tenantId, key])
   @@map("system_settings")
+}
+
+/** 平台级公告：admin 发布，全租户可见，发布人展示为「系统」 */
+model PlatformAnnouncement {
+  id        String   @id @default(uuid()) @db.Uuid
+  title     String   @db.VarChar(80)
+  body      String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([createdAt(sort: Desc)])
+  @@map("platform_announcements")
 }
 
 // ============================================================

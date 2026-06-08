@@ -1,0 +1,59 @@
+/* 工作台网格：编辑态拖拽/缩放 */
+.workbench-grid-host {
+  width: 100%;
+}
+
+/* RGL v2 会把 react-grid-item 类合并到我们的内层 div 上，二者是同一元素 */
+.workbench-grid .react-grid-item.workbench-grid-item-inner {
+  overflow: visible;
+}
+
+.workbench-grid--editing .react-grid-item {
+  outline: 1px dashed rgba(16, 185, 129, 0.4);
+  outline-offset: -1px;
+}
+
+.workbench-grid--editing .react-grid-item:hover {
+  outline-color: rgba(16, 185, 129, 0.8);
+}
+
+/* 拖拽中：抬升层级并去掉过渡，手感更跟手 */
+.workbench-grid .react-grid-item.react-draggable-dragging,
+.workbench-grid .react-grid-item.resizing {
+  z-index: 50;
+  transition: none;
+}
+
+/* 占位提示块 */
+.workbench-grid .react-grid-item.react-grid-placeholder {
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px dashed rgba(16, 185, 129, 0.7);
+  border-radius: 16px;
+  opacity: 1;
+}
+
+/* 缩放手柄：编辑态做大、常显 */
+.workbench-grid--editing .react-grid-item > .react-resizable-handle {
+  opacity: 1;
+  width: 22px;
+  height: 22px;
+  z-index: 40;
+}
+
+.workbench-grid--editing .react-grid-item > .react-resizable-handle-se {
+  right: 2px;
+  bottom: 2px;
+  background: #fff;
+  border: 1.5px solid rgba(16, 185, 129, 0.8);
+  border-radius: 6px 2px 6px 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.workbench-grid--editing .react-grid-item > .react-resizable-handle-se::after {
+  right: 5px;
+  bottom: 5px;
+  width: 9px;
+  height: 9px;
+  border-right: 2.5px solid rgba(16, 185, 129, 0.9);
+  border-bottom: 2.5px solid rgba(16, 185, 129, 0.9);
+}

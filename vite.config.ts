@@ -17,6 +17,15 @@ export default defineConfig(({ mode }) => {
         },
       },
       plugins: [react()],
+      /**
+       * react-draggable（react-grid-layout 的拖拽依赖）编译产物里有
+       * `if (process.env.DRAGGABLE_DEBUG)`，而浏览器没有 process 全局，
+       * 会在拖拽/缩放按下鼠标时抛 ReferenceError。这里精确替换该表达式，
+       * 避免引用不存在的 process。
+       */
+      define: {
+        'process.env.DRAGGABLE_DEBUG': 'false',
+      },
       resolve: {
         alias: {
           '@': path.resolve(__dirname, '.'),

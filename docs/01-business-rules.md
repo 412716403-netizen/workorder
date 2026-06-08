@@ -146,6 +146,19 @@
 - `totalOrderQty`：`order.items` 数量之和
 - `msCount`：`milestones.length`
 
+### 2.5 工作台（多 Tab 首页）
+
+- 路由：`/workbench`；登录后默认首页。
+- **WorkbenchConfig**：`pages[]` 每页含独立 `layout.items`；`activePageId` 记录上次 Tab。
+- **有效配置**：`membership.preferences.dashboardWorkbench` → 内置默认（见 `shared/workbench.ts`）。
+- **Tab 约束**：至少保留 1 个页面；编辑模式可增删改 Tab、拖拽排序。
+- **组件**：快捷入口、插件中心（租户功能开关）、消息中心（只读，展示系统公告与到期提醒）、生产/销售/财务统计；无模块权限或未启用功能插件的组件不可添加且保存时剔除。
+- **消息中心**：**仅平台管理员**（`users.role === admin`）可在 `/announcements` 发布/删除**全平台**公告，存 `platform_announcements` 表；各租户消息中心只读展示，发布人显示为「系统」（最多 50 条）。租户及租户管理员**不可**发布消息。
+- **软件到期提醒**：租户 `expiresAt` 到期前第 7、3、1 个日历日，消息中心自动出现一条系统提醒（发布人「系统」），无需持久化；当日仅对应里程碑出现一次。
+- **平台管理员**（`users.role === admin`）：侧栏仅「信息发布」「账号管理」；登录默认进入 `/announcements`；不可访问 ERP 业务模块。
+- **功能插件**（`system_settings.featurePlugins`）：插件市场仅展示「协作管理」「开发管理」两项可开关插件；与 RBAC 叠加，关闭后隐藏侧栏入口与相关 widget/快捷项。
+- **消息 feed**：聚合平台公告、到期提醒；无独立 Notification 表。
+
 ---
 
 ## 3. 计划 / BOM / 工单

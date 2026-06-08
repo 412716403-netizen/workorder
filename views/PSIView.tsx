@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, Suspense } from 'react';
+import { useLocation } from 'react-router-dom';
 import { 
   ClipboardList, 
   Receipt, 
@@ -78,8 +79,15 @@ const PSIView: React.FC = () => {
   const orders = o.orders;
   const userPermissions = tenantCtx?.permissions;
   const tenantRole = tenantCtx?.tenantRole || '';
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<PSITab>('PURCHASE_ORDER');
   const setScrollSegment = useSetMainScrollSegment();
+
+  useEffect(() => {
+    const tab = (location.state as { tab?: PSITab })?.tab;
+    const allowed: PSITab[] = ['PURCHASE_ORDER', 'PURCHASE_BILL', 'SALES_ORDER', 'SALES_BILL', 'WAREHOUSE_MGMT'];
+    if (tab && allowed.includes(tab)) setActiveTab(tab);
+  }, [location.state]);
   useLayoutEffect(() => {
     setScrollSegment?.(activeTab);
   }, [activeTab, setScrollSegment]);

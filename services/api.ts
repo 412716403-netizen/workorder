@@ -56,3 +56,6 @@ export { roles, tenants } from './api/tenants';
 export type { RoleRow } from './api/tenants';
 
 export { collaboration, itemCodesApi, planVirtualBatchesApi } from './api/collaboration';
+
+export { dashboard } from './api/dashboard';
+export type { WorkbenchResponse, DashboardNotification, DashboardStats } from './api/dashboard';

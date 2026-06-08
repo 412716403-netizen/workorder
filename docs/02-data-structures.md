@@ -91,6 +91,16 @@
 | | 设备管理 | equipment / Equipment |
 | | 公共数据字典 | dictionaries / DictionaryItem |
 
+### 1.6 工作台配置
+
+| 存储 | Key / 字段 | 形状 | 说明 |
+|------|------------|------|------|
+| `tenant_memberships.preferences` | `dashboardWorkbench` | `WorkbenchConfig` | 用户个性化工作台（多 Tab + 每页 layout） |
+| `system_settings` | `featurePlugins` | `Record<string, boolean>` | 租户级功能插件开关 |
+| `platform_announcements` | — | 行级表 | 平台 admin 发布的全租户公告（最多 50 条，发布人展示「系统」） |
+
+类型定义见 `shared/workbench.ts`、`shared/dashboardMessages.ts`；到期提醒逻辑见 `shared/tenantExpiryReminder.ts`；API 见 `GET/PUT /api/dashboard/workbench`、`GET/POST/DELETE /api/dashboard/messages`（仅平台 admin）、`GET /api/dashboard/notifications`。
+
 ---
 
 ## 2. 进销存记录 (psiRecords)

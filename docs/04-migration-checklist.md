@@ -74,7 +74,7 @@
 | 模块 | 当前状态 | 说明 | 剩余收口 |
 |------|------|------|------|
 | 财务记录 CRUD | 已落地 | 已有 `/api/finance/records` | 补充统计、校验与测试说明 |
-| Dashboard 汇总接口 | 已落地 | 已有 `/api/dashboard/stats` 聚合接口 | 核对看板指标口径与业务文档的一致性 |
+| Dashboard / 工作台 | 已落地 | `/api/dashboard/*`：workbench 配置、feature-plugins、stats、notifications | 前端 `WorkbenchView`；默认首页 `/workbench` |
 | 收支汇总、库存预警、订单进度 | 部分落地 | 已有后端聚合方向 | 继续按指标逐项校验计算口径 |
 
 ---

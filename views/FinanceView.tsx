@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { 
   ArrowDownCircle, 
   ArrowUpCircle, 
@@ -82,7 +83,14 @@ const FinanceView: React.FC = () => {
   const onUpdatePrintTemplates = a.onUpdatePrintTemplates;
   const onRefreshPrintTemplates = a.refreshPrintTemplates;
   const [activeTab, setActiveTab] = useState<FinanceOpType>('RECEIPT');
+  const location = useLocation();
   const setScrollSegment = useSetMainScrollSegment();
+
+  useEffect(() => {
+    const tab = (location.state as { tab?: FinanceOpType })?.tab;
+    const allowed: FinanceOpType[] = ['RECEIPT', 'PAYMENT', 'RECONCILIATION'];
+    if (tab && allowed.includes(tab)) setActiveTab(tab);
+  }, [location.state]);
   useLayoutEffect(() => {
     setScrollSegment?.(activeTab);
   }, [activeTab, setScrollSegment]);

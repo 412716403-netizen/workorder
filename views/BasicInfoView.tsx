@@ -118,6 +118,12 @@ const BasicInfoView: React.FC = () => {
     setScrollSegment?.(activeTab);
   }, [activeTab, setScrollSegment]);
 
+  useEffect(() => {
+    const tab = (location.state as { tab?: BasicTab })?.tab;
+    const allowed: BasicTab[] = ['PRODUCTS', 'PARTNERS', 'MEMBERS', 'EQUIPMENT', 'DICTIONARIES'];
+    if (tab && allowed.includes(tab)) setActiveTab(tab);
+  }, [location.state]);
+
   const [initialProductId, setInitialProductId] = useState<string | null>(locState?.editProductId ?? null);
   const clearInitialProductId = useCallback(() => {
     setInitialProductId(null);

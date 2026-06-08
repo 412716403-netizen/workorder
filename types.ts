@@ -66,6 +66,76 @@ export {
   type DevStageTemplateFieldDto,
 } from './shared/types';
 
+export {
+  WORKBENCH_BUILTIN_DEFAULT,
+  WORKBENCH_HOME_PAGE_ID,
+  WORKBENCH_WIDGET_CATALOG,
+  WORKBENCH_WIDGET_TYPES,
+  FEATURE_PLUGIN_CATALOG,
+  DASHBOARD_SETTING_KEYS,
+  defaultFeaturePlugins,
+  isWorkbenchHomePage,
+  isWorkbenchWidgetType,
+  type WorkbenchWidgetType,
+  type WorkbenchWidgetCategory,
+  type WorkbenchLayoutItem,
+  type WorkbenchPageLayout,
+  type WorkbenchPage,
+  type WorkbenchConfig,
+  type FeaturePluginId,
+  type FeaturePluginDefinition,
+  type FeaturePluginsConfig,
+  type WorkbenchWidgetDefinition,
+} from './shared/workbench';
+
+export {
+  WORKBENCH_SHORTCUT_CATALOG,
+  DEFAULT_DASHBOARD_SHORTCUT_IDS,
+  resolveShortcutItems,
+  normalizeShortcutIds,
+  getShortcutDefinition,
+  isKnownShortcutId,
+  type WorkbenchShortcutDefinition,
+  type WorkbenchShortcutIconKey,
+} from './shared/workbenchShortcuts';
+
+export {
+  FEATURE_PLUGIN_MARKET_CATALOG,
+  FEATURE_PLUGIN_CATEGORY_TABS,
+  getFeaturePluginMarketItem,
+  getLatestFeaturePlugins,
+  isFeaturePluginActivated,
+  type FeaturePluginCategoryId,
+  type FeaturePluginIconKey,
+  type FeaturePluginMarketItem,
+  type FeaturePluginGuideSection,
+} from './shared/featurePluginCatalog';
+
+export {
+  DASHBOARD_PLATFORM_PUBLISHER,
+  MAX_PLATFORM_ANNOUNCEMENTS,
+  publishedMessageToNotification,
+  type DashboardPublishedMessage,
+} from './shared/dashboardMessages';
+
+export {
+  TENANT_EXPIRY_REMINDER_DAYS,
+  DASHBOARD_SYSTEM_PUBLISHER,
+  calendarDaysUntilExpiry,
+  resolveTenantExpiryReminderDay,
+  buildTenantExpiryReminderContent,
+  tenantExpiryReminderId,
+  type TenantExpiryReminderDay,
+} from './shared/tenantExpiryReminder';
+
+export {
+  resolveEffectiveWorkbenchConfig,
+  normalizeWorkbenchConfig,
+  filterWorkbenchByAccess,
+  canUseWidget,
+  isValidWorkbenchConfig,
+} from './shared/workbenchValidate';
+
 /** 开发管理 BOM（与 BOM 结构对齐，parent 为款式 id） */
 export type DevBOM = DevBomDto;
 export type DevBOMItem = DevBomItemDto;

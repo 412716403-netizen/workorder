@@ -1,9 +1,9 @@
 import React, { Suspense, useRef, useLayoutEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Link, Navigate, useParams, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, Navigate, useParams, useLocation, useNavigate } from 'react-router-dom';
 import {
   ClipboardList, Settings as SettingsIcon,
   Boxes, ShoppingCart, Wallet, LogOut, User, UserCog, Building2, Loader2, Inbox, ScanLine,
-  FlaskConical,
+  FlaskConical, LayoutDashboard, Megaphone,
 } from 'lucide-react';
 
 import LoginView from './views/LoginView';
@@ -22,16 +22,21 @@ const UserAdminView = lazyWithReloadOnChunkError(() => import('./views/UserAdmin
 const CollaborationInboxView = lazyWithReloadOnChunkError(() => import('./views/CollaborationInboxView'));
 const PrintTemplateEditorView = lazyWithReloadOnChunkError(() => import('./views/PrintTemplateEditorView'));
 const TraceView = lazyWithReloadOnChunkError(() => import('./views/TraceView'));
+const WorkbenchView = lazyWithReloadOnChunkError(() => import('./views/workbench/WorkbenchView'));
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppDataProvider, useDataLoading } from './contexts/AppDataContext';
 import { useCollabPendingIndicator } from './hooks/useCollabPendingIndicator';
+import { useFeaturePlugins } from './hooks/useFeaturePlugins';
 import { hasCollaborationModuleAccess, canViewCollaborationList } from './utils/canViewAmount';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ConfirmProvider } from './contexts/ConfirmContext';
 import { MainScrollSegmentProvider } from './contexts/MainScrollSegmentContext';
 import { BRAND_LOGO_PATH, BRAND_NAME } from './constants/branding';
+import { isPlatformAdmin } from './utils/isPlatformAdmin';
+
+const AnnouncementPublishView = lazyWithReloadOnChunkError(() => import('./views/announcements/AnnouncementPublishView'));
 
 const RouteFallback = () => (
   <div className="flex items-center justify-center py-32">
@@ -120,7 +125,9 @@ function AppLayout() {
   const auth = useAuth();
   const dataLoading = useDataLoading();
   const location = useLocation();
+  const navigate = useNavigate();
   const printEditorFullscreen = location.pathname.startsWith('/print-editor');
+  const isWorkbenchRoute = location.pathname.startsWith('/workbench');
 
   const mainContentRef = useRef<HTMLDivElement>(null);
   const scrollPositions = useRef<Record<string, number>>({});
@@ -150,10 +157,14 @@ function AppLayout() {
 
   const { currentUser, tenantCtx, hasPerm, handleLogout, handleSwitchTenant } = auth;
   const { profileOpen, setProfileOpen, onProfileUpdate, onTenantCtxUpdate } = auth;
+  const platformAdmin = isPlatformAdmin(currentUser as Record<string, unknown>);
   const showCollabNav =
     hasCollaborationModuleAccess(tenantCtx?.tenantRole, tenantCtx?.permissions)
     && canViewCollaborationList(tenantCtx?.tenantRole, tenantCtx?.permissions);
   const collabHasPending = useCollabPendingIndicator(tenantCtx?.tenantId ?? null, showCollabNav);
+  const { isPluginEnabled } = useFeaturePlugins();
+  const showDevNav = hasPerm('development') && isPluginEnabled('development');
+  const showCollabNavWithPlugin = showCollabNav && isPluginEnabled('collaboration');
 
   if (dataLoading) {
     return (
@@ -197,7 +208,7 @@ function AppLayout() {
           </button>
           <Link
             to="/trace"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-800 transition-colors hover:bg-slate-100 hover:text-slate-900"
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-800 transition-colors hover:bg-slate-100 hover:text-slate-900 ${platformAdmin ? 'hidden' : ''}`}
             title="扫码追溯 / 产品追溯"
           >
             <ScanLine className="h-5 w-5" strokeWidth={2.25} />
@@ -205,7 +216,31 @@ function AppLayout() {
         </div>
 
         <nav className="flex flex-col gap-1.5">
-          {hasPerm('development') && (
+          {platformAdmin ? (
+            <>
+              <Link to="/announcements" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+                <Megaphone className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 信息发布
+              </Link>
+              <Link to="/admin/users" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+                <UserCog className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 账号管理
+              </Link>
+            </>
+          ) : (
+            <>
+          <Link
+            to="/workbench"
+            onClick={e => {
+              e.preventDefault();
+              navigate('/workbench', {
+                state: { workbenchHome: Date.now() },
+                replace: location.pathname === '/workbench',
+              });
+            }}
+            className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group"
+          >
+            <LayoutDashboard className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 工作台
+          </Link>
+          {showDevNav && (
             <Link to="/development" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
               <FlaskConical className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 开发管理
             </Link>
@@ -225,7 +260,7 @@ function AppLayout() {
               <Wallet className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 财务结算
             </Link>
           )}
-          {showCollabNav && (
+          {showCollabNavWithPlugin && (
           <Link to="/collaboration" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group relative">
             <Inbox className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 协作管理
             {collabHasPending && (
@@ -243,10 +278,7 @@ function AppLayout() {
               <SettingsIcon className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 系统设置
             </Link>
           )}
-          {(currentUser as Record<string, unknown>)?.role === 'admin' && (
-            <Link to="/admin/users" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
-              <UserCog className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 账号管理
-            </Link>
+            </>
           )}
         </nav>
 
@@ -290,7 +322,9 @@ function AppLayout() {
         className={
           printEditorFullscreen
             ? 'flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-100 p-3'
-            : 'min-h-0 flex-1 overflow-auto bg-slate-50/30 px-12 pb-8 pt-4'
+            : isWorkbenchRoute
+              ? 'min-h-0 flex-1 overflow-auto bg-slate-50/30 px-4 pb-6 pt-4'
+              : 'min-h-0 flex-1 overflow-auto bg-slate-50/30 px-12 pb-8 pt-4'
         }
       >
         <ErrorBoundary>
@@ -314,30 +348,39 @@ function AppLayout() {
 
 // ── Route wrappers: each subscribes only to the domains it needs ──
 
-/** 根路径与通配：进入首个有模块权限的业务页 */
+/** 根路径与通配：平台管理员进信息发布，其余进工作台 */
 function DefaultHomeRedirect() {
-  const { tenantCtx } = useAuth();
-  const role = tenantCtx?.tenantRole;
-  const perms = tenantCtx?.permissions;
-  const { hasPerm } = useAuth();
-  if (hasPerm('development')) return <Navigate to="/development" replace />;
-  if (hasPerm('production')) return <Navigate to="/production" replace />;
-  if (hasPerm('psi')) return <Navigate to="/psi" replace />;
-  if (hasPerm('finance')) return <Navigate to="/finance" replace />;
-  if (
-    hasCollaborationModuleAccess(role, perms)
-    && canViewCollaborationList(role, perms)
-  ) {
-    return <Navigate to="/collaboration" replace />;
+  const { currentUser } = useAuth();
+  if (isPlatformAdmin(currentUser as Record<string, unknown>)) {
+    return <Navigate to="/announcements" replace />;
   }
-  if (hasPerm('basic')) return <Navigate to="/basic" replace />;
-  if (hasPerm('settings')) return <Navigate to="/settings" replace />;
-  return (
-    <div className="max-w-md mx-auto mt-24 p-8 bg-white rounded-2xl border border-slate-200 text-center shadow-sm">
-      <p className="text-slate-700 font-bold mb-2">当前账号暂无可访问的业务模块</p>
-      <p className="text-sm text-slate-500">请联系管理员分配权限</p>
-    </div>
-  );
+  return <Navigate to="/workbench" replace state={{ workbenchHome: Date.now() }} />;
+}
+
+/** 平台管理员不可访问业务模块，统一重定向到信息发布 */
+function PlatformAdminBusinessGuard({ children }: { children: React.ReactNode }) {
+  const { currentUser } = useAuth();
+  if (isPlatformAdmin(currentUser as Record<string, unknown>)) {
+    return <Navigate to="/announcements" replace />;
+  }
+  return <>{children}</>;
+}
+
+function AnnouncementsRoute() {
+  const { currentUser } = useAuth();
+  if (!isPlatformAdmin(currentUser as Record<string, unknown>)) {
+    return (
+      <div className="max-w-md mx-auto mt-24 p-8 bg-white rounded-2xl border border-slate-200 text-center shadow-sm">
+        <p className="text-slate-700 font-bold mb-4">无权访问信息发布</p>
+        <Link to="/workbench" className="text-indigo-600 font-bold hover:underline">返回工作台</Link>
+      </div>
+    );
+  }
+  return <AnnouncementPublishView />;
+}
+
+function WorkbenchRoute() {
+  return <WorkbenchView />;
 }
 
 function DevelopmentRoute() {
@@ -387,13 +430,15 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<DefaultHomeRedirect />} />
-      <Route path="/development" element={<DevelopmentRoute />} />
-      <Route path="/production" element={<ProductionRoute />} />
-      <Route path="/psi" element={<PsiRoute />} />
-      <Route path="/finance" element={<FinanceRoute />} />
-      <Route path="/collaboration" element={<CollaborationRoute />} />
-      <Route path="/basic" element={<BasicInfoRoute />} />
-      <Route path="/settings" element={<SettingsRoute />} />
+      <Route path="/announcements" element={<AnnouncementsRoute />} />
+      <Route path="/workbench" element={<PlatformAdminBusinessGuard><WorkbenchRoute /></PlatformAdminBusinessGuard>} />
+      <Route path="/development" element={<PlatformAdminBusinessGuard><DevelopmentRoute /></PlatformAdminBusinessGuard>} />
+      <Route path="/production" element={<PlatformAdminBusinessGuard><ProductionRoute /></PlatformAdminBusinessGuard>} />
+      <Route path="/psi" element={<PlatformAdminBusinessGuard><PsiRoute /></PlatformAdminBusinessGuard>} />
+      <Route path="/finance" element={<PlatformAdminBusinessGuard><FinanceRoute /></PlatformAdminBusinessGuard>} />
+      <Route path="/collaboration" element={<PlatformAdminBusinessGuard><CollaborationRoute /></PlatformAdminBusinessGuard>} />
+      <Route path="/basic" element={<PlatformAdminBusinessGuard><BasicInfoRoute /></PlatformAdminBusinessGuard>} />
+      <Route path="/settings" element={<PlatformAdminBusinessGuard><SettingsRoute /></PlatformAdminBusinessGuard>} />
       <Route
         path="/admin/users"
         element={
@@ -407,13 +452,15 @@ function AppRoutes() {
           )
         }
       />
-      <Route path="/orders/:id" element={<Navigate to="/production" replace state={{ tab: 'orders' }} />} />
+      <Route path="/orders/:id" element={<PlatformAdminBusinessGuard><Navigate to="/production" replace state={{ tab: 'orders' }} /></PlatformAdminBusinessGuard>} />
       <Route
         path="/trace"
         element={
-          <Suspense fallback={<RouteFallback />}>
-            <TraceView />
-          </Suspense>
+          <PlatformAdminBusinessGuard>
+            <Suspense fallback={<RouteFallback />}>
+              <TraceView />
+            </Suspense>
+          </PlatformAdminBusinessGuard>
         }
       />
       <Route
