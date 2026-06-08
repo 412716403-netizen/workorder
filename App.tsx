@@ -27,6 +27,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppDataProvider, useDataLoading } from './contexts/AppDataContext';
 import { useCollabPendingIndicator } from './hooks/useCollabPendingIndicator';
+import { hasCollaborationModuleAccess, canViewCollaborationList } from './utils/canViewAmount';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ConfirmProvider } from './contexts/ConfirmContext';
 import { MainScrollSegmentProvider } from './contexts/MainScrollSegmentContext';
@@ -149,7 +150,10 @@ function AppLayout() {
 
   const { currentUser, tenantCtx, hasPerm, handleLogout, handleSwitchTenant } = auth;
   const { profileOpen, setProfileOpen, onProfileUpdate, onTenantCtxUpdate } = auth;
-  const collabHasPending = useCollabPendingIndicator(tenantCtx?.tenantId ?? null);
+  const showCollabNav =
+    hasCollaborationModuleAccess(tenantCtx?.tenantRole, tenantCtx?.permissions)
+    && canViewCollaborationList(tenantCtx?.tenantRole, tenantCtx?.permissions);
+  const collabHasPending = useCollabPendingIndicator(tenantCtx?.tenantId ?? null, showCollabNav);
 
   if (dataLoading) {
     return (
@@ -221,12 +225,14 @@ function AppLayout() {
               <Wallet className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 财务结算
             </Link>
           )}
+          {showCollabNav && (
           <Link to="/collaboration" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group relative">
             <Inbox className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 协作管理
             {collabHasPending && (
               <span className="absolute top-2.5 right-3 w-2 h-2 rounded-full bg-rose-500" aria-label="有待办" />
             )}
           </Link>
+          )}
           {hasPerm('basic') && (
             <Link to="/basic" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
               <Boxes className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 基础信息
@@ -310,14 +316,28 @@ function AppLayout() {
 
 /** 根路径与通配：进入首个有模块权限的业务页 */
 function DefaultHomeRedirect() {
+  const { tenantCtx } = useAuth();
+  const role = tenantCtx?.tenantRole;
+  const perms = tenantCtx?.permissions;
   const { hasPerm } = useAuth();
   if (hasPerm('development')) return <Navigate to="/development" replace />;
   if (hasPerm('production')) return <Navigate to="/production" replace />;
   if (hasPerm('psi')) return <Navigate to="/psi" replace />;
   if (hasPerm('finance')) return <Navigate to="/finance" replace />;
+  if (
+    hasCollaborationModuleAccess(role, perms)
+    && canViewCollaborationList(role, perms)
+  ) {
+    return <Navigate to="/collaboration" replace />;
+  }
   if (hasPerm('basic')) return <Navigate to="/basic" replace />;
   if (hasPerm('settings')) return <Navigate to="/settings" replace />;
-  return <Navigate to="/collaboration" replace />;
+  return (
+    <div className="max-w-md mx-auto mt-24 p-8 bg-white rounded-2xl border border-slate-200 text-center shadow-sm">
+      <p className="text-slate-700 font-bold mb-2">当前账号暂无可访问的业务模块</p>
+      <p className="text-sm text-slate-500">请联系管理员分配权限</p>
+    </div>
+  );
 }
 
 function DevelopmentRoute() {
@@ -337,6 +357,18 @@ function FinanceRoute() {
 }
 
 function CollaborationRoute() {
+  const { tenantCtx } = useAuth();
+  const allowed =
+    hasCollaborationModuleAccess(tenantCtx?.tenantRole, tenantCtx?.permissions)
+    && canViewCollaborationList(tenantCtx?.tenantRole, tenantCtx?.permissions);
+  if (!allowed) {
+    return (
+      <div className="max-w-md mx-auto mt-24 p-8 bg-white rounded-2xl border border-slate-200 text-center shadow-sm">
+        <p className="text-slate-700 font-bold mb-4">无权访问协作管理</p>
+        <Link to="/" className="text-indigo-600 font-bold hover:underline">返回首页</Link>
+      </div>
+    );
+  }
   return <CollaborationInboxView />;
 }
 

@@ -5,6 +5,7 @@ import * as api from '../../services/api';
 import QtyMatrixTable from '../../components/variant-matrix/QtyMatrixTable';
 import { collabPayloadItemsToQtyMatrixProps, type CollabPayloadItem } from './collabDocDisplay';
 import { resolvePreferredCollabMatrixOrder } from './collabHelpers';
+import { AMOUNT_PERMISSION_KEYS, useCanViewAmount } from '../../utils/canViewAmount';
 
 interface CollabPeerConfirmForwardModalProps {
   open: boolean;
@@ -37,6 +38,7 @@ function sumItemsQty(items: any[] | undefined): number {
 }
 
 const CollabPeerConfirmForwardModal: React.FC<CollabPeerConfirmForwardModalProps> = ({ open, onClose, transfers, onDone }) => {
+  const showCollabAmount = useCanViewAmount(AMOUNT_PERMISSION_KEYS.COLLABORATION);
   const [rows, setRows] = useState<Row[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -244,7 +246,7 @@ const CollabPeerConfirmForwardModal: React.FC<CollabPeerConfirmForwardModalProps
                       </div>
                     )}
 
-                    {r.originUnitPrice != null && (
+                    {showCollabAmount && r.originUnitPrice != null && (
                       <div className="border-t border-amber-100 bg-amber-50/80 px-4 py-2 text-[11px] text-amber-950">
                         <span className="font-bold">乙方申报单价（确认后写入外协收货）：</span>
                         <span className="tabular-nums font-black">{r.originUnitPrice}</span> 元/件

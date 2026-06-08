@@ -28,6 +28,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
 import { buildOutsourceFlowPrintContext } from '../../utils/buildOutsourceFlowPrintContext';
+import { AMOUNT_PERMISSION_KEYS, canViewAmount } from '../../utils/canViewAmount';
+import { maskPrintContextAmounts } from '../../utils/maskPrintContextAmounts';
 import {
   OUTSOURCE_DISPATCH_CUSTOM_DATA_KEY,
   OUTSOURCE_DISPATCH_DELIVERY_DATE_KEY,
@@ -115,6 +117,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
 }) => {
   const { currentUser, tenantCtx } = useAuth();
   const flowDetailOperatorFallback = currentOperatorDisplayName(currentUser);
+  const showOutsourceAmount = canViewAmount(tenantRole, userPermissions, AMOUNT_PERMISSION_KEYS.OUTSOURCE);
   const confirm = useConfirm();
   const docPhaseEditToolbarHost = useContext(DocPhaseEditToolbarPortalContext);
   const [flowDetailEditMode, setFlowDetailEditMode] = useState(false);
@@ -508,7 +511,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
   const showOrderCol = productionLinkMode !== 'product';
   const nodeUsesWeightRow = (nodeId?: string) => !!nodeId && !!globalNodes.find(n => n.id === nodeId)?.enableWeightOnReport;
   const showWeightCol = isReceiveDoc && detailLines.some(d => nodeUsesWeightRow(d.records[0]?.nodeId));
-  const outsourceDetailColCount = (showOrderCol ? 3 : 2) + (isReceiveDoc ? 2 : 0) + (showWeightCol ? 1 : 0);
+  const outsourceDetailColCount = (showOrderCol ? 3 : 2) + (isReceiveDoc && showOutsourceAmount ? 2 : 0) + (showWeightCol ? 1 : 0);
   const formatLineWeightKg = (sum: number) => formatWeightKgDisplay(sum);
 
   const getUnitName = (productId: string | undefined) => {
@@ -586,17 +589,20 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                 <OrderCenterDetailPrintBlock
                   printSlot={printSlot}
                   printTemplates={printTemplates}
-                  buildContext={(_template: PrintTemplate): PrintRenderContext => ({
-                    ...buildOutsourceFlowPrintContext({
-                      docRecords,
-                      isReceiveDoc,
-                      orders,
-                      products,
-                      globalNodes,
-                      dictionaries,
-                    }),
-                    tenantName: tenantCtx?.tenantName?.trim() || undefined,
-                  })}
+                  buildContext={(_template: PrintTemplate): PrintRenderContext => {
+                    const ctx: PrintRenderContext = {
+                      ...buildOutsourceFlowPrintContext({
+                        docRecords,
+                        isReceiveDoc,
+                        orders,
+                        products,
+                        globalNodes,
+                        dictionaries,
+                      }),
+                      tenantName: tenantCtx?.tenantName?.trim() || undefined,
+                    };
+                    return isReceiveDoc && !showOutsourceAmount ? maskPrintContextAmounts(ctx) : ctx;
+                  }}
                   pickerSubtitle={`单号 ${flowDetailKey}`}
                   onAddPrintTemplate={onOpenOutsourceFormPrintTab}
                 />
@@ -745,7 +751,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                     {totalDocQty.toLocaleString()} {docSummaryQtyUnit}
                   </p>
                 </div>
-                {isReceiveDoc ? (
+                {isReceiveDoc && showOutsourceAmount ? (
                   <div className="min-w-[6.5rem] md:text-right">
                     <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">加工费合计</p>
                     <p className="font-black tabular-nums text-emerald-600">¥{totalAmount.toFixed(2)}</p>
@@ -761,8 +767,8 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                 <col style={{ width: showOrderCol ? (showWeightCol ? '32%' : '44%') : showWeightCol ? '40%' : '52%' }} />
                 {showOrderCol ? <col style={{ width: showWeightCol ? '14%' : '18%' }} /> : null}
                 <col style={{ width: isReceiveDoc ? (showWeightCol ? '10%' : '12%') : '18%' }} />
-                {isReceiveDoc ? <col style={{ width: showWeightCol ? '10%' : '13%' }} /> : null}
-                {isReceiveDoc ? <col style={{ width: showWeightCol ? '10%' : '13%' }} /> : null}
+                {isReceiveDoc && showOutsourceAmount ? <col style={{ width: showWeightCol ? '10%' : '13%' }} /> : null}
+                {isReceiveDoc && showOutsourceAmount ? <col style={{ width: showWeightCol ? '10%' : '13%' }} /> : null}
                 {showWeightCol ? <col style={{ width: '12%' }} /> : null}
               </colgroup>
               <thead>
@@ -770,8 +776,8 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                   <th className="py-2.5 px-3 text-left">产品 / SKU</th>
                   {showOrderCol ? <th className="py-2.5 px-3 text-left">工单</th> : null}
                   <th className="py-2.5 px-3 text-right">{isReceiveDoc ? '数量' : '委外数量'}</th>
-                  {isReceiveDoc ? <th className="py-2.5 px-3 text-right">单价</th> : null}
-                  {isReceiveDoc ? <th className="py-2.5 px-3 text-right">金额</th> : null}
+                  {isReceiveDoc && showOutsourceAmount ? <th className="py-2.5 px-3 text-right">单价</th> : null}
+                  {isReceiveDoc && showOutsourceAmount ? <th className="py-2.5 px-3 text-right">金额</th> : null}
                   {showWeightCol ? (
                     <th className="py-2.5 px-3 text-right whitespace-nowrap" title="工序开启称重时，本次收回交货总重量（kg）">
                       重量 (kg)
@@ -890,7 +896,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                           {matrixLineTotalQty.toLocaleString()} {unitLabel}
                         </span>
                       </td>
-                      {isReceiveDoc ? (
+                      {isReceiveDoc && showOutsourceAmount ? (
                         <td className="py-2.5 px-3 text-right align-middle">
                           {editActive ? (
                             <input
@@ -909,7 +915,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                           )}
                         </td>
                       ) : null}
-                      {isReceiveDoc ? (
+                      {isReceiveDoc && showOutsourceAmount ? (
                         <td className="py-2.5 px-3 text-right align-middle font-black text-indigo-600">
                           ¥{matrixLineAmount.toFixed(2)}
                         </td>
@@ -1023,7 +1029,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                       <span className="shrink-0 text-xs font-bold text-slate-500">{unitLabel}</span>
                     </div>
                   </td>
-                  {isReceiveDoc ? (
+                  {isReceiveDoc && showOutsourceAmount ? (
                     <td className="py-2.5 px-3 text-right align-middle">
                       {editActive ? (
                         <input
@@ -1043,7 +1049,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                       )}
                     </td>
                   ) : null}
-                  {isReceiveDoc ? (
+                  {isReceiveDoc && showOutsourceAmount ? (
                     <td className="py-2.5 px-3 text-right align-middle font-black text-indigo-600">¥{lineAmount.toFixed(2)}</td>
                   ) : null}
                   {showWeightCol ? (

@@ -415,6 +415,36 @@
 - **外协链转发**：中间站转发给下游的派发 `payload.categoryName` 优先取**链头甲方**最早派发单上的分类名（与色码沿用链头一致），避免中间站本地分类名污染下游默认展示。
 - **规格标签归一**：协作侧颜色/尺码名称使用 `normalizeCollabSpecLabel`（NFKC + 折叠空白），前后端一致，减少重复字典项。
 
+### 5.6 单价/金额查看权限
+
+模块级权限 **`price_amount`（单价/金额）** 统一管控各业务域金额展示；在角色编辑的「单价/金额 - 细粒度权限」中按业务勾选（实际落库键仍分别为 `psi:*:amount`、`production:outsource_amount:allow`、`collaboration:amount:allow`）。
+
+| 业务域 | 权限 key | 说明 |
+|--------|----------|------|
+| 模块入口 | `price_amount` | 勾选后可在细粒度中配置；未勾选且无历史 amount 键 → 全站隐藏单价/金额 |
+| 进销存 · 采购订单 | `psi:purchase_order:amount` | 采购价、行金额、合计 |
+| 进销存 · 采购入库 | `psi:purchase_bill:amount` | 同上 |
+| 进销存 · 销售订单 | `psi:sales_order:amount` | 销售价、行金额、合计 |
+| 进销存 · 销售单 | `psi:sales_bill:amount` | 同上 |
+| 生产 · 外协 | `production:outsource_amount:allow` | 收回单加工单价/金额、收货录入加工费 |
+| 协作 | `collaboration:amount:allow` | 回传/转发单价金额、详情页脚（协作列表仍在「协作管理」模块） |
+
+**协作模块入口**：侧栏「协作管理」仅当角色勾选模块级 `collaboration` 时显示；细粒度 `collaboration:list:allow` 控制列表。协作单价/金额在「单价/金额」模块中配置（`collaboration:amount:allow`）。勾选协作模块且未配置 list 细粒度时，列表可见。
+
+**可见性语义**（与 `useModulePermission().hasPerm` 一致）：
+
+- **owner / admin**：始终可见。
+- **未配置细粒度**（仅持裸模块键如 `psi`、`production`、`collaboration`）：始终可见。
+- **细粒度角色**：须精确勾选对应 `:amount` 或 `:allow` 键；未勾选则隐藏。
+
+**隐藏不清空（关键约束）**：新增/编辑单据页无金额权限时，**只隐藏**单价输入框、金额列与合计等 UI；表单 state 与默认「上次成交价/加工单价」填充逻辑**照常运行**，保存提交体仍带 `purchasePrice` / `salesPrice` / `unitPrice` / `amount` 等字段。**禁止**在无权限时把价格字段从 state 或提交体删除/置 0。
+
+**打印/导出**：无权限时在调用 `build*PrintContext` 后对上下文做金额脱敏（`utils/maskPrintContextAmounts.ts`），将 `unitPrice`、`amount`、`docTotalAmount` 等置空。
+
+**实现锚点**：`utils/canViewAmount.ts`、`views/member-management/constants.ts`、`views/member-management/RoleEditModal.tsx`；进销存 `views/PSIOpsView.tsx` / `views/psi-ops/*`；外协 `views/production-ops/Outsource*.tsx`；协作 `views/collaboration/*`。
+
+**范围外（默认不做）**：财务对账模块中的 PSI/外协金额展示与导出，仍按财务域权限控制；如需叠加金额权限可单独评估。
+
 ---
 
 ## 6. 款式开发管理
@@ -476,4 +506,4 @@
 
 ---
 
-*最后更新：新增款式开发管理规则（§6）。*
+*最后更新：新增单价/金额查看权限规则（§5.6）。*

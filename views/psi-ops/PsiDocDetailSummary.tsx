@@ -30,6 +30,8 @@ export interface PsiDocDetailSummaryProps {
   onProductImagePreview?: (url: string) => void;
   /** 当前 `docType` 对应表单配置的 `customFields`；详情顶栏（经办同行）展示 `showInCreate` 或 `showInDetail` 的项（只读） */
   headerCustomFieldDefs?: PlanFormFieldConfig[];
+  /** 是否展示单价/金额列与合计 */
+  showAmount?: boolean;
 }
 
 function readPsiLinePrice(i: PsiRecord, priceField: string): number {
@@ -154,6 +156,7 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
   warehouseMapPSI,
   dictionaries, getUnitName, formatQtyDisplay, receivedByOrderLine, onProductImagePreview,
   headerCustomFieldDefs = [],
+  showAmount = true,
 }) => {
   const meta = DOC_META[docType];
 
@@ -192,16 +195,20 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
   }, [docItems]);
 
   /** 详情表颜色尺码矩阵行通栏 colspan（与各类型表头列数一致） */
-  const detailVariantMatrixColSpan =
-    docType === 'SALES_BILL'
-      ? 5 + (showBillBatchColumn ? 1 : 0)
-      : docType === 'SALES_ORDER'
-        ? 5
-        : docType === 'PURCHASE_ORDER'
+  const detailVariantMatrixColSpan = useMemo(() => {
+    let span =
+      docType === 'SALES_BILL'
+        ? 5 + (showBillBatchColumn ? 1 : 0)
+        : docType === 'SALES_ORDER'
           ? 5
-          : docType === 'PURCHASE_BILL'
-            ? 5 + (showPbLineRelatedColumn ? 1 : 0) + (showBillBatchColumn ? 1 : 0)
-            : 0;
+          : docType === 'PURCHASE_ORDER'
+            ? 5
+            : docType === 'PURCHASE_BILL'
+              ? 5 + (showPbLineRelatedColumn ? 1 : 0) + (showBillBatchColumn ? 1 : 0)
+              : 0;
+    if (!showAmount) span -= 2;
+    return span;
+  }, [docType, showBillBatchColumn, showPbLineRelatedColumn, showAmount]);
 
   const headerCustomDefsForDetail = useMemo(
     () => (headerCustomFieldDefs ?? []).filter(f => f.showInCreate || f.showInDetail),
@@ -326,12 +333,14 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
                 {totalQty.toLocaleString()} PCS
               </p>
             </div>
+            {showAmount && (
             <div className="min-w-[6.5rem] md:text-right">
               <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">合计金额</p>
               <p className={`font-black tabular-nums ${isReturnDoc || totalAmount < 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                 ¥{totalAmount.toFixed(2)}
               </p>
             </div>
+            )}
           </div>
         </div>
       </div>
@@ -339,7 +348,7 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
       {/* Detail table */}
       <div className="overflow-x-auto rounded-2xl border border-slate-200">
         <table className="w-full text-left text-sm" style={{ tableLayout: 'fixed' }}>
-          <TableColGroup docType={docType} showPurchaseBatch={showBillBatchColumn} showPbLineRelated={showPbLineRelatedColumn} />
+          <TableColGroup docType={docType} showPurchaseBatch={showBillBatchColumn} showPbLineRelated={showPbLineRelatedColumn} showAmount={showAmount} />
           <thead>
             <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/80">
               <th className="py-2.5 px-3 text-left">产品 / SKU</th>
@@ -355,10 +364,18 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
               {(docType === 'PURCHASE_ORDER' || docType === 'PURCHASE_BILL') && (
                 <th className="py-2.5 px-3 text-right">数量</th>
               )}
-              <th className="py-2.5 px-3 text-right">{meta.priceLabel}</th>
-              <th className="py-2.5 px-3 text-right">金额</th>
-              {docType === 'PURCHASE_ORDER' && <th className="py-2.5 px-3 text-left">入库进度</th>}
-              {docType === 'SALES_ORDER' && <th className="py-2.5 px-3 text-left">配货进度</th>}
+              {showAmount && (
+                <>
+                  <th className="py-2.5 px-3 text-right">{meta.priceLabel}</th>
+                  <th className="py-2.5 px-3 text-right">金额</th>
+                </>
+              )}
+              {docType === 'PURCHASE_ORDER' && (
+                <th className={`py-2.5 px-3 ${showAmount ? 'text-left' : 'text-right'}`}>入库进度</th>
+              )}
+              {docType === 'SALES_ORDER' && (
+                <th className={`py-2.5 px-3 ${showAmount ? 'text-left' : 'text-right'}`}>配货进度</th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white">
@@ -462,8 +479,12 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
                       </td>
                     )}
 
-                    <td className="py-2.5 px-3 text-right font-bold text-slate-600">¥{avgPrice.toFixed(2)}</td>
-                    <td className="py-2.5 px-3 text-right font-black text-indigo-600">¥{rowAmount.toFixed(2)}</td>
+                    {showAmount && (
+                      <>
+                        <td className="py-2.5 px-3 text-right font-bold text-slate-600">¥{avgPrice.toFixed(2)}</td>
+                        <td className="py-2.5 px-3 text-right font-black text-indigo-600">¥{rowAmount.toFixed(2)}</td>
+                      </>
+                    )}
 
                     {docType === 'PURCHASE_ORDER' && receivedByOrderLine && (
                       <PurchaseOrderProgressCell grp={grp} orderQty={orderQty} docNumber={docNumber} receivedByOrderLine={receivedByOrderLine} />
@@ -499,10 +520,16 @@ const PsiDocDetailSummary: React.FC<PsiDocDetailSummaryProps> = ({
   );
 };
 
-const TableColGroup: React.FC<{ docType: PsiDocType; showPurchaseBatch?: boolean; showPbLineRelated?: boolean }> = ({
+const TableColGroup: React.FC<{
+  docType: PsiDocType;
+  showPurchaseBatch?: boolean;
+  showPbLineRelated?: boolean;
+  showAmount?: boolean;
+}> = ({
   docType,
   showPurchaseBatch = false,
   showPbLineRelated = false,
+  showAmount = true,
 }) => {
   switch (docType) {
     case 'PURCHASE_ORDER':
@@ -510,8 +537,8 @@ const TableColGroup: React.FC<{ docType: PsiDocType; showPurchaseBatch?: boolean
         <colgroup>
           <col style={{ width: 'auto' }} />
           <col style={{ width: 100 }} />
-          <col style={{ width: 100 }} />
-          <col style={{ width: 110 }} />
+          {showAmount ? <col style={{ width: 100 }} /> : null}
+          {showAmount ? <col style={{ width: 110 }} /> : null}
           <col style={{ width: 140 }} />
         </colgroup>
       );
@@ -520,8 +547,8 @@ const TableColGroup: React.FC<{ docType: PsiDocType; showPurchaseBatch?: boolean
         <colgroup>
           <col style={{ width: 'auto' }} />
           <col style={{ width: 100 }} />
-          <col style={{ width: 100 }} />
-          <col style={{ width: 110 }} />
+          {showAmount ? <col style={{ width: 100 }} /> : null}
+          {showAmount ? <col style={{ width: 110 }} /> : null}
           <col style={{ width: 160 }} />
         </colgroup>
       );
@@ -533,8 +560,8 @@ const TableColGroup: React.FC<{ docType: PsiDocType; showPurchaseBatch?: boolean
           <col style={{ width: 100 }} />
           {showPurchaseBatch ? <col style={{ width: 88 }} /> : null}
           <col style={{ width: 100 }} />
-          <col style={{ width: 100 }} />
-          <col style={{ width: 110 }} />
+          {showAmount ? <col style={{ width: 100 }} /> : null}
+          {showAmount ? <col style={{ width: 110 }} /> : null}
         </colgroup>
       );
     case 'SALES_BILL':
@@ -544,8 +571,8 @@ const TableColGroup: React.FC<{ docType: PsiDocType; showPurchaseBatch?: boolean
           <col style={{ width: 100 }} />
           {showPurchaseBatch ? <col style={{ width: 88 }} /> : null}
           <col style={{ width: 100 }} />
-          <col style={{ width: 100 }} />
-          <col style={{ width: 110 }} />
+          {showAmount ? <col style={{ width: 100 }} /> : null}
+          {showAmount ? <col style={{ width: 110 }} /> : null}
         </colgroup>
       );
   }

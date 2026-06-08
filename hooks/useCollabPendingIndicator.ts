@@ -8,11 +8,18 @@ import * as api from '../services/api';
  *
  * 为避免大文件 polling 过于激进，默认每 60s 轻量刷新一次；仅在用户路由在「协作管理」外时轮询。
  */
-export function useCollabPendingIndicator(tenantKey: string | null | undefined): boolean {
+export function useCollabPendingIndicator(
+  tenantKey: string | null | undefined,
+  enabled = true,
+): boolean {
   const [hasPending, setHasPending] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
+    if (!enabled) {
+      setHasPending(false);
+      return;
+    }
     let cancelled = false;
     const fetchOnce = async () => {
       if (!tenantKey) { setHasPending(false); return; }
@@ -48,7 +55,7 @@ export function useCollabPendingIndicator(tenantKey: string | null | undefined):
       cancelled = true;
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [tenantKey]);
+  }, [tenantKey, enabled]);
 
   return hasPending;
 }

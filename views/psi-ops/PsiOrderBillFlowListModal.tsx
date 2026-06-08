@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ScrollText, X, Filter, FileText, Loader2 } from 'lucide-react';
 import type { Product, PsiRecordType, Warehouse } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
+import { PSI_DOC_TYPE_AMOUNT_KEY, canViewAmount } from '../../utils/canViewAmount';
 import {
   fetchPsiByFilter,
   dateInputToIsoStart,
@@ -74,6 +76,12 @@ const PsiOrderBillFlowListModal: React.FC<PsiOrderBillFlowListModalProps> = ({
   warehouses,
   receivedByOrderLine,
 }) => {
+  const { tenantCtx } = useAuth();
+  const showAmount = useMemo(() => {
+    const key = PSI_DOC_TYPE_AMOUNT_KEY[recordType];
+    return key ? canViewAmount(tenantCtx?.tenantRole, tenantCtx?.permissions, key) : true;
+  }, [recordType, tenantCtx?.tenantRole, tenantCtx?.permissions]);
+
   const flowLabel = PSI_ORDER_BILL_FLOW_LABELS[recordType];
   const todayDate = useMemo(() => isoToDateInput(getTodayRangeIso().from), []);
   const [dateFrom, setDateFrom] = useState(todayDate);
@@ -267,11 +275,13 @@ const PsiOrderBillFlowListModal: React.FC<PsiOrderBillFlowListModalProps> = ({
                       value: `${totals.totalQty.toLocaleString()} 件`,
                       className: qtyClass,
                     },
-                    {
-                      label: '金额',
-                      value: `¥${totals.totalAmount.toFixed(2)}`,
-                      className: amountClass,
-                    },
+                    ...(showAmount
+                      ? [{
+                          label: '金额',
+                          value: `¥${totals.totalAmount.toFixed(2)}`,
+                          className: amountClass,
+                        }]
+                      : []),
                   ]}
                 />
               }
@@ -299,9 +309,11 @@ const PsiOrderBillFlowListModal: React.FC<PsiOrderBillFlowListModalProps> = ({
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">
                       数量
                     </th>
+                    {showAmount && (
                     <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">
                       金额
                     </th>
+                    )}
                     {showOrderStatus && (
                       <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase whitespace-nowrap">
                         状态
@@ -340,6 +352,7 @@ const PsiOrderBillFlowListModal: React.FC<PsiOrderBillFlowListModalProps> = ({
                         >
                           {row.totalQty.toLocaleString()}
                         </td>
+                        {showAmount && (
                         <td
                           className={`px-4 py-3 text-right font-black tabular-nums ${
                             rowAmountNegative ? 'text-amber-600' : 'text-emerald-600'
@@ -347,6 +360,7 @@ const PsiOrderBillFlowListModal: React.FC<PsiOrderBillFlowListModalProps> = ({
                         >
                           ¥{row.totalAmount.toFixed(2)}
                         </td>
+                        )}
                         {showOrderStatus && (
                           <td className="px-4 py-3 whitespace-nowrap">
                             <OrderFlowStatusBadge

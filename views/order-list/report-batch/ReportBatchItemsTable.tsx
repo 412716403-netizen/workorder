@@ -28,6 +28,7 @@ import {
   isOutsourceReceiveReport,
   resolveReportDisplayEconomics,
 } from '../../../utils/outsourceReceiveReportDisplay';
+import { AMOUNT_PERMISSION_KEYS, useCanViewAmount } from '../../../utils/canViewAmount';
 import { formatWeightKgDisplay } from '../../../utils/reportBatchWeightHelpers';
 import type { ProductionOpRecord } from '../../../types';
 
@@ -85,6 +86,8 @@ const ReportBatchItemsTable: React.FC<Props> = ({
   displayBatchTotalWeightKg,
 }) => {
   const batchIsOutsourceReceive = isOutsourceReceiveReport(batch.first.report);
+  const showOutsourceAmount = useCanViewAmount(AMOUNT_PERMISSION_KEYS.OUTSOURCE);
+  const showEconomics = !batchIsOutsourceReceive || showOutsourceAmount;
   const productId = batch.source === 'order' ? batch.first.order.productId : batch.productId;
   const p = products.find(px => px.id === productId);
   const unitName = (p?.unitId && dictionaries?.units?.find(u => u.id === p.unitId)?.name) || '件';
@@ -149,7 +152,7 @@ const ReportBatchItemsTable: React.FC<Props> = ({
                 {batch.totalGood.toLocaleString()} {unitName}
               </p>
             </div>
-            {displayBatchTotalAmount > 0 ? (
+            {showEconomics && displayBatchTotalAmount > 0 ? (
               <div className="min-w-[6.5rem] md:text-right">
                 <p className="text-[10px] text-slate-400 font-black uppercase mb-0.5">本批金额</p>
                 <p className="font-black tabular-nums text-emerald-600">¥{displayBatchTotalAmount.toFixed(2)}</p>
@@ -179,6 +182,7 @@ const ReportBatchItemsTable: React.FC<Props> = ({
             reportDetailViewNodeUsesWeight={reportDetailViewNodeUsesWeight}
             displayBatchTotalAmount={displayBatchTotalAmount}
             displayBatchTotalWeightKg={displayBatchTotalWeightKg}
+            showEconomics={showEconomics}
           />
         ) : (
           <FlatView
@@ -187,6 +191,7 @@ const ReportBatchItemsTable: React.FC<Props> = ({
             dictionaries={dictionaries}
             prodRecords={prodRecords}
             reportDetailViewNodeUsesWeight={reportDetailViewNodeUsesWeight}
+            showEconomics={showEconomics}
           />
         )}
       </div>
@@ -205,6 +210,7 @@ interface MatrixViewProps {
   reportDetailViewNodeUsesWeight: boolean;
   displayBatchTotalAmount: number;
   displayBatchTotalWeightKg: number;
+  showEconomics?: boolean;
 }
 
 const MatrixView: React.FC<MatrixViewProps> = ({
@@ -218,6 +224,7 @@ const MatrixView: React.FC<MatrixViewProps> = ({
   reportDetailViewNodeUsesWeight,
   displayBatchTotalAmount,
   displayBatchTotalWeightKg,
+  showEconomics = true,
 }) => {
   const { layout, goodByVariant, defectiveByVariant, variantToReportId, product: viewMatrixProduct } = matrix;
   const viewMatrixUnit = (viewMatrixProduct.unitId && dictionaries.units.find(u => u.id === viewMatrixProduct.unitId)?.name) || '件';
@@ -226,7 +233,7 @@ const MatrixView: React.FC<MatrixViewProps> = ({
     viewMatrixProduct.categoryId ? categoryMap.get(viewMatrixProduct.categoryId) ?? null : null,
     { includeFile: false, includeEmpty: false },
   );
-  const viewMatrixColSpan = 4 + (reportDetailViewNodeUsesWeight ? 1 : 0);
+  const viewMatrixColSpan = 2 + (showEconomics ? 2 : 0) + (reportDetailViewNodeUsesWeight ? 1 : 0);
   const viewMatrixRate = (() => {
     if (batchIsOutsourceReceive && batch.totalGood > 0 && displayBatchTotalAmount > 0) {
       return displayBatchTotalAmount / batch.totalGood;
@@ -299,8 +306,8 @@ const MatrixView: React.FC<MatrixViewProps> = ({
             <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 bg-slate-50/80">
               <th className="py-2.5 px-3 text-left">产品 / SKU</th>
               <th className="py-2.5 px-3 text-right">数量</th>
-              <th className="py-2.5 px-3 text-right">工价</th>
-              <th className="py-2.5 px-3 text-right">金额(元)</th>
+              {showEconomics && <th className="py-2.5 px-3 text-right">工价</th>}
+              {showEconomics && <th className="py-2.5 px-3 text-right">金额(元)</th>}
               {reportDetailViewNodeUsesWeight ? <th className="py-2.5 px-3 text-right whitespace-nowrap">重量 (kg)</th> : null}
             </tr>
           </thead>
@@ -338,12 +345,16 @@ const MatrixView: React.FC<MatrixViewProps> = ({
                   </span>
                 ) : null}
               </td>
+              {showEconomics && (
               <td className="py-2.5 px-3 text-right align-middle text-xs text-slate-600">
                 {viewMatrixRate > 0 ? `${viewMatrixRate.toFixed(2)} 元/${viewMatrixUnit}` : '—'}
               </td>
+              )}
+              {showEconomics && (
               <td className="py-2.5 px-3 text-right align-middle text-sm font-black text-indigo-600 tabular-nums">
                 {displayBatchTotalAmount > 0 ? displayBatchTotalAmount.toFixed(2) : '—'}
               </td>
+              )}
               {reportDetailViewNodeUsesWeight ? (
                 <td className="py-2.5 px-3 text-right align-middle text-xs font-bold tabular-nums text-slate-700">
                   {formatWeightKgDisplay(displayBatchTotalWeightKg)}
@@ -368,9 +379,10 @@ interface FlatViewProps {
   dictionaries: AppDictionaries;
   prodRecords: ProductionOpRecord[];
   reportDetailViewNodeUsesWeight: boolean;
+  showEconomics?: boolean;
 }
 
-const FlatView: React.FC<FlatViewProps> = ({ batch, products, dictionaries, prodRecords, reportDetailViewNodeUsesWeight }) => (
+const FlatView: React.FC<FlatViewProps> = ({ batch, products, dictionaries, prodRecords, reportDetailViewNodeUsesWeight, showEconomics = true }) => (
   <div className="space-y-2">
     <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">报工明细</p>
     <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-2 sm:p-3 space-y-2">
@@ -380,8 +392,8 @@ const FlatView: React.FC<FlatViewProps> = ({ batch, products, dictionaries, prod
             <tr className="bg-slate-50 border-b border-slate-200">
               <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase">产品</th>
               <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-left">数量</th>
-              <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">工价</th>
-              <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">金额(元)</th>
+              {showEconomics && <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">工价</th>}
+              {showEconomics && <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right">金额(元)</th>}
               {reportDetailViewNodeUsesWeight ? (
                 <th className="px-3 py-2.5 sm:px-4 text-[10px] font-black text-slate-500 uppercase text-right whitespace-nowrap">重量 (kg)</th>
               ) : null}
@@ -417,12 +429,16 @@ const FlatView: React.FC<FlatViewProps> = ({ batch, products, dictionaries, prod
                           {def > 0 ? <span className="text-[10px] font-medium tabular-nums text-amber-800">不良 {def} {detailUnit}</span> : null}
                         </div>
                       </td>
+                      {showEconomics && (
                       <td className="px-3 py-2.5 sm:px-4 align-middle text-slate-600 text-right text-xs">
                         {rate > 0 ? `${rate.toFixed(2)} 元/${detailUnit}` : '—'}
                       </td>
+                      )}
+                      {showEconomics && (
                       <td className="px-3 py-2.5 sm:px-4 align-middle text-sm font-bold text-indigo-600 text-right tabular-nums">
                         {amount > 0 ? amount.toFixed(2) : '—'}
                       </td>
+                      )}
                       {reportDetailViewNodeUsesWeight ? (
                         <td className="px-3 py-2.5 sm:px-4 align-middle text-right text-xs font-bold tabular-nums text-slate-700">
                           {formatWeightKgDisplay(weight)}
@@ -456,12 +472,16 @@ const FlatView: React.FC<FlatViewProps> = ({ batch, products, dictionaries, prod
                           {def > 0 ? <span className="text-[10px] font-medium tabular-nums text-amber-800">不良 {def} {detailUnit}</span> : null}
                         </div>
                       </td>
+                      {showEconomics && (
                       <td className="px-3 py-2.5 sm:px-4 align-middle text-slate-600 text-right text-xs">
                         {rate > 0 ? `${rate.toFixed(2)} 元/${detailUnit}` : '—'}
                       </td>
+                      )}
+                      {showEconomics && (
                       <td className="px-3 py-2.5 sm:px-4 align-middle text-sm font-bold text-indigo-600 text-right tabular-nums">
                         {amount > 0 ? amount.toFixed(2) : '—'}
                       </td>
+                      )}
                       {reportDetailViewNodeUsesWeight ? (
                         <td className="px-3 py-2.5 sm:px-4 align-middle text-right text-xs font-bold tabular-nums text-slate-700">
                           {formatWeightKgDisplay(weight)}

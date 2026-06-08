@@ -130,6 +130,8 @@ interface PurchaseBillFormSectionProps {
   buildPurchaseBillPrintContext?: (template: PrintTemplate) => PrintRenderContext;
   /** 按合作单位 + 商品 解析默认采购价（优先上次成交价，回退产品档案价） */
   resolveDefaultPurchasePrice?: (productId: string) => number;
+  /** 是否展示单价/金额（无权限时隐藏 UI，state 仍保留） */
+  showAmount?: boolean;
 }
 
 const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
@@ -145,6 +147,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
   printTemplates = [],
   buildPurchaseBillPrintContext,
   resolveDefaultPurchasePrice,
+  showAmount = true,
 }) => {
   const { currentUser } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
@@ -520,10 +523,12 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                           />
                         </div>
                       )}
+                      {showAmount && (
                       <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
                         <label className={psiOrderBillCompactLineLabelClass}>采购价 (元)</label>
                         <input type="number" min={0} step={0.01} value={line.purchasePrice || ''} onChange={e => onUpdateItem(line.id, { purchasePrice: parseFloat(e.target.value) || 0 })} className={psiOrderBillCompactLineInputClass} placeholder="0" />
                       </div>
+                      )}
                       {pbHasVariants && (
                         <>
                           <div className="w-20 shrink-0 space-y-0.5">
@@ -532,12 +537,14 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                               {formatQtyDisplay(pbLineQty)} {line.productId ? getUnitName(line.productId) : '—'}
                             </div>
                           </div>
+                          {showAmount && (
                           <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
                             <label className={psiOrderBillCompactLineLabelClass}>金额 (元)</label>
                             <div className={psiOrderBillCompactLineReadonlyClass}>
                               {pbLineAmount.toFixed(2)}
                             </div>
                           </div>
+                          )}
                         </>
                       )}
                       {!pbHasVariants && (
@@ -549,12 +556,14 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                               <span className="flex shrink-0 items-center text-[9px] font-bold text-slate-400">{line.productId ? getUnitName(line.productId) : '—'}</span>
                             </div>
                           </div>
+                          {showAmount && (
                           <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
                             <label className={psiOrderBillCompactLineLabelClass}>金额 (元)</label>
                             <div className={psiOrderBillCompactLineReadonlyClass}>
                               {pbLineAmount.toFixed(2)}
                             </div>
                           </div>
+                          )}
                         </>
                       )}
                       <button type="button" onClick={() => onRemoveItem(line.id)} className="shrink-0 rounded-lg p-1 text-slate-300 transition-all hover:bg-rose-50 hover:text-rose-500"><Trash2 className="h-3.5 w-3.5" /></button>
@@ -609,12 +618,14 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                     <span className={psiOrderBillCompactSummaryUnitClass}>PCS</span>
                   </span>
                 </div>
+                {showAmount && (
                 <div className="flex items-baseline gap-2 border-l border-white/25 pl-4">
                   <span className={psiOrderBillCompactSummaryLabelClass}>总金额</span>
                   <span className={psiOrderBillCompactSummaryValueClass}>
                     ¥{purchaseBillItems.reduce((s, i) => s + (i.quantity || 0) * (i.purchasePrice || 0), 0).toFixed(2)}
                   </span>
                 </div>
+                )}
               </div>
             </div>
           </>
@@ -688,7 +699,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                     </span>
                   </h4>
                   <p className="pl-10 text-[11px] font-medium leading-relaxed text-slate-500 sm:max-w-xl">
-                    单击行可勾选；已选行可改采购价、本次数量
+                    单击行可勾选；已选行可改{showAmount ? '采购价、' : ''}本次数量
                     {showFromOrderBatchColumn ? '；需批次时请填写批号（可留空）。' : '。'}
                   </p>
                 </div>
@@ -754,12 +765,14 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                             关联成品
                           </th>
                         )}
+                        {showAmount && (
                         <th
                           className="w-14 shrink-0 px-1 py-2.5 text-right align-bottom text-[10px] font-black uppercase tracking-wider text-slate-500"
                           title="采购单价（元）"
                         >
                           单价
                         </th>
+                        )}
                         <th className="w-[4.25rem] shrink-0 px-1 py-2.5 text-right align-bottom text-[10px] font-black uppercase tracking-wider text-slate-500">
                           订单量
                         </th>
@@ -855,6 +868,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                                 </span>
                               </td>
                             )}
+                            {showAmount && (
                             <td
                               className="min-w-0 px-1 py-2.5 text-right align-middle tabular-nums"
                               onClick={e => e.stopPropagation()}
@@ -884,6 +898,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
                                 <span className="text-xs font-semibold text-slate-600">¥{(Number(item.purchasePrice) || 0).toFixed(2)}</span>
                               )}
                             </td>
+                            )}
                             <td className="min-w-0 px-1 py-2.5 text-right align-middle">
                               <span className="block truncate text-xs font-semibold tabular-nums text-slate-700">
                                 {formatQtyDisplay(item.quantity)}

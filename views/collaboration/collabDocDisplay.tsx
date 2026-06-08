@@ -1,6 +1,7 @@
 import React from 'react';
 import type { QtyMatrixTableRow } from '../../components/variant-matrix/QtyMatrixTable';
 import { buildCollabQtyMatrix, type BuildCollabQtyMatrixOpts } from './collabHelpers';
+import { AMOUNT_PERMISSION_KEYS, useCanViewAmount } from '../../utils/canViewAmount';
 
 export type CollabPayloadItem = {
   colorName?: string | null;
@@ -35,6 +36,8 @@ export function CollabDocQtyPriceFooter({
   resolvedUnitPrice: number | null;
   lineAmount: number | null;
 }) {
+  const showAmount = useCanViewAmount(AMOUNT_PERMISSION_KEYS.COLLABORATION);
+
   return (
     <div className="mt-4 flex flex-wrap items-end gap-x-6 gap-y-3 border-t border-slate-100 pt-4">
       <div className="flex min-w-[5rem] flex-col gap-1">
@@ -44,6 +47,8 @@ export function CollabDocQtyPriceFooter({
           <span className="ml-1 text-xs font-bold text-indigo-600/90">件</span>
         </span>
       </div>
+      {showAmount && (
+      <>
       <div className="hidden h-9 w-px shrink-0 bg-slate-200 sm:block" aria-hidden />
       <div className="flex min-w-[5.5rem] flex-col gap-1">
         <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">单价（元/件）</span>
@@ -64,6 +69,8 @@ export function CollabDocQtyPriceFooter({
           {lineAmount != null ? lineAmount.toFixed(2) : '—'}
         </span>
       </div>
+      </>
+      )}
     </div>
   );
 }

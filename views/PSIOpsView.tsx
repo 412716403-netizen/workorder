@@ -80,6 +80,8 @@ import { effectivePlanFormFieldType } from '../utils/planFormCustomField';
 import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
 import { toLocalDateYmd, formatCustomFieldDatetimeForPrint } from '../utils/localDateTime';
 import { hasModulePerm } from '../utils/hasModulePerm';
+import { PSI_DOC_TYPE_AMOUNT_KEY, canViewAmount } from '../utils/canViewAmount';
+import { maskPrintContextAmounts } from '../utils/maskPrintContextAmounts';
 import { useStockSnapshot } from '../hooks/useStockSnapshot';
 import { usePsiOpsRecordsList } from '../hooks/usePsiOpsRecordsList';
 import { productHasColorSizeMatrix } from '../utils/productColorSize';
@@ -180,6 +182,10 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
   const { tenantCtx, userId } = useAuth();
   const _isOwner = tenantRole === 'owner';
   const hasPsiPerm = (perm: string) => hasModulePerm(tenantRole, userPermissions, 'psi', perm);
+  const showPsiDocAmount = (docType: string) => {
+    const key = PSI_DOC_TYPE_AMOUNT_KEY[docType];
+    return key ? canViewAmount(tenantRole, userPermissions, key) : true;
+  };
   const ordersList = orders ?? [];
   const recordsList = usePsiOpsRecordsList(type, records == null ? EMPTY_PSI_CTX : records) as any[];
   const { printTemplates } = useConfigData();
@@ -787,6 +793,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               receivedByOrderLine={receivedByOrderLine}
               onProductImagePreview={setPsiProductImagePreviewUrl}
               headerCustomFieldDefs={safePurchaseOrderFormSettings.customFields}
+              showAmount={showPsiDocAmount('PURCHASE_ORDER')}
             />
           }
           formContent={
@@ -864,6 +871,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               formatQtyDisplay={formatQtyDisplay}
               onProductImagePreview={setPsiProductImagePreviewUrl}
               headerCustomFieldDefs={safePurchaseBillFormSettings.customFields}
+              showAmount={showPsiDocAmount('PURCHASE_BILL')}
             />
           }
           formContent={
@@ -939,6 +947,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               formatQtyDisplay={formatQtyDisplay}
               onProductImagePreview={setPsiProductImagePreviewUrl}
               headerCustomFieldDefs={safeSalesOrderFormSettings.customFields}
+              showAmount={showPsiDocAmount('SALES_ORDER')}
             />
           }
           formContent={
@@ -1021,6 +1030,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               formatQtyDisplay={formatQtyDisplay}
               onProductImagePreview={setPsiProductImagePreviewUrl}
               headerCustomFieldDefs={safeSalesBillFormSettings.customFields}
+              showAmount={showPsiDocAmount('SALES_BILL')}
             />
           }
           formContent={
@@ -1358,7 +1368,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                         <p className="text-[9px] text-slate-300 font-black uppercase tracking-tighter">单据总量</p>
                         <p className={`text-base font-black ${(type === 'SALES_BILL' || type === 'PURCHASE_BILL') && totalQty < 0 ? 'text-amber-600' : 'text-slate-900'}`}>{totalQty.toLocaleString()} <span className="text-xs font-medium text-slate-400">PCS</span></p>
                       </div>
-                      {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL' || type === 'SALES_ORDER' || type === 'SALES_BILL') && (
+                      {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL' || type === 'SALES_ORDER' || type === 'SALES_BILL') && showPsiDocAmount(type) && (
                         <div className="text-right mr-1">
                           <p className="text-[9px] text-slate-300 font-black uppercase tracking-tighter">单据金额</p>
                           <p className={`text-base font-black ${(type === 'SALES_BILL' || type === 'PURCHASE_BILL') && totalAmount < 0 ? 'text-amber-600' : 'text-emerald-600'}`}>¥{totalAmount.toFixed(2)}</p>
@@ -1469,14 +1479,14 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                         )}
                         {!current.hideWarehouse && <col style={{ width: 100 }} />}
                         {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <col style={{ width: 100 }} />}
-                        {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <col style={{ width: 100 }} />}
-                        {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <col style={{ width: 110 }} />}
+                        {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && showPsiDocAmount(type) && <col style={{ width: 100 }} />}
+                        {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && showPsiDocAmount(type) && <col style={{ width: 110 }} />}
                         {type === 'SALES_ORDER' && <col style={{ width: 132 }} />}
-                        {type === 'SALES_ORDER' && <col style={{ width: 82 }} />}
-                        {type === 'SALES_ORDER' && <col style={{ width: 92 }} />}
+                        {type === 'SALES_ORDER' && showPsiDocAmount(type) && <col style={{ width: 82 }} />}
+                        {type === 'SALES_ORDER' && showPsiDocAmount(type) && <col style={{ width: 92 }} />}
                         {type === 'SALES_BILL' && <col style={{ width: 132 }} />}
-                        {type === 'SALES_BILL' && <col style={{ width: 82 }} />}
-                        {type === 'SALES_BILL' && <col style={{ width: 92 }} />}
+                        {type === 'SALES_BILL' && showPsiDocAmount(type) && <col style={{ width: 82 }} />}
+                        {type === 'SALES_BILL' && showPsiDocAmount(type) && <col style={{ width: 92 }} />}
                         {type === 'SALES_ORDER' && <col style={{ width: 140 }} />}
                         {type === 'SALES_ORDER' && <col style={{ width: 82 }} />}
                         {type === 'PURCHASE_ORDER' && <col style={{ width: 140 }} />}
@@ -1489,17 +1499,21 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                           )}
                           {!current.hideWarehouse && <th className="pb-2 px-3 text-center">{type === 'SALES_BILL' ? '出库仓库' : '入库仓库'}</th>}
                           {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <th className="pb-2 px-3 text-right">数量</th>}
-                          {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <th className="pb-2 px-3 text-right">采购价</th>}
-                          {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && <th className="pb-2 px-3 text-right">金额</th>}
+                          {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && showPsiDocAmount(type) && <th className="pb-2 px-3 text-right">采购价</th>}
+                          {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && showPsiDocAmount(type) && <th className="pb-2 px-3 text-right">金额</th>}
                           {type === 'SALES_ORDER' && <th className="pb-2 px-3 text-right">数量</th>}
-                          {type === 'SALES_ORDER' && <th className="pb-2 px-3 text-right">销售价</th>}
-                          {type === 'SALES_ORDER' && <th className="pb-2 px-3 text-right">金额</th>}
+                          {type === 'SALES_ORDER' && showPsiDocAmount(type) && <th className="pb-2 px-3 text-right">销售价</th>}
+                          {type === 'SALES_ORDER' && showPsiDocAmount(type) && <th className="pb-2 px-3 text-right">金额</th>}
                           {type === 'SALES_BILL' && <th className="pb-2 px-3 text-right">数量</th>}
-                          {type === 'SALES_BILL' && <th className="pb-2 px-3 text-right">销售价</th>}
-                          {type === 'SALES_BILL' && <th className="pb-2 px-3 text-right">金额</th>}
-                          {type === 'SALES_ORDER' && <th className="pb-2 px-3 text-left">配货进度</th>}
+                          {type === 'SALES_BILL' && showPsiDocAmount(type) && <th className="pb-2 px-3 text-right">销售价</th>}
+                          {type === 'SALES_BILL' && showPsiDocAmount(type) && <th className="pb-2 px-3 text-right">金额</th>}
+                          {type === 'SALES_ORDER' && (
+                            <th className={`pb-2 px-3 ${showPsiDocAmount(type) ? 'text-left' : 'text-right'}`}>配货进度</th>
+                          )}
                           {type === 'SALES_ORDER' && <th className="pb-2 px-3 text-center">操作</th>}
-                          {type === 'PURCHASE_ORDER' && <th className="pb-2 px-3 text-left">入库进度</th>}
+                          {type === 'PURCHASE_ORDER' && (
+                            <th className={`pb-2 px-3 ${showPsiDocAmount(type) ? 'text-left' : 'text-right'}`}>入库进度</th>
+                          )}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
@@ -1655,12 +1669,12 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                     </span>
                                   </td>
                                 )}
-                                {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && (
+                                {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && showPsiDocAmount(type) && (
                                   <td className="py-2.5 px-3 text-right">
                                     <span className="text-sm font-bold text-slate-600">¥{avgPrice.toFixed(2)}</span>
                               </td>
                                 )}
-                                {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && (
+                                {(type === 'PURCHASE_ORDER' || type === 'PURCHASE_BILL') && showPsiDocAmount(type) && (
                                   <td className="py-2.5 px-3 text-right">
                                     <span className="text-sm font-black text-indigo-600">¥{rowAmount.toFixed(2)}</span>
                                   </td>
@@ -1672,12 +1686,12 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                     </span>
                                   </td>
                                 )}
-                                {type === 'SALES_ORDER' && (
+                                {type === 'SALES_ORDER' && showPsiDocAmount(type) && (
                                   <td className="py-2.5 px-3 text-right">
                                     <span className="text-sm font-bold text-slate-600">¥{avgPrice.toFixed(2)}</span>
                                   </td>
                                 )}
-                                {type === 'SALES_ORDER' && (
+                                {type === 'SALES_ORDER' && showPsiDocAmount(type) && (
                                   <td className="py-2.5 px-3 text-right">
                                     <span className="text-sm font-black text-indigo-600">¥{rowAmount.toFixed(2)}</span>
                                   </td>
@@ -1689,12 +1703,12 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                                     </span>
                                   </td>
                                 )}
-                                {type === 'SALES_BILL' && (
+                                {type === 'SALES_BILL' && showPsiDocAmount(type) && (
                                   <td className="py-2.5 px-3 text-right">
                                     <span className="text-sm font-bold text-slate-600">¥{avgPrice.toFixed(2)}</span>
                                   </td>
                                 )}
-                                {type === 'SALES_BILL' && (
+                                {type === 'SALES_BILL' && showPsiDocAmount(type) && (
                                   <td className="py-2.5 px-3 text-right">
                                     <span className="text-sm font-black text-indigo-600">¥{rowAmount.toFixed(2)}</span>
                                   </td>
@@ -1883,14 +1897,15 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           resolveDocItems={docNumber =>
             recordsList.filter((r: any) => r.type === 'PURCHASE_ORDER' && r.docNumber === docNumber)
           }
-          buildContext={(_t, { docNumber, docItems }) =>
-            buildPurchaseOrderPrintContextFromPsiDoc({
+          buildContext={(_t, { docNumber, docItems }) => {
+            const ctx = buildPurchaseOrderPrintContextFromPsiDoc({
               docNumber,
               docItems,
               productMap: productMapPSI,
               dictionaries,
-            })
-          }
+            });
+            return showPsiDocAmount('PURCHASE_ORDER') ? ctx : maskPrintContextAmounts(ctx);
+          }}
           pickerSubtitle={docNumber =>
             `采购订单 ${docNumber.startsWith('UNGROUPED-') ? '独立单据' : docNumber}`
           }
@@ -1909,15 +1924,16 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           resolveDocItems={docNumber =>
             recordsList.filter((r: any) => r.type === 'PURCHASE_BILL' && r.docNumber === docNumber)
           }
-          buildContext={(_t, { docNumber, docItems }) =>
-            buildPurchaseBillPrintContextFromPsiDoc({
+          buildContext={(_t, { docNumber, docItems }) => {
+            const ctx = buildPurchaseBillPrintContextFromPsiDoc({
               docNumber,
               docItems,
               productMap: productMapPSI,
               warehouseMap: warehouseMapPSI,
               dictionaries,
-            })
-          }
+            });
+            return showPsiDocAmount('PURCHASE_BILL') ? ctx : maskPrintContextAmounts(ctx);
+          }}
           pickerSubtitle={docNumber =>
             `采购入库 ${docNumber.startsWith('UNGROUPED-') ? '独立单据' : docNumber}`
           }
@@ -1936,14 +1952,15 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           resolveDocItems={docNumber =>
             recordsList.filter((r: any) => r.type === 'SALES_ORDER' && r.docNumber === docNumber)
           }
-          buildContext={(_t, { docNumber, docItems }) =>
-            buildSalesOrderPrintContextFromPsiDoc({
+          buildContext={(_t, { docNumber, docItems }) => {
+            const ctx = buildSalesOrderPrintContextFromPsiDoc({
               docNumber,
               docItems,
               productMap: productMapPSI,
               dictionaries,
-            })
-          }
+            });
+            return showPsiDocAmount('SALES_ORDER') ? ctx : maskPrintContextAmounts(ctx);
+          }}
           pickerSubtitle={docNumber =>
             `销售订单 ${docNumber.startsWith('UNGROUPED-') ? '独立单据' : docNumber}`
           }
@@ -1998,7 +2015,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
                 console.warn('[PSIOpsView] partnerReceivable failed', e);
               }
             }
-            return buildSalesBillPrintContextFromPsiDoc({
+            const ctx = buildSalesBillPrintContextFromPsiDoc({
               docNumber,
               docItems,
               productMap: productMapPSI,
@@ -2006,6 +2023,7 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
               dictionaries,
               preBalance: { previousBalance },
             });
+            return showPsiDocAmount('SALES_BILL') ? ctx : maskPrintContextAmounts(ctx);
           }}
           pickerSubtitle={docNumber =>
             `销售单 ${docNumber.startsWith('UNGROUPED-') ? '独立单据' : docNumber}`

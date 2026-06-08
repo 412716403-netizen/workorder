@@ -86,6 +86,8 @@ interface PurchaseOrderFormSectionProps {
   receivedByOrderLine: Record<string, number>;
   /** 按合作单位 + 商品 解析默认采购价（优先上次成交价，回退产品档案价） */
   resolveDefaultPurchasePrice?: (productId: string) => number;
+  /** 是否展示单价/金额（无权限时隐藏 UI，state 仍保留） */
+  showAmount?: boolean;
 }
 
 const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
@@ -100,6 +102,7 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
   partnerLabel,
   receivedByOrderLine,
   resolveDefaultPurchasePrice,
+  showAmount = true,
 }) => {
   const confirm = useConfirm();
 
@@ -269,10 +272,12 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
                       }}
                     />
                   </div>
+                  {showAmount && (
                   <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
                     <label className={psiOrderBillCompactLineLabelClass}>采购价 (元)</label>
                     <input type="number" min={0} step={0.01} value={line.purchasePrice || ''} onChange={e => onUpdateItem(line.id, { purchasePrice: parseFloat(e.target.value) || 0 })} className={psiOrderBillCompactLineInputClass} placeholder="0" />
                   </div>
+                  )}
                   {hasVariants && (
                     <>
                       <div className="w-20 shrink-0 space-y-0.5">
@@ -281,12 +286,14 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
                           {formatQtyDisplay(lineQty)} {line.productId ? getUnitName(line.productId) : '—'}
                         </div>
                       </div>
+                      {showAmount && (
                       <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
                         <label className={psiOrderBillCompactLineLabelClass}>金额 (元)</label>
                         <div className={psiOrderBillCompactLineReadonlyClass}>
                           {lineAmount.toFixed(2)}
                         </div>
                       </div>
+                      )}
                     </>
                   )}
                   {!hasVariants && (
@@ -298,12 +305,14 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
                           <span className="flex shrink-0 items-center text-[9px] font-bold text-slate-400">{line.productId ? getUnitName(line.productId) : '—'}</span>
                         </div>
                       </div>
+                      {showAmount && (
                       <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
                         <label className={psiOrderBillCompactLineLabelClass}>金额 (元)</label>
                         <div className={psiOrderBillCompactLineReadonlyClass}>
                           {lineAmount.toFixed(2)}
                         </div>
                       </div>
+                      )}
                     </>
                   )}
                   {poDocNum && received > 0 && (
@@ -366,6 +375,7 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
                 <span className={psiOrderBillCompactSummaryUnitClass}>PCS</span>
               </span>
             </div>
+            {showAmount && (
             <div className="flex items-baseline gap-2 border-l border-white/25 pl-4">
               <span className={psiOrderBillCompactSummaryLabelClass}>订单金额</span>
               <span className={psiOrderBillCompactSummaryValueClass}>
@@ -376,6 +386,7 @@ const PurchaseOrderFormSection: React.FC<PurchaseOrderFormSectionProps> = ({
                 }, 0).toFixed(2)}
               </span>
             </div>
+            )}
           </div>
         </div>
       </div>

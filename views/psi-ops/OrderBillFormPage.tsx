@@ -25,6 +25,7 @@ import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 import { nextPsiDocNumber } from '../../utils/partnerDocNumber';
 import { buildSalesOrderPrintRenderContext } from '../../utils/buildSalesOrderPrintContext';
 import { buildPurchaseBillPrintRenderContext } from '../../utils/buildPurchaseBillPrintContext';
+import { maskPrintContextAmounts } from '../../utils/maskPrintContextAmounts';
 import { useAuth } from '../../contexts/AuthContext';
 import { useConfigData } from '../../contexts/AppDataContext';
 import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayName';
@@ -39,6 +40,7 @@ import {
   lookupLastPrice,
 } from '../../utils/psiPartnerProductLastPrice';
 import { hasModulePerm } from '../../utils/hasModulePerm';
+import { AMOUNT_PERMISSION_KEYS, canViewAmount } from '../../utils/canViewAmount';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { categoryUsesBatchManagement } from '../../types';
@@ -172,6 +174,10 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   const recordsList = records ?? [];
   const _isOwner = tenantRole === 'owner';
   const hasPsiPerm = (perm: string) => hasModulePerm(tenantRole, userPermissions, 'psi', perm);
+  const showPoAmount = canViewAmount(tenantRole, userPermissions, AMOUNT_PERMISSION_KEYS.PSI_PURCHASE_ORDER);
+  const showPbAmount = canViewAmount(tenantRole, userPermissions, AMOUNT_PERMISSION_KEYS.PSI_PURCHASE_BILL);
+  const showSoAmount = canViewAmount(tenantRole, userPermissions, AMOUNT_PERMISSION_KEYS.PSI_SALES_ORDER);
+  const showSbAmount = canViewAmount(tenantRole, userPermissions, AMOUNT_PERMISSION_KEYS.PSI_SALES_BILL);
   const safePurchaseBillFormSettings = useMemo(
     () => ({
       standardFields: purchaseBillFormSettings?.standardFields ?? [],
@@ -601,8 +607,8 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   );
 
   const buildSalesOrderPrintContext = useCallback(
-    (_template: PrintTemplate) =>
-      buildSalesOrderPrintRenderContext({
+    (_template: PrintTemplate) => {
+      const ctx = buildSalesOrderPrintRenderContext({
         docNumber: soDocNumberForPrint,
         partner: String(form.partner ?? ''),
         operator: docOperator,
@@ -616,8 +622,10 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         })),
         productMap: productMapPSI,
         dictionaries,
-      }),
-    [soDocNumberForPrint, form.partner, form.customData, salesOrderItems, productMapPSI, dictionaries, docOperator],
+      });
+      return showSoAmount ? ctx : maskPrintContextAmounts(ctx);
+    },
+    [soDocNumberForPrint, form.partner, form.customData, salesOrderItems, productMapPSI, dictionaries, docOperator, showSoAmount],
   );
 
   const addSalesBillItem = () =>
@@ -654,7 +662,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
     (_template: PrintTemplate) => {
       const wid = form.warehouseId as string | undefined;
       const warehouseName = wid ? warehouseMapPSI.get(wid)?.name ?? wid : '';
-      return buildPurchaseBillPrintRenderContext({
+      const ctx = buildPurchaseBillPrintRenderContext({
         docNumber: pbDocNumberForPrint,
         partner: String(form.partner ?? ''),
         operator: docOperator,
@@ -670,8 +678,9 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         productMap: productMapPSI,
         dictionaries,
       });
+      return showPbAmount ? ctx : maskPrintContextAmounts(ctx);
     },
-    [pbDocNumberForPrint, form.partner, form.customData, form.warehouseId, purchaseBillItems, productMapPSI, warehouseMapPSI, dictionaries, docOperator],
+    [pbDocNumberForPrint, form.partner, form.customData, form.warehouseId, purchaseBillItems, productMapPSI, warehouseMapPSI, dictionaries, docOperator, showPbAmount],
   );
 
   const addPurchaseBillItem = () =>
@@ -1275,6 +1284,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         partnerLabel={partnerLabel}
         receivedByOrderLine={receivedByOrderLine}
         resolveDefaultPurchasePrice={resolveDefaultPurchasePrice}
+        showAmount={showPoAmount}
       />
     );
   }
@@ -1309,6 +1319,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         printTemplates={mergedPrintTemplates}
         buildSalesOrderPrintContext={buildSalesOrderPrintContext}
         resolveDefaultSalesPrice={resolveDefaultSalesPrice}
+        showAmount={showSoAmount}
       />
     );
   }
@@ -1343,6 +1354,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         resolveDefaultSalesPrice={resolveDefaultSalesPrice}
         recordsList={recordsList}
         prodRecords={prodRecords}
+        showAmount={showSbAmount}
       />
     );
   }
@@ -1386,6 +1398,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         printTemplates={mergedPrintTemplates}
         buildPurchaseBillPrintContext={buildPurchaseBillPrintContext}
         resolveDefaultPurchasePrice={resolveDefaultPurchasePrice}
+        showAmount={showPbAmount}
       />
     );
   }

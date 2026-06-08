@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Package } from 'lucide-react';
 import QtyMatrixTable, { type QtyMatrixTableRow } from '../../components/variant-matrix/QtyMatrixTable';
 import { VariantQtyMatrixHint } from '../../components/variant-matrix/VariantQtyMatrixHint';
+import { AMOUNT_PERMISSION_KEYS, useCanViewAmount } from '../../utils/canViewAmount';
 import {
   buildCollabQtyMatrix, collabVariantKey, type BuildCollabQtyMatrixOpts, type CollabReturnRow,
 } from './collabHelpers';
@@ -43,6 +44,9 @@ const CollabPeerQtyMatrixBlock: React.FC<Props> = ({
   onUpdateRow,
   matrixOrder,
 }) => {
+  const canShowAmount = useCanViewAmount(AMOUNT_PERMISSION_KEYS.COLLABORATION);
+  const effectiveShowPricing = showPricing && canShowAmount;
+
   const matrixKey = rows.map(r => collabVariantKey(r)).sort().join('|');
   const orderKey = `${matrixOrder?.preferredColorOrder?.join('\t') ?? ''}|${matrixOrder?.preferredSizeOrder?.join('\t') ?? ''}`;
   const { colors, sizes, cellRowIdx } = useMemo(
@@ -119,7 +123,7 @@ const CollabPeerQtyMatrixBlock: React.FC<Props> = ({
           </div>
 
           <div className="flex flex-wrap items-end gap-x-6 gap-y-3 md:shrink-0">
-            {showPricing && (
+            {effectiveShowPricing && (
               <>
                 <div className="flex min-w-[5.5rem] flex-col gap-1">
                   <label className="text-[10px] font-black uppercase tracking-wide text-slate-400">单价（元）</label>
@@ -144,7 +148,7 @@ const CollabPeerQtyMatrixBlock: React.FC<Props> = ({
                 <span className="ml-1 text-xs font-bold text-indigo-600/90">件</span>
               </span>
             </div>
-            {showPricing && (
+            {effectiveShowPricing && (
               <>
                 <div className="hidden h-9 w-px shrink-0 bg-slate-200 sm:block" aria-hidden />
                 <div className="flex min-w-[5.5rem] flex-col gap-1">

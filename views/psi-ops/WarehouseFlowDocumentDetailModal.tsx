@@ -3,6 +3,8 @@ import { X, ScrollText } from 'lucide-react';
 import { Product, Warehouse, ProductCategory, AppDictionaries, ProductVariant } from '../../types';
 import { BATCH_NO_UNTAGGED } from '../../types';
 import { formatPsiDocBusinessDateListZh } from '../../utils/flowDocSort';
+import { useAuth } from '../../contexts/AuthContext';
+import { PSI_DOC_TYPE_AMOUNT_KEY, canViewAmount } from '../../utils/canViewAmount';
 
 const formatFlowDateTime = (ts: string) => {
   if (!ts || !ts.toString().trim()) return '—';
@@ -37,6 +39,8 @@ const WarehouseFlowDocumentDetailModal: React.FC<WarehouseFlowDocumentDetailModa
   dictionaries,
   getUnitName,
 }) => {
+  const { tenantCtx } = useAuth();
+
   const result = useMemo(() => {
     const [detailType, detailDocNo] = warehouseFlowDetailKey.split('|');
     const isStockIn = detailType === 'STOCK_IN';
@@ -148,6 +152,11 @@ const WarehouseFlowDocumentDetailModal: React.FC<WarehouseFlowDocumentDetailModa
   if (!result) return null;
   const { detailType, mainInfo, detailLines } = result;
   const showBatchCol = detailLines.some((l: { batchNo?: string }) => Boolean((l.batchNo ?? '').trim()));
+  const showAmount = (() => {
+    if (detailType !== 'PURCHASE_BILL' && detailType !== 'SALES_BILL') return false;
+    const key = PSI_DOC_TYPE_AMOUNT_KEY[detailType];
+    return key ? canViewAmount(tenantCtx?.tenantRole, tenantCtx?.permissions, key) : true;
+  })();
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
@@ -224,8 +233,8 @@ const WarehouseFlowDocumentDetailModal: React.FC<WarehouseFlowDocumentDetailModa
                   {detailLines.some((l: any) => l.variantLabel) && <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">规格（颜色/尺码）</th>}
                   {showBatchCol && <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase">批次</th>}
                   <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">数量</th>
-                  {(detailType === 'PURCHASE_BILL' || detailType === 'SALES_BILL') && <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">单价</th>}
-                  {(detailType === 'PURCHASE_BILL' || detailType === 'SALES_BILL') && <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">金额</th>}
+                  {showAmount && <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">单价</th>}
+                  {showAmount && <th className="px-4 py-3 text-[10px] font-black text-slate-500 uppercase text-right">金额</th>}
                 </tr>
               </thead>
               <tbody>
@@ -242,7 +251,7 @@ const WarehouseFlowDocumentDetailModal: React.FC<WarehouseFlowDocumentDetailModa
                         <td className="px-4 py-3 text-xs font-bold text-slate-600 break-all">{batchCell}</td>
                       )}
                       <td className="px-4 py-3 text-right font-bold text-indigo-600">{(line.quantity ?? 0)} {line.unitName}</td>
-                      {(detailType === 'PURCHASE_BILL' || detailType === 'SALES_BILL') && (
+                      {showAmount && (
                         <>
                           <td className="px-4 py-3 text-right">¥{price.toFixed(2)}</td>
                           <td className="px-4 py-3 text-right">¥{((line.quantity ?? 0) * price).toFixed(2)}</td>

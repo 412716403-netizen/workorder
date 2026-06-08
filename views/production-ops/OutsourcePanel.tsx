@@ -85,6 +85,8 @@ import StockDocDetailModal from './StockDocDetailModal';
 import DocPhaseModal from '../../components/DocPhaseModal';
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
 import { buildOutsourceFlowPrintContext } from '../../utils/buildOutsourceFlowPrintContext';
+import { maskPrintContextAmounts } from '../../utils/maskPrintContextAmounts';
+import { AMOUNT_PERMISSION_KEYS, canViewAmount } from '../../utils/canViewAmount';
 import type { PrintRenderContext, PrintTemplate } from '../../types';
 import OutsourceCollabSyncModal, {
   type CollabOutsourceRouteRow,
@@ -141,6 +143,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   const { currentUser, tenantCtx, userId } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
   const canViewMainList = hasOpsPerm(tenantRole, userPermissions, 'production:outsource_list:allow');
+  const showOutsourceAmount = canViewAmount(tenantRole, userPermissions, AMOUNT_PERMISSION_KEYS.OUTSOURCE);
 
   /**
    * Phase 3.E：OutsourcePanel 自取数据。
@@ -1700,17 +1703,20 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
               <OrderCenterDetailPrintBlock
                 printSlot={flowDetailPrintSlot}
                 printTemplates={printTemplates}
-                buildContext={(_template: PrintTemplate): PrintRenderContext => ({
-                  ...buildOutsourceFlowPrintContext({
-                    docRecords: flowDetailRecordsForPrint,
-                    isReceiveDoc: !!flowDetailPrintIsReceive,
-                    orders,
-                    products,
-                    globalNodes,
-                    dictionaries,
-                  }),
-                  tenantName: tenantCtx?.tenantName?.trim() || undefined,
-                })}
+                buildContext={(_template: PrintTemplate): PrintRenderContext => {
+                  const ctx: PrintRenderContext = {
+                    ...buildOutsourceFlowPrintContext({
+                      docRecords: flowDetailRecordsForPrint,
+                      isReceiveDoc: !!flowDetailPrintIsReceive,
+                      orders,
+                      products,
+                      globalNodes,
+                      dictionaries,
+                    }),
+                    tenantName: tenantCtx?.tenantName?.trim() || undefined,
+                  };
+                  return flowDetailPrintIsReceive && !showOutsourceAmount ? maskPrintContextAmounts(ctx) : ctx;
+                }}
                 pickerSubtitle={`单号 ${flowDetailKey}`}
                 onAddPrintTemplate={() => {
                   setOutsourceConfigDefaultTab('print');

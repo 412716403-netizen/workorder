@@ -106,6 +106,8 @@ interface SalesBillFormSectionProps {
   /** 与进销存/生产快照合并批次选项（销售按批出库） */
   recordsList?: PsiRecord[];
   prodRecords?: unknown[];
+  /** 是否展示单价/金额（无权限时隐藏 UI，state 仍保留） */
+  showAmount?: boolean;
 }
 
 const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
@@ -123,6 +125,7 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
   resolveDefaultSalesPrice,
   recordsList = [],
   prodRecords = [],
+  showAmount = true,
 }) => {
   const confirm = useConfirm();
   const { listAvailableBatches } = useStockSnapshot();
@@ -295,10 +298,12 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
                       />
                     </div>
                   )}
+                  {showAmount && (
                   <div className="w-[5.5rem] sm:w-24 shrink-0 space-y-0.5">
                     <label className={psiOrderBillCompactLineLabelClass}>销售价 (元)</label>
                     <input type="number" min={0} step={0.01} value={line.salesPrice || ''} onChange={e => onUpdateItem(line.id, { salesPrice: parseFloat(e.target.value) || 0 })} className={psiOrderBillCompactLineInputClass} placeholder="0" />
                   </div>
+                  )}
                   {hasVariants && (
                     <>
                       <div className="w-20 shrink-0 space-y-0.5">
@@ -307,12 +312,14 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
                           {formatQtyDisplay(lineQty)} {line.productId ? getUnitName(line.productId) : '—'}
                         </div>
                       </div>
+                      {showAmount && (
                       <div className="w-[5.5rem] sm:w-24 shrink-0 space-y-0.5">
                         <label className={psiOrderBillCompactLineLabelClass}>金额 (元)</label>
                         <div className={psiOrderBillCompactLineReadonlyClass}>
                           {lineAmount.toFixed(2)}
                         </div>
                       </div>
+                      )}
                     </>
                   )}
                   {!hasVariants && (
@@ -324,12 +331,14 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
                           <span className="flex shrink-0 items-center text-[9px] font-bold text-slate-400">{line.productId ? getUnitName(line.productId) : '—'}</span>
                         </div>
                       </div>
+                      {showAmount && (
                       <div className="w-[5.5rem] sm:w-24 shrink-0 space-y-0.5">
                         <label className={psiOrderBillCompactLineLabelClass}>金额 (元)</label>
                         <div className={psiOrderBillCompactLineReadonlyClass}>
                           {lineAmount.toFixed(2)}
                         </div>
                       </div>
+                      )}
                     </>
                   )}
                   <button type="button" onClick={() => onRemoveItem(line.id)} className="p-1 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -370,6 +379,7 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
                 <span className={psiOrderBillCompactSummaryUnitClass}>PCS</span>
               </span>
             </div>
+            {showAmount && (
             <div className={`flex items-baseline gap-2 border-l border-white/25 pl-4`}>
               <span className={psiOrderBillCompactSummaryLabelClass}>单据金额</span>
               <span className={psiOrderBillCompactSummaryValueClass}>
@@ -380,6 +390,7 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
                 }, 0).toFixed(2)}
               </span>
             </div>
+            )}
           </div>
         </div>
       </div>

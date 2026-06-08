@@ -5,6 +5,7 @@ import * as api from '../../services/api';
 import QtyMatrixTable from '../../components/variant-matrix/QtyMatrixTable';
 import { collabPayloadItemsToQtyMatrixProps, type CollabPayloadItem } from './collabDocDisplay';
 import { resolvePreferredCollabMatrixOrder } from './collabHelpers';
+import { AMOUNT_PERMISSION_KEYS, useCanViewAmount } from '../../utils/canViewAmount';
 
 interface CollabForwardDetailModalProps {
   open: boolean;
@@ -39,6 +40,7 @@ function sumItemsQty(items: any[] | undefined): number {
 }
 
 const CollabForwardDetailModal: React.FC<CollabForwardDetailModalProps> = ({ open, onClose, siblings, onDone }) => {
+  const showCollabAmount = useCanViewAmount(AMOUNT_PERMISSION_KEYS.COLLABORATION);
   const [rows, setRows] = useState<Row[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const prevOpenRef = useRef(false);
@@ -205,7 +207,7 @@ const CollabForwardDetailModal: React.FC<CollabForwardDetailModalProps> = ({ ope
                   ) : (
                     <p className="text-xs text-slate-400">无规格明细</p>
                   )}
-                  {r.originUnitPrice != null && (
+                  {showCollabAmount && r.originUnitPrice != null && (
                     <p className="mt-3 text-[11px] text-amber-900/90 rounded-lg border border-amber-100 bg-amber-50/90 px-3 py-2">
                       <span className="font-bold">乙方申报单价（确认转发后写入甲方外协收货）：</span>
                       <span className="tabular-nums font-black">{r.originUnitPrice}</span> 元/件

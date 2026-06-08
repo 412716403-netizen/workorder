@@ -1,4 +1,5 @@
 import type { RoleRow } from '../../services/api';
+import { PRICE_AMOUNT_SUB_MODULES } from '../../utils/amountPermissionKeys';
 
 export const ALL_PERMISSIONS = [
   { id: 'development', label: '开发管理' },
@@ -6,6 +7,7 @@ export const ALL_PERMISSIONS = [
   { id: 'process_report', label: '工序报工' },
   { id: 'psi', label: '进销存' },
   { id: 'finance', label: '财务结算' },
+  { id: 'price_amount', label: '单价/金额' },
   { id: 'basic', label: '基础信息' },
   { id: 'collaboration', label: '协作管理' },
   { id: 'settings', label: '系统设置' },
@@ -83,7 +85,22 @@ export const FINANCE_SUB_MODULES: { key: string; label: string; actions: string[
   { key: 'reconciliation', label: '财务对帐', actions: ['allow'], group: '财务对帐' },
 ];
 
-export const ACTION_LABELS: Record<string, string> = { view: '查看', create: '添加', edit: '编辑', delete: '删除' };
+export const COLLABORATION_SUB_MODULES: { key: string; label: string; actions: string[]; group: string }[] = [
+  { key: 'list', label: '列表', actions: ['allow'], group: '列表' },
+];
+
+export {
+  AMOUNT_FINE_GRAINED_PERM_KEYS,
+  PRICE_AMOUNT_SUB_MODULES,
+  type PriceAmountSubModule,
+} from '../../utils/amountPermissionKeys';
+
+export const ACTION_LABELS: Record<string, string> = {
+  view: '查看',
+  create: '添加',
+  edit: '编辑',
+  delete: '删除',
+};
 
 export type Member = {
   id: string; userId: string; username: string; phone?: string;
@@ -122,6 +139,10 @@ export function permSummary(perms: string[]): string {
   const productionCount = PRODUCTION_SUB_MODULES.filter(sm => perms.some(p => p.startsWith(`production:${sm.key}:`))).length;
   const psiCount = PSI_SUB_MODULES.filter(sm => perms.some(p => p.startsWith(`psi:${sm.key}:`))).length;
   const financeCount = FINANCE_SUB_MODULES.filter(sm => perms.some(p => p.startsWith(`finance:${sm.key}:`))).length;
+  const collaborationCount = COLLABORATION_SUB_MODULES.filter(sm =>
+    perms.some(p => p.startsWith(`collaboration:${sm.key}:`)),
+  ).length;
+  const priceAmountCount = PRICE_AMOUNT_SUB_MODULES.filter(sm => perms.includes(sm.permKey)).length;
   const modules = ALL_PERMISSIONS
     .filter(p => perms.includes(p.id))
     .map(p => {
@@ -131,6 +152,8 @@ export function permSummary(perms: string[]): string {
       if (p.id === 'production' && productionCount > 0) return `${p.label}(${productionCount}项)`;
       if (p.id === 'psi' && psiCount > 0) return `${p.label}(${psiCount}项)`;
       if (p.id === 'finance' && financeCount > 0) return `${p.label}(${financeCount}项)`;
+      if (p.id === 'collaboration' && collaborationCount > 0) return `${p.label}(${collaborationCount}项)`;
+      if (p.id === 'price_amount' && priceAmountCount > 0) return `${p.label}(${priceAmountCount}项)`;
       return p.label;
     });
   if (!perms.includes('settings') && settingsCount > 0) modules.push(`系统设置(${settingsCount}项)`);
@@ -139,5 +162,7 @@ export function permSummary(perms: string[]): string {
   if (!perms.includes('production') && productionCount > 0) modules.push(`生产管理(${productionCount}项)`);
   if (!perms.includes('psi') && psiCount > 0) modules.push(`进销存(${psiCount}项)`);
   if (!perms.includes('finance') && financeCount > 0) modules.push(`财务结算(${financeCount}项)`);
+  if (!perms.includes('collaboration') && collaborationCount > 0) modules.push(`协作管理(${collaborationCount}项)`);
+  if (!perms.includes('price_amount') && priceAmountCount > 0) modules.push(`单价/金额(${priceAmountCount}项)`);
   return modules.length > 0 ? modules.join('、') : '无权限';
 }

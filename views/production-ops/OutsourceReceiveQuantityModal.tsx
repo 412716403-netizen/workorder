@@ -22,6 +22,7 @@ import { calcUsageByWeight } from '../../utils/bomMaterialUsageByWeight';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 import { useOutsourceReceiveScan, type ReceiveScanRow } from '../../hooks/useOutsourceReceiveScan';
+import { AMOUNT_PERMISSION_KEYS, useCanViewAmount } from '../../utils/canViewAmount';
 import {
   sectionTitleClass,
   psiOrderBillFormCardClass,
@@ -143,6 +144,7 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
   onClose,
   embedded = false,
 }) => {
+  const showAmount = useCanViewAmount(AMOUNT_PERMISSION_KEYS.OUTSOURCE);
   const productsById = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
 
   const visibleRows = useMemo(
@@ -556,6 +558,8 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                           {rowTotalPb.toLocaleString()} {unitPb}
                         </div>
                       </div>
+                      {showAmount && (
+                      <>
                       <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
                         <label className={psiOrderBillCompactLineLabelClass}>加工单价 (元)</label>
                         <input
@@ -572,6 +576,8 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                         <label className={psiOrderBillCompactLineLabelClass}>金额 (元)</label>
                         <div className={psiOrderBillCompactLineReadonlyClass}>{rowAmountPb.toFixed(2)}</div>
                       </div>
+                      </>
+                      )}
                     </div>
                   </div>
                   <div className="space-y-3 border-t border-slate-100 pt-2">
@@ -693,6 +699,8 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                           {rowTotalQty.toLocaleString()} {unitOrd}
                         </div>
                       </div>
+                      {showAmount && (
+                      <>
                       <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
                         <label className={psiOrderBillCompactLineLabelClass}>加工单价 (元)</label>
                         <input
@@ -709,6 +717,8 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                         <label className={psiOrderBillCompactLineLabelClass}>金额 (元)</label>
                         <div className={psiOrderBillCompactLineReadonlyClass}>{rowAmount.toFixed(2)}</div>
                       </div>
+                      </>
+                      )}
                     </div>
                   </div>
                   <div className="space-y-3 border-t border-slate-100 pt-2">
@@ -814,6 +824,8 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                         <span className="w-8 shrink-0 text-right text-[9px] font-bold text-slate-400">{unitSimple}</span>
                       </div>
                     </div>
+                    {showAmount && (
+                    <>
                     <div className="w-[5.5rem] shrink-0 space-y-0.5 sm:w-24">
                       <label className={psiOrderBillCompactLineLabelClass}>加工单价 (元)</label>
                       <input
@@ -832,6 +844,8 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                         {((receiveFormQuantities[baseKey] ?? 0) * (receiveFormUnitPrices[baseKey] ?? 0)).toFixed(2)}
                       </div>
                     </div>
+                    </>
+                    )}
                   </div>
                 </div>
                 {renderWeightFooter()}
@@ -847,10 +861,12 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                       <span className={psiOrderBillCompactSummaryUnitClass}>{receiveSummaryTotals.summaryUnit}</span>
                     </span>
                   </div>
+                  {showAmount && (
                   <div className="flex items-baseline gap-2 border-l border-white/25 pl-0 sm:pl-4">
                     <span className={psiOrderBillCompactSummaryLabelClass}>加工费合计</span>
                     <span className={psiOrderBillCompactSummaryValueClass}>¥{receiveSummaryTotals.totalAmt.toFixed(2)}</span>
                   </div>
+                  )}
                 </div>
               </div>
             </div>

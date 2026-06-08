@@ -11,8 +11,13 @@ import {
   PRODUCTION_SUB_MODULES,
   PSI_SUB_MODULES,
   FINANCE_SUB_MODULES,
+  COLLABORATION_SUB_MODULES,
   ACTION_LABELS,
 } from './constants';
+import {
+  AMOUNT_FINE_GRAINED_PERM_KEYS,
+  PRICE_AMOUNT_SUB_MODULES,
+} from '../../utils/amountPermissionKeys';
 
 interface RoleEditModalProps {
   editingRole: RoleRow | null;
@@ -41,6 +46,12 @@ function computeInitialPerms(role: RoleRow | null): string[] {
   if (!perms.includes('finance') && perms.some(p => p.startsWith('finance:'))) {
     perms.push('finance');
   }
+  if (!perms.includes('collaboration') && perms.some(p => p.startsWith('collaboration:'))) {
+    perms.push('collaboration');
+  }
+  if (!perms.includes('price_amount') && AMOUNT_FINE_GRAINED_PERM_KEYS.some(k => perms.includes(k))) {
+    perms.push('price_amount');
+  }
   return perms;
 }
 
@@ -55,6 +66,8 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
   const [productionExpanded, setProductionExpanded] = useState(false);
   const [psiExpanded, setPsiExpanded] = useState(false);
   const [financeExpanded, setFinanceExpanded] = useState(false);
+  const [collaborationExpanded, setCollaborationExpanded] = useState(false);
+  const [priceAmountExpanded, setPriceAmountExpanded] = useState(false);
 
   const settingsModuleChecked = rolePerms.includes('settings');
   const developmentModuleChecked = rolePerms.includes('development');
@@ -62,6 +75,8 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
   const productionModuleChecked = rolePerms.includes('production');
   const psiModuleChecked = rolePerms.includes('psi');
   const financeModuleChecked = rolePerms.includes('finance');
+  const collaborationModuleChecked = rolePerms.includes('collaboration');
+  const priceAmountModuleChecked = rolePerms.includes('price_amount');
 
   async function handleSaveRole() {
     if (!roleName.trim()) { toast.error('请输入角色名称'); return; }
@@ -84,6 +99,8 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
     if (permsToSave.some(p => p.startsWith('finance:'))) {
       permsToSave = permsToSave.filter(p => p !== 'finance');
     }
+    // 协作：保留裸模块键 `collaboration` 作为侧栏入口开关；细粒度 list 另存
+    // 单价/金额：保留裸模块键 `price_amount`；各业务 amount 键另存
     try {
       if (editingRole) {
         await api.roles.update(editingRole.id, { name: roleName.trim(), description: roleDesc.trim() || undefined, permissions: permsToSave });
@@ -373,6 +390,92 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
     });
   }
 
+  function toggleCollaborationPerm(perm: string) {
+    setRolePerms(prev => {
+      const parts = perm.split(':');
+      const mod = `${parts[0]}:${parts[1]}`;
+      const action = parts[2];
+      if (prev.includes(perm)) {
+        if (action === 'view') {
+          return prev.filter(p => !p.startsWith(`${mod}:`));
+        }
+        return prev.filter(p => p !== perm);
+      }
+      return [...prev, perm];
+    });
+  }
+
+  function toggleCollaborationAll() {
+    const allPerms = COLLABORATION_SUB_MODULES.flatMap(sm =>
+      sm.actions.map(a => `collaboration:${sm.key}:${a}`),
+    );
+    const hasAll = allPerms.every(p => rolePerms.includes(p));
+    setRolePerms(prev =>
+      hasAll ? prev.filter(p => !p.startsWith('collaboration:')) : [...new Set([...prev.filter(p => !p.startsWith('collaboration:')), ...allPerms])],
+    );
+  }
+
+  function toggleCollaborationSubModuleAll(smKey: string) {
+    const sm = COLLABORATION_SUB_MODULES.find(s => s.key === smKey);
+    if (!sm) return;
+    const perms = sm.actions.map(a => `collaboration:${smKey}:${a}`);
+    const hasAll = perms.every(p => rolePerms.includes(p));
+    setRolePerms(prev =>
+      hasAll ? prev.filter(p => !p.startsWith(`collaboration:${smKey}:`)) : [...prev.filter(p => !p.startsWith(`collaboration:${smKey}:`)), ...perms],
+    );
+  }
+
+  function togglePriceAmountPerm(permKey: string) {
+    setRolePerms(prev => {
+      if (prev.includes(permKey)) {
+        return prev.filter(p => p !== permKey);
+      }
+      const next = [...prev, permKey];
+      const sm = PRICE_AMOUNT_SUB_MODULES.find(s => s.permKey === permKey);
+      if (sm?.requiresDocViewOnEnable) {
+        const viewPerm = permKey.replace(':amount', ':view');
+        if (!next.includes(viewPerm)) next.push(viewPerm);
+      }
+      return next;
+    });
+  }
+
+  function togglePriceAmountAll() {
+    const allKeys = PRICE_AMOUNT_SUB_MODULES.map(sm => sm.permKey);
+    const hasAll = allKeys.every(k => rolePerms.includes(k));
+    setRolePerms(prev => {
+      if (hasAll) {
+        return prev.filter(p => !AMOUNT_FINE_GRAINED_PERM_KEYS.includes(p));
+      }
+      const next = new Set(prev);
+      for (const sm of PRICE_AMOUNT_SUB_MODULES) {
+        next.add(sm.permKey);
+        if (sm.requiresDocViewOnEnable) {
+          next.add(sm.permKey.replace(':amount', ':view'));
+        }
+      }
+      return [...next];
+    });
+  }
+
+  function togglePriceAmountGroupAll(group: string) {
+    const items = PRICE_AMOUNT_SUB_MODULES.filter(sm => sm.group === group);
+    const keys = items.map(sm => sm.permKey);
+    const hasAll = keys.every(k => rolePerms.includes(k));
+    setRolePerms(prev => {
+      const without = prev.filter(p => !keys.includes(p));
+      if (hasAll) return without;
+      const next = new Set(without);
+      for (const sm of items) {
+        next.add(sm.permKey);
+        if (sm.requiresDocViewOnEnable) {
+          next.add(sm.permKey.replace(':amount', ':view'));
+        }
+      }
+      return [...next];
+    });
+  }
+
   function toggleModulePerm(modId: string) {
     setRolePerms(prev => {
       if (prev.includes(modId)) {
@@ -390,6 +493,12 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
         }
         if (modId === 'finance') {
           return prev.filter(p => p !== modId && !p.startsWith('finance:'));
+        }
+        if (modId === 'collaboration') {
+          return prev.filter(p => p !== modId && !p.startsWith('collaboration:'));
+        }
+        if (modId === 'price_amount') {
+          return prev.filter(p => p !== modId && !AMOUNT_FINE_GRAINED_PERM_KEYS.includes(p));
         }
         return prev.filter(p => p !== modId);
       }
@@ -766,7 +875,7 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
                           </label>
                         </th>
                         {['view', 'create', 'edit', 'delete'].map(a => (
-                          <th key={a} className="text-center px-2 py-2 font-medium text-slate-600">{ACTION_LABELS[a]}</th>
+                          <th key={a} className="text-center px-2 py-2 font-medium text-slate-600">{ACTION_LABELS[a] ?? a}</th>
                         ))}
                       </tr>
                     </thead>
@@ -981,6 +1090,182 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
                         }
                         return rows;
                       })()}
+                    </tbody>
+                  </table>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* 单价/金额细粒度权限 */}
+          {priceAmountModuleChecked && (
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setPriceAmountExpanded(v => !v)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+              >
+                <span className="text-sm font-bold text-slate-700">单价/金额 - 细粒度权限</span>
+                <div className="flex items-center gap-2">
+                  {!priceAmountExpanded && AMOUNT_FINE_GRAINED_PERM_KEYS.some(k => rolePerms.includes(k)) && (
+                    <span className="text-xs text-indigo-500 font-medium">
+                      已配置 {PRICE_AMOUNT_SUB_MODULES.filter(sm => rolePerms.includes(sm.permKey)).length} 项
+                    </span>
+                  )}
+                  {priceAmountExpanded
+                    ? <ChevronDown className="w-4 h-4 text-slate-400" />
+                    : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                </div>
+              </button>
+              {priceAmountExpanded && (
+                <>
+                  <p className="px-4 py-2 text-xs text-slate-400 bg-slate-50/50 border-t border-slate-100">
+                    勾选模块且未配置细粒度时，各业务域单价/金额均可见；配置后仅勾选的业务可见（PSI 单据金额会自动补 view 权限）
+                  </p>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 border-t border-slate-100">
+                        <th className="text-left px-4 py-2 font-medium text-slate-600 w-[40%]">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={PRICE_AMOUNT_SUB_MODULES.every(sm => rolePerms.includes(sm.permKey))}
+                              onChange={togglePriceAmountAll}
+                              className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
+                            />
+                            全选
+                          </label>
+                        </th>
+                        <th className="text-center px-2 py-2 font-medium text-slate-600">允许查看</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(() => {
+                        const groups = [...new Set(PRICE_AMOUNT_SUB_MODULES.map(sm => sm.group))];
+                        const rows: React.ReactNode[] = [];
+                        for (const group of groups) {
+                          const items = PRICE_AMOUNT_SUB_MODULES.filter(sm => sm.group === group);
+                          rows.push(
+                            <tr key={`pa-g-${group}`} className="bg-indigo-50/40">
+                              <td colSpan={2} className="px-4 py-1.5">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={items.every(sm => rolePerms.includes(sm.permKey))}
+                                    onChange={() => togglePriceAmountGroupAll(group)}
+                                    className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
+                                  />
+                                  <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{group}</span>
+                                </label>
+                              </td>
+                            </tr>,
+                          );
+                          for (const sm of items) {
+                            rows.push(
+                              <tr key={sm.key} className="hover:bg-slate-50/50">
+                                <td className="px-4 pl-8 py-2.5 text-slate-700 font-medium">
+                                  <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={rolePerms.includes(sm.permKey)}
+                                      onChange={() => togglePriceAmountPerm(sm.permKey)}
+                                      className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
+                                    />
+                                    {sm.label}
+                                  </label>
+                                </td>
+                                <td className="text-center px-2 py-2.5">
+                                  <input
+                                    type="checkbox"
+                                    checked={rolePerms.includes(sm.permKey)}
+                                    onChange={() => togglePriceAmountPerm(sm.permKey)}
+                                    className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
+                                  />
+                                </td>
+                              </tr>,
+                            );
+                          }
+                        }
+                        return rows;
+                      })()}
+                    </tbody>
+                  </table>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* 协作管理细粒度权限 */}
+          {collaborationModuleChecked && (
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setCollaborationExpanded(v => !v)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+              >
+                <span className="text-sm font-bold text-slate-700">协作管理 - 细粒度权限</span>
+                <div className="flex items-center gap-2">
+                  {!collaborationExpanded && rolePerms.some(p => p.startsWith('collaboration:')) && (
+                    <span className="text-xs text-indigo-500 font-medium">
+                      已配置 {COLLABORATION_SUB_MODULES.filter(sm => rolePerms.some(p => p.startsWith(`collaboration:${sm.key}:`))).length} 项
+                    </span>
+                  )}
+                  {collaborationExpanded
+                    ? <ChevronDown className="w-4 h-4 text-slate-400" />
+                    : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                </div>
+              </button>
+              {collaborationExpanded && (
+                <>
+                  <p className="px-4 py-2 text-xs text-slate-400 bg-slate-50/50 border-t border-slate-100">
+                    须先勾选上方「协作管理」模块；不配置细粒度时拥有列表全部权限；单价/金额请在「单价/金额」模块中配置
+                  </p>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 border-t border-slate-100">
+                        <th className="text-left px-4 py-2 font-medium text-slate-600 w-[40%]">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={COLLABORATION_SUB_MODULES.flatMap(sm => sm.actions.map(a => `collaboration:${sm.key}:${a}`)).every(p => rolePerms.includes(p))}
+                              onChange={toggleCollaborationAll}
+                              className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
+                            />
+                            全选
+                          </label>
+                        </th>
+                        <th className="text-center px-2 py-2 font-medium text-slate-600">允许</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {COLLABORATION_SUB_MODULES.map(sm => (
+                        <tr key={sm.key} className="hover:bg-slate-50/50">
+                          <td className="px-4 py-2.5 text-slate-700 font-medium">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={sm.actions.every(a => rolePerms.includes(`collaboration:${sm.key}:${a}`))}
+                                onChange={() => toggleCollaborationSubModuleAll(sm.key)}
+                                className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
+                              />
+                              {sm.label}
+                            </label>
+                          </td>
+                          {sm.actions.map(action => {
+                            const perm = `collaboration:${sm.key}:${action}`;
+                            return (
+                              <td key={action} className="text-center px-2 py-2.5">
+                                <input
+                                  type="checkbox"
+                                  checked={rolePerms.includes(perm)}
+                                  onChange={() => toggleCollaborationPerm(perm)}
+                                  className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
+                                />
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </>
