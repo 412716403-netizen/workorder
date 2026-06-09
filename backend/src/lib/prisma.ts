@@ -14,6 +14,7 @@ const TENANT_MODELS = new Set([
   'ProductionOpRecord', 'PsiRecord', 'FinanceRecord',
   'Role', 'ItemCode', 'PlanVirtualBatch',
   'DevStyle', 'DevBom', 'DevStageTemplate',
+  'KnowledgeFolder', 'KnowledgeDocument', 'KnowledgeAsset',
 ]);
 
 /**

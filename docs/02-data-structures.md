@@ -22,6 +22,7 @@
 | 协作 | TenantCollaboration, InterTenantSubcontractTransfer, CollaborationProductMap, OutsourceRoute |
 | 码管理 | ItemCode, PlanVirtualBatch |
 | 款式开发 | DevStyle, DevStyleVariant, DevBom, DevBomItem, DevSample, DevStage, DevStageField, DevAttachment, DevStageTemplate, DevLog |
+| 资料库 | KnowledgeFolder, KnowledgeDocument, KnowledgeAsset |
 
 ### 1.2 客户端会话 / 租户缓存
 
@@ -100,6 +101,16 @@
 | `platform_announcements` | — | 行级表 | 平台 admin 发布的全租户公告（最多 50 条，发布人展示「系统」） |
 
 类型定义见 `shared/workbench.ts`、`shared/dashboardMessages.ts`；到期提醒逻辑见 `shared/tenantExpiryReminder.ts`；API 见 `GET/PUT /api/dashboard/workbench`、`GET/POST/DELETE /api/dashboard/messages`（仅平台 admin）、`GET /api/dashboard/notifications`。
+
+### 1.7 资料库
+
+| 表 | 租户 | 说明 |
+|------|------|------|
+| `knowledge_folders` | `tenant_id` | 文件夹树，`parent_id` 自关联 |
+| `knowledge_documents` | `tenant_id` | 文档标题 + Tiptap HTML 正文 `content` |
+| `knowledge_assets` | `tenant_id` | 图片二进制 `data`（BYTEA），文档正文引用 `/api/knowledge-base/assets/:id` |
+
+DTO 见 `shared/types.ts`（`KnowledgeFolderDto`、`KnowledgeDocumentDto`）；API 见 `/api/knowledge-base/*`。
 
 ---
 
@@ -337,10 +348,12 @@ interface ProductMilestoneProgress {
 
 ## 10. 自定义扩展字段类型（与计划单一致）
 
-产品分类、合作单位分类、财务收付款类型、工序报工模板等处的 `ReportFieldDefinition.type` 与计划单自定义单据字段一致，仅 **`text` | `date` | `select` | `file`**（见 `shared/types.ts` 中的 `CustomDocFieldType`）。
+`ReportFieldDefinition.type` 的取值见 `shared/types.ts` 中的 `CustomDocFieldType`：**`text` | `date` | `select` | `file` | `knowledge`**。
 
+- **`knowledge`（资料库）**：填值时从资料库中选择一篇文档，存值为 JSON 字符串 `{"id":"<docId>","title":"<标题快照>"}`（解析见 `utils/knowledgeFieldValue.ts`）。`title` 仅作离线/列表展示快照，查看时以 `id` 实时读取资料库文档；选择/预览复用 `components/knowledge/KnowledgeDocPickerModal.tsx`。
+- 各处可用类型由组件 `allowedTypes` 控制：**产品分类扩展字段**（`CategoriesTab`）开放全部含 `knowledge`；**工序节点库报工页展示内容**（`NodesTab` 的 `reportDisplayTemplate`）开放 `text`/`file`/`knowledge`；合作单位分类、财务分类、计划单单据等沿用默认 `text`/`date`/`select`/`file`，不含 `knowledge`。
 - 历史 JSON 中若仍存在 `number`，加载与归一化时视为 **`text`**；若存在 **`boolean`**，定义会规范为 **`select`**，缺省选项为 `['是','否']`（已有 `options` 则保留）。
-- 工序 **`reportDisplayTemplate`**（报工页只读展示）仅保留 **文本与附件** 语义：归一化时非 `text`/`file` 的项会降级为 **`text`**，与报工弹窗只读区展示逻辑一致。
+- 工序 **`reportDisplayTemplate`**（报工页只读展示）保留 **文本 / 附件 / 资料库** 语义：归一化时非 `text`/`file`/`knowledge` 的项会降级为 **`text`**，与报工弹窗只读区展示逻辑一致。
 - 前端在 `appDataLoadCore` / 设置保存链路对 `customFields`、`reportTemplate`、`reportDisplayTemplate` 做归一化；设置 API 写入时对上述 JSON 数组做 Zod 校验，拒绝再写入 `number`/`boolean` 类型字面量。
 
 ---

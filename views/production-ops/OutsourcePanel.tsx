@@ -16,6 +16,7 @@ import {
   Truck,
   Sliders,
   Search,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
@@ -105,6 +106,7 @@ import type { PartnerFlowDetailSeed } from '../../utils/outsourcePartnerFlowDeta
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { toLocalDateYmd } from '../../utils/localDateTime';
+import PlanProductDetail from '../plan-order-list/PlanProductDetail';
 
 const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planFormSettings?: PlanFormSettings }> = ({
   productionLinkMode,
@@ -282,6 +284,9 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   const [dispatchDeliveryDate, setDispatchDeliveryDate] = useState('');
   const [receiveCustomValues, setReceiveCustomValues] = useState<Record<string, unknown>>({});
   const [receiveLineCustomValues, setReceiveLineCustomValues] = useState<Record<string, unknown>>({});
+  const [viewProductId, setViewProductId] = useState<string | null>(null);
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
+  const [filePreviewType, setFilePreviewType] = useState<'image' | 'pdf'>('image');
 
   const OUTS_PAGE_SIZE = 10;
   const [outsPage, setOutsPage] = useState(1);
@@ -1241,7 +1246,16 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
                     <div className="min-w-0">
                       <div className="flex items-center gap-3 mb-1 flex-wrap">
                         {productionLinkMode !== 'product' && orderNumber != null && <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-widest">{orderNumber}</span>}
-                        <span className="text-base font-bold text-slate-800">{productName}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (productId) setViewProductId(productId);
+                          }}
+                          className="text-left text-base font-bold text-slate-800 hover:text-indigo-600 hover:underline transition-colors"
+                        >
+                          {productName}
+                        </button>
                         {product?.sku && <span className="text-[10px] font-bold text-slate-500">{product.sku}</span>}
                       </div>
                       <div className="mb-1 flex flex-wrap items-center gap-1">
@@ -1839,6 +1853,38 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           plans={plans}
           orders={orders}
           products={products}
+        />
+      )}
+
+      {filePreviewUrl && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-8 bg-slate-900/80 backdrop-blur-sm" onClick={() => setFilePreviewUrl(null)}>
+          <button type="button" onClick={() => setFilePreviewUrl(null)} className="absolute top-6 right-6 z-10 p-2 rounded-full bg-white/20 hover:bg-white/40 text-white transition-all">
+            <X className="w-8 h-8" />
+          </button>
+          <div className="relative z-10 w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            {filePreviewType === 'image' ? (
+              <img src={filePreviewUrl} alt="预览" className="w-full h-full max-h-[85vh] object-contain" />
+            ) : (
+              <iframe src={filePreviewUrl} title="PDF 预览" className="w-full h-[85vh] border-0" />
+            )}
+          </div>
+        </div>
+      )}
+
+      {viewProductId && dictionaries && (
+        <PlanProductDetail
+          viewProductId={viewProductId}
+          products={products}
+          categories={categories}
+          dictionaries={dictionaries}
+          partners={partners}
+          globalNodes={globalNodes}
+          boms={boms}
+          onClose={() => setViewProductId(null)}
+          onFilePreview={(url, type) => {
+            setFilePreviewUrl(url);
+            setFilePreviewType(type);
+          }}
         />
       )}
     </div>

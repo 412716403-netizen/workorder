@@ -18,14 +18,14 @@ const reportFieldDefRowZ = z
   .object({
     id: z.string(),
     label: z.string(),
-    type: z.enum(['text', 'date', 'select', 'file']),
+    type: z.enum(['text', 'date', 'select', 'file', 'knowledge']),
   })
   .passthrough();
 
 function parseJsonReportFieldDefinitions(path: string, raw: unknown): unknown {
   const parsed = z.array(reportFieldDefRowZ).safeParse(raw);
   if (!parsed.success) {
-    throw new Error(`${path} 无效：自定义项 type 仅允许 text、date、select、file（${parsed.error.message}）`);
+    throw new Error(`${path} 无效：自定义项 type 仅允许 text、date、select、file、knowledge（${parsed.error.message}）`);
   }
   return parsed.data;
 }

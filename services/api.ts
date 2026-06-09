@@ -59,3 +59,6 @@ export { collaboration, itemCodesApi, planVirtualBatchesApi } from './api/collab
 
 export { dashboard } from './api/dashboard';
 export type { WorkbenchResponse, DashboardNotification, DashboardStats } from './api/dashboard';
+
+export { knowledgeBase } from './api/knowledgeBase';
+export type { KnowledgeTreeResponse } from './api/knowledgeBase';

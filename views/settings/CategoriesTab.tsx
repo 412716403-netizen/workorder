@@ -14,12 +14,13 @@ import {
   Trash2,
   Building2,
 } from 'lucide-react';
-import { ProductCategory } from '../../types';
+import { ProductCategory, type CustomDocFieldType } from '../../types';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { ExtFieldLabelInput } from './shared';
 import { ReportCustomFieldsConfigTable } from '../../components/form-config/CustomFieldsEditorTable';
 import { formStandardControlClass } from '../../styles/uiDensity';
+import { useFeaturePlugins } from '../../hooks/useFeaturePlugins';
 
 interface CategoriesTabProps {
   categories: ProductCategory[];
@@ -38,6 +39,10 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [categoryNameDraft, setCategoryNameDraft] = useState('');
   const addLock = useAsyncSubmitLock();
+  const { isPluginEnabled } = useFeaturePlugins();
+  const customFieldAllowedTypes: CustomDocFieldType[] = isPluginEnabled('knowledge_base')
+    ? ['text', 'date', 'select', 'file', 'knowledge']
+    : ['text', 'date', 'select', 'file'];
 
   const addCategory = async () => {
     if (!newCatName.trim()) return;
@@ -249,6 +254,7 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
                   <div className="space-y-4 pt-4 border-t border-slate-100">
                     <ReportCustomFieldsConfigTable
                       showRequiredColumn
+                      allowedTypes={customFieldAllowedTypes}
                       fields={cat.customFields}
                       onChange={next => updateCategoryConfig(cat.id, { customFields: next })}
                       title={

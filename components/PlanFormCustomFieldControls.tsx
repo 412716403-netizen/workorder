@@ -1,7 +1,16 @@
-import React, { useLayoutEffect, useRef } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
+import { BookOpen, X } from 'lucide-react';
 import type { PlanFormFieldConfig } from '../types';
 import { getFileExtFromDataUrl } from '../utils/fileHelpers';
 import { effectivePlanFormFieldType } from '../utils/planFormCustomField';
+import {
+  parseKnowledgeFieldValue,
+  stringifyKnowledgeFieldValue,
+} from '../utils/knowledgeFieldValue';
+import {
+  KnowledgeDocPickerModal,
+  KnowledgeDocPreviewModal,
+} from './knowledge/KnowledgeDocPickerModal';
 import {
   formatLocalDateTimeZh,
   localNowForDatetimeLocal,
@@ -10,6 +19,59 @@ import {
 } from '../utils/localDateTime';
 
 const FILE_ACCEPT = 'image/*,.pdf,.doc,.docx,.xls,.xlsx';
+
+/** 「资料库」类型字段的填值控件：选择资料库文档，存储 {id,title}。 */
+export const PlanFormKnowledgeInput: React.FC<{
+  value: unknown;
+  onChange: (next: unknown) => void;
+}> = ({ value, onChange }) => {
+  const ref = parseKnowledgeFieldValue(value);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
+        >
+          <BookOpen className="h-3.5 w-3.5" /> {ref ? '重新选择' : '从资料库选择'}
+        </button>
+        {ref && (
+          <>
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(true)}
+              className="max-w-[180px] truncate text-xs font-bold text-indigo-600 hover:underline"
+              title={ref.title || '查看'}
+            >
+              {ref.title || '查看文件'}
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange('')}
+              className="inline-flex items-center gap-0.5 text-xs font-bold text-rose-500 hover:text-rose-700"
+            >
+              <X className="h-3 w-3" /> 移除
+            </button>
+          </>
+        )}
+      </div>
+      <KnowledgeDocPickerModal
+        isOpen={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        selectedId={ref?.id ?? null}
+        onSelect={r => onChange(stringifyKnowledgeFieldValue(r))}
+      />
+      <KnowledgeDocPreviewModal
+        isOpen={previewOpen}
+        docId={ref?.id ?? null}
+        onClose={() => setPreviewOpen(false)}
+      />
+    </div>
+  );
+};
 
 const PlanFormDateCustomInput: React.FC<{
   cf: PlanFormFieldConfig;
@@ -77,6 +139,9 @@ export const PlanFormCustomFieldInput: React.FC<PlanFormCustomFieldInputProps> =
         ))}
       </select>
     );
+  }
+  if (t === 'knowledge') {
+    return <PlanFormKnowledgeInput value={value} onChange={onChange} />;
   }
   if (t === 'file') {
     const dataStr = typeof value === 'string' ? value : '';
@@ -147,6 +212,27 @@ export const PlanFormCustomFieldInput: React.FC<PlanFormCustomFieldInputProps> =
   );
 };
 
+/** 「资料库」类型只读展示：显示标题，点击在弹窗内预览文档 */
+const PlanFormKnowledgeReadonly: React.FC<{ value: unknown; className: string }> = ({ value, className }) => {
+  const ref = parseKnowledgeFieldValue(value);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  if (!ref) return <span className="text-sm font-bold text-slate-400">—</span>;
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setPreviewOpen(true)}
+        className={`inline-flex items-center gap-1 ${className} text-indigo-600 hover:underline`}
+        title={ref.title || '查看资料库文件'}
+      >
+        <BookOpen className="h-3.5 w-3.5 shrink-0" />
+        <span className="max-w-[220px] truncate">{ref.title || '资料库文件'}</span>
+      </button>
+      <KnowledgeDocPreviewModal isOpen={previewOpen} docId={ref.id} onClose={() => setPreviewOpen(false)} />
+    </>
+  );
+};
+
 export interface PlanFormCustomFieldReadonlyProps {
   cf: PlanFormFieldConfig;
   value: unknown;
@@ -167,6 +253,10 @@ export const PlanFormCustomFieldReadonly: React.FC<PlanFormCustomFieldReadonlyPr
   const metaTextCls = 'text-[10px] font-bold text-slate-400 normal-case';
   const defaultValueCls = 'text-sm font-bold text-slate-800';
   const valueCls = inlineMeta ? metaTextCls : defaultValueCls;
+
+  if (t === 'knowledge') {
+    return <PlanFormKnowledgeReadonly value={value} className={valueCls} />;
+  }
 
   if (str === '') {
     return <span className={inlineMeta ? metaTextCls : 'text-sm font-bold text-slate-400'}>—</span>;

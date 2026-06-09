@@ -64,6 +64,10 @@ export {
   type DevBomItemDto,
   type DevStageTemplateDto,
   type DevStageTemplateFieldDto,
+  type KnowledgeFolderDto,
+  type KnowledgeDocumentDto,
+  type KnowledgeTreeResponse,
+  type KnowledgeAssetUploadResponse,
 } from './shared/types';
 
 export {

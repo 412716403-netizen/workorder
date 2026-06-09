@@ -4,10 +4,13 @@
  * 仅负责渲染 routeReportDisplayValues 中已配置的图片/PDF/文本。
  * 文件预览回调由父组件 (主壳) 通过 hook 提供。
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { BookOpen, FileText } from 'lucide-react';
 import type { Milestone, Product, GlobalNodeTemplate } from '../../../types';
 import { parseRouteReportFileUrls } from '../../../utils/routeReportFileUrls';
+import { effectiveCustomDocFieldType } from '../../../utils/reportCustomDocField';
+import { parseKnowledgeFieldValue } from '../../../utils/knowledgeFieldValue';
+import { KnowledgeDocPreviewModal } from '../../../components/knowledge/KnowledgeDocPickerModal';
 
 interface Props {
   milestone: Milestone;
@@ -17,6 +20,7 @@ interface Props {
 }
 
 const ReportRouteDisplaySection: React.FC<Props> = ({ milestone, product, globalNodes, onOpenFilePreview }) => {
+  const [previewDocId, setPreviewDocId] = useState<string | null>(null);
   const tid = milestone.templateId;
   const nodeDef = globalNodes.find(n => n.id === tid);
   const fromMilestone = milestone.reportDisplayTemplate;
@@ -26,14 +30,20 @@ const ReportRouteDisplaySection: React.FC<Props> = ({ milestone, product, global
 
   type VisibleDisplayRow =
     | { field: (typeof displayTpl)[number]; kind: 'file'; urls: string[] }
+    | { field: (typeof displayTpl)[number]; kind: 'knowledge'; docId: string; title: string }
     | { field: (typeof displayTpl)[number]; kind: 'text'; text: string };
   const visibleRows: VisibleDisplayRow[] = [];
   for (const field of displayTpl) {
     const raw = displayVals[field.id] ?? '';
-    if (field.type === 'file') {
+    const t = effectiveCustomDocFieldType(field);
+    if (t === 'file') {
       const urls = parseRouteReportFileUrls(raw);
       if (urls.length === 0) continue;
       visibleRows.push({ field, kind: 'file', urls });
+    } else if (t === 'knowledge') {
+      const ref = parseKnowledgeFieldValue(raw);
+      if (!ref) continue;
+      visibleRows.push({ field, kind: 'knowledge', docId: ref.id, title: ref.title || '资料库文件' });
     } else if (String(raw).trim()) {
       visibleRows.push({ field, kind: 'text', text: String(raw) });
     }
@@ -49,7 +59,16 @@ const ReportRouteDisplaySection: React.FC<Props> = ({ milestone, product, global
       {visibleRows.map(row => (
         <div key={row.field.id} className="rounded-xl border border-slate-200 bg-white p-2.5">
           <p className="text-[10px] font-bold text-slate-500 mb-1.5">{row.field.label}</p>
-          {row.kind === 'file' ? (
+          {row.kind === 'knowledge' ? (
+            <button
+              type="button"
+              onClick={() => setPreviewDocId(row.docId)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
+            >
+              <BookOpen className="w-3.5 h-3.5 shrink-0" />
+              <span className="max-w-[220px] truncate">{row.title}</span>
+            </button>
+          ) : row.kind === 'file' ? (
             <div className="flex flex-wrap gap-2">
               {row.urls.map((url, fi) => (
                 <div key={`${row.field.id}-${fi}`} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/80 p-1.5">
@@ -83,6 +102,11 @@ const ReportRouteDisplaySection: React.FC<Props> = ({ milestone, product, global
           )}
         </div>
       ))}
+      <KnowledgeDocPreviewModal
+        isOpen={previewDocId != null}
+        docId={previewDocId}
+        onClose={() => setPreviewDocId(null)}
+      />
     </div>
   );
 };

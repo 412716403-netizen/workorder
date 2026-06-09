@@ -1159,3 +1159,54 @@ model DevLog {
   @@index([sampleId])
   @@map("dev_logs")
 }
+
+// ============================================================
+// 资料库（知识库插件）
+// ============================================================
+
+model KnowledgeFolder {
+  id        String   @id @db.VarChar(50)
+  tenantId  String   @map("tenant_id") @db.Uuid
+  parentId  String?  @map("parent_id") @db.VarChar(50)
+  name      String   @db.VarChar(200)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  parent    KnowledgeFolder?  @relation("KnowledgeFolderTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  KnowledgeFolder[] @relation("KnowledgeFolderTree")
+  documents KnowledgeDocument[]
+
+  @@index([tenantId])
+  @@index([tenantId, parentId])
+  @@map("knowledge_folders")
+}
+
+model KnowledgeDocument {
+  id        String   @id @db.VarChar(50)
+  tenantId  String   @map("tenant_id") @db.Uuid
+  folderId  String?  @map("folder_id") @db.VarChar(50)
+  title     String   @db.VarChar(200)
+  content   String   @default("") @db.Text
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  folder KnowledgeFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([folderId])
+  @@map("knowledge_documents")
+}
+
+model KnowledgeAsset {
+  id        String   @id @db.VarChar(50)
+  tenantId  String   @map("tenant_id") @db.Uuid
+  mimeType  String   @map("mime_type") @db.VarChar(100)
+  sizeBytes Int      @map("size_bytes")
+  data      Bytes
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  @@index([tenantId])
+  @@map("knowledge_assets")
+}

@@ -396,8 +396,8 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
   };
 
   const shellClass = useCardShell ? productArchiveFormCardClass : 'space-y-4';
-  const visibleCustomFields =
-    activeCategory?.customFields?.filter((f) => f.showInForm !== false) ?? [];
+  // 产品新增/编辑/详情表单始终展示分类的全部扩展字段；showInForm 仅控制计划单/工单中心列表是否展示。
+  const visibleCustomFields = activeCategory?.customFields ?? [];
   const showColorSizeSpecs = productColorSizeEnabled(working, activeCategory);
   const showExtendedSection = visibleCustomFields.length > 0 || showColorSizeSpecs;
   const extendedSectionTitle =

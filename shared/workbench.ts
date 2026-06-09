@@ -45,7 +45,7 @@ export interface WorkbenchConfig {
   pages: WorkbenchPage[];
 }
 
-export type FeaturePluginId = 'collaboration' | 'development';
+export type FeaturePluginId = 'collaboration' | 'development' | 'knowledge_base';
 
 export interface FeaturePluginDefinition {
   id: FeaturePluginId;

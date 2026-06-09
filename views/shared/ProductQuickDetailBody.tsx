@@ -16,8 +16,9 @@ import { parseRouteReportFileUrls } from '../../utils/routeReportFileUrls';
 import {
   effectiveCustomDocFieldType,
   formatReportCustomDataForList,
-  getShowInFormCategoryFields,
 } from '../../utils/reportCustomDocField';
+import { parseKnowledgeFieldValue } from '../../utils/knowledgeFieldValue';
+import { KnowledgeDocPreviewModal } from '../../components/knowledge/KnowledgeDocPickerModal';
 
 type FilePreviewKind = 'image' | 'pdf';
 
@@ -59,6 +60,7 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
   contentClassName = 'p-8 space-y-6',
 }) => {
   const [bomSkuId, setBomSkuId] = useState<string | null>(null);
+  const [previewDocId, setPreviewDocId] = useState<string | null>(null);
 
   useEffect(() => {
     const withItems = boms.filter(b => b.parentProductId === p.id).filter(bomHasConfiguredItems);
@@ -76,7 +78,8 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
   }, [p.id, p.variants, boms]);
 
   const cat = categories.find(c => c.id === p.categoryId);
-  const visibleCustomFields = getShowInFormCategoryFields(cat, { includeFile: true });
+  // 商品详情始终展示分类的全部扩展字段；showInForm 仅控制计划单/工单中心列表是否展示。
+  const visibleCustomFields = cat?.customFields ?? [];
   const unitName = p.unitId ? dictionaries.units?.find(u => u.id === p.unitId)?.name : '件';
   const supplier = p.supplierId ? partners.find(pt => pt.id === p.supplierId) : undefined;
 
@@ -252,6 +255,31 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
                   </div>
                 );
               }
+              if (effectiveCustomDocFieldType(f) === 'knowledge') {
+                const ref = parseKnowledgeFieldValue(val);
+                if (!ref) {
+                  return (
+                    <div key={f.id} className="px-3 py-1.5 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                      <span className="text-[10px] font-bold text-slate-400">{f.label}: </span>
+                      <span className="text-xs font-medium text-slate-400 italic">未填写</span>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={f.id} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 rounded-lg">
+                    <span className="text-[10px] font-bold text-slate-400">{f.label}: </span>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewDocId(ref.id)}
+                      className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:underline"
+                      title={ref.title || '查看资料库文件'}
+                    >
+                      <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                      <span className="max-w-[180px] truncate">{ref.title || '资料库文件'}</span>
+                    </button>
+                  </div>
+                );
+              }
               if (f.type === 'file' && typeof val === 'string' && val.startsWith('data:')) {
                 const isImg = val.startsWith('data:image/');
                 const isPdf = val.startsWith('data:application/pdf');
@@ -329,13 +357,18 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
               const displayVals = p.routeReportDisplayValues?.[node.id] ?? {};
               type DispRow =
                 | { field: ReportFieldDefinition; kind: 'file'; urls: string[] }
+                | { field: ReportFieldDefinition; kind: 'knowledge'; docId: string; title: string }
                 | { field: ReportFieldDefinition; kind: 'text'; text: string };
               const displayRows: DispRow[] = [];
               for (const field of displayTpl) {
                 const raw = displayVals[field.id] ?? '';
-                if (field.type === 'file') {
+                const ft = effectiveCustomDocFieldType(field);
+                if (ft === 'file') {
                   const urls = parseRouteReportFileUrls(raw);
                   if (urls.length > 0) displayRows.push({ field, kind: 'file', urls });
+                } else if (ft === 'knowledge') {
+                  const ref = parseKnowledgeFieldValue(raw);
+                  if (ref) displayRows.push({ field, kind: 'knowledge', docId: ref.id, title: ref.title || '资料库文件' });
                 } else if (String(raw).trim()) {
                   displayRows.push({ field, kind: 'text', text: String(raw) });
                 }
@@ -390,7 +423,16 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
                             className="rounded-lg border border-slate-200/80 bg-white px-2.5 py-2"
                           >
                             <p className="text-[10px] font-bold text-slate-500 mb-1">{row.field.label}</p>
-                            {row.kind === 'file' ? (
+                            {row.kind === 'knowledge' ? (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewDocId(row.docId)}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
+                              >
+                                <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                                <span className="max-w-[220px] truncate">{row.title}</span>
+                              </button>
+                            ) : row.kind === 'file' ? (
                               <div className="flex flex-wrap gap-2">
                                 {row.urls.map((url, fi) => (
                                   <div
@@ -596,6 +638,12 @@ const ProductQuickDetailBody: React.FC<ProductQuickDetailBodyProps> = ({
           ) : null}
         </div>
       ) : null}
+
+      <KnowledgeDocPreviewModal
+        isOpen={previewDocId != null}
+        docId={previewDocId}
+        onClose={() => setPreviewDocId(null)}
+      />
     </div>
   );
 };

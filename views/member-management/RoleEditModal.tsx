@@ -7,6 +7,7 @@ import {
   ALL_PERMISSIONS,
   SETTINGS_SUB_MODULES,
   DEVELOPMENT_SUB_MODULES,
+  KNOWLEDGE_BASE_SUB_MODULES,
   BASIC_SUB_MODULES,
   PRODUCTION_SUB_MODULES,
   PSI_SUB_MODULES,
@@ -33,6 +34,9 @@ function computeInitialPerms(role: RoleRow | null): string[] {
   }
   if (!perms.includes('development') && perms.some(p => p.startsWith('development:'))) {
     perms.push('development');
+  }
+  if (!perms.includes('knowledge_base') && perms.some(p => p.startsWith('knowledge_base:'))) {
+    perms.push('knowledge_base');
   }
   if (!perms.includes('basic') && perms.some(p => p.startsWith('basic:'))) {
     perms.push('basic');
@@ -62,6 +66,7 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
 
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [developmentExpanded, setDevelopmentExpanded] = useState(false);
+  const [knowledgeBaseExpanded, setKnowledgeBaseExpanded] = useState(false);
   const [basicExpanded, setBasicExpanded] = useState(false);
   const [productionExpanded, setProductionExpanded] = useState(false);
   const [psiExpanded, setPsiExpanded] = useState(false);
@@ -71,6 +76,7 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
 
   const settingsModuleChecked = rolePerms.includes('settings');
   const developmentModuleChecked = rolePerms.includes('development');
+  const knowledgeBaseModuleChecked = rolePerms.includes('knowledge_base');
   const basicModuleChecked = rolePerms.includes('basic');
   const productionModuleChecked = rolePerms.includes('production');
   const psiModuleChecked = rolePerms.includes('psi');
@@ -86,6 +92,9 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
     }
     if (permsToSave.some(p => p.startsWith('development:'))) {
       permsToSave = permsToSave.filter(p => p !== 'development');
+    }
+    if (permsToSave.some(p => p.startsWith('knowledge_base:'))) {
+      permsToSave = permsToSave.filter(p => p !== 'knowledge_base');
     }
     if (permsToSave.some(p => p.startsWith('basic:'))) {
       permsToSave = permsToSave.filter(p => p !== 'basic');
@@ -169,6 +178,42 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
     const hasAll = perms.every(p => rolePerms.includes(p));
     setRolePerms(prev =>
       hasAll ? prev.filter(p => !p.startsWith(`development:${smKey}:`)) : [...prev.filter(p => !p.startsWith(`development:${smKey}:`)), ...perms],
+    );
+  }
+
+  function toggleKnowledgeBasePerm(perm: string) {
+    setRolePerms(prev => {
+      const parts = perm.split(':');
+      const mod = `${parts[0]}:${parts[1]}`;
+      const action = parts[2];
+      if (prev.includes(perm)) {
+        if (action === 'view') return prev.filter(p => !p.startsWith(`${mod}:`));
+        return prev.filter(p => p !== perm);
+      }
+      const next = [...prev, perm];
+      if (action !== 'view') {
+        const viewPerm = `${mod}:view`;
+        if (!next.includes(viewPerm)) next.push(viewPerm);
+      }
+      return next;
+    });
+  }
+
+  function toggleKnowledgeBaseAll() {
+    const all = KNOWLEDGE_BASE_SUB_MODULES.flatMap(sm => sm.actions.map(a => `knowledge_base:${sm.key}:${a}`));
+    const hasAll = all.every(p => rolePerms.includes(p));
+    setRolePerms(prev =>
+      hasAll ? prev.filter(p => !p.startsWith('knowledge_base:')) : [...new Set([...prev.filter(p => !p.startsWith('knowledge_base:')), ...all])],
+    );
+  }
+
+  function toggleKnowledgeBaseSubModuleAll(smKey: string) {
+    const sm = KNOWLEDGE_BASE_SUB_MODULES.find(s => s.key === smKey);
+    if (!sm) return;
+    const perms = sm.actions.map(a => `knowledge_base:${smKey}:${a}`);
+    const hasAll = perms.every(p => rolePerms.includes(p));
+    setRolePerms(prev =>
+      hasAll ? prev.filter(p => !p.startsWith(`knowledge_base:${smKey}:`)) : [...prev.filter(p => !p.startsWith(`knowledge_base:${smKey}:`)), ...perms],
     );
   }
 
@@ -497,6 +542,9 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
         if (modId === 'collaboration') {
           return prev.filter(p => p !== modId && !p.startsWith('collaboration:'));
         }
+        if (modId === 'knowledge_base') {
+          return prev.filter(p => p !== modId && !p.startsWith('knowledge_base:'));
+        }
         if (modId === 'price_amount') {
           return prev.filter(p => p !== modId && !AMOUNT_FINE_GRAINED_PERM_KEYS.includes(p));
         }
@@ -605,6 +653,83 @@ function RoleEditModal({ editingRole, onClose, onSaved }: RoleEditModalProps) {
                                   type="checkbox"
                                   checked={rolePerms.includes(perm)}
                                   onChange={() => toggleDevelopmentPerm(perm)}
+                                  className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
+                                />
+                              ) : <span className="text-slate-200">—</span>}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
+          {knowledgeBaseModuleChecked && (
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setKnowledgeBaseExpanded(v => !v)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+              >
+                <span className="text-sm font-bold text-slate-700">资料库 - 细粒度权限</span>
+                <div className="flex items-center gap-2">
+                  {!knowledgeBaseExpanded && rolePerms.some(p => p.startsWith('knowledge_base:')) && (
+                    <span className="text-xs text-indigo-500 font-medium">
+                      已配置 {KNOWLEDGE_BASE_SUB_MODULES.filter(sm => rolePerms.some(p => p.startsWith(`knowledge_base:${sm.key}:`))).length} 项
+                    </span>
+                  )}
+                  {knowledgeBaseExpanded
+                    ? <ChevronDown className="w-4 h-4 text-slate-400" />
+                    : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                </div>
+              </button>
+              {knowledgeBaseExpanded && (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-t border-slate-100">
+                      <th className="text-left px-4 py-2 font-medium text-slate-600 w-[40%]">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={KNOWLEDGE_BASE_SUB_MODULES.flatMap(sm => sm.actions.map(a => `knowledge_base:${sm.key}:${a}`)).every(p => rolePerms.includes(p))}
+                            onChange={toggleKnowledgeBaseAll}
+                            className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
+                          />
+                          全选
+                        </label>
+                      </th>
+                      {['view', 'create', 'edit', 'delete'].map(a => (
+                        <th key={a} className="text-center px-2 py-2 font-medium text-slate-600">{ACTION_LABELS[a]}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {KNOWLEDGE_BASE_SUB_MODULES.map(sm => (
+                      <tr key={sm.key} className="hover:bg-slate-50/50">
+                        <td className="px-4 py-2.5 text-slate-700 font-medium">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={sm.actions.every(a => rolePerms.includes(`knowledge_base:${sm.key}:${a}`))}
+                              onChange={() => toggleKnowledgeBaseSubModuleAll(sm.key)}
+                              className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
+                            />
+                            {sm.label}
+                          </label>
+                        </td>
+                        {['view', 'create', 'edit', 'delete'].map(action => {
+                          const perm = `knowledge_base:${sm.key}:${action}`;
+                          const available = sm.actions.includes(action);
+                          return (
+                            <td key={action} className="text-center px-2 py-2.5">
+                              {available ? (
+                                <input
+                                  type="checkbox"
+                                  checked={rolePerms.includes(perm)}
+                                  onChange={() => toggleKnowledgeBasePerm(perm)}
                                   className="rounded border-gray-300 text-indigo-600 cursor-pointer w-4 h-4"
                                 />
                               ) : <span className="text-slate-200">—</span>}

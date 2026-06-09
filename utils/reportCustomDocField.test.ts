@@ -16,11 +16,12 @@ describe('effectiveCustomDocFieldType', () => {
   it('maps boolean to select', () => {
     expect(effectiveCustomDocFieldType({ type: 'boolean' })).toBe('select');
   });
-  it('passes through four canonical types', () => {
+  it('passes through canonical types', () => {
     expect(effectiveCustomDocFieldType({ type: 'text' })).toBe('text');
     expect(effectiveCustomDocFieldType({ type: 'date' })).toBe('date');
     expect(effectiveCustomDocFieldType({ type: 'select' })).toBe('select');
     expect(effectiveCustomDocFieldType({ type: 'file' })).toBe('file');
+    expect(effectiveCustomDocFieldType({ type: 'knowledge' })).toBe('knowledge');
   });
 });
 
@@ -83,13 +84,20 @@ describe('formatReportCustomDataForList', () => {
     const f: ReportFieldDefinition = { id: '1', label: 'f', type: 'file' };
     expect(formatReportCustomDataForList(f, 'data:image/png;base64,xx')).toBe('[附件]');
   });
+  it('shows knowledge title', () => {
+    const f: ReportFieldDefinition = { id: '1', label: 'k', type: 'knowledge' };
+    expect(formatReportCustomDataForList(f, '{"id":"d1","title":"工艺SOP"}')).toBe('工艺SOP');
+    expect(formatReportCustomDataForList(f, '{"id":"d1","title":""}')).toBe('[资料库文件]');
+    expect(formatReportCustomDataForList(f, '')).toBe('');
+  });
 });
 
 describe('normalizeReportDisplayFieldDefinitions', () => {
-  it('keeps text and file', () => {
+  it('keeps text, file and knowledge', () => {
     const defs: ReportFieldDefinition[] = [
       { id: 'a', label: 't', type: 'text' },
       { id: 'b', label: 'f', type: 'file' },
+      { id: 'c', label: 'k', type: 'knowledge' },
     ];
     expect(normalizeReportDisplayFieldDefinitions(defs)).toEqual(defs);
   });

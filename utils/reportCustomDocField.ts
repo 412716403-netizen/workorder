@@ -7,15 +7,16 @@ import type {
   ProductCategory,
   ReportFieldDefinition,
 } from '../types';
+import { parseKnowledgeFieldValue } from './knowledgeFieldValue';
 
 const DEFAULT_BOOLEAN_OPTIONS = ['是', '否'] as const;
 
-/** 将历史或非法 type 规范为四种自定义单据类型（与计划单字段配置一致） */
+/** 将历史或非法 type 规范为自定义单据类型（与计划单字段配置一致） */
 export function effectiveCustomDocFieldType(field: { type?: string | null }): CustomDocFieldType {
   const t = field.type as string | undefined;
   if (t === 'number') return 'text';
   if (t === 'boolean') return 'select';
-  if (t === 'date' || t === 'select' || t === 'file') return t;
+  if (t === 'date' || t === 'select' || t === 'file' || t === 'knowledge') return t;
   return 'text';
 }
 
@@ -29,7 +30,7 @@ export function normalizeReportFieldDefinition(field: ReportFieldDefinition): Re
   if (raw === 'number') {
     return { ...field, type: 'text', options: undefined };
   }
-  if (raw === 'date' || raw === 'file') {
+  if (raw === 'date' || raw === 'file' || raw === 'knowledge') {
     return { ...field, type: raw, options: undefined };
   }
   if (raw === 'select') {
@@ -66,6 +67,10 @@ export function formatReportCustomDataForList(
     return String(normalizeReportCustomDataValue(f, raw));
   }
   if (eff === 'file' && typeof raw === 'string' && raw.startsWith('data:')) return '[附件]';
+  if (eff === 'knowledge') {
+    const ref = parseKnowledgeFieldValue(raw);
+    return ref ? (ref.title || '[资料库文件]') : '';
+  }
   if (typeof raw === 'boolean') return raw ? '是' : '否';
   return String(raw);
 }
@@ -117,7 +122,7 @@ export function normalizeFinanceCategoriesFromApi(list: FinanceCategory[]): Fina
   return list.map(c => ({ ...c, customFields: normalizeReportFieldDefinitions(c.customFields) }));
 }
 
-/** 报工页只读展示项：历史上仅支持文本/附件；非 text|file 的模板项降级为文本，避免与报工弹窗展示逻辑不一致 */
+/** 报工页只读展示项：支持文本/附件/资料库；其余类型降级为文本，避免与报工弹窗展示逻辑不一致 */
 export function normalizeReportDisplayFieldDefinitions(
   defs: ReportFieldDefinition[] | undefined | null,
 ): ReportFieldDefinition[] {
@@ -125,7 +130,7 @@ export function normalizeReportDisplayFieldDefinitions(
   return defs.map(d => {
     const n = normalizeReportFieldDefinition(d);
     const t = effectiveCustomDocFieldType(n);
-    if (t === 'text' || t === 'file') return n;
+    if (t === 'text' || t === 'file' || t === 'knowledge') return n;
     return {
       ...n,
       type: 'text',

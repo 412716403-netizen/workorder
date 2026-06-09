@@ -54,6 +54,7 @@ import { useAuthOptional } from '../../contexts/AuthContext';
 import { hasSubPermission } from '../../utils/hasSubPermission';
 import BomEditorPortal, { useBomEditorPortalState } from './BomEditorPortal';
 import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
+import { PlanFormKnowledgeInput } from '../../components/PlanFormCustomFieldControls';
 import ProductCategoryInfoFields from '../../components/product/ProductCategoryInfoFields';
 import {
   readLastUnitByCategoryMap,
@@ -1258,9 +1259,17 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                                   <label className="text-[10px] font-bold text-slate-500 block mb-1">
                                     {field.label}
                                     <span className="text-slate-300 font-normal mx-1">·</span>
-                                    <span className="text-slate-400 font-normal">{field.type === 'file' ? '文件/PDF' : '文本'}</span>
+                                    <span className="text-slate-400 font-normal">
+                                      {field.type === 'file' ? '文件/PDF' : field.type === 'knowledge' ? '资料库' : '文本'}
+                                    </span>
                                   </label>
-                                  {field.type !== 'file' && (
+                                  {field.type === 'knowledge' && (
+                                    <PlanFormKnowledgeInput
+                                      value={val}
+                                      onChange={v => setVal(typeof v === 'string' ? v : '')}
+                                    />
+                                  )}
+                                  {field.type !== 'file' && field.type !== 'knowledge' && (
                                     <input
                                       type="text"
                                       value={val}

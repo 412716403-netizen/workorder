@@ -7,7 +7,7 @@ import type { FeaturePluginId } from './workbench';
 
 export type FeaturePluginCategoryId = 'reporting' | 'tools' | 'management';
 
-export type FeaturePluginIconKey = 'Inbox' | 'FlaskConical';
+export type FeaturePluginIconKey = 'Inbox' | 'FlaskConical' | 'BookOpen';
 
 export interface FeaturePluginGuideSection {
   title: string;
@@ -121,6 +121,46 @@ export const FEATURE_PLUGIN_MARKET_CATALOG: FeaturePluginMarketItem[] = [
       {
         title: '转入量产',
         body: '试制确认后，可将开发数据沉淀到正式产品档案，再创建生产计划与工单。',
+      },
+    ],
+  },
+  {
+    id: 'knowledge_base',
+    label: '资料库',
+    tagline: '企业知识沉淀：文件夹管理与飞书风格文档编辑',
+    category: 'tools',
+    tags: ['知识库', '文档协作'],
+    icon: 'BookOpen',
+    launchedAt: '2026-06-10',
+    defaultEnabled: false,
+    toggleable: true,
+    introduction: {
+      summary:
+        '资料库面向租户内知识沉淀：左侧文件夹/文档树管理，右侧飞书风格块级富文本编辑，支持标题、列表、待办、表格、代码块与图片。',
+      highlights: [
+        '租户内共享文件夹与文档，权限可按文件夹/文档细粒度控制',
+        '斜杠命令快速插入内容块，贴近飞书文档体验',
+        '图片独立上传存储，文档正文仅引用 URL',
+      ],
+      scenarios: [
+        '沉淀生产工艺、SOP、培训资料',
+        '跨部门共享项目文档与会议纪要',
+        '替代散落 Excel/Word 的企业内部知识库',
+      ],
+    },
+    usageGuide: [
+      {
+        title: '开通与权限',
+        body: '租户管理员在插件中心开启「资料库」后，侧栏出现资料库入口（位于基础信息上方）。成员需具备 knowledge_base 模块权限。',
+        bullets: ['管理员：插件中心开启 → 成员管理分配资料库权限', '编辑文档需 documents:edit 权限'],
+      },
+      {
+        title: '管理文件夹与文档',
+        body: '左侧树形面板可新建文件夹、在文件夹下创建文档；支持重命名与删除（空文件夹方可删除）。',
+      },
+      {
+        title: '编辑文档',
+        body: '右侧编辑器输入「/」唤起块级菜单，可插入标题、列表、待办、表格、代码块、分割线、高亮块与图片。',
       },
     ],
   },

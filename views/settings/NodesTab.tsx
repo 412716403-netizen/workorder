@@ -16,13 +16,14 @@ import {
   Trash2,
   BookOpen,
 } from 'lucide-react';
-import { GlobalNodeTemplate } from '../../types';
+import { GlobalNodeTemplate, type CustomDocFieldType } from '../../types';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { ExtFieldLabelInput } from './shared';
 import { ReportCustomFieldsConfigTable } from '../../components/form-config/CustomFieldsEditorTable';
 import { formStandardControlClass } from '../../styles/uiDensity';
 import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
+import { useFeaturePlugins } from '../../hooks/useFeaturePlugins';
 import { isEquipmentAssignmentEnabled, isWorkerAssignmentEnabled } from '../../utils/nodeAssignmentFlags';
 
 interface NodesTabProps {
@@ -39,6 +40,10 @@ const NodesTab: React.FC<NodesTabProps> = ({
   canDelete,
 }) => {
   const equipmentFeaturesOn = useEquipmentFeaturesEffective();
+  const { isPluginEnabled } = useFeaturePlugins();
+  const displayAllowedTypes: CustomDocFieldType[] = isPluginEnabled('knowledge_base')
+    ? ['text', 'file', 'knowledge']
+    : ['text', 'file'];
   const [newNodeName, setNewNodeName] = useState('');
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [nodeNameDraft, setNodeNameDraft] = useState('');
@@ -279,7 +284,7 @@ const NodesTab: React.FC<NodesTabProps> = ({
 
                        <div className="space-y-4 pt-4 border-t border-slate-100">
                           <ReportCustomFieldsConfigTable
-                            allowedTypes={['text', 'file']}
+                            allowedTypes={displayAllowedTypes}
                             showShowInFormColumn={false}
                             fields={displayTpl(node)}
                             onChange={next => updateNodeConfig(node.id, { reportDisplayTemplate: next })}

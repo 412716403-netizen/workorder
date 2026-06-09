@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Link, Navigate, useParams, useLocation, u
 import {
   ClipboardList, Settings as SettingsIcon,
   Boxes, ShoppingCart, Wallet, LogOut, User, UserCog, Building2, Loader2, Inbox, ScanLine,
-  FlaskConical, LayoutDashboard, Megaphone,
+  FlaskConical, LayoutDashboard, Megaphone, BookOpen,
 } from 'lucide-react';
 
 import LoginView from './views/LoginView';
@@ -23,6 +23,7 @@ const CollaborationInboxView = lazyWithReloadOnChunkError(() => import('./views/
 const PrintTemplateEditorView = lazyWithReloadOnChunkError(() => import('./views/PrintTemplateEditorView'));
 const TraceView = lazyWithReloadOnChunkError(() => import('./views/TraceView'));
 const WorkbenchView = lazyWithReloadOnChunkError(() => import('./views/workbench/WorkbenchView'));
+const KnowledgeBaseView = lazyWithReloadOnChunkError(() => import('./views/knowledge-base/KnowledgeBaseView'));
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -164,6 +165,7 @@ function AppLayout() {
   const collabHasPending = useCollabPendingIndicator(tenantCtx?.tenantId ?? null, showCollabNav);
   const { isPluginEnabled } = useFeaturePlugins();
   const showDevNav = hasPerm('development') && isPluginEnabled('development');
+  const showKnowledgeNav = hasPerm('knowledge_base') && isPluginEnabled('knowledge_base');
   const showCollabNavWithPlugin = showCollabNav && isPluginEnabled('collaboration');
 
   if (dataLoading) {
@@ -267,6 +269,11 @@ function AppLayout() {
               <span className="absolute top-2.5 right-3 w-2 h-2 rounded-full bg-rose-500" aria-label="有待办" />
             )}
           </Link>
+          )}
+          {showKnowledgeNav && (
+            <Link to="/knowledge-base" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
+              <BookOpen className="w-5 h-5 shrink-0 text-slate-300 group-hover:text-indigo-600" /> 资料库
+            </Link>
           )}
           {hasPerm('basic') && (
             <Link to="/basic" className="flex items-center gap-3 px-5 py-3 rounded-2xl hover:bg-slate-50 transition-all font-bold text-sm text-slate-600 group">
@@ -415,6 +422,21 @@ function CollaborationRoute() {
   return <CollaborationInboxView />;
 }
 
+function KnowledgeBaseRoute() {
+  const { hasPerm } = useAuth();
+  const { isPluginEnabled } = useFeaturePlugins();
+  const allowed = hasPerm('knowledge_base') && isPluginEnabled('knowledge_base');
+  if (!allowed) {
+    return (
+      <div className="max-w-md mx-auto mt-24 p-8 bg-white rounded-2xl border border-slate-200 text-center shadow-sm">
+        <p className="text-slate-700 font-bold mb-4">无权访问资料库或插件未开启</p>
+        <Link to="/workbench" className="text-indigo-600 font-bold hover:underline">返回工作台</Link>
+      </div>
+    );
+  }
+  return <KnowledgeBaseView />;
+}
+
 function BasicInfoRoute() {
   return <BasicInfoView />;
 }
@@ -437,6 +459,7 @@ function AppRoutes() {
       <Route path="/psi" element={<PlatformAdminBusinessGuard><PsiRoute /></PlatformAdminBusinessGuard>} />
       <Route path="/finance" element={<PlatformAdminBusinessGuard><FinanceRoute /></PlatformAdminBusinessGuard>} />
       <Route path="/collaboration" element={<PlatformAdminBusinessGuard><CollaborationRoute /></PlatformAdminBusinessGuard>} />
+      <Route path="/knowledge-base" element={<PlatformAdminBusinessGuard><KnowledgeBaseRoute /></PlatformAdminBusinessGuard>} />
       <Route path="/basic" element={<PlatformAdminBusinessGuard><BasicInfoRoute /></PlatformAdminBusinessGuard>} />
       <Route path="/settings" element={<PlatformAdminBusinessGuard><SettingsRoute /></PlatformAdminBusinessGuard>} />
       <Route

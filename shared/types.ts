@@ -125,8 +125,9 @@ export const PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER = 'sourcePlanNumber' as const
 /**
  * 自定义单据/扩展字段类型（单一事实源）：与生产计划「字段配置 → 自定义单据内容」一致。
  * 用于产品分类、合作单位分类、工序报工模板、财务分类扩展项及计划/进销存单据自定义列。
+ * - knowledge：资料库引用，填值时从资料库中选择文档，存储 JSON `{ id, title }`。
  */
-export type CustomDocFieldType = 'text' | 'date' | 'select' | 'file';
+export type CustomDocFieldType = 'text' | 'date' | 'select' | 'file' | 'knowledge';
 
 /** 历史持久化 JSON 中曾出现的 type，加载时应归一为 CustomDocFieldType */
 export type LegacyCustomDocFieldType = CustomDocFieldType | 'number' | 'boolean';
@@ -441,4 +442,37 @@ export interface DevStageTemplateDto {
   name: string;
   order: number;
   fields: DevStageTemplateFieldDto[];
+}
+
+/** 资料库文件夹 */
+export interface KnowledgeFolderDto {
+  id: string;
+  parentId: string | null;
+  name: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 资料库文档 */
+export interface KnowledgeDocumentDto {
+  id: string;
+  folderId: string | null;
+  title: string;
+  content: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KnowledgeTreeResponse {
+  folders: KnowledgeFolderDto[];
+  documents: KnowledgeDocumentDto[];
+}
+
+export interface KnowledgeAssetUploadResponse {
+  id: string;
+  url: string;
+  mimeType: string;
+  sizeBytes: number;
 }

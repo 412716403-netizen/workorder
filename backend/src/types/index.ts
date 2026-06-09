@@ -82,7 +82,7 @@ export interface JwtPayload {
 }
 
 export const ALL_PERMISSIONS = [
-  'production', 'process_report', 'psi', 'finance', 'price_amount', 'basic', 'settings', 'members', 'collaboration', 'development',
+  'production', 'process_report', 'psi', 'finance', 'price_amount', 'basic', 'settings', 'members', 'collaboration', 'development', 'knowledge_base',
 ] as const;
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];
@@ -145,6 +145,21 @@ export function allDevelopmentPermissions(): string[] {
   for (const [mod, def] of Object.entries(DEVELOPMENT_SUB_MODULES)) {
     for (const action of def.actions) {
       perms.push(`development:${mod}:${action}`);
+    }
+  }
+  return perms;
+}
+
+export const KNOWLEDGE_BASE_SUB_MODULES = {
+  folders: { label: '文件夹', actions: ['view', 'create', 'edit', 'delete'] as const },
+  documents: { label: '文档', actions: ['view', 'create', 'edit', 'delete'] as const },
+} as const;
+
+export function allKnowledgeBasePermissions(): string[] {
+  const perms: string[] = [];
+  for (const [mod, def] of Object.entries(KNOWLEDGE_BASE_SUB_MODULES)) {
+    for (const action of def.actions) {
+      perms.push(`knowledge_base:${mod}:${action}`);
     }
   }
   return perms;

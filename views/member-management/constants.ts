@@ -2,6 +2,7 @@ import type { RoleRow } from '../../services/api';
 import { PRICE_AMOUNT_SUB_MODULES } from '../../utils/amountPermissionKeys';
 
 export const ALL_PERMISSIONS = [
+  { id: 'knowledge_base', label: '资料库' },
   { id: 'development', label: '开发管理' },
   { id: 'production', label: '生产管理' },
   { id: 'process_report', label: '工序报工' },
@@ -21,6 +22,11 @@ export const SETTINGS_SUB_MODULES: { key: string; label: string; actions: string
   { key: 'finance_categories',    label: '收付款分类设置', actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'finance_account_types', label: '收支账户类型',   actions: ['view', 'create', 'edit', 'delete'] },
   { key: 'config',                label: '业务配置',       actions: ['view', 'edit'] },
+];
+
+export const KNOWLEDGE_BASE_SUB_MODULES: { key: string; label: string; actions: string[] }[] = [
+  { key: 'folders', label: '文件夹', actions: ['view', 'create', 'edit', 'delete'] },
+  { key: 'documents', label: '文档', actions: ['view', 'create', 'edit', 'delete'] },
 ];
 
 export const DEVELOPMENT_SUB_MODULES: { key: string; label: string; actions: string[] }[] = [

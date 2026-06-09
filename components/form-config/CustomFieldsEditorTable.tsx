@@ -515,6 +515,7 @@ export const ReportCustomFieldsConfigTable: React.FC<ReportCustomFieldsConfigTab
                       {typeOptions.includes('date') && <option value="date">日期</option>}
                       {typeOptions.includes('select') && <option value="select">下拉</option>}
                       {typeOptions.includes('file') && <option value="file">上传文件/图片</option>}
+                      {typeOptions.includes('knowledge') && <option value="knowledge">资料库</option>}
                     </select>
                   </td>
                   <td className="align-top px-4 py-2">

@@ -5,7 +5,7 @@ import {
   Receipt, ShoppingBag, CreditCard, Warehouse,
   ArrowDownCircle, ArrowUpCircle, Scale,
   Boxes, Building2, ShieldCheck, Cpu, Library,
-  Inbox, ScanLine, FlaskConical, Settings, Pencil,
+  Inbox, ScanLine, FlaskConical, BookOpen, Settings, Pencil,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import WidgetShell from '../WidgetShell';
@@ -38,6 +38,7 @@ const ICON_MAP: Record<WorkbenchShortcutIconKey, LucideIcon> = {
   Inbox,
   ScanLine,
   FlaskConical,
+  BookOpen,
   Settings,
 };
 
