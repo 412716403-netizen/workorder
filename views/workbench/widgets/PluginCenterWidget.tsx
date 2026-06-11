@@ -162,6 +162,7 @@ const PluginCenterWidget: React.FC<PluginCenterWidgetProps> = ({ editing, layout
         canEdit={canEdit}
         isUpdating={isUpdating}
         onClose={() => setDetailPlugin(null)}
+        onToggle={toggle}
       />
     </>
   );
