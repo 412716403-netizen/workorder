@@ -4,7 +4,7 @@
 
 import {
   getToggleableFeaturePlugins,
-} from './featurePluginCatalog';
+} from './featurePluginCatalog.js';
 
 export type WorkbenchWidgetType =
   | 'shortcuts'

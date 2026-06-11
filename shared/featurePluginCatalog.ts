@@ -3,7 +3,7 @@
  * 带 toggleable 的项与 system_settings.featurePlugins 联动；其余为说明型插件。
  */
 
-import type { FeaturePluginId } from './workbench';
+import type { FeaturePluginId } from './workbench.js';
 
 export type FeaturePluginCategoryId = 'reporting' | 'tools' | 'management';
 
