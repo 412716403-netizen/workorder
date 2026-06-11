@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { ReportCustomFieldsConfigTable } from '../../components/form-config/CustomFieldsEditorTable';
 import { formStandardControlClass } from '../../styles/uiDensity';
+import { hasSettingsNameConflict } from '../../utils/settingsNameUnique';
 
 interface PartnerCategoriesTabProps {
   partnerCategories: PartnerCategory[];
@@ -33,7 +34,8 @@ const PartnerCategoriesTab: React.FC<PartnerCategoriesTabProps> = ({
 
   const addPartnerCategory = async () => {
     if (!newPCatName.trim()) return;
-    if (partnerCategories.some(c => c.name === newPCatName.trim())) { toast.warning(`分类"${newPCatName.trim()}"已存在`); return; }
+    const trimmed = newPCatName.trim();
+    if (hasSettingsNameConflict(partnerCategories, trimmed)) { toast.warning(`分类"${trimmed}"已存在`); return; }
     await addLock.run(async () => {
       try {
         const created = await api.settings.partnerCategories.create({ name: newPCatName, customFields: [] }) as PartnerCategory;
@@ -126,6 +128,11 @@ const PartnerCategoriesTab: React.FC<PartnerCategoriesTabProps> = ({
                                if (next === cur.name) return;
                                if (!next) {
                                  toast.error('分类名称不能为空');
+                                 setPartnerCatNameDraft(cur.name);
+                                 return;
+                               }
+                               if (hasSettingsNameConflict(partnerCategories, next, cat.id)) {
+                                 toast.error(`分类"${next}"已存在`);
                                  setPartnerCatNameDraft(cur.name);
                                  return;
                                }

@@ -16,6 +16,23 @@ async function invalidateDictionaryCache(tenantId: string): Promise<void> {
 
 // ── 合作单位 ──
 
+async function assertPartnerNameUnique(
+  db: TenantPrismaClient,
+  name: string,
+  excludeId?: string,
+): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new AppError(400, '请填写单位名称');
+  const conflict = await db.partner.findFirst({
+    where: {
+      name: { equals: trimmed, mode: 'insensitive' },
+      ...(excludeId ? { NOT: { id: excludeId } } : {}),
+    },
+    select: { id: true },
+  });
+  if (conflict) throw new AppError(409, `单位名称「${trimmed}」已存在`);
+}
+
 export async function listPartners(
   db: TenantPrismaClient,
   opts: { categoryId?: string; search?: string; all?: boolean; page?: number; pageSize?: number },
@@ -46,6 +63,9 @@ export async function createPartner(
   const data = sanitizeCreate(body);
   if (!data.id) data.id = genId('partner');
   delete data.partnerListNo;
+  const name = typeof data.name === 'string' ? data.name.trim() : '';
+  await assertPartnerNameUnique(db, name);
+  data.name = name;
   const maxRow = await db.partner.aggregate({ _max: { partnerListNo: true } });
   data.partnerListNo = (maxRow._max.partnerListNo ?? 0) + 1;
   return db.partner.create({ data });
@@ -61,9 +81,18 @@ export async function updatePartner(
   if (!existing) throw new AppError(404, '合作单位不存在');
 
   const data = sanitizeUpdate(body);
+  delete data.partnerListNo;
+
   const newName = typeof data.name === 'string' ? data.name.trim() : undefined;
   const oldName = existing.name;
-  const renamed = newName !== undefined && newName !== '' && newName !== oldName;
+  if (newName !== undefined) {
+    if (!newName) throw new AppError(400, '请填写单位名称');
+    const nameChanged = newName.toLowerCase() !== oldName.trim().toLowerCase();
+    if (nameChanged) await assertPartnerNameUnique(db, newName, id);
+    data.name = newName;
+  }
+
+  const renamed = newName !== undefined && newName !== oldName;
 
   if (!renamed) {
     return db.partner.update({ where: { id }, data });
@@ -76,8 +105,6 @@ export async function updatePartner(
    * - ProductionOpRecord.partner：外协派工/收回、委外返工等（无 partnerId，按旧名称匹配）
    * - PsiRecord.partner：采购/销售等单据（优先按 partnerId 关联，兼容旧数据按名称匹配）
    * - FinanceRecord.partner：应收应付/结算（按旧名称匹配）
-   *
-   * 注意：若多个合作单位重名，按名称匹配的快照无法区分归属，会一并更新为新名称。
    */
   return basePrisma.$transaction(async (tx) => {
     const updated = await tx.partner.update({

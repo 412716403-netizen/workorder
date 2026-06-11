@@ -365,19 +365,19 @@
 
 | 子模块 | 管理实体 | 规则 |
 |--------|----------|------|
-| 产品分类管理 | `categories` | 支持 `customFields` 扩展 |
-| 合作单位分类 | `partnerCategories` | 支持 `customFields` 扩展 |
-| 工序节点库 | `globalNodes` | 维护工序名称、功能开关、`reportDisplayTemplate`（报工页展示内容）等；`reportTemplate`（报工自定义单据内容）在 **工单中心 → 表单配置 → 字段配置** 按工序维护 |
-| 仓库管理 | `warehouses` | 支持 code 自动生成或手工填写 |
-| 收付款类型 | `financeCategories` | 控制财务表单显示与关联项 |
-| 收支账户类型 | `financeAccountTypes` | 控制收付款账户选项 |
+| 产品分类管理 | `categories` | 支持 `customFields` 扩展；**名称租户内唯一**（新增/编辑，忽略首尾空白与大小写） |
+| 合作单位分类 | `partnerCategories` | 支持 `customFields` 扩展；名称租户内唯一 |
+| 工序节点库 | `globalNodes` | 维护工序名称、功能开关、`reportDisplayTemplate`（报工页展示内容）等；`reportTemplate`（报工自定义单据内容）在 **工单中心 → 表单配置 → 字段配置** 按工序维护；工序名称租户内唯一 |
+| 仓库管理 | `warehouses` | 支持 code 自动生成或手工填写；仓库名称租户内唯一 |
+| 收付款类型 | `financeCategories` | 控制财务表单显示与关联项；类型名称租户内唯一（不区分收款/付款 kind） |
+| 收支账户类型 | `financeAccountTypes` | 控制收付款账户选项；类型名称租户内唯一 |
 
 ### 5.2 基本信息
 
 | 子模块 | 管理实体 | 规则 |
 |--------|----------|------|
 | 产品与 BOM | `products`, `boms` | 支持产品编辑、变体管理、BOM 绑定 |
-| 合作单位 | `partners` | 关联 `partnerCategories`；**改名级联**：修改单位名称时，后端事务内同步更新名称快照字段 `ProductionOpRecord.partner`（外协/委外返工）、`PsiRecord.partner`（按 `partnerId` 或旧名称匹配）、`FinanceRecord.partner`，保证外协管理、外协流水及相关单据展示一致；若存在重名单位，按名称匹配的历史快照会一并更新 |
+| 合作单位 | `partners` | 关联 `partnerCategories`；**名称租户内唯一**（新增/编辑均校验，忽略首尾空白与大小写）；**单位编号**（`partnerListNo`）创建时按租户递增自动生成，**不可编辑**；**改名级联**：修改单位名称时，后端事务内同步更新名称快照字段 `ProductionOpRecord.partner`（外协/委外返工）、`PsiRecord.partner`（按 `partnerId` 或旧名称匹配）、`FinanceRecord.partner`，保证外协管理、外协流水及相关单据展示一致 |
 | 工人管理 | `workers` | 支持按工序派工 |
 | 设备管理 | `equipment` | 支持按工序派工 |
 | 公共数据字典 | `dictionaries` | 维护颜色、尺码、单位三组数据 |

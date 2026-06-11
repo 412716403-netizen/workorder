@@ -44,6 +44,7 @@ import {
   sectionTitleClass,
 } from '../../styles/uiDensity';
 import { dataUrlToBlobUrl } from '../../utils/routeReportFileUrls';
+import { findPartnerByName } from '../../utils/partnerNormalize';
 
 function resolveDefaultPartnerCategoryId(categories: PartnerCategory[]): string {
   return categories.find((c) => c.name.includes('供应商'))?.id ?? categories[0]?.id ?? '';
@@ -367,7 +368,7 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
       toast.error('请输入供应商名称');
       return;
     }
-    const existing = partners.find((p) => p.name.trim() === name);
+    const existing = findPartnerByName(partners, name);
     if (existing) {
       setWorking({ ...working, supplierId: existing.id });
       setQuickAddSupplierOpen(false);

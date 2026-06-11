@@ -9,6 +9,7 @@ import { FinanceAccountType } from '../../types';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { formStandardControlClass } from '../../styles/uiDensity';
+import { hasSettingsNameConflict } from '../../utils/settingsNameUnique';
 
 interface AccountTypesModalProps {
   financeAccountTypes: FinanceAccountType[];
@@ -33,10 +34,12 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({
   const addLock = useAsyncSubmitLock();
 
   const addFinanceAccountType = async () => {
-    if (!newAccountTypeName.trim()) return;
+    const trimmed = newAccountTypeName.trim();
+    if (!trimmed) return;
+    if (hasSettingsNameConflict(financeAccountTypes, trimmed)) { toast.warning(`账户类型"${trimmed}"已存在`); return; }
     await addLock.run(async () => {
       try {
-        await api.settings.financeAccountTypes.create({ name: newAccountTypeName.trim() });
+        await api.settings.financeAccountTypes.create({ name: trimmed });
         setNewAccountTypeName('');
         await onRefreshFinanceAccountTypes();
       } catch (err: any) { toast.error(err.message || '操作失败'); }
@@ -101,7 +104,19 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({
                         onChange={e => setEditingAccountTypeName(e.target.value)}
                         className="flex-1 bg-white border border-slate-200 rounded-xl py-2.5 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500"
                       />
-                      <button type="button" onClick={() => { updateFinanceAccountTypeConfig(acc.id, { name: editingAccountTypeName.trim() }); setEditingAccountTypeId(null); }} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = editingAccountTypeName.trim();
+                          if (!next) { toast.error('账户类型名称不能为空'); return; }
+                          if (hasSettingsNameConflict(financeAccountTypes, next, acc.id)) {
+                            toast.error(`账户类型"${next}"已存在`);
+                            return;
+                          }
+                          void updateFinanceAccountTypeConfig(acc.id, { name: next }).then(() => setEditingAccountTypeId(null));
+                        }}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700"
+                      >
                         保存
                       </button>
                       <button type="button" onClick={() => setEditingAccountTypeId(null)} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200">

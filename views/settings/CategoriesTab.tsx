@@ -21,6 +21,7 @@ import { ExtFieldLabelInput } from './shared';
 import { ReportCustomFieldsConfigTable } from '../../components/form-config/CustomFieldsEditorTable';
 import { formStandardControlClass } from '../../styles/uiDensity';
 import { useFeaturePlugins } from '../../hooks/useFeaturePlugins';
+import { hasSettingsNameConflict } from '../../utils/settingsNameUnique';
 
 interface CategoriesTabProps {
   categories: ProductCategory[];
@@ -46,7 +47,8 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
 
   const addCategory = async () => {
     if (!newCatName.trim()) return;
-    if (categories.some(c => c.name === newCatName.trim())) { toast.warning(`分类"${newCatName.trim()}"已存在`); return; }
+    const trimmed = newCatName.trim();
+    if (hasSettingsNameConflict(categories, trimmed)) { toast.warning(`分类"${trimmed}"已存在`); return; }
     await addLock.run(async () => {
       try {
         const created = await api.settings.categories.create({
@@ -167,6 +169,11 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
                             if (next === cur.name) return;
                             if (!next) {
                               toast.error('分类名称不能为空');
+                              setCategoryNameDraft(cur.name);
+                              return;
+                            }
+                            if (hasSettingsNameConflict(categories, next, cat.id)) {
+                              toast.error(`分类"${next}"已存在`);
                               setCategoryNameDraft(cur.name);
                               return;
                             }

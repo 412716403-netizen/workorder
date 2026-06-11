@@ -63,6 +63,7 @@ import {
 } from '../../utils/productLastUnitByCategory';
 import { resolveProductSkuForSave } from '../../utils/productSkuAutoGen';
 import { validateProductCatalogUnique } from '../../utils/productCatalogUnique';
+import { findPartnerByName } from '../../utils/partnerNormalize';
 import {
   productArchiveFormCardClass,
   productArchiveFormCategoryPillClass,
@@ -824,7 +825,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
       toast.error('请输入供应商名称');
       return;
     }
-    const existing = partners.find(p => p.name.trim() === name);
+    const existing = findPartnerByName(partners, name);
     if (existing) {
       setWorkingProduct(wp => ({ ...wp, supplierId: existing.id }));
       toast.info('该供应商已存在，已为您选中');

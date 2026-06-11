@@ -21,6 +21,7 @@ import * as api from '../../services/api';
 import { ExtFieldLabelInput } from './shared';
 import { ReportCustomFieldsConfigTable } from '../../components/form-config/CustomFieldsEditorTable';
 import { formStandardControlClass } from '../../styles/uiDensity';
+import { hasSettingsNameConflict } from '../../utils/settingsNameUnique';
 
 interface FinanceCategoriesTabProps {
   financeCategories: FinanceCategory[];
@@ -41,17 +42,19 @@ const FinanceCategoriesTab: React.FC<FinanceCategoriesTabProps> = ({
   const addLock = useAsyncSubmitLock();
 
   const addFinanceCategory = async () => {
-    if (!newFinanceCatName.trim()) return;
+    const trimmed = newFinanceCatName.trim();
+    if (!trimmed) return;
+    if (hasSettingsNameConflict(financeCategories, trimmed)) { toast.warning(`分类"${trimmed}"已存在`); return; }
     await addLock.run(async () => {
       try {
         const created = await api.settings.financeCategories.create({
-          kind: 'RECEIPT', name: newFinanceCatName.trim(), linkOrder: false,
+          kind: 'RECEIPT', name: trimmed, linkOrder: false,
           linkPartner: false, selectPaymentAccount: false, linkWorker: false,
           linkProduct: false, customFields: []
         }) as FinanceCategory;
         setNewFinanceCatName('');
         setEditingFinanceCatId(created.id);
-        setFinanceCatNameDraft((created as FinanceCategory).name || newFinanceCatName.trim());
+        setFinanceCatNameDraft((created as FinanceCategory).name || trimmed);
         await onRefreshFinanceCategories();
       } catch (err: any) { toast.error(err.message || '操作失败'); }
     });
@@ -146,6 +149,11 @@ const FinanceCategoriesTab: React.FC<FinanceCategoriesTabProps> = ({
                             if (next === cur.name) return;
                             if (!next) {
                               toast.error('分类名称不能为空');
+                              setFinanceCatNameDraft(cur.name);
+                              return;
+                            }
+                            if (hasSettingsNameConflict(financeCategories, next, cat.id)) {
+                              toast.error(`分类"${next}"已存在`);
                               setFinanceCatNameDraft(cur.name);
                               return;
                             }

@@ -9,6 +9,7 @@ import { Warehouse } from '../../types';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { formStandardControlClass } from '../../styles/uiDensity';
+import { hasSettingsNameConflict } from '../../utils/settingsNameUnique';
 
 interface WarehousesTabProps {
   warehouses: Warehouse[];
@@ -30,7 +31,8 @@ const WarehousesTab: React.FC<WarehousesTabProps> = ({
 
   const handleAddWarehouse = async () => {
     if (!newWhName.trim()) return;
-    if (warehouses.some(w => w.name === newWhName.trim())) { toast.warning(`仓库"${newWhName.trim()}"已存在`); return; }
+    const trimmed = newWhName.trim();
+    if (hasSettingsNameConflict(warehouses, trimmed)) { toast.warning(`仓库"${trimmed}"已存在`); return; }
     await addLock.run(async () => {
       try {
         const created = await api.settings.warehouses.create({
@@ -117,6 +119,11 @@ const WarehousesTab: React.FC<WarehousesTabProps> = ({
                               if (next === (cur.name || '')) return;
                               if (!next) {
                                 toast.error('仓库名称不能为空');
+                                setWhDraft((d) => ({ ...d, name: cur.name || '' }));
+                                return;
+                              }
+                              if (hasSettingsNameConflict(warehouses, next, wh.id)) {
+                                toast.error(`仓库"${next}"已存在`);
                                 setWhDraft((d) => ({ ...d, name: cur.name || '' }));
                                 return;
                               }

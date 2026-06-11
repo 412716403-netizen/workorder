@@ -36,6 +36,42 @@ function maybeParseReportFields(data: Record<string, unknown>, key: string) {
   }
 }
 
+type NameUniqueDelegate = {
+  findFirst(args: {
+    where: { name: { equals: string; mode: 'insensitive' }; NOT?: { id: string } };
+    select: { id: true };
+  }): Promise<{ id: string } | null>;
+};
+
+async function assertSettingsNameUnique(
+  delegate: NameUniqueDelegate,
+  rawName: unknown,
+  entityLabel: string,
+  excludeId?: string,
+): Promise<string> {
+  const trimmed = typeof rawName === 'string' ? rawName.trim() : '';
+  if (!trimmed) throw new AppError(400, `请填写${entityLabel}`);
+  const conflict = await delegate.findFirst({
+    where: {
+      name: { equals: trimmed, mode: 'insensitive' },
+      ...(excludeId ? { NOT: { id: excludeId } } : {}),
+    },
+    select: { id: true },
+  });
+  if (conflict) throw new AppError(409, `${entityLabel}「${trimmed}」已存在`);
+  return trimmed;
+}
+
+async function resolveSettingsNameOnUpdate(
+  delegate: NameUniqueDelegate,
+  data: Record<string, unknown>,
+  entityLabel: string,
+  excludeId: string,
+): Promise<void> {
+  if (!Object.prototype.hasOwnProperty.call(data, 'name')) return;
+  data.name = await assertSettingsNameUnique(delegate, data.name, entityLabel, excludeId);
+}
+
 // ── 产品分类 ──
 
 export async function listCategories(db: TenantPrismaClient, opts: { all?: boolean; page?: number; pageSize?: number }) {
@@ -63,6 +99,7 @@ export async function createCategory(
   assertCategoryBatchColorMutex(data);
   applyCategoryPurchasePartnerRule(data);
   assertCategoryPurchasePartnerRule(data);
+  data.name = await assertSettingsNameUnique(db.productCategory, data.name, '产品分类');
   if (!data.id) data.id = genId('cat');
   const maxRow = await db.productCategory.aggregate({ _max: { sortOrder: true } });
   data.sortOrder = (maxRow._max.sortOrder ?? -1) + 1;
@@ -109,6 +146,7 @@ export async function updateCategory(
     hasPurchasePrice: nextHasPurchase,
     linkPartner: nextLinkPartner,
   });
+  await resolveSettingsNameOnUpdate(db.productCategory, data, '产品分类', id);
   return db.productCategory.update({ where: { id }, data });
 }
 
@@ -141,6 +179,7 @@ export async function createPartnerCategory(
 ) {
   const data = sanitizeCreate(body) as Record<string, unknown>;
   maybeParseReportFields(data, 'customFields');
+  data.name = await assertSettingsNameUnique(db.partnerCategory, data.name, '合作单位分类');
   if (!data.id) data.id = genId('pcat');
   return db.partnerCategory.create({ data: data as any });
 }
@@ -152,6 +191,7 @@ export async function updatePartnerCategory(
 ) {
   const data = sanitizeUpdate(body) as Record<string, unknown>;
   maybeParseReportFields(data, 'customFields');
+  await resolveSettingsNameOnUpdate(db.partnerCategory, data, '合作单位分类', id);
   return db.partnerCategory.update({ where: { id }, data });
 }
 
@@ -200,6 +240,7 @@ export async function createNode(
   const data = sanitizeCreate(normalizeNodeData(body) as Record<string, unknown>) as Record<string, unknown>;
   maybeParseReportFields(data, 'reportTemplate');
   maybeParseReportFields(data, 'reportDisplayTemplate');
+  data.name = await assertSettingsNameUnique(db.globalNodeTemplate, data.name, '工序');
   if (!data.id) data.id = genId('node');
   const maxRow = await db.globalNodeTemplate.aggregate({ _max: { sortOrder: true } });
   data.sortOrder = (maxRow._max.sortOrder ?? -1) + 1;
@@ -215,6 +256,7 @@ export async function updateNode(
   delete data.sortOrder;
   maybeParseReportFields(data, 'reportTemplate');
   maybeParseReportFields(data, 'reportDisplayTemplate');
+  await resolveSettingsNameOnUpdate(db.globalNodeTemplate, data, '工序', id);
   return db.globalNodeTemplate.update({ where: { id }, data: data as any });
 }
 
@@ -277,6 +319,7 @@ export async function createWarehouse(
   body: Record<string, unknown>,
 ) {
   const data = sanitizeCreate(body);
+  data.name = await assertSettingsNameUnique(db.warehouse, data.name, '仓库');
   if (!data.id) data.id = genId('wh');
   return db.warehouse.create({ data });
 }
@@ -286,7 +329,9 @@ export async function updateWarehouse(
   id: string,
   body: Record<string, unknown>,
 ) {
-  return db.warehouse.update({ where: { id }, data: sanitizeUpdate(body) });
+  const data = sanitizeUpdate(body);
+  await resolveSettingsNameOnUpdate(db.warehouse, data, '仓库', id);
+  return db.warehouse.update({ where: { id }, data });
 }
 
 export async function deleteWarehouse(db: TenantPrismaClient, id: string) {
@@ -318,6 +363,7 @@ export async function createFinanceCategory(
 ) {
   const data = sanitizeCreate(body) as Record<string, unknown>;
   maybeParseReportFields(data, 'customFields');
+  data.name = await assertSettingsNameUnique(db.financeCategory, data.name, '收付款类型');
   if (!data.id) data.id = genId('fcat');
   return db.financeCategory.create({ data: data as any });
 }
@@ -329,6 +375,7 @@ export async function updateFinanceCategory(
 ) {
   const data = sanitizeUpdate(body) as Record<string, unknown>;
   maybeParseReportFields(data, 'customFields');
+  await resolveSettingsNameOnUpdate(db.financeCategory, data, '收付款类型', id);
   return db.financeCategory.update({ where: { id }, data });
 }
 
@@ -360,6 +407,7 @@ export async function createFinanceAccountType(
   body: Record<string, unknown>,
 ) {
   const data = sanitizeCreate(body);
+  data.name = await assertSettingsNameUnique(db.financeAccountType, data.name, '收支账户类型');
   if (!data.id) data.id = genId('fatype');
   return db.financeAccountType.create({ data });
 }
@@ -369,7 +417,9 @@ export async function updateFinanceAccountType(
   id: string,
   body: Record<string, unknown>,
 ) {
-  return db.financeAccountType.update({ where: { id }, data: sanitizeUpdate(body) });
+  const data = sanitizeUpdate(body);
+  await resolveSettingsNameOnUpdate(db.financeAccountType, data, '收支账户类型', id);
+  return db.financeAccountType.update({ where: { id }, data });
 }
 
 export async function deleteFinanceAccountType(db: TenantPrismaClient, id: string) {

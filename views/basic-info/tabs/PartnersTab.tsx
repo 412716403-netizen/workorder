@@ -12,6 +12,7 @@ import * as api from '../../../services/api';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { useAsyncSubmitLock } from '../../../hooks/useAsyncSubmitLock';
 import { filterPartnersByCategoryAndKeyword } from '../../../utils/basicInfoFilters';
+import { findPartnerByName } from '../../../utils/partnerNormalize';
 import ReportCustomFieldsEditor from '../../../components/ReportCustomFieldsEditor';
 import {
   formStandardControlClass,
@@ -57,7 +58,8 @@ const PartnersTab: React.FC<Props> = ({ partners, partnerCategories, onRefreshPa
   };
 
   const savePartner = async () => {
-    if (!editPartner.name?.trim()) {
+    const trimmedName = editPartner.name?.trim() ?? '';
+    if (!trimmedName) {
       toast.warning('请填写单位名称');
       return;
     }
@@ -65,23 +67,25 @@ const PartnersTab: React.FC<Props> = ({ partners, partnerCategories, onRefreshPa
       toast.warning('请选择单位分类');
       return;
     }
+    if (findPartnerByName(partners, trimmedName, editingId ?? undefined)) {
+      toast.warning(`单位名称「${trimmedName}」已存在`);
+      return;
+    }
     await partnerSubmit.run(async () => {
       try {
         if (editingId) {
-          if (editPartner.partnerListNo == null || editPartner.partnerListNo < 1) {
-            toast.error('请填写有效的单位编号（1–9999）');
-            return;
-          }
           const prevName = partners.find(p => p.id === editingId)?.name;
-          await api.partners.update(editingId, editPartner);
+          const { partnerListNo: _n, ...updatePayload } = editPartner;
+          void _n;
+          await api.partners.update(editingId, { ...updatePayload, name: trimmedName });
           // 改名后后端会级联同步外协/进销存/财务单据上的名称快照，这里整体失效缓存让各列表重拉
-          if (prevName && editPartner.name && editPartner.name.trim() !== prevName) {
+          if (prevName && trimmedName !== prevName) {
             void queryClient.invalidateQueries();
           }
         } else {
           const { partnerListNo: _n, ...createPayload } = editPartner;
           void _n;
-          await api.partners.create(createPayload);
+          await api.partners.create({ ...createPayload, name: trimmedName });
         }
         setShowModal(false);
         await onRefreshPartners();
@@ -146,24 +150,18 @@ const PartnersTab: React.FC<Props> = ({ partners, partnerCategories, onRefreshPa
                 ))}
               </select>
             </div>
-            {editingId && (
-              <div className="space-y-1 md:col-span-2">
+            {editingId && editPartner.partnerListNo != null && (
+              <div className="space-y-1">
                 <label className={formStandardLabelClass}>单位编号</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={9999}
-                  value={editPartner.partnerListNo ?? ''}
-                  onChange={e => {
-                    const v = e.target.value;
-                    setEditPartner({
-                      ...editPartner,
-                      partnerListNo: v === '' ? undefined : Math.min(9999, Math.max(1, parseInt(v, 10) || 1)),
-                    });
-                  }}
-                  className={`${formStandardControlClass} max-w-[200px] font-mono tabular-nums`}
-                />
-                <p className="text-[10px] text-slate-400 font-medium mt-1 ml-1">租户内唯一；中间四位与流水共同组成单号，勿与其他单位重复</p>
+                <div className="flex h-9 items-center gap-2.5">
+                  <span
+                    className="inline-flex h-9 min-w-[5rem] items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white px-3 font-mono text-sm font-bold tabular-nums tracking-[0.15em] text-indigo-700"
+                    aria-label={`单位编号 ${String(editPartner.partnerListNo).padStart(4, '0')}`}
+                  >
+                    {String(editPartner.partnerListNo).padStart(4, '0')}
+                  </span>
+                  <span className="text-[10px] font-medium leading-snug text-slate-400">自动分配 · 不可修改</span>
+                </div>
               </div>
             )}
           </div>

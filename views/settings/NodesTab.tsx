@@ -23,6 +23,7 @@ import { ReportCustomFieldsConfigTable } from '../../components/form-config/Cust
 import { formStandardControlClass } from '../../styles/uiDensity';
 import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
 import { useFeaturePlugins } from '../../hooks/useFeaturePlugins';
+import { hasSettingsNameConflict } from '../../utils/settingsNameUnique';
 import { isEquipmentAssignmentEnabled, isWorkerAssignmentEnabled } from '../../utils/nodeAssignmentFlags';
 
 interface NodesTabProps {
@@ -51,7 +52,7 @@ const NodesTab: React.FC<NodesTabProps> = ({
   const handleQuickAddNode = async () => {
     const name = newNodeName.trim();
     if (!name) return;
-    if (globalNodes.some(n => n.name.trim() === name)) { toast.warning(`工序"${name}"已存在`); return; }
+    if (hasSettingsNameConflict(globalNodes, name)) { toast.warning(`工序"${name}"已存在`); return; }
     await addLock.run(async () => {
       try {
         const created = await api.settings.nodes.create({
@@ -156,7 +157,7 @@ const NodesTab: React.FC<NodesTabProps> = ({
                                       setNodeNameDraft(cur.name);
                                       return;
                                     }
-                                    if (globalNodes.some(n => n.id !== node.id && n.name.trim() === next)) {
+                                    if (hasSettingsNameConflict(globalNodes, next, node.id)) {
                                       toast.error(`工序"${next}"已存在`);
                                       setNodeNameDraft(cur.name);
                                       return;

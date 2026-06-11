@@ -9,6 +9,7 @@ import { useAppActionsOptional } from '../contexts/AppDataContext';
 import { hasSubPermission } from '../utils/hasSubPermission';
 import { effectiveCustomDocFieldType, formatReportCustomDataForList } from '../utils/reportCustomDocField';
 import { getSupplierCategoryId } from '../utils/resolvePartnerCategoryId';
+import { findPartnerByName } from '../utils/partnerNormalize';
 import { psiOrderBillCompactLineInputClass, psiOrderBillCompactLineLabelClass } from '../styles/uiDensity';
 
 /**
@@ -458,6 +459,17 @@ export function SearchablePartnerSelect({
                     }
                     if (!quickFormCategoryId.trim()) {
                       toast.warning('请选择合作单位分类');
+                      return;
+                    }
+                    const existing = findPartnerByName(options, name);
+                    if (existing) {
+                      onChange(existing.name, existing.id);
+                      setQuickCreateOpen(false);
+                      setQuickName('');
+                      setQuickFormCategoryId('');
+                      setSearch('');
+                      setIsOpen(false);
+                      toast.info(`单位名称「${name}」已存在，已为您选中`);
                       return;
                     }
                     setQuickSubmitting(true);
