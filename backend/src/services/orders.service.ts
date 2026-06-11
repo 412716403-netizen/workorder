@@ -6,7 +6,25 @@ import { genId } from '../utils/genId.js';
 import { sanitizeUpdate, sanitizeItems, normalizeDates } from '../utils/request.js';
 import { buildReportWeightBreakdown } from './reportWeightBreakdown.service.js';
 import { assertScanNotAlreadyUsed } from './scanValidate.service.js';
-import { OrderDispatchStatus } from '../types/index.js';
+import { OrderDispatchStatus, PlanStatus } from '../types/index.js';
+
+/**
+ * 删除工单后：若该计划已无关联工单，将 `CONVERTED` 回退为可再次下达的状态。
+ * 主计划 → APPROVED；子计划 → DRAFT（与创建时的默认状态一致）。
+ */
+async function revertPlanIfNoLinkedOrders(db: TenantPrismaClient, planOrderId: string) {
+  const remaining = await db.productionOrder.count({ where: { planOrderId } });
+  if (remaining > 0) return;
+
+  const plan = await db.planOrder.findUnique({
+    where: { id: planOrderId },
+    select: { status: true, parentPlanId: true },
+  });
+  if (!plan || plan.status !== PlanStatus.CONVERTED) return;
+
+  const revertStatus = plan.parentPlanId ? PlanStatus.DRAFT : PlanStatus.APPROVED;
+  await db.planOrder.update({ where: { id: planOrderId }, data: { status: revertStatus } });
+}
 
 export async function listOrders(
   db: TenantPrismaClient,
@@ -152,7 +170,14 @@ export async function deleteOrder(db: TenantPrismaClient, orderId: string) {
   if (childCount > 0)
     throw new AppError(400, `该工单存在 ${childCount} 条子工单，请先删除子工单后再试`);
 
+  const planOrderId = order.planOrderId;
+
   await db.productionOrder.delete({ where: { id: orderId } });
+
+  if (planOrderId) {
+    await revertPlanIfNoLinkedOrders(db, planOrderId);
+  }
+
   return { message: '已删除' };
 }
 

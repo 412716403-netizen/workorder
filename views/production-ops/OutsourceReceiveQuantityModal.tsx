@@ -1,7 +1,5 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo } from 'react';
 import { ArrowDownToLine, X, Check, Scale, Package, FileText, Layers } from 'lucide-react';
-import { ScanBatchTrigger } from '../../components/scan/ScanBatchTrigger';
-import type { ScanPayload } from '../../utils/scanPayload';
 import type {
   ProductionOpRecord,
   ProductionOrder,
@@ -21,7 +19,6 @@ import { RECEIVE_VARIANT_SEP, outsourceReceiveBaseKey } from './outsourceReceive
 import { calcUsageByWeight } from '../../utils/bomMaterialUsageByWeight';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
-import { useOutsourceReceiveScan, type ReceiveScanRow } from '../../hooks/useOutsourceReceiveScan';
 import { AMOUNT_PERMISSION_KEYS, useCanViewAmount } from '../../utils/canViewAmount';
 import {
   sectionTitleClass,
@@ -153,52 +150,6 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
     [outsourceReceiveRows, receiveSelectedKeys],
   );
 
-  /**
-   * 录入弹窗内的扫码按钮：仅在「已勾选行」范围内累加，复用共享 hook。
-   * 与列表弹窗扫码会话不同的是：此处不需要 partner / nodeLock 参数，
-   * 因为 visibleRows 已由 receiveSelectedKeys 保证同工厂同工序（清单弹窗勾选时的约束）。
-   */
-  const scanPendingRows = useMemo<ReceiveScanRow[]>(
-    () =>
-      visibleRows.map((r) => ({
-        orderId: r.orderId,
-        productId: r.productId,
-        nodeId: r.nodeId,
-        partner: r.partner,
-        pending: r.pending,
-        productName: r.productName,
-        milestoneName: r.milestoneName,
-      })),
-    [visibleRows],
-  );
-  const { applyScanPayload, resolveScanRowPreview } = useOutsourceReceiveScan({
-    pendingRows: scanPendingRows,
-    products,
-    categories,
-    allowExceedMaxOutsourceReceiveQty,
-  });
-
-  const handleReceiveScanBatchConfirm = useCallback(
-    async (payloads: ScanPayload[]): Promise<boolean> => {
-      const localSnapshot: Record<string, number> = { ...receiveFormQuantities };
-      for (const payload of payloads) {
-        const res = await applyScanPayload({ payload, currentQuantities: localSnapshot });
-        if (!res) return false;
-        localSnapshot[res.key] = (localSnapshot[res.key] ?? 0) + res.qty;
-      }
-      // 全部解析成功后再统一写入；任一失败已经在 hook 内 toast 并返回 false
-      setReceiveFormQuantities((prev) => {
-        const next = { ...prev };
-        for (const k of Object.keys(localSnapshot)) {
-          next[k] = localSnapshot[k]!;
-        }
-        return next;
-      });
-      return true;
-    },
-    [applyScanPayload, receiveFormQuantities, setReceiveFormQuantities],
-  );
-
   const getUnitName = (productId: string | undefined) => {
     if (!productId) return 'PCS';
     const p = products.find(pr => pr.id === productId);
@@ -323,17 +274,6 @@ const OutsourceReceiveQuantityModal: React.FC<OutsourceReceiveQuantityModalProps
                       <Layers className="h-4 w-4" />
                     </div>
                     <h3 className={sectionTitleClass}>2. 外协收货明细录入</h3>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold uppercase text-slate-400">扫码录入</span>
-                    <ScanBatchTrigger
-                      onApply={handleReceiveScanBatchConfirm}
-                      resolveRowPreview={resolveScanRowPreview}
-                      hint="扫码收货"
-                      modalTitle="外协收货 · 批量扫码"
-                      modalHint="请使用扫码枪；请先切换到英文（半角）输入法。扫入的码显示在列表中，确认后一次性累加收货数量。"
-                      showScanIntentToggle
-                    />
                   </div>
                 </div>
                 <div className="space-y-3">

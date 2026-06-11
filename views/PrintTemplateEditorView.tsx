@@ -72,7 +72,7 @@ export default function PrintTemplateEditorView() {
   const { id: routeId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { products, categories } = useMasterData();
+  const { products, categories, globalNodes } = useMasterData();
   const {
     printTemplates,
     planFormSettings,
@@ -226,12 +226,13 @@ export default function PrintTemplateEditorView() {
       plan,
       order,
       product,
+      globalNodes,
       milestoneName: '示例工序',
       completedQuantity: 12,
       tenantName: tenantCtx?.tenantName?.trim() || undefined,
     };
     return augmentPrintPreviewContext(base, template, psiCustomSamples);
-  }, [plans, orders, products, template, psiCustomSamples, productCategoryCustomPreviewSamples, tenantCtx?.tenantName]);
+  }, [plans, orders, products, globalNodes, template, psiCustomSamples, productCategoryCustomPreviewSamples, tenantCtx?.tenantName]);
 
   const fieldOptionsAll = useMemo(
     () =>
@@ -251,6 +252,7 @@ export default function PrintTemplateEditorView() {
         purchaseOrderCustomFields: purchaseOrderFormSettings.customFields,
         salesOrderCustomFields: salesOrderFormSettings.customFields,
         purchaseBillCustomFields: purchaseBillFormSettings.customFields,
+        showPurchaseBillRelatedProduct: purchaseBillFormSettings.relatedProductEnabled === true,
         salesBillCustomFields: salesBillFormSettings.customFields,
         financeCategories,
         productCategories: categories,
@@ -271,6 +273,7 @@ export default function PrintTemplateEditorView() {
       purchaseOrderFormSettings.customFields,
       salesOrderFormSettings.customFields,
       purchaseBillFormSettings.customFields,
+      purchaseBillFormSettings.relatedProductEnabled,
       salesBillFormSettings.customFields,
       financeCategories,
       categories,

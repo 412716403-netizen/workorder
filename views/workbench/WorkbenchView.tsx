@@ -9,11 +9,14 @@ import AddPageModal from './AddPageModal';
 import ShortcutsWidget from './widgets/ShortcutsWidget';
 import PluginCenterWidget from './widgets/PluginCenterWidget';
 import MessageCenterWidget from './widgets/MessageCenterWidget';
-import ProductionStatsWidget from './widgets/ProductionStatsWidget';
+import OrderStatsWidget from './widgets/OrderStatsWidget';
+import OutsourceStatsWidget from './widgets/OutsourceStatsWidget';
+import ReworkStatsWidget from './widgets/ReworkStatsWidget';
 import SalesStatsWidget from './widgets/SalesStatsWidget';
+import SalesOrderStatsWidget from './widgets/SalesOrderStatsWidget';
 import FinanceStatsWidget from './widgets/FinanceStatsWidget';
 import { useWorkbenchConfig } from '../../hooks/useWorkbenchConfig';
-import { isWorkbenchHomePage } from '../../types';
+import { isWorkbenchHomePage, isHomePinnedWidgetType } from '../../types';
 import type { WorkbenchLayoutItem, WorkbenchWidgetType } from '../../types';
 import { useConfirm } from '../../contexts/ConfirmContext';
 
@@ -41,11 +44,17 @@ const WorkbenchView: React.FC = () => {
 
   const renderWidget = useCallback(
     (item: WorkbenchLayoutItem) => {
+      const pinnedOnHome =
+        !!activePage
+        && isWorkbenchHomePage(activePage.id)
+        && isHomePinnedWidgetType(item.widgetType);
       const props = {
         editing: wb.editing,
-        onRemove: wb.editing && activePage
-          ? () => wb.removeWidget(activePage.id, item.i)
-          : undefined,
+        layoutLocked: pinnedOnHome,
+        onRemove:
+          wb.editing && activePage && !pinnedOnHome
+            ? () => wb.removeWidget(activePage.id, item.i)
+            : undefined,
       };
       switch (item.widgetType) {
         case 'shortcuts':
@@ -54,10 +63,16 @@ const WorkbenchView: React.FC = () => {
           return <PluginCenterWidget {...props} />;
         case 'messages':
           return <MessageCenterWidget {...props} />;
-        case 'production_stats':
-          return <ProductionStatsWidget {...props} />;
+        case 'order_stats':
+          return <OrderStatsWidget {...props} />;
+        case 'outsource_stats':
+          return <OutsourceStatsWidget {...props} />;
+        case 'rework_stats':
+          return <ReworkStatsWidget {...props} />;
         case 'sales_stats':
           return <SalesStatsWidget {...props} />;
+        case 'sales_order_stats':
+          return <SalesOrderStatsWidget {...props} />;
         case 'finance_stats':
           return <FinanceStatsWidget {...props} />;
         default:
@@ -165,6 +180,9 @@ const WorkbenchView: React.FC = () => {
         key={activePage.id}
         items={activePage.layout.items}
         editing={wb.editing}
+        isItemPinned={item =>
+          isWorkbenchHomePage(activePage.id) && isHomePinnedWidgetType(item.widgetType)
+        }
         renderWidget={renderWidget}
         onLayoutChange={items => wb.updatePageLayout(activePage.id, items)}
       />

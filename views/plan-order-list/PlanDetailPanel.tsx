@@ -236,10 +236,9 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   // --- Derived data ---
   const viewPlan = plans.find(p => p.id === planId);
   const viewProduct = products.find(p => p.id === viewPlan?.productId);
-  /** 已下达工单：计划行已转 CONVERTED，或已有 planOrderId 指向本计划的工单 */
+  /** 已下达工单：存在 planOrderId 指向本计划的关联工单（删光工单后可再次编辑与下达） */
   const planWorkOrdersDispatched = useMemo(() => {
     if (!viewPlan) return false;
-    if (viewPlan.status === PlanStatus.CONVERTED) return true;
     return orders.some(o => o.planOrderId === viewPlan.id);
   }, [viewPlan, orders]);
   const parentPlan = viewPlan?.parentPlanId ? plans.find(p => p.id === viewPlan.parentPlanId) : null;

@@ -30,6 +30,7 @@ import type {
 import { itemCodesApi, planVirtualBatchesApi } from '../services/api';
 import { rewriteScanApiErrorForIme, type ScanPayload } from '../utils/scanPayload';
 import type { ScanValidatePurpose, ScanValidateScope } from '../types';
+import { SCAN_ITEM_CODE_IDS_KEY } from '../types';
 import type { ScanBatchRowDetail } from '../utils/scanBatchRowDetail';
 import { scanItemResultToRowDetail, scanVirtualBatchResultToRowDetail } from '../utils/scanBatchRowDetail';
 import { calcUsageByWeight } from '../utils/bomMaterialUsageByWeight';
@@ -48,6 +49,19 @@ export interface ReportModalData {
   productItems?: { variantId?: string; quantity: number; completedQuantity: number }[];
   productOrders?: ProductionOrder[];
 }
+
+/** 工单中心报工扫码解析结果（按 token 缓存，确认时复用以避免重复网络请求） */
+type PreparedReportScan = {
+  vid: string;
+  qty: number;
+  itemCodeId: string | null;
+  batchId: string | null;
+  detail: ScanBatchRowDetail;
+  variantLabel?: string | null;
+  productName?: string | null;
+  ownerTenantName?: string | null;
+  relation?: 'OWNER' | 'DOWNSTREAM' | 'UPSTREAM' | 'PEER';
+};
 
 export interface ReportFormState {
   quantity: number;
@@ -245,18 +259,30 @@ export function useReportModalState(args: UseReportModalStateArgs) {
     }));
   }, []);
 
-  const scannedItemTokensRef = useRef<Set<string>>(new Set());
-  const scannedBatchTokensRef = useRef<Set<string>>(new Set());
+  /**
+   * 扫码解析缓存：扫码（预览）阶段写入「scan + validate-usage」结果，
+   * 点「确认应用」时命中缓存 → 0 网络请求，避免逐条重新解析触发频控/投毒。
+   * 去重依赖扫码弹窗自身的 keysRef + 此缓存幂等，不再单独维护 token 集合。
+   */
+  const preparedByTokenRef = useRef<Map<string, PreparedReportScan>>(new Map());
   const reportScanLinkRef = useRef<{ virtualBatchId: string | null; itemCodeId: string | null }>({
     virtualBatchId: null,
     itemCodeId: null,
   });
+  /**
+   * 单品码模式下按规格累积本次扫入的单品码列表（key = variantId，无规格为 ''）。
+   * 提交时写入对应报工的 `customData.__scanItemCodeIds`，使追溯可逐件精确命中。
+   * `hadBatchScan` 标记本次是否扫过批次码：批次码模式沿用整批链路，不写逐件列表（避免混扫时批次部分漏关联）。
+   */
+  const reportScanItemCodesByVidRef = useRef<Map<string, string[]>>(new Map());
+  const reportHadBatchScanRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
-    scannedItemTokensRef.current.clear();
-    scannedBatchTokensRef.current.clear();
+    preparedByTokenRef.current.clear();
     reportScanLinkRef.current = { virtualBatchId: null, itemCodeId: null };
+    reportScanItemCodesByVidRef.current = new Map();
+    reportHadBatchScanRef.current = false;
   }, [open, reportModal.order.id, reportModal.milestone.id]);
 
   /**
@@ -321,117 +347,15 @@ export function useReportModalState(args: UseReportModalStateArgs) {
     ],
   );
 
-  const applyScanPayload = useCallback(
-    async (payload: ScanPayload): Promise<boolean> => {
-      if (!payload.token) return false;
-      const currentPlanOrderId = reportModal.order.planOrderId;
-      if (!currentPlanOrderId) {
-        toast.error('当前工单未关联计划，无法校验扫码');
-        return false;
-      }
-      try {
-        if (payload.kind === 'ITEM') {
-          if (scannedItemTokensRef.current.has(payload.token)) {
-            toast.warning('此单品码已扫描过');
-            return false;
-          }
-          const res = await itemCodesApi.scan(payload.token);
-          if (res.status === 'VOIDED') {
-            toast.error(res.message || '单品码已作废');
-            return false;
-          }
-          const callerPlanId = res.callerContext?.callerPlanOrderId ?? res.planOrderId;
-          if (callerPlanId !== currentPlanOrderId) {
-            toast.error('此码不属于当前工单所在计划');
-            return false;
-          }
-          if (res.kind !== 'ITEM_CODE') return false;
-          const vid = res.variantId || '';
-          if (reportForm.variantQuantities && !vid) {
-            toast.error('单品码未带规格，无法在按规格模式下累加');
-            return false;
-          }
-          const okValidate = await validateScanForReport({
-            itemCodeId: res.itemCodeId ?? null,
-            virtualBatchId: res.batchId ?? null,
-            variantId: vid || null,
-            addQty: 1,
-          });
-          if (!okValidate) return false;
-          scannedItemTokensRef.current.add(payload.token);
-          if (res.batchId) reportScanLinkRef.current.virtualBatchId = res.batchId;
-          if (res.itemCodeId) reportScanLinkRef.current.itemCodeId = res.itemCodeId;
-          setReportForm(f => {
-            if (f.variantQuantities) {
-              const prev = f.variantQuantities[vid] ?? 0;
-              return { ...f, variantQuantities: { ...f.variantQuantities, [vid]: prev + 1 } };
-            }
-            return { ...f, quantity: (f.quantity || 0) + 1, variantId: vid || f.variantId };
-          });
-          toast.success(
-            `扫码 +1${res.variantLabel || res.productName ? `（${res.variantLabel || res.productName}）` : ''}${
-              res.ownerTenantName && res.callerContext?.relation !== 'OWNER' ? ` · 来自 ${res.ownerTenantName}` : ''
-            }`,
-          );
-          return true;
-        }
-        if (payload.kind === 'BATCH') {
-          if (scannedBatchTokensRef.current.has(payload.token)) {
-            toast.warning('此批次码已扫描过');
-            return false;
-          }
-          const res = await planVirtualBatchesApi.scan(payload.token);
-          if (res.kind !== 'VIRTUAL_BATCH') return false;
-          if (res.status === 'VOIDED') {
-            toast.error(res.message || '批次码已作废');
-            return false;
-          }
-          const callerPlanId = res.callerContext?.callerPlanOrderId ?? res.planOrderId;
-          if (callerPlanId !== currentPlanOrderId) {
-            toast.error('此批次码不属于当前工单所在计划');
-            return false;
-          }
-          const qty = res.quantity ?? 0;
-          const vid = res.variantId || '';
-          if (reportForm.variantQuantities && !vid) {
-            toast.error('批次码未带规格，无法在按规格模式下累加');
-            return false;
-          }
-          const okValidate = await validateScanForReport({
-            itemCodeId: null,
-            virtualBatchId: res.batchId ?? null,
-            variantId: vid || null,
-            addQty: qty,
-          });
-          if (!okValidate) return false;
-          scannedBatchTokensRef.current.add(payload.token);
-          if (res.batchId) reportScanLinkRef.current.virtualBatchId = res.batchId;
-          setReportForm(f => {
-            if (f.variantQuantities) {
-              const prev = f.variantQuantities[vid] ?? 0;
-              return { ...f, variantQuantities: { ...f.variantQuantities, [vid]: prev + qty } };
-            }
-            return { ...f, quantity: (f.quantity || 0) + qty, variantId: vid || f.variantId };
-          });
-          toast.success(
-            `批次码 +${qty}${res.variantLabel || res.productName ? `（${res.variantLabel || res.productName}）` : ''}${
-              res.ownerTenantName && res.callerContext?.relation !== 'OWNER' ? ` · 来自 ${res.ownerTenantName}` : ''
-            }`,
-          );
-          return true;
-        }
-      } catch (e) {
-        toast.error(rewriteScanApiErrorForIme(payload.raw, (e as Error)?.message || '扫码查询失败'));
-        return false;
-      }
-      return false;
-    },
-    [reportModal.order.planOrderId, reportForm.variantQuantities, validateScanForReport],
-  );
-
-  const resolveReportScanRowPreview = useCallback(
-    async (payload: ScanPayload): Promise<ScanBatchRowDetail | null> => {
+  /**
+   * 扫码解析（含持久化去重校验），按 token 缓存。
+   * - 扫码（预览）阶段与「确认应用」阶段共用：预览先解析并缓存，确认时命中缓存 → 0 网络请求。
+   */
+  const prepareReportScan = useCallback(
+    async (payload: ScanPayload): Promise<PreparedReportScan | null> => {
       if (!payload.token) return null;
+      const cached = preparedByTokenRef.current.get(payload.token);
+      if (cached) return cached;
       const currentPlanOrderId = reportModal.order.planOrderId;
       if (!currentPlanOrderId) {
         toast.error('当前工单未关联计划，无法校验扫码');
@@ -439,10 +363,6 @@ export function useReportModalState(args: UseReportModalStateArgs) {
       }
       try {
         if (payload.kind === 'ITEM') {
-          if (scannedItemTokensRef.current.has(payload.token)) {
-            toast.warning('此单品码已扫描过');
-            return null;
-          }
           const res = await itemCodesApi.scan(payload.token);
           if (res.status === 'VOIDED') {
             toast.error(res.message || '单品码已作废');
@@ -453,12 +373,12 @@ export function useReportModalState(args: UseReportModalStateArgs) {
             toast.error('此码不属于当前工单所在计划');
             return null;
           }
+          if (res.kind !== 'ITEM_CODE') return null;
           const vid = res.variantId || '';
           if (reportForm.variantQuantities && !vid) {
             toast.error('单品码未带规格，无法在按规格模式下累加');
             return null;
           }
-          if (res.kind !== 'ITEM_CODE') return null;
           const okValidate = await validateScanForReport({
             itemCodeId: res.itemCodeId ?? null,
             virtualBatchId: res.batchId ?? null,
@@ -466,13 +386,21 @@ export function useReportModalState(args: UseReportModalStateArgs) {
             addQty: 1,
           });
           if (!okValidate) return null;
-          return scanItemResultToRowDetail(res);
+          const prepared: PreparedReportScan = {
+            vid,
+            qty: 1,
+            itemCodeId: res.itemCodeId ?? null,
+            batchId: res.batchId ?? null,
+            detail: scanItemResultToRowDetail(res),
+            variantLabel: res.variantLabel,
+            productName: res.productName,
+            ownerTenantName: res.ownerTenantName,
+            relation: res.callerContext?.relation,
+          };
+          preparedByTokenRef.current.set(payload.token, prepared);
+          return prepared;
         }
         if (payload.kind === 'BATCH') {
-          if (scannedBatchTokensRef.current.has(payload.token)) {
-            toast.warning('此批次码已扫描过');
-            return null;
-          }
           const res = await planVirtualBatchesApi.scan(payload.token);
           if (res.kind !== 'VIRTUAL_BATCH') return null;
           if (res.status === 'VOIDED') {
@@ -484,6 +412,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
             toast.error('此批次码不属于当前工单所在计划');
             return null;
           }
+          const qty = res.quantity ?? 0;
           const vid = res.variantId || '';
           if (reportForm.variantQuantities && !vid) {
             toast.error('批次码未带规格，无法在按规格模式下累加');
@@ -493,10 +422,22 @@ export function useReportModalState(args: UseReportModalStateArgs) {
             itemCodeId: null,
             virtualBatchId: res.batchId ?? null,
             variantId: vid || null,
-            addQty: res.quantity ?? 0,
+            addQty: qty,
           });
           if (!okValidate) return null;
-          return scanVirtualBatchResultToRowDetail(res);
+          const prepared: PreparedReportScan = {
+            vid,
+            qty,
+            itemCodeId: null,
+            batchId: res.batchId ?? null,
+            detail: scanVirtualBatchResultToRowDetail(res),
+            variantLabel: res.variantLabel,
+            productName: res.productName,
+            ownerTenantName: res.ownerTenantName,
+            relation: res.callerContext?.relation,
+          };
+          preparedByTokenRef.current.set(payload.token, prepared);
+          return prepared;
         }
       } catch (e) {
         toast.error(rewriteScanApiErrorForIme(payload.raw, (e as Error)?.message || '扫码查询失败'));
@@ -505,6 +446,42 @@ export function useReportModalState(args: UseReportModalStateArgs) {
       return null;
     },
     [reportModal.order.planOrderId, reportForm.variantQuantities, validateScanForReport],
+  );
+
+  const resolveReportScanRowPreview = useCallback(
+    async (payload: ScanPayload): Promise<ScanBatchRowDetail | null> => {
+      const prepared = await prepareReportScan(payload);
+      return prepared?.detail ?? null;
+    },
+    [prepareReportScan],
+  );
+
+  const applyScanPayload = useCallback(
+    async (payload: ScanPayload): Promise<boolean> => {
+      // 扫码阶段已通过 resolveReportScanRowPreview 调 prepareReportScan 并缓存，
+      // 此处命中缓存 → 0 网络；缓存未命中（极少数）才回退到网络解析。
+      const prepared = await prepareReportScan(payload);
+      if (!prepared) return false;
+      const { vid, qty } = prepared;
+      if (prepared.batchId) reportScanLinkRef.current.virtualBatchId = prepared.batchId;
+      if (prepared.itemCodeId) {
+        reportScanLinkRef.current.itemCodeId = prepared.itemCodeId;
+        const arr = reportScanItemCodesByVidRef.current.get(vid) ?? [];
+        if (!arr.includes(prepared.itemCodeId)) arr.push(prepared.itemCodeId);
+        reportScanItemCodesByVidRef.current.set(vid, arr);
+      } else if (prepared.batchId) {
+        reportHadBatchScanRef.current = true;
+      }
+      setReportForm(f => {
+        if (f.variantQuantities) {
+          const prev = f.variantQuantities[vid] ?? 0;
+          return { ...f, variantQuantities: { ...f.variantQuantities, [vid]: prev + qty } };
+        }
+        return { ...f, quantity: (f.quantity || 0) + qty, variantId: vid || f.variantId };
+      });
+      return true;
+    },
+    [prepareReportScan],
   );
 
   const handleScanBatchConfirm = useCallback(
@@ -634,13 +611,29 @@ export function useReportModalState(args: UseReportModalStateArgs) {
     const weightForVariant = (variantId: string) => matrixWeightPartsByVariantId?.get(variantId);
 
     const getNextReportNo = () => generateNextReportNo(orders, productMilestoneProgresses);
-    const submitCustomData = (): Record<string, unknown> => ({
-      ...reportForm.customData,
-      ...(reportScanLinkRef.current.virtualBatchId
-        ? { virtualBatchId: reportScanLinkRef.current.virtualBatchId }
-        : {}),
-      ...(reportScanLinkRef.current.itemCodeId ? { itemCodeId: reportScanLinkRef.current.itemCodeId } : {}),
-    });
+    /**
+     * 单品码模式下取本次扫入的单品码列表：
+     * - `variantId` 传具体规格（矩阵报工每行）→ 仅取该规格扫入的单品码；
+     * - 传 `null`（非矩阵单条报工）→ 合并所有规格的单品码（同一条报工承载全部扫入）。
+     * 扫过批次码（批次码模式）则不写列表，沿用整批 virtual_batch_id 链路。
+     */
+    const collectScanItemCodes = (variantId: string | null): string[] => {
+      if (reportHadBatchScanRef.current) return [];
+      const map = reportScanItemCodesByVidRef.current;
+      if (variantId === null) return [...new Set([...map.values()].flat())];
+      return map.get(variantId) ?? [];
+    };
+    const submitCustomData = (variantId: string | null): Record<string, unknown> => {
+      const scanItemCodeIds = collectScanItemCodes(variantId);
+      return {
+        ...reportForm.customData,
+        ...(reportScanLinkRef.current.virtualBatchId
+          ? { virtualBatchId: reportScanLinkRef.current.virtualBatchId }
+          : {}),
+        ...(reportScanLinkRef.current.itemCodeId ? { itemCodeId: reportScanLinkRef.current.itemCodeId } : {}),
+        ...(scanItemCodeIds.length > 0 ? { [SCAN_ITEM_CODE_IDS_KEY]: scanItemCodeIds } : {}),
+      };
+    };
 
     if (productionLinkMode === 'product' && onReportSubmitProduct) {
       if (showVariantMatrix && reportForm.variantQuantities) {
@@ -654,7 +647,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
         for (const [vId, qty] of entries) {
           const defQty = reportForm.variantDefectiveQuantities?.[vId] ?? 0;
           await onReportSubmitProduct(
-            productId, milestoneTemplateId, qty, submitCustomData(),
+            productId, milestoneTemplateId, qty, submitCustomData(vId),
             vId, reportForm.workerId || undefined, defQty,
             reportForm.equipmentId || undefined, batchId, reportNo,
             weightForVariant(vId),
@@ -663,7 +656,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
       } else {
         const reportNo = getNextReportNo();
         await onReportSubmitProduct(
-          productId, milestoneTemplateId, reportForm.quantity, submitCustomData(),
+          productId, milestoneTemplateId, reportForm.quantity, submitCustomData(null),
           reportForm.variantId || undefined, reportForm.workerId || undefined,
           reportForm.defectiveQuantity || 0, reportForm.equipmentId || undefined,
           undefined, reportNo,
@@ -692,7 +685,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
         const ms = targetOrder.milestones.find(m => m.templateId === reportModal.milestone.templateId) ?? reportModal.milestone;
         const defQty = reportForm.variantDefectiveQuantities?.[vId] ?? 0;
         await onReportSubmit(
-          targetOrder.id, ms.id, qty, submitCustomData(),
+          targetOrder.id, ms.id, qty, submitCustomData(vId),
           vId, reportForm.workerId || undefined, defQty,
           reportForm.equipmentId || undefined, batchId, reportNo,
           weightForVariant(vId),
@@ -708,7 +701,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
       const ms = targetOrder.milestones.find(m => m.templateId === reportModal.milestone.templateId) ?? reportModal.milestone;
       const reportNo = getNextReportNo();
       await onReportSubmit(
-        targetOrder.id, ms.id, reportForm.quantity, submitCustomData(),
+        targetOrder.id, ms.id, reportForm.quantity, submitCustomData(null),
         reportForm.variantId || undefined, reportForm.workerId || undefined,
         reportForm.defectiveQuantity || 0, reportForm.equipmentId || undefined,
         undefined, reportNo,

@@ -37,11 +37,9 @@ async function getAllDescendantPlans(planId: string, tenantId: string, depth = 0
  * 规则：基于该计划下直接关联工单 `productionOrders WHERE planOrderId = plan.id` 的 `dispatchStatus` 聚合：
  * - 全部 `COMPLETED` → `COMPLETED`
  * - 有工单但未全部完成 → `IN_PROGRESS`
- * - 无关联工单：
- *   - 计划已下达（`status === CONVERTED`）→ `IN_PROGRESS`
- *     （已点过下达，工单可能被删 / 历史数据 planOrderId 未关联 / 经委外等非下达途径产生，
- *      此时不能回退成「未下单」，否则与持久化的已下达状态矛盾，表现为「明明下了单却显示未下单」）
- *   - 计划未下达 → `NOT_DISPATCHED`
+ * - 无关联工单 → `NOT_DISPATCHED`
+ *   （删除工单后 `orders.service.revertPlanIfNoLinkedOrders` 会将计划 `status` 从 CONVERTED 回退，
+ *    与派生状态保持一致，可再次下达并编辑详情）
  *
  * 父子计划在列表里各自是独立 PlanOrder 行，互不影响。
  */
@@ -51,9 +49,7 @@ function computePlanDispatchStatus(plan: {
 }): PlanDispatchStatus {
   const linked = plan.productionOrders ?? [];
   if (linked.length === 0) {
-    return plan.status === PlanStatus.CONVERTED
-      ? PlanDispatchStatus.IN_PROGRESS
-      : PlanDispatchStatus.NOT_DISPATCHED;
+    return PlanDispatchStatus.NOT_DISPATCHED;
   }
   const allCompleted = linked.every(o => o.dispatchStatus === PlanDispatchStatus.COMPLETED);
   return allCompleted ? PlanDispatchStatus.COMPLETED : PlanDispatchStatus.IN_PROGRESS;

@@ -8,6 +8,7 @@
  * - 颜色 × 尺码模式按 variantId 分别构造记录
  */
 import type { ProductionOrder, ProductionOpRecord } from '../types';
+import { SCAN_ITEM_CODE_IDS_KEY } from '../types';
 import { stockInCollabFromCustomData } from '../views/order-list/pendingStockStockInHelpers';
 
 export interface BuildSingleStockInArgs {
@@ -22,6 +23,14 @@ export interface BuildSingleStockInArgs {
   customData: Record<string, unknown>;
   virtualBatchId?: string;
   itemCodeId?: string;
+  /**
+   * 单品码模式下按规格扫入的单品码列表（key = variantId，无规格为 ''）。
+   * 写入记录 `customData.__scanItemCodeIds`，使追溯可逐件精确命中；批次码模式不传。
+   * 同一规格被拆到多条记录时，仅首条携带该列表，避免追溯出现重复事件。
+   */
+  scanItemCodeIdsByVid?: Record<string, string[]>;
+  /** 本次是否扫过批次码：批次码模式沿用整批链路，不写逐件列表 */
+  hadBatchScan?: boolean;
   operator: string;
   timestamp: string;
   /** 上游 prodRecords,用于按工单做"已入库"扣减(产品模式 + 多工单) */
@@ -62,6 +71,24 @@ export function buildSingleStockInRecords(args: BuildSingleStockInArgs): Product
     ...(virtualBatchId ? { virtualBatchId } : {}),
     ...(itemCodeId ? { itemCodeId } : {}),
   };
+
+  /**
+   * 单品码模式：把本次扫入的单品码列表写入记录 `customData`，供追溯逐件精确命中。
+   * 自消费：同一规格（或非矩阵的合并列表）只在首条记录携带，避免拆单后追溯重复事件。
+   */
+  const itemCodesByVid = args.scanItemCodeIdsByVid ?? {};
+  const hadBatchScan = args.hadBatchScan ?? false;
+  const assignedScanKeys = new Set<string>();
+  const spreadScanList = (vid: string | null): { customData?: Record<string, unknown> } => {
+    if (hadBatchScan) return {};
+    const akey = vid ?? '__ALL__';
+    if (assignedScanKeys.has(akey)) return {};
+    const list = vid === null ? [...new Set(Object.values(itemCodesByVid).flat())] : itemCodesByVid[vid] ?? [];
+    if (list.length === 0) return {};
+    assignedScanKeys.add(akey);
+    return { customData: { [SCAN_ITEM_CODE_IDS_KEY]: list } };
+  };
+
   const isProductMulti = productionLinkMode === 'product' && ordersInRow.length > 1;
   const records: ProductionOpRecord[] = [];
   let seq = 0;
@@ -100,6 +127,7 @@ export function buildSingleStockInRecords(args: BuildSingleStockInArgs): Product
             warehouseId: warehouseId || undefined,
             ...collab,
             ...traceFields,
+            ...spreadScanList(vid),
           } as ProductionOpRecord);
         }
         if (remain > 0) {
@@ -118,6 +146,7 @@ export function buildSingleStockInRecords(args: BuildSingleStockInArgs): Product
             warehouseId: warehouseId || undefined,
             ...collab,
             ...traceFields,
+            ...spreadScanList(vid),
           } as ProductionOpRecord);
         }
       }
@@ -146,6 +175,7 @@ export function buildSingleStockInRecords(args: BuildSingleStockInArgs): Product
           warehouseId: warehouseId || undefined,
           ...collab,
           ...traceFields,
+          ...spreadScanList(null),
         } as ProductionOpRecord);
       }
       if (remain > 0) {
@@ -163,6 +193,7 @@ export function buildSingleStockInRecords(args: BuildSingleStockInArgs): Product
           warehouseId: warehouseId || undefined,
           ...collab,
           ...traceFields,
+          ...spreadScanList(null),
         } as ProductionOpRecord);
       }
     }
@@ -188,6 +219,7 @@ export function buildSingleStockInRecords(args: BuildSingleStockInArgs): Product
             warehouseId: warehouseId || undefined,
             ...collab,
             ...traceFields,
+            ...spreadScanList(variantId),
           }) as ProductionOpRecord,
       );
   }
@@ -206,6 +238,7 @@ export function buildSingleStockInRecords(args: BuildSingleStockInArgs): Product
       warehouseId: warehouseId || undefined,
       ...collab,
       ...traceFields,
+      ...spreadScanList(null),
     } as ProductionOpRecord,
   ];
 }

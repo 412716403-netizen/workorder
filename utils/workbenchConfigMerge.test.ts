@@ -63,6 +63,74 @@ describe('normalizeWorkbenchConfig', () => {
   });
 });
 
+describe('mergeWorkbenchHomePinnedItems', () => {
+  it('always restores pinned widgets on home page', () => {
+    const config = normalizeWorkbenchConfig({
+      version: 1,
+      activePageId: 'page-overview',
+      pages: [
+        {
+          id: 'page-overview',
+          title: '首页',
+          sortOrder: 0,
+          layout: {
+            version: 1,
+            items: [
+              { i: 'w-sales', widgetType: 'sales_stats', x: 0, y: 20, w: 4, h: 6 },
+            ],
+          },
+        },
+      ],
+    });
+    const types = config.pages[0].layout.items.map(i => i.widgetType);
+    expect(types).toContain('shortcuts');
+    expect(types).toContain('plugin_center');
+    expect(types).toContain('messages');
+    expect(types).toContain('sales_stats');
+    expect(types.filter(t => t === 'shortcuts')).toHaveLength(1);
+    const messages = config.pages[0].layout.items.find(i => i.widgetType === 'messages');
+    expect(messages).toMatchObject({ x: 8, y: 0, w: 4, h: 6 });
+  });
+
+  it('pushes custom widgets below pinned header row', () => {
+    const config = normalizeWorkbenchConfig({
+      version: 1,
+      activePageId: 'page-overview',
+      pages: [
+        {
+          id: 'page-overview',
+          title: '首页',
+          sortOrder: 0,
+          layout: {
+            version: 1,
+            items: [
+              { i: 'w-order', widgetType: 'order_stats', x: 8, y: 0, w: 5, h: 7 },
+            ],
+          },
+        },
+      ],
+    });
+    const order = config.pages[0].layout.items.find(i => i.widgetType === 'order_stats');
+    expect(order?.y).toBeGreaterThanOrEqual(6);
+    const messages = config.pages[0].layout.items.find(i => i.widgetType === 'messages');
+    expect(messages).toMatchObject({ x: 8, y: 0 });
+  });
+
+  it('builtin default includes full home dashboard layout', () => {
+    const types = WORKBENCH_BUILTIN_DEFAULT.pages[0].layout.items.map(i => i.widgetType);
+    expect(types).toEqual([
+      'shortcuts',
+      'plugin_center',
+      'messages',
+      'order_stats',
+      'outsource_stats',
+      'finance_stats',
+      'sales_stats',
+      'rework_stats',
+    ]);
+  });
+});
+
 describe('filterWorkbenchByAccess', () => {
   it('removes widgets without module permission', () => {
     const config = normalizeWorkbenchConfig(WORKBENCH_BUILTIN_DEFAULT);

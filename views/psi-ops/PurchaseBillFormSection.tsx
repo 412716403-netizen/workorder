@@ -248,9 +248,24 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
   };
 
   const handleConvertPOToBill = () => {
-    if (selectedPOItemIds.length === 0 || !form.warehouseId) return;
+    if (!form.warehouseId) {
+      toast.warning('请选择入库仓库');
+      return;
+    }
+    if (selectedPOItemIds.length === 0) {
+      toast.warning('请至少选择一条采购订单明细');
+      return;
+    }
 
     const itemsToBill = availableItemsFromSelectedPOs.filter(item => selectedPOItemIds.includes(item.id));
+    const hasPositiveQty = itemsToBill.some(item => {
+      const qty = Math.max(0, selectedPOItemQuantities[item.id] ?? item.remainingQty ?? 0);
+      return qty > 0;
+    });
+    if (!hasPositiveQty) {
+      toast.warning('入库数量须大于 0，请填写后再执行入库');
+      return;
+    }
     const timestampIso = new Date().toISOString();
     const firstItem = itemsToBill[0];
     let pbDocNumber = generatePBDocNumber(firstItem?.partnerId || '', firstItem?.partner || '');
@@ -384,11 +399,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
             <button
               type="button"
               onClick={() => onSaveManual()}
-              disabled={!form.partner || !form.warehouseId || purchaseBillItems.length === 0 || !purchaseBillItems.some(i => {
-              if (!i.productId) return false;
-              const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((s, v) => s + v, 0) : (i.quantity ?? 0);
-              return q !== 0;
-            })}
+              disabled={!form.partner || !form.warehouseId || purchaseBillItems.length === 0}
               className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
             >
               <Save className="w-4 h-4" /> {editingDocNumber ? '保存修改' : '确认保存采购入库'}
@@ -397,7 +408,7 @@ const PurchaseBillFormSection: React.FC<PurchaseBillFormSectionProps> = ({
             <button
               type="button"
               onClick={handleConvertPOToBill}
-              disabled={!form.warehouseId || selectedPOItemIds.length === 0 || selectedPOItemIds.every(id => (selectedPOItemQuantities[id] ?? 0) <= 0)}
+              disabled={!form.warehouseId || selectedPOItemIds.length === 0}
               className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
             >
               <ArrowDownToLine className="w-4 h-4" />

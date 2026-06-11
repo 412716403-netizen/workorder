@@ -28,12 +28,12 @@ export interface ScanBatchSessionModalProps {
   hint?: string;
   /** 是否显示底部手工粘贴区（默认 true） */
   allowManualPaste?: boolean;
-  /** 为 true 时显示「批次码 / 单品码」扫码方式，并在扫入后按方式归一化 payload（默认 false，保持旧行为） */
+  /** 为 true 时显示「按批累计 / 按件累计」切换，并在扫入后按所选方式归一化 payload（默认 false，保持旧行为） */
   showScanIntentToggle?: boolean;
-  /** 与 `showScanIntentToggle` 配合：每次打开弹窗时的默认扫码方式（未传时组件内默认为「批次码」） */
+  /** 与 `showScanIntentToggle` 配合：每次打开弹窗时的默认累计方式（未传时组件内默认为「按批累计」） */
   defaultScanIntent?: ScanIntent;
   /**
-   * 自定义头部插槽：渲染在标题/hint 与「扫码方式」之间。
+   * 自定义头部插槽：渲染在标题/hint 与「累计方式」之间。
    * 用于挂载业务上下文选择（如外协收货前先选加工厂）。
    */
   headerSlot?: React.ReactNode;
@@ -363,8 +363,8 @@ export function ScanBatchSessionModal({
 
         {showScanIntentToggle ? (
           <div className="shrink-0 border-b border-slate-100 px-4 py-2.5">
-            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">扫码方式</div>
-            <div className="mt-1.5 flex gap-1.5" role="tablist" aria-label="扫码方式">
+            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">累计方式</div>
+            <div className="mt-1.5 flex gap-1.5" role="tablist" aria-label="扫码累计方式">
               <button
                 type="button"
                 role="tab"
@@ -376,7 +376,7 @@ export function ScanBatchSessionModal({
                     : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                批次码
+                按批累计
               </button>
               <button
                 type="button"
@@ -389,13 +389,13 @@ export function ScanBatchSessionModal({
                     : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                单品码
+                按件累计
               </button>
             </div>
             <p className="mt-1.5 text-[10px] leading-snug text-slate-500">
               {scanIntent === 'ITEM'
-                ? '仅接受单品码；扫批次码将提示不匹配。'
-                : '接受批次码；扫单品码时若有关联批次则按批次展示与累计，否则提示无批次信息。'}
+                ? '须扫单品标签登记；扫批次标签将提示不匹配。'
+                : '可扫批次或单品标签；扫单品时若有关联批次则按该批累计，否则提示无批次信息。'}
             </p>
           </div>
         ) : null}

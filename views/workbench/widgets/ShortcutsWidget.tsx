@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import WidgetShell from '../WidgetShell';
+import WorkbenchIconGrid from '../WorkbenchIconGrid';
 import ShortcutsEditModal from './ShortcutsEditModal';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useFeaturePlugins } from '../../../hooks/useFeaturePlugins';
@@ -44,10 +45,11 @@ const ICON_MAP: Record<WorkbenchShortcutIconKey, LucideIcon> = {
 
 interface ShortcutsWidgetProps {
   editing?: boolean;
+  layoutLocked?: boolean;
   onRemove?: () => void;
 }
 
-const ShortcutsWidget: React.FC<ShortcutsWidgetProps> = ({ editing, onRemove }) => {
+const ShortcutsWidget: React.FC<ShortcutsWidgetProps> = ({ editing, layoutLocked, onRemove }) => {
   const navigate = useNavigate();
   const { tenantCtx } = useAuth();
   const { plugins } = useFeaturePlugins();
@@ -77,7 +79,7 @@ const ShortcutsWidget: React.FC<ShortcutsWidgetProps> = ({ editing, onRemove }) 
 
   return (
     <>
-      <WidgetShell title="快捷入口" editing={editing} onRemove={onRemove} headerExtra={headerExtra}>
+      <WidgetShell title="快捷入口" editing={editing} layoutLocked={layoutLocked} onRemove={onRemove} headerExtra={headerExtra}>
         {shortcuts.isLoading ? (
           <div className="flex min-h-[120px] items-center justify-center text-xs text-slate-400">加载中…</div>
         ) : items.length === 0 ? (
@@ -86,7 +88,7 @@ const ShortcutsWidget: React.FC<ShortcutsWidgetProps> = ({ editing, onRemove }) 
             <p className="text-[10px]">点击右上角「编辑」添加入口</p>
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-3">
+          <WorkbenchIconGrid>
             {items.map(item => {
               const Icon = ICON_MAP[item.icon];
               return (
@@ -94,16 +96,16 @@ const ShortcutsWidget: React.FC<ShortcutsWidgetProps> = ({ editing, onRemove }) 
                   key={item.id}
                   type="button"
                   onClick={() => navigateWorkbenchShortcut(navigate, item)}
-                  className="workbench-no-drag flex flex-col items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/80 p-3 transition hover:border-indigo-200 hover:bg-indigo-50/50"
+                  className="workbench-no-drag flex flex-col items-center gap-2.5 rounded-xl border border-slate-100 bg-slate-50/80 p-3.5 transition hover:border-indigo-200 hover:bg-indigo-50/50"
                 >
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-sm">
-                    <Icon className="h-5 w-5" />
+                  <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-sm">
+                    <Icon className="h-6 w-6" />
                   </span>
-                  <span className="text-center text-[11px] font-bold leading-tight text-slate-700">{item.label}</span>
+                  <span className="text-center text-xs font-bold leading-tight text-slate-700">{item.label}</span>
                 </button>
               );
             })}
-          </div>
+          </WorkbenchIconGrid>
         )}
       </WidgetShell>
 

@@ -864,9 +864,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const onDeleteOrder = useCallback(async (orderId: string) => {
-    try { await api.orders.delete(orderId); setOrders(prev => prev.filter(o => o.id !== orderId)); }
-    catch (err: any) { toast.error(err.message || '删除工单失败'); }
-  }, []);
+    try {
+      await api.orders.delete(orderId);
+      setOrders(prev => prev.filter(o => o.id !== orderId));
+      await refreshPlans();
+    } catch (err: any) { toast.error(err.message || '删除工单失败'); }
+  }, [refreshPlans]);
 
   // ── Production record handlers ──
   /**

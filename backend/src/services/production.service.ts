@@ -794,6 +794,9 @@ export async function applyOutsourceProgress(record: {
   /** 外协收回若工序开启称重，会同步把本次重量 + 物料分摊快照写入派生的 milestone/PMP 报工 */
   weight?: unknown;
   materialBreakdown?: unknown;
+  /** 扫码收货关联的单品码/虚拟批次 id，透传到派生报工以便产品追溯链路按码命中 */
+  itemCodeId?: string | null;
+  virtualBatchId?: string | null;
 }) {
   if (!record.nodeId) return;
   const qty = Number(record.quantity);
@@ -814,6 +817,9 @@ export async function applyOutsourceProgress(record: {
     customData: { source: 'outsourceReceive', docNo: record.docNo ?? '' },
     weight: weightNum != null && Number.isFinite(weightNum) && weightNum > 0 ? weightNum : null,
     materialBreakdown: (record.materialBreakdown as any) ?? null,
+    // 透传扫码 link，使派生的 milestone/PMP 报工也能被产品追溯链路按码命中
+    itemCodeId: record.itemCodeId ?? null,
+    virtualBatchId: record.virtualBatchId ?? null,
   };
 
   if (record.orderId) {

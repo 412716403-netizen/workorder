@@ -54,6 +54,7 @@ const CollabPeerReturnModal: React.FC<CollabPeerReturnModalProps> = ({
   useEffect(() => {
     if (!open) {
       prevOpenRef.current = false;
+      setBlocks([]);
       return;
     }
     const isFirstOpen = !prevOpenRef.current;

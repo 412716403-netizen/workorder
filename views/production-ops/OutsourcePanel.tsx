@@ -81,7 +81,7 @@ import {
 import OutsourceFlowListModal, { type OutsourceFlowOpenSeed } from './OutsourceFlowListModal';
 import OutsourcePartnerFlowDetailModal from './OutsourcePartnerFlowDetailModal';
 import OutsourceFlowDocumentDetailModal from './OutsourceFlowDocumentDetailModal';
-import { buildWeightMapForKeyedEntries } from '../../utils/reportBatchWeightHelpers';
+import { buildWeightMapForKeyedEntries, distributeWeightByQty } from '../../utils/reportBatchWeightHelpers';
 import StockDocDetailModal from './StockDocDetailModal';
 import DocPhaseModal from '../../components/DocPhaseModal';
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
@@ -248,6 +248,16 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   const [receiveFormUnitPrices, setReceiveFormUnitPrices] = useState<Record<string, number>>({});
   /** 外协收货按工序开关录入的本次交货总重量（kg），baseKey 维度，用于 BOM 占比分摊 */
   const [receiveFormWeights, setReceiveFormWeights] = useState<Record<string, number>>({});
+  /**
+   * 扫码收货时按 entry key 记录的 scan link，提交时写入收货记录，使追溯链路能按码命中本次收货。
+   * - 单品码模式：收集所有扫入的 itemCodeIds，提交时逐件落记录（每件只挂自己的单品码，不下沉到整批），
+   *   保证「扫 1 件只该件可查、扫多件各自独立可查」；
+   * - 批次码模式：只记 virtualBatchId（整批收回，同批各单品共享链路），合并为一条记录。
+   * 判定依据：扫码意图为批次时（含批次模式扫单品码）后端解析为 BATCH、itemCodeId 为空，故按是否有 itemCodeId 区分。
+   */
+  const [receiveScanLinkByKey, setReceiveScanLinkByKey] = useState<
+    Record<string, { virtualBatchId?: string | null; itemCodeIds: string[] }>
+  >({});
   const [receiveModal, setReceiveModal] = useState<{ orderId?: string; nodeId: string; productId: string; orderNumber?: string; productName: string; milestoneName: string; partner: string; pendingQty: number } | null>(null);
   const [receiveQty, setReceiveQty] = useState(0);
   const [flowDetailKey, setFlowDetailKey] = useState<string | null>(null);
@@ -785,6 +795,33 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   const showOrderDueDateColumn =
     productionLinkMode !== 'product' && planFormSettings?.listDisplay?.showDeliveryDate === true;
 
+  /** 关闭未保存的外协发出录入弹窗时丢弃草稿 */
+  const resetDispatchFormDraft = () => {
+    setDispatchFormQuantities({});
+    setDispatchCustomValues({});
+    setDispatchDeliveryDate('');
+    setDispatchPartnerName('');
+  };
+
+  const closeDispatchFormModal = () => {
+    resetDispatchFormDraft();
+    setDispatchFormModalOpen(false);
+  };
+
+  /** 关闭未保存的收货录入弹窗时丢弃草稿（数量/单价/重量/自定义字段） */
+  const resetReceiveFormDraft = () => {
+    setReceiveFormQuantities({});
+    setReceiveFormUnitPrices({});
+    setReceiveFormWeights({});
+    setReceiveScanLinkByKey({});
+    setReceiveCustomValues({});
+  };
+
+  const closeReceiveFormModal = () => {
+    resetReceiveFormDraft();
+    setReceiveFormModalOpen(false);
+  };
+
   const handleDispatchFormSubmit = async () => {
     const partnerName = (dispatchPartnerName || '').trim();
     if (!partnerName) {
@@ -869,8 +906,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
     const matchedPartner = partners.find(p => p.name === partnerName);
     const collabTenantId = matchedPartner?.collaborationTenantId;
 
-    setDispatchFormQuantities({});
-    setDispatchPartnerName('');
+    resetDispatchFormDraft();
     setDispatchFormModalOpen(false);
     setOutsourceModal(null);
     setDispatchSelectedKeys(new Set());
@@ -1056,48 +1092,78 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       const { row, isProductScope, baseKey, variantId } = resolved;
       const nodeId = row.nodeId;
       const unitPrice = receiveFormUnitPrices[baseKey] ?? 0;
-      const amount = qty * unitPrice;
       const weightForThis = weightByEntryKey.get(key);
-      const baseRecord = {
-        id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        type: 'OUTSOURCE' as const,
-        productId: row.productId,
-        quantity: qty,
-        reason: undefined,
-        operator: docOperator,
-        timestamp,
-        status: '已收回' as const,
-        partner: partnerName,
-        nodeId,
-        variantId: variantId || undefined,
-        docNo: receiveDocNo,
-        unitPrice: unitPrice || undefined,
-        amount: amount || undefined,
-        weight: weightForThis,
-        ...receiveCollab,
-      };
-      if (isProductScope) {
-        /** product 维度发出 → product 维度收回；不附 orderId，与发出对称 */
-        onAddRecord(baseRecord);
+      const link = receiveScanLinkByKey[key];
+      const itemCodeIds = link?.itemCodeIds ?? [];
+
+      /**
+       * 把本 key 拆成若干"分片"落记录：
+       * - 单品码模式：每件单独 qty1，仅挂自己的单品码（不挂批次），保证逐件独立可追溯；
+       *   尊重表单可能改小的数量（最多 qty 件带链路），改大的多出部分并入一条无链路记录。
+       * - 批次码模式：整批一条，挂 virtualBatchId。
+       * - 手工收货（无扫码链路）：单条，无链路。
+       */
+      type ReceiveSlice = { quantity: number; itemCodeId?: string; virtualBatchId?: string };
+      let slices: ReceiveSlice[];
+      if (itemCodeIds.length > 0) {
+        const linkedCount = Math.min(qty, itemCodeIds.length);
+        slices = itemCodeIds.slice(0, linkedCount).map(id => ({ quantity: 1, itemCodeId: id }));
+        const remainder = qty - linkedCount;
+        if (remainder > 0) slices.push({ quantity: remainder });
+      } else if (link?.virtualBatchId) {
+        slices = [{ quantity: qty, virtualBatchId: link.virtualBatchId }];
       } else {
-        /** order 维度发出 → order 维度收回；附 orderId，写回 milestone，与发出对称 */
-        const order = idx.ordersById.get(row.orderId!);
-        if (!order) continue;
-        const rowRec: ProductionOpRecord = {
-          ...baseRecord,
-          orderId: row.orderId!,
-          productId: order.productId,
-        };
-        onAddRecord(rowRec);
+        slices = [{ quantity: qty }];
       }
+
+      const sliceWeights =
+        weightForThis != null
+          ? distributeWeightByQty(weightForThis, slices.map(s => ({ quantity: s.quantity })))
+          : null;
+
+      slices.forEach((slice, si) => {
+        const sliceAmount = slice.quantity * unitPrice;
+        const baseRecord = {
+          id: `wx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${si}`,
+          type: 'OUTSOURCE' as const,
+          productId: row.productId,
+          quantity: slice.quantity,
+          reason: undefined,
+          operator: docOperator,
+          timestamp,
+          status: '已收回' as const,
+          partner: partnerName,
+          nodeId,
+          variantId: variantId || undefined,
+          docNo: receiveDocNo,
+          unitPrice: unitPrice || undefined,
+          amount: sliceAmount || undefined,
+          weight: sliceWeights ? sliceWeights[si] : weightForThis,
+          ...(slice.virtualBatchId ? { virtualBatchId: slice.virtualBatchId } : {}),
+          ...(slice.itemCodeId ? { itemCodeId: slice.itemCodeId } : {}),
+          ...receiveCollab,
+        };
+        if (isProductScope) {
+          /** product 维度发出 → product 维度收回；不附 orderId，与发出对称 */
+          onAddRecord(baseRecord);
+        } else {
+          /** order 维度发出 → order 维度收回；附 orderId，写回 milestone，与发出对称 */
+          const order = idx.ordersById.get(row.orderId!);
+          if (!order) return;
+          const rowRec: ProductionOpRecord = {
+            ...baseRecord,
+            orderId: row.orderId!,
+            productId: order.productId,
+          };
+          onAddRecord(rowRec);
+        }
+      });
     }
     const receiveTotalQty = entries.reduce((s, [, q]) => s + q, 0);
     toast.success('收货已保存', {
       description: `收回单号 ${receiveDocNo}，${entries.length} 条明细，合计 ${receiveTotalQty} 件`,
     });
-    setReceiveFormQuantities({});
-    setReceiveFormUnitPrices({});
-    setReceiveFormWeights({});
+    resetReceiveFormDraft();
     setReceiveFormModalOpen(false);
     setReceiveSelectedKeys(new Set());
   };
@@ -1120,6 +1186,23 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       const next = { ...prev };
       entries.forEach(e => {
         next[e.key] = (next[e.key] ?? 0) + e.qty;
+      });
+      return next;
+    });
+    setReceiveScanLinkByKey(prev => {
+      const next = { ...prev };
+      entries.forEach(e => {
+        const cur = next[e.key] ?? { itemCodeIds: [] as string[], virtualBatchId: null };
+        const itemCodeIds = [...cur.itemCodeIds];
+        let virtualBatchId = cur.virtualBatchId ?? null;
+        if (e.itemCodeId) {
+          // 单品码模式：逐件精确关联（不挂批次，避免同批其他单品被误关联）
+          if (!itemCodeIds.includes(e.itemCodeId)) itemCodeIds.push(e.itemCodeId);
+        } else if (e.virtualBatchId) {
+          // 批次码模式：整批关联
+          virtualBatchId = virtualBatchId ?? e.virtualBatchId;
+        }
+        next[e.key] = { itemCodeIds, virtualBatchId };
       });
       return next;
     });
@@ -1525,10 +1608,16 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           dispatchSelectedKeys={dispatchSelectedKeys}
           setDispatchSelectedKeys={setDispatchSelectedKeys}
           onDispatchFormOpen={() => {
-            setDispatchFormQuantities({});
+            resetDispatchFormDraft();
             setDispatchFormModalOpen(true);
           }}
-          onClose={() => setOutsourceModal(null)}
+          onClose={() => {
+            setOutsourceModal(null);
+            if (!dispatchFormModalOpen) {
+              resetDispatchFormDraft();
+              setDispatchSelectedKeys(new Set());
+            }
+          }}
         />
       )}
 
@@ -1544,9 +1633,9 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           hasPerm={p => hasOpsPerm(tenantRole, userPermissions, p)}
           viewPerm="production:outsource_send:allow"
           editPerm="production:outsource_send:allow"
-          onClose={() => setDispatchFormModalOpen(false)}
+          onClose={closeDispatchFormModal}
           onEnterEdit={() => {}}
-          onCancelEdit={() => {}}
+          onCancelEdit={closeDispatchFormModal}
           renderContent={() => (
             <OutsourceDispatchQuantityModal
               embedded
@@ -1575,7 +1664,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
               dispatchDeliveryDate={dispatchDeliveryDate}
               setDispatchDeliveryDate={setDispatchDeliveryDate}
               onSubmit={handleDispatchFormSubmit}
-              onClose={() => setDispatchFormModalOpen(false)}
+              onClose={closeDispatchFormModal}
             />
           )}
         />
@@ -1595,7 +1684,13 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           receiveFormQuantities={receiveFormQuantities}
           onReceiveFormOpen={() => setReceiveFormModalOpen(true)}
           onScanConfirm={handleReceiveScanConfirm}
-          onClose={() => setOutsourceModal(null)}
+          onClose={() => {
+            setOutsourceModal(null);
+            if (!receiveFormModalOpen) {
+              resetReceiveFormDraft();
+              setReceiveSelectedKeys(new Set());
+            }
+          }}
         />
       )}
 
@@ -1611,9 +1706,9 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           hasPerm={p => hasOpsPerm(tenantRole, userPermissions, p)}
           viewPerm="production:outsource_receive:allow"
           editPerm="production:outsource_receive:allow"
-          onClose={() => setReceiveFormModalOpen(false)}
+          onClose={closeReceiveFormModal}
           onEnterEdit={() => {}}
-          onCancelEdit={() => {}}
+          onCancelEdit={closeReceiveFormModal}
           renderContent={() => (
             <OutsourceReceiveQuantityModal
               embedded
@@ -1640,7 +1735,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
               boms={boms}
               allowExceedMaxOutsourceReceiveQty={allowExceedMaxOutsourceReceiveQty}
               onSubmit={handleReceiveFormSubmit}
-              onClose={() => setReceiveFormModalOpen(false)}
+              onClose={closeReceiveFormModal}
             />
           )}
         />

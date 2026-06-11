@@ -12,6 +12,7 @@ import type {
   PlanStatus,
 } from '../types';
 import { formatCustomFieldDatetimeForPrint } from './localDateTime';
+import { formatProductProcessNodesText } from './productProcessNodesPrint';
 
 const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   PLANNING: '计划中',
@@ -109,10 +110,12 @@ function orderField(order: ProductionOrder, key: string): unknown {
   }
 }
 
-function productField(product: Product, key: string): unknown {
+function productField(product: Product, key: string, ctx: PrintRenderContext): unknown {
   switch (key) {
     case 'name': return product.name;
     case 'sku': return product.sku;
+    case 'processNodes':
+      return formatProductProcessNodesText(product, ctx.globalNodes);
     case 'description': return product.description ?? '';
     case 'imageUrl': return product.imageUrl ?? '';
     default:
@@ -174,6 +177,8 @@ function purchaseBillField(pb: PurchaseBillPrintContext, key: string): unknown {
       return String(Math.round(Number(pb.docTotalQty) || 0));
     case 'docTotalAmount':
       return fmtMoney(Number(pb.docTotalAmount) || 0);
+    case 'relatedProduct':
+      return pb.relatedProduct ?? '';
     default:
       if (key.startsWith('custom.')) {
         const id = key.slice('custom.'.length);
@@ -285,7 +290,7 @@ function resolvePath(ctx: PrintRenderContext, path: string): unknown {
   }
   if (ns === '计划' && ctx.plan) return planField(ctx.plan, sub, ctx);
   if (ns === '工单' && ctx.order) return orderField(ctx.order, sub);
-  if (ns === '产品' && ctx.product) return productField(ctx.product, sub);
+  if (ns === '产品' && ctx.product) return productField(ctx.product, sub, ctx);
   if (ns === '销售单') {
     if (!ctx.salesBill) return '';
     const v = salesBillField(ctx.salesBill, sub);

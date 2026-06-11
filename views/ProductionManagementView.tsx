@@ -76,6 +76,7 @@ const ProductionManagementView: React.FC = () => {
   const onRefreshPrintTemplates = a.refreshPrintTemplates;
   const orderFormSettings = c.orderFormSettings;
   const onUpdateOrderFormSettings = a.onUpdateOrderFormSettings;
+  const onRefreshGlobalNodes = a.refreshGlobalNodes;
   const materialPanelSettings = c.materialPanelSettings;
   const onUpdateMaterialPanelSettings = a.onUpdateMaterialPanelSettings;
   const materialFormSettings = c.materialFormSettings;
@@ -310,6 +311,7 @@ const ProductionManagementView: React.FC = () => {
             onRefreshPrintTemplates={onRefreshPrintTemplates}
             warehouses={warehouses}
             onUpdateOrderFormSettings={onUpdateOrderFormSettings}
+            onRefreshGlobalNodes={onRefreshGlobalNodes}
             onReportSubmit={onReportSubmit}
             onUpdateOrder={onUpdateOrder}
             onUpdateOrderDispatchStatus={onUpdateOrderDispatchStatus}

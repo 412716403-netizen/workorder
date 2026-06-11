@@ -25,6 +25,7 @@
 | 模块 | 当前状态 | 说明 | 剩余收口 |
 |------|------|------|------|
 | 产品分类、合作单位分类、工序节点、仓库 | 已落地 | 已有 settings 路由与前端封装 | 细化子权限说明，保持文档同步 |
+| 工序报工自定义字段（`reportTemplate`） | 已落地 | 维护入口迁至工单中心表单配置；`PUT /api/orders/node-report-templates`（`production:orders_form_config:allow`） | 数据仍存 `global_node_templates.report_template` |
 | 收付款类型、收支账户类型 | 已落地 | 已有 settings 路由与前端封装 | 对照财务页面核验真实使用范围 |
 | 产品、BOM、合作单位、工人、设备、字典 | 已落地 | 已有 master / products / boms 等后端能力 | 持续清理前端历史假设与文档中的旧字段说明 |
 
@@ -74,7 +75,7 @@
 | 模块 | 当前状态 | 说明 | 剩余收口 |
 |------|------|------|------|
 | 财务记录 CRUD | 已落地 | 已有 `/api/finance/records` | 补充统计、校验与测试说明 |
-| Dashboard / 工作台 | 已落地 | `/api/dashboard/*`：workbench 配置、feature-plugins、stats、notifications | 前端 `WorkbenchView`；默认首页 `/workbench` |
+| Dashboard / 工作台 | 已落地 | `/api/dashboard/*`：workbench 配置、feature-plugins、stats、**order-stats / outsource-stats / rework-stats**、notifications | 前端 `WorkbenchView`；默认首页 `/workbench` |
 | 资料库 | 已落地 | `/api/knowledge-base/*`：文件夹/文档 CRUD、图片资源上传 | 前端 `KnowledgeBaseView`；插件 `knowledge_base` 可开关 |
 | 收支汇总、库存预警、订单进度 | 部分落地 | 已有后端聚合方向 | 继续按指标逐项校验计算口径 |
 

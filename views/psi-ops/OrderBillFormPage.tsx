@@ -44,6 +44,7 @@ import { AMOUNT_PERMISSION_KEYS, canViewAmount } from '../../utils/canViewAmount
 import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { categoryUsesBatchManagement } from '../../types';
+import { validatePsiOrderSave } from '../../utils/psiOrderLineSave';
 
 type FormType = 'PURCHASE_ORDER' | 'PURCHASE_BILL' | 'SALES_ORDER' | 'SALES_BILL';
 
@@ -668,12 +669,13 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         operator: docOperator,
         warehouseName,
         customData: form.customData,
-        lines: purchaseBillItems.map(({ id, productId, quantity, purchasePrice, variantQuantities }) => ({
+        lines: purchaseBillItems.map(({ id, productId, quantity, purchasePrice, variantQuantities, relatedProductId }) => ({
           id,
           productId,
           quantity,
           purchasePrice,
           variantQuantities,
+          ...(relatedProductId ? { relatedProductId } : {}),
         })),
         productMap: productMapPSI,
         dictionaries,
@@ -733,12 +735,16 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   // ── Save handler ──
   const handleSaveManual = async (submitType: string) => {
     if (submitType === 'PURCHASE_ORDER') {
-      const hasValidLine = purchaseOrderItems.some(i => {
-        if (!i.productId) return false;
-        const q = i.variantQuantities ? Object.values(i.variantQuantities).reduce((s, v) => s + v, 0) : (i.quantity ?? 0);
-        return q > 0;
-      });
-      if (!form.partner || purchaseOrderItems.length === 0 || !hasValidLine) return;
+      if (
+        !validatePsiOrderSave({
+          partner: form.partner,
+          partnerRequired: true,
+          partnerLabel: '供应商',
+          lines: purchaseOrderItems,
+        })
+      ) {
+        return;
+      }
       const originalDocNumber = editingDocNumber || '';
       /** 采购订单单号：新增保存时自动生成；编辑沿用原单号且不可改 */
       let docNumber = editingDocNumber ? editingDocNumber : generatePODocNumber();
@@ -846,7 +852,10 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
         }
       });
 
-      if (newRecords.length === 0) return;
+      if (newRecords.length === 0) {
+        toast.warning('明细数量须大于 0，请填写后再保存');
+        return;
+      }
 
       if (editingDocNumber && onReplaceRecords) {
         onReplaceRecords('PURCHASE_ORDER', originalDocNumber || docNumber, newRecords);
@@ -866,12 +875,20 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
     }
 
     if (submitType === 'PURCHASE_BILL') {
-      const hasValidBillLine = purchaseBillItems.some(i => {
-        if (!i.productId) return false;
-        const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((s, v) => s + v, 0) : (i.quantity ?? 0);
-        return q !== 0;
-      });
-      if (!form.partner || !form.warehouseId || purchaseBillItems.length === 0 || !hasValidBillLine) return;
+      if (
+        !validatePsiOrderSave({
+          partner: form.partner,
+          partnerRequired: true,
+          partnerLabel: '供应商',
+          warehouseId: form.warehouseId,
+          warehouseRequired: true,
+          warehouseLabel: '入库仓库',
+          lines: purchaseBillItems,
+          allowNegativeQty: true,
+        })
+      ) {
+        return;
+      }
       const originalDocNumber = editingDocNumber || '';
       /** 采购入库单号：新增保存时自动生成；编辑沿用原单号且不可改 */
       let docNumber = editingDocNumber ? editingDocNumber : generatePBDocNumber(form.partnerId || '', form.partner || '');
@@ -989,6 +1006,10 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
           });
         }
       });
+      if (newRecords.length === 0) {
+        toast.warning('明细数量不能为 0，请填写有效数量后再保存');
+        return;
+      }
       if (editingDocNumber && onReplaceRecords) {
         onReplaceRecords('PURCHASE_BILL', originalDocNumber || docNumber, newRecords);
       } else {
@@ -1009,12 +1030,16 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
     }
 
     if (submitType === 'SALES_ORDER') {
-      const hasValidLine = salesOrderItems.some(i => {
-        if (!i.productId) return false;
-        const q = i.variantQuantities ? Object.values(i.variantQuantities).reduce((s, v) => s + v, 0) : (i.quantity ?? 0);
-        return q > 0;
-      });
-      if (!form.partner || salesOrderItems.length === 0 || !hasValidLine) return;
+      if (
+        !validatePsiOrderSave({
+          partner: form.partner,
+          partnerRequired: true,
+          partnerLabel: '客户',
+          lines: salesOrderItems,
+        })
+      ) {
+        return;
+      }
       const originalDocNumber = editingDocNumber || '';
       /** 销售订单单号：新增保存时自动生成；编辑沿用原单号且不可改 */
       let docNumber = editingDocNumber ? editingDocNumber : generateSODocNumber();
@@ -1100,7 +1125,10 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
           });
         }
       });
-      if (newRecords.length === 0) return;
+      if (newRecords.length === 0) {
+        toast.warning('明细数量须大于 0，请填写后再保存');
+        return;
+      }
       if (editingDocNumber && onReplaceRecords) {
         onReplaceRecords('SALES_ORDER', originalDocNumber || docNumber, newRecords);
       } else {
@@ -1118,12 +1146,20 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
     }
 
     if (submitType === 'SALES_BILL') {
-      const hasValidLine = salesBillItems.some(i => {
-        if (!i.productId) return false;
-        const q = i.variantQuantities ? Object.values(i.variantQuantities).reduce((s, v) => s + v, 0) : (i.quantity ?? 0);
-        return q !== 0;
-      });
-      if (!form.partner || !form.warehouseId || salesBillItems.length === 0 || !hasValidLine) return;
+      if (
+        !validatePsiOrderSave({
+          partner: form.partner,
+          partnerRequired: true,
+          partnerLabel: '客户',
+          warehouseId: form.warehouseId,
+          warehouseRequired: true,
+          warehouseLabel: '出库仓库',
+          lines: salesBillItems,
+          allowNegativeQty: true,
+        })
+      ) {
+        return;
+      }
       const wh = form.warehouseId;
       for (const item of salesBillItems) {
         if (!item.productId) continue;
@@ -1234,7 +1270,10 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
           });
         }
       });
-      if (newRecords.length === 0) return;
+      if (newRecords.length === 0) {
+        toast.warning('明细数量不能为 0，请填写有效数量后再保存');
+        return;
+      }
       if (editingDocNumber && onReplaceRecords) {
         onReplaceRecords('SALES_BILL', originalDocNumber || docNumber, newRecords);
       } else {

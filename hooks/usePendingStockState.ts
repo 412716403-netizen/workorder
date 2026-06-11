@@ -65,6 +65,17 @@ export type StockInForm = {
   customData: Record<string, unknown>;
 };
 
+/** 待入库扫码解析结果（按 token 缓存，确认时复用以避免重复网络请求） */
+type ResolvedPendingScan = {
+  row: PendingStockItem;
+  variantId: string;
+  addQty: number;
+  hasColorSize: boolean;
+  detail: ScanBatchRowDetail;
+  virtualBatchId?: string;
+  itemCodeId?: string;
+};
+
 export type BatchStockForm = {
   warehouseId: string;
   customData: Record<string, unknown>;
@@ -155,6 +166,12 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
   const [stockInOrder, setStockInOrder] = useState<PendingStockItem | null>(null);
   const stockInScannedItemRef = useRef<Set<string>>(new Set());
   const stockInScannedBatchRef = useRef<Set<string>>(new Set());
+  /**
+   * 待入库批量扫码：按 token 缓存「解析 + 持久化去重」结果。
+   * - 扫码（预览）阶段写入；点「确认应用」时命中缓存 → 0 网络请求，避免触发频控；
+   * - 待入库清单变化（如已入库消化）或面板关闭时清空，避免使用过期 pendingTotal。
+   */
+  const preparedPendingScanRef = useRef<Map<string, ResolvedPendingScan>>(new Map());
   const [stockInForm, setStockInForm] = useState<StockInForm>({
     warehouseId: '',
     variantQuantities: {},
@@ -164,6 +181,10 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
   const [stockInScanLink, setStockInScanLink] = useState<{
     virtualBatchId?: string;
     itemCodeId?: string;
+    /** 单品码模式下按规格扫入的单品码列表（追溯逐件命中） */
+    itemCodeIdsByVid?: Record<string, string[]>;
+    /** 本次是否扫过批次码：批次码模式沿用整批链路，不写逐件列表 */
+    hadBatchScan?: boolean;
   }>({});
   const [selectedPendingRowKeys, setSelectedPendingRowKeys] = useState<Set<string>>(new Set());
   const togglePendingRowKey = useCallback((rowKey: string) => {
@@ -189,15 +210,27 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
       setSelectedPendingRowKeys(new Set());
       setBatchStockInItems(null);
       setBatchStockForm({ warehouseId: '', customData: {}, lines: {} });
+      setStockInOrder(null);
+      setStockInForm({
+        warehouseId: singlePendingStockInDefaultWh(),
+        variantQuantities: {},
+        singleQuantity: 0,
+        customData: {},
+      });
+      setStockInScanLink({});
     }
-  }, [open]);
+  }, [open, singlePendingStockInDefaultWh]);
   useEffect(() => {
     const valid = new Set(pendingStockOrders.map(i => i.rowKey));
     setSelectedPendingRowKeys(prev => {
       const next = new Set([...prev].filter(id => valid.has(id)));
       return next.size === prev.size && [...prev].every(id => next.has(id)) ? prev : next;
     });
+    preparedPendingScanRef.current.clear();
   }, [pendingStockOrders]);
+  useEffect(() => {
+    if (!open) preparedPendingScanRef.current.clear();
+  }, [open]);
   useEffect(() => {
     if (!stockInOrder) {
       stockInScannedItemRef.current.clear();
@@ -293,6 +326,9 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
       itemCodeId?: string;
     } | null> => {
       if (!payload.token) return null;
+      const cacheKey = `${payload.kind}:${payload.token}`;
+      const cached = preparedPendingScanRef.current.get(cacheKey);
+      if (cached) return cached;
       try {
         if (payload.kind === 'ITEM') {
           const res = await itemCodesApi.scan(payload.token);
@@ -328,7 +364,7 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
             virtualBatchId: res.batchId ?? null,
           });
           if (!okValidate) return null;
-          return {
+          const resolved: ResolvedPendingScan = {
             row,
             variantId: vid,
             addQty: 1,
@@ -337,6 +373,8 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
             virtualBatchId: res.batchId ?? undefined,
             itemCodeId: res.itemCodeId,
           };
+          preparedPendingScanRef.current.set(cacheKey, resolved);
+          return resolved;
         }
         if (payload.kind === 'BATCH') {
           const res = await planVirtualBatchesApi.scan(payload.token);
@@ -377,7 +415,7 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
             virtualBatchId: res.batchId ?? null,
           });
           if (!okValidate) return null;
-          return {
+          const resolved: ResolvedPendingScan = {
             row,
             variantId: vid,
             addQty: qty,
@@ -385,6 +423,8 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
             detail: scanVirtualBatchResultToRowDetail(res),
             virtualBatchId: res.batchId,
           };
+          preparedPendingScanRef.current.set(cacheKey, resolved);
+          return resolved;
         }
       } catch (e) {
         toast.error(rewriteScanApiErrorForIme(payload.raw, (e as Error)?.message || '扫码查询失败'));
@@ -412,7 +452,12 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
 
       let targetRow: PendingStockItem | null = null;
       let formSlice = { variantQuantities: {} as Record<string, number>, singleQuantity: 0 };
-      let scanLink: { virtualBatchId?: string; itemCodeId?: string } = {};
+      const scanLink: {
+        virtualBatchId?: string;
+        itemCodeId?: string;
+        itemCodeIdsByVid: Record<string, string[]>;
+        hadBatchScan: boolean;
+      } = { itemCodeIdsByVid: {}, hadBatchScan: false };
       const seen = new Set<string>();
 
       for (const payload of payloads) {
@@ -450,7 +495,16 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
         }
         formSlice = tryResult.form;
         if (parsed.virtualBatchId) scanLink.virtualBatchId = parsed.virtualBatchId;
-        if (parsed.itemCodeId) scanLink.itemCodeId = parsed.itemCodeId;
+        if (parsed.itemCodeId) {
+          scanLink.itemCodeId = parsed.itemCodeId;
+          const vid = parsed.variantId || '';
+          const arr = scanLink.itemCodeIdsByVid[vid] ?? [];
+          if (!arr.includes(parsed.itemCodeId)) arr.push(parsed.itemCodeId);
+          scanLink.itemCodeIdsByVid[vid] = arr;
+        } else if (parsed.virtualBatchId) {
+          // 批次码扫入（含批次码模式扫单品码后解析为批次）→ 沿用整批链路
+          scanLink.hadBatchScan = true;
+        }
       }
 
       if (!targetRow) {
@@ -697,6 +751,8 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
         customData: stockInForm.customData,
         virtualBatchId: stockInScanLink.virtualBatchId,
         itemCodeId: stockInScanLink.itemCodeId,
+        scanItemCodeIdsByVid: stockInScanLink.itemCodeIdsByVid,
+        hadBatchScan: stockInScanLink.hadBatchScan,
         operator,
         timestamp: ts,
         prodRecords,

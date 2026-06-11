@@ -125,7 +125,31 @@
 | 已完成工序数 | `milestones` 中 `status === COMPLETED` 的数量 |
 | 完成率 | `(completedMilestones / totalMilestones) * 100`，四舍五入 |
 
-### 2.2 财务统计
+### 2.2 销售统计（工作台）
+
+| 指标 | 规则 |
+|------|------|
+| 周期 | 今日 / 昨日 / 本月（与工单统计一致，按单据 `timestamp` 过滤） |
+| 销售额 / 单数 / 件数 | 周期内 `SALES_BILL` 正数量出库合计 |
+| 销售退货件数 | 周期内 `SALES_BILL` 负数量绝对值合计 |
+
+### 2.3 销售订单统计（工作台）
+
+| 指标 | 规则 |
+|------|------|
+| 周期 | 今日 / 昨日 / 本月（按 `PsiRecord.timestamp` 过滤） |
+| 订单额 / 单数 / 件数 | 周期内 `SALES_ORDER` 正数量合计；单数按 `docNumber` 去重 |
+| 减单件数 | 周期内 `SALES_ORDER` 负数量绝对值合计 |
+
+### 2.4 财务统计（工作台）
+
+| 指标 | 规则 |
+|------|------|
+| 周期 | 今日 / 昨日 / 本月（按 `FinanceRecord.timestamp` 过滤） |
+| 净现金流 | 周期内收款 − 支出 |
+| 收款 / 支出 | 周期内 `RECEIPT` / `PAYMENT` 金额与笔数 |
+
+### 2.5 财务统计（累计，历史口径）
 
 | 指标 | 规则 |
 |------|------|
@@ -133,26 +157,31 @@
 | 累计支出 | `financeRecords` 中 `type === 'PAYMENT'` 的 `amount` 之和 |
 | 现金流 | 收款 - 支出 |
 
-### 2.3 库存预警
+### 2.6 库存预警
 
 **历史前端规则**：`(100 + 入库 - 出库) < 10` 的产品数量。
 
 **当前要求**：库存预警阈值与库存口径应以后端库存结果为准，避免看板与 PSI 明细出现口径漂移。
 
-### 2.4 订单进度
+### 2.7 订单进度
 
 **公式**：`progress = round((sum(m.completedQuantity / totalOrderQty) / msCount) * 100)`
 
 - `totalOrderQty`：`order.items` 数量之和
 - `msCount`：`milestones.length`
 
-### 2.5 工作台（多 Tab 首页）
+### 2.8 工作台（多 Tab 首页）
 
 - 路由：`/workbench`；登录后默认首页。
 - **WorkbenchConfig**：`pages[]` 每页含独立 `layout.items`；`activePageId` 记录上次 Tab。
 - **有效配置**：`membership.preferences.dashboardWorkbench` → 内置默认（见 `shared/workbench.ts`）。
+- **首页默认布局**：顶部三卡（快捷入口 / 插件中心 / 消息中心）+ 工单/外协统计（各 6×7 格，占满第二行）+ 财务/销售/返工统计（各 4×6 格）；详见 `WORKBENCH_HOME_DEFAULT_LAYOUT`。
+- **首页固定组件**：快捷入口、插件中心、消息中心**不可移除、拖动或缩放**；保存时后端强制合并固定位置，租户仅可调整其余组件与其他 Tab 页。
 - **Tab 约束**：至少保留 1 个页面；编辑模式可增删改 Tab、拖拽排序。
-- **组件**：快捷入口、插件中心（租户功能开关）、消息中心（只读，展示系统公告与到期提醒）、生产/销售/财务统计；无模块权限或未启用功能插件的组件不可添加且保存时剔除。
+- **组件**：快捷入口、插件中心（租户功能开关）、消息中心（只读，展示系统公告与到期提醒）、**工单统计 / 外协统计 / 返工统计**、销售/财务统计；无模块权限或未启用功能插件的组件不可添加且保存时剔除。
+- **工单统计**：按用户所选工序展示卡片；周期可选今日/昨日/本月；**生产任务数**为当前快照（未完工工单/产品数，不随周期变化）；**剩余可报**与工单中心工序卡一致（可报最多 − 已报数）；良品/不良品为周期内报工合计；**进度 = 已报数 / 可报最多**。
+- **外协统计**：布局与工单统计一致；**外协任务数**为有待收回的任务数（快照）；**待收回**为已派 − 已收（快照）；**已收回 / 已派出**为周期内外协流水；**进度 = 已收回 / 已派出**（快照）。
+- **返工统计**：布局与工单统计一致；**返工任务数**为进行中返工任务数（快照）；**待返工**为剩余未完成数（快照）；**已完成 / 新开返工**为周期内返工报工 / 新开返工单；**进度 = 已完成 / 返工总量**（快照）。
 - **消息中心**：**仅平台管理员**（`users.role === admin`）可在 `/announcements` 发布/删除**全平台**公告，存 `platform_announcements` 表；各租户消息中心只读展示，发布人显示为「系统」（最多 50 条）。租户及租户管理员**不可**发布消息。
 - **软件到期提醒**：租户 `expiresAt` 到期前第 7、3、1 个日历日，消息中心自动出现一条系统提醒（发布人「系统」），无需持久化；当日仅对应里程碑出现一次。
 - **平台管理员**（`users.role === admin`）：侧栏仅「信息发布」「账号管理」；登录默认进入 `/announcements`；不可访问 ERP 业务模块。
@@ -229,12 +258,23 @@
 
 通过校验后再进行二次确认，删除后返回工单中心。
 
+删除成功后，若该工单关联的计划单（`planOrderId`）已无任何剩余关联工单，后端将计划 `status` 从 `CONVERTED` 回退：
+- 主计划 → `APPROVED`
+- 子计划 → `DRAFT`
+
+回退后计划单派生状态为「未下单」，可再次「下达工单」，详情中的数量明细与 BOM 汇总恢复可编辑。
+
 ### 3.9 工单表单配置
 
 `OrderFormSettings` 结构与计划单表单配置一致，控制列表 / 详情页展示字段。
 
 标准可配置字段主要包括：工单号、客户、交期、开始日期。  
 产品、SKU、总量、状态通常为固定展示字段。
+
+**字段配置**（工单中心 → 表单配置 → 字段配置）：
+
+- **入库自定义单据内容**：写入 `orderFormSettings.stockInCustomFields`，控制待入库 / 入库登记 / 入库流水详情。
+- **报工自定义单据内容（按工序）**：按 `GlobalNodeTemplate` 维护 `reportTemplate`（报工弹窗填报项）；保存时调用 `PUT /api/orders/node-report-templates`（权限 `production:orders_form_config:allow`）。数据仍存工序节点库，报工运行时以节点库为准（`getEffectiveReportTemplate`）。
 
 **列表显示**（关联工单模式）：
 
@@ -265,12 +305,12 @@
 
 | 状态 | 中文 | 判定 |
 |------|------|------|
-| `NOT_DISPATCHED` | 未下单 | 该计划**未下达**（`status !== CONVERTED`）且无直接关联工单 |
-| `IN_PROGRESS`    | 未完成 | 有工单但未全部完成；**或**计划已下达（`status === CONVERTED`）但当前查不到关联工单 |
+| `NOT_DISPATCHED` | 未下单 | 无直接关联工单（含删除全部关联工单后由 `deleteOrder` 回退计划状态） |
+| `IN_PROGRESS`    | 未完成 | 有工单但未全部完成 |
 | `COMPLETED`      | 已完成 | 所有 `planOrderId = plan.id` 工单 `dispatchStatus === COMPLETED` |
 
 - 由后端 `plans.service.listPlans` / `getPlan` 注入；前端不再二次算。
-- **已下达兜底**：只要 `status === CONVERTED`（确实点过「下达工单」），即使关联工单被删除 / 历史数据 `planOrderId` 未关联 / 经委外等非下达途径产生，也**不会回退成「未下单」**，而按「未完成」展示，避免「明明下了单却显示未下单」。
+- **删单回退**：删除工单且该计划无剩余关联工单时，`orders.service.deleteOrder` 将计划 `status` 从 `CONVERTED` 回退，派生状态同步为「未下单」。
 - **父子计划独立**：父和子计划各自是独立的 `PlanOrder` 行，徽章互不影响。
 - **多工单的计划**（如「补充下达子工单」）：所有工单都 COMPLETED 才算计划完成；任何一张退回，计划单也回到 IN_PROGRESS。
 
@@ -327,7 +367,7 @@
 |--------|----------|------|
 | 产品分类管理 | `categories` | 支持 `customFields` 扩展 |
 | 合作单位分类 | `partnerCategories` | 支持 `customFields` 扩展 |
-| 工序节点库 | `globalNodes` | 支持 `reportTemplate`、`enablePieceRate` 等配置 |
+| 工序节点库 | `globalNodes` | 维护工序名称、功能开关、`reportDisplayTemplate`（报工页展示内容）等；`reportTemplate`（报工自定义单据内容）在 **工单中心 → 表单配置 → 字段配置** 按工序维护 |
 | 仓库管理 | `warehouses` | 支持 code 自动生成或手工填写 |
 | 收付款类型 | `financeCategories` | 控制财务表单显示与关联项 |
 | 收支账户类型 | `financeAccountTypes` | 控制收付款账户选项 |
@@ -337,7 +377,7 @@
 | 子模块 | 管理实体 | 规则 |
 |--------|----------|------|
 | 产品与 BOM | `products`, `boms` | 支持产品编辑、变体管理、BOM 绑定 |
-| 合作单位 | `partners` | 关联 `partnerCategories` |
+| 合作单位 | `partners` | 关联 `partnerCategories`；**改名级联**：修改单位名称时，后端事务内同步更新名称快照字段 `ProductionOpRecord.partner`（外协/委外返工）、`PsiRecord.partner`（按 `partnerId` 或旧名称匹配）、`FinanceRecord.partner`，保证外协管理、外协流水及相关单据展示一致；若存在重名单位，按名称匹配的历史快照会一并更新 |
 | 工人管理 | `workers` | 支持按工序派工 |
 | 设备管理 | `equipment` | 支持按工序派工 |
 | 公共数据字典 | `dictionaries` | 维护颜色、尺码、单位三组数据 |
@@ -397,6 +437,21 @@
 
 **实现锚点**：后端 [`backend/src/services/scanValidate.service.ts`](../backend/src/services/scanValidate.service.ts) + `POST /api/item-codes/scan/validate-usage`；前端 `itemCodesApi.validateUsage` 经 [`useReportModalState`](../hooks/useReportModalState.ts)、[`usePendingStockState`](../hooks/usePendingStockState.ts)、[`ReworkReportSubmitModal`](../views/production-ops/ReworkReportSubmitModal.tsx)、[`OutsourceReceiveQuantityModal`](../views/production-ops/OutsourceReceiveQuantityModal.tsx) 调用。外协收货扫码（清单弹窗 / 录入弹窗）统一走 [`useOutsourceReceiveScan`](../hooks/useOutsourceReceiveScan.ts) hook。
 
+### 5.4.1.1 扫码追溯链路口径（按扫码模式区分写入粒度）
+
+工序报工（含产品池报工）、生产入库、返工报工、外协收货扫码后，写入记录时附带扫码关联，使产品追溯查询能命中本次生产事件。**写入粒度由扫码模式决定**（不是看物理扫了批次码还是单品码）：
+
+- **批次码模式**（可扫批次码，也可扫单品码，均按整批数量）：记录挂 `virtual_batch_id`。该批次下所有单品码做追溯时都能查到本事件（整批共享链路）。
+- **单品码模式**（仅可扫单品码，每件 qty=1）：把本次逐件扫入的单品码列表写入记录 `customData.__scanItemCodeIds`（常量 `SCAN_ITEM_CODE_IDS_KEY`，见 `shared/types.ts`），追溯按列表**逐件精确命中**——「扫 1 件只该件可查、同批其他单品查不到」「一次扫多件各自独立可查」。
+
+关键实现要点：
+
+- **不改变扫码去重所依赖的 `item_code_id / virtual_batch_id` 列写入**：`__scanItemCodeIds` 只服务于追溯展示，去重（`assertScanNotAlreadyUsed` / `buildDupIdsFilter` 的批次展开）行为不变。
+- 追溯 SQL（[`itemCodes.service.ts`](../backend/src/services/itemCodes.service.ts) 的 `traceScanLinkSql`）：记录带 `__scanItemCodeIds` 数组时按列表逐件匹配（忽略列）；否则回退 `virtual_batch_id / item_code_id` 列匹配。仅按批次追溯（scope 无具体单品码）时直接用列，单品模式记录仍写了 `virtual_batch_id`，整批查询照样能命中。
+- 矩阵报工/多规格：逐件列表**按规格**收集与写入；同一规格被拆到多条记录（如生产入库按工单分摊）时只首条携带列表，避免追溯出现重复事件。
+- 该键以 `__` 前缀标记为内部元数据，报工详情/打印不展示（见 [`effectiveReportTemplate.ts`](../utils/effectiveReportTemplate.ts) 的 `INTERNAL_CUSTOM_DATA_KEYS`）。
+- **例外**：外协收货（[`OutsourcePanel.handleReceiveFormSubmit`](../views/production-ops/OutsourcePanel.tsx)）单品码模式采用「逐件单独落一条 qty1 记录、各挂自己的 `item_code_id`」实现同样效果，不走 `__scanItemCodeIds` 列表（见 5.4.2）。
+
 ### 5.4.2 外协收货：清单弹窗扫码 → 自动跳录入弹窗
 
 **入口**：「外协管理 → 待收回清单」弹窗（[`OutsourceReceiveListModal`](../views/production-ops/OutsourceReceiveListModal.tsx)）底部「扫码收货」按钮，与「收货」按钮并列。
@@ -417,6 +472,12 @@
 | 当前加工厂下有外发且 `pending>0` | 走常规累加；超出行级 pending → toast | 走常规累加（不再做 pending clamp） |
 
 即「开启允许超额时，只判断是否给该加工厂外发过；关闭时同时要求 pending>0」。
+
+**扫码收货的追溯链路口径（按扫码模式区分写入粒度）**：外协收货记录会把扫码所属的 `itemCodeId / virtualBatchId` 落到 `ProductionOpRecord`，并由 `applyOutsourceProgress` 透传到派生的工序报工 / 产品进度报工，使产品追溯查询能命中本次「外协收货」事件。写入粒度由扫码模式决定（实现见 [`OutsourcePanel.handleReceiveFormSubmit`](../views/production-ops/OutsourcePanel.tsx) 的分片逻辑）：
+
+- **批次码模式**（可扫批次码，也可扫单品码，均按整批数量）：按产品+规格合并为**一条**收货记录，挂 `virtualBatchId`。该批次下所有单品码做追溯时都能查到这条收货（整批共享链路）。
+- **单品码模式**（仅可扫单品码，每件 qty=1）：**每扫一件单独落一条收货记录**，只挂该件自己的 `itemCodeId`、**不挂 `virtualBatchId`**。因此「扫 1 件只该件可查、同批其他单品查不到」「一次收货扫多件也各自独立可查」。
+  - 受单条记录只有一个链路字段限制，逐件落记录是为支持「同款多件各自独立追溯」；若提交前在录入弹窗把数量改小，则按数量截取前 N 件带链路，改大的多出部分并入一条无链路记录。
 
 **实现锚点**：[`OutsourceReceiveListModal.handleScanApply`](../views/production-ops/OutsourceReceiveListModal.tsx) + [`useOutsourceReceiveScan`](../hooks/useOutsourceReceiveScan.ts) + [`OutsourcePanel.handleReceiveScanConfirm`](../views/production-ops/OutsourcePanel.tsx)。录入弹窗内的扫码按钮（[`OutsourceReceiveQuantityModal`](../views/production-ops/OutsourceReceiveQuantityModal.tsx) 顶部「扫码录入」）保留并复用同一 hook，仅在已勾选行范围内累加（不传 `partner` / `isNodeAllowed`，因为 `receiveSelectedKeys` 已经保证同工厂 + 同工序）。
 
@@ -507,7 +568,7 @@
 
 ### 6.5 开发节点库自定义内容
 
-- **开发节点库**（`DevStageTemplate` + `DevStageTemplateField`）中每个节点的「节点登记自定义内容」与 **系统设置 → 工序节点库 → 报工自定义单据内容** 对齐：支持字段类型 `text | date | select | file`、下拉选项、日期（含时分 / 自动填入）、必填。
+- **开发节点库**（`DevStageTemplate` + `DevStageTemplateField`）中每个节点的「节点登记自定义内容」与 **工单中心 → 表单配置 → 字段配置 → 报工自定义单据内容（按工序）** 对齐：支持字段类型 `text | date | select | file`、下拉选项、日期（含时分 / 自动填入）、必填。
 - 配置 UI 复用 `ReportCustomFieldsConfigTable`；节点登记弹窗对模板字段复用 `ReportCustomFieldsEditor`，按类型渲染控件；登记值写入 `DevStageField.value`（字符串）与 `DevStageField.type`。
 - 模板外仍可添加「附加参数」（自由 label + 文本值），与模板字段一并保存。
 

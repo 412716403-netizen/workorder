@@ -14,6 +14,7 @@ import {
 } from './planTreeQuota.service.js';
 import { attachBatchPieceNos } from '../utils/itemCodeBatchPiece.js';
 import { formatBatchSerialLabel, formatItemCodeSerialLabel } from '../../../shared/serialLabels.js';
+import { SCAN_ITEM_CODE_IDS_KEY } from '../types/index.js';
 
 const INSERT_CHUNK = 2000;
 
@@ -451,16 +452,34 @@ export type TraceScanLinkScope = {
 
 function traceScanLinkSql(alias: string, scope: TraceScanLinkScope): Prisma.Sql {
   const { virtualBatchId, itemCodeId } = scope;
+  const a = Prisma.raw(alias);
+
+  // 列匹配：批次码模式 / 老数据 / 非扫码记录沿用 virtual_batch_id / item_code_id 列。
+  let columnCond: Prisma.Sql;
   if (virtualBatchId && itemCodeId) {
-    return Prisma.sql`(${Prisma.raw(alias)}.virtual_batch_id = ${virtualBatchId}::uuid OR ${Prisma.raw(alias)}.item_code_id = ${itemCodeId}::uuid)`;
+    columnCond = Prisma.sql`(${a}.virtual_batch_id = ${virtualBatchId}::uuid OR ${a}.item_code_id = ${itemCodeId}::uuid)`;
+  } else if (virtualBatchId) {
+    columnCond = Prisma.sql`${a}.virtual_batch_id = ${virtualBatchId}::uuid`;
+  } else if (itemCodeId) {
+    columnCond = Prisma.sql`${a}.item_code_id = ${itemCodeId}::uuid`;
+  } else {
+    return Prisma.sql`FALSE`;
   }
-  if (virtualBatchId) {
-    return Prisma.sql`${Prisma.raw(alias)}.virtual_batch_id = ${virtualBatchId}::uuid`;
-  }
-  if (itemCodeId) {
-    return Prisma.sql`${Prisma.raw(alias)}.item_code_id = ${itemCodeId}::uuid`;
-  }
-  return Prisma.sql`FALSE`;
+
+  // 仅按批次追溯（无具体单品码）时，直接用列：单品码模式记录仍写了 virtual_batch_id（去重所需），故也能命中整批。
+  if (!itemCodeId) return columnCond;
+
+  // 追溯具体单品码时：记录若带 __scanItemCodeIds（单品码模式逐件扫入列表），则仅按列表逐件精确匹配，
+  // 使同批未扫入的单品不被误关联；否则（批次码模式/老数据）回退列匹配（整批共享链路）。
+  const itemInListCond = Prisma.sql`(${a}.custom_data -> ${SCAN_ITEM_CODE_IDS_KEY}) @> to_jsonb(${itemCodeId}::text)`;
+  return Prisma.sql`
+    CASE
+      WHEN jsonb_typeof(${a}.custom_data -> ${SCAN_ITEM_CODE_IDS_KEY}) = 'array'
+           AND jsonb_array_length(${a}.custom_data -> ${SCAN_ITEM_CODE_IDS_KEY}) > 0
+      THEN (${itemInListCond})
+      ELSE (${columnCond})
+    END
+  `;
 }
 
 async function traceEventRowsPaged(params: {
@@ -534,7 +553,7 @@ async function traceEventRowsPaged(params: {
       INNER JOIN milestones m ON m.id = mr.milestone_id
       INNER JOIN production_orders po ON po.id = m.production_order_id
       WHERE po.plan_order_id IN (${planList})
-        AND (${variantCond})
+        AND (${scanLinkScope ? Prisma.sql`TRUE` : variantCond})
         AND (${mrTimeCond})
         AND (${mrLinkCond})
     )
@@ -542,7 +561,11 @@ async function traceEventRowsPaged(params: {
     (
       SELECT
         'OP'::text AS ev_kind,
-        por.type AS sub_kind,
+        CASE
+          WHEN por.type = 'OUTSOURCE' AND por.status = '已收回' THEN 'OUTSOURCE_RECEIVE'
+          WHEN por.type = 'OUTSOURCE' THEN 'OUTSOURCE_DISPATCH'
+          ELSE por.type
+        END AS sub_kind,
         por.id::text AS ev_id,
         por.tenant_id::text AS tenant_id,
         por.timestamp AS ts,
@@ -584,7 +607,7 @@ async function traceEventRowsPaged(params: {
       LEFT JOIN global_node_templates gnt ON gnt.id = pmp.milestone_template_id
       WHERE pmp.tenant_id IN (${tenantList})
         AND pmp.product_id = ${productId}
-        AND (${pmpVariantCond})
+        AND (${scanLinkScope ? Prisma.sql`TRUE` : pmpVariantCond})
         AND (${pprTimeCond})
         AND (${pprLinkCond})
     )

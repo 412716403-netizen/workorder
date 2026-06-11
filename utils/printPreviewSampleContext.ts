@@ -1,4 +1,5 @@
 import type {
+  GlobalNodeTemplate,
   MaterialFlowPrintContext,
   PrintListRow,
   PrintRenderContext,
@@ -324,6 +325,7 @@ const SAMPLE_PURCHASE_BILL_PRINT: PurchaseBillPrintContext = {
   warehouseName: '主仓',
   docTotalQty: 80,
   docTotalAmount: 5600,
+  relatedProduct: '示例成品 A（SKU-FG-001）',
   custom: {},
 };
 
@@ -377,6 +379,46 @@ const SAMPLE_OUTSOURCE_MATERIAL_RETURN_PRINT: MaterialFlowPrintContext = {
 };
 
 const PREVIEW_TENANT_NAME_FALLBACK = '示例公司名称';
+
+/** 计划单类模版预览：解析 {{产品.processNodes}} 用的示例工序库 */
+const SAMPLE_PREVIEW_GLOBAL_NODES: GlobalNodeTemplate[] = [
+  {
+    id: 'preview-node-knit',
+    name: '横机',
+    reportTemplate: [],
+    hasBOM: true,
+    enableAssignment: false,
+    enableWorkerAssignment: false,
+    enableEquipmentAssignment: false,
+    enableEquipmentOnReport: false,
+    enablePieceRate: false,
+    allowOutsource: true,
+  },
+  {
+    id: 'preview-node-link',
+    name: '套口',
+    reportTemplate: [],
+    hasBOM: false,
+    enableAssignment: false,
+    enableWorkerAssignment: false,
+    enableEquipmentAssignment: false,
+    enableEquipmentOnReport: false,
+    enablePieceRate: false,
+    allowOutsource: true,
+  },
+  {
+    id: 'preview-node-finish',
+    name: '后道',
+    reportTemplate: [],
+    hasBOM: false,
+    enableAssignment: false,
+    enableWorkerAssignment: false,
+    enableEquipmentAssignment: false,
+    enableEquipmentOnReport: false,
+    enablePieceRate: false,
+    allowOutsource: true,
+  },
+];
 
 export function augmentPrintPreviewContext(
   base: PrintRenderContext,
@@ -517,6 +559,8 @@ export function augmentPrintPreviewContext(
           lineNo: 1,
           sku: 'SKU-101',
           productName: '示例入库品 A',
+          relatedProductName: '示例成品 A',
+          relatedProductSku: 'SKU-FG-001',
           colorName: '黑色',
           sizeName: 'M',
           qty: 30,
@@ -528,6 +572,8 @@ export function augmentPrintPreviewContext(
           lineNo: 2,
           sku: 'SKU-102',
           productName: '示例入库品 B',
+          relatedProductName: '',
+          relatedProductSku: '',
           colorName: '',
           sizeName: '',
           qty: 50,
@@ -576,6 +622,20 @@ export function augmentPrintPreviewContext(
     next = {
       ...next,
       printListRows: samplePlanPrintListRowsWithMatrix(),
+    };
+  }
+  if ((dt === 'plan' || dt === 'all') && (!next.globalNodes || next.globalNodes.length === 0)) {
+    const product = next.product;
+    const needsSampleRoute = product && (product.milestoneNodeIds?.length ?? 0) === 0;
+    next = {
+      ...next,
+      globalNodes: SAMPLE_PREVIEW_GLOBAL_NODES,
+      product: needsSampleRoute && product
+        ? {
+            ...product,
+            milestoneNodeIds: SAMPLE_PREVIEW_GLOBAL_NODES.map(n => n.id),
+          }
+        : product,
     };
   }
   if ((dt === 'plan' || dt === 'all') && next.plan && !String(next.plan.dueDate ?? '').trim()) {

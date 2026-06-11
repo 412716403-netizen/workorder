@@ -17,9 +17,9 @@ export interface ScanBatchTriggerProps {
   modalTitle?: string;
   modalHint?: string;
   allowManualPaste?: boolean;
-  /** 为 true 时弹窗内可选择「批次码 / 单品码」扫码方式（默认 false） */
+  /** 为 true 时弹窗内可选择「按批累计 / 按件累计」（默认 false） */
   showScanIntentToggle?: boolean;
-  /** 每次打开弹窗时的默认扫码方式（默认「批次码」） */
+  /** 每次打开弹窗时的默认累计方式（默认「按批累计」） */
   defaultScanIntent?: ScanIntent;
   /** 透传给 ScanBatchSessionModal 的头部插槽（用于挂业务上下文，如加工厂选择） */
   modalHeaderSlot?: React.ReactNode;

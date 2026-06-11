@@ -223,6 +223,37 @@ export async function deleteNode(db: TenantPrismaClient, id: string) {
   return { message: '已删除' };
 }
 
+/** 工单中心表单配置：仅更新工序报工自定义单据字段（reportTemplate） */
+export async function updateNodeReportTemplate(
+  db: TenantPrismaClient,
+  nodeId: string,
+  reportTemplate: unknown,
+) {
+  const existing = await db.globalNodeTemplate.findUnique({ where: { id: nodeId } });
+  if (!existing) throw new AppError(404, '工序不存在');
+  const data: Record<string, unknown> = { reportTemplate };
+  maybeParseReportFields(data, 'reportTemplate');
+  const updated = await db.globalNodeTemplate.update({
+    where: { id: nodeId },
+    data: { reportTemplate: data.reportTemplate } as Parameters<typeof db.globalNodeTemplate.update>[0]['data'],
+  });
+  const { hasBom, ...rest } = updated as Record<string, unknown>;
+  return { ...rest, hasBOM: hasBom };
+}
+
+export async function batchUpdateNodeReportTemplates(
+  db: TenantPrismaClient,
+  updates: Array<{ nodeId: string; reportTemplate: unknown }>,
+) {
+  return db.$transaction(async (tx) => {
+    const updated: Awaited<ReturnType<typeof updateNodeReportTemplate>>[] = [];
+    for (const { nodeId, reportTemplate } of updates) {
+      updated.push(await updateNodeReportTemplate(tx as TenantPrismaClient, nodeId, reportTemplate));
+    }
+    return { updated };
+  });
+}
+
 // ── 仓库 ──
 
 export async function listWarehouses(db: TenantPrismaClient, opts: { all?: boolean; page?: number; pageSize?: number }) {

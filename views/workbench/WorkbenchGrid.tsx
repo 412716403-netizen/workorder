@@ -9,6 +9,7 @@ import './workbench-grid.css';
 interface WorkbenchGridProps {
   items: WorkbenchLayoutItem[];
   editing: boolean;
+  isItemPinned?: (item: WorkbenchLayoutItem) => boolean;
   renderWidget: (item: WorkbenchLayoutItem) => React.ReactNode;
   onLayoutChange: (items: WorkbenchLayoutItem[]) => void;
 }
@@ -38,6 +39,7 @@ function isSameGeometry(items: WorkbenchLayoutItem[], next: Layout[]): boolean {
 const WorkbenchGrid: React.FC<WorkbenchGridProps> = ({
   items,
   editing,
+  isItemPinned,
   renderWidget,
   onLayoutChange,
 }) => {
@@ -52,9 +54,9 @@ const WorkbenchGrid: React.FC<WorkbenchGridProps> = ({
       h: it.h,
       minW: it.minW,
       minH: it.minH,
-      static: !editing,
+      static: !editing || (isItemPinned?.(it) ?? false),
     })),
-    [items, editing],
+    [items, editing, isItemPinned],
   );
 
   const commitLayout = useCallback(

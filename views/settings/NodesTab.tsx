@@ -12,7 +12,6 @@ import {
   Scale,
   ToggleLeft,
   ToggleRight,
-  FileText,
   Trash2,
   BookOpen,
 } from 'lucide-react';
@@ -50,19 +49,20 @@ const NodesTab: React.FC<NodesTabProps> = ({
   const addLock = useAsyncSubmitLock();
 
   const handleQuickAddNode = async () => {
-    if (!newNodeName.trim()) return;
-    if (globalNodes.some(n => n.name === newNodeName.trim())) { toast.warning(`工序"${newNodeName.trim()}"已存在`); return; }
+    const name = newNodeName.trim();
+    if (!name) return;
+    if (globalNodes.some(n => n.name.trim() === name)) { toast.warning(`工序"${name}"已存在`); return; }
     await addLock.run(async () => {
       try {
         const created = await api.settings.nodes.create({
-          name: newNodeName, reportTemplate: [], reportDisplayTemplate: [], hasBOM: false,
+          name, reportTemplate: [], reportDisplayTemplate: [], hasBOM: false,
           enableAssignment: false, enableWorkerAssignment: false,
           enableEquipmentAssignment: false, enableEquipmentOnReport: false,
           enablePieceRate: false, allowOutsource: false,
         }) as GlobalNodeTemplate;
         setNewNodeName('');
         setEditingNodeId(created.id);
-        setNodeNameDraft((created as GlobalNodeTemplate).name || newNodeName.trim());
+        setNodeNameDraft((created as GlobalNodeTemplate).name || name);
         await onRefreshGlobalNodes();
       } catch (err: any) { toast.error(err.message || '操作失败'); }
     });
@@ -153,6 +153,11 @@ const NodesTab: React.FC<NodesTabProps> = ({
                                     if (next === cur.name) return;
                                     if (!next) {
                                       toast.error('工序名称不能为空');
+                                      setNodeNameDraft(cur.name);
+                                      return;
+                                    }
+                                    if (globalNodes.some(n => n.id !== node.id && n.name.trim() === next)) {
+                                      toast.error(`工序"${next}"已存在`);
                                       setNodeNameDraft(cur.name);
                                       return;
                                     }
@@ -298,21 +303,6 @@ const NodesTab: React.FC<NodesTabProps> = ({
                           />
                        </div>
 
-                       <div className="space-y-4 pt-4 border-t border-slate-100">
-                          <ReportCustomFieldsConfigTable
-                            showRequiredColumn
-                            showShowInFormColumn={false}
-                            fields={node.reportTemplate}
-                            onChange={next => updateNodeConfig(node.id, { reportTemplate: next })}
-                            title={
-                              <span className="flex items-center gap-2">
-                                <FileText className="w-4 h-4" /> 报工自定义单据内容
-                              </span>
-                            }
-                            addButtonLabel="增加填报项"
-                            idPrefix={`node-rt-${node.id}-`}
-                          />
-                       </div>
                     </div>
                  </div>
               ))}

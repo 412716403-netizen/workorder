@@ -15,7 +15,8 @@ export const createPartner = asyncHandler(async (req, res) => {
   res.status(201).json(await masterDataService.createPartner(getTenantPrisma(req.tenantId!), req.body));
 });
 export const updatePartner = asyncHandler(async (req, res) => {
-  res.json(await masterDataService.updatePartner(getTenantPrisma(req.tenantId!), str(req.params.id), req.body));
+  const tenantId = req.tenantId!;
+  res.json(await masterDataService.updatePartner(getTenantPrisma(tenantId), tenantId, str(req.params.id), req.body));
 });
 export const deletePartner = asyncHandler(async (req, res) => {
   res.json(await masterDataService.deletePartner(getTenantPrisma(req.tenantId!), str(req.params.id)));

@@ -34,6 +34,10 @@ export interface OutsourceReceiveScanConfirmEntry {
   qty: number;
   productName?: string;
   variantLabel?: string | null;
+  /** 本次扫码解析到的单品码 id（用于把收货记录写入产品追溯链路） */
+  itemCodeId?: string | null;
+  /** 本次扫码解析到的虚拟批次 id（同批次各单品码共享追溯链路） */
+  virtualBatchId?: string | null;
 }
 
 export interface OutsourceReceiveScanConfirmPayload {
@@ -246,6 +250,8 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
           qty: res.qty,
           productName: res.row.productName,
           variantLabel: res.detail.specNote ?? `${res.detail.colorName} / ${res.detail.sizeName}`,
+          itemCodeId: res.itemCodeId,
+          virtualBatchId: res.virtualBatchId,
         });
         currentQuantitiesSnapshot[res.key] = (currentQuantitiesSnapshot[res.key] ?? 0) + res.qty;
       }

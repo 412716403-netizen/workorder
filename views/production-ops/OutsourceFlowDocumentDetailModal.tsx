@@ -266,6 +266,19 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
     if (layout === 'standalone') setFlowDetailEditMode(true);
   }, [docRecords, outsourceCustomSnapshot, productionLinkMode, flowDetailKey, records, layout, globalNodes]);
 
+  /** 取消编辑或关闭弹窗时丢弃未保存的明细数量/单价/重量等草稿 */
+  const discardFlowDetailEditDraft = useCallback(() => {
+    docPhaseInitKeyRef.current = null;
+    flowDetailQuantitiesRef.current = {};
+    flowDetailUnitPricesRef.current = {};
+    setFlowDetailQuantities({});
+    setFlowDetailUnitPrices({});
+    setFlowDetailLineWeights({});
+    setFlowDetailEditCustom({});
+    setFlowDetailDeliveryDate('');
+    setFlowDetailEditMode(false);
+  }, []);
+
   useEffect(() => {
     docPhaseInitKeyRef.current = null;
   }, [flowDetailKey, layout]);
@@ -275,6 +288,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
     docPhaseInitKeyRef.current = null;
     flowDetailUnitPricesRef.current = {};
     flowDetailQuantitiesRef.current = {};
+    setFlowDetailQuantities({});
     setFlowDetailUnitPrices({});
     setFlowDetailLineWeights({});
     setFlowDetailEditCustom({});
@@ -549,7 +563,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
         }
       >
         {layout === 'standalone' && (
-          <div className="absolute inset-0 bg-slate-900/60" onClick={() => { onClose(); setFlowDetailEditMode(false); setFlowDetailEditCustom({}); setFlowDetailDeliveryDate(''); }} aria-hidden />
+          <div className="absolute inset-0 bg-slate-900/60" onClick={() => { discardFlowDetailEditDraft(); onClose(); }} aria-hidden />
         )}
         <div
           className={
@@ -569,13 +583,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
               <>
                 <button
                   type="button"
-                  onClick={() => {
-                    setFlowDetailEditMode(false);
-                    setFlowDetailUnitPrices({});
-                    setFlowDetailLineWeights({});
-                    setFlowDetailEditCustom({});
-                    setFlowDetailDeliveryDate('');
-                  }}
+                  onClick={discardFlowDetailEditDraft}
                   className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700"
                 >
                   取消
@@ -622,9 +630,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                         await Promise.all(ids.map(id => Promise.resolve(onDeleteRecord(id))));
                       }
                       onClose();
-                      setFlowDetailEditMode(false);
-                      setFlowDetailEditCustom({});
-                      setFlowDetailDeliveryDate('');
+                      discardFlowDetailEditDraft();
                     });
                   }} className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-sm font-bold">
                     <Trash2 className="w-4 h-4" /> 删除
@@ -632,7 +638,7 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
                 )}
               </>
             )}
-            <button type="button" onClick={() => { onClose(); setFlowDetailEditMode(false); setFlowDetailEditCustom({}); setFlowDetailDeliveryDate(''); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
+            <button type="button" onClick={() => { discardFlowDetailEditDraft(); onClose(); }} className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50"><X className="w-5 h-5" /></button>
           </div>
         </div>
         )}

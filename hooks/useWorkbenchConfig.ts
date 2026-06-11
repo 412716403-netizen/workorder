@@ -9,6 +9,8 @@ import {
   WORKBENCH_BUILTIN_DEFAULT,
   WORKBENCH_HOME_PAGE_ID,
   isWorkbenchHomePage,
+  isHomePinnedWidgetType,
+  mergeWorkbenchHomePinnedItems,
   type WorkbenchConfig,
   type WorkbenchLayoutItem,
   type WorkbenchPage,
@@ -183,10 +185,13 @@ export function useWorkbenchConfig() {
   const updatePageLayout = useCallback((pageId: string, items: WorkbenchLayoutItem[]) => {
     setDraft(prev => {
       if (!prev) return prev;
+      const nextItems = isWorkbenchHomePage(pageId)
+        ? mergeWorkbenchHomePinnedItems(items)
+        : items;
       return {
         ...prev,
         pages: prev.pages.map(p =>
-          p.id === pageId ? { ...p, layout: { version: 1, items } } : p,
+          p.id === pageId ? { ...p, layout: { version: 1, items: nextItems } } : p,
         ),
       };
     });
@@ -221,6 +226,12 @@ export function useWorkbenchConfig() {
   const removeWidget = useCallback((pageId: string, itemId: string) => {
     setDraft(prev => {
       if (!prev) return prev;
+      if (isWorkbenchHomePage(pageId)) {
+        const target = prev.pages
+          .find(p => p.id === pageId)
+          ?.layout.items.find(it => it.i === itemId);
+        if (target && isHomePinnedWidgetType(target.widgetType)) return prev;
+      }
       return {
         ...prev,
         pages: prev.pages.map(p =>

@@ -25,4 +25,13 @@ export const env = {
     const v = process.env.REDIS_URL?.trim();
     return v || undefined;
   },
+  /**
+   * 通用 API 每 IP 每分钟请求上限（`apiLimiter`）。
+   * 默认 1000：外协扫码收货等批量场景一单可能上千件，扫码时会逐件发解析/校验请求，
+   * 旧默认 200 会被打爆（前端表现：「请求过于频繁」后整单卡死）。多 worker / 多用户同 IP 时可继续调大。
+   */
+  get API_RATE_LIMIT_MAX() {
+    const n = parseInt(process.env.API_RATE_LIMIT_MAX || '1000', 10);
+    return Number.isFinite(n) && n > 0 ? n : 1000;
+  },
 };

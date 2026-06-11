@@ -94,6 +94,8 @@ PrintRenderContext.virtualBatch
 
 会在下列打印上下文的明细行中写入该字段（模板可选用矩阵列）：**销售单**、**计划单列表**、**采购订单 / 采购入库 / 销售订单**（与销售单一致为「货号块」一行，不再按规格拆多行；旧模板若依赖 `行.colorName` / `行.sizeName` 分列需改为矩阵列或 `行.qty` 等）、**外协发出与收回**、**返工报工与处理不良**、**生产退料与外协领料发出/外协生产退料**、**生产入库批次**、**报工批次**、**工单详情打印**。例外：**生产领料**（`materialIssuePrint`）仍为扁平行，**不**写入 `colorSizeMatrixJson`。
 
+**采购入库关联产品**（与表单配置「关联产品」开关联动）：开启后打印字段选项暴露 `{{采购入库.relatedProduct}}`（各行 `customData.relatedProductId` 去重汇总）、明细 `{{行.relatedProductName}}` / `{{行.relatedProductSku}}`。数据由 `utils/buildPurchaseBillPrintContext.ts` 与 `utils/purchaseBillRelatedProductPrint.ts` 组装；兼容占位符 `{{采购单.relatedProduct}}`。
+
 实现入口：`utils/buildSalesBillPrintContext.ts`（`buildSalesBillPrintListRowsByProductLine`、`buildMatrixJsonAndTotalQtyFromVariantLine`）、`utils/variantMatrixPrintRows.ts` 及各 `utils/build*PrintContext.ts`。
 
 ### 3.4.1 计划单动态列表「颜色物料数量」与 `colorMaterialMatrixJson`
@@ -132,6 +134,7 @@ PrintRenderContext.virtualBatch
 - `{{计划.dueDate}}`（计划交货日期；打印编辑器「插入字段」是否在「计划」分组中显示该项，与计划表单配置「列表显示 → 显示交货日期」开关一致）
 - `{{工单.orderNumber}}`
 - `{{产品.name}}`
+- `{{产品.processNodes}}`（计划单数据源：按产品 `milestoneNodeIds` 与工序节点库解析为路线文案，如「横机 → 套口 → 后道」）
 - `{{系统.pageCurrent}}`
 - `{{行.scanUrl}}`
 - `{{批次.serialLabel}}`
@@ -278,7 +281,7 @@ PrintRenderContext.virtualBatch
 | 生产入库 | `views/order-list/PendingStockPanel.tsx` | 入库弹窗内 `ScanBatchTrigger`（同上，矩阵/单量两处） | 同上；计划校验 + 矩阵写 `variantQuantities` / 否则 `singleQuantity` |
 | 产品追溯 | `views/TraceView.tsx` | `App.tsx` 侧栏「切换企业」与主导航之间独立「扫码追溯」 | **无批量弹窗、无摄像头**：`ScanPanel`（`showCameraButton={false}`）仅扫码枪 + 粘贴，每扫一次即 `scan+trace` 刷新下方；再扫下一条码即切换为当前码的追溯信息 |
 
-通用能力：`utils/scanPayload.ts`、`utils/scanBatchIntent.ts`（批量弹窗扫码方式归一化）、`hooks/useScanGun.ts`；**报工 / 返工 / 外协收货 / 生产入库**使用 `ScanBatchSessionModal` + `ScanBatchTrigger`（先收集列表再确认；列表行展示依赖 `resolveRowPreview`）。**产品追溯**使用 `ScanPanel`（即时查询，`suppressDispatchSounds` + 关闭摄像头）。`ScanInputButton` 供其他入口复用；摄像头依赖 `@zxing/browser`（`ScanInputButton`、`ScanPanel` 在 `showCameraButton` 为真时、`ScanBatchSessionModal` 在开启 `showCameraButton` 时）。
+通用能力：`utils/scanPayload.ts`、`utils/scanBatchIntent.ts`（批量弹窗「按批累计 / 按件累计」归一化）、`hooks/useScanGun.ts`；**报工 / 返工 / 外协收货 / 生产入库**使用 `ScanBatchSessionModal` + `ScanBatchTrigger`（先收集列表再确认；列表行展示依赖 `resolveRowPreview`）。**产品追溯**使用 `ScanPanel`（即时查询，`suppressDispatchSounds` + 关闭摄像头）。`ScanInputButton` 供其他入口复用；摄像头依赖 `@zxing/browser`（`ScanInputButton`、`ScanPanel` 在 `showCameraButton` 为真时、`ScanBatchSessionModal` 在开启 `showCameraButton` 时）。
 
 ### 10.2 后端接口
 

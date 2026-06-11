@@ -296,6 +296,28 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
   };
   const removeTransferItem = (id: string) => setTransferItems(prev => prev.filter(i => i.id !== id));
 
+  const resetTransferDraft = useCallback(() => {
+    setTransferForm({ fromWarehouseId: '', toWarehouseId: '', transferDate: localTodayYmd(), note: '' });
+    setTransferItems([]);
+  }, []);
+
+  const closeTransferModal = useCallback(() => {
+    setTransferModalOpen(false);
+    setEditingTransferDocNumber(null);
+    resetTransferDraft();
+  }, [resetTransferDraft]);
+
+  const resetStocktakeDraft = useCallback(() => {
+    setStocktakeForm({ warehouseId: '', stocktakeDate: localTodayYmd(), note: '' });
+    setStocktakeItems([]);
+  }, []);
+
+  const closeStocktakeModal = useCallback(() => {
+    setStocktakeModalOpen(false);
+    setEditingStocktakeDocNumber(null);
+    resetStocktakeDraft();
+  }, [resetStocktakeDraft]);
+
   // ── 盘点明细行操作 ──
   const addStocktakeItem = () => setStocktakeItems(prev => [...prev, { id: `st-line-${Date.now()}`, productId: '', quantity: undefined, batchNo: undefined }]);
   const updateStocktakeItem = (id: string, updates: Partial<StocktakeLineDraft>) => {
@@ -417,8 +439,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
     }
     setTransferModalOpen(false);
     setEditingTransferDocNumber(null);
-    setTransferForm({ fromWarehouseId: '', toWarehouseId: '', transferDate: localTodayYmd(), note: '' });
-    setTransferItems([]);
+    resetTransferDraft();
     writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PSI_TRANSFER, {
       fromWarehouseId: fromId,
       toWarehouseId: toId,
@@ -559,8 +580,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
     }
     setStocktakeModalOpen(false);
     setEditingStocktakeDocNumber(null);
-    setStocktakeForm({ warehouseId: '', stocktakeDate: localTodayYmd(), note: '' });
-    setStocktakeItems([]);
+    resetStocktakeDraft();
     writeWarehousePreference(tenantCtx?.tenantId, userId, WAREHOUSE_DOC_KIND.PSI_STOCKTAKE, {
       warehouseId,
     });
@@ -1320,7 +1340,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                />
                <TransferOrderModal
                  open={transferModalOpen}
-                 onClose={() => { setTransferModalOpen(false); setEditingTransferDocNumber(null); }}
+                 onClose={closeTransferModal}
                  editingDocNumber={editingTransferDocNumber}
                  transferForm={transferForm}
                  setTransferForm={setTransferForm}
@@ -1340,7 +1360,7 @@ const WarehousePanel: React.FC<WarehouseProps> = ({
                />
                <StocktakeOrderModal
                  open={stocktakeModalOpen}
-                 onClose={() => { setStocktakeModalOpen(false); setEditingStocktakeDocNumber(null); }}
+                 onClose={closeStocktakeModal}
                  editingDocNumber={editingStocktakeDocNumber}
                  stocktakeForm={stocktakeForm}
                  setStocktakeForm={setStocktakeForm}

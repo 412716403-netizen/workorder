@@ -90,7 +90,8 @@ interface OrderListViewProps {
   onUpdatePrintTemplates: (list: PrintTemplate[]) => void | Promise<void>;
   onRefreshPrintTemplates?: () => void | Promise<void>;
   warehouses?: Warehouse[];
-  onUpdateOrderFormSettings: (settings: OrderFormSettings) => void;
+  onUpdateOrderFormSettings: (settings: OrderFormSettings) => void | Promise<void>;
+  onRefreshGlobalNodes: () => Promise<void>;
   onReportSubmit?: (orderId: string, milestoneId: string, quantity: number, customData: any, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string) => void;
   onUpdateOrder?: (orderId: string, updates: Partial<ProductionOrder>) => void;
   /**
@@ -161,6 +162,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   onRefreshPrintTemplates,
   warehouses = [],
   onUpdateOrderFormSettings,
+  onRefreshGlobalNodes,
   onReportSubmit,
   onUpdateOrder,
   onUpdateOrderDispatchStatus,
@@ -187,17 +189,6 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     if (userPermissions.includes('production')) return true;
     if (userPermissions.includes(permKey)) return true;
     if (userPermissions.some(p => p.startsWith(`${permKey}:`))) return true;
-    return false;
-  };
-  /** 与系统设置页「工序节点库」页签的查看权限一致 */
-  const canViewSettingsNodesTab = (): boolean => {
-    if (_isOwner) return true;
-    if (!userPermissions) return true;
-    const perm = 'settings:nodes:view';
-    if (userPermissions.includes(perm)) return true;
-    if (userPermissions.includes('settings')) return true;
-    const [module] = perm.split(':');
-    if (module && userPermissions.includes(module)) return true;
     return false;
   };
   const hasProcessReportPerm = (): boolean => {
@@ -1532,7 +1523,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           plans={plans}
           orders={orders}
           products={products}
-          canNavigateToSettingsNodes={canViewSettingsNodesTab()}
+          globalNodes={globalNodes}
+          onRefreshGlobalNodes={onRefreshGlobalNodes}
         />
       )}
 

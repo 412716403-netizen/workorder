@@ -54,11 +54,13 @@ const AddWidgetModal: React.FC<AddWidgetModalProps> = ({
     for (const w of available) counts.set(w.category, (counts.get(w.category) ?? 0) + 1);
     return [
       { id: 'all', label: '全部', count: available.length },
-      ...Object.entries(CATEGORY_LABELS).map(([id, label]) => ({
-        id,
-        label,
-        count: counts.get(id) ?? 0,
-      })),
+      ...Object.entries(CATEGORY_LABELS)
+        .map(([id, label]) => ({
+          id,
+          label,
+          count: counts.get(id) ?? 0,
+        }))
+        .filter(c => c.count > 0),
     ];
   }, [available]);
 

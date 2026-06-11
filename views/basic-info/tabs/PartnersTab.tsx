@@ -4,6 +4,7 @@
  * 自包含: 列表 + 单位编辑面板;通过 props 传入 partners / partnerCategories / 操作回调。
  */
 import React, { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Building2, Plus, Search, X, Edit2, Trash2, ArrowLeft, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Partner, PartnerCategory } from '../../../types';
@@ -35,6 +36,7 @@ const PartnersTab: React.FC<Props> = ({ partners, partnerCategories, onRefreshPa
   const [editPartner, setEditPartner] = useState<Partial<Partner>>({});
   const [showModal, setShowModal] = useState(false);
   const partnerSubmit = useAsyncSubmitLock();
+  const queryClient = useQueryClient();
 
   const filteredPartners = useMemo(
     () => filterPartnersByCategoryAndKeyword(partners, activePartnerCategoryId, debouncedSearchTerm),
@@ -70,7 +72,12 @@ const PartnersTab: React.FC<Props> = ({ partners, partnerCategories, onRefreshPa
             toast.error('请填写有效的单位编号（1–9999）');
             return;
           }
+          const prevName = partners.find(p => p.id === editingId)?.name;
           await api.partners.update(editingId, editPartner);
+          // 改名后后端会级联同步外协/进销存/财务单据上的名称快照，这里整体失效缓存让各列表重拉
+          if (prevName && editPartner.name && editPartner.name.trim() !== prevName) {
+            void queryClient.invalidateQueries();
+          }
         } else {
           const { partnerListNo: _n, ...createPayload } = editPartner;
           void _n;

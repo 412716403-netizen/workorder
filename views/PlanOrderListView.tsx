@@ -349,6 +349,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
       ? {
           plan: planListPrintRun.plan,
           product: products.find(p => p.id === planListPrintRun.plan.productId),
+          globalNodes,
           printListRows: (planListPrintRun.plan as any)._printListRows ?? undefined,
           labelPerRow: (planListPrintRun.plan as any)._labelPerRow ?? undefined,
           virtualBatch: (planListPrintRun.plan as any)._virtualBatch ?? undefined,
@@ -357,7 +358,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
         }
       : idlePlanPrintCtx;
     return mergeTenantPrintContext(raw, tenantCtx?.tenantName);
-  }, [planListPrintRun, idlePlanPrintCtx, products, tenantCtx?.tenantName]);
+  }, [planListPrintRun, idlePlanPrintCtx, products, globalNodes, tenantCtx?.tenantName]);
 
   const { printRef: planListPrintRef, handlePrint: handlePlanListPrint } = usePrintTemplateAction(
     planListActivePrintTemplate,

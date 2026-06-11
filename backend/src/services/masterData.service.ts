@@ -1,5 +1,7 @@
 import type { DictionaryItem } from '@prisma/client';
 import type { TenantPrismaClient } from '../lib/prisma.js';
+import { prisma as basePrisma } from '../lib/prisma.js';
+import { AppError } from '../middleware/errorHandler.js';
 import { genId } from '../utils/genId.js';
 import { sanitizeUpdate, sanitizeCreate } from '../utils/request.js';
 import { getRedis, redisDel, redisGetJson, redisSetJson } from '../lib/redis.js';
@@ -51,10 +53,51 @@ export async function createPartner(
 
 export async function updatePartner(
   db: TenantPrismaClient,
+  tenantId: string,
   id: string,
   body: Record<string, unknown>,
 ) {
-  return db.partner.update({ where: { id }, data: sanitizeUpdate(body) });
+  const existing = await db.partner.findUnique({ where: { id } });
+  if (!existing) throw new AppError(404, '合作单位不存在');
+
+  const data = sanitizeUpdate(body);
+  const newName = typeof data.name === 'string' ? data.name.trim() : undefined;
+  const oldName = existing.name;
+  const renamed = newName !== undefined && newName !== '' && newName !== oldName;
+
+  if (!renamed) {
+    return db.partner.update({ where: { id }, data });
+  }
+
+  /**
+   * 改名级联：业务单据上的合作单位名称是写入时的快照字符串，改名后必须同步，
+   * 否则外协管理 / 外协流水 / 进销存 / 财务等列表会新旧名称并存（按名称分组也会割裂）。
+   *
+   * - ProductionOpRecord.partner：外协派工/收回、委外返工等（无 partnerId，按旧名称匹配）
+   * - PsiRecord.partner：采购/销售等单据（优先按 partnerId 关联，兼容旧数据按名称匹配）
+   * - FinanceRecord.partner：应收应付/结算（按旧名称匹配）
+   *
+   * 注意：若多个合作单位重名，按名称匹配的快照无法区分归属，会一并更新为新名称。
+   */
+  return basePrisma.$transaction(async (tx) => {
+    const updated = await tx.partner.update({
+      where: { id },
+      data: { ...data, name: newName },
+    });
+    await tx.productionOpRecord.updateMany({
+      where: { tenantId, partner: oldName },
+      data: { partner: newName },
+    });
+    await tx.psiRecord.updateMany({
+      where: { tenantId, OR: [{ partnerId: id }, { partner: oldName }] },
+      data: { partner: newName },
+    });
+    await tx.financeRecord.updateMany({
+      where: { tenantId, partner: oldName },
+      data: { partner: newName },
+    });
+    return updated;
+  });
 }
 
 export async function deletePartner(db: TenantPrismaClient, id: string) {

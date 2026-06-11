@@ -8,6 +8,7 @@ import type {
   Warehouse,
 } from '../types';
 import { buildSalesBillPrintListRowsByProductLine, type SalesBillLineInput } from './buildSalesBillPrintContext';
+import { aggregatePurchaseBillRelatedProductListText } from './purchaseBillRelatedProductPrint';
 import { sumPsiLineQty, sumPsiLineAmount, groupPsiDocLines } from './psiPrintShared';
 
 export type PurchaseBillLineInput = {
@@ -17,6 +18,8 @@ export type PurchaseBillLineInput = {
   purchasePrice: number;
   variantQuantities?: Record<string, number>;
   batchNo?: string;
+  /** 行级关联成品 id（存于 PSI 行 customData.relatedProductId） */
+  relatedProductId?: string;
 };
 
 /** 采购单动态列表行：与采购订单/销售单明细列键一致 */
@@ -32,6 +35,7 @@ export function buildPurchaseBillPrintListRows(
     salesPrice: Number(l.purchasePrice) || 0,
     variantQuantities: l.variantQuantities,
     batchNo: l.batchNo,
+    ...(l.relatedProductId ? { relatedProductId: l.relatedProductId } : {}),
   }));
   return buildSalesBillPrintListRowsByProductLine(asSales, productMap, dictionaries);
 }
@@ -53,6 +57,10 @@ export function buildPurchaseBillPrintRenderContext(params: {
   const printListRows = buildPurchaseBillPrintListRows(lines, productMap, dictionaries);
   const firstProductId = lines.find(l => l.productId)?.productId;
   const product = firstProductId ? productMap.get(firstProductId) : undefined;
+  const relatedProductSummary = aggregatePurchaseBillRelatedProductListText(
+    lines.map(l => ({ customData: l.relatedProductId ? { relatedProductId: l.relatedProductId } : undefined })),
+    productMap,
+  );
   const purchaseBillPrint: PurchaseBillPrintContext = {
     docNumber,
     partner,
@@ -60,6 +68,7 @@ export function buildPurchaseBillPrintRenderContext(params: {
     warehouseName: warehouseName || '',
     docTotalQty: sumPsiLineQty(lines, productMap),
     docTotalAmount: sumPsiLineAmount(lines, productMap, l => Number(l.purchasePrice) || 0),
+    ...(relatedProductSummary !== '—' ? { relatedProduct: relatedProductSummary } : {}),
     custom: customData && Object.keys(customData).length > 0 ? { ...customData } : undefined,
   };
   return {
@@ -73,6 +82,11 @@ export function buildPurchaseBillPrintRenderContext(params: {
 export function buildPurchaseBillLinesFromPsiRecords(docItems: PsiRecord[]): PurchaseBillLineInput[] {
   return groupPsiDocLines<PurchaseBillLineInput>(docItems, (lgId, first, _recs, hasVar, vq, lineQtyNoVar) => {
     const bn = String(first.batchNo ?? (first as { batch?: string }).batch ?? '').trim();
+    const cd = first.customData;
+    const relatedProductId =
+      cd && typeof cd === 'object' && !Array.isArray(cd)
+        ? String((cd as Record<string, unknown>).relatedProductId ?? '').trim()
+        : '';
     return {
       id: lgId,
       productId: first.productId,
@@ -80,6 +94,7 @@ export function buildPurchaseBillLinesFromPsiRecords(docItems: PsiRecord[]): Pur
       purchasePrice: Number(first.purchasePrice) || 0,
       variantQuantities: hasVar ? vq : undefined,
       ...(bn ? { batchNo: bn } : {}),
+      ...(relatedProductId ? { relatedProductId } : {}),
     };
   });
 }

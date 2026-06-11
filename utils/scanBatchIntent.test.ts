@@ -19,7 +19,7 @@ describe('normalizeScanPayloadForIntent', () => {
   it('ITEM intent + BATCH payload → reject', async () => {
     const r = await normalizeScanPayloadForIntent('ITEM', batch('x'), deps());
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.message).toContain('单品码');
+    if (!r.ok) expect(r.message).toContain('按件累计');
   });
 
   it('BATCH intent + BATCH payload → pass through', async () => {

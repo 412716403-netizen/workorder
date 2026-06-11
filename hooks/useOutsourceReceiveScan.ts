@@ -110,7 +110,6 @@ interface ResolvedScan {
   itemCodeId: string | null;
   virtualBatchId: string | null;
   detail: ScanBatchRowDetail;
-  tip: string;
 }
 
 export function useOutsourceReceiveScan(opts: UseOutsourceReceiveScanOptions): UseOutsourceReceiveScanReturn {
@@ -124,26 +123,31 @@ export function useOutsourceReceiveScan(opts: UseOutsourceReceiveScanOptions): U
     isNodeAllowed,
   } = opts;
 
-  const scannedItemRef = useRef<Set<string>>(new Set());
-  const scannedBatchRef = useRef<Set<string>>(new Set());
+  /**
+   * 会话内「按 token 缓存」的解析+命中+校验结果。
+   *
+   * 关键：扫码当下（`resolveScanRowPreview`）就把每个码解析、命中候选行、跑持久化去重、算出
+   * entry key，并缓存到这里；点「确认应用」时 `applyScanPayload` 直接读缓存（**0 网络请求**），
+   * 只补做超额/工序锁校验。这样把网络开销从「确认时瞬时 N 倍爆发」摊到「逐件扫码的几分钟里」，
+   * 避免大批量（上千件）一次性把后端限流（200 请求/60s）打爆。
+   *
+   * 同时它天然充当会话内去重：同一 token 第二次进来直接命中缓存、不再发请求，也不再像旧实现
+   * 那样在中途失败后污染一个独立的「已扫过」集合导致整单无法重试。
+   */
+  const preparedByTokenRef = useRef<Map<string, ApplyScanResult>>(new Map());
 
   const resetSession = useCallback(() => {
-    scannedItemRef.current = new Set();
-    scannedBatchRef.current = new Set();
+    preparedByTokenRef.current = new Map();
   }, []);
 
   /**
    * 解析扫码 token；通过 itemCodes/planVirtualBatches API 取回 productId/variantId/quantity。
-   * 与 ScanBatchSessionModal 的会话内 dedup 是独立两层；调用方可任选其一或两者皆用。
+   * 纯网络解析，不做去重（去重由 `preparedByTokenRef` 缓存 + ScanBatchSessionModal 会话层负责）。
    */
   const resolveScan = useCallback(
     async (payload: ScanPayload): Promise<ResolvedScan | null> => {
       if (!payload.token) return null;
       if (payload.kind === 'ITEM') {
-        if (scannedItemRef.current.has(payload.token)) {
-          toast.warning('此单品码已扫描过');
-          return null;
-        }
         const res = await itemCodesApi.scan(payload.token);
         if (res.kind !== 'ITEM_CODE') return null;
         if (res.status !== 'ACTIVE') {
@@ -155,11 +159,6 @@ export function useOutsourceReceiveScan(opts: UseOutsourceReceiveScanOptions): U
           toast.error('扫码结果缺少产品信息');
           return null;
         }
-        const tip = `${res.variantLabel || res.productName || ''}${
-          res.ownerTenantName && res.callerContext?.relation !== 'OWNER'
-            ? ` · 来自 ${res.ownerTenantName}`
-            : ''
-        }`;
         return {
           productId,
           variantId: res.variantId ?? null,
@@ -167,14 +166,9 @@ export function useOutsourceReceiveScan(opts: UseOutsourceReceiveScanOptions): U
           itemCodeId: res.itemCodeId ?? null,
           virtualBatchId: res.batchId ?? null,
           detail: scanItemResultToRowDetail(res),
-          tip,
         };
       }
       if (payload.kind === 'BATCH') {
-        if (scannedBatchRef.current.has(payload.token)) {
-          toast.warning('此批次码已扫描过');
-          return null;
-        }
         const res = await planVirtualBatchesApi.scan(payload.token);
         if (res.kind !== 'VIRTUAL_BATCH') return null;
         if (res.status !== 'ACTIVE') {
@@ -186,11 +180,6 @@ export function useOutsourceReceiveScan(opts: UseOutsourceReceiveScanOptions): U
           toast.error('扫码结果缺少产品信息');
           return null;
         }
-        const tip = `${res.variantLabel || res.productName || ''}${
-          res.ownerTenantName && res.callerContext?.relation !== 'OWNER'
-            ? ` · 来自 ${res.ownerTenantName}`
-            : ''
-        }`;
         return {
           productId,
           variantId: res.variantId ?? null,
@@ -198,7 +187,6 @@ export function useOutsourceReceiveScan(opts: UseOutsourceReceiveScanOptions): U
           itemCodeId: null,
           virtualBatchId: res.batchId ?? null,
           detail: scanVirtualBatchResultToRowDetail(res),
-          tip,
         };
       }
       return null;
@@ -258,108 +246,133 @@ export function useOutsourceReceiveScan(opts: UseOutsourceReceiveScanOptions): U
     [products, categories],
   );
 
-  const applyScanPayload = useCallback(
-    async (input: ApplyScanInput): Promise<ApplyScanResult | null> => {
-      const { payload, currentQuantities } = input;
+  /**
+   * 扫码当下执行的「重活」：解析 token → 命中候选行（含 allAggregates 特例分流）→ 算 entry key →
+   * 持久化去重校验。成功后按 token 缓存整个 {@link ApplyScanResult}（不含超额/工序锁校验，那两项
+   * 依赖确认时的累计与锁定，留给 `applyScanPayload`）。
+   *
+   * - 同一 token 第二次进来命中缓存、直接返回，不再发请求（确认应用即走这条 0 网络路径）。
+   * - 任一步失败：toast 由各步给出，返回 null，且**不写缓存**——重试时可重新解析，不会被污染。
+   */
+  const prepareScan = useCallback(
+    async (payload: ScanPayload): Promise<ApplyScanResult | null> => {
+      if (payload.token) {
+        const cached = preparedByTokenRef.current.get(payload.token);
+        if (cached) return cached;
+      }
+
       const partnerFilter = partner != null ? String(partner) : null;
       const pendingPool = partnerFilter != null
         ? pendingRows.filter((r) => (r.partner ?? '') === partnerFilter)
         : pendingRows;
       if (pendingPool.length === 0 && !allAggregates?.length) return null;
 
-      try {
-        const resolved = await resolveScan(payload);
-        if (!resolved) return null;
-        const { productId, variantId, qty: addQty, itemCodeId, virtualBatchId, detail, tip } = resolved;
+      const resolved = await resolveScan(payload);
+      if (!resolved) return null;
+      const { productId, variantId, qty: addQty, itemCodeId, virtualBatchId, detail } = resolved;
 
-        let row = pendingPool.find((r) => r.productId === productId);
-        let isFromAllAggregates = false;
+      let row = pendingPool.find((r) => r.productId === productId);
+      let isFromAllAggregates = false;
 
-        if (!row) {
-          // 命中失败时按 allAggregates 分流：未外发 / 已收完 / 特例放行
-          const aggregatePool = allAggregates && partnerFilter != null
-            ? allAggregates.filter((r) => (r.partner ?? '') === partnerFilter)
-            : allAggregates ?? [];
-          const aggregateRows = aggregatePool.filter((r) => r.productId === productId);
-          if (aggregateRows.length === 0) {
-            if (partnerFilter != null) {
-              toast.error(`此码对应产品未外发给加工厂「${partnerFilter}」`);
-            } else {
-              toast.error('此码对应产品不在本次收货列表中');
-            }
-            return null;
+      if (!row) {
+        // 命中失败时按 allAggregates 分流：未外发 / 已收完 / 特例放行
+        const aggregatePool = allAggregates && partnerFilter != null
+          ? allAggregates.filter((r) => (r.partner ?? '') === partnerFilter)
+          : allAggregates ?? [];
+        const aggregateRows = aggregatePool.filter((r) => r.productId === productId);
+        if (aggregateRows.length === 0) {
+          if (partnerFilter != null) {
+            toast.error(`此码对应产品未外发给加工厂「${partnerFilter}」`);
+          } else {
+            toast.error('此码对应产品不在本次收货列表中');
           }
-          // 有历史外发但 pending<=0
-          if (!allowExceedMaxOutsourceReceiveQty) {
-            toast.error(`此码对应产品在加工厂「${partnerFilter ?? ''}」已全部收回`);
-            return null;
-          }
-          // 特例：开启允许超额，注入该聚合行（取 nodeId 最契合工序锁的一行；不行则首条）
-          const allowedRow = aggregateRows.find((r) => (isNodeAllowed ? isNodeAllowed(r.nodeId) : true));
-          row = allowedRow ?? aggregateRows[0];
-          isFromAllAggregates = true;
+          return null;
         }
+        // 有历史外发但 pending<=0
+        if (!allowExceedMaxOutsourceReceiveQty) {
+          toast.error(`此码对应产品在加工厂「${partnerFilter ?? ''}」已全部收回`);
+          return null;
+        }
+        // 特例：开启允许超额，注入该聚合行（取 nodeId 最契合工序锁的一行；不行则首条）
+        const allowedRow = aggregateRows.find((r) => (isNodeAllowed ? isNodeAllowed(r.nodeId) : true));
+        row = allowedRow ?? aggregateRows[0];
+        isFromAllAggregates = true;
+      }
 
-        if (!row) return null;
+      if (!row) return null;
+
+      const keyResult = computeEntryKey(row, variantId);
+      if ('error' in keyResult) {
+        toast.error(keyResult.error);
+        return null;
+      }
+      const { key, baseKey } = keyResult;
+
+      if (!(await validateUsage({ row, itemCodeId, virtualBatchId }))) {
+        return null;
+      }
+
+      const result: ApplyScanResult = {
+        row,
+        key,
+        baseKey,
+        qty: addQty,
+        isFromAllAggregates,
+        detail,
+        itemCodeId,
+        virtualBatchId,
+      };
+      if (payload.token) preparedByTokenRef.current.set(payload.token, result);
+      return result;
+    },
+    [pendingRows, allAggregates, partner, allowExceedMaxOutsourceReceiveQty, isNodeAllowed, resolveScan, computeEntryKey, validateUsage],
+  );
+
+  const applyScanPayload = useCallback(
+    async (input: ApplyScanInput): Promise<ApplyScanResult | null> => {
+      const { payload, currentQuantities } = input;
+      try {
+        // 扫码阶段已 prepare 过 → 命中缓存、0 网络；未命中（极少）则回退到实时解析，保证不漏单
+        const result = await prepareScan(payload);
+        if (!result) return null;
 
         // 工序锁定校验（特例路径也复用同一锁定，避免跨工序混扫）
-        if (isNodeAllowed && !isNodeAllowed(row.nodeId)) {
-          const lockName = row.milestoneName || row.nodeId;
+        if (isNodeAllowed && !isNodeAllowed(result.row.nodeId)) {
+          const lockName = result.row.milestoneName || result.row.nodeId;
           toast.error(`该码属于工序「${lockName}」，与首条扫入工序不同；请分批收货`);
           return null;
         }
 
-        const keyResult = computeEntryKey(row, variantId);
-        if ('error' in keyResult) {
-          toast.error(keyResult.error);
-          return null;
-        }
-        const { key, baseKey } = keyResult;
-
-        if (!(await validateUsage({ row, itemCodeId, virtualBatchId }))) {
-          return null;
-        }
-
         // 行级 pending 上限校验：特例路径或开启允许超额时跳过
-        if (!allowExceedMaxOutsourceReceiveQty && !isFromAllAggregates) {
-          const cur = currentQuantities[key] ?? 0;
-          const ck = checkExceedMax(cur, addQty, row.pending);
+        if (!allowExceedMaxOutsourceReceiveQty && !result.isFromAllAggregates) {
+          const cur = currentQuantities[result.key] ?? 0;
+          const ck = checkExceedMax(cur, result.qty, result.row.pending);
           if (ck.exceeds) {
             toast.error(ck.message ?? '本次扫入数量超过该行外协待收上限');
             return null;
           }
         }
 
-        if (payload.kind === 'ITEM' && payload.token) scannedItemRef.current.add(payload.token);
-        if (payload.kind === 'BATCH' && payload.token) scannedBatchRef.current.add(payload.token);
-
-        if (tip) {
-          toast.success(`外协收货 +${addQty} ${tip}`);
-        } else {
-          toast.success(`外协收货 +${addQty}`);
-        }
-
-        return { row, key, baseKey, qty: addQty, isFromAllAggregates, detail, itemCodeId, virtualBatchId };
+        return result;
       } catch (e) {
         toast.error(rewriteScanApiErrorForIme(payload.raw, (e as Error)?.message || '扫码查询失败'));
         return null;
       }
     },
-    [pendingRows, allAggregates, partner, allowExceedMaxOutsourceReceiveQty, isNodeAllowed, resolveScan, computeEntryKey, validateUsage],
+    [prepareScan, isNodeAllowed, allowExceedMaxOutsourceReceiveQty],
   );
 
   const resolveScanRowPreview = useCallback(
     async (payload: ScanPayload): Promise<ScanBatchRowDetail | null> => {
       try {
-        const resolved = await resolveScan(payload);
-        if (!resolved) return null;
-        return resolved.detail;
+        const result = await prepareScan(payload);
+        return result?.detail ?? null;
       } catch (e) {
         toast.error(rewriteScanApiErrorForIme(payload.raw, (e as Error)?.message || '扫码查询失败'));
         return null;
       }
     },
-    [resolveScan],
+    [prepareScan],
   );
 
   return { applyScanPayload, resolveScanRowPreview, resetSession };

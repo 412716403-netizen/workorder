@@ -4,6 +4,8 @@ import type {
   ProductionOpRecord,
   ProductMilestoneProgress,
   MilestoneReport,
+  ReportFieldDefinition,
+  GlobalNodeTemplate,
 } from '../../types';
 import type { OrderDispatchStatus } from '../../types';
 
@@ -49,6 +51,12 @@ export const orders = {
     request<ProductionOrder>(`/orders/${orderId}/dispatch-status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
+    }),
+  /** 工单中心表单配置：批量保存工序报工自定义单据字段 */
+  updateNodeReportTemplates: (updates: { nodeId: string; reportTemplate: ReportFieldDefinition[] }[]) =>
+    request<{ updated: GlobalNodeTemplate[] }>('/orders/node-report-templates', {
+      method: 'PUT',
+      body: JSON.stringify({ updates }),
     }),
 };
 

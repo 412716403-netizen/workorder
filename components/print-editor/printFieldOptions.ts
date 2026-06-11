@@ -92,6 +92,8 @@ export function buildPrintFieldOptions(opts: {
   showOutsourceDispatchDeliveryDate?: boolean;
   /** 与计划单表单配置「列表显示-显示交货日期」联动；为 true 时开放 {{计划.dueDate}} */
   showPlanDeliveryDate?: boolean;
+  /** 与采购入库表单配置「关联产品」联动；为 true 时开放关联产品表头/明细字段 */
+  showPurchaseBillRelatedProduct?: boolean;
   /** 外协收回自定义；{{外协收回.custom.<id>}} */
   outsourceReceiveCustomFields?: PlanFormFieldConfig[];
   /** 返工管理：处理不良自定义；{{处理不良.custom.<id>}} */
@@ -120,6 +122,7 @@ export function buildPrintFieldOptions(opts: {
   const outsourceDispatchCustomFields = opts.outsourceDispatchCustomFields ?? [];
   const showOutsourceDispatchDeliveryDate = opts.showOutsourceDispatchDeliveryDate === true;
   const showPlanDeliveryDate = opts.showPlanDeliveryDate === true;
+  const showPurchaseBillRelatedProduct = opts.showPurchaseBillRelatedProduct === true;
   const outsourceReceiveCustomFields = opts.outsourceReceiveCustomFields ?? [];
   const defectTreatmentCustomFields = opts.defectTreatmentCustomFields ?? [];
   const reworkReportCustomFields = opts.reworkReportCustomFields ?? [];
@@ -164,6 +167,7 @@ export function buildPrintFieldOptions(opts: {
   const productStatic: PrintFieldOption[] = [
     { group: '产品', value: '产品.name', label: '产品名称' },
     { group: '产品', value: '产品.sku', label: 'SKU' },
+    { group: '产品', value: '产品.processNodes', label: '产品工序' },
     { group: '产品', value: '产品.imageUrl', label: '产品主图', isFileOrImageField: true },
     { group: '产品', value: '产品.description', label: '描述' },
   ];
@@ -264,6 +268,9 @@ export function buildPrintFieldOptions(opts: {
     { group: '采购入库', value: '采购入库.warehouseName', label: '入库仓库' },
     { group: '采购入库', value: '采购入库.docTotalQty', label: '本单总件数' },
     { group: '采购入库', value: '采购入库.docTotalAmount', label: '本单总金额' },
+    ...(showPurchaseBillRelatedProduct
+      ? [{ group: '采购入库' as const, value: '采购入库.relatedProduct', label: '关联产品' }]
+      : []),
   ];
   const purchaseBillCustom: PrintFieldOption[] = purchaseBillCustomFields.map(f =>
     planFormCustomPrintField('采购入库', '采购入库', f),
@@ -309,6 +316,12 @@ export function buildPrintFieldOptions(opts: {
     { group: '采购入库明细', value: '行.lineNo', label: '行序号' },
     { group: '采购入库明细', value: '行.sku', label: '货号' },
     { group: '采购入库明细', value: '行.productName', label: '名称' },
+    ...(showPurchaseBillRelatedProduct
+      ? [
+          { group: '采购入库明细' as const, value: '行.relatedProductName', label: '关联产品名称' },
+          { group: '采购入库明细' as const, value: '行.relatedProductSku', label: '关联产品货号' },
+        ]
+      : []),
     { group: '采购入库明细', value: '行.colorName', label: '颜色' },
     { group: '采购入库明细', value: '行.sizeName', label: '尺码' },
     { group: '采购入库明细', value: '行.batchNo', label: '批次' },

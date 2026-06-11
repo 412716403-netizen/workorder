@@ -18,6 +18,7 @@ import {
   Partner,
   PlanFormFieldConfig,
 } from '../../types';
+import { SCAN_ITEM_CODE_IDS_KEY } from '../../types';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { checkExceedMax } from '../../utils/scanApplyGuards';
@@ -54,6 +55,20 @@ function reworkReportCollabFromValues(values: Record<string, unknown>): { collab
   if (!Object.keys(clean).length) return {};
   return { collabData: { [REWORK_REPORT_CUSTOM_DATA_KEY]: clean } };
 }
+
+/** 返工报工扫码解析结果（按 token 缓存，确认时复用以避免重复网络请求） */
+type PreparedReworkScan = {
+  vid: string;
+  add: number;
+  ownerTenantName?: string | null;
+  relation?: 'OWNER' | 'DOWNSTREAM' | 'UPSTREAM' | 'PEER';
+  variantLabel?: string | null;
+  detail: ScanBatchRowDetail;
+  /** 单品码扫入时为该单品码 id；批次码扫入为 null */
+  itemCodeId: string | null;
+  /** 所属虚拟批次 id（单品码取父批次，批次码取自身） */
+  batchId: string | null;
+};
 
 export interface ReworkReportSubmitModalProps {
   reworkReportModal: { order: ProductionOrder; nodeId: string; nodeName: string; outsourcePartner?: string };
@@ -256,8 +271,19 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
   const reworkMatrixInputClass =
     'h-9 w-[3.25rem] shrink-0 rounded-lg border border-slate-200 bg-white px-2 text-left text-xs font-bold text-indigo-600 tabular-nums outline-none focus:ring-2 focus:ring-indigo-200';
 
-  const scannedItemTokensRef = useRef<Set<string>>(new Set());
-  const scannedBatchTokensRef = useRef<Set<string>>(new Set());
+  /**
+   * 扫码解析缓存：扫码（预览）阶段写入「scan + validate-usage」结果，
+   * 点「确认应用」时命中缓存 → 0 网络请求，避免逐条重新解析触发频控/投毒。
+   * 去重依赖扫码弹窗自身的 keysRef + 此缓存幂等（弹窗每次打开随组件挂载重置）。
+   */
+  const preparedByTokenRef = useRef<Map<string, PreparedReworkScan>>(new Map());
+  /**
+   * 扫码追溯关联：单品码模式按规格累积扫入的单品码列表（写入记录 customData.__scanItemCodeIds，逐件可追溯）；
+   * 批次码模式记 virtualBatchId（整批共享链路）。`hadBatchScan` 标记本次是否扫过批次码。
+   */
+  const reworkScanItemCodesByVidRef = useRef<Map<string, string[]>>(new Map());
+  const reworkScanVirtualBatchRef = useRef<string | null>(null);
+  const reworkHadBatchScanRef = useRef(false);
 
   const applyScanQuantity = useCallback(
     (params: {
@@ -345,101 +371,20 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
     [order.id, reworkReportModal.nodeId],
   );
 
-  const applyReworkScanPayload = useCallback(
-    async (payload: ScanPayload): Promise<boolean> => {
-      if (!payload.token) return false;
-      try {
-        if (payload.kind === 'ITEM') {
-          if (scannedItemTokensRef.current.has(payload.token)) {
-            toast.warning('此单品码已扫描过');
-            return false;
-          }
-          const res = await itemCodesApi.scan(payload.token);
-          if (res.kind !== 'ITEM_CODE') return false;
-          if (res.status !== 'ACTIVE') {
-            toast.error(res.message || '单品码不可用');
-            return false;
-          }
-          if (res.productId !== order.productId) {
-            toast.error('此码产品与当前工单不一致');
-            return false;
-          }
-          if (
-            !(await validateReworkScan({
-              itemCodeId: res.itemCodeId ?? null,
-              virtualBatchId: res.batchId ?? null,
-            }))
-          )
-            return false;
-          if (
-            !applyScanQuantity({
-              vid: res.variantId || '',
-              add: 1,
-              ownerTenantName: res.ownerTenantName,
-              relation: res.callerContext?.relation,
-              variantLabel: res.variantLabel,
-            })
-          ) {
-            return false;
-          }
-          scannedItemTokensRef.current.add(payload.token);
-          return true;
-        }
-        if (payload.kind === 'BATCH') {
-          if (scannedBatchTokensRef.current.has(payload.token)) {
-            toast.warning('此批次码已扫描过');
-            return false;
-          }
-          const res = await planVirtualBatchesApi.scan(payload.token);
-          if (res.kind !== 'VIRTUAL_BATCH') return false;
-          if (res.status !== 'ACTIVE') {
-            toast.error(res.message || '批次码不可用');
-            return false;
-          }
-          if (res.productId !== order.productId) {
-            toast.error('此批次码产品与当前工单不一致');
-            return false;
-          }
-          if (
-            !(await validateReworkScan({
-              itemCodeId: null,
-              virtualBatchId: res.batchId ?? null,
-            }))
-          )
-            return false;
-          if (
-            !applyScanQuantity({
-              vid: res.variantId || '',
-              add: res.quantity ?? 0,
-              ownerTenantName: res.ownerTenantName,
-              relation: res.callerContext?.relation,
-              variantLabel: res.variantLabel,
-            })
-          ) {
-            return false;
-          }
-          scannedBatchTokensRef.current.add(payload.token);
-          return true;
-        }
-      } catch (e) {
-        toast.error(rewriteScanApiErrorForIme(payload.raw, (e as Error)?.message || '扫码查询失败'));
-        return false;
-      }
-      return false;
-    },
-    [order.productId, applyScanQuantity, validateReworkScan],
-  );
-
-  const resolveReworkScanRowPreview = useCallback(
-    async (payload: ScanPayload): Promise<ScanBatchRowDetail | null> => {
+  /**
+   * 扫码解析（含产品一致性 + 持久化去重校验），按 token 缓存。
+   * - 扫码（预览）阶段与「确认应用」阶段共用：预览先解析并缓存，确认时命中缓存 → 0 网络请求。
+   * - 待返工路径/规格匹配等本地校验放在预览与 applyScanQuantity 中，不计入缓存。
+   */
+  const prepareReworkScan = useCallback(
+    async (payload: ScanPayload): Promise<PreparedReworkScan | null> => {
       if (!payload.token) return null;
+      const cached = preparedByTokenRef.current.get(payload.token);
+      if (cached) return cached;
       try {
         if (payload.kind === 'ITEM') {
-          if (scannedItemTokensRef.current.has(payload.token)) {
-            toast.warning('此单品码已扫描过');
-            return null;
-          }
           const res = await itemCodesApi.scan(payload.token);
+          if (res.kind !== 'ITEM_CODE') return null;
           if (res.status !== 'ACTIVE') {
             toast.error(res.message || '单品码不可用');
             return null;
@@ -448,22 +393,6 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
             toast.error('此码产品与当前工单不一致');
             return null;
           }
-          const vid = res.variantId || '';
-          if (reworkReportHasColorSize) {
-            if (!vid) {
-              toast.error('当前产品按规格管理，单品/批次码未带规格');
-              return null;
-            }
-            const target = reworkReportPaths.find((p) => (p.pendingByVariant[vid] ?? 0) > 0);
-            if (!target) {
-              toast.error('没有匹配此规格的待返工路径');
-              return null;
-            }
-          } else if (reworkReportPaths.length === 0) {
-            toast.error('暂无待返工路径可累加');
-            return null;
-          }
-          if (res.kind !== 'ITEM_CODE') return null;
           if (
             !(await validateReworkScan({
               itemCodeId: res.itemCodeId ?? null,
@@ -471,13 +400,20 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
             }))
           )
             return null;
-          return scanItemResultToRowDetail(res);
+          const prepared: PreparedReworkScan = {
+            vid: res.variantId || '',
+            add: 1,
+            ownerTenantName: res.ownerTenantName,
+            relation: res.callerContext?.relation,
+            variantLabel: res.variantLabel,
+            detail: scanItemResultToRowDetail(res),
+            itemCodeId: res.itemCodeId ?? null,
+            batchId: res.batchId ?? null,
+          };
+          preparedByTokenRef.current.set(payload.token, prepared);
+          return prepared;
         }
         if (payload.kind === 'BATCH') {
-          if (scannedBatchTokensRef.current.has(payload.token)) {
-            toast.warning('此批次码已扫描过');
-            return null;
-          }
           const res = await planVirtualBatchesApi.scan(payload.token);
           if (res.kind !== 'VIRTUAL_BATCH') return null;
           if (res.status !== 'ACTIVE') {
@@ -493,21 +429,6 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
             toast.error('暂无待返工路径可累加');
             return null;
           }
-          const vid = res.variantId || '';
-          if (reworkReportHasColorSize) {
-            if (!vid) {
-              toast.error('当前产品按规格管理，单品/批次码未带规格');
-              return null;
-            }
-            const target = reworkReportPaths.find((p) => (p.pendingByVariant[vid] ?? 0) > 0);
-            if (!target) {
-              toast.error('没有匹配此规格的待返工路径');
-              return null;
-            }
-          } else if (reworkReportPaths.length === 0) {
-            toast.error('暂无待返工路径可累加');
-            return null;
-          }
           if (
             !(await validateReworkScan({
               itemCodeId: null,
@@ -515,7 +436,18 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
             }))
           )
             return null;
-          return scanVirtualBatchResultToRowDetail(res);
+          const prepared: PreparedReworkScan = {
+            vid: res.variantId || '',
+            add,
+            ownerTenantName: res.ownerTenantName,
+            relation: res.callerContext?.relation,
+            variantLabel: res.variantLabel,
+            detail: scanVirtualBatchResultToRowDetail(res),
+            itemCodeId: null,
+            batchId: res.batchId ?? null,
+          };
+          preparedByTokenRef.current.set(payload.token, prepared);
+          return prepared;
         }
       } catch (e) {
         toast.error(rewriteScanApiErrorForIme(payload.raw, (e as Error)?.message || '扫码查询失败'));
@@ -523,7 +455,57 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
       }
       return null;
     },
-    [order.productId, reworkReportPaths, reworkReportHasColorSize, validateReworkScan],
+    [order.productId, validateReworkScan],
+  );
+
+  const applyReworkScanPayload = useCallback(
+    async (payload: ScanPayload): Promise<boolean> => {
+      // 扫码阶段已通过 resolveReworkScanRowPreview 调 prepareReworkScan 并缓存，
+      // 此处命中缓存 → 0 网络；缓存未命中（极少数）才回退到网络解析。
+      const prepared = await prepareReworkScan(payload);
+      if (!prepared) return false;
+      if (prepared.itemCodeId) {
+        const vid = prepared.vid || '';
+        const arr = reworkScanItemCodesByVidRef.current.get(vid) ?? [];
+        if (!arr.includes(prepared.itemCodeId)) arr.push(prepared.itemCodeId);
+        reworkScanItemCodesByVidRef.current.set(vid, arr);
+      } else if (prepared.batchId) {
+        reworkHadBatchScanRef.current = true;
+        reworkScanVirtualBatchRef.current = reworkScanVirtualBatchRef.current ?? prepared.batchId;
+      }
+      return applyScanQuantity({
+        vid: prepared.vid,
+        add: prepared.add,
+        ownerTenantName: prepared.ownerTenantName,
+        relation: prepared.relation,
+        variantLabel: prepared.variantLabel,
+      });
+    },
+    [prepareReworkScan, applyScanQuantity],
+  );
+
+  const resolveReworkScanRowPreview = useCallback(
+    async (payload: ScanPayload): Promise<ScanBatchRowDetail | null> => {
+      const prepared = await prepareReworkScan(payload);
+      if (!prepared) return null;
+      // 本地早校验：是否存在匹配的待返工路径/规格（不依赖网络）
+      if (reworkReportHasColorSize) {
+        if (!prepared.vid) {
+          toast.error('当前产品按规格管理，单品/批次码未带规格');
+          return null;
+        }
+        const target = reworkReportPaths.find((p) => (p.pendingByVariant[prepared.vid] ?? 0) > 0);
+        if (!target) {
+          toast.error('没有匹配此规格的待返工路径');
+          return null;
+        }
+      } else if (reworkReportPaths.length === 0) {
+        toast.error('暂无待返工路径可累加');
+        return null;
+      }
+      return prepared.detail;
+    },
+    [prepareReworkScan, reworkReportPaths, reworkReportHasColorSize],
   );
 
   const handleReworkScanBatchConfirm = useCallback(
@@ -581,6 +563,26 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
     const appliedReworkSourceIds = new Set<string>();
     const resolveOpName = (fallback?: string) => workers?.find((w: Worker) => w.id === reworkReportWorkerId)?.name ?? fallback ?? docOperatorFallback;
     const collabExtra = reworkReportCollabFromValues(reworkReportCustomData);
+    /**
+     * 扫码追溯关联：
+     * - 批次码模式 → 记录挂 virtual_batch_id（整批共享链路）；
+     * - 单品码模式 → 记录 customData 写入本规格扫入的单品码列表（逐件精确命中）；同规格被拆到多条记录时只首条携带，避免追溯重复事件。
+     * 手工报工（无扫码）→ 不附加任何追溯字段。
+     */
+    const reworkHadBatchScan = reworkHadBatchScanRef.current;
+    const reworkScanVirtualBatchId = reworkScanVirtualBatchRef.current;
+    const assignedScanVids = new Set<string>();
+    const scanTraceFor = (
+      variantId: string | undefined,
+    ): { virtualBatchId?: string; customData?: Record<string, unknown> } => {
+      if (reworkHadBatchScan) return reworkScanVirtualBatchId ? { virtualBatchId: reworkScanVirtualBatchId } : {};
+      const vid = variantId || '';
+      if (assignedScanVids.has(vid)) return {};
+      const list = reworkScanItemCodesByVidRef.current.get(vid) ?? [];
+      if (list.length === 0) return {};
+      assignedScanVids.add(vid);
+      return { customData: { [SCAN_ITEM_CODE_IDS_KEY]: list } };
+    };
     const pushReworkReport = (qty: number, variantId: string | undefined, src: ProductionOpRecord) => {
       if (qty <= 0) return;
       if (!batchDocNo) batchDocNo = getNextReworkReportDocNo();
@@ -608,6 +610,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
         amount: reworkReportUnitPrice > 0 ? qty * reworkReportUnitPrice : undefined,
         ...(isOutsourceRework && outsourcePartner ? { partner: outsourcePartner } : {}),
         ...collabExtra,
+        ...scanTraceFor(variantId),
       });
     };
     try {
@@ -759,6 +762,16 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
         appliedReworkSourceIds.has(String(r.sourceReworkId)) &&
         (r.partner ?? '') === outsourcePartner
       );
+      // 委外返工收回单（单条汇总）同样挂上扫码追溯：批次码模式挂 virtual_batch_id，单品码模式写合并单品码列表。
+      const receiveScanTrace: { virtualBatchId?: string; customData?: Record<string, unknown> } =
+        reworkHadBatchScan
+          ? reworkScanVirtualBatchId
+            ? { virtualBatchId: reworkScanVirtualBatchId }
+            : {}
+          : (() => {
+              const all = [...new Set([...reworkScanItemCodesByVidRef.current.values()].flat())];
+              return all.length ? { customData: { [SCAN_ITEM_CODE_IDS_KEY]: all } } : {};
+            })();
       onAddRecord({
         id: `wx-recv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         type: 'OUTSOURCE',
@@ -772,6 +785,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
         nodeId: currentNodeId,
         docNo: receiveDocNo,
         sourceReworkId: firstDispatch?.sourceReworkId,
+        ...receiveScanTrace,
       });
     }
     onClose();

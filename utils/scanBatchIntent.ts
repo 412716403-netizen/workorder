@@ -13,8 +13,8 @@ export interface NormalizeScanPayloadDeps {
 }
 
 /**
- * 批量扫码弹窗：按所选「批次码 / 单品码」方式把 parseScanPayload 结果规范化为
- * 最终写入列表与 onApply 的 payload（批次方式下扫单品 → BATCH + 批次 scanToken）。
+ * 批量扫码弹窗：按所选「按批累计 / 按件累计」把 parseScanPayload 结果规范化为
+ * 最终写入列表与 onApply 的 payload（按批累计下扫单品标签 → BATCH + 批次 scanToken）。
  */
 export async function normalizeScanPayloadForIntent(
   intent: ScanIntent,
@@ -25,7 +25,7 @@ export async function normalizeScanPayloadForIntent(
     return { ok: false, message: '无法识别该扫码内容' };
   }
   if (intent === 'ITEM' && payload.kind === 'BATCH') {
-    return { ok: false, message: '当前为单品码扫码，请勿扫批次码' };
+    return { ok: false, message: '当前为按件累计，请扫单品标签，勿扫批次标签' };
   }
   if (intent === 'BATCH' && payload.kind === 'ITEM') {
     let batchNotFound = false;

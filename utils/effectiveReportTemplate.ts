@@ -1,4 +1,5 @@
 import type { GlobalNodeTemplate, Milestone, ReportFieldDefinition } from '../types';
+import { SCAN_ITEM_CODE_IDS_KEY } from '../types';
 import { effectiveCustomDocFieldType, normalizeReportFieldDefinition } from './reportCustomDocField';
 
 /**
@@ -14,7 +15,7 @@ export function getEffectiveReportTemplate(
   return milestone.reportTemplate ?? [];
 }
 
-const INTERNAL_CUSTOM_DATA_KEYS = new Set(['source', 'docNo']);
+const INTERNAL_CUSTOM_DATA_KEYS = new Set(['source', 'docNo', SCAN_ITEM_CODE_IDS_KEY]);
 
 /**
  * 报工弹窗：从产品 routeReportValues 取默认值时做类型校验，避免旧数据（如文本写进文件项、data URL 写进文本项）污染表单。

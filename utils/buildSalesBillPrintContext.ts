@@ -18,6 +18,10 @@ import {
 import { BATCH_NO_UNTAGGED } from '../shared/types';
 import { sortedVariantColorEntries } from './sortVariantsByProduct';
 import { groupPsiDocLines } from './psiPrintShared';
+import {
+  relatedProductNameForPrint,
+  relatedProductSkuForPrint,
+} from './purchaseBillRelatedProductPrint';
 
 export type SalesBillLineInput = {
   id: string;
@@ -29,6 +33,8 @@ export type SalesBillLineInput = {
   batchNo?: string;
   /** 与 PSI `batch` 入参一致（销售单保存常用 `batch`） */
   batch?: string;
+  /** 采购入库行级关联成品 id */
+  relatedProductId?: string;
 };
 
 function lineBatchForPrint(line: SalesBillLineInput): string {
@@ -141,6 +147,7 @@ export function buildSalesBillMatrixGroups(
         totalAmount: q * price,
         remark: '',
         batchNo: lineBatchForPrint(line) || undefined,
+        ...(line.relatedProductId ? { relatedProductId: line.relatedProductId } : {}),
       });
       continue;
     }
@@ -198,6 +205,7 @@ export function buildSalesBillMatrixGroups(
       totalAmount,
       remark: '',
       batchNo: lineBatchForPrint(line) || undefined,
+      ...(line.relatedProductId ? { relatedProductId: line.relatedProductId } : {}),
     });
   }
   return groups;
@@ -219,6 +227,12 @@ export function buildSalesBillPrintListRowsByProductLine(
     amount: fmtMoney(g.totalAmount),
     remark: g.remark ?? '',
     ...(g.batchNo ? { batchNo: g.batchNo } : {}),
+    ...(g.relatedProductId
+      ? {
+          relatedProductName: relatedProductNameForPrint(g.relatedProductId, productMap),
+          relatedProductSku: relatedProductSkuForPrint(g.relatedProductId, productMap),
+        }
+      : {}),
     [COLOR_SIZE_MATRIX_JSON_KEY]: serializeColorSizeMatrixPayload(matrixGroupToColorSizePayload(g)),
   }));
 }

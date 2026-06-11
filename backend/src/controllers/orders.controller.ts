@@ -1,6 +1,7 @@
 import { getTenantPrisma } from '../lib/prisma.js';
 import { str, optStr } from '../utils/request.js';
 import * as ordersService from '../services/orders.service.js';
+import * as settingsService from '../services/settings.service.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { listQueryFromRequest, warnListAllFromRequest } from '../utils/listQuery.js';
 import { isOrderDispatchStatus } from '../types/index.js';
@@ -110,4 +111,11 @@ export const updateProductReport = asyncHandler(async (req, res) => {
 export const deleteProductReport = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
   res.json(await ordersService.deleteProductReport(db, str(req.params.reportId)));
+});
+
+/** PUT /api/orders/node-report-templates — 工单中心表单配置保存工序报工自定义字段 */
+export const updateNodeReportTemplates = asyncHandler(async (req, res) => {
+  const db = getTenantPrisma(req.tenantId!);
+  const { updates } = req.body as { updates: Array<{ nodeId: string; reportTemplate: unknown }> };
+  res.json(await settingsService.batchUpdateNodeReportTemplates(db, updates));
 });

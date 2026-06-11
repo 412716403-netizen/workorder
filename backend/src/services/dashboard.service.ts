@@ -5,7 +5,6 @@ import { isTenantElevatedRole, hasSubPermission } from '../types/index.js';
 import { loadEffectivePermissions } from '../services/auth.service.js';
 import * as settingsService from './settings.service.js';
 import * as productionService from './production.service.js';
-import * as financeService from './finance.service.js';
 import {
   DASHBOARD_SETTING_KEYS,
   defaultFeaturePlugins,
@@ -34,7 +33,19 @@ import {
   normalizeWorkbenchConfig,
   resolveEffectiveWorkbenchConfig,
 } from '../../../shared/workbenchValidate.js';
+import {
+  DEFAULT_DASHBOARD_ORDER_STATS_NODE_COUNT,
+  DASHBOARD_OUTSOURCE_STATS_NODES_KEY,
+  DASHBOARD_REWORK_STATS_NODES_KEY,
+  MAX_DASHBOARD_ORDER_STATS_NODES,
+  normalizeOrderStatsNodeIds,
+  resolveWorkbenchStatsPeriodRange,
+  type WorkbenchOrderStatsPeriod,
+} from '../../../shared/workbenchOrderStats.js';
 import { OrderStatus } from '../../../shared/types.js';
+import { computeTemplateReportStats } from './orderReportableStats.service.js';
+import { computeOutsourceTemplateStats } from './outsourceDashboardStats.service.js';
+import { computeReworkTemplateStats } from './reworkDashboardStats.service.js';
 
 function parseWorkbenchConfig(value: unknown): WorkbenchConfig | null {
   if (value == null) return null;
@@ -205,6 +216,408 @@ export async function saveShortcuts(
   return { selected };
 }
 
+function readUserOrderStatsNodeIds(preferences: unknown): string[] {
+  if (!preferences || typeof preferences !== 'object') return [];
+  const raw = (preferences as { dashboardOrderStatsNodes?: unknown }).dashboardOrderStatsNodes;
+  return normalizeOrderStatsNodeIds(raw);
+}
+
+function readUserNodeIdsFromPrefs(preferences: unknown, key: string): string[] {
+  if (!preferences || typeof preferences !== 'object') return [];
+  const raw = (preferences as Record<string, unknown>)[key];
+  return normalizeOrderStatsNodeIds(raw);
+}
+
+function canAccessProductionStats(permissions: string[]): boolean {
+  return permissions.includes('production') || permissions.some(p => p.startsWith('production:'));
+}
+
+function resolveOrderStatsPeriodRange(period: WorkbenchOrderStatsPeriod): { start: Date; end: Date } {
+  return resolveWorkbenchStatsPeriodRange(period);
+}
+
+async function loadNodeStatsSettingsContext(
+  userId: string,
+  tenantId: string,
+  permissions: string[],
+) {
+  if (!canAccessProductionStats(permissions)) {
+    throw new AppError(403, '无生产模块权限');
+  }
+  const db = getTenantPrisma(tenantId);
+  const [membership, nodes] = await Promise.all([
+    getMembership(userId, tenantId),
+    db.globalNodeTemplate.findMany({
+      orderBy: { sortOrder: 'asc' },
+      select: { id: true, name: true },
+    }),
+  ]);
+  return { db, membership, nodes };
+}
+
+async function saveUserNodeStatsSettings(
+  userId: string,
+  tenantId: string,
+  body: unknown,
+  permissions: string[],
+  prefKey: string,
+) {
+  if (!canAccessProductionStats(permissions)) {
+    throw new AppError(403, '无生产模块权限');
+  }
+  const { membership, nodes } = await loadNodeStatsSettingsContext(userId, tenantId, permissions);
+  const nodeIds = new Set(nodes.map(n => n.id));
+  const rawIds = Array.isArray(body)
+    ? body
+    : body && typeof body === 'object' && Array.isArray((body as { ids?: unknown }).ids)
+      ? (body as { ids: unknown[] }).ids
+      : [];
+  const selected = normalizeOrderStatsNodeIds(rawIds)
+    .filter(id => nodeIds.has(id))
+    .slice(0, MAX_DASHBOARD_ORDER_STATS_NODES);
+  if (selected.length === 0) {
+    throw new AppError(400, '至少选择一个工序');
+  }
+
+  const prefs =
+    membership.preferences && typeof membership.preferences === 'object'
+      ? { ...(membership.preferences as Record<string, unknown>) }
+      : {};
+
+  await basePrisma.tenantMembership.update({
+    where: { id: membership.id },
+    data: {
+      preferences: {
+        ...prefs,
+        [prefKey]: selected,
+      } as object,
+    },
+  });
+
+  return { selected };
+}
+
+type OrderStatsAgg = {
+  goodQty: number;
+  defectiveQty: number;
+};
+
+function emptyOrderStatsAgg(): OrderStatsAgg {
+  return { goodQty: 0, defectiveQty: 0 };
+}
+
+export async function getOrderStatsSettings(
+  userId: string,
+  tenantId: string,
+  permissions: string[],
+) {
+  if (!canAccessProductionStats(permissions)) {
+    throw new AppError(403, '无生产模块权限');
+  }
+  const db = getTenantPrisma(tenantId);
+  const [membership, nodes] = await Promise.all([
+    getMembership(userId, tenantId),
+    db.globalNodeTemplate.findMany({
+      orderBy: { sortOrder: 'asc' },
+      select: { id: true, name: true },
+    }),
+  ]);
+  const nodeIds = new Set(nodes.map(n => n.id));
+  const defaults = nodes.slice(0, DEFAULT_DASHBOARD_ORDER_STATS_NODE_COUNT).map(n => n.id);
+  const stored = readUserOrderStatsNodeIds(membership.preferences);
+  const selected = (stored.length > 0 ? stored : defaults).filter(id => nodeIds.has(id));
+  return {
+    selected,
+    nodes,
+    defaults,
+    hasCustom: membership.preferences
+      && typeof membership.preferences === 'object'
+      && Array.isArray((membership.preferences as { dashboardOrderStatsNodes?: unknown }).dashboardOrderStatsNodes),
+  };
+}
+
+export async function saveOrderStatsSettings(
+  userId: string,
+  tenantId: string,
+  body: unknown,
+  permissions: string[],
+) {
+  if (!canAccessProductionStats(permissions)) {
+    throw new AppError(403, '无生产模块权限');
+  }
+  const db = getTenantPrisma(tenantId);
+  const membership = await getMembership(userId, tenantId);
+  const nodes = await db.globalNodeTemplate.findMany({ select: { id: true } });
+  const nodeIds = new Set(nodes.map(n => n.id));
+  const rawIds = Array.isArray(body)
+    ? body
+    : body && typeof body === 'object' && Array.isArray((body as { ids?: unknown }).ids)
+      ? (body as { ids: unknown[] }).ids
+      : [];
+  const selected = normalizeOrderStatsNodeIds(rawIds)
+    .filter(id => nodeIds.has(id))
+    .slice(0, MAX_DASHBOARD_ORDER_STATS_NODES);
+  if (selected.length === 0) {
+    throw new AppError(400, '至少选择一个工序');
+  }
+
+  const prefs =
+    membership.preferences && typeof membership.preferences === 'object'
+      ? { ...(membership.preferences as Record<string, unknown>) }
+      : {};
+
+  await basePrisma.tenantMembership.update({
+    where: { id: membership.id },
+    data: {
+      preferences: {
+        ...prefs,
+        dashboardOrderStatsNodes: selected,
+      } as object,
+    },
+  });
+
+  return { selected };
+}
+
+export async function getOrderStats(
+  db: TenantPrismaClient,
+  userId: string,
+  tenantId: string,
+  permissions: string[],
+  opts: { period?: WorkbenchOrderStatsPeriod; includeNotStarted?: boolean } = {},
+) {
+  if (!canAccessProductionStats(permissions)) {
+    return null;
+  }
+  const period: WorkbenchOrderStatsPeriod = opts.period ?? 'today';
+  const includeNotStarted = opts.includeNotStarted === true;
+  const settings = await getOrderStatsSettings(userId, tenantId, permissions);
+  const templateIds = settings.selected;
+  if (templateIds.length === 0) {
+    return { period, includeNotStarted, rows: [] as Array<{
+      templateId: string;
+      name: string;
+      taskCount: number;
+      maxReportableQty: number;
+      reportedQty: number;
+      remainingQty: number;
+      goodQty: number;
+      defectiveQty: number;
+      progress: number;
+    }> };
+  }
+
+  const { start, end } = resolveOrderStatsPeriodRange(period);
+  const rowMap = new Map<string, OrderStatsAgg>();
+  for (const tid of templateIds) rowMap.set(tid, emptyOrderStatsAgg());
+
+  const templateStats = await computeTemplateReportStats(db, tenantId, templateIds);
+
+  const msReports = await db.milestoneReport.findMany({
+    where: {
+      timestamp: { gte: start, lte: end },
+      milestone: { templateId: { in: templateIds } },
+    },
+    select: {
+      quantity: true,
+      defectiveQuantity: true,
+      milestone: {
+        select: {
+          templateId: true,
+          productionOrderId: true,
+        },
+      },
+    },
+  });
+
+  for (const report of msReports) {
+    const tid = report.milestone.templateId;
+    const agg = rowMap.get(tid);
+    if (!agg) continue;
+    agg.goodQty += Number(report.quantity ?? 0);
+    agg.defectiveQty += Number(report.defectiveQuantity ?? 0);
+  }
+
+  const pmpReports = await db.productProgressReport.findMany({
+    where: {
+      timestamp: { gte: start, lte: end },
+      progress: { milestoneTemplateId: { in: templateIds } },
+    },
+    select: {
+      quantity: true,
+      defectiveQuantity: true,
+      progress: { select: { milestoneTemplateId: true, productId: true } },
+    },
+  });
+
+  for (const report of pmpReports) {
+    const tid = report.progress.milestoneTemplateId;
+    const agg = rowMap.get(tid);
+    if (!agg) continue;
+    agg.goodQty += Number(report.quantity ?? 0);
+    agg.defectiveQty += Number(report.defectiveQuantity ?? 0);
+  }
+
+  const nodeRows = await db.globalNodeTemplate.findMany({
+    where: { id: { in: templateIds } },
+    select: { id: true, name: true },
+  });
+  const nameById = new Map(nodeRows.map(n => [n.id, n.name]));
+
+  const rows = templateIds.map(tid => {
+    const agg = rowMap.get(tid) ?? emptyOrderStatsAgg();
+    const snap = templateStats.get(tid);
+    const maxReportableQty = snap?.maxReportableQty ?? 0;
+    const reportedQty = snap?.reportedQty ?? 0;
+    const remainingQty = snap?.remainingQty ?? 0;
+    const progress = snap?.progress ?? 0;
+    return {
+      templateId: tid,
+      name: nameById.get(tid) ?? tid,
+      taskCount: snap?.taskCount ?? 0,
+      maxReportableQty,
+      reportedQty,
+      remainingQty,
+      goodQty: agg.goodQty,
+      defectiveQty: agg.defectiveQty,
+      progress,
+    };
+  });
+
+  return { period, includeNotStarted, rows };
+}
+
+async function getNodeStatsSettings(
+  userId: string,
+  tenantId: string,
+  permissions: string[],
+  prefKey: string,
+) {
+  const { membership, nodes } = await loadNodeStatsSettingsContext(userId, tenantId, permissions);
+  const nodeIds = new Set(nodes.map(n => n.id));
+  const defaults = nodes.slice(0, DEFAULT_DASHBOARD_ORDER_STATS_NODE_COUNT).map(n => n.id);
+  const stored = readUserNodeIdsFromPrefs(membership.preferences, prefKey);
+  const selected = (stored.length > 0 ? stored : defaults).filter(id => nodeIds.has(id));
+  return {
+    selected,
+    nodes,
+    defaults,
+    hasCustom: membership.preferences
+      && typeof membership.preferences === 'object'
+      && Array.isArray((membership.preferences as Record<string, unknown>)[prefKey]),
+  };
+}
+
+export async function getOutsourceStatsSettings(
+  userId: string,
+  tenantId: string,
+  permissions: string[],
+) {
+  return getNodeStatsSettings(userId, tenantId, permissions, DASHBOARD_OUTSOURCE_STATS_NODES_KEY);
+}
+
+export async function saveOutsourceStatsSettings(
+  userId: string,
+  tenantId: string,
+  body: unknown,
+  permissions: string[],
+) {
+  return saveUserNodeStatsSettings(userId, tenantId, body, permissions, DASHBOARD_OUTSOURCE_STATS_NODES_KEY);
+}
+
+export async function getOutsourceStats(
+  db: TenantPrismaClient,
+  userId: string,
+  tenantId: string,
+  permissions: string[],
+  opts: { period?: WorkbenchOrderStatsPeriod } = {},
+) {
+  if (!canAccessProductionStats(permissions)) return null;
+  const period: WorkbenchOrderStatsPeriod = opts.period ?? 'today';
+  const settings = await getOutsourceStatsSettings(userId, tenantId, permissions);
+  const templateIds = settings.selected;
+  if (templateIds.length === 0) {
+    return { period, rows: [] };
+  }
+
+  const stats = await computeOutsourceTemplateStats(db, templateIds, period);
+  const nodeRows = await db.globalNodeTemplate.findMany({
+    where: { id: { in: templateIds } },
+    select: { id: true, name: true },
+  });
+  const nameById = new Map(nodeRows.map(n => [n.id, n.name]));
+
+  const rows = templateIds.map(tid => {
+    const snap = stats.get(tid);
+    return {
+      templateId: tid,
+      name: nameById.get(tid) ?? tid,
+      taskCount: snap?.taskCount ?? 0,
+      pendingQty: snap?.pendingQty ?? 0,
+      receivedQty: snap?.periodReceivedQty ?? 0,
+      dispatchedQty: snap?.periodDispatchedQty ?? 0,
+      progress: snap?.progress ?? 0,
+    };
+  });
+
+  return { period, rows };
+}
+
+export async function getReworkStatsSettings(
+  userId: string,
+  tenantId: string,
+  permissions: string[],
+) {
+  return getNodeStatsSettings(userId, tenantId, permissions, DASHBOARD_REWORK_STATS_NODES_KEY);
+}
+
+export async function saveReworkStatsSettings(
+  userId: string,
+  tenantId: string,
+  body: unknown,
+  permissions: string[],
+) {
+  return saveUserNodeStatsSettings(userId, tenantId, body, permissions, DASHBOARD_REWORK_STATS_NODES_KEY);
+}
+
+export async function getReworkStats(
+  db: TenantPrismaClient,
+  userId: string,
+  tenantId: string,
+  permissions: string[],
+  opts: { period?: WorkbenchOrderStatsPeriod } = {},
+) {
+  if (!canAccessProductionStats(permissions)) return null;
+  const period: WorkbenchOrderStatsPeriod = opts.period ?? 'today';
+  const settings = await getReworkStatsSettings(userId, tenantId, permissions);
+  const templateIds = settings.selected;
+  if (templateIds.length === 0) {
+    return { period, rows: [] };
+  }
+
+  const stats = await computeReworkTemplateStats(db, tenantId, templateIds, period);
+  const nodeRows = await db.globalNodeTemplate.findMany({
+    where: { id: { in: templateIds } },
+    select: { id: true, name: true },
+  });
+  const nameById = new Map(nodeRows.map(n => [n.id, n.name]));
+
+  const rows = templateIds.map(tid => {
+    const snap = stats.get(tid);
+    return {
+      templateId: tid,
+      name: nameById.get(tid) ?? tid,
+      taskCount: snap?.taskCount ?? 0,
+      pendingQty: snap?.pendingQty ?? 0,
+      completedQty: snap?.periodCompletedQty ?? 0,
+      newReworkQty: snap?.periodNewReworkQty ?? 0,
+      progress: snap?.progress ?? 0,
+    };
+  });
+
+  return { period, rows };
+}
+
 export async function getFeaturePlugins(tenantId: string) {
   const config = await settingsService.getConfig(tenantId);
   return parseFeaturePlugins(config[DASHBOARD_SETTING_KEYS.featurePlugins]);
@@ -234,16 +647,16 @@ export async function assertCanManageFeaturePlugins(
 export async function getStats(
   db: TenantPrismaClient,
   permissions: string[],
-  opts: { days?: number } = {},
+  opts: { days?: number; period?: WorkbenchOrderStatsPeriod } = {},
 ) {
   const days = Math.min(Math.max(1, opts.days ?? 30), 90);
+  const period: WorkbenchOrderStatsPeriod = opts.period ?? 'today';
+  const { start, end } = resolveWorkbenchStatsPeriodRange(period);
+  const periodTs = { gte: start, lte: end };
+
   const since = new Date();
   since.setDate(since.getDate() - days);
   since.setHours(0, 0, 0, 0);
-
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
 
   const canProduction = permissions.includes('production') || permissions.some(p => p.startsWith('production:'));
   const canPsi = permissions.includes('psi') || permissions.some(p => p.startsWith('psi:'));
@@ -295,67 +708,80 @@ export async function getStats(
   }
 
   if (canPsi) {
-    const [salesMonth, salesAll, purchaseMonth, stockRows] = await Promise.all([
+    const [salesPeriod, salesReturnPeriod, salesOrderPeriod, salesOrderReducePeriod, salesOrderDocs] =
+      await Promise.all([
       db.psiRecord.aggregate({
-        where: { type: 'SALES_BILL', timestamp: { gte: monthStart } },
+        where: { type: 'SALES_BILL', timestamp: periodTs, quantity: { gt: 0 } },
         _sum: { amount: true, quantity: true },
         _count: { _all: true },
       }),
       db.psiRecord.aggregate({
-        where: { type: 'SALES_BILL' },
-        _sum: { amount: true },
-        _count: { _all: true },
+        where: { type: 'SALES_BILL', timestamp: periodTs, quantity: { lt: 0 } },
+        _sum: { quantity: true },
       }),
       db.psiRecord.aggregate({
-        where: { type: 'PURCHASE_BILL', timestamp: { gte: monthStart } },
+        where: { type: 'SALES_ORDER', timestamp: periodTs, quantity: { gt: 0 } },
         _sum: { amount: true, quantity: true },
-        _count: { _all: true },
+      }),
+      db.psiRecord.aggregate({
+        where: { type: 'SALES_ORDER', timestamp: periodTs, quantity: { lt: 0 } },
+        _sum: { quantity: true },
       }),
       db.psiRecord.groupBy({
-        by: ['productId'],
-        where: { productId: { not: null } },
-        _sum: { quantity: true },
+        by: ['docNumber'],
+        where: {
+          type: 'SALES_ORDER',
+          timestamp: periodTs,
+          quantity: { gt: 0 },
+          docNumber: { not: null },
+        },
       }),
     ]);
 
-    const lowStockThreshold = 10;
-    let lowStockCount = 0;
-    for (const row of stockRows) {
-      const qty = Number(row._sum.quantity ?? 0);
-      if (qty >= 0 && qty < lowStockThreshold) lowStockCount += 1;
-    }
+    const salesReturnQtyRaw = Number(salesReturnPeriod._sum.quantity ?? 0);
+    const salesOrderReduceQtyRaw = Number(salesOrderReducePeriod._sum.quantity ?? 0);
 
     result.sales = {
-      monthBillCount: salesMonth._count._all,
-      monthAmount: Number(salesMonth._sum.amount ?? 0),
-      monthQuantity: Number(salesMonth._sum.quantity ?? 0),
-      totalBillCount: salesAll._count._all,
-      totalAmount: Number(salesAll._sum.amount ?? 0),
-      purchaseMonthCount: purchaseMonth._count._all,
-      purchaseMonthAmount: Number(purchaseMonth._sum.amount ?? 0),
-      lowStockCount,
-      lowStockThreshold,
+      period,
+      salesBillCount: salesPeriod._count._all,
+      salesAmount: Number(salesPeriod._sum.amount ?? 0),
+      salesQuantity: Number(salesPeriod._sum.quantity ?? 0),
+      salesReturnQuantity: salesReturnQtyRaw < 0 ? -salesReturnQtyRaw : salesReturnQtyRaw,
+    };
+
+    result.salesOrder = {
+      period,
+      salesOrderCount: salesOrderDocs.length,
+      salesOrderAmount: Number(salesOrderPeriod._sum.amount ?? 0),
+      salesOrderQuantity: Number(salesOrderPeriod._sum.quantity ?? 0),
+      salesOrderReduceQuantity:
+        salesOrderReduceQtyRaw < 0 ? -salesOrderReduceQtyRaw : salesOrderReduceQtyRaw,
     };
   }
 
   if (canFinance) {
-    const financeSummary = await financeService.summarize(db, { startDate: since.toISOString() });
-    const receipts = await db.financeRecord.aggregate({
-      where: { type: 'RECEIPT' },
-      _sum: { amount: true },
-    });
-    const payments = await db.financeRecord.aggregate({
-      where: { type: 'PAYMENT' },
-      _sum: { amount: true },
-    });
-    const totalReceipt = Number(receipts._sum.amount ?? 0);
-    const totalPayment = Number(payments._sum.amount ?? 0);
+    const [receipts, payments] = await Promise.all([
+      db.financeRecord.aggregate({
+        where: { type: 'RECEIPT', timestamp: periodTs },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
+      db.financeRecord.aggregate({
+        where: { type: 'PAYMENT', timestamp: periodTs },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
+    ]);
+    const receiptAmount = Number(receipts._sum.amount ?? 0);
+    const paymentAmount = Number(payments._sum.amount ?? 0);
 
     result.finance = {
-      totalReceipt,
-      totalPayment,
-      cashFlow: totalReceipt - totalPayment,
-      summary: financeSummary,
+      period,
+      receiptAmount,
+      paymentAmount,
+      cashFlow: receiptAmount - paymentAmount,
+      receiptCount: receipts._count._all,
+      paymentCount: payments._count._all,
     };
   }
 

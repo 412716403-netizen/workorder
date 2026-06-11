@@ -262,6 +262,19 @@ export type ProductionOpCollabData = {
 } & Record<string, unknown>;
 
 /**
+ * 扫码报工/入库/返工时，按「单品码模式」逐件扫入的单品码列表，写入对应记录的 `customData`
+ * （工序报工 → milestone/PMP report；入库/返工 → ProductionOpRecord）。
+ *
+ * 用途：产品追溯查询时按此列表逐件精确命中，使「单品码模式」下每件单独可查、同批未扫入的单品不被误关联；
+ * 批次码模式不写该键，追溯沿用 `virtual_batch_id`（整批共享链路）。
+ *
+ * 关键点：
+ * - 该键只服务于追溯展示，**不改变扫码去重所依赖的 `item_code_id / virtual_batch_id` 列写入**；
+ * - 以 `__` 前缀标记为内部元数据，报工详情/打印不展示（见 `INTERNAL_CUSTOM_DATA_KEYS`）。
+ */
+export const SCAN_ITEM_CODE_IDS_KEY = '__scanItemCodeIds' as const;
+
+/**
  * 扫码二次校验（去重 + 单据上限）请求/响应。
  * 前端 `itemCodesApi.validateUsage` 与后端 `POST /item-codes/scan/validate-usage`
  * 共用：扫码成功后、改表单前调用；持久化去重作用域由 `purpose` 决定。

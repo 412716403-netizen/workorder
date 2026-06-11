@@ -1,25 +1,18 @@
 import type { ProductionOrder, ProductMilestoneProgress, ProcessSequenceMode } from '../types';
-import { reworkMergeBucketOrderId } from './reworkMergeBucketOrderId';
+import {
+  sumBlockOrderQty,
+  pmpCompletedAtTemplate,
+  pmpDefectiveTotalAtTemplate,
+  orderMaxReportableAtTemplateProductAware,
+  productGroupMaxReportableSum,
+  reworkMergeBucketOrderId,
+} from '../shared/orderReportableAggregates';
 
-export function sumBlockOrderQty(orders: ProductionOrder[]): number {
-  return orders.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0);
-}
+export { sumBlockOrderQty, pmpCompletedAtTemplate, pmpDefectiveTotalAtTemplate, reworkMergeBucketOrderId, orderMaxReportableAtTemplateProductAware, productGroupMaxReportableSum };
 
 export function sumVariantQtyInOrders(orders: ProductionOrder[], variantId: string): number {
   const vid = variantId || '';
   return orders.reduce((s, o) => s + o.items.filter(i => (i.variantId || '') === vid).reduce((a, i) => a + i.quantity, 0), 0);
-}
-
-export function pmpCompletedAtTemplate(
-  pmp: ProductMilestoneProgress[],
-  productId: string,
-  templateId: string,
-  pmpByKey?: Map<string, number>,
-): number {
-  if (pmpByKey) return pmpByKey.get(`${productId}|${templateId}`) ?? 0;
-  return pmp
-    .filter(p => p.productId === productId && p.milestoneTemplateId === templateId)
-    .reduce((s, p) => s + (p.completedQuantity ?? 0), 0);
 }
 
 export function pmpCompletedAtTemplateVariant(
@@ -97,105 +90,6 @@ export function combinedCompletedByVariantAtTemplate(
     }
   }
   return byVariant;
-}
-
-/**
- * 单工单在某工序的「可报最多」= 基数 - 本工序不良 + 本工序返工完成（与工单中心一致）。
- * 关联产品 + 顺序模式：基数 = 上一道工序完成量——优先用该单里程碑上的完成数；否则按本单数量占同产品工单块的比例分摊产品报工中上一道的完成总量（与关联工单「上道完成限制本道」一致）。
- */
-export function orderMaxReportableAtTemplateProductAware(
-  order: ProductionOrder,
-  templateId: string,
-  args: {
-    processSequenceMode: ProcessSequenceMode;
-    productId: string;
-    pmp: ProductMilestoneProgress[];
-    blockOrders: ProductionOrder[];
-    defective: number;
-    rework: number;
-    pmpByKey?: Map<string, number>;
-  }
-): number {
-  const { processSequenceMode, productId, pmp, blockOrders, defective, rework, pmpByKey } = args;
-  const idx = order.milestones.findIndex(m => m.templateId === templateId);
-  if (idx < 0) return 0;
-  const orderQty = order.items.reduce((s, i) => s + i.quantity, 0);
-  let baseQty = orderQty;
-  if (processSequenceMode === 'sequential' && idx > 0) {
-    const prevMs = order.milestones[idx - 1];
-    const prevTid = prevMs.templateId;
-    const blockQty = sumBlockOrderQty(blockOrders);
-    const pmpPrevTotal = pmpCompletedAtTemplate(pmp, productId, prevTid, pmpByKey);
-    const fromMilestone = prevMs.completedQuantity ?? 0;
-    if (fromMilestone > 0) {
-      baseQty = Math.min(orderQty, fromMilestone);
-    } else if (blockQty > 0) {
-      baseQty = (orderQty * pmpPrevTotal) / blockQty;
-    } else {
-      baseQty = 0;
-    }
-  }
-  return Math.max(0, baseQty - defective + rework);
-}
-
-/** 产品报工（PMP）在本工序记录的不良合计；关联产品模式下与工单里程碑不良分开统计 */
-export function pmpDefectiveTotalAtTemplate(
-  pmp: ProductMilestoneProgress[],
-  productId: string,
-  templateId: string,
-): number {
-  return pmp
-    .filter(p => p.productId === productId && p.milestoneTemplateId === templateId)
-    .flatMap(p => p.reports || [])
-    .reduce((s, r) => s + (r.defectiveQuantity ?? 0), 0);
-}
-
-/** 产品卡片：工序可报最多合计（非顺序模式或需按单分摊不良时使用） */
-export function productGroupMaxReportableSum(
-  blockOrders: ProductionOrder[],
-  templateId: string,
-  productId: string,
-  pmp: ProductMilestoneProgress[],
-  processSequenceMode: ProcessSequenceMode,
-  getDefectiveRework: (orderId: string, tid: string) => { defective: number; rework: number },
-  pmpByKey?: Map<string, number>,
-  /** 传入后按父单桶分摊返工完成量（与子工单 map 键对齐） */
-  orderForest?: Pick<ProductionOrder, 'id' | 'parentOrderId'>[],
-): number {
-  const qtyByBucket = new Map<string, number>();
-  if (orderForest?.length) {
-    for (const o of blockOrders) {
-      const q = o.items.reduce((s, i) => s + i.quantity, 0);
-      const b = reworkMergeBucketOrderId(o.id, orderForest);
-      qtyByBucket.set(b, (qtyByBucket.get(b) ?? 0) + q);
-    }
-  }
-  let sum = blockOrders.reduce((acc, o) => {
-    const { defective } = getDefectiveRework(o.id, templateId);
-    let rework = getDefectiveRework(o.id, templateId).rework;
-    if (orderForest?.length) {
-      const b = reworkMergeBucketOrderId(o.id, orderForest);
-      const bucketRework = getDefectiveRework(b, templateId).rework;
-      const tot = qtyByBucket.get(b) ?? 0;
-      const qo = o.items.reduce((s, i) => s + i.quantity, 0);
-      rework = tot > 0 ? (bucketRework * qo) / tot : 0;
-    }
-    return (
-      acc +
-      orderMaxReportableAtTemplateProductAware(o, templateId, {
-        processSequenceMode,
-        productId,
-        pmp,
-        blockOrders,
-        defective,
-        rework,
-        pmpByKey
-      })
-    );
-  }, 0);
-  const pmpDef = pmpDefectiveTotalAtTemplate(pmp, productId, templateId);
-  const mileDef = blockOrders.reduce((s, o) => s + getDefectiveRework(o.id, templateId).defective, 0);
-  return Math.max(0, Math.round(sum - Math.max(0, pmpDef - mileDef)));
 }
 
 /**

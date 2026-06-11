@@ -163,11 +163,7 @@ const SalesBillFormSection: React.FC<SalesBillFormSectionProps> = ({
           <button
             type="button"
             onClick={() => onSave()}
-            disabled={!form.partner || !form.warehouseId || salesBillItems.length === 0 || !salesBillItems.some(i => {
-              if (!i.productId) return false;
-              const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((s, v) => s + v, 0) : (i.quantity ?? 0);
-              return q !== 0;
-            }) || salesBillItems.some(i => {
+            disabled={!form.partner || !form.warehouseId || salesBillItems.length === 0 || salesBillItems.some(i => {
               if (!i.productId) return false;
               const prod = productMapPSI.get(i.productId);
               const hasVariants = prod?.variants && prod.variants.length > 0;

@@ -10,8 +10,11 @@ export type WorkbenchWidgetType =
   | 'shortcuts'
   | 'plugin_center'
   | 'messages'
-  | 'production_stats'
+  | 'order_stats'
+  | 'outsource_stats'
+  | 'rework_stats'
   | 'sales_stats'
+  | 'sales_order_stats'
   | 'finance_stats';
 
 export type WorkbenchWidgetCategory = 'general' | 'efficiency' | 'reports';
@@ -77,8 +80,11 @@ export const WORKBENCH_WIDGET_TYPES: WorkbenchWidgetType[] = [
   'shortcuts',
   'plugin_center',
   'messages',
-  'production_stats',
+  'order_stats',
+  'outsource_stats',
+  'rework_stats',
   'sales_stats',
+  'sales_order_stats',
   'finance_stats',
 ];
 
@@ -116,49 +122,130 @@ export const WORKBENCH_WIDGET_CATALOG: WorkbenchWidgetDefinition[] = [
     type: 'messages',
     title: '消息中心',
     description: '协作待办、成员申请与系统通知',
-    category: 'efficiency',
+    category: 'general',
     defaultW: 4,
-    defaultH: 7,
+    defaultH: 6,
     minW: 3,
     minH: 5,
     requiredModule: null,
   },
   {
-    type: 'production_stats',
-    title: '生产统计',
-    description: '活跃工单、工序完成率与报工趋势',
+    type: 'order_stats',
+    title: '工单统计',
+    description: '按工序查看计划数、良品数、不良品数与完成进度',
     category: 'reports',
-    defaultW: 8,
+    defaultW: 6,
     defaultH: 7,
-    minW: 4,
-    minH: 5,
+    minW: 3,
+    minH: 6,
+    requiredModule: 'production',
+  },
+  {
+    type: 'outsource_stats',
+    title: '外协统计',
+    description: '按工序查看外协任务、待收回与收派进度',
+    category: 'reports',
+    defaultW: 6,
+    defaultH: 7,
+    minW: 3,
+    minH: 6,
+    requiredModule: 'production',
+  },
+  {
+    type: 'rework_stats',
+    title: '返工统计',
+    description: '按工序查看返工任务、待返工与完成进度',
+    category: 'reports',
+    defaultW: 5,
+    defaultH: 7,
+    minW: 3,
+    minH: 6,
     requiredModule: 'production',
   },
   {
     type: 'sales_stats',
     title: '销售统计',
-    description: '销售单汇总、库存预警',
+    description: '销售出库、单数与退货汇总',
     category: 'reports',
-    defaultW: 8,
-    defaultH: 7,
+    defaultW: 5,
+    defaultH: 6,
     minW: 4,
-    minH: 5,
+    minH: 4,
+    requiredModule: 'psi',
+  },
+  {
+    type: 'sales_order_stats',
+    title: '销售订单统计',
+    description: '销售订单金额、单数与件数汇总',
+    category: 'reports',
+    defaultW: 5,
+    defaultH: 6,
+    minW: 4,
+    minH: 4,
     requiredModule: 'psi',
   },
   {
     type: 'finance_stats',
     title: '财务统计',
-    description: '收付款汇总与现金流',
+    description: '收付款汇总与净现金流',
     category: 'reports',
-    defaultW: 8,
-    defaultH: 7,
+    defaultW: 5,
+    defaultH: 6,
     minW: 4,
-    minH: 5,
+    minH: 4,
     requiredModule: 'finance',
   },
 ];
 
 export const WORKBENCH_HOME_PAGE_ID = 'page-overview';
+
+/** 首页固定组件：租户不可移除、拖动或缩放 */
+export const WORKBENCH_HOME_PINNED_WIDGET_TYPES = [
+  'shortcuts',
+  'plugin_center',
+  'messages',
+] as const satisfies readonly WorkbenchWidgetType[];
+
+export type WorkbenchHomePinnedWidgetType = (typeof WORKBENCH_HOME_PINNED_WIDGET_TYPES)[number];
+
+const HOME_PINNED_WIDGET_SET = new Set<string>(WORKBENCH_HOME_PINNED_WIDGET_TYPES);
+
+export function isHomePinnedWidgetType(widgetType: WorkbenchWidgetType): boolean {
+  return HOME_PINNED_WIDGET_SET.has(widgetType);
+}
+
+/** 首页顶部固定三卡（快捷入口 / 插件中心 / 消息中心） */
+export const WORKBENCH_HOME_PINNED_LAYOUT: WorkbenchLayoutItem[] = [
+  { i: 'w-shortcuts', widgetType: 'shortcuts', x: 0, y: 0, w: 4, h: 6, minW: 3, minH: 4 },
+  { i: 'w-plugin-center', widgetType: 'plugin_center', x: 4, y: 0, w: 4, h: 6, minW: 3, minH: 4 },
+  { i: 'w-messages', widgetType: 'messages', x: 8, y: 0, w: 4, h: 6, minW: 3, minH: 5 },
+];
+
+/** 首页固定区占据的最底行（不含），其余组件须从此行开始 */
+export function getWorkbenchHomePinnedRowBottom(): number {
+  return WORKBENCH_HOME_PINNED_LAYOUT.reduce((max, it) => Math.max(max, it.y + it.h), 0);
+}
+
+/** 系统内置首页完整布局（含统计组件默认位置） */
+export const WORKBENCH_HOME_DEFAULT_LAYOUT: WorkbenchLayoutItem[] = [
+  ...WORKBENCH_HOME_PINNED_LAYOUT,
+  { i: 'w-order-stats', widgetType: 'order_stats', x: 0, y: 6, w: 6, h: 7, minW: 3, minH: 6 },
+  { i: 'w-outsource-stats', widgetType: 'outsource_stats', x: 6, y: 6, w: 6, h: 7, minW: 3, minH: 6 },
+  { i: 'w-finance-stats', widgetType: 'finance_stats', x: 0, y: 13, w: 4, h: 6, minW: 4, minH: 4 },
+  { i: 'w-sales-stats', widgetType: 'sales_stats', x: 4, y: 13, w: 4, h: 6, minW: 4, minH: 4 },
+  { i: 'w-rework-stats', widgetType: 'rework_stats', x: 8, y: 13, w: 4, h: 6, minW: 3, minH: 6 },
+];
+
+export function mergeWorkbenchHomePinnedItems(items: WorkbenchLayoutItem[]): WorkbenchLayoutItem[] {
+  const zoneBottom = getWorkbenchHomePinnedRowBottom();
+  const custom = items
+    .filter(it => !isHomePinnedWidgetType(it.widgetType))
+    .map(it => (it.y < zoneBottom ? { ...it, y: zoneBottom } : it));
+  return [
+    ...WORKBENCH_HOME_PINNED_LAYOUT.map(it => ({ ...it })),
+    ...custom,
+  ];
+}
 
 export const WORKBENCH_BUILTIN_DEFAULT: WorkbenchConfig = {
   version: 1,
@@ -170,11 +257,7 @@ export const WORKBENCH_BUILTIN_DEFAULT: WorkbenchConfig = {
       sortOrder: 0,
       layout: {
         version: 1,
-        items: [
-          { i: 'w-shortcuts', widgetType: 'shortcuts', x: 0, y: 0, w: 4, h: 6, minW: 3, minH: 4 },
-          { i: 'w-messages', widgetType: 'messages', x: 4, y: 0, w: 4, h: 7, minW: 3, minH: 5 },
-          { i: 'w-production', widgetType: 'production_stats', x: 8, y: 0, w: 4, h: 7, minW: 4, minH: 5 },
-        ],
+        items: WORKBENCH_HOME_DEFAULT_LAYOUT.map(it => ({ ...it })),
       },
     },
   ],

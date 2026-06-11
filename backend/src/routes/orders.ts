@@ -66,6 +66,13 @@ const updateProductReportSchema = z.object({
   timestamp: z.string().optional(),
 }).passthrough();
 
+const updateNodeReportTemplatesSchema = z.object({
+  updates: z.array(z.object({
+    nodeId: z.string().min(1),
+    reportTemplate: z.array(z.object({}).passthrough()),
+  })).min(1),
+});
+
 /**
  * 工单 / 报工路由权限：
  * - 历史挂 `production:orders:*`，但权限树无 `orders` 资源（仅 `orders_list`/`orders_detail`…），
@@ -102,6 +109,13 @@ router.delete(
   '/product-progress/report/:reportId',
   requireProductionWrite('write'),
   ctrl.deleteProductReport,
+);
+
+router.put(
+  '/node-report-templates',
+  requireSubPermission('production:orders_form_config:allow'),
+  validate(updateNodeReportTemplatesSchema),
+  ctrl.updateNodeReportTemplates,
 );
 
 router.get('/:id', requireProductionRead(), ctrl.getOrder);

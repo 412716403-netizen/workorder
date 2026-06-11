@@ -12,6 +12,7 @@ export {
   isPlanDispatchStatus,
   isOrderDispatchStatus,
   FINANCE_DOC_NO_PREFIX,
+  SCAN_ITEM_CODE_IDS_KEY,
   PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID,
   PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER,
   BATCH_FIELD_MAX_LEN,
@@ -73,14 +74,20 @@ export {
 export {
   WORKBENCH_BUILTIN_DEFAULT,
   WORKBENCH_HOME_PAGE_ID,
+  WORKBENCH_HOME_PINNED_WIDGET_TYPES,
+  WORKBENCH_HOME_PINNED_LAYOUT,
+  WORKBENCH_HOME_DEFAULT_LAYOUT,
   WORKBENCH_WIDGET_CATALOG,
   WORKBENCH_WIDGET_TYPES,
   FEATURE_PLUGIN_CATALOG,
   DASHBOARD_SETTING_KEYS,
   defaultFeaturePlugins,
   isWorkbenchHomePage,
+  isHomePinnedWidgetType,
+  mergeWorkbenchHomePinnedItems,
   isWorkbenchWidgetType,
   type WorkbenchWidgetType,
+  type WorkbenchHomePinnedWidgetType,
   type WorkbenchWidgetCategory,
   type WorkbenchLayoutItem,
   type WorkbenchPageLayout,
@@ -131,6 +138,25 @@ export {
   tenantExpiryReminderId,
   type TenantExpiryReminderDay,
 } from './shared/tenantExpiryReminder';
+
+export {
+  WORKBENCH_ORDER_STATS_PERIODS,
+  WORKBENCH_ORDER_STATS_PERIOD_LABELS,
+  MAX_DASHBOARD_ORDER_STATS_NODES,
+  DEFAULT_DASHBOARD_ORDER_STATS_NODE_COUNT,
+  normalizeOrderStatsNodeIds,
+  isWorkbenchOrderStatsPeriod,
+  type WorkbenchOrderStatsPeriod,
+  type DashboardOrderStatsRow,
+  type DashboardOrderStatsNodeOption,
+  type DashboardOutsourceStatsRow,
+  type DashboardReworkStatsRow,
+  type DashboardSalesStats,
+  type DashboardSalesOrderStats,
+  type DashboardFinanceStats,
+  workbenchPeriodLabel,
+  resolveWorkbenchStatsPeriodRange,
+} from './shared/workbenchOrderStats';
 
 export {
   resolveEffectiveWorkbenchConfig,
@@ -1063,6 +1089,8 @@ export interface SalesBillMatrixGroup {
   remark: string;
   /** 采购入库等 PSI 行携带的批次，透传到 PrintListRow.batchNo */
   batchNo?: string;
+  /** 采购入库行级关联成品 id */
+  relatedProductId?: string;
 }
 
 /** 采购订单打印：占位符 {{采购订单.xxx}} */
@@ -1087,6 +1115,8 @@ export interface PurchaseBillPrintContext {
   warehouseName: string;
   docTotalQty: number;
   docTotalAmount: number;
+  /** 各行关联成品去重汇总；占位符 {{采购入库.relatedProduct}} */
+  relatedProduct?: string;
   custom?: Record<string, unknown>;
 }
 
@@ -1145,6 +1175,8 @@ export interface PrintRenderContext {
   plan?: PlanOrder;
   order?: ProductionOrder;
   product?: Product;
+  /** 解析 {{产品.processNodes}} 等工序名称时按 id 查表；计划单打印等场景由调用方注入 */
+  globalNodes?: GlobalNodeTemplate[];
   milestoneName?: string;
   completedQuantity?: number;
   page?: { current: number; total: number };

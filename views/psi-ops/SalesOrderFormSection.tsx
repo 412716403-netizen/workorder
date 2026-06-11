@@ -134,11 +134,7 @@ const SalesOrderFormSection: React.FC<SalesOrderFormSectionProps> = ({
           <button
             type="button"
             onClick={() => onSave()}
-            disabled={!form.partner || salesOrderItems.length === 0 || !salesOrderItems.some(i => {
-              if (!i.productId) return false;
-              const q = i.variantQuantities ? Object.values(i.variantQuantities || {}).reduce((s, v) => s + v, 0) : (i.quantity ?? 0);
-              return q > 0;
-            })}
+            disabled={!form.partner || salesOrderItems.length === 0}
             className="bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
           >
             <Save className="w-4 h-4" /> {editingDocNumber ? '保存修改' : '确认保存销售订单'}

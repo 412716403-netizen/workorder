@@ -51,31 +51,7 @@ export type PsiDocListMainRow = {
   customData?: Record<string, unknown>;
 };
 
-/**
- * 采购入库：按**所有行**的 `customData.relatedProductId` 去重后，顿号连接展示（列表/汇总用）。
- * 无行级关联时回退为 — 。
- */
-export function aggregatePurchaseBillRelatedProductListText(
-  lineRows: Array<{ customData?: unknown }>,
-  productMap?: Map<string, Product>,
-): string {
-  const ids: string[] = [];
-  for (const row of lineRows) {
-    const cd = row.customData;
-    if (!cd || typeof cd !== 'object' || Array.isArray(cd)) continue;
-    const id = String((cd as Record<string, unknown>).relatedProductId ?? '').trim();
-    if (id) ids.push(id);
-  }
-  const unique = Array.from(new Set(ids));
-  if (unique.length === 0) return '—';
-  return unique
-    .map((id) => {
-      const p = productMap?.get(id);
-      if (!p) return id;
-      return p.sku ? `${p.name || '—'}（${p.sku}）` : (p.name || id);
-    })
-    .join('、');
-}
+export { aggregatePurchaseBillRelatedProductListText } from '../../utils/purchaseBillRelatedProductPrint';
 
 /** 采购订单标准字段在列表中的显示文案（按 fieldId 分派） */
 export function purchaseOrderStandardListText(

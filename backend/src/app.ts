@@ -70,7 +70,7 @@ app.use(express.json({ limit: env.JSON_BODY_LIMIT }));
 
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 200,
+  max: env.API_RATE_LIMIT_MAX,
   message: { error: '请求过于频繁，请稍后再试' },
   standardHeaders: true,
   legacyHeaders: false,

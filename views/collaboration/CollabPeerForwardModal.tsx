@@ -60,6 +60,7 @@ const CollabPeerForwardModal: React.FC<CollabPeerForwardModalProps> = ({
   useEffect(() => {
     if (!open) {
       prevOpenRef.current = false;
+      setBlocks([]);
       return;
     }
     const isFirstOpen = !prevOpenRef.current;

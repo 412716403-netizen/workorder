@@ -64,6 +64,23 @@ const StockMaterialFormModal: React.FC<StockMaterialFormModalProps> = ({
   });
   const [customValues, setCustomValues] = useState<Record<string, unknown>>({});
 
+  const emptyMaterialForm = () => ({
+    orderId: '',
+    productId: '',
+    quantity: 0,
+    reason: '',
+    partner: '',
+    warehouseId: '',
+    batchNo: '',
+  });
+
+  useEffect(() => {
+    if (!visible) {
+      setForm(emptyMaterialForm());
+      setCustomValues({});
+    }
+  }, [visible]);
+
   const materialCustomFieldDefs = useMemo(() => {
     const wx = Boolean(form.partner?.trim());
     const raw =

@@ -4,6 +4,7 @@ import {
   WORKBENCH_WIDGET_CATALOG,
   WORKBENCH_WIDGET_TYPES,
   isWorkbenchHomePage,
+  mergeWorkbenchHomePinnedItems,
   type WorkbenchConfig,
   type WorkbenchLayoutItem,
   type WorkbenchPage,
@@ -57,7 +58,15 @@ function pinHomePageFirst(pages: WorkbenchPage[]): WorkbenchPage[] {
   if (!home) {
     home = { ...WORKBENCH_BUILTIN_DEFAULT.pages[0], sortOrder: 0 };
   } else {
-    home = { ...home, title: '首页', sortOrder: 0 };
+    home = {
+      ...home,
+      title: '首页',
+      sortOrder: 0,
+      layout: {
+        version: 1,
+        items: mergeWorkbenchHomePinnedItems(home.layout.items),
+      },
+    };
   }
 
   return [home, ...rest.map((p, idx) => ({ ...p, sortOrder: idx + 1 }))];
@@ -82,11 +91,15 @@ function normalizePage(raw: unknown, fallbackOrder: number): WorkbenchPage | nul
     items.push(item);
   }
 
+  const layoutItems = isWorkbenchHomePage(id)
+    ? mergeWorkbenchHomePinnedItems(items)
+    : items;
+
   return {
     id,
     title,
     sortOrder,
-    layout: { version: 1, items },
+    layout: { version: 1, items: layoutItems },
   };
 }
 
@@ -130,7 +143,11 @@ export function filterWorkbenchByAccess(
     ...page,
     layout: {
       version: 1,
-      items: page.layout.items.filter(item => canUseWidget(item.widgetType, opts)),
+      items: isWorkbenchHomePage(page.id)
+        ? mergeWorkbenchHomePinnedItems(
+            page.layout.items.filter(item => canUseWidget(item.widgetType, opts)),
+          )
+        : page.layout.items.filter(item => canUseWidget(item.widgetType, opts)),
     },
   }));
   if (!next.pages.some(p => p.id === next.activePageId)) {

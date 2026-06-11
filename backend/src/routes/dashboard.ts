@@ -34,6 +34,10 @@ const shortcutIdsSchema = z.object({
   ids: z.array(z.string().min(1)).min(1).max(12),
 });
 
+const orderStatsNodeIdsSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(12),
+});
+
 const publishMessageSchema = z.object({
   title: z.string().trim().min(1).max(80),
   body: z.string().trim().min(1).max(2000),
@@ -49,6 +53,15 @@ router.get('/feature-plugins', ctrl.getFeaturePlugins);
 router.put('/feature-plugins', validate(featurePluginsSchema), ctrl.updateFeaturePlugins);
 
 router.get('/stats', ctrl.getStats);
+router.get('/order-stats/settings', ctrl.getOrderStatsSettings);
+router.put('/order-stats/settings', validate(orderStatsNodeIdsSchema), ctrl.saveOrderStatsSettings);
+router.get('/order-stats', ctrl.getOrderStats);
+router.get('/outsource-stats/settings', ctrl.getOutsourceStatsSettings);
+router.put('/outsource-stats/settings', validate(orderStatsNodeIdsSchema), ctrl.saveOutsourceStatsSettings);
+router.get('/outsource-stats', ctrl.getOutsourceStats);
+router.get('/rework-stats/settings', ctrl.getReworkStatsSettings);
+router.put('/rework-stats/settings', validate(orderStatsNodeIdsSchema), ctrl.saveReworkStatsSettings);
+router.get('/rework-stats', ctrl.getReworkStats);
 router.get('/notifications', ctrl.getNotifications);
 router.get('/messages', ctrl.listPublishedMessages);
 router.post('/messages', validate(publishMessageSchema), ctrl.publishMessage);

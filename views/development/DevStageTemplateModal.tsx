@@ -414,7 +414,7 @@ const DevStageTemplateModal: React.FC<DevStageTemplateModalProps> = ({
             {selected ? (
               <DevCreateSectionCard
                 title={`${selected.name} · 登记自定义内容`}
-                description="与工序节点库「报工自定义单据内容」一致，支持文本、日期、下拉与文件上传"
+                description="与工单中心表单配置「报工自定义单据内容」一致，支持文本、日期、下拉与文件上传"
                 icon={GitBranch}
                 iconTone="indigo"
                 className="lg:col-span-8"
