@@ -228,7 +228,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
       rows.sort((a, b) => {
         const oa = idx.ordersById.get(a.orderId);
         const ob = idx.ordersById.get(b.orderId);
-        const d = orderCreatedMs(ob!) - orderCreatedMs(oa!);
+        const d = orderCreatedMs(ob) - orderCreatedMs(oa);
         if (d !== 0) return d;
         const ma = milestoneIndexInOrder(oa, a.nodeId);
         const mb = milestoneIndexInOrder(ob, b.nodeId);

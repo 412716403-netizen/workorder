@@ -524,7 +524,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
     return rows.sort((a, b) => {
       const oa = a.orderId ? idx.ordersById.get(a.orderId) : undefined;
       const ob = b.orderId ? idx.ordersById.get(b.orderId) : undefined;
-      const d = orderCreatedMs(ob!) - orderCreatedMs(oa!);
+      const d = orderCreatedMs(ob) - orderCreatedMs(oa);
       if (d !== 0) return d;
       const ma = milestoneIndexInOrder(oa, a.nodeId);
       const mb = milestoneIndexInOrder(ob, b.nodeId);
@@ -621,7 +621,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       if (aIsOrder && bIsOrder) {
         const oa = idx.ordersById.get(a.orderId!);
         const ob = idx.ordersById.get(b.orderId!);
-        const d = orderCreatedMs(ob!) - orderCreatedMs(oa!);
+        const d = orderCreatedMs(ob) - orderCreatedMs(oa);
         if (d !== 0) return d;
         const ma = milestoneIndexInOrder(oa, a.nodeId);
         const mb = milestoneIndexInOrder(ob, b.nodeId);
@@ -756,7 +756,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       .sort((a, b) => {
         const oa = idx.ordersById.get(a.orderId);
         const ob = idx.ordersById.get(b.orderId);
-        const d = orderCreatedMs(ob!) - orderCreatedMs(oa!);
+        const d = orderCreatedMs(ob) - orderCreatedMs(oa);
         if (d !== 0) return d;
         return (a.orderNumber || '').localeCompare(b.orderNumber || '');
       });

@@ -1,7 +1,8 @@
 import type { ProductionOrder, Product, ProductMilestoneProgress } from '../types';
 
-/** 工单创建时刻（ms），用于工单模式「最新生成的工单」排序 */
-export function orderCreatedMs(o: ProductionOrder): number {
+/** 工单创建时刻（ms），用于工单模式「最新生成的工单」排序；缺失工单时返回 0（外协流水可能引用已删/未加载工单） */
+export function orderCreatedMs(o: ProductionOrder | undefined | null): number {
+  if (!o) return 0;
   if (o.createdAt) {
     const t = new Date(o.createdAt).getTime();
     if (!Number.isNaN(t)) return t;
@@ -15,7 +16,8 @@ export function orderCreatedMs(o: ProductionOrder): number {
 }
 
 /** 工单最近活动时间（ms）：优先 updatedAt，否则取里程碑报工最新时间，再退回创建时间 */
-export function orderUpdatedMs(o: ProductionOrder): number {
+export function orderUpdatedMs(o: ProductionOrder | undefined | null): number {
+  if (!o) return 0;
   if (o.updatedAt) {
     const t = new Date(o.updatedAt).getTime();
     if (!Number.isNaN(t)) return t;
