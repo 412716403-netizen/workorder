@@ -185,7 +185,7 @@
 - **消息中心**：**仅平台管理员**（`users.role === admin`）可在 `/announcements` 发布/删除**全平台**公告，存 `platform_announcements` 表；各租户消息中心只读展示，发布人显示为「系统」（最多 50 条）。租户及租户管理员**不可**发布消息。
 - **软件到期提醒**：租户 `expiresAt` 到期前第 7、3、1 个日历日，消息中心自动出现一条系统提醒（发布人「系统」），无需持久化；当日仅对应里程碑出现一次。
 - **平台管理员**（`users.role === admin`）：侧栏仅「信息发布」「账号管理」；登录默认进入 `/announcements`；不可访问 ERP 业务模块。
-- **功能插件**（`system_settings.featurePlugins`）：插件市场展示「协作管理」「开发管理」「资料库」等可开关插件；与 RBAC 叠加，关闭后隐藏侧栏入口与相关 widget/快捷项。
+- **功能插件**（`system_settings.featurePlugins`）：插件市场展示「协作管理」「开发管理」「资料库」等可开关插件；与 RBAC 叠加，关闭后隐藏侧栏入口与相关 widget/快捷项。默认关闭：「协作管理」「开发管理」「资料库」；租户管理员在插件中心手动开启。
 - **资料库**（`knowledge_base` 插件）：租户内共享文件夹与文档；左侧树形管理（文档/文件夹可拖拽排序与移动），右侧 Tiptap 块级富文本（斜杠命令插入标题/列表/待办/表格/代码块/图片等）自动保存；图片经 `/api/knowledge-base/assets` 独立存储；侧栏入口位于「基础信息」上方；权限 `knowledge_base:folders:*` / `knowledge_base:documents:*`。
 - **资料库引用字段**（`CustomDocFieldType='knowledge'`）：产品分类扩展字段、工序节点库「报工页展示内容」的字段类型可选「资料库」；填写产品/工序内容时从资料库中选择一篇文档，存值为 `{id,title}` JSON；报工只读区与产品列表显示文档标题，点击在弹窗内只读预览（实时读取资料库文档，需 `knowledge_base:documents:view`）。
 - **消息 feed**：聚合平台公告、到期提醒；无独立 Notification 表。

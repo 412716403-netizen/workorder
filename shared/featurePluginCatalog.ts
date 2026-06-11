@@ -54,7 +54,7 @@ export const FEATURE_PLUGIN_MARKET_CATALOG: FeaturePluginMarketItem[] = [
     tags: ['外协协作', '多租户'],
     icon: 'Inbox',
     launchedAt: '2024-10-01',
-    defaultEnabled: true,
+    defaultEnabled: false,
     toggleable: true,
     introduction: {
       summary:
@@ -94,7 +94,7 @@ export const FEATURE_PLUGIN_MARKET_CATALOG: FeaturePluginMarketItem[] = [
     tags: ['款式开发', 'BOM 试制'],
     icon: 'FlaskConical',
     launchedAt: '2025-11-01',
-    defaultEnabled: true,
+    defaultEnabled: false,
     toggleable: true,
     introduction: {
       summary:
