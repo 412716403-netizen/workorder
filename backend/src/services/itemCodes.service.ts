@@ -7,6 +7,7 @@ import {
   collectPlanTreeFromNode,
   generateScanToken,
   parseScanTokenTenantHexPrefix,
+  scanTokenEqualsWhere,
   resolveTenantIdFromScanTokenPrefix,
   resolveCallerContext,
   resolveVariantLabel,
@@ -137,7 +138,7 @@ async function findItemCodeByScanToken(scanToken: string) {
   const ownerTenantId = await resolveTenantIdFromScanTokenPrefix(prefix);
   if (!ownerTenantId) return null;
   return basePrisma.itemCode.findFirst({
-    where: { tenantId: ownerTenantId, scanToken },
+    where: scanTokenEqualsWhere(ownerTenantId, scanToken),
   });
 }
 
@@ -147,7 +148,7 @@ async function findVirtualBatchByScanToken(scanToken: string) {
   const ownerTenantId = await resolveTenantIdFromScanTokenPrefix(prefix);
   if (!ownerTenantId) return null;
   return basePrisma.planVirtualBatch.findFirst({
-    where: { tenantId: ownerTenantId, scanToken },
+    where: scanTokenEqualsWhere(ownerTenantId, scanToken),
   });
 }
 
@@ -556,6 +557,8 @@ async function traceEventRowsPaged(params: {
         AND (${scanLinkScope ? Prisma.sql`TRUE` : variantCond})
         AND (${mrTimeCond})
         AND (${mrLinkCond})
+        -- 外协收货派生的工序报工：OUTSOURCE 已收回记录已表达同一业务
+        AND COALESCE(mr.custom_data ->> 'source', '') <> 'outsourceReceive'
     )
     UNION ALL
     (
@@ -585,6 +588,8 @@ async function traceEventRowsPaged(params: {
         AND (${scanLinkScope ? Prisma.sql`TRUE` : opOrderCond})
         AND (${porTimeCond})
         AND (${porLinkCond})
+        -- 委外返工收回：REWORK_REPORT 已表达同一业务，跳过镜像 OUTSOURCE 已收回（带 source_rework_id）
+        AND NOT (por.type = 'OUTSOURCE' AND por.status = '已收回' AND por.source_rework_id IS NOT NULL)
     )
     UNION ALL
     (
@@ -610,6 +615,7 @@ async function traceEventRowsPaged(params: {
         AND (${scanLinkScope ? Prisma.sql`TRUE` : pmpVariantCond})
         AND (${pprTimeCond})
         AND (${pprLinkCond})
+        AND COALESCE(ppr.custom_data ->> 'source', '') <> 'outsourceReceive'
     )
   `;
 

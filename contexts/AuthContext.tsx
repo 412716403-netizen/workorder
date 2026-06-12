@@ -14,6 +14,8 @@ export type TenantContext = {
   expiresAt?: string | null;
   /** 企业是否启用设备模块（由平台在「企业管理」中配置） */
   equipmentFeaturesEnabled?: boolean;
+  /** 租户行业类型（平台在「企业管理」中指定；缺省视为 generic） */
+  industryKind?: string;
 };
 
 type LoginData = {
@@ -31,6 +33,7 @@ type TenantReadyResult = {
   status?: string;
   expiresAt?: string | null;
   equipmentFeaturesEnabled?: boolean;
+  industryKind?: string;
 };
 
 interface AuthContextValue {
@@ -106,6 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             status: matched.status,
             expiresAt: matched.expiresAt ?? null,
             equipmentFeaturesEnabled: matched.equipmentFeaturesEnabled,
+            industryKind: matched.industryKind,
           };
           setTenantCtx(ctx);
           localStorage.setItem('tenantCtx', JSON.stringify(ctx));
@@ -142,6 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         status: result.status,
         expiresAt: result.expiresAt ?? null,
         equipmentFeaturesEnabled: result.equipmentFeaturesEnabled,
+        industryKind: result.industryKind,
       };
       setTenantCtx(ctx);
       localStorage.setItem('tenantCtx', JSON.stringify(ctx));
@@ -154,6 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             permissions: typeof t.permissions === 'string' ? JSON.parse(t.permissions) : (t.permissions || []),
             status: t.status, expiresAt: t.expiresAt ?? null,
             equipmentFeaturesEnabled: t.equipmentFeaturesEnabled,
+            industryKind: t.industryKind,
           }));
           setUserTenants(infos);
           localStorage.setItem('userTenants', JSON.stringify(infos));
@@ -222,6 +228,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           permissions: typeof t.permissions === 'string' ? JSON.parse(t.permissions) : (t.permissions || []),
           status: t.status, expiresAt: t.expiresAt ?? null,
           equipmentFeaturesEnabled: t.equipmentFeaturesEnabled,
+          industryKind: t.industryKind,
         }));
         setUserTenants(infos);
         localStorage.setItem('userTenants', JSON.stringify(infos));
@@ -235,6 +242,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             status: matched.status,
             expiresAt: matched.expiresAt ?? null,
             equipmentFeaturesEnabled: matched.equipmentFeaturesEnabled,
+            industryKind: matched.industryKind,
           };
           if (JSON.stringify(next) !== JSON.stringify(tenantCtx)) {
             setTenantCtx(next);

@@ -48,7 +48,7 @@ export interface WorkbenchConfig {
   pages: WorkbenchPage[];
 }
 
-export type FeaturePluginId = 'collaboration' | 'development' | 'knowledge_base';
+export type FeaturePluginId = 'collaboration' | 'development' | 'knowledge_base' | 'traceability';
 
 export interface FeaturePluginDefinition {
   id: FeaturePluginId;
@@ -273,6 +273,18 @@ export function defaultFeaturePlugins(): FeaturePluginsConfig {
     out[p.id] = p.defaultEnabled;
   }
   return out;
+}
+
+/** 合并 DB 中的 featurePlugins；存量租户未写入 traceability 键时视为已开启 */
+export function parseFeaturePlugins(value: unknown): FeaturePluginsConfig {
+  const base = defaultFeaturePlugins();
+  if (!value || typeof value !== 'object') return base;
+  const stored = value as FeaturePluginsConfig;
+  const merged = { ...base, ...stored };
+  if (!Object.prototype.hasOwnProperty.call(stored, 'traceability')) {
+    merged.traceability = true;
+  }
+  return merged;
 }
 
 export function isWorkbenchHomePage(pageId: string): boolean {

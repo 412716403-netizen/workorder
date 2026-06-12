@@ -71,8 +71,10 @@ import {
   normalizeSalesBillFormSettings,
   normalizeSalesOrderFormSettings,
   repairPlanLabelPrintWhitelistMissingPlanLabelTemplates,
+  ensureTraceabilityLabelPrintDefaults,
 } from './formSettingsDefaults';
 import { mergePrintTemplatesForTenantConfig } from '../shared/systemPrintTemplates';
+import { parseFeaturePlugins } from '../shared/workbench';
 
 export function settledVal<T>(results: PromiseSettledResult<unknown>[], i: number): T | undefined {
   return results[i]?.status === 'fulfilled' ? (results[i] as PromiseFulfilledResult<unknown>).value as T : undefined;
@@ -90,6 +92,7 @@ export interface AppDataLoadCoreSetters {
   setProcessSequenceMode: Dispatch<SetStateAction<ProcessSequenceMode>>;
   setAllowExceedMaxReportQty: Dispatch<SetStateAction<boolean>>;
   setAllowExceedMaxOutsourceReceiveQty: Dispatch<SetStateAction<boolean>>;
+  setWeightTolerancePercent: Dispatch<SetStateAction<number>>;
   setPlanFormSettings: Dispatch<SetStateAction<PlanFormSettings>>;
   setOrderFormSettings: Dispatch<SetStateAction<OrderFormSettings>>;
   setPurchaseOrderFormSettings: Dispatch<SetStateAction<PurchaseOrderFormSettings>>;
@@ -163,12 +166,22 @@ export async function executeAppDataLoadCore(
   s.setProcessSequenceMode((cfg.processSequenceMode as ProcessSequenceMode) ?? 'sequential');
   s.setAllowExceedMaxReportQty(cfg.allowExceedMaxReportQty === true);
   s.setAllowExceedMaxOutsourceReceiveQty(cfg.allowExceedMaxOutsourceReceiveQty === true);
+  {
+    const raw = cfg.weightTolerancePercent;
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    s.setWeightTolerancePercent(Number.isFinite(n) && n >= 0 ? n : 5);
+  }
   const printTemplatesFromCfg = Array.isArray(cfg.printTemplates) ? (cfg.printTemplates as PrintTemplate[]) : [];
   const printTemplatesMerged = mergePrintTemplatesForTenantConfig(printTemplatesFromCfg) as PrintTemplate[];
+  const traceEnabled = parseFeaturePlugins(cfg.featurePlugins).traceability !== false;
   s.setPlanFormSettings(
-    repairPlanLabelPrintWhitelistMissingPlanLabelTemplates(
-      normalizePlanFormSettings(cfg.planFormSettings as PlanFormSettings),
+    ensureTraceabilityLabelPrintDefaults(
+      repairPlanLabelPrintWhitelistMissingPlanLabelTemplates(
+        normalizePlanFormSettings(cfg.planFormSettings as PlanFormSettings),
+        printTemplatesMerged,
+      ),
       printTemplatesMerged,
+      traceEnabled,
     ),
   );
   s.setOrderFormSettings(normalizeOrderFormSettings((cfg.orderFormSettings as OrderFormSettings) ?? DEFAULT_ORDER_FORM_SETTINGS));

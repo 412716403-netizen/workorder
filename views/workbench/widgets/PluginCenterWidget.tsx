@@ -14,6 +14,8 @@ import {
 } from '../../../types';
 import { useFeaturePlugins } from '../../../hooks/useFeaturePlugins';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useAppData } from '../../../contexts/AppDataContext';
+import { ensureTraceabilityLabelPrintDefaults } from '../../../contexts/formSettingsDefaults';
 import { isTenantElevatedRole } from '../../../utils/hasModulePerm';
 
 const LATEST_DISPLAY_COUNT = 2;
@@ -57,6 +59,7 @@ const PluginTile: React.FC<PluginTileProps> = ({ plugin, activated, badge, onSel
 const PluginCenterWidget: React.FC<PluginCenterWidgetProps> = ({ editing, layoutLocked, onRemove }) => {
   const { plugins, updatePlugins, isUpdating } = useFeaturePlugins();
   const { tenantCtx } = useAuth();
+  const { planFormSettings, printTemplates, onUpdatePlanFormSettings } = useAppData();
   const [marketOpen, setMarketOpen] = useState(false);
   const [detailPlugin, setDetailPlugin] = useState<FeaturePluginMarketItem | null>(null);
 
@@ -78,6 +81,17 @@ const PluginCenterWidget: React.FC<PluginCenterWidgetProps> = ({ editing, layout
     }
     try {
       await updatePlugins({ ...plugins, [id]: enabled });
+      if (id === 'traceability' && enabled) {
+        const nextPlanForm = ensureTraceabilityLabelPrintDefaults(
+          planFormSettings,
+          printTemplates,
+          true,
+          { forceEnableTraceSection: true },
+        );
+        if (nextPlanForm !== planFormSettings) {
+          await onUpdatePlanFormSettings(nextPlanForm);
+        }
+      }
       toast.success(enabled ? '插件已开通' : '插件已关闭');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '更新失败');

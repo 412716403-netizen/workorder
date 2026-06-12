@@ -7,7 +7,7 @@ import type { FeaturePluginId } from './workbench.js';
 
 export type FeaturePluginCategoryId = 'reporting' | 'tools' | 'management';
 
-export type FeaturePluginIconKey = 'Inbox' | 'FlaskConical' | 'BookOpen';
+export type FeaturePluginIconKey = 'Inbox' | 'FlaskConical' | 'BookOpen' | 'ScanLine';
 
 export interface FeaturePluginGuideSection {
   title: string;
@@ -161,6 +161,47 @@ export const FEATURE_PLUGIN_MARKET_CATALOG: FeaturePluginMarketItem[] = [
       {
         title: '编辑文档',
         body: '右侧编辑器输入「/」唤起块级菜单，可插入标题、列表、待办、表格、代码块、分割线、高亮块与图片。',
+      },
+    ],
+  },
+  {
+    id: 'traceability',
+    label: '追溯码',
+    tagline: '单品码/批次码生成、扫码追溯、报工扫码累加与称重校验',
+    category: 'reporting',
+    tags: ['单品码', '批次码', '扫码称重'],
+    icon: 'ScanLine',
+    launchedAt: '2026-06-11',
+    defaultEnabled: false,
+    toggleable: true,
+    introduction: {
+      summary:
+        '追溯码插件面向需要单品/批次级追溯的制造场景：在计划单生成码、扫码查询生产链路，并在报工、外协收货、返工、待入库等环节通过扫码累加数量；开启后可配合电子秤做理论重量比对与交货总重录入。',
+      highlights: [
+        '计划单内生成单品码与虚拟批次码，支持标签打印',
+        '侧栏与快捷入口进入扫码追溯页，查看单件生产链路',
+        '报工/外协/返工/待入库支持扫码枪批量累加数量',
+        '工序开启记重时可录入交货总重、维护单件标准重量与容差校验',
+      ],
+      scenarios: [
+        '服装针织需按件追溯横机、缝盘等工序进度',
+        '外协收回需扫码确认规格数量并可选称重',
+        '暂不需要追溯的小厂可关闭插件，仅用手工数量录入',
+      ],
+    },
+    usageGuide: [
+      {
+        title: '开通与权限',
+        body: '租户管理员在插件中心开启「追溯码」。成员需具备生产计划 view 权限方可使用追溯查询与计划内码生成；报工/外协等模块仍按原有 RBAC 控制。',
+        bullets: ['管理员：插件中心开启', '关闭插件后：追溯页、扫码累加、称重相关 UI 均不可用'],
+      },
+      {
+        title: '生成与打印追溯码',
+        body: '在生产计划详情中维护追溯码区块，按规格生成单品码或虚拟批次码，并使用标签模板打印。',
+      },
+      {
+        title: '扫码报工与称重',
+        body: '报工或外协收货时点击扫码累加，扫入码后确认应用；若工序开启「报工时记录重量」，可维护单件标准重量并在扫码会话中比对秤读数。',
       },
     ],
   },

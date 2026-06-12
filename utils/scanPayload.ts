@@ -116,6 +116,15 @@ function isLikelyToken(token: string): boolean {
   );
 }
 
+/** 租户前缀为 8 位 hex，扫码枪可能整段大写；归一为小写前缀以便与库内 token 对齐。 */
+export function normalizeExtractedScanToken(token: string): string {
+  const i = token.indexOf('.');
+  if (i <= 0) return token;
+  const prefix = token.slice(0, i);
+  if (!/^[0-9A-Fa-f]{8}$/.test(prefix)) return token;
+  return prefix.toLowerCase() + token.slice(i);
+}
+
 /**
  * 解析扫码内容。
  * 规则（按顺序匹配）：
@@ -132,18 +141,19 @@ export function parseScanPayload(raw: string): ScanPayload {
   if (!cleaned) return base;
 
   const pathToken = `[A-Za-z0-9._-]+`;
-  const batchMatch = cleaned.match(new RegExp(`/scan/batch/(${pathToken})/?$`));
+  // 扫码枪/部分打印机可能输出全大写 URL（HTTP://HOST/SCAN/...），路径段大小写不敏感
+  const batchMatch = cleaned.match(new RegExp(`/scan/batch/(${pathToken})/?$`, 'i'));
   if (batchMatch && isLikelyToken(batchMatch[1])) {
-    return { kind: 'BATCH', token: batchMatch[1], raw };
+    return { kind: 'BATCH', token: normalizeExtractedScanToken(batchMatch[1]), raw };
   }
 
-  const itemMatch = cleaned.match(new RegExp(`/scan/(${pathToken})/?$`));
+  const itemMatch = cleaned.match(new RegExp(`/scan/(${pathToken})/?$`, 'i'));
   if (itemMatch && isLikelyToken(itemMatch[1])) {
-    return { kind: 'ITEM', token: itemMatch[1], raw };
+    return { kind: 'ITEM', token: normalizeExtractedScanToken(itemMatch[1]), raw };
   }
 
   if (isLikelyToken(cleaned)) {
-    return { kind: 'ITEM', token: cleaned, raw };
+    return { kind: 'ITEM', token: normalizeExtractedScanToken(cleaned), raw };
   }
 
   return base;

@@ -6,6 +6,7 @@ import {
   type VirtualBatchQuota,
   generateScanToken,
   parseScanTokenTenantHexPrefix,
+  scanTokenEqualsWhere,
   resolveTenantIdFromScanTokenPrefix,
   collectPlanSubtreeIds,
   loadVirtualBatchQuota,
@@ -494,7 +495,7 @@ async function findVirtualBatchByScanToken(scanToken: string) {
   const ownerTenantId = await resolveTenantIdFromScanTokenPrefix(prefix);
   if (!ownerTenantId) return null;
   return basePrisma.planVirtualBatch.findFirst({
-    where: { tenantId: ownerTenantId, scanToken },
+    where: scanTokenEqualsWhere(ownerTenantId, scanToken),
   });
 }
 

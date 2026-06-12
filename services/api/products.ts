@@ -1,4 +1,5 @@
 import { request, crud, buildQs } from './_client';
+import type { ReceiveUnitWeightAveragesResponse, ProductVariantUsageResponse } from '../../types';
 
 // ── Products ──
 export const products = {
@@ -6,6 +7,13 @@ export const products = {
   listVariants: (productId: string) => request(`/products/${productId}/variants`),
   syncVariants: (productId: string, variants: unknown[]) =>
     request(`/products/${productId}/variants`, { method: 'POST', body: JSON.stringify({ variants }) }),
+  receiveUnitWeightAverages: (productId: string) =>
+    request<ReceiveUnitWeightAveragesResponse>(`/products/${productId}/receive-unit-weight-averages`),
+  /** 删除颜色/尺码（变体）前查询业务引用情况 */
+  variantUsage: (productId: string, variantIds: string[]) =>
+    request<ProductVariantUsageResponse>(
+      `/products/${productId}/variant-usage${buildQs({ variantIds: variantIds.join(',') })}`,
+    ),
   import: (data: { categoryId: string; products: unknown[]; newDictionaryItems?: unknown[] }) =>
     request('/products/import', { method: 'POST', body: JSON.stringify(data) }),
 };

@@ -40,6 +40,9 @@ export {
   type CustomDocFieldType,
   type LegacyCustomDocFieldType,
   type ProductionOpCollabData,
+  type ProductVariantUsageDetail,
+  type ProductVariantUsageEntry,
+  type ProductVariantUsageResponse,
   SCAN_ITEM_CODE_IDS_KEY,
 } from '../../../shared/types.js';
 

@@ -26,12 +26,15 @@ import type {
   ProductMilestoneProgress,
   ProcessSequenceMode,
   BOM,
+  PlanOrder,
 } from '../types';
 import { itemCodesApi, planVirtualBatchesApi } from '../services/api';
 import { rewriteScanApiErrorForIme, type ScanPayload } from '../utils/scanPayload';
+import { arePlanOrdersScanCompatible } from '../utils/planOrderScanCompat';
 import type { ScanValidatePurpose, ScanValidateScope } from '../types';
 import { SCAN_ITEM_CODE_IDS_KEY } from '../types';
 import type { ScanBatchRowDetail } from '../utils/scanBatchRowDetail';
+import type { ScanBatchApplyMeta } from '../components/scan/ScanBatchSessionModal';
 import { scanItemResultToRowDetail, scanVirtualBatchResultToRowDetail } from '../utils/scanBatchRowDetail';
 import { calcUsageByWeight } from '../utils/bomMaterialUsageByWeight';
 import { coerceRouteReportDefaultForField, getEffectiveReportTemplate } from '../utils/effectiveReportTemplate';
@@ -94,6 +97,8 @@ interface UseReportModalStateArgs {
   effectiveReportTemplate: ReturnType<typeof getEffectiveReportTemplate>;
   boms?: BOM[];
   orders: ProductionOrder[];
+  /** 计划单列表：报工扫码时校验码与工单是否在同一计划树 */
+  plans?: PlanOrder[];
   onReportSubmit?: (orderId: string, milestoneId: string, quantity: number, customData: unknown, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number) => void;
   onReportSubmitProduct?: (productId: string, milestoneTemplateId: string, quantity: number, customData: unknown, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number) => void;
   /**
@@ -122,6 +127,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
     effectiveReportTemplate,
     boms,
     orders,
+    plans = [],
     onReportSubmit,
     onReportSubmitProduct,
     getScanMaxQty,
@@ -361,6 +367,8 @@ export function useReportModalState(args: UseReportModalStateArgs) {
         toast.error('当前工单未关联计划，无法校验扫码');
         return null;
       }
+      const isPlanCompatible = (codePlanOrderId: string) =>
+        arePlanOrdersScanCompatible(plans, codePlanOrderId, currentPlanOrderId);
       try {
         if (payload.kind === 'ITEM') {
           const res = await itemCodesApi.scan(payload.token);
@@ -368,8 +376,8 @@ export function useReportModalState(args: UseReportModalStateArgs) {
             toast.error(res.message || '单品码已作废');
             return null;
           }
-          const callerPlanId = res.callerContext?.callerPlanOrderId ?? res.planOrderId;
-          if (callerPlanId !== currentPlanOrderId) {
+          const codePlanId = res.planOrderId;
+          if (!isPlanCompatible(codePlanId)) {
             toast.error('此码不属于当前工单所在计划');
             return null;
           }
@@ -407,8 +415,8 @@ export function useReportModalState(args: UseReportModalStateArgs) {
             toast.error(res.message || '批次码已作废');
             return null;
           }
-          const callerPlanId = res.callerContext?.callerPlanOrderId ?? res.planOrderId;
-          if (callerPlanId !== currentPlanOrderId) {
+          const codePlanId = res.planOrderId;
+          if (!isPlanCompatible(codePlanId)) {
             toast.error('此批次码不属于当前工单所在计划');
             return null;
           }
@@ -445,7 +453,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
       }
       return null;
     },
-    [reportModal.order.planOrderId, reportForm.variantQuantities, validateScanForReport],
+    [reportModal.order.planOrderId, reportForm.variantQuantities, validateScanForReport, plans],
   );
 
   const resolveReportScanRowPreview = useCallback(
@@ -485,14 +493,17 @@ export function useReportModalState(args: UseReportModalStateArgs) {
   );
 
   const handleScanBatchConfirm = useCallback(
-    async (payloads: ScanPayload[]) => {
+    async (payloads: ScanPayload[], meta?: ScanBatchApplyMeta) => {
       for (const p of payloads) {
         const ok = await applyScanPayload(p);
         if (!ok) return false;
       }
+      if (weightReportEnabled && meta && meta.totalMeasuredWeightKg > 0) {
+        setReportForm(f => ({ ...f, weight: meta.totalMeasuredWeightKg }));
+      }
       return true;
     },
-    [applyScanPayload],
+    [applyScanPayload, weightReportEnabled],
   );
 
   const getSeqRemainingForVariant = useCallback((variantId: string): number => {

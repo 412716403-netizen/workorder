@@ -274,6 +274,48 @@ export type ProductionOpCollabData = {
  */
 export const SCAN_ITEM_CODE_IDS_KEY = '__scanItemCodeIds' as const;
 
+/** system_settings 键：扫码称重容差百分比（默认 5，表示 ±5%） */
+export const WEIGHT_TOLERANCE_PERCENT_KEY = 'weightTolerancePercent' as const;
+export const DEFAULT_WEIGHT_TOLERANCE_PERCENT = 5;
+
+/** 规格×工序历史外协收货单件重量均值（Σ交货重÷Σ收货件数） */
+export interface ReceiveUnitWeightAverageRow {
+  variantId: string;
+  nodeId: string;
+  avgUnitWeightKg: number;
+  recordCount: number;
+}
+
+export interface ReceiveUnitWeightAveragesResponse {
+  productId: string;
+  averages: ReceiveUnitWeightAverageRow[];
+}
+
+/**
+ * 产品规格（变体）业务引用情况。
+ * 前端 `api.products.variantUsage` 与后端 `GET /products/:id/variant-usage` 共用：
+ * 删除颜色/尺码（即删除变体）前校验是否已产生业务数据。
+ */
+export interface ProductVariantUsageDetail {
+  /** 引用来源中文名，如「工单明细」「进销存流水」 */
+  label: string;
+  count: number;
+}
+
+export interface ProductVariantUsageEntry {
+  variantId: string;
+  /** 规格展示名（skuSuffix，如「红色-XL」），缺省回退 variantId */
+  variantLabel: string;
+  /** 各来源引用条数合计；> 0 表示该规格不可删除 */
+  total: number;
+  details: ProductVariantUsageDetail[];
+}
+
+export interface ProductVariantUsageResponse {
+  productId: string;
+  usages: ProductVariantUsageEntry[];
+}
+
 /**
  * 扫码二次校验（去重 + 单据上限）请求/响应。
  * 前端 `itemCodesApi.validateUsage` 与后端 `POST /item-codes/scan/validate-usage`

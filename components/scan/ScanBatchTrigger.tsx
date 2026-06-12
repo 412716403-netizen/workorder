@@ -4,9 +4,10 @@ import type { ScanPayload } from '../../utils/scanPayload';
 import type { ScanBatchRowDetail } from '../../utils/scanBatchRowDetail';
 import type { ScanIntent } from '../../utils/scanBatchIntent';
 import { ScanBatchSessionModal } from './ScanBatchSessionModal';
+import type { ScanBatchApplyMeta } from './ScanBatchSessionModal';
 
 export interface ScanBatchTriggerProps {
-  onApply: (payloads: ScanPayload[]) => void | Promise<boolean | void>;
+  onApply: (payloads: ScanPayload[], meta?: ScanBatchApplyMeta) => void | Promise<boolean | void>;
   /** 列表行展示：产品名、颜色、尺码、数量（需请求扫码接口） */
   resolveRowPreview?: (payload: ScanPayload) => Promise<ScanBatchRowDetail | null>;
   size?: 'sm' | 'md';
@@ -16,7 +17,6 @@ export interface ScanBatchTriggerProps {
   title?: string;
   modalTitle?: string;
   modalHint?: string;
-  allowManualPaste?: boolean;
   /** 为 true 时弹窗内可选择「按批累计 / 按件累计」（默认 false） */
   showScanIntentToggle?: boolean;
   /** 每次打开弹窗时的默认累计方式（默认「按批累计」） */
@@ -27,6 +27,10 @@ export interface ScanBatchTriggerProps {
   modalScanDisabled?: boolean;
   /** 透传：禁用时替换「列表为空」占位文案 */
   modalScanDisabledHint?: string;
+  enableWeightCheck?: boolean;
+  weightNodeId?: string;
+  weightTolerancePercent?: number;
+  getUnitWeightKg?: (productId: string, variantId: string, nodeId: string) => number | undefined;
 }
 
 /**
@@ -42,12 +46,15 @@ export function ScanBatchTrigger({
   title,
   modalTitle,
   modalHint,
-  allowManualPaste,
   showScanIntentToggle,
   defaultScanIntent,
   modalHeaderSlot,
   modalScanDisabled,
   modalScanDisabledHint,
+  enableWeightCheck,
+  weightNodeId,
+  weightTolerancePercent,
+  getUnitWeightKg,
 }: ScanBatchTriggerProps) {
   const [open, setOpen] = useState(false);
 
@@ -77,12 +84,15 @@ export function ScanBatchTrigger({
         resolveRowPreview={resolveRowPreview}
         title={modalTitle}
         hint={modalHint}
-        allowManualPaste={allowManualPaste}
         showScanIntentToggle={showScanIntentToggle}
         defaultScanIntent={defaultScanIntent}
         headerSlot={modalHeaderSlot}
         scanDisabled={modalScanDisabled}
         scanDisabledHint={modalScanDisabledHint}
+        enableWeightCheck={enableWeightCheck}
+        weightNodeId={weightNodeId}
+        weightTolerancePercent={weightTolerancePercent}
+        getUnitWeightKg={getUnitWeightKg}
       />
     </>
   );

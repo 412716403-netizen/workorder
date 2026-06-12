@@ -523,7 +523,8 @@ const OutsourceFlowDocumentDetailModal: React.FC<OutsourceFlowDocumentDetailModa
 
   const docMilestonesSummary = [...new Set(detailLines.map(d => d.nodeName).filter(n => n && n !== '—'))].join('、');
   const showOrderCol = productionLinkMode !== 'product';
-  const nodeUsesWeightRow = (nodeId?: string) => !!nodeId && !!globalNodes.find(n => n.id === nodeId)?.enableWeightOnReport;
+  const nodeUsesWeightRow = (nodeId?: string) =>
+    !!nodeId && !!globalNodes.find(n => n.id === nodeId)?.enableWeightOnReport;
   const showWeightCol = isReceiveDoc && detailLines.some(d => nodeUsesWeightRow(d.records[0]?.nodeId));
   const outsourceDetailColCount = (showOrderCol ? 3 : 2) + (isReceiveDoc && showOutsourceAmount ? 2 : 0) + (showWeightCol ? 1 : 0);
   const formatLineWeightKg = (sum: number) => formatWeightKgDisplay(sum);

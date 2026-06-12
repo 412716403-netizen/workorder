@@ -76,6 +76,7 @@
 |------|------|------|------|
 | 财务记录 CRUD | 已落地 | 已有 `/api/finance/records` | 补充统计、校验与测试说明 |
 | Dashboard / 工作台 | 已落地 | `/api/dashboard/*`：workbench 配置、feature-plugins、stats、**order-stats / outsource-stats / rework-stats**、notifications | 前端 `WorkbenchView`；默认首页 `/workbench` |
+| 追溯码插件 | 已落地 | `featurePlugins.traceability`：计划追溯码、扫码累加、扫码称重 UI gate | 插件中心开通；存量租户默认开启 |
 | 资料库 | 已落地 | `/api/knowledge-base/*`：文件夹/文档 CRUD、图片资源上传 | 前端 `KnowledgeBaseView`；插件 `knowledge_base` 可开关 |
 | 收支汇总、库存预警、订单进度 | 部分落地 | 已有后端聚合方向 | 继续按指标逐项校验计算口径 |
 

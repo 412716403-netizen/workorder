@@ -1,6 +1,7 @@
 import { getTenantPrisma } from '../lib/prisma.js';
 import { str, optStr } from '../utils/request.js';
 import * as productsService from '../services/products.service.js';
+import { getReceiveUnitWeightAverages } from '../services/receiveUnitWeightAverages.service.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { listQueryFromRequest, warnListAllFromRequest } from '../utils/listQuery.js';
 
@@ -16,6 +17,20 @@ export const listProducts = asyncHandler(async (req, res) => {
 
 export const getProduct = asyncHandler(async (req, res) => {
   res.json(await productsService.getProduct(getTenantPrisma(req.tenantId!), str(req.params.id)));
+});
+
+export const receiveUnitWeightAverages = asyncHandler(async (req, res) => {
+  const db = getTenantPrisma(req.tenantId!);
+  res.json(await getReceiveUnitWeightAverages(db, str(req.params.id)));
+});
+
+export const variantUsage = asyncHandler(async (req, res) => {
+  const db = getTenantPrisma(req.tenantId!);
+  const variantIds = String(req.query.variantIds ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  res.json(await productsService.getVariantUsage(db, str(req.params.id), variantIds));
 });
 
 export const createProduct = asyncHandler(async (req, res) => {

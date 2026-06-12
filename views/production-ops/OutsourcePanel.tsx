@@ -81,7 +81,7 @@ import {
 import OutsourceFlowListModal, { type OutsourceFlowOpenSeed } from './OutsourceFlowListModal';
 import OutsourcePartnerFlowDetailModal from './OutsourcePartnerFlowDetailModal';
 import OutsourceFlowDocumentDetailModal from './OutsourceFlowDocumentDetailModal';
-import { buildWeightMapForKeyedEntries, distributeWeightByQty } from '../../utils/reportBatchWeightHelpers';
+import { buildWeightMapForKeyedEntries, distributeWeightByQty, roundWeightKg } from '../../utils/reportBatchWeightHelpers';
 import StockDocDetailModal from './StockDocDetailModal';
 import DocPhaseModal from '../../components/DocPhaseModal';
 import { OrderCenterDetailPrintBlock } from '../../components/order-print/OrderCenterDetailPrintBlock';
@@ -1188,6 +1188,17 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
         next[e.key] = (next[e.key] ?? 0) + e.qty;
       });
       return next;
+    });
+    setReceiveFormWeights(prev => {
+      let changed = false;
+      const next = { ...prev };
+      entries.forEach(e => {
+        if (e.measuredWeightKg != null && e.measuredWeightKg > 0) {
+          next[e.baseKey] = roundWeightKg((next[e.baseKey] ?? 0) + e.measuredWeightKg);
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
     });
     setReceiveScanLinkByKey(prev => {
       const next = { ...prev };

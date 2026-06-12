@@ -27,6 +27,7 @@ import {
   ProductionOpRecord,
   ProcessSequenceMode,
   BOM,
+  PlanOrder,
 } from '../../types';
 import WorkerSelector from '../../components/WorkerSelector';
 import EquipmentSelector from '../../components/EquipmentSelector';
@@ -39,6 +40,7 @@ import {
 import { buildDefectiveReworkByOrderMilestone } from '../../utils/defectiveReworkByOrderMilestone';
 import { reworkMergeBucketOrderId } from '../../utils/reworkMergeBucketOrderId';
 import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
+import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { getEffectiveReportTemplate } from '../../utils/effectiveReportTemplate';
 import ReportCustomFieldsEditor from '../../components/ReportCustomFieldsEditor';
@@ -48,6 +50,8 @@ import ReportVariantMatrixInput from './report/ReportVariantMatrixInput';
 import ReportSingleVariantInput from './report/ReportSingleVariantInput';
 import ReportWeightBomSection from './report/ReportWeightBomSection';
 import { formStandardLabelClass } from '../../styles/uiDensity';
+import { useConfigData } from '../../contexts/AppDataContext';
+import { getVariantNodeUnitWeightKg } from '../../utils/variantNodeUnitWeight';
 
 export type { ReportModalData };
 
@@ -81,6 +85,7 @@ interface ReportModalProps {
   prodRecords: ProductionOpRecord[];
   /** 工序开启「报工时记录重量」时,用于本工序 BOM 预览与按占比分摊预估 */
   boms?: BOM[];
+  plans?: PlanOrder[];
 }
 
 const ReportModal: React.FC<ReportModalProps> = ({
@@ -102,7 +107,9 @@ const ReportModal: React.FC<ReportModalProps> = ({
   productMilestoneProgresses,
   prodRecords,
   boms,
+  plans = [],
 }) => {
+  const { weightTolerancePercent } = useConfigData();
   const equipmentFeaturesOn = useEquipmentFeaturesEffective();
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
@@ -131,6 +138,25 @@ const ReportModal: React.FC<ReportModalProps> = ({
   const weightReportEnabled = useMemo(
     () => !!globalNodes.find(n => n.id === reportModal.milestone.templateId)?.enableWeightOnReport,
     [globalNodes, reportModal.milestone.templateId],
+  );
+
+  const { scanEnabled, weightEnabled } = useTraceabilityPlugin();
+  const scanWeightCheckEnabled = weightReportEnabled && weightEnabled;
+
+  const getUnitWeightKg = useCallback(
+    (productId: string, variantId: string, nodeId: string) =>
+      getVariantNodeUnitWeightKg(products, productId, variantId, nodeId),
+    [products],
+  );
+
+  const scanWeightProps = useMemo(
+    () => ({
+      enableWeightCheck: scanWeightCheckEnabled,
+      weightNodeId: reportModal.milestone.templateId,
+      weightTolerancePercent,
+      getUnitWeightKg,
+    }),
+    [reportModal.milestone.templateId, weightTolerancePercent, getUnitWeightKg, scanWeightCheckEnabled],
   );
 
   /**
@@ -180,6 +206,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
     effectiveReportTemplate,
     boms,
     orders,
+    plans,
     onReportSubmit,
     onReportSubmitProduct,
     getScanMaxQty,
@@ -420,6 +447,8 @@ const ReportModal: React.FC<ReportModalProps> = ({
                 onVariantDefChange={handleVariantDefectiveChange}
                 onScanBatchConfirm={handleScanBatchConfirm}
                 resolveScanRowPreview={resolveReportScanRowPreview}
+                scanWeightProps={scanWeightProps}
+                scanEnabled={scanEnabled}
               />
             ) : (
               <ReportSingleVariantInput
@@ -440,6 +469,8 @@ const ReportModal: React.FC<ReportModalProps> = ({
                 totalRework={totalRework}
                 onScanBatchConfirm={handleScanBatchConfirm}
                 resolveScanRowPreview={resolveReportScanRowPreview}
+                scanWeightProps={scanWeightProps}
+                scanEnabled={scanEnabled}
               />
             )}
 

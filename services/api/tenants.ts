@@ -24,7 +24,7 @@ export const roles = {
 
 // ── Tenants ──
 export const tenants = {
-  list: () => request<Array<{ id: string; name: string; logo?: string; inviteCode: string; status?: string; expiresAt?: string | null; role: string; permissions: unknown; joinedAt: string }>>('/tenants?all=true'),
+  list: () => request<Array<{ id: string; name: string; logo?: string; inviteCode: string; status?: string; expiresAt?: string | null; role: string; permissions: unknown; joinedAt: string; equipmentFeaturesEnabled?: boolean; industryKind?: string }>>('/tenants?all=true'),
   create: (data: { name: string; logo?: string }) =>
     request<{ tenant: { id: string; name: string; status: string }; message: string }>('/tenants', { method: 'POST', body: JSON.stringify(data) }),
   select: async (id: string) => {
@@ -35,6 +35,7 @@ export const tenants = {
       permissions: string[];
       expiresAt?: string | null;
       equipmentFeaturesEnabled?: boolean;
+      industryKind?: string;
       accessToken: string;
       refreshToken: string;
     }>(`/tenants/${id}/select`, { method: 'POST' });

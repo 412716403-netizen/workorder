@@ -365,7 +365,7 @@
 
 | 子模块 | 管理实体 | 规则 |
 |--------|----------|------|
-| 产品分类管理 | `categories` | 支持 `customFields` 扩展；**名称租户内唯一**（新增/编辑，忽略首尾空白与大小写） |
+| 产品分类管理 | `categories` | 支持 `customFields` 扩展；**名称租户内唯一**（新增/编辑，忽略首尾空白与大小写）；**「启用颜色尺码」开关仅毛衣工厂行业租户可见**（租户 `industryKind = sweater_factory`，由平台在企业管理中指定，经登录/选企业/租户列表接口透传到前端 `tenantCtx.industryKind`）；通用行业租户隐藏该开关，但已开启颜色尺码的分类仍显示开关便于关闭 |
 | 合作单位分类 | `partnerCategories` | 支持 `customFields` 扩展；名称租户内唯一 |
 | 工序节点库 | `globalNodes` | 维护工序名称、功能开关、`reportDisplayTemplate`（报工页展示内容）等；`reportTemplate`（报工自定义单据内容）在 **工单中心 → 表单配置 → 字段配置** 按工序维护；工序名称租户内唯一 |
 | 仓库管理 | `warehouses` | 支持 code 自动生成或手工填写；仓库名称租户内唯一 |
@@ -376,11 +376,11 @@
 
 | 子模块 | 管理实体 | 规则 |
 |--------|----------|------|
-| 产品与 BOM | `products`, `boms` | 支持产品编辑、变体管理、BOM 绑定 |
+| 产品与 BOM | `products`, `boms` | 支持产品编辑、变体管理、BOM 绑定；**改名级联**：修改产品名称/编号时，后端事务内同步刷新工单快照字段 `ProductionOrder.productName` / `ProductionOrder.sku`，保证工单中心、报工记录及相关单据展示与产品档案一致（PSI、财务、计划单等均按 `productId` 动态取名，无需级联；跨租户协作单据的 `senderProductName` 为发出时快照，刻意不随改名变化）；**规格删除限制**：取消勾选颜色/尺码即删除对应变体，若变体已被业务数据引用（工单明细、工单/产品报工记录、产品工序进度、生产操作记录、进销存流水、计划单明细、扫码批次、单品码）则禁止删除——前端取消勾选时经 `GET /products/:id/variant-usage` 预检提示，后端保存时同口径校验 409 兜底；变体写入为 diff 式（保留的 update、新增 create、移除先校验再 delete），被删变体的变体级 BOM（配置数据）随之清理 |
 | 合作单位 | `partners` | 关联 `partnerCategories`；**名称租户内唯一**（新增/编辑均校验，忽略首尾空白与大小写）；**单位编号**（`partnerListNo`）创建时按租户递增自动生成，**不可编辑**；**改名级联**：修改单位名称时，后端事务内同步更新名称快照字段 `ProductionOpRecord.partner`（外协/委外返工）、`PsiRecord.partner`（按 `partnerId` 或旧名称匹配）、`FinanceRecord.partner`，保证外协管理、外协流水及相关单据展示一致 |
 | 工人管理 | `workers` | 支持按工序派工 |
 | 设备管理 | `equipment` | 支持按工序派工 |
-| 公共数据字典 | `dictionaries` | 维护颜色、尺码、单位三组数据 |
+| 公共数据字典 | `dictionaries` | 维护颜色、尺码、单位三组数据；**名称同类型租户内唯一**；**删除限制**：被业务数据按 id 引用时禁止删除（颜色/尺码查产品勾选 `colorIds`/`sizeIds`、产品规格 `ProductVariant.colorId/sizeId`、开发款式规格 `DevStyleVariant`；单位查 `Product.unitId`），409 列明细；前端删除有确认弹窗。改名安全（业务引用按 id 动态取名），但变体 `skuSuffix` 为创建时快照、跨租户协作按名称匹配规格，改名不回刷这两处 |
 
 ### 5.3 工序工价
 
@@ -449,6 +449,8 @@
 - **不改变扫码去重所依赖的 `item_code_id / virtual_batch_id` 列写入**：`__scanItemCodeIds` 只服务于追溯展示，去重（`assertScanNotAlreadyUsed` / `buildDupIdsFilter` 的批次展开）行为不变。
 - 追溯 SQL（[`itemCodes.service.ts`](../backend/src/services/itemCodes.service.ts) 的 `traceScanLinkSql`）：记录带 `__scanItemCodeIds` 数组时按列表逐件匹配（忽略列）；否则回退 `virtual_batch_id / item_code_id` 列匹配。仅按批次追溯（scope 无具体单品码）时直接用列，单品模式记录仍写了 `virtual_batch_id`，整批查询照样能命中。
 - 矩阵报工/多规格：逐件列表**按规格**收集与写入；同一规格被拆到多条记录（如生产入库按工单分摊）时只首条携带列表，避免追溯出现重复事件。
+- **委外返工收回去重**：委外返工报工提交时会同时写 `REWORK_REPORT` 与镜像 `OUTSOURCE（已收回，sourceReworkId 非空）`；产品追溯时间轴**仅展示返工报工**，不重复展示后者（与外协管理流水 `!sourceReworkId` 过滤口径一致）。
+- **外协收货派生报工去重**：普通外协收货写入 `OUTSOURCE（已收回）` 后，`applyOutsourceProgress` 会同步派生 `milestone_reports` / `product_progress_reports`（`customData.source = 'outsourceReceive'`）；追溯时间轴**仅展示外协收货**，不重复展示派生工序报工。
 - 该键以 `__` 前缀标记为内部元数据，报工详情/打印不展示（见 [`effectiveReportTemplate.ts`](../utils/effectiveReportTemplate.ts) 的 `INTERNAL_CUSTOM_DATA_KEYS`）。
 - **例外**：外协收货（[`OutsourcePanel.handleReceiveFormSubmit`](../views/production-ops/OutsourcePanel.tsx)）单品码模式采用「逐件单独落一条 qty1 记录、各挂自己的 `item_code_id`」实现同样效果，不走 `__scanItemCodeIds` 列表（见 5.4.2）。
 
@@ -458,7 +460,7 @@
 
 **流程**：
 
-1. 弹出扫码会话（[`ScanBatchSessionModal`](../components/scan/ScanBatchSessionModal.tsx)），顶部 `headerSlot` 内嵌**加工厂下拉**（候选项 = 当前待收回清单中出现过的加工厂去重）。未选加工厂前手工粘贴区与「确认应用」禁用；若用户仍用扫码枪扫入，toast 提示「请先在上方选择加工厂后再开始扫码」并播放错误音。
+1. 弹出扫码会话（[`ScanBatchSessionModal`](../components/scan/ScanBatchSessionModal.tsx)），顶部 `headerSlot` 内嵌**加工厂下拉**（候选项 = 当前待收回清单中出现过的加工厂去重）。未选加工厂前「确认应用」禁用；若用户仍用扫码枪扫入，toast 提示「请先在上方选择加工厂后再开始扫码」并播放错误音。
 2. 选定加工厂后开始扫码，**首条命中码自动锁定该工序**（UI 顶部出现「工序已锁定」徽标）；后续扫到不同工序的码 toast「请分批收货」并拒绝。
 3. 点「确认应用」时，由 [`OutsourcePanel.handleReceiveScanConfirm`](../views/production-ops/OutsourcePanel.tsx) 把命中行 baseKey 合并入 `receiveSelectedKeys`、把每条 entry 的 `{ key, qty }` 累加到 `receiveFormQuantities`，关闭清单弹窗、打开「外协收货 · 录入数量」弹窗供用户复核提交。提交链路与「勾选→收货」完全一致（`onAddRecord` → `POST /api/production/records`）。
 4. 用户在清单里已经手动勾选过的行若与扫码命中行的工厂 / 工序不一致 → toast 报错并拒绝合并，要求先清空已勾选项。
@@ -480,6 +482,27 @@
   - 受单条记录只有一个链路字段限制，逐件落记录是为支持「同款多件各自独立追溯」；若提交前在录入弹窗把数量改小，则按数量截取前 N 件带链路，改大的多出部分并入一条无链路记录。
 
 **实现锚点**：[`OutsourceReceiveListModal.handleScanApply`](../views/production-ops/OutsourceReceiveListModal.tsx) + [`useOutsourceReceiveScan`](../hooks/useOutsourceReceiveScan.ts) + [`OutsourcePanel.handleReceiveScanConfirm`](../views/production-ops/OutsourcePanel.tsx)。录入弹窗内的扫码按钮（[`OutsourceReceiveQuantityModal`](../views/production-ops/OutsourceReceiveQuantityModal.tsx) 顶部「扫码录入」）保留并复用同一 hook，仅在已勾选行范围内累加（不传 `partner` / `isNodeAllowed`，因为 `receiveSelectedKeys` 已经保证同工厂 + 同工序）。
+
+### 5.4.3 扫码称重校验（电子秤 + 标准重量）
+
+**插件开关**：以上扫码累加、追溯码生成/查询、以及本节称重能力均依赖租户插件 **`traceability`（追溯码）**。插件中心关闭后：侧栏/快捷「扫码追溯」、计划详情追溯码区块、报工/外协/返工/待入库扫码按钮、工序「报工时记录重量」、单件标准重量与容差设置等 UI 均不可用（存量租户在插件上线前未写入 `featurePlugins.traceability` 键时视为已开启；新建租户默认关闭）。
+
+**适用入口**：工序报工、外协收货扫码、返工报工批量扫码会话（**不含**待入库扫码；待入库扫码亦受追溯码插件总开关控制）。
+
+**标准重量维护**：产品档案 → 编辑产品 → 点击「设置单件标准重量」打开弹窗，按 **规格 × 工序** 录入 kg；数据存 `product_variants.node_unit_weights`（JSON）。弹窗矩阵输入框右侧「均 X kg」为历史外协收货单件重量均值（Σ交货重÷Σ收货件数，仅统计已落库的 `OUTSOURCE` 已收回且含重量记录）。
+
+**容差**：租户级 `SystemSetting.weightTolerancePercent`（默认 5），在「设置 → 生产业务配置 → 数量上限」区块维护。
+
+**现场流程**：
+
+1. 批量扫码弹窗顶部有**秤捕获输入框**（打开后自动聚焦）：HID 秤稳定后会把读数打进该框，左侧同步显示 kg；扫码枪仍可用（快速按键不会写入该框）。
+2. 现场顺序：**放货 → 待重量显示 → 扫本包标签 → 换下一包重复**。
+2. 每次扫码成功时快照当前秤读数；期望重量 = `nodeUnitWeights[nodeId] × 扫码数量`（批次码数量取 `PlanVirtualBatch.quantity`，单品码为 1）。
+3. 扫码列表每行**同一行**展示理论重量与实测重量（`理论 X kg · 实测 Y kg`）；未维护理论重量时显示「未设置」。有 `basic:products:edit` 权限时，行内**设置**按钮打开弹窗，维护该产品**全部规格 × 工序**的单件标准重量矩阵（与产品档案编辑页一致，写回 `nodeUnitWeights`）。
+4. 偏差超过容差 → 列表行标红 + toast 告警 + 错误提示音；**不强制拦截**，用户仍可确认应用。
+5. 实测重量**不落库**；若当前工序开启 `enableWeightOnReport`，报工扫码确认后会把会话累计实测总重自动填入报工表单的「交货总重」字段（用户可改）。
+
+**实现锚点**：[`hooks/useScanSessionKeyboard.ts`](../hooks/useScanSessionKeyboard.ts)、[`utils/scanSessionKeyboardLogic.ts`](../utils/scanSessionKeyboardLogic.ts)、[`components/scan/ScaleWeightInput.tsx`](../components/scan/ScaleWeightInput.tsx)、[`components/scan/ScanBatchSessionModal.tsx`](../components/scan/ScanBatchSessionModal.tsx)、[`components/scan/ScanUnitWeightSettingPopover.tsx`](../components/scan/ScanUnitWeightSettingPopover.tsx)、[`utils/scanWeightCheck.ts`](../utils/scanWeightCheck.ts)。
 
 ### 5.5 协作派发：乙方接收与产品分类
 

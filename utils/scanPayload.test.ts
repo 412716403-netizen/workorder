@@ -33,6 +33,29 @@ describe('parseScanPayload', () => {
     expect(p.token).toBe(token);
   });
 
+  it('parses uppercase scan URL from some scanners (HTTP://HOST/SCAN/token)', () => {
+    const token = 'cabbaeb9.SBUEPxwv9TDYabcd';
+    const raw = `HTTP://LOCALHOST:3000/SCAN/${token}`;
+    const p = parseScanPayload(raw);
+    expect(p.kind).toBe('ITEM');
+    expect(p.token).toBe(token);
+  });
+
+  it('normalizes uppercase tenant hex prefix in extracted token', () => {
+    const raw = 'HTTP://LOCALHOST:3000/SCAN/BATCH/CABBAEB9.SBUEPxwv9TDYabcd';
+    const p = parseScanPayload(raw.replace('/SCAN/BATCH/', '/scan/batch/'));
+    expect(p.kind).toBe('BATCH');
+    expect(p.token).toBe('cabbaeb9.SBUEPxwv9TDYabcd');
+  });
+
+  it('parses uppercase batch scan URL', () => {
+    const token = 'a1b2c3d4.Z9Y8X7W6V5U4T3S2';
+    const raw = `HTTPS://APP.EXAMPLE.COM/SCAN/BATCH/${token}`;
+    const p = parseScanPayload(raw);
+    expect(p.kind).toBe('BATCH');
+    expect(p.token).toBe(token);
+  });
+
   it('rejects token shorter than min length', () => {
     expect(parseScanPayload('http://localhost:3000/scan/short').kind).toBe('UNKNOWN');
   });

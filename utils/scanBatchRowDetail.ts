@@ -18,6 +18,19 @@ export interface ScanBatchRowDetail {
    */
   itemCodeId?: string | null;
   virtualBatchId?: string | null;
+  /** 扫码结果产品/规格（称重校验用） */
+  productId?: string | null;
+  variantId?: string | null;
+  /** 业务上下文工序（报工/外协/返工）；外协由 prepareScan 注入 */
+  nodeId?: string | null;
+  /** 称重校验：实测/期望/偏差（仅 enableWeightCheck 时有值） */
+  measuredWeightKg?: number | null;
+  /** 单件标准重量(kg)，用于展示理论重量 */
+  unitWeightKg?: number | null;
+  expectedWeightKg?: number | null;
+  deviationPercent?: number | null;
+  weightCheckOk?: boolean | null;
+  weightCheckSkipped?: boolean;
 }
 
 function deriveColorSizeSpec(res: {
@@ -66,6 +79,8 @@ export function scanItemResultToRowDetail(res: ScanItemCodeResult): ScanBatchRow
     specNote,
     itemCodeId: res.itemCodeId ?? null,
     virtualBatchId: res.batchId ?? null,
+    productId: res.productId ?? null,
+    variantId: res.variantId ?? null,
   };
 }
 
@@ -81,5 +96,7 @@ export function scanVirtualBatchResultToRowDetail(res: ScanVirtualBatchResult): 
     specNote,
     itemCodeId: null,
     virtualBatchId: res.batchId ?? null,
+    productId: res.productId ?? null,
+    variantId: res.variantId ?? null,
   };
 }

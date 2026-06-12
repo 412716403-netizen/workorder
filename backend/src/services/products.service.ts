@@ -79,6 +79,185 @@ function normalizeProductNameSku(
   return { name, sku };
 }
 
+// ── 变体（颜色/尺码规格）引用校验与 diff 写入 ──
+
+type VariantRef = { id: string; skuSuffix: string | null };
+type VariantUsageDetail = { label: string; count: number };
+
+/**
+ * 统计指定变体在各业务表中的引用条数（按 variantId 分组）。
+ * 覆盖含 variantId 的业务数据表；Bom.variantId 属配置数据，删除变体时级联清理，不在此列。
+ */
+async function collectVariantUsage(
+  db: TenantPrismaClient,
+  productId: string,
+  variantIds: string[],
+): Promise<Map<string, VariantUsageDetail[]>> {
+  const result = new Map<string, VariantUsageDetail[]>();
+  if (variantIds.length === 0) return result;
+  const vIn = { in: variantIds };
+  const groupArgs = { by: ['variantId'] as ['variantId'], _count: { _all: true as const } };
+
+  const [orderItems, milestoneReports, pmps, pmpReports, opRecords, psiRecords, planItems, virtualBatches, itemCodes] =
+    await Promise.all([
+      db.orderItem.groupBy({ ...groupArgs, where: { variantId: vIn, productionOrder: { productId } } }),
+      db.milestoneReport.groupBy({ ...groupArgs, where: { variantId: vIn, milestone: { productionOrder: { productId } } } }),
+      db.productMilestoneProgress.groupBy({ ...groupArgs, where: { variantId: vIn, productId } }),
+      db.productProgressReport.groupBy({ ...groupArgs, where: { variantId: vIn, progress: { productId } } }),
+      db.productionOpRecord.groupBy({ ...groupArgs, where: { variantId: vIn, productId } }),
+      db.psiRecord.groupBy({ ...groupArgs, where: { variantId: vIn, productId } }),
+      db.planItem.groupBy({ ...groupArgs, where: { variantId: vIn, planOrder: { productId } } }),
+      db.planVirtualBatch.groupBy({ ...groupArgs, where: { variantId: vIn, productId } }),
+      db.itemCode.groupBy({ ...groupArgs, where: { variantId: vIn, productId } }),
+    ]);
+
+  const add = (label: string, rows: Array<{ variantId: string | null; _count: { _all: number } }>) => {
+    for (const row of rows) {
+      if (!row.variantId || row._count._all === 0) continue;
+      const list = result.get(row.variantId) ?? [];
+      list.push({ label, count: row._count._all });
+      result.set(row.variantId, list);
+    }
+  };
+  add('工单明细', orderItems);
+  add('工单报工记录', milestoneReports);
+  add('产品工序进度', pmps);
+  add('产品报工记录', pmpReports);
+  add('生产操作记录', opRecords);
+  add('进销存流水', psiRecords);
+  add('计划单明细', planItems);
+  add('扫码批次', virtualBatches);
+  add('单品码', itemCodes);
+  return result;
+}
+
+function variantLabelOf(v: VariantRef): string {
+  return (v.skuSuffix ?? '').trim() || v.id;
+}
+
+/** 删除变体前校验：任一变体已被业务数据引用则 409，按规格列出引用明细。 */
+async function assertVariantsRemovable(
+  db: TenantPrismaClient,
+  productId: string,
+  removed: VariantRef[],
+): Promise<void> {
+  const usage = await collectVariantUsage(db, productId, removed.map((v) => v.id));
+  const blocked = removed.filter((v) => (usage.get(v.id) ?? []).length > 0);
+  if (blocked.length === 0) return;
+  const msgs = blocked.map((v) => {
+    const details = usage.get(v.id)!;
+    return `规格【${variantLabelOf(v)}】有 ${details.map((d) => `${d.count} 条${d.label}`).join('、')}`;
+  });
+  throw new AppError(409, `无法删除已产生业务数据的颜色/尺码：${msgs.join('；')}。请保留该规格，或先处理相关单据。`);
+}
+
+/** 规范化提交的变体行：补 id、剥离关系/审计字段、对齐 nodeBoms / nodeUnitWeights。 */
+function cleanVariantInput(v: Record<string, unknown>, productId: string): Record<string, unknown> & { id: string } {
+  const { id, createdAt, updatedAt, tenantId, product, productId: _pid, nodeBOMs, ...fields } = v as Record<string, unknown> & {
+    id?: string;
+    nodeBOMs?: unknown;
+  };
+  return {
+    ...fields,
+    id: id || genId('pv'),
+    nodeBoms: nodeBOMs ?? (fields as { nodeBoms?: unknown }).nodeBoms ?? {},
+    nodeUnitWeights: (fields as { nodeUnitWeights?: unknown }).nodeUnitWeights ?? {},
+    productId,
+  };
+}
+
+type VariantWritePlan = {
+  removedIds: string[];
+  toUpdate: Array<Record<string, unknown> & { id: string }>;
+  toCreate: Array<Record<string, unknown> & { id: string }>;
+};
+
+/**
+ * 计算变体 diff 写入计划（替代旧的「全删全建」）：
+ * 被移除的变体先过引用校验；保留的只 update，新增的 create，避免误删后重建丢失外部引用。
+ */
+async function planVariantWrite(
+  db: TenantPrismaClient,
+  productId: string,
+  variants: Array<Record<string, unknown>>,
+): Promise<VariantWritePlan> {
+  const existing = await db.productVariant.findMany({
+    where: { productId },
+    select: { id: true, skuSuffix: true },
+  });
+  const clean = variants.map((v) => cleanVariantInput(v, productId));
+  const submittedIds = new Set(clean.map((v) => v.id));
+  const removed = existing.filter((v) => !submittedIds.has(v.id));
+  if (removed.length > 0) await assertVariantsRemovable(db, productId, removed);
+  const existingIds = new Set(existing.map((v) => v.id));
+  return {
+    removedIds: removed.map((v) => v.id),
+    toUpdate: clean.filter((v) => existingIds.has(v.id)),
+    toCreate: clean.filter((v) => !existingIds.has(v.id)),
+  };
+}
+
+/**
+ * 变体写入所需的最小事务客户端形状。
+ * 租户扩展客户端与 basePrisma 的事务客户端泛型签名不互相兼容，这里用结构化类型同时接住两者。
+ */
+type VariantWriteTx = {
+  bom: { deleteMany: (args: { where: Prisma.BomWhereInput }) => Promise<unknown> };
+  productVariant: {
+    deleteMany: (args: { where: Prisma.ProductVariantWhereInput }) => Promise<unknown>;
+    update: (args: { where: Prisma.ProductVariantWhereUniqueInput; data: Prisma.ProductVariantUpdateInput }) => Promise<unknown>;
+    createMany: (args: { data: Prisma.ProductVariantCreateManyInput[] }) => Promise<unknown>;
+  };
+};
+
+/** 在事务内应用变体写入计划；被删变体的变体级 BOM（配置数据）一并清理。 */
+async function applyVariantWritePlan(
+  tx: VariantWriteTx,
+  productId: string,
+  plan: VariantWritePlan,
+): Promise<void> {
+  if (plan.removedIds.length > 0) {
+    await tx.bom.deleteMany({ where: { parentProductId: productId, variantId: { in: plan.removedIds } } });
+    await tx.productVariant.deleteMany({ where: { productId, id: { in: plan.removedIds } } });
+  }
+  for (const v of plan.toUpdate) {
+    const { id, productId: _pid, ...fields } = v;
+    await tx.productVariant.update({ where: { id }, data: fields as Prisma.ProductVariantUpdateInput });
+  }
+  if (plan.toCreate.length > 0) {
+    await tx.productVariant.createMany({ data: plan.toCreate as Prisma.ProductVariantCreateManyInput[] });
+  }
+}
+
+/** 查询变体引用情况（前端取消勾选颜色/尺码时预检用） */
+export async function getVariantUsage(
+  db: TenantPrismaClient,
+  productId: string,
+  variantIds: string[],
+) {
+  const product = await db.product.findUnique({
+    where: { id: productId },
+    include: { variants: { select: { id: true, skuSuffix: true } } },
+  });
+  if (!product) throw new AppError(404, '产品不存在');
+  const known = new Map(product.variants.map((v) => [v.id, v]));
+  // 只统计后端已持久化的变体；前端临时生成、尚未保存的 id 不可能有业务数据
+  const ids = (variantIds.length > 0 ? variantIds : product.variants.map((v) => v.id)).filter((id) => known.has(id));
+  const usage = await collectVariantUsage(db, productId, ids);
+  return {
+    productId,
+    usages: ids.map((id) => {
+      const details = usage.get(id) ?? [];
+      return {
+        variantId: id,
+        variantLabel: variantLabelOf(known.get(id)!),
+        total: details.reduce((sum, d) => sum + d.count, 0),
+        details,
+      };
+    }),
+  };
+}
+
 // ── Products CRUD ──
 
 export async function listProducts(
@@ -141,7 +320,12 @@ export async function createProduct(
   if (variants && Array.isArray(variants) && variants.length > 0) {
     cleanVariants = (variants as any[]).map((v: any) => {
       const { id, createdAt, updatedAt, tenantId: _t, product, productId, nodeBOMs, ...fields } = v;
-      return { id: id || genId('pv'), ...fields, nodeBoms: nodeBOMs ?? fields.nodeBoms ?? {} };
+      return {
+        id: id || genId('pv'),
+        ...fields,
+        nodeBoms: nodeBOMs ?? fields.nodeBoms ?? {},
+        nodeUnitWeights: fields.nodeUnitWeights ?? {},
+      };
     });
   }
   return db.product.create({
@@ -177,20 +361,23 @@ export async function updateProduct(
   if (dupName) throw new AppError(409, '产品名称已存在');
 
   const oldNodeIds = (existing.milestoneNodeIds as string[]) || [];
+  // 工单上的 productName/sku 是创建时的快照；产品改名/改编号后同步刷新，保持单据展示与档案一致
+  const nameOrSkuChanged = name !== existing.name || sku !== existing.sku;
+
+  // 被移除的变体（颜色/尺码组合）若已被业务数据引用，这里直接 409，不进事务
+  const variantPlan = variants && Array.isArray(variants)
+    ? await planVariantWrite(db, productId, variants as Array<Record<string, unknown>>)
+    : null;
 
   await db.$transaction(async (tx) => {
     await tx.product.update({ where: { id: productId }, data: data as Prisma.ProductUpdateInput });
-    if (variants && Array.isArray(variants)) {
-      await tx.productVariant.deleteMany({ where: { productId } });
-      if (variants.length > 0) {
-        for (const v of variants as any[]) { if (!v.id) v.id = genId('pv'); }
-        const cleanVariants = (variants as any[]).map((v: Record<string, unknown>) => {
-          const { createdAt, updatedAt, product, nodeBOMs, ...fields } = v as any;
-          return { ...fields, nodeBoms: nodeBOMs ?? fields.nodeBoms ?? {}, productId };
-        });
-        await tx.productVariant.createMany({ data: cleanVariants });
-      }
+    if (nameOrSkuChanged) {
+      await tx.productionOrder.updateMany({
+        where: { productId },
+        data: { productName: name, sku },
+      });
     }
+    if (variantPlan) await applyVariantWritePlan(tx, productId, variantPlan);
   });
 
   const newNodeIds = (data.milestoneNodeIds as string[] | undefined) ?? oldNodeIds;
@@ -268,16 +455,9 @@ export async function syncVariants(
   const product = await db.product.findUnique({ where: { id: productId } });
   if (!product) throw new AppError(404, '产品不存在');
 
+  const plan = await planVariantWrite(db, productId, variants);
   await basePrisma.$transaction(async (tx) => {
-    await tx.productVariant.deleteMany({ where: { productId } });
-    if (variants.length > 0) {
-      const cleanVariants = variants.map((v: any) => {
-        const { createdAt, updatedAt, tenantId, product: _p, nodeBOMs, ...fields } = v;
-        if (!fields.id) fields.id = genId('pv');
-        return { ...fields, nodeBoms: nodeBOMs ?? fields.nodeBoms ?? {}, productId };
-      });
-      await tx.productVariant.createMany({ data: cleanVariants });
-    }
+    await applyVariantWritePlan(tx, productId, plan);
   });
 
   return basePrisma.productVariant.findMany({ where: { productId }, orderBy: { id: 'asc' } });
@@ -452,13 +632,13 @@ export async function importProducts(
         nodeRates: {} as Prisma.InputJsonValue, nodePricingModes: {} as Prisma.InputJsonValue,
       };
 
-      const variants: Array<{ id: string; colorId: string; sizeId: string; skuSuffix: string; nodeBoms: Prisma.InputJsonValue }> = [];
+      const variants: Array<{ id: string; colorId: string; sizeId: string; skuSuffix: string; nodeBoms: Prisma.InputJsonValue; nodeUnitWeights: Prisma.InputJsonValue }> = [];
       if (colorIds.length > 0 && sizeIds.length > 0) {
-        for (const cid of colorIds) { for (const sid of sizeIds) { variants.push({ id: genId('pv'), colorId: cid, sizeId: sid, skuSuffix: '', nodeBoms: {} as Prisma.InputJsonValue }); } }
+        for (const cid of colorIds) { for (const sid of sizeIds) { variants.push({ id: genId('pv'), colorId: cid, sizeId: sid, skuSuffix: '', nodeBoms: {} as Prisma.InputJsonValue, nodeUnitWeights: {} as Prisma.InputJsonValue }); } }
       } else if (colorIds.length > 0) {
-        for (const cid of colorIds) { variants.push({ id: genId('pv'), colorId: cid, sizeId: '', skuSuffix: '', nodeBoms: {} as Prisma.InputJsonValue }); }
+        for (const cid of colorIds) { variants.push({ id: genId('pv'), colorId: cid, sizeId: '', skuSuffix: '', nodeBoms: {} as Prisma.InputJsonValue, nodeUnitWeights: {} as Prisma.InputJsonValue }); }
       } else if (sizeIds.length > 0) {
-        for (const sid of sizeIds) { variants.push({ id: genId('pv'), colorId: '', sizeId: sid, skuSuffix: '', nodeBoms: {} as Prisma.InputJsonValue }); }
+        for (const sid of sizeIds) { variants.push({ id: genId('pv'), colorId: '', sizeId: sid, skuSuffix: '', nodeBoms: {} as Prisma.InputJsonValue, nodeUnitWeights: {} as Prisma.InputJsonValue }); }
       }
 
       await db.product.create({

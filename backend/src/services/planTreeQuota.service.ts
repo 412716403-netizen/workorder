@@ -33,6 +33,14 @@ export function parseScanTokenTenantHexPrefix(token: string): string | null {
   return prefix;
 }
 
+/** Prisma where：扫码 token 大小写不敏感匹配（部分扫码枪会整段 URL 大写）。 */
+export function scanTokenEqualsWhere(tenantId: string, scanToken: string) {
+  return {
+    tenantId,
+    scanToken: { equals: scanToken, mode: 'insensitive' as const },
+  };
+}
+
 /** 将扫码前缀解析为唯一租户 id；存在歧义或不存在时返回 null。 */
 export async function resolveTenantIdFromScanTokenPrefix(prefix8: string): Promise<string | null> {
   const rows = await basePrisma.$queryRaw<Array<{ id: string }>>(

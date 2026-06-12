@@ -7,7 +7,7 @@
  * - 提交确认（扫码在待入库清单弹窗完成，确认后进入本页）
  */
 import React from 'react';
-import { Check } from 'lucide-react';
+import { Check, Package, Warehouse as WarehouseIcon } from 'lucide-react';
 import type {
   AppDictionaries,
   Warehouse,
@@ -17,8 +17,17 @@ import type {
 import { productHasColorSizeMatrix } from '../../../utils/productColorSize';
 import VariantQtyMatrixInputs from '../../../components/variant-matrix/VariantQtyMatrixInputs';
 import DocPhaseModal from '../../../components/DocPhaseModal';
-import { StockInCustomCreateFields, expandPendingByVariantForMatrix, type PendingStockItem } from '../pendingStockStockInHelpers';
+import { StockInCustomCreateFields, expandPendingByVariantForMatrix } from '../pendingStockStockInHelpers';
 import type { usePendingStockState } from '../../../hooks/usePendingStockState';
+import {
+  formStandardControlClass,
+  formStandardLabelClass,
+  psiOrderBillFormCardClass,
+  psiOrderBillFormSectionIconEmeraldClass,
+  psiOrderBillFormSectionIconIndigoClass,
+  psiOrderBillFormGridGapClass,
+  sectionTitleClass,
+} from '../../../styles/uiDensity';
 
 type Helper = ReturnType<typeof usePendingStockState>;
 
@@ -32,6 +41,32 @@ interface Props {
   categoryMap: Map<string, ProductCategory>;
   onAddRecord?: unknown;
   onAddRecordBatch?: unknown;
+}
+
+function PendingStatCard({
+  label,
+  value,
+  unit,
+  highlight,
+}: {
+  label: string;
+  value: number;
+  unit: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-xl border px-3 py-2.5 ${
+        highlight ? 'border-indigo-200 bg-indigo-50/70' : 'border-slate-100 bg-slate-50/80'
+      }`}
+    >
+      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+      <p className={`mt-0.5 text-lg font-black tabular-nums ${highlight ? 'text-indigo-600' : 'text-slate-800'}`}>
+        {value}
+        <span className="ml-1 text-xs font-bold text-slate-400">{unit}</span>
+      </p>
+    </div>
+  );
 }
 
 const PendingStockSingleModal: React.FC<Props> = ({
@@ -64,15 +99,34 @@ const PendingStockSingleModal: React.FC<Props> = ({
   const hasColorSize = productHasColorSizeMatrix(product ?? undefined, category ?? undefined);
   const pendingCapsForSingle = expandPendingByVariantForMatrix(stockInOrder, product ?? undefined, category ?? undefined);
 
+  const productDisplayName = order.productName || product?.name || '关联产品';
   const unitName = getUnitName(order.productId);
+  const orderTotal =
+    productionLinkMode === 'product' ? stockInOrder.productBlockOrderTotal : stockInOrder.orderTotal;
+  const alreadyIn =
+    productionLinkMode === 'product'
+      ? (stockInOrder.productTotalStockIn ?? stockInOrder.alreadyIn)
+      : stockInOrder.alreadyIn;
+
   const totalStockInQty = hasColorSize
     ? (Object.values(stockInForm.variantQuantities) as number[]).reduce((s, q) => s + (q || 0), 0)
     : stockInForm.singleQuantity;
+  const exceedsPending = totalStockInQty > stockInOrder.pendingTotal;
   const canSubmitStockIn =
     !!(onAddRecord || onAddRecordBatch) &&
     totalStockInQty > 0 &&
-    totalStockInQty <= (stockInOrder?.pendingTotal ?? 0) &&
+    !exceedsPending &&
     !!stockInForm.warehouseId;
+
+  const resetForm = () => {
+    setStockInOrder(null);
+    setStockInForm({
+      warehouseId: singlePendingStockInDefaultWh(),
+      variantQuantities: {},
+      singleQuantity: 0,
+      customData: {},
+    });
+  };
 
   return (
     <DocPhaseModal
@@ -83,133 +137,159 @@ const PendingStockSingleModal: React.FC<Props> = ({
       zIndexClass="z-[85]"
       detailTitle=""
       editTitle=""
-      newTitle={`确认入库 — ${productionLinkMode === 'product' ? (order.productName || product?.name || '关联产品') : order.orderNumber}`}
+      newTitle={productDisplayName}
       hasPerm={() => false}
       viewPerm=""
       editPerm=""
-      onClose={() => {
-        setStockInOrder(null);
-        setStockInForm({ warehouseId: singlePendingStockInDefaultWh(), variantQuantities: {}, singleQuantity: 0, customData: {} });
-      }}
+      onClose={resetForm}
       onEnterEdit={() => {}}
       onCancelEdit={() => {}}
       renderContent={() => (
         <>
-          <div className="-mx-4 -mt-4 sm:-mx-6 sm:-mt-6 mb-4 px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-            <p className="text-sm font-bold text-slate-700">{order.productName || product?.name}</p>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {productionLinkMode === 'product' ? (
-                <>
-                  产品工单总数 {stockInOrder.productBlockOrderTotal} {unitName}，产品总入库{' '}
-                  {stockInOrder.productTotalStockIn ?? stockInOrder.alreadyIn} {unitName}，待入库 {stockInOrder.pendingTotal} {unitName}
-                </>
-              ) : (
-                <>
-                  工单总量 {stockInOrder.orderTotal} {unitName}，已入库 {stockInOrder.alreadyIn} {unitName}，待入库{' '}
-                  {stockInOrder.pendingTotal} {unitName}
-                </>
-              )}
-            </p>
-          </div>
-          <div className="space-y-4">
-            <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">入库仓库</label>
-              {warehouses.length > 0 ? (
-                <select
-                  value={stockInForm.warehouseId}
-                  onChange={e => setStockInForm(f => ({ ...f, warehouseId: e.target.value }))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none"
-                >
-                  <option value="">请选择仓库</option>
-                  {warehouses.map(w => (
-                    <option key={w.id} value={w.id}>
-                      {w.name}
-                      {w.code ? ` (${w.code})` : ''}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                  <span className="text-amber-500 text-lg">⚠</span>
-                  <p className="text-sm font-bold text-amber-700">请先在「进销存」中设置仓库后再进行入库操作</p>
-                </div>
-              )}
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                确认入库
+              </span>
+              {productionLinkMode !== 'product' && order.orderNumber ? (
+                <span className="text-xs font-bold text-slate-500">工单 {order.orderNumber}</span>
+              ) : null}
             </div>
-            <StockInCustomCreateFields
-              fields={stockInCustomFieldDefs}
-              values={stockInForm.customData}
-              onChange={(id, v) => setStockInForm(f => ({ ...f, customData: { ...f.customData, [id]: v } }))}
-              onFilePreview={(url, type) => setStockInFilePreview({ url, type })}
-            />
-            {hasColorSize && product?.variants?.length ? (
-              <div className="space-y-4">
-                <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider">入库数量明细（颜色尺码）</h4>
-                <VariantQtyMatrixInputs
-                  product={product}
-                  dictionaries={dictionaries}
-                  quantities={stockInForm.variantQuantities}
-                  onVariantQtyChange={(variantId, qty) =>
-                    setStockInForm(f => ({
-                      ...f,
-                      variantQuantities: { ...f.variantQuantities, [variantId]: qty },
-                    }))
-                  }
-                  getCellExtras={v => {
-                    const pending = pendingCapsForSingle[v.id] ?? 0;
-                    return { max: pending, hint: `待入库 ${pending}` };
-                  }}
-                />
-                <div className="flex flex-col items-end gap-1 p-3 bg-indigo-600 rounded-2xl text-white">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold opacity-80">本次入库合计:</span>
-                    <span className="text-lg font-black">
-                      {totalStockInQty} {unitName}
-                    </span>
+
+            <div className="grid grid-cols-3 gap-3">
+              <PendingStatCard label={productionLinkMode === 'product' ? '产品工单' : '工单总量'} value={orderTotal} unit={unitName} />
+              <PendingStatCard label="已入库" value={alreadyIn} unit={unitName} />
+              <PendingStatCard label="待入库" value={stockInOrder.pendingTotal} unit={unitName} highlight />
+            </div>
+
+            <div className={psiOrderBillFormCardClass}>
+              <section className="space-y-4">
+                <div className="flex items-center gap-2.5 border-b border-slate-100 pb-2.5">
+                  <div className={psiOrderBillFormSectionIconIndigoClass}>
+                    <WarehouseIcon className="h-4 w-4" />
                   </div>
-                  {totalStockInQty > stockInOrder.pendingTotal && (
-                    <span className="text-xs font-bold text-amber-200">
-                      不得超过可入库数量 {stockInOrder.pendingTotal} {unitName}
+                  <h4 className={sectionTitleClass}>1. 入库信息</h4>
+                </div>
+                <div className={`grid grid-cols-1 md:grid-cols-2 ${psiOrderBillFormGridGapClass}`}>
+                  <div className="space-y-1 md:col-span-2">
+                    <label className={formStandardLabelClass}>入库仓库</label>
+                    {warehouses.length > 0 ? (
+                      <select
+                        value={stockInForm.warehouseId}
+                        onChange={e => setStockInForm(f => ({ ...f, warehouseId: e.target.value }))}
+                        className={`${formStandardControlClass} bg-white`}
+                      >
+                        <option value="">请选择仓库</option>
+                        {warehouses.map(w => (
+                          <option key={w.id} value={w.id}>
+                            {w.name}
+                            {w.code ? ` (${w.code})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                        <span className="text-amber-500">⚠</span>
+                        <p className="text-xs font-bold text-amber-700">请先在「进销存」中设置仓库后再进行入库操作</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="md:col-span-2">
+                    <StockInCustomCreateFields
+                      fields={stockInCustomFieldDefs}
+                      values={stockInForm.customData}
+                      onChange={(id, v) => setStockInForm(f => ({ ...f, customData: { ...f.customData, [id]: v } }))}
+                      onFilePreview={(url, type) => setStockInFilePreview({ url, type })}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <section className="space-y-4 border-t border-slate-100 pt-5">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className={psiOrderBillFormSectionIconEmeraldClass}>
+                      <Package className="h-4 w-4" />
+                    </div>
+                    <h4 className={sectionTitleClass}>2. 入库数量</h4>
+                  </div>
+                  {!hasColorSize && (
+                    <span className="text-xs font-bold text-slate-400 tabular-nums">
+                      待入库 {stockInOrder.pendingTotal} {unitName}
                     </span>
                   )}
                 </div>
-              </div>
-            ) : (
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">
-                  入库数量 ({unitName})
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  max={stockInOrder.pendingTotal}
-                  value={stockInForm.singleQuantity || ''}
-                  onChange={e =>
-                    setStockInForm(f => ({
-                      ...f,
-                      singleQuantity: Math.max(
-                        0,
-                        Math.min(stockInOrder.pendingTotal, parseInt(e.target.value, 10) || 0),
-                      ),
-                    }))
-                  }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-4 px-6 text-xl font-bold text-indigo-600 focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder={`最多 ${stockInOrder.pendingTotal}`}
-                />
-              </div>
-            )}
+
+                {hasColorSize && product?.variants?.length ? (
+                  <div className="space-y-3">
+                    <VariantQtyMatrixInputs
+                      product={product}
+                      dictionaries={dictionaries}
+                      quantities={stockInForm.variantQuantities}
+                      onVariantQtyChange={(variantId, qty) =>
+                        setStockInForm(f => ({
+                          ...f,
+                          variantQuantities: { ...f.variantQuantities, [variantId]: qty },
+                        }))
+                      }
+                      getCellExtras={v => {
+                        const pending = pendingCapsForSingle[v.id] ?? 0;
+                        return { max: pending, hint: `待入库 ${pending}` };
+                      }}
+                    />
+                    <div
+                      className={`flex items-center justify-between rounded-xl border px-4 py-2.5 ${
+                        exceedsPending ? 'border-rose-200 bg-rose-50/60' : 'border-slate-100 bg-slate-50/80'
+                      }`}
+                    >
+                      <span className="text-xs font-bold text-slate-500">本次入库合计</span>
+                      <div className="text-right">
+                        <span className={`text-sm font-black tabular-nums ${exceedsPending ? 'text-rose-600' : 'text-indigo-600'}`}>
+                          {totalStockInQty} {unitName}
+                        </span>
+                        {exceedsPending && (
+                          <p className="text-[10px] font-bold text-rose-500 mt-0.5">
+                            不得超过 {stockInOrder.pendingTotal} {unitName}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="max-w-xs space-y-1.5">
+                    <label className={formStandardLabelClass}>入库数量 ({unitName})</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={stockInOrder.pendingTotal}
+                      value={stockInForm.singleQuantity || ''}
+                      onChange={e =>
+                        setStockInForm(f => ({
+                          ...f,
+                          singleQuantity: Math.max(
+                            0,
+                            Math.min(stockInOrder.pendingTotal, parseInt(e.target.value, 10) || 0),
+                          ),
+                        }))
+                      }
+                      className={`${formStandardControlClass} bg-white text-right font-bold tabular-nums text-indigo-600`}
+                      placeholder={`最多 ${stockInOrder.pendingTotal}`}
+                    />
+                    {exceedsPending && (
+                      <p className="text-[10px] font-bold text-rose-500">
+                        不得超过待入库 {stockInOrder.pendingTotal} {unitName}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </section>
+            </div>
           </div>
-          <div className="sticky bottom-0 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 mt-4 px-6 py-4 border-t border-slate-100 bg-white flex justify-end gap-3">
+
+          <div className="sticky bottom-0 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 mt-5 px-6 py-4 border-t border-slate-100 bg-white flex justify-end gap-3">
             <button
               type="button"
-              onClick={() => {
-                setStockInOrder(null);
-                setStockInForm({
-                  warehouseId: singlePendingStockInDefaultWh(),
-                  variantQuantities: {},
-                  singleQuantity: 0,
-                  customData: {},
-                });
-              }}
+              onClick={resetForm}
               className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200"
             >
               返回列表
@@ -233,6 +313,3 @@ const PendingStockSingleModal: React.FC<Props> = ({
 };
 
 export default PendingStockSingleModal;
-
-// 仅为消除 PendingStockItem 未使用的 import 警告(实际签名通过 helper 推断)
-void ({} as PendingStockItem | null);

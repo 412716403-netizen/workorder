@@ -1,6 +1,7 @@
 import { getTenantPrisma } from '../lib/prisma.js';
 import { str, optStr } from '../utils/request.js';
 import * as productionService from '../services/production.service.js';
+import { getReceiveUnitWeightAverages } from '../services/receiveUnitWeightAverages.service.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { warnListAllFromRequest, listQueryFromRequest } from '../utils/listQuery.js';
 
@@ -107,4 +108,14 @@ export const deleteRecord = asyncHandler(async (req, res) => {
 export const getDefectiveRework = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
   res.json(await productionService.getDefectiveRework(db));
+});
+
+export const receiveUnitWeightAverages = asyncHandler(async (req, res) => {
+  const productId = optStr(req.query.productId);
+  if (!productId) {
+    res.status(400).json({ error: '缺少 productId' });
+    return;
+  }
+  const db = getTenantPrisma(req.tenantId!);
+  res.json(await getReceiveUnitWeightAverages(db, productId));
 });

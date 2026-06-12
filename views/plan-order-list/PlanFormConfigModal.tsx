@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import type {
   PlanFormSettings,
   PlanOrder,
@@ -8,6 +8,7 @@ import type {
 } from '../../types';
 import { BusinessFormConfigModal } from '../../components/form-config/BusinessFormConfigModal';
 import { planFormConfigSchema } from '../../components/form-config/schemas/planFormConfigSchema';
+import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
 
 interface PlanFormConfigModalProps {
   open: boolean;
@@ -37,12 +38,25 @@ const PlanFormConfigModal: React.FC<PlanFormConfigModalProps> = ({
   plans,
   orders,
   products,
-}) => (
+}) => {
+  const { traceEnabled } = useTraceabilityPlugin();
+  const schema = useMemo(() => {
+    if (traceEnabled) return planFormConfigSchema;
+    return {
+      ...planFormConfigSchema,
+      tabs: planFormConfigSchema.tabs.map(tab => ({
+        ...tab,
+        sections: tab.sections.filter(s => s.id !== 'labelPrint'),
+      })),
+    };
+  }, [traceEnabled]);
+
+  return (
   <BusinessFormConfigModal
     open={open}
     onClose={onClose}
     defaultTabId={defaultTabWhenOpen}
-    schema={planFormConfigSchema}
+    schema={schema}
     initialValue={settings}
     onSave={onSave}
     productionLinkMode={productionLinkMode}
@@ -53,6 +67,7 @@ const PlanFormConfigModal: React.FC<PlanFormConfigModalProps> = ({
     orders={orders}
     products={products}
   />
-);
+  );
+};
 
 export default React.memo(PlanFormConfigModal);

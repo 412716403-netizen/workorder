@@ -66,7 +66,7 @@ export const WORKBENCH_SHORTCUT_CATALOG: WorkbenchShortcutDefinition[] = [
   { id: 'basic-dictionaries', label: '公共数据字典', group: '基础信息', href: '/basic', tab: 'DICTIONARIES', icon: 'Library', module: 'basic', perm: 'basic:dictionaries:view' },
 
   { id: 'collaboration-inbox', label: '协作管理', group: '协作', href: '/collaboration', icon: 'Inbox', module: 'collaboration', pluginId: 'collaboration' },
-  { id: 'trace-scan', label: '扫码追溯', group: '工具', href: '/trace', icon: 'ScanLine', pluginId: 'virtual_batch' },
+  { id: 'trace-scan', label: '扫码追溯', group: '工具', href: '/trace', icon: 'ScanLine', pluginId: 'traceability' },
   { id: 'development', label: '开发管理', group: '开发', href: '/development', icon: 'FlaskConical', module: 'development', pluginId: 'development' },
   { id: 'knowledge-base', label: '资料库', group: '工具', href: '/knowledge-base', icon: 'BookOpen', module: 'knowledge_base', pluginId: 'knowledge_base' },
   { id: 'settings', label: '系统设置', group: '系统', href: '/settings', tab: 'categories', icon: 'Settings', module: 'settings', perm: 'settings:categories:view' },

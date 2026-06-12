@@ -75,6 +75,8 @@ const SettingsView: React.FC = () => {
   const onUpdateAllowExceedMaxReportQty = a.onUpdateAllowExceedMaxReportQty;
   const allowExceedMaxOutsourceReceiveQty = c.allowExceedMaxOutsourceReceiveQty;
   const onUpdateAllowExceedMaxOutsourceReceiveQty = a.onUpdateAllowExceedMaxOutsourceReceiveQty;
+  const weightTolerancePercent = c.weightTolerancePercent;
+  const onUpdateWeightTolerancePercent = a.onUpdateWeightTolerancePercent;
   const onRefreshCategories = a.refreshCategories;
   const onRefreshPartnerCategories = a.refreshPartnerCategories;
   const onRefreshGlobalNodes = a.refreshGlobalNodes;
@@ -240,6 +242,8 @@ const SettingsView: React.FC = () => {
             onUpdateAllowExceedMaxReportQty={onUpdateAllowExceedMaxReportQty}
             allowExceedMaxOutsourceReceiveQty={allowExceedMaxOutsourceReceiveQty}
             onUpdateAllowExceedMaxOutsourceReceiveQty={onUpdateAllowExceedMaxOutsourceReceiveQty}
+            weightTolerancePercent={weightTolerancePercent}
+            onUpdateWeightTolerancePercent={onUpdateWeightTolerancePercent}
             canEdit={canEdit('production')}
           />
         )}

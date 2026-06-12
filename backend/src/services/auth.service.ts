@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { AppError } from '../middleware/errorHandler.js';
 import type { JwtPayload } from '../types/index.js';
-import { ALL_PERMISSIONS } from '../types/index.js';
+import { ALL_PERMISSIONS, normalizeTenantIndustryKind } from '../types/index.js';
 import { prisma } from '../lib/prisma.js';
 import { hashToken } from '../utils/cookies.js';
 import {
@@ -72,6 +72,7 @@ type TenantPayloadResult = {
     status: string;
     expiresAt: string | null;
     equipmentFeaturesEnabled: boolean;
+    industryKind: string;
   }>;
 };
 
@@ -79,7 +80,7 @@ async function loadTenantPayloadFromDb(userId: string, tenantId?: string): Promi
   const memberships = await prisma.tenantMembership.findMany({
     where: { userId },
     include: {
-      tenant: { select: { id: true, name: true, status: true, expiresAt: true, equipmentModuleEnabled: true } },
+      tenant: { select: { id: true, name: true, status: true, expiresAt: true, equipmentModuleEnabled: true, industryKind: true } },
       customRole: { select: { permissions: true } },
     },
   });
@@ -96,6 +97,7 @@ async function loadTenantPayloadFromDb(userId: string, tenantId?: string): Promi
     status: m.tenant.status,
     expiresAt: m.tenant.expiresAt?.toISOString() ?? null,
     equipmentFeaturesEnabled: m.tenant.equipmentModuleEnabled !== false,
+    industryKind: normalizeTenantIndustryKind(m.tenant.industryKind),
   }));
 
   const activeMemberships = memberships.filter(m => m.tenant.status === 'active');
@@ -321,7 +323,7 @@ export async function selectTenant(userId: string, tenantId: string) {
   const membership = await prisma.tenantMembership.findUnique({
     where: { userId_tenantId: { userId, tenantId } },
     include: {
-      tenant: { select: { id: true, name: true, status: true, expiresAt: true, equipmentModuleEnabled: true } },
+      tenant: { select: { id: true, name: true, status: true, expiresAt: true, equipmentModuleEnabled: true, industryKind: true } },
       customRole: { select: { permissions: true } },
     },
   });
@@ -357,6 +359,7 @@ export async function selectTenant(userId: string, tenantId: string) {
     permissions,
     expiresAt: membership.tenant.expiresAt?.toISOString() ?? null,
     equipmentFeaturesEnabled: membership.tenant.equipmentModuleEnabled !== false,
+    industryKind: normalizeTenantIndustryKind(membership.tenant.industryKind),
     ...tokens,
   };
 }
@@ -421,7 +424,7 @@ export async function getMe(userId: string) {
   const memberships = await prisma.tenantMembership.findMany({
     where: { userId },
     include: {
-      tenant: { select: { id: true, name: true, status: true, expiresAt: true, equipmentModuleEnabled: true } },
+      tenant: { select: { id: true, name: true, status: true, expiresAt: true, equipmentModuleEnabled: true, industryKind: true } },
       customRole: { select: { permissions: true } },
     },
   });
@@ -444,6 +447,7 @@ export async function getMe(userId: string) {
       status: m.tenant.status,
       expiresAt: m.tenant.expiresAt?.toISOString() ?? null,
       equipmentFeaturesEnabled: m.tenant.equipmentModuleEnabled !== false,
+      industryKind: normalizeTenantIndustryKind(m.tenant.industryKind),
     })),
   };
 }

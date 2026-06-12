@@ -22,6 +22,7 @@ import {
   DEFAULT_OUTSOURCE_FORM_SETTINGS,
   DEFAULT_REWORK_FORM_SETTINGS,
 } from '../types';
+import { applyTraceabilityLabelPrintDefaults } from '../shared/traceabilityLabelPrintDefaults';
 import { normalizePlanFormFieldConfigArray } from '../utils/planFormCustomField';
 // ── Decimal normalizer ──
 
@@ -195,6 +196,17 @@ export function repairPlanLabelPrintWhitelistMissingPlanLabelTemplates(
       allowedTemplateIds: next,
     },
   };
+}
+
+/** 追溯码插件开启时，补齐计划单标签打印默认配置（内存归一化，不写库） */
+export function ensureTraceabilityLabelPrintDefaults(
+  planForm: PlanFormSettings,
+  printTemplates: PrintTemplate[],
+  traceEnabled: boolean,
+  opts?: { forceEnableTraceSection?: boolean },
+): PlanFormSettings {
+  if (!traceEnabled) return planForm;
+  return applyTraceabilityLabelPrintDefaults(planForm, printTemplates, opts);
 }
 
 function normalizePlanListSlot(slot: PlanListPrintSettings | undefined): PlanListPrintSettings | undefined {

@@ -30,6 +30,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppDataProvider, useDataLoading } from './contexts/AppDataContext';
 import { useCollabPendingIndicator } from './hooks/useCollabPendingIndicator';
 import { useFeaturePlugins } from './hooks/useFeaturePlugins';
+import { useTraceabilityPlugin } from './hooks/useTraceabilityPlugin';
 import { hasCollaborationModuleAccess, canViewCollaborationList } from './utils/canViewAmount';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ConfirmProvider } from './contexts/ConfirmContext';
@@ -164,6 +165,7 @@ function AppLayout() {
     && canViewCollaborationList(tenantCtx?.tenantRole, tenantCtx?.permissions);
   const collabHasPending = useCollabPendingIndicator(tenantCtx?.tenantId ?? null, showCollabNav);
   const { isPluginEnabled } = useFeaturePlugins();
+  const { traceEnabled } = useTraceabilityPlugin();
   const showDevNav = hasPerm('development') && isPluginEnabled('development');
   const showKnowledgeNav = hasPerm('knowledge_base') && isPluginEnabled('knowledge_base');
   const showCollabNavWithPlugin = showCollabNav && isPluginEnabled('collaboration');
@@ -208,13 +210,15 @@ function AppLayout() {
             <Building2 className="h-4 w-4 shrink-0 text-violet-600" />
             <span className="truncate text-xs font-bold text-violet-800">{tenantCtx!.tenantName}</span>
           </button>
+          {traceEnabled ? (
           <Link
             to="/trace"
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-800 transition-colors hover:bg-slate-100 hover:text-slate-900 ${platformAdmin ? 'hidden' : ''}`}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-800 transition-colors hover:bg-slate-100 hover:text-slate-900"
             title="扫码追溯 / 产品追溯"
           >
             <ScanLine className="h-5 w-5" strokeWidth={2.25} />
           </Link>
+          ) : null}
         </div>
 
         <nav className="flex flex-col gap-1.5">
@@ -422,6 +426,24 @@ function CollaborationRoute() {
   return <CollaborationInboxView />;
 }
 
+function TraceRoute() {
+  const { traceEnabled } = useTraceabilityPlugin();
+  if (!traceEnabled) {
+    return (
+      <div className="max-w-md mx-auto mt-24 p-8 bg-white rounded-2xl border border-slate-200 text-center shadow-sm">
+        <p className="text-slate-700 font-bold mb-4">追溯码插件未开启</p>
+        <p className="text-sm text-slate-500 mb-4">请在插件中心开通「追溯码」后使用扫码追溯功能。</p>
+        <Link to="/workbench" className="text-indigo-600 font-bold hover:underline">返回工作台</Link>
+      </div>
+    );
+  }
+  return (
+    <Suspense fallback={<RouteFallback />}>
+      <TraceView />
+    </Suspense>
+  );
+}
+
 function KnowledgeBaseRoute() {
   const { hasPerm } = useAuth();
   const { isPluginEnabled } = useFeaturePlugins();
@@ -480,9 +502,7 @@ function AppRoutes() {
         path="/trace"
         element={
           <PlatformAdminBusinessGuard>
-            <Suspense fallback={<RouteFallback />}>
-              <TraceView />
-            </Suspense>
+            <TraceRoute />
           </PlatformAdminBusinessGuard>
         }
       />

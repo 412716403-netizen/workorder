@@ -20,6 +20,7 @@ import {
 import { toast } from 'sonner';
 import type { AppDictionaries } from '../../../types';
 import * as api from '../../../services/api';
+import { useConfirm } from '../../../contexts/ConfirmContext';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { useAsyncSubmitLock } from '../../../hooks/useAsyncSubmitLock';
 import { filterAndSortDictionaryRows } from '../../../utils/basicInfoFilters';
@@ -50,6 +51,7 @@ const DictionariesTab: React.FC<Props> = ({ dictionaries, onRefreshDictionaries,
   const [dictAddValue, setDictAddValue] = useState('');
   const [showModal, setShowModal] = useState(false);
   const dictSubmit = useAsyncSubmitLock();
+  const confirm = useConfirm();
 
   const units = dictionaries.units ?? [];
   const dictTotalCount = dictionaries.colors.length + dictionaries.sizes.length + units.length;
@@ -146,10 +148,17 @@ const DictionariesTab: React.FC<Props> = ({ dictionaries, onRefreshDictionaries,
     });
   };
 
-  const handleDeleteDictionary = async (id: string) => {
+  const handleDeleteDictionary = async (row: DictRow) => {
+    const kindLabel = row.kind === 'color' ? '颜色' : row.kind === 'size' ? '尺码' : '单位';
+    const ok = await confirm({
+      message: `确定删除${kindLabel}「${row.name}」？删除后不可恢复；若仍被产品引用，后台将拒绝删除。`,
+      danger: true,
+    });
+    if (!ok) return;
     try {
-      await api.dictionaries.delete(id);
+      await api.dictionaries.delete(row.id);
       await onRefreshDictionaries();
+      toast.success('已删除');
     } catch (err) {
       toast.error((err as Error).message || '操作失败');
     }
@@ -381,7 +390,7 @@ const DictionariesTab: React.FC<Props> = ({ dictionaries, onRefreshDictionaries,
                           {canDelete && (
                             <button
                               type="button"
-                              onClick={() => handleDeleteDictionary(row.id)}
+                              onClick={() => handleDeleteDictionary(row)}
                               className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors inline-flex"
                               aria-label="删除"
                             >

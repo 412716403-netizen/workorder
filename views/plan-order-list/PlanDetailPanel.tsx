@@ -61,6 +61,7 @@ import { formatPlanOrderCreatedAtForList, localTodayYmd, planIdToLocalYmd, toLoc
 // 改为调后端 `psi.nextDocNumber` / `psi.lastPurchasePrices`。
 import { PlanPrintTemplateManageDialog } from '../../components/plan-print/PlanPrintTemplateManageDialog';
 import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
+import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
 import { isEquipmentAssignmentEnabled, isWorkerAssignmentEnabled } from '../../utils/nodeAssignmentFlags';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import PlanTraceSection from './PlanTraceSection';
@@ -188,6 +189,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   onUpdatePlanFormSettings,
 }) => {
   const equipmentFeaturesOn = useEquipmentFeaturesEffective();
+  const { traceEnabled } = useTraceabilityPlugin();
   const confirm = useConfirm();
   const [labelPrintTemplateManageOpen, setLabelPrintTemplateManageOpen] = useState(false);
 
@@ -563,9 +565,11 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   const hasSubBom = (materialId: string) => boms.some(b => b.parentProductId === materialId);
   const leafMaterials = (materialRequirements as any[]).filter((m: any) => !hasSubBom(m.materialId));
   const leafWithShortage = leafMaterials.filter((m: any) => m.shortage > 0);
+  /** 计划用量 > 0 的叶子物料（默认回填缺料数；库存充足时也可手填后下采购单） */
+  const leafWithPlannedQty = leafMaterials.filter((m: any) => (m.plannedQty ?? 0) > 0);
   const allPlannedFilled = leafWithShortage.every((m: any) => (m.plannedQty ?? 0) > 0);
   const hasExistingPOs = Object.keys(relatedPOsByMaterial).length > 0;
-  const canGeneratePO = leafWithShortage.length > 0 && allPlannedFilled && proposedOrders.length === 0 && !hasExistingPOs;
+  const canGeneratePO = leafWithPlannedQty.length > 0 && allPlannedFilled && proposedOrders.length === 0;
 
   /**
    * Phase 3.D follow-up：构建建议采购单。
@@ -589,7 +593,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
       const staged: StagedItem[] = [];
       const pricePairs: Array<{ partnerId: string; partnerName: string; productId: string }> = [];
 
-      leafWithShortage.forEach((item: any, index: number) => {
+      leafWithPlannedQty.forEach((item: any, index: number) => {
         const materialProduct = products.find(p => p.id === item.materialId);
         const effective = effectiveSupplierIdFromProduct(materialProduct, partners);
         if (!effective) backfill.add(item.materialId);
@@ -673,7 +677,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
 
       setProposedOrders(Object.values(groupedMap));
     },
-    [leafWithShortage, products, partners],
+    [leafWithPlannedQty, products, partners],
   );
 
   // --- Effects ---
@@ -866,8 +870,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
 
   const handleGenerateProposedOrders = () => {
     if (!canGeneratePO) {
-      if (hasExistingPOs) toast.warning("采购订单已创建，不可重复创建。");
-      else if (leafWithShortage.length === 0) toast.info("当前库存充裕，无需生成额外采购单。");
+      if (leafWithPlannedQty.length === 0) toast.info("请先为需要采购的物料填写计划用量。");
       else if (!allPlannedFilled) toast.warning("请先为所有缺料物料填写计划用量。");
       return;
     }
@@ -1136,7 +1139,8 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
   if (!viewPlan || !viewProduct) return null;
 
   const showPlanDetailTraceSection =
-    planFormSettings.labelPrint?.showPlanDetailTraceSection !== false || planHasActiveItemCodes;
+    traceEnabled &&
+    (planFormSettings.labelPrint?.showPlanDetailTraceSection !== false || planHasActiveItemCodes);
 
   // --- Render ---
   return (
@@ -1175,11 +1179,9 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
             <button type="button" onClick={() => sectionProcessRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/80 transition-colors">
               工序任务
             </button>
-            {!planWorkOrdersDispatched && (
-              <button type="button" onClick={() => sectionMaterialRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/80 transition-colors">
-                生产用料
-              </button>
-            )}
+            <button type="button" onClick={() => sectionMaterialRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/80 transition-colors">
+              生产用料
+            </button>
             {showPlanDetailTraceSection && (
               <button type="button" onClick={() => sectionTraceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/80 transition-colors">
                 <span className="inline-flex items-center gap-1"><QrCode className="w-3.5 h-3.5" />追溯码</span>
@@ -1295,7 +1297,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
              </div>
 
              {/* 3. 工序任务 */}
-             <div ref={sectionProcessRef} className={`space-y-4 scroll-mt-4${planWorkOrdersDispatched ? ' pb-20' : ''}`}>
+             <div ref={sectionProcessRef} className="space-y-4 scroll-mt-4">
                 <div className="flex items-center gap-3 border-b border-slate-100 pb-4 ml-2">
                   <Users className="w-5 h-5 text-indigo-600" />
                   <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">3. 工序任务</h3>
@@ -1376,8 +1378,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                 </div>
              </div>
 
-             {/* 4. 计划生产用料清单 (BOM 汇总) — 已下达工单后隐藏 */}
-             {!planWorkOrdersDispatched && (
+             {/* 4. 计划生产用料清单 (BOM 汇总) — 下达工单后仍可查看与编辑 */}
              <div ref={sectionMaterialRef} className="space-y-4 pb-20 scroll-mt-4">
                 <div className="flex flex-col gap-4 ml-2">
                    <div className="flex items-center justify-between flex-wrap gap-4">
@@ -1395,15 +1396,23 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                              创建子工单
                            </button>
                          )}
+                   {!hasExistingPOs && (
                    <button
                       onClick={handleGenerateProposedOrders}
                            disabled={!canGeneratePO || materialRequirements.length === 0}
                       className="bg-slate-900 text-white px-5 py-2 rounded-xl text-xs font-bold hover:bg-black transition-all flex items-center gap-2 shadow-lg disabled:opacity-50"
-                           title={hasExistingPOs ? '采购订单已创建，不可重复创建' : !allPlannedFilled && leafWithShortage.length > 0 ? '请先为所有缺料物料填写计划用量' : undefined}
+                           title={
+                             !allPlannedFilled && leafWithShortage.length > 0
+                               ? '请先为所有缺料物料填写计划用量'
+                               : leafWithPlannedQty.length === 0
+                                 ? '请先为需要采购的物料填写计划用量'
+                                 : undefined
+                           }
                     >
                        <ShoppingCart className="w-3.5 h-3.5" />
                            创建采购订单
                     </button>
+                   )}
                       </div>
                    </div>
                 </div>
@@ -1807,7 +1816,6 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                   </div>
                 )}
              </div>
-             )}
 
             {/* 5. 追溯码 */}
             {showPlanDetailTraceSection && (
@@ -1845,7 +1853,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                 </p>
                 <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed font-medium">
                   {planWorkOrdersDispatched
-                    ? '※ 生产数量与 BOM 汇总已锁定。保存将更新客户、交期、工序派发等；交期会同步到关联工单（工单中心 / 外协等）。'
+                    ? '※ 生产数量与 BOM 计划用量已锁定，用料清单仍可查看。保存将更新客户、交期、工序派发等；交期会同步到关联工单（工单中心 / 外协等）。'
                     : '※ 点击保存将同步更新客户、交期、规格数量及派发方案。'}
                 </p>
              </div>

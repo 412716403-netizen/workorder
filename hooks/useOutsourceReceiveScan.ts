@@ -318,7 +318,12 @@ export function useOutsourceReceiveScan(opts: UseOutsourceReceiveScanOptions): U
         baseKey,
         qty: addQty,
         isFromAllAggregates,
-        detail,
+        detail: {
+          ...detail,
+          productId,
+          variantId: variantId ?? null,
+          nodeId: row.nodeId,
+        },
         itemCodeId,
         virtualBatchId,
       };

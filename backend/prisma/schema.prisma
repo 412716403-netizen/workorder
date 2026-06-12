@@ -370,6 +370,8 @@ model ProductVariant {
   sizeId    String?  @map("size_id") @db.VarChar(50)
   skuSuffix String?  @map("sku_suffix") @db.VarChar(50)
   nodeBoms  Json     @default("{}") @map("node_boms")
+  /// 规格×工序单件标准重量(kg)，形如 { [nodeId]: number }
+  nodeUnitWeights Json @default("{}") @map("node_unit_weights")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -726,6 +728,8 @@ model ProductionOpRecord {
   /** 按 BOM 占比把 weight 拆成各子物料实际消耗的快照（MaterialBreakdownRow[]），用于物料损耗核算 */
   materialBreakdown               Json?    @map("material_breakdown")
   collabData                      Json?    @map("collab_data")
+  /** 扫码追溯等扩展字段（如 __scanItemCodeIds 单品码列表）；与 milestone_reports.custom_data 语义一致 */
+  customData                      Json     @default("{}") @map("custom_data")
   /// 领料/退料/外协物料等按批次号与进销存 `PsiRecord.batchNo` 对齐
   batchNo                         String?  @map("batch_no") @db.VarChar(100)
   virtualBatchId                  String?  @map("virtual_batch_id") @db.Uuid

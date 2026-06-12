@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { dashboard } from '../services/api/dashboard';
-import { defaultFeaturePlugins, type FeaturePluginsConfig } from '../types';
+import { parseFeaturePlugins, type FeaturePluginsConfig } from '../types';
 import { dashboardQueryKey } from './dashboardQueryKeys';
 import { useAuth } from '../contexts/AuthContext';
 import { useMemo } from 'react';
@@ -23,7 +23,7 @@ export function useFeaturePlugins() {
     onSuccess: data => { qc.setQueryData(queryKey, data); },
   });
 
-  const plugins = query.data ?? defaultFeaturePlugins();
+  const plugins = parseFeaturePlugins(query.data ?? null);
 
   function isPluginEnabled(id: string): boolean {
     return plugins[id] !== false;

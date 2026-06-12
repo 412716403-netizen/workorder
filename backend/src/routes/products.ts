@@ -44,6 +44,8 @@ const updateBomSchema = z.object({
 
 router.get('/',    requireSubPermission('basic:products:view'),   ctrl.listProducts);
 router.post('/import', requireSubPermission('basic:products:create'), validate(importProductsSchema), ctrl.importProducts);
+router.get('/:id/receive-unit-weight-averages', requireSubPermission('basic:products:view'), ctrl.receiveUnitWeightAverages);
+router.get('/:id/variant-usage', requireSubPermission('basic:products:view'), ctrl.variantUsage);
 router.get('/:id', requireSubPermission('basic:products:view'),   ctrl.getProduct);
 router.post('/',   requireSubPermission('basic:products:create'), validate(createProductSchema), ctrl.createProduct);
 router.put('/:id', requireSubPermission('basic:products:edit'),   validate(updateProductSchema), ctrl.updateProduct);

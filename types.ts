@@ -13,6 +13,13 @@ export {
   isOrderDispatchStatus,
   FINANCE_DOC_NO_PREFIX,
   SCAN_ITEM_CODE_IDS_KEY,
+  WEIGHT_TOLERANCE_PERCENT_KEY,
+  DEFAULT_WEIGHT_TOLERANCE_PERCENT,
+  type ReceiveUnitWeightAverageRow,
+  type ReceiveUnitWeightAveragesResponse,
+  type ProductVariantUsageDetail,
+  type ProductVariantUsageEntry,
+  type ProductVariantUsageResponse,
   PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID,
   PSI_PO_CUSTOM_DATA_SOURCE_PLAN_NUMBER,
   BATCH_FIELD_MAX_LEN,
@@ -82,6 +89,7 @@ export {
   FEATURE_PLUGIN_CATALOG,
   DASHBOARD_SETTING_KEYS,
   defaultFeaturePlugins,
+  parseFeaturePlugins,
   isWorkbenchHomePage,
   isHomePinnedWidgetType,
   mergeWorkbenchHomePinnedItems,
@@ -472,6 +480,8 @@ export interface ProductVariant {
   sizeId: string;
   skuSuffix: string;
   nodeBoms?: Record<string, string>;
+  /** 规格×工序单件标准重量(kg) */
+  nodeUnitWeights?: Record<string, number>;
 }
 
 export interface Product {
@@ -1537,6 +1547,11 @@ export interface ProductionOpRecord {
    * 返工管理：`defectTreatmentCustomData`（处理不良批次）、`reworkReportCustomData`（返工报工批次）。
    */
   collabData?: ProductionOpCollabData;
+  /**
+   * 扫码追溯扩展（如 `__scanItemCodeIds` 逐件扫入列表），与报工 `MilestoneReport.customData` 同键。
+   * 外协收货逐件落库时优先用 `itemCodeId` 列，可不写此字段。
+   */
+  customData?: Record<string, unknown>;
   /** 领料/退料/外协物料等明细批次号，与进销存 `PsiRecord.batchNo` 对齐 */
   batchNo?: string;
 }

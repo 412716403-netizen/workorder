@@ -10,6 +10,7 @@
 import React from 'react';
 import { History } from 'lucide-react';
 import { ScanBatchTrigger } from '../../../components/scan/ScanBatchTrigger';
+import { useTraceabilityPlugin } from '../../../hooks/useTraceabilityPlugin';
 import type { Product, ProductCategory } from '../../../types';
 import { buildStockInFormDefaultsForPending, type PendingStockItem } from '../pendingStockStockInHelpers';
 import type { usePendingStockState } from '../../../hooks/usePendingStockState';
@@ -26,6 +27,7 @@ interface Props {
 }
 
 const PendingStockTable: React.FC<Props> = ({ helper, productionLinkMode, productMap, categoryMap, hasPerm }) => {
+  const { scanEnabled } = useTraceabilityPlugin();
   const {
     pendingStockOrders,
     selectedPendingRowKeys,
@@ -81,7 +83,7 @@ const PendingStockTable: React.FC<Props> = ({ helper, productionLinkMode, produc
           {pendingStockOrders.length > 0 ? `共 ${pendingStockOrders.length} 笔待入库` : ''}
         </p>
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          {hasPerm('production:orders_pending_stock_in:create') && pendingStockOrders.length > 0 && (
+          {scanEnabled && hasPerm('production:orders_pending_stock_in:create') && pendingStockOrders.length > 0 && (
             <ScanBatchTrigger
               onApply={confirmPendingListScan}
               resolveRowPreview={resolvePendingListScanPreview}

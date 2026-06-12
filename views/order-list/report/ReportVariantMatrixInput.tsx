@@ -25,6 +25,14 @@ import {
 import type { ScanBatchRowDetail } from '../../../utils/scanBatchRowDetail';
 import type { ScanPayload } from '../../../utils/scanPayload';
 import type { ReportFormState, ReportModalData } from '../../../hooks/useReportModalState';
+import type { ScanBatchApplyMeta } from '../../../components/scan/ScanBatchSessionModal';
+
+export interface ScanWeightCheckProps {
+  enableWeightCheck: boolean;
+  weightNodeId?: string;
+  weightTolerancePercent?: number;
+  getUnitWeightKg?: (productId: string, variantId: string, nodeId: string) => number | undefined;
+}
 
 interface Props {
   reportModal: ReportModalData;
@@ -45,8 +53,10 @@ interface Props {
   getSeqRemainingForVariant: (variantId: string) => number;
   onVariantQtyChange: (variantId: string, qty: number) => void;
   onVariantDefChange: (variantId: string, qty: number) => void;
-  onScanBatchConfirm: (payloads: ScanPayload[]) => Promise<boolean>;
+  onScanBatchConfirm: (payloads: ScanPayload[], meta?: ScanBatchApplyMeta) => Promise<boolean>;
   resolveScanRowPreview: (payload: ScanPayload) => Promise<ScanBatchRowDetail | null>;
+  scanWeightProps?: ScanWeightCheckProps;
+  scanEnabled?: boolean;
 }
 
 const ReportVariantMatrixInput: React.FC<Props> = ({
@@ -70,6 +80,8 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
   onVariantDefChange,
   onScanBatchConfirm,
   resolveScanRowPreview,
+  scanWeightProps,
+  scanEnabled = true,
 }) => {
   const tid = reportModal.milestone.templateId;
   const product = productMap.get(reportModal.order.productId);
@@ -187,6 +199,7 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
       <div className="flex items-baseline justify-between gap-3">
         <label className="text-[10px] font-bold text-slate-400 uppercase shrink-0">本次完成数量（按规格）</label>
         <div className="flex items-center gap-2 shrink-0">
+          {scanEnabled ? (
           <ScanBatchTrigger
             onApply={onScanBatchConfirm}
             resolveRowPreview={resolveScanRowPreview}
@@ -195,7 +208,12 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
             modalTitle="报工 · 批量扫码"
             modalHint="请使用扫码枪；请先切换到英文（半角）输入法。扫入的码显示在列表中，确认后一次性累加到本次完成数量。"
             showScanIntentToggle
+            enableWeightCheck={scanWeightProps?.enableWeightCheck}
+            weightNodeId={scanWeightProps?.weightNodeId}
+            weightTolerancePercent={scanWeightProps?.weightTolerancePercent}
+            getUnitWeightKg={scanWeightProps?.getUnitWeightKg}
           />
+          ) : null}
           <span className="text-xs sm:text-sm font-bold text-indigo-600 tabular-nums">合计 {matrixTotalQty} 件</span>
         </div>
       </div>

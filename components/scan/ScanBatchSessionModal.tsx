@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScanLine, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { useScanGun } from '../../hooks/useScanGun';
+import { useScanGun, useScanGunParallel } from '../../hooks/useScanGun';
 import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
 import {
   getUnrecognizedScanImeHint,
@@ -13,21 +13,38 @@ import { normalizeScanPayloadForIntent, type ScanIntent } from '../../utils/scan
 import type { ScanBatchRowDetail } from '../../utils/scanBatchRowDetail';
 import { playScanErrorSound, playScanSuccessSound } from '../../utils/scanFeedbackSound';
 import { checkScanSessionOverlap } from '../../utils/scanSessionOverlap';
+import {
+  checkWeightTolerance,
+  expectedWeightKg,
+  formatDeviationPercent,
+  formatWeightKg,
+} from '../../utils/scanWeightCheck';
+import { extractWeightFromCaptureText, looksLikeScanPollutedInput } from '../../utils/parseScaleInput';
+import { ScaleWeightInput, type ScaleWeightInputHandle } from './ScaleWeightInput';
+import { ScanUnitWeightSettingPopover } from './ScanUnitWeightSettingPopover';
+import { useMasterData } from '../../contexts/AppDataContext';
 
 export type { ScanBatchRowDetail } from '../../utils/scanBatchRowDetail';
 export type { ScanIntent } from '../../utils/scanBatchIntent';
+
+export interface ScanBatchApplyMeta {
+  /** 会话内各行实测重量之和(kg) */
+  totalMeasuredWeightKg: number;
+  /** 是否存在超容差告警行 */
+  hasWeightWarning: boolean;
+  /** 与 payloads 同序的各行实测重量(kg)；无实测或未称重时为 undefined */
+  rowMeasuredWeightKg?: (number | undefined)[];
+}
 
 export interface ScanBatchSessionModalProps {
   open: boolean;
   onClose: () => void;
   /** 返回 false 时弹窗保持打开；void/undefined/true 时关闭并清空列表 */
-  onApply: (payloads: ScanPayload[]) => void | Promise<boolean | void>;
+  onApply: (payloads: ScanPayload[], meta?: ScanBatchApplyMeta) => void | Promise<boolean | void>;
   /** 扫入后解析展示字段（产品名、颜色、尺码、数量）；失败返回 null 且不应加入列表 */
   resolveRowPreview?: (payload: ScanPayload) => Promise<ScanBatchRowDetail | null>;
   title?: string;
   hint?: string;
-  /** 是否显示底部手工粘贴区（默认 true） */
-  allowManualPaste?: boolean;
   /** 为 true 时显示「按批累计 / 按件累计」切换，并在扫入后按所选方式归一化 payload（默认 false，保持旧行为） */
   showScanIntentToggle?: boolean;
   /** 与 `showScanIntentToggle` 配合：每次打开弹窗时的默认累计方式（未传时组件内默认为「按批累计」） */
@@ -38,7 +55,7 @@ export interface ScanBatchSessionModalProps {
    */
   headerSlot?: React.ReactNode;
   /**
-   * 为 true 时禁用扫码枪监听 + 手工粘贴回车 + 「确认应用」按钮，
+   * 为 true 时禁用扫码枪监听 + 「确认应用」按钮，
    * 但弹窗内容、关闭按钮仍可交互。常用于 `headerSlot` 内必填项未满足时阻断扫码。
    */
   scanDisabled?: boolean;
@@ -49,6 +66,14 @@ export interface ScanBatchSessionModalProps {
    * 首次打开弹窗时不会因此清空（仅 prev !== current 且 prev 已定义时触发）。
    */
   sessionResetKey?: string;
+  /** 启用扫码称重校验（报工/外协/返工；待入库不传） */
+  enableWeightCheck?: boolean;
+  /** 默认工序上下文（detail 未带 nodeId 时使用） */
+  weightNodeId?: string;
+  /** 容差百分比，默认 5 */
+  weightTolerancePercent?: number;
+  /** 读取规格×工序单件标准重量(kg) */
+  getUnitWeightKg?: (productId: string, variantId: string, nodeId: string) => number | undefined;
 }
 
 type Row = { id: string; payload: ScanPayload; detail: ScanBatchRowDetail };
@@ -81,16 +106,28 @@ export function ScanBatchSessionModal({
   resolveRowPreview,
   title = '批量扫码',
   hint = '请使用扫码枪；请先切换到英文（半角）输入法。扫入的码将显示在下方列表，确认后一次性写入单据。',
-  allowManualPaste = true,
   showScanIntentToggle = false,
   defaultScanIntent = 'BATCH',
   headerSlot,
   scanDisabled = false,
   scanDisabledHint,
   sessionResetKey,
+  enableWeightCheck = false,
+  weightNodeId,
+  weightTolerancePercent = 5,
+  getUnitWeightKg,
 }: ScanBatchSessionModalProps) {
+  const [currentWeightKg, setCurrentWeightKg] = useState<number | null>(null);
+  const currentWeightKgRef = useRef<number | null>(null);
+
+  const commitWeightKg = useCallback((kg: number | null) => {
+    currentWeightKgRef.current = kg;
+    setCurrentWeightKg(kg);
+  }, []);
+  const [scaleCaptureRaw, setScaleCaptureRaw] = useState('');
+  const scaleCaptureRef = useRef<ScaleWeightInputHandle>(null);
+  const scaleIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
-  const [manual, setManual] = useState('');
   const [applying, setApplying] = useState(false);
   const [scanIntent, setScanIntent] = useState<ScanIntent>(defaultScanIntent);
   const keysRef = useRef<Set<string>>(new Set());
@@ -120,17 +157,23 @@ export function ScanBatchSessionModal({
     sessionItemParentBatchIdsRef.current = new Set();
   }, []);
 
+  const clearScaleCapture = useCallback(() => {
+    scaleCaptureRef.current?.clear();
+    setScaleCaptureRaw('');
+    commitWeightKg(null);
+  }, [commitWeightKg]);
+
   useEffect(() => {
     if (!open) {
       setRows([]);
-      setManual('');
+      clearScaleCapture();
       resetSessionDedup();
       return;
     }
     if (showScanIntentToggle) {
       setScanIntent(defaultScanIntent);
     }
-  }, [open, showScanIntentToggle, defaultScanIntent, resetSessionDedup]);
+  }, [open, showScanIntentToggle, defaultScanIntent, resetSessionDedup, clearScaleCapture]);
 
   const prevSessionResetKeyRef = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -142,10 +185,115 @@ export function ScanBatchSessionModal({
     prevSessionResetKeyRef.current = sessionResetKey;
     if (prev !== undefined && prev !== sessionResetKey) {
       setRows([]);
-      setManual('');
+      clearScaleCapture();
       resetSessionDedup();
     }
-  }, [sessionResetKey, open, resetSessionDedup]);
+  }, [sessionResetKey, open, resetSessionDedup, clearScaleCapture]);
+
+  const applyScaleCaptureRaw = useCallback(
+    (raw: string) => {
+      setScaleCaptureRaw(raw);
+      if (looksLikeScanPollutedInput(raw)) return;
+      commitWeightKg(extractWeightFromCaptureText(raw));
+    },
+    [commitWeightKg],
+  );
+
+  const handleScaleCaptureInput = useCallback(
+    (raw: string) => {
+      applyScaleCaptureRaw(raw);
+      if (scaleIdleTimerRef.current) clearTimeout(scaleIdleTimerRef.current);
+      scaleIdleTimerRef.current = setTimeout(() => {
+        scaleIdleTimerRef.current = null;
+        const latest = scaleCaptureRef.current?.getRaw() ?? raw;
+        if (latest !== raw) applyScaleCaptureRaw(latest);
+      }, 320);
+    },
+    [applyScaleCaptureRaw],
+  );
+
+  const refocusScaleCapture = useCallback(() => {
+    if (!enableWeightCheck || !open) return;
+    window.setTimeout(() => {
+      if (document.activeElement?.closest('[data-scan-manual-input]')) return;
+      scaleCaptureRef.current?.focus();
+    }, 80);
+  }, [enableWeightCheck, open]);
+
+  useEffect(() => {
+    if (!open || !enableWeightCheck) return;
+    const t = window.setTimeout(() => scaleCaptureRef.current?.focus(), 120);
+    return () => window.clearTimeout(t);
+  }, [open, enableWeightCheck]);
+
+  const snapshotWeightKg = useCallback((): number | null => {
+    const raw = (scaleCaptureRef.current?.getRaw() ?? scaleCaptureRaw).trim();
+    if (!raw) return null;
+    if (looksLikeScanPollutedInput(raw)) {
+      return currentWeightKgRef.current;
+    }
+    return extractWeightFromCaptureText(raw);
+  }, [scaleCaptureRaw]);
+
+  const enrichDetailWithWeight = useCallback(
+    (detail: ScanBatchRowDetail, measuredKg: number | null, unitOverride?: number): ScanBatchRowDetail => {
+      if (!enableWeightCheck) return detail;
+      const measured = measuredKg != null && measuredKg > 0 ? measuredKg : null;
+      const nodeId = detail.nodeId ?? weightNodeId ?? null;
+      const productId = detail.productId ?? null;
+      const variantId = detail.variantId ?? null;
+      const base: ScanBatchRowDetail = { ...detail, nodeId, measuredWeightKg: measured };
+
+      if (!nodeId || !productId || !variantId) {
+        return { ...base, weightCheckSkipped: true, unitWeightKg: null };
+      }
+      const unit =
+        unitOverride ??
+        (getUnitWeightKg ? getUnitWeightKg(productId, variantId, nodeId) : undefined);
+      if (unit == null) {
+        return { ...base, unitWeightKg: null, weightCheckSkipped: true };
+      }
+      const expected = expectedWeightKg(unit, detail.quantity);
+      const check = checkWeightTolerance(expected, measured ?? 0, weightTolerancePercent);
+      return {
+        ...base,
+        unitWeightKg: unit,
+        expectedWeightKg: expected > 0 ? expected : null,
+        deviationPercent: check.skipped ? null : check.deviationPercent,
+        weightCheckOk: check.skipped ? null : check.ok,
+        weightCheckSkipped: check.skipped && measured == null,
+      };
+    },
+    [enableWeightCheck, weightNodeId, getUnitWeightKg, weightTolerancePercent],
+  );
+
+  const refreshProductRowWeights = useCallback(
+    (productId: string) => {
+      setRows(prev =>
+        prev.map(r => {
+          if (r.detail.productId !== productId) return r;
+          return {
+            ...r,
+            detail: enrichDetailWithWeight(r.detail, r.detail.measuredWeightKg ?? null),
+          };
+        }),
+      );
+    },
+    [enrichDetailWithWeight],
+  );
+
+  const { globalNodes } = useMasterData();
+
+  useEffect(() => {
+    if (!enableWeightCheck) return;
+    setRows(prev => {
+      if (prev.length === 0) return prev;
+      return prev.map(r => ({
+        ...r,
+        detail: enrichDetailWithWeight(r.detail, r.detail.measuredWeightKg ?? null),
+      }));
+    });
+  }, [weightTolerancePercent, enableWeightCheck, enrichDetailWithWeight]);
 
   const pushRow = useCallback((payload: ScanPayload, detail: ScanBatchRowDetail) => {
     if (detail.itemCodeId) sessionItemCodeIdsRef.current.add(detail.itemCodeId);
@@ -197,7 +345,7 @@ export function ScanBatchSessionModal({
                 },
               });
               if (!n.ok) {
-                toast.error(rewriteScanApiErrorForIme(raw, n.message));
+                toast.error(rewriteScanApiErrorForIme(raw, n.ok === false ? n.message : '扫码归一化失败'));
                 playScanErrorSound();
                 return;
               }
@@ -240,8 +388,22 @@ export function ScanBatchSessionModal({
                   playScanErrorSound();
                   return;
                 }
-                pushRow(payload, detail);
-                playScanSuccessSound();
+                const measured = enableWeightCheck ? snapshotWeightKg() : null;
+                const enriched = enrichDetailWithWeight(detail, measured);
+                if (enriched.weightCheckOk === false) {
+                  toast.warning(
+                    `重量偏差 ${formatDeviationPercent(enriched.deviationPercent ?? 0)}，期望 ${formatWeightKg(enriched.expectedWeightKg ?? 0)} kg，实测 ${formatWeightKg(enriched.measuredWeightKg ?? 0)} kg`,
+                  );
+                  playScanErrorSound();
+                }
+                pushRow(payload, enriched);
+                if (enableWeightCheck) {
+                  clearScaleCapture();
+                  refocusScaleCapture();
+                }
+                if (enriched.weightCheckOk !== false) {
+                  playScanSuccessSound();
+                }
               } catch (e) {
                 keysRef.current.delete(key);
                 const msg = rewriteScanApiErrorForIme(raw, (e as Error)?.message || '解析扫码失败');
@@ -251,7 +413,12 @@ export function ScanBatchSessionModal({
               return;
             }
 
-            pushRow(payload, fallbackDetail(payload));
+            pushRow(
+              payload,
+              enableWeightCheck
+                ? enrichDetailWithWeight(fallbackDetail(payload), snapshotWeightKg())
+                : fallbackDetail(payload),
+            );
             playScanSuccessSound();
           } catch (e) {
             toast.error((e as Error)?.message || '扫码处理失败');
@@ -260,13 +427,16 @@ export function ScanBatchSessionModal({
         })
         .catch(() => {});
     },
-    [pushRow, showScanIntentToggle, scanIntent, scanDisabled, scanDisabledHint],
+    [pushRow, showScanIntentToggle, scanIntent, scanDisabled, scanDisabledHint, enableWeightCheck, snapshotWeightKg, enrichDetailWithWeight, refocusScaleCapture, clearScaleCapture],
   );
 
-  // 弹窗打开时始终监听扫码枪；`scanDisabled` 时在 ingestRaw 内 toast 提示（如外协收货未选加工厂），
-  // 而非静默丢弃——否则用户直接扫码得不到任何反馈。
   useScanGun({
-    active: open,
+    active: open && !enableWeightCheck,
+    onScan: ingestRaw,
+  });
+
+  useScanGunParallel({
+    active: open && enableWeightCheck,
     onScan: ingestRaw,
   });
 
@@ -305,13 +475,18 @@ export function ScanBatchSessionModal({
 
   const handleConfirm = useCallback(async () => {
     if (rows.length === 0) {
-      toast.warning('请先扫码或粘贴至少一条有效内容');
+      toast.warning('请先扫码至少一条有效内容');
       return;
     }
     setApplying(true);
     try {
       const payloads = rows.map(r => r.payload);
-      const result = await onApply(payloads);
+      const meta: ScanBatchApplyMeta = {
+        totalMeasuredWeightKg: rows.reduce((s, r) => s + (r.detail.measuredWeightKg ?? 0), 0),
+        hasWeightWarning: rows.some(r => r.detail.weightCheckOk === false),
+        rowMeasuredWeightKg: rows.map(r => r.detail.measuredWeightKg),
+      };
+      const result = await onApply(payloads, meta);
       if (result !== false) {
         onClose();
       }
@@ -332,7 +507,7 @@ export function ScanBatchSessionModal({
       aria-labelledby="scan-batch-title"
     >
       <div
-        className="flex max-h-[min(90dvh,32rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+        className="flex max-h-[min(92dvh,52rem)] min-h-[min(78dvh,40rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-3">
@@ -359,6 +534,17 @@ export function ScanBatchSessionModal({
 
         {headerSlot ? (
           <div className="shrink-0 border-b border-slate-100 px-4 py-2.5">{headerSlot}</div>
+        ) : null}
+
+        {enableWeightCheck ? (
+          <div className="shrink-0 border-b border-slate-100 px-4 py-2.5">
+            <ScaleWeightInput
+              ref={scaleCaptureRef}
+              weightKg={currentWeightKg}
+              onCaptureInput={handleScaleCaptureInput}
+              onCaptureBlur={refocusScaleCapture}
+            />
+          </div>
         ) : null}
 
         {showScanIntentToggle ? (
@@ -400,19 +586,23 @@ export function ScanBatchSessionModal({
           </div>
         ) : null}
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+        <div className="min-h-[14rem] flex-1 overflow-y-auto px-3 py-2">
           {rows.length === 0 ? (
             <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-3 py-8 text-center text-xs text-slate-500">
               {scanDisabled && scanDisabledHint
                 ? scanDisabledHint
-                : '列表为空。请用扫码枪扫入二维码，或在下方粘贴后按回车。'}
+                : '列表为空。请用扫码枪扫入二维码。'}
             </p>
           ) : (
             <ul className="space-y-2">
               {rows.map((r, i) => (
                 <li
                   key={r.id}
-                  className="flex items-start gap-2 rounded-xl border border-slate-100 bg-slate-50/90 px-2.5 py-2.5"
+                  className={`flex items-start gap-2 rounded-xl border px-2.5 py-2.5 ${
+                    r.detail.weightCheckOk === false
+                      ? 'border-rose-200 bg-rose-50/90'
+                      : 'border-slate-100 bg-slate-50/90'
+                  }`}
                 >
                   <span className="w-6 shrink-0 pt-0.5 text-center text-[11px] font-black tabular-nums text-slate-400">
                     {i + 1}
@@ -445,6 +635,71 @@ export function ScanBatchSessionModal({
                     {r.detail.specNote ? (
                       <p className="text-[10px] font-medium text-slate-500">规格 {r.detail.specNote}</p>
                     ) : null}
+                    {enableWeightCheck &&
+                    r.detail.productId &&
+                    r.detail.variantId &&
+                    (r.detail.nodeId ?? weightNodeId) ? (
+                      <p
+                        className={`flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] font-bold tabular-nums ${
+                          r.detail.weightCheckOk === false
+                            ? 'text-rose-600'
+                            : r.detail.measuredWeightKg != null &&
+                                r.detail.measuredWeightKg > 0 &&
+                                r.detail.expectedWeightKg != null &&
+                                !r.detail.weightCheckSkipped
+                              ? 'text-emerald-700'
+                              : 'text-slate-700'
+                        }`}
+                      >
+                        <span className="text-slate-600">
+                          理论{' '}
+                          {r.detail.expectedWeightKg != null && r.detail.expectedWeightKg > 0 ? (
+                            <>
+                              {formatWeightKg(r.detail.expectedWeightKg)} kg
+                              {r.detail.unitWeightKg != null && r.detail.quantity > 1 ? (
+                                <span className="font-medium text-slate-400">
+                                  {' '}
+                                  ({formatWeightKg(r.detail.unitWeightKg)}×{r.detail.quantity})
+                                </span>
+                              ) : null}
+                            </>
+                          ) : (
+                            <span className="text-amber-600">未设置</span>
+                          )}
+                        </span>
+                        {r.detail.measuredWeightKg != null && r.detail.measuredWeightKg > 0 ? (
+                          <>
+                            <span className="font-medium text-slate-300">·</span>
+                            <span>
+                              实测 {formatWeightKg(r.detail.measuredWeightKg)} kg
+                              {r.detail.expectedWeightKg != null &&
+                              r.detail.expectedWeightKg > 0 &&
+                              !r.detail.weightCheckSkipped ? (
+                                <>
+                                  {r.detail.deviationPercent != null
+                                    ? ` · 偏差 ${formatDeviationPercent(r.detail.deviationPercent)}`
+                                    : ''}
+                                  {r.detail.weightCheckOk === false ? ' · 超容差' : ''}
+                                </>
+                              ) : null}
+                            </span>
+                          </>
+                        ) : null}
+                        <ScanUnitWeightSettingPopover
+                          productId={r.detail.productId}
+                          productName={r.detail.productName}
+                          scanContext={{
+                            variantId: r.detail.variantId,
+                            nodeId: (r.detail.nodeId ?? weightNodeId)!,
+                            variantLabel: `${r.detail.colorName} / ${r.detail.sizeName}`,
+                            nodeName:
+                              globalNodes.find(n => n.id === (r.detail.nodeId ?? weightNodeId))?.name ??
+                              '当前工序',
+                          }}
+                          onSaved={() => refreshProductRowWeights(r.detail.productId!)}
+                        />
+                      </p>
+                    ) : null}
                   </div>
                   <button
                     type="button"
@@ -459,27 +714,6 @@ export function ScanBatchSessionModal({
             </ul>
           )}
         </div>
-
-        {allowManualPaste && (
-          <div className="shrink-0 border-t border-slate-100 px-3 py-2">
-            <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">粘贴 token 或 URL 后按回车</label>
-            <input
-              type="text"
-              value={manual}
-              onChange={e => setManual(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && manual.trim()) {
-                  ingestRaw(manual.trim());
-                  setManual('');
-                }
-              }}
-              disabled={scanDisabled}
-              className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
-              placeholder={scanDisabled ? scanDisabledHint || '已禁用' : '粘贴后按回车加入列表'}
-              data-scan-gun-passthrough="true"
-            />
-          </div>
-        )}
 
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-100 px-3 py-3">
           <button

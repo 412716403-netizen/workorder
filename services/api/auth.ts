@@ -9,6 +9,8 @@ export type TenantInfo = {
   expiresAt?: string | null;
   /** 企业是否启用设备模块；缺省为开 */
   equipmentFeaturesEnabled?: boolean;
+  /** 租户行业类型（TenantIndustryKind；缺省视为 generic） */
+  industryKind?: string;
 };
 
 export type LoginResult = {

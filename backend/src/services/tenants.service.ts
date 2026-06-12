@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import { seedTenantDefaultSettings } from '../lib/tenantDefaultSettings.js';
-import { ALL_PERMISSIONS } from '../types/index.js';
+import { ALL_PERMISSIONS, normalizeTenantIndustryKind } from '../types/index.js';
 import { AppError } from '../middleware/errorHandler.js';
 import crypto from 'crypto';
 
@@ -41,6 +41,7 @@ export async function listTenants(userId: string, opts: { all?: boolean; page?: 
         expiresAt: m.tenant.expiresAt?.toISOString() ?? null,
         role: m.role, permissions: perms, joinedAt: m.createdAt,
         equipmentFeaturesEnabled: m.tenant.equipmentModuleEnabled !== false,
+        industryKind: normalizeTenantIndustryKind(m.tenant.industryKind),
       };
     });
   }
@@ -67,6 +68,7 @@ export async function listTenants(userId: string, opts: { all?: boolean; page?: 
       expiresAt: m.tenant.expiresAt?.toISOString() ?? null,
       role: m.role, permissions: perms, joinedAt: m.createdAt,
       equipmentFeaturesEnabled: m.tenant.equipmentModuleEnabled !== false,
+      industryKind: normalizeTenantIndustryKind(m.tenant.industryKind),
     };
   });
   return { data, total, page, pageSize };

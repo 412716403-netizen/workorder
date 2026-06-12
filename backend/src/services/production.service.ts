@@ -131,6 +131,17 @@ function normalizeMoneyFields(data: Record<string, unknown>): void {
   }
 }
 
+function parseWeightKg(raw: unknown): number | null {
+  const n = typeof raw === 'number' ? raw : typeof raw === 'string' && raw !== '' ? parseFloat(raw) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function normalizeWeightField(data: Record<string, unknown>): void {
+  const n = parseWeightKg(data.weight);
+  if (n == null) delete data.weight;
+  else data.weight = new Prisma.Decimal(n);
+}
+
 export interface ProductionListFilter {
   type?: string;
   /** Phase 3.C：支持多 type 窄拉（容器层按 tab 选择 ['STOCK_OUT','STOCK_RETURN'] 等） */
@@ -318,6 +329,8 @@ export async function summarize(
   };
 }
 
+export { getReceiveUnitWeightAverages } from './receiveUnitWeightAverages.service.js';
+
 export async function getRecord(db: TenantPrismaClient, id: string) {
   return db.productionOpRecord.findUnique({ where: { id } });
 }
@@ -413,21 +426,31 @@ export async function createRecord(
    * 其他类型（领退料等）即便传了 weight 也不会分摊。
    */
   const isWeightSusceptible =
-    (data.type === 'OUTSOURCE' && data.status === '已收回' && !data.sourceReworkId) ||
+    (data.type === 'OUTSOURCE' && data.status === '已收回') ||
     data.type === 'REWORK_REPORT';
   if (isWeightSusceptible && data.productId && data.nodeId) {
+    const incomingWeight = parseWeightKg((data as Record<string, unknown>).weight);
     const payload = await buildOpWeightBreakdown({
       productId: String(data.productId),
       nodeId: String(data.nodeId),
       variantId: (data.variantId as string | null | undefined) ?? null,
       quantity: Number(data.quantity) || 0,
-      weight: (data as Record<string, unknown>).weight,
+      weight: incomingWeight,
     });
     if (payload) {
       data.weight = payload.weight;
       data.materialBreakdown = payload.materialBreakdown as any;
+    } else if (incomingWeight != null) {
+      const node = await basePrisma.globalNodeTemplate.findUnique({
+        where: { id: String(data.nodeId) },
+        select: { enableWeightOnReport: true },
+      });
+      if (node?.enableWeightOnReport) {
+        data.weight = incomingWeight;
+      }
     }
   }
+  normalizeWeightField(data);
 
   const stockish = data.type === 'STOCK_OUT' || data.type === 'STOCK_RETURN';
   const record = stockish

@@ -8,9 +8,11 @@ import * as productionService from './production.service.js';
 import {
   DASHBOARD_SETTING_KEYS,
   defaultFeaturePlugins,
+  parseFeaturePlugins,
   type WorkbenchConfig,
   type FeaturePluginsConfig,
 } from '../../../shared/workbench.js';
+import { applyTraceabilityLabelPrintDefaults } from '../../../shared/traceabilityLabelPrintDefaults.js';
 import {
   DEFAULT_DASHBOARD_SHORTCUT_IDS,
   normalizeShortcutIds,
@@ -50,12 +52,6 @@ import { computeReworkTemplateStats } from './reworkDashboardStats.service.js';
 function parseWorkbenchConfig(value: unknown): WorkbenchConfig | null {
   if (value == null) return null;
   return normalizeWorkbenchConfig(value);
-}
-
-function parseFeaturePlugins(value: unknown): FeaturePluginsConfig {
-  const base = defaultFeaturePlugins();
-  if (!value || typeof value !== 'object') return base;
-  return { ...base, ...(value as FeaturePluginsConfig) };
 }
 
 async function getMembership(userId: string, tenantId: string) {
@@ -628,8 +624,24 @@ export async function updateFeaturePlugins(tenantId: string, body: unknown) {
   if (!body || typeof body !== 'object') {
     throw new AppError(400, '无效的功能插件配置');
   }
-  const next = { ...current, ...(body as FeaturePluginsConfig) };
+  const patch = body as FeaturePluginsConfig;
+  const next = { ...current, ...patch };
   await settingsService.updateConfig(tenantId, DASHBOARD_SETTING_KEYS.featurePlugins, next);
+
+  if (patch.traceability === true && current.traceability === false) {
+    const config = await settingsService.getConfig(tenantId);
+    const printTemplates = Array.isArray(config.printTemplates)
+      ? (config.printTemplates as Array<{ id: string | number; printTemplateManageScope?: string | null }>)
+      : [];
+    const rawPlan = (config.planFormSettings ?? {}) as Record<string, unknown>;
+    const updatedPlan = applyTraceabilityLabelPrintDefaults(rawPlan, printTemplates, {
+      forceEnableTraceSection: true,
+    });
+    if (JSON.stringify(updatedPlan.labelPrint) !== JSON.stringify(rawPlan.labelPrint)) {
+      await settingsService.updateConfig(tenantId, 'planFormSettings', updatedPlan);
+    }
+  }
+
   return next;
 }
 

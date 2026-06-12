@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { ProductionLinkMode, ProcessSequenceMode } from '../../types';
 import { useConfirm } from '../../contexts/ConfirmContext';
+import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
 
 interface ProductionConfigTabProps {
   productionLinkMode: ProductionLinkMode;
@@ -16,6 +17,8 @@ interface ProductionConfigTabProps {
   onUpdateAllowExceedMaxReportQty?: (value: boolean) => void;
   allowExceedMaxOutsourceReceiveQty: boolean;
   onUpdateAllowExceedMaxOutsourceReceiveQty?: (value: boolean) => void;
+  weightTolerancePercent: number;
+  onUpdateWeightTolerancePercent?: (value: number) => void;
   canEdit: boolean;
 }
 
@@ -79,9 +82,12 @@ const ProductionConfigTab: React.FC<ProductionConfigTabProps> = ({
   onUpdateAllowExceedMaxReportQty,
   allowExceedMaxOutsourceReceiveQty,
   onUpdateAllowExceedMaxOutsourceReceiveQty,
+  weightTolerancePercent,
+  onUpdateWeightTolerancePercent,
   canEdit,
 }) => {
   const confirm = useConfirm();
+  const { weightEnabled } = useTraceabilityPlugin();
 
   const handleSwitchLinkMode = async (next: ProductionLinkMode) => {
     if (!onUpdateProductionLinkMode) return;
@@ -248,6 +254,29 @@ const ProductionConfigTab: React.FC<ProductionConfigTabProps> = ({
               )}
             </button>
           </div>
+          {weightEnabled ? (
+          <div className={TOGGLE_ROW}>
+            <div className="flex-1">
+              <p className={OPTION_LABEL}>扫码称重容差（%）</p>
+              <p className={OPTION_DESC}>
+                报工/外协/返工扫码时，电子秤实测重量与「单件标准重量 × 数量」偏差超过此百分比将提示告警（默认 ±5%）。
+              </p>
+            </div>
+            <div className="ml-4 flex shrink-0 items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={0.1}
+                disabled={!canEdit}
+                value={weightTolerancePercent}
+                onChange={e => onUpdateWeightTolerancePercent?.(parseFloat(e.target.value) || 0)}
+                className="w-20 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 text-right disabled:opacity-60"
+              />
+              <span className="text-sm font-bold text-slate-500">%</span>
+            </div>
+          </div>
+          ) : null}
         </div>
       </div>
     </div>

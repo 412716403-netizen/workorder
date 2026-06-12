@@ -35,6 +35,8 @@ import {
 import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, BOMItem, AppDictionaries, ProductVariant, DictionaryItem, Partner } from '../../types';
 import { sortVariantsByColorThenSize } from '../../utils/sortVariantsByProduct';
 import BomVariantMatrix from '../../components/product/BomVariantMatrix';
+import { VariantNodeWeightSettingTrigger } from './VariantNodeWeightSection';
+import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
 import { productColorSizeEnabled } from '../../utils/productColorSize';
 import { bomHasConfiguredItems } from '../../utils/bomEffective';
 import { isProductBlockedAsBomMaterial } from '../../utils/productBomMaterial';
@@ -534,6 +536,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   onProductPersisted,
 }) => {
   const confirm = useConfirm();
+  const { weightEnabled } = useTraceabilityPlugin();
   const auth = useAuthOptional();
   /** 嵌在「新增产品」全屏弹窗（z=10800）内时，子层须更高，避免颜色/尺码等二级弹窗被挡住 */
   const nestedOverlayZ = embeddedInQuickCreateModal ? 'z-[11200]' : 'z-[10250]';
@@ -705,7 +708,8 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
             id: `v-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
             colorId: cId, sizeId: sId,
             skuSuffix: `${colorName}${colorName && sizeName ? '-' : ''}${sizeName}`,
-            nodeBoms: {}
+            nodeBoms: {},
+            nodeUnitWeights: {},
           });
         }
       });
@@ -722,14 +726,50 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
     }
   }, [workingProduct?.colorIds, workingProduct?.sizeIds, activeCategory?.hasColorSize, activeCategory?.id]);
 
-  const toggleAttribute = (type: 'color' | 'size', id: string) => {
+  const [specRemovalCheckBusy, setSpecRemovalCheckBusy] = useState(false);
+
+  /**
+   * 取消勾选颜色/尺码即删除对应变体；已持久化的产品先查后端引用情况，
+   * 有业务数据（工单、报工、进销存等）则阻止取消。后端保存时还有同口径校验兜底。
+   */
+  const checkSpecRemovalAllowed = async (type: 'color' | 'size', id: string): Promise<boolean> => {
+    if (!isPersistedProduct || !workingProduct) return true;
+    const affectedIds = workingProduct.variants
+      .filter(v => (type === 'color' ? v.colorId === id : v.sizeId === id))
+      .map(v => v.id);
+    if (affectedIds.length === 0) return true;
+    try {
+      const res = await api.products.variantUsage(workingProduct.id, affectedIds);
+      const blocked = res.usages.filter(u => u.total > 0);
+      if (blocked.length === 0) return true;
+      const specName = (type === 'color' ? dictionaries.colors : dictionaries.sizes).find(i => i.id === id)?.name ?? '';
+      const detail = blocked
+        .map(u => `规格【${u.variantLabel}】有 ${u.details.map(d => `${d.count} 条${d.label}`).join('、')}`)
+        .join('；');
+      toast.error(`${type === 'color' ? '颜色' : '尺码'}【${specName}】已产生业务数据，无法删除：${detail}`);
+      return false;
+    } catch {
+      // 预检接口异常时放行，由后端保存时的引用校验兜底
+      return true;
+    }
+  };
+
+  const toggleAttribute = async (type: 'color' | 'size', id: string) => {
     if (!workingProduct) return;
     const key = type === 'color' ? 'colorIds' : 'sizeIds';
-    const current = [...workingProduct[key]];
-    const index = current.indexOf(id);
-    if (index > -1) current.splice(index, 1);
-    else current.push(id);
-    setWorkingProduct({ ...workingProduct, [key]: current });
+    if (workingProduct[key].includes(id)) {
+      if (specRemovalCheckBusy) return;
+      setSpecRemovalCheckBusy(true);
+      try {
+        const allowed = await checkSpecRemovalAllowed(type, id);
+        if (!allowed) return;
+      } finally {
+        setSpecRemovalCheckBusy(false);
+      }
+      setWorkingProduct(wp => ({ ...wp, [key]: wp[key].filter(x => x !== id) }));
+    } else {
+      setWorkingProduct(wp => (wp[key].includes(id) ? wp : { ...wp, [key]: [...wp[key], id] }));
+    }
   };
 
   const handleAddNewSpec = async (type: 'colors' | 'sizes', name: string): Promise<boolean> => {
@@ -1154,9 +1194,20 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
         {/* 3. 生产工序与工艺 BOM */}
         {activeCategory?.hasProcess && (
           <div className={productArchiveFormCardClass}>
-            <div className="flex items-center gap-3 border-b border-slate-50 pb-3">
-              <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600"><ClipboardCheck className="w-4 h-4" /></div>
-              <h3 className={sectionTitleClass}>2. 生产工序与工艺 BOM</h3>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-50 pb-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600 shrink-0"><ClipboardCheck className="w-4 h-4" /></div>
+                <h3 className={sectionTitleClass}>2. 生产工序与工艺 BOM</h3>
+              </div>
+              {weightEnabled ? (
+              <VariantNodeWeightSettingTrigger
+                product={workingProduct}
+                nodes={selectedNodesOrdered}
+                dictionaries={dictionaries}
+                onChange={variants => setWorkingProduct({ ...workingProduct, variants })}
+                overlayClassName={embeddedInQuickCreateModal ? nestedOverlayZ : 'z-[110]'}
+              />
+              ) : null}
             </div>
 
             <div className="space-y-4">

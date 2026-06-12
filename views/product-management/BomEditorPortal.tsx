@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { Boxes, Copy, ListChecks, Plus, Trash2, X } from 'lucide-react';
 import { BOM, BOMItem, GlobalNodeTemplate, Product, ProductCategory, ProductVariant, AppDictionaries } from '../../types';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
-
 /** 用量数字展示：去掉 JS 浮点尾数（如 0.32+0.1 → 0.42000000000000004） */
 function formatBomQuantityDisplay(n: number): string {
   if (!Number.isFinite(n)) return '0';

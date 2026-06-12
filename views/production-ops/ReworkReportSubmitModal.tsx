@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useCallback, useRef } from 'react';
-import { FileText, X, UserPlus, Layers, Package } from 'lucide-react';
+import { FileText, X, UserPlus, Layers, Package, Scale } from 'lucide-react';
 import { toast } from 'sonner';
 import { ScanBatchTrigger } from '../../components/scan/ScanBatchTrigger';
+import type { ScanBatchApplyMeta } from '../../components/scan/ScanBatchSessionModal';
 import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
 import { rewriteScanApiErrorForIme, type ScanPayload } from '../../utils/scanPayload';
 import type { ScanBatchRowDetail } from '../../utils/scanBatchRowDetail';
@@ -22,6 +23,7 @@ import { SCAN_ITEM_CODE_IDS_KEY } from '../../types';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { checkExceedMax } from '../../utils/scanApplyGuards';
+import { distributeWeightByQty } from '../../utils/reportBatchWeightHelpers';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import {
   sectionTitleClass,
@@ -48,6 +50,9 @@ import { currentOperatorDisplayName } from '../../utils/currentOperatorDisplayNa
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import { REWORK_REPORT_CUSTOM_DATA_KEY } from '../../utils/productionOpCollab/rework';
 import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
+import { useConfigData } from '../../contexts/AppDataContext';
+import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
+import { getVariantNodeUnitWeightKg } from '../../utils/variantNodeUnitWeight';
 import { effectivePlanFormFieldType } from '../../utils/planFormCustomField';
 
 function reworkReportCollabFromValues(values: Record<string, unknown>): { collabData?: Record<string, unknown> } {
@@ -108,12 +113,20 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
   onClose,
 }) => {
   const equipmentFeaturesOn = useEquipmentFeaturesEffective();
+  const { weightTolerancePercent } = useConfigData();
+  const { scanEnabled, weightEnabled } = useTraceabilityPlugin();
+  const getUnitWeightKg = useCallback(
+    (productId: string, variantId: string, nodeId: string) =>
+      getVariantNodeUnitWeightKg(products, productId, variantId, nodeId),
+    [products],
+  );
   const { currentUser } = useAuth();
   const docOperatorFallback = currentOperatorDisplayName(currentUser);
   const [reworkReportQuantities, setReworkReportQuantities] = useState<Record<string, number>>({});
   const [reworkReportWorkerId, setReworkReportWorkerId] = useState('');
   const [reworkReportEquipmentId, setReworkReportEquipmentId] = useState('');
   const [reworkReportUnitPrice, setReworkReportUnitPrice] = useState<number>(0);
+  const [reworkReportWeight, setReworkReportWeight] = useState<number>(0);
   const [reworkReportCustomData, setReworkReportCustomData] = useState<Record<string, unknown>>({});
 
   const reworkReportCreateFields = useMemo(
@@ -157,6 +170,11 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
 
   const { order, nodeId: currentNodeId, outsourcePartner } = reworkReportModal;
   const isOutsourceRework = !!outsourcePartner;
+  const weightReportEnabled = useMemo(
+    () => !!globalNodes.find(n => n.id === currentNodeId)?.enableWeightOnReport,
+    [globalNodes, currentNodeId],
+  );
+  const scanWeightCheckEnabled = weightReportEnabled && weightEnabled;
 
   const reworkRemainingAtNode = (r: ProductionOpRecord, nodeId: string): number => {
     const pathNodes = (r.reworkNodeIds && r.reworkNodeIds.length > 0) ? r.reworkNodeIds : (r.nodeId ? [r.nodeId] : []);
@@ -509,13 +527,16 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
   );
 
   const handleReworkScanBatchConfirm = useCallback(
-    async (payloads: ScanPayload[]) => {
+    async (payloads: ScanPayload[], meta?: ScanBatchApplyMeta) => {
       for (const p of payloads) {
         if (!(await applyReworkScanPayload(p))) return false;
       }
+      if (scanWeightCheckEnabled && meta && meta.totalMeasuredWeightKg > 0) {
+        setReworkReportWeight(meta.totalMeasuredWeightKg);
+      }
       return true;
     },
-    [applyReworkScanPayload],
+    [applyReworkScanPayload, scanWeightCheckEnabled],
   );
 
   const handleSubmit = async () => {
@@ -583,35 +604,17 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
       assignedScanVids.add(vid);
       return { customData: { [SCAN_ITEM_CODE_IDS_KEY]: list } };
     };
+    const pendingReworkReports: Array<{
+      qty: number;
+      variantId: string | undefined;
+      src: ProductionOpRecord;
+    }> = [];
     const pushReworkReport = (qty: number, variantId: string | undefined, src: ProductionOpRecord) => {
       if (qty <= 0) return;
       if (!batchDocNo) batchDocNo = getNextReworkReportDocNo();
       appliedReportQty += qty;
       if (src.id) appliedReworkSourceIds.add(String(src.id));
-      const ts = new Date().toLocaleString();
-      const opName = isOutsourceRework ? '' : resolveOpName();
-      const sid = src.id != null ? String(src.id) : 'x';
-      onAddRecord({
-        id: `rec-rework-report-${Date.now()}-${reportSeq++}-${sid.slice(-8)}`,
-        type: 'REWORK_REPORT' as const,
-        orderId: src.orderId ?? order.id,
-        productId: order.productId,
-        operator: opName,
-        timestamp: ts,
-        nodeId: currentNodeId,
-        sourceNodeId: src.sourceNodeId,
-        sourceReworkId: src.id,
-        workerId: isOutsourceRework ? undefined : (reworkReportWorkerId || undefined),
-        equipmentId: isOutsourceRework ? undefined : (reworkReportEquipmentId || undefined),
-        quantity: qty,
-        variantId: variantId || undefined,
-        docNo: batchDocNo,
-        unitPrice: reworkReportUnitPrice > 0 ? reworkReportUnitPrice : undefined,
-        amount: reworkReportUnitPrice > 0 ? qty * reworkReportUnitPrice : undefined,
-        ...(isOutsourceRework && outsourcePartner ? { partner: outsourcePartner } : {}),
-        ...collabExtra,
-        ...scanTraceFor(variantId),
-      });
+      pendingReworkReports.push({ qty, variantId, src });
     };
     try {
       for (const { pathKey, records: pathRecords, pendingByVariant } of pathsSnapshot) {
@@ -732,6 +735,41 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
       toast.error(`提交失败：${e instanceof Error ? e.message : String(e)}`);
       return;
     }
+    const reworkWeightParts =
+      weightReportEnabled && reworkReportWeight > 0
+        ? distributeWeightByQty(
+            reworkReportWeight,
+            pendingReworkReports.map(r => ({ quantity: r.qty })),
+          )
+        : null;
+    for (let i = 0; i < pendingReworkReports.length; i++) {
+      const { qty, variantId, src } = pendingReworkReports[i]!;
+      const ts = new Date().toLocaleString();
+      const opName = isOutsourceRework ? '' : resolveOpName();
+      const sid = src.id != null ? String(src.id) : 'x';
+      onAddRecord({
+        id: `rec-rework-report-${Date.now()}-${reportSeq++}-${sid.slice(-8)}`,
+        type: 'REWORK_REPORT' as const,
+        orderId: src.orderId ?? order.id,
+        productId: order.productId,
+        operator: opName,
+        timestamp: ts,
+        nodeId: currentNodeId,
+        sourceNodeId: src.sourceNodeId,
+        sourceReworkId: src.id,
+        workerId: isOutsourceRework ? undefined : (reworkReportWorkerId || undefined),
+        equipmentId: isOutsourceRework ? undefined : (reworkReportEquipmentId || undefined),
+        quantity: qty,
+        variantId: variantId || undefined,
+        docNo: batchDocNo,
+        unitPrice: reworkReportUnitPrice > 0 ? reworkReportUnitPrice : undefined,
+        amount: reworkReportUnitPrice > 0 ? qty * reworkReportUnitPrice : undefined,
+        weight: reworkWeightParts?.[i],
+        ...(isOutsourceRework && outsourcePartner ? { partner: outsourcePartner } : {}),
+        ...collabExtra,
+        ...scanTraceFor(variantId),
+      });
+    }
     if (appliedReportQty <= 0) {
       toast.error(isOutsourceRework ? '未能写入委外返工收回：请确认所填数量与各规格「待收回」一致，或尝试刷新页面后重试。' : '未能写入返工报工：请确认所填数量与各规格「待返工」一致，或尝试刷新页面后重试。');
       return;
@@ -785,6 +823,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
         nodeId: currentNodeId,
         docNo: receiveDocNo,
         sourceReworkId: firstDispatch?.sourceReworkId,
+        weight: weightReportEnabled && reworkReportWeight > 0 ? reworkReportWeight : undefined,
         ...receiveScanTrace,
       });
     }
@@ -949,7 +988,27 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
                     </div>
                     <h3 className={sectionTitleClass}>2. 返工报工明细录入</h3>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {weightReportEnabled ? (
+                      <div className="flex items-center gap-1.5">
+                        <label className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-indigo-700">
+                          <Scale className="h-3.5 w-3.5 shrink-0" /> 交货总重 (kg)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.0001"
+                          value={reworkReportWeight === 0 ? '' : reworkReportWeight}
+                          onChange={e => {
+                            const n = parseFloat(e.target.value);
+                            setReworkReportWeight(Number.isFinite(n) && n > 0 ? n : 0);
+                          }}
+                          className="h-8 w-28 rounded-lg border border-indigo-200 bg-white px-2 text-right text-xs font-bold tabular-nums text-indigo-700 outline-none focus:ring-2 focus:ring-indigo-200"
+                        />
+                      </div>
+                    ) : null}
+                    {scanEnabled ? (
+                    <>
                     <span className="text-[10px] font-bold uppercase text-slate-400">扫码录入</span>
                     <ScanBatchTrigger
                       onApply={handleReworkScanBatchConfirm}
@@ -958,7 +1017,13 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
                       modalTitle="返工报工 · 批量扫码"
                       modalHint="请使用扫码枪；请先切换到英文（半角）输入法。扫入的码显示在列表中，确认后一次性累加返工报工数量。"
                       showScanIntentToggle
+                      enableWeightCheck={scanWeightCheckEnabled}
+                      weightNodeId={reworkReportModal.nodeId}
+                      weightTolerancePercent={weightTolerancePercent}
+                      getUnitWeightKg={getUnitWeightKg}
                     />
+                    </>
+                    ) : null}
                   </div>
                 </div>
 

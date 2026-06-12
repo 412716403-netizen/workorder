@@ -67,6 +67,7 @@
 | processSequenceMode | `ProcessSequenceMode` | 工序顺序模式 |
 | allowExceedMaxReportQty | `boolean` | 是否允许超额报工 |
 | allowExceedMaxOutsourceReceiveQty | `boolean` | 是否允许超额外协收货（已派 − 已收） |
+| weightTolerancePercent | `number` | 扫码称重容差百分比（默认 5，表示 ±5%） |
 | productMilestoneProgresses | `ProductMilestoneProgress[]` | 关联产品模式进度数据 |
 
 ### 1.4 说明
@@ -200,7 +201,7 @@ interface BOM {
 }
 ```
 
-**关联**：`Product.variants[].nodeBOMs` 为 `{ [nodeId]: bomId }`，按工序绑定 BOM。
+**关联**：`Product.variants[].nodeBOMs` 为 `{ [nodeId]: bomId }`，按工序绑定 BOM。`Product.variants[].nodeUnitWeights` 为 `{ [nodeId]: number }`（kg），按规格×工序维护单件标准重量，供扫码称重校验。
 
 ### 5.1 开发款式 BOM（DevBom）
 

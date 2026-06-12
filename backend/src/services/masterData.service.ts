@@ -303,7 +303,36 @@ export async function updateDictionaryItem(
   return updated;
 }
 
+const DICT_TYPE_LABEL: Record<string, string> = { color: '颜色', size: '尺码', unit: '单位' };
+
 export async function deleteDictionaryItem(db: TenantPrismaClient, tenantId: string, id: string) {
+  const existing = await db.dictionaryItem.findFirst({ where: { id } });
+  if (!existing) throw new AppError(404, '字典项不存在');
+
+  // 字典项被业务数据按 id 引用（变体颜色/尺码、产品勾选、产品单位）；被引用时禁止删除，避免悬空 id 导致名称解析失效
+  const blockers: string[] = [];
+  if (existing.type === 'color' || existing.type === 'size') {
+    const variantWhere = existing.type === 'color' ? { colorId: id } : { sizeId: id };
+    const productJsonWhere = existing.type === 'color'
+      ? { colorIds: { array_contains: id } }
+      : { sizeIds: { array_contains: id } };
+    const [productCount, variantCount, devVariantCount] = await Promise.all([
+      db.product.count({ where: productJsonWhere }),
+      db.productVariant.count({ where: variantWhere }),
+      db.devStyleVariant.count({ where: variantWhere }),
+    ]);
+    if (productCount > 0) blockers.push(`${productCount} 个产品已勾选`);
+    if (variantCount > 0) blockers.push(`${variantCount} 个产品规格在使用`);
+    if (devVariantCount > 0) blockers.push(`${devVariantCount} 个开发款式规格在使用`);
+  } else if (existing.type === 'unit') {
+    const unitCount = await db.product.count({ where: { unitId: id } });
+    if (unitCount > 0) blockers.push(`${unitCount} 个产品将其用作计量单位`);
+  }
+  if (blockers.length > 0) {
+    const typeLabel = DICT_TYPE_LABEL[existing.type] ?? '字典项';
+    throw new AppError(409, `无法删除${typeLabel}「${existing.name}」：${blockers.join('、')}。请先在相关产品中调整后再删除。`);
+  }
+
   await db.dictionaryItem.delete({ where: { id } });
   await invalidateDictionaryCache(tenantId);
   return { message: '已删除' };

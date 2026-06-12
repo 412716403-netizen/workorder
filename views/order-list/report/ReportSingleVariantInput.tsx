@@ -11,6 +11,8 @@ import { ScanBatchTrigger } from '../../../components/scan/ScanBatchTrigger';
 import type { ScanBatchRowDetail } from '../../../utils/scanBatchRowDetail';
 import type { ScanPayload } from '../../../utils/scanPayload';
 import type { ReportFormState, ReportModalData } from '../../../hooks/useReportModalState';
+import type { ScanBatchApplyMeta } from '../../../components/scan/ScanBatchSessionModal';
+import type { ScanWeightCheckProps } from './ReportVariantMatrixInput';
 import { formStandardLabelClass } from '../../../styles/uiDensity';
 
 interface Props {
@@ -29,8 +31,10 @@ interface Props {
   totalOutsourcedAtNode: number;
   defectiveQtyForHint: number;
   totalRework: number;
-  onScanBatchConfirm: (payloads: ScanPayload[]) => Promise<boolean>;
+  onScanBatchConfirm: (payloads: ScanPayload[], meta?: ScanBatchApplyMeta) => Promise<boolean>;
   resolveScanRowPreview: (payload: ScanPayload) => Promise<ScanBatchRowDetail | null>;
+  scanWeightProps?: ScanWeightCheckProps;
+  scanEnabled?: boolean;
 }
 
 const ReportSingleVariantInput: React.FC<Props> = ({
@@ -51,6 +55,8 @@ const ReportSingleVariantInput: React.FC<Props> = ({
   totalRework,
   onScanBatchConfirm,
   resolveScanRowPreview,
+  scanWeightProps,
+  scanEnabled = true,
 }) => {
   const reportProduct = productMap.get(reportModal.order.productId);
   const detailUnit = (reportProduct?.unitId && dictionaries.units.find(u => u.id === reportProduct.unitId)?.name) || '件';
@@ -185,6 +191,7 @@ const ReportSingleVariantInput: React.FC<Props> = ({
             </div>
           </div>
         </div>
+        {scanEnabled ? (
         <div className="flex flex-col gap-0.5 shrink-0 sm:pl-1">
           <label className="text-[9px] font-black text-slate-400 uppercase whitespace-nowrap tracking-wide">扫码累加</label>
           <div className="h-8 flex items-center">
@@ -195,9 +202,14 @@ const ReportSingleVariantInput: React.FC<Props> = ({
               modalTitle="报工 · 批量扫码"
               modalHint="请使用扫码枪；请先切换到英文（半角）输入法。扫入的码显示在列表中，确认后一次性累加到本次完成数量。"
               showScanIntentToggle
+              enableWeightCheck={scanWeightProps?.enableWeightCheck}
+              weightNodeId={scanWeightProps?.weightNodeId}
+              weightTolerancePercent={scanWeightProps?.weightTolerancePercent}
+              getUnitWeightKg={scanWeightProps?.getUnitWeightKg}
             />
           </div>
         </div>
+        ) : null}
       </div>
     </div>
   );

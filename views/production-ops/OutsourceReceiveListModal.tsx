@@ -3,7 +3,7 @@ import { ArrowDownToLine, X, Check, ScanLine, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Product, Partner, ProductCategory } from '../../types';
 import { outsourceReceiveBaseKey } from './outsourceReceiveKeys';
-import { ScanBatchSessionModal } from '../../components/scan/ScanBatchSessionModal';
+import { ScanBatchSessionModal, type ScanBatchApplyMeta } from '../../components/scan/ScanBatchSessionModal';
 import { SearchablePartnerSelect } from '../../components/SearchablePartnerSelect';
 import {
   useOutsourceReceiveScan,
@@ -11,6 +11,9 @@ import {
 } from '../../hooks/useOutsourceReceiveScan';
 import type { ScanPayload } from '../../utils/scanPayload';
 import type { ScanBatchRowDetail } from '../../utils/scanBatchRowDetail';
+import { useConfigData } from '../../contexts/AppDataContext';
+import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
+import { getVariantNodeUnitWeightKg } from '../../utils/variantNodeUnitWeight';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
 
 export interface ReceiveRow {
@@ -38,6 +41,8 @@ export interface OutsourceReceiveScanConfirmEntry {
   itemCodeId?: string | null;
   /** 本次扫码解析到的虚拟批次 id（同批次各单品码共享追溯链路） */
   virtualBatchId?: string | null;
+  /** 扫码会话该行实测重量(kg)，确认后累加到 receiveFormWeights[baseKey] */
+  measuredWeightKg?: number;
 }
 
 export interface OutsourceReceiveScanConfirmPayload {
@@ -88,6 +93,13 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
   onScanConfirm,
   onClose,
 }) => {
+  const { weightTolerancePercent } = useConfigData();
+  const { scanEnabled, weightEnabled } = useTraceabilityPlugin();
+  const getUnitWeightKg = useCallback(
+    (productId: string, variantId: string, nodeId: string) =>
+      getVariantNodeUnitWeightKg(products, productId, variantId, nodeId),
+    [products],
+  );
   const [searchOrder, setSearchOrder] = useState('');
   const [searchProduct, setSearchProduct] = useState('');
   const [searchPartner, setSearchPartner] = useState('');
@@ -223,7 +235,7 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
    * 任一失败返回 false 保持弹窗打开（toast 已由 hook 给出）。
    */
   const handleScanApply = useCallback(
-    async (payloads: ScanPayload[]): Promise<boolean> => {
+    async (payloads: ScanPayload[], meta?: ScanBatchApplyMeta): Promise<boolean> => {
       if (!scanPartner) {
         toast.warning('请先选择加工厂');
         return false;
@@ -233,9 +245,11 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
       const accEntries: OutsourceReceiveScanConfirmEntry[] = [];
       let lockedNode: string | null = scanLockedNodeId;
       const currentQuantitiesSnapshot: Record<string, number> = { ...receiveFormQuantities };
-      for (const payload of payloads) {
+      for (let i = 0; i < payloads.length; i++) {
+        const payload = payloads[i]!;
         const res = await applyScanPayload({ payload, currentQuantities: currentQuantitiesSnapshot });
         if (!res) return false;
+        const rowWeight = meta?.rowMeasuredWeightKg?.[i];
         // 首条扫入即锁工序
         if (lockedNode == null) lockedNode = res.row.nodeId;
         else if (res.row.nodeId !== lockedNode) {
@@ -252,6 +266,7 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
           variantLabel: res.detail.specNote ?? `${res.detail.colorName} / ${res.detail.sizeName}`,
           itemCodeId: res.itemCodeId,
           virtualBatchId: res.virtualBatchId,
+          ...(rowWeight != null && rowWeight > 0 ? { measuredWeightKg: rowWeight } : {}),
         });
         currentQuantitiesSnapshot[res.key] = (currentQuantitiesSnapshot[res.key] ?? 0) + res.qty;
       }
@@ -587,6 +602,7 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
               已选 <span className="tabular-nums text-indigo-700">{receiveSelectedKeys.size}</span> 项
             </span>
             <div className="flex flex-wrap items-center gap-2">
+              {scanEnabled ? (
               <button
                 type="button"
                 onClick={handleOpenScan}
@@ -594,6 +610,7 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
               >
                 <ScanLine className="h-4 w-4 shrink-0" /> 扫码收货
               </button>
+              ) : null}
               <button
                 type="button"
                 disabled={receiveSelectedKeys.size === 0}
@@ -607,6 +624,7 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
         )}
       </div>
 
+      {scanEnabled ? (
       <ScanBatchSessionModal
         open={scanOpen}
         onClose={handleCloseScan}
@@ -619,7 +637,11 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
         scanDisabled={!scanPartner}
         scanDisabledHint="请先在上方选择加工厂后再开始扫码。"
         sessionResetKey={scanPartner}
+        enableWeightCheck={weightEnabled}
+        weightTolerancePercent={weightTolerancePercent}
+        getUnitWeightKg={getUnitWeightKg}
       />
+      ) : null}
     </div>
   );
 };

@@ -56,4 +56,10 @@ router.get(
   ctrl.getDefectiveRework,
 );
 
+router.get(
+  '/receive-unit-weight-averages',
+  requireProductionRead(),
+  ctrl.receiveUnitWeightAverages,
+);
+
 export default router;

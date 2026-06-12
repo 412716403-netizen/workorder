@@ -14,9 +14,10 @@ import {
   Trash2,
   Building2,
 } from 'lucide-react';
-import { ProductCategory, type CustomDocFieldType } from '../../types';
+import { ProductCategory, type CustomDocFieldType, normalizeTenantIndustryKind } from '../../types';
 import { toast } from 'sonner';
 import * as api from '../../services/api';
+import { useAuthOptional } from '../../contexts/AuthContext';
 import { ExtFieldLabelInput } from './shared';
 import { ReportCustomFieldsConfigTable } from '../../components/form-config/CustomFieldsEditorTable';
 import { formStandardControlClass } from '../../styles/uiDensity';
@@ -41,6 +42,10 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
   const [categoryNameDraft, setCategoryNameDraft] = useState('');
   const addLock = useAsyncSubmitLock();
   const { isPluginEnabled } = useFeaturePlugins();
+  const auth = useAuthOptional();
+  /** 「启用颜色尺码」仅对毛衣工厂行业租户开放（平台在企业管理中指定行业类型） */
+  const colorSizeIndustryEnabled =
+    normalizeTenantIndustryKind(auth?.tenantCtx?.industryKind) === 'sweater_factory';
   const customFieldAllowedTypes: CustomDocFieldType[] = isPluginEnabled('knowledge_base')
     ? ['text', 'date', 'select', 'file', 'knowledge']
     : ['text', 'date', 'select', 'file'];
@@ -203,8 +208,11 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
                         { label: '关联合作单位', key: 'linkPartner', desc: '开启后可关联首选供应商；开发管理可录入客户并按客户排序。', icon: Building2 },
                         { label: '启用颜色尺码', key: 'hasColorSize', desc: '开启后支持颜色、尺码库选择。', icon: Maximize },
                         { label: '启用批次管理', key: 'hasBatchManagement', desc: '开启后该类产品在采购、出入库和生产入库中按批次记录库存。', icon: Tag },
-                      ].map(toggle => {
-                        const curVal = Boolean((cat as Record<string, unknown>)[toggle.key]);
+                      ]
+                        // 非毛衣工厂行业隐藏颜色尺码开关；已开启的分类仍显示，便于关闭
+                        .filter(toggle => toggle.key !== 'hasColorSize' || colorSizeIndustryEnabled || cat.hasColorSize)
+                        .map(toggle => {
+                        const curVal = Boolean((cat as unknown as Record<string, unknown>)[toggle.key]);
                         const nextVal = !curVal;
                         const toggleBlocked =
                           (toggle.key === 'hasColorSize' && nextVal && Boolean(cat.hasBatchManagement)) ||
