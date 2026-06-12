@@ -24,6 +24,7 @@ import {
   isPartnerReconOutsourceReceiveDocType,
   outsourceReceiveRecordMatchesReconDocType,
 } from '../../utils/partnerReconLedger';
+import FinanceRecordDetailSummary from './FinanceRecordDetailSummary';
 
 interface FinanceDetailModalProps {
   detailRecord: DetailTarget | null;
@@ -136,9 +137,14 @@ function FinanceDetailModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white w-full max-w-2xl rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 max-h-[90vh] flex flex-col">
+      <div className="relative bg-white w-full max-w-3xl rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 max-h-[90vh] flex flex-col">
         <div className="px-8 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
-          <h2 className="text-lg font-bold text-slate-800">单据详情</h2>
+          <h2 className="text-lg font-bold text-slate-800">
+            单据详情
+            {financeRec && (financeRec.type === 'RECEIPT' || financeRec.type === 'PAYMENT') && (
+              <span className="text-slate-500 font-bold"> · {financeRec.docNo || financeRec.id}</span>
+            )}
+          </h2>
           <div className="flex items-center gap-2">
             {financeRec && onUpdateRecord && canEdit && (
               <button
@@ -460,48 +466,31 @@ function FinanceDetailModal({
             );
           })()}
           {(financeRec != null) && (
-            <>
-              <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-                <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">单据编号</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.docNo || financeRec.id}</p></div>
-                <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">单据类型</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.categoryId ? (financeCatMap.get(financeRec.categoryId)?.name ?? bizConfig[financeRec.type]?.label) : (bizConfig[financeRec.type]?.label ?? financeRec.type)}</p></div>
-                <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">业务时间</span><p className="text-sm font-bold text-slate-800 mt-0.5">{fmtDT(financeRec.timestamp)}</p></div>
-                <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{current.partnerLabel}</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.partner || '-'}</p></div>
-                {financeRec.workerId && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">关联工人</span><p className="text-sm font-bold text-slate-800 mt-0.5">{workerMap.get(financeRec.workerId)?.name ?? financeRec.workerId}</p></div>}
-                {financeRec.relatedId && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">关联工单</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.relatedId}</p></div>}
-                {financeRec.paymentAccount && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">收支账户</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.paymentAccount}</p></div>}
-                <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">业务金额</span><p className={`text-sm font-black mt-0.5 ${financeRec.type === 'RECEIPT' ? 'text-emerald-600' : 'text-slate-800'}`}>¥ {financeRec.amount.toLocaleString()}</p></div>
-                <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">经办人</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.operator}</p></div>
-              </div>
-              <div>
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">产品、数量、单价</span>
-                <div className="mt-2 border border-slate-100 rounded-xl overflow-hidden">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50">
-                      <tr>
-                        <th className="px-4 py-2 font-black text-slate-500">产品</th>
-                        <th className="px-4 py-2 font-black text-slate-500 text-right">数量</th>
-                        <th className="px-4 py-2 font-black text-slate-500 text-right">单价</th>
-                        <th className="px-4 py-2 font-black text-slate-500 text-right">金额</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td className="px-4 py-2 font-bold text-slate-800">{financeRec.productId ? (productMap.get(financeRec.productId)?.name ?? financeRec.productId) : '—'}</td>
-                        <td className="px-4 py-2 text-right font-bold text-slate-800">—</td>
-                        <td className="px-4 py-2 text-right font-bold text-slate-800">—</td>
-                        <td className="px-4 py-2 text-right font-black text-slate-800">¥ {financeRec.amount.toLocaleString()}</td>
-                      </tr>
-                    </tbody>
-                  </table>
+            financeRec.type === 'RECEIPT' || financeRec.type === 'PAYMENT' ? (
+              <FinanceRecordDetailSummary
+                financeRec={financeRec}
+                current={current}
+                financeCatMap={financeCatMap}
+                orders={orders}
+                productMap={productMap}
+                workerMap={workerMap}
+              />
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                  <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">单据编号</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.docNo || financeRec.id}</p></div>
+                  <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">单据类型</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.categoryId ? (financeCatMap.get(financeRec.categoryId)?.name ?? bizConfig[financeRec.type]?.label) : (bizConfig[financeRec.type]?.label ?? financeRec.type)}</p></div>
+                  <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">业务时间</span><p className="text-sm font-bold text-slate-800 mt-0.5">{fmtDT(financeRec.timestamp)}</p></div>
+                  <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{current.partnerLabel}</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.partner || '-'}</p></div>
+                  {financeRec.workerId && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">关联工人</span><p className="text-sm font-bold text-slate-800 mt-0.5">{workerMap.get(financeRec.workerId)?.name ?? financeRec.workerId}</p></div>}
+                  {financeRec.relatedId && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">关联工单</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.relatedId}</p></div>}
+                  {financeRec.paymentAccount && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">收支账户</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.paymentAccount}</p></div>}
+                  <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">业务金额</span><p className={`text-sm font-black mt-0.5 ${financeRec.type === 'RECEIPT' ? 'text-emerald-600' : 'text-slate-800'}`}>¥ {financeRec.amount.toLocaleString()}</p></div>
+                  <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">经办人</span><p className="text-sm font-bold text-slate-800 mt-0.5">{financeRec.operator}</p></div>
                 </div>
-              </div>
-              {(financeRec.note != null && financeRec.note !== '') && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">备注</span><p className="text-sm text-slate-600 mt-0.5 whitespace-pre-wrap">{financeRec.note}</p></div>}
-              {financeRec.customData && Object.keys(financeRec.customData).length > 0 && (() => {
-                const cat = financeRec.categoryId ? financeCatMap.get(financeRec.categoryId) ?? null : null;
-                const fields = cat?.customFields ?? [];
-                return fields.length > 0 ? <div className="space-y-3"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">自定义内容</span><div className="grid grid-cols-2 gap-x-8 gap-y-2">{fields.map(f => <div key={f.id}><span className="text-[10px] text-slate-400">{f.label}</span><p className="text-sm font-bold text-slate-800 mt-0.5">{String(financeRec.customData![f.id] ?? '-')}</p></div>)}</div></div> : null;
-              })()}
-            </>
+                {(financeRec.note != null && financeRec.note !== '') && <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">备注</span><p className="text-sm text-slate-600 mt-0.5 whitespace-pre-wrap">{financeRec.note}</p></div>}
+              </>
+            )
           )}
         </div>
       </div>
