@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/core';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -8,14 +8,21 @@ import { Table } from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
+import Link from '@tiptap/extension-link';
 import { ResizableImage } from './resizableImageExtension';
 import Placeholder from '@tiptap/extension-placeholder';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { common, createLowlight } from 'lowlight';
+import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
-import { createSlashCommandExtension } from './slashCommandExtension';
+import {
+  isAllowedKnowledgeExternalUrl,
+} from '../../shared/knowledgeLinkUrl';
 import EditorInsertHandle from './EditorInsertHandle';
 import TableBubbleMenu from './TableBubbleMenu';
+import LinkInsertDialog from './LinkInsertDialog';
+import { insertKnowledgeExternalLink } from './knowledgeEditorInsert';
+import { bindKnowledgeEditorLinkClick } from './knowledgeEditorLinkClick';
 import { tableDeleteShortcut } from './tableDeleteShortcut';
 import { focusDocumentTail, isClickBelowEditorContent } from './focusDocumentTail';
 import './knowledge-editor.css';
@@ -33,6 +40,7 @@ interface KnowledgeRichEditorProps {
   saving?: boolean;
   onTitleChange: (title: string) => void;
   onSave: (payload: { docId: string; title: string; content: string }) => void | Promise<void>;
+  onSaveError?: () => void;
   onUploadImage: (file: File) => Promise<string>;
 }
 
@@ -45,6 +53,7 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
   saving,
   onTitleChange,
   onSave,
+  onSaveError,
   onUploadImage,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,6 +62,10 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
   const onSaveRef = useRef(onSave);
   const lastSavedRef = useRef({ title: '', content: '' });
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hydratingRef = useRef(true);
+  const dirtyRef = useRef(false);
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [linkDialogInitialText, setLinkDialogInitialText] = useState('');
 
   documentIdRef.current = documentId;
   onSaveRef.current = onSave;
@@ -63,8 +76,11 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
     ed.chain().focus().setImage({ src: url }).run();
   }, [onUploadImage]);
 
-  const flushSave = useCallback(async (docId: string, ed: Editor | null) => {
-    if (!ed || !editable) return;
+  const onSaveErrorRef = useRef(onSaveError);
+  onSaveErrorRef.current = onSaveError;
+
+  const flushSave = useCallback(async (docId: string, ed: Editor | null, opts?: { silent?: boolean }) => {
+    if (!ed || !editable || hydratingRef.current) return;
     const payload = {
       docId,
       title: titleRef.current,
@@ -74,18 +90,27 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
       payload.title === lastSavedRef.current.title
       && payload.content === lastSavedRef.current.content
     ) {
+      dirtyRef.current = false;
       return;
     }
     try {
       await onSaveRef.current(payload);
       lastSavedRef.current = { title: payload.title, content: payload.content };
-    } catch {
-      /* 保存失败时保留 dirty 状态，等待下次编辑重试 */
+      dirtyRef.current = false;
+    } catch (err: unknown) {
+      if (opts?.silent) return;
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('已被他人修改')) {
+        toast.error(msg || '文档已被他人修改，请刷新后重试');
+      } else {
+        onSaveErrorRef.current?.();
+      }
     }
   }, [editable]);
 
   const scheduleSave = useCallback((docId: string, ed: Editor | null) => {
-    if (!editable) return;
+    if (!editable || hydratingRef.current) return;
+    dirtyRef.current = true;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       void flushSave(docId, ed);
@@ -100,6 +125,20 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
       StarterKit.configure({
         codeBlock: false,
         heading: { levels: [1, 2, 3] },
+        link: false,
+      }),
+      Link.configure({
+        openOnClick: false,
+        autolink: false,
+        linkOnPaste: false,
+        defaultProtocol: 'https',
+        protocols: ['http', 'https', 'mailto'],
+        HTMLAttributes: {
+          class: 'kb-external-link',
+          rel: 'noopener noreferrer',
+          target: '_blank',
+        },
+        isAllowedUri: url => isAllowedKnowledgeExternalUrl(url),
       }),
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -122,32 +161,41 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
         placeholder: '输入正文，或点击左侧 + 插入内容块…',
       }),
       CodeBlockLowlight.configure({ lowlight }),
-      createSlashCommandExtension(() => fileInputRef.current?.click()),
       tableDeleteShortcut,
     ],
     content,
     editable,
     onUpdate: ({ editor: ed }) => {
+      if (hydratingRef.current) return;
       scheduleSaveRef.current(documentIdRef.current, ed);
     },
   }, []);
 
   useEffect(() => {
     titleRef.current = title;
-  }, [title]);
+    if (!editor || hydratingRef.current) return;
+    if (title !== lastSavedRef.current.title) {
+      dirtyRef.current = true;
+    }
+  }, [title, editor]);
 
-  /** 仅在切换文档时对齐基线；勿依赖 title，否则每次改标题都会跳过保存 */
-  useEffect(() => {
-    lastSavedRef.current = { title, content };
-  }, [documentId]);
-
+  /** 切换文档或服务端正文到达后：写入编辑器并以 Tiptap 序列化结果对齐保存基线，避免误触发自动保存 */
   useEffect(() => {
     if (!editor) return;
-    const current = editor.getHTML();
-    if (content === current) {
-      lastSavedRef.current = { title: titleRef.current, content };
+    hydratingRef.current = true;
+    dirtyRef.current = false;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
     }
-  }, [content, editor]);
+    titleRef.current = title;
+    const current = editor.getHTML();
+    if (content !== current) {
+      editor.commands.setContent(content || '<p></p>', false);
+    }
+    lastSavedRef.current = { title: titleRef.current, content: editor.getHTML() };
+    hydratingRef.current = false;
+  }, [editor, content, documentId]);
 
   useEffect(() => {
     if (!editor) return;
@@ -155,20 +203,16 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
   }, [editor, editable]);
 
   useEffect(() => {
-    if (!editor) return;
-    const current = editor.getHTML();
-    if (content !== current) {
-      editor.commands.setContent(content || '<p></p>', false);
-    }
-  }, [editor, content]);
-
-  useEffect(() => {
+    const docId = documentId;
+    const ed = editor;
     return () => {
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
       }
-      void flushSave(documentId, editor);
+      if (dirtyRef.current && ed) {
+        void flushSave(docId, ed, { silent: true });
+      }
     };
   }, [documentId, editor, flushSave]);
 
@@ -206,10 +250,30 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
     return () => el.removeEventListener('paste', handlePaste);
   }, [editor, handlePaste]);
 
+  useEffect(() => {
+    const root = editor?.view.dom;
+    if (!root) return;
+    return bindKnowledgeEditorLinkClick(root);
+  }, [editor]);
+
+  const openLinkDialog = useCallback(() => {
+    if (!editor) return;
+    const { from, to, empty } = editor.state.selection;
+    const selectedText = empty ? '' : editor.state.doc.textBetween(from, to, ' ');
+    setLinkDialogInitialText(selectedText);
+    setLinkDialogOpen(true);
+  }, [editor]);
+
+  const handleLinkConfirm = useCallback((text: string, href: string) => {
+    if (!editor) return;
+    insertKnowledgeExternalLink(editor, text, href);
+    scheduleSaveRef.current(documentIdRef.current, editor);
+  }, [editor]);
+
   const handleEditorShellMouseDown = (e: React.MouseEvent) => {
     if (!editor || !editable || e.button !== 0) return;
     const target = e.target as HTMLElement;
-    if (target.closest('.kb-insert-plus, .kb-insert-popup-portal, .kb-table-bubble-menu, .kb-insert-wrap')) {
+    if (target.closest('.kb-insert-plus, .kb-insert-popup-portal, .kb-table-bubble-menu, .kb-insert-wrap, .kb-link-insert-overlay')) {
       return;
     }
 
@@ -275,6 +339,7 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
           editor={editor}
           editable={editable}
           onPickImage={() => fileInputRef.current?.click()}
+          onOpenLinkDialog={openLinkDialog}
         />
         <div className="kb-editor">
           <TableBubbleMenu editor={editor} editable={editable} />
@@ -282,6 +347,13 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
         </div>
         {editable && <div className="kb-editor-tail-hit" aria-hidden />}
       </div>
+
+      <LinkInsertDialog
+        open={linkDialogOpen}
+        initialText={linkDialogInitialText}
+        onClose={() => setLinkDialogOpen(false)}
+        onConfirm={handleLinkConfirm}
+      />
 
       <input
         ref={fileInputRef}

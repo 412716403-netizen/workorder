@@ -9,7 +9,12 @@ import {
   useKnowledgeDocument,
   useKnowledgeBaseMutations,
 } from '../../hooks/useKnowledgeBase';
-import type { KnowledgeFolderDto, KnowledgeDocumentDto } from '../../types';
+import type { KnowledgeFolderDto, KnowledgeDocumentSummaryDto } from '../../types';
+import {
+  fetchKnowledgeDocumentReferences,
+  formatKnowledgeReferencesForDisplay,
+  hasKnowledgeReferences,
+} from '../../utils/knowledgeDocReferencesDisplay';
 import KnowledgeTreeSidebar from './KnowledgeTreeSidebar';
 import KnowledgeRichEditor from './KnowledgeRichEditor';
 import KnowledgeFolderModal from './KnowledgeFolderModal';
@@ -64,6 +69,7 @@ const KnowledgeBaseView: React.FC = () => {
     updateDocument,
     deleteDocument,
     uploadAsset,
+    invalidateDoc,
   } = useKnowledgeBaseMutations();
 
   const editorTitle = selectedDoc ? draftTitle : '';
@@ -75,18 +81,28 @@ const KnowledgeBaseView: React.FC = () => {
 
   const handleSave = async (payload: { docId: string; title: string; content: string }) => {
     if (!canEditDoc) return;
-    const doc = payload.docId === selectedDocId
-      ? selectedDoc
-      : documents.find(d => d.id === payload.docId);
+    const baseline = payload.docId === selectedDocId ? selectedDoc : undefined;
     const normalized = { title: payload.title.trim(), content: payload.content };
-    if (doc && doc.title === normalized.title && doc.content === normalized.content) return;
+    if (
+      baseline
+      && baseline.title === normalized.title
+      && baseline.content === normalized.content
+    ) {
+      return;
+    }
     try {
       await updateDocument.mutateAsync({
         id: payload.docId,
-        body: normalized,
+        body: {
+          ...normalized,
+          expectedUpdatedAt: baseline?.updatedAt,
+        },
       });
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : '保存失败');
+      const msg = err instanceof Error ? err.message : '保存失败';
+      if (msg.includes('已被他人修改') && payload.docId === selectedDocId) {
+        void invalidateDoc(payload.docId);
+      }
       throw err;
     }
   };
@@ -187,7 +203,18 @@ const KnowledgeBaseView: React.FC = () => {
     }
   };
 
-  const handleDeleteDoc = async (doc: KnowledgeDocumentDto) => {
+  const handleDeleteDoc = async (doc: KnowledgeDocumentSummaryDto) => {
+    try {
+      const refs = await fetchKnowledgeDocumentReferences(doc.id);
+      if (hasKnowledgeReferences(refs)) {
+        toast.error(`无法删除：文档仍被引用（${formatKnowledgeReferencesForDisplay(refs)}）`);
+        return;
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : '无法检查引用关系');
+      return;
+    }
+
     const ok = await confirm({
       title: '删除文档',
       message: `确定删除「${doc.title}」？`,
@@ -260,6 +287,7 @@ const KnowledgeBaseView: React.FC = () => {
       {selectedDocId && selectedDoc && !docLoading ? (
         <div className="min-w-0 flex-1">
           <KnowledgeRichEditor
+            key={selectedDocId}
             documentId={selectedDocId}
             title={editorTitle}
             content={editorContent}
@@ -268,6 +296,7 @@ const KnowledgeBaseView: React.FC = () => {
             saving={updateDocument.isPending}
             onTitleChange={setDraftTitle}
             onSave={handleSave}
+            onSaveError={() => toast.error('自动保存失败，请检查网络后继续编辑')}
             onUploadImage={handleUploadImage}
           />
         </div>

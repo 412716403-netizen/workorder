@@ -721,6 +721,60 @@ sudo certbot renew --dry-run
 
 ---
 
+## PWA：安装到桌面（浏览器快捷图标）
+
+> 在 Electron 桌面客户端暂缓期间，用户可通过 **PWA「安装应用」** 从开始菜单 / Dock 独立打开，**界面仍从 Nginx 加载**，与浏览器标签页同步更新，无需单独发客户端安装包。
+
+### 前提
+
+- 站点须 **HTTPS**（正式域 `https://procx.wanpuxx.com` 已满足；本地 `http://localhost:3000` 也可用于开发验证）。
+- 发版流程不变：`npm run build` → 部署 `dist/`（含 `sw.js`、`manifest.webmanifest`、图标）。
+
+### 用户安装步骤
+
+**Windows（Chrome / Edge）**
+
+1. 用 Chrome 或 Edge 打开正式站点并登录（可选，安装后仍需登录）。
+2. 地址栏右侧点击 **「安装」** ⊕，或菜单 **「应用 → 安装万濮云」**。
+3. 确认后应用出现在 **开始菜单**；安装时可勾选 **「在桌面创建快捷方式」**。
+4. 之后从桌面 / 开始菜单打开为**独立窗口**（无浏览器地址栏）。
+
+**macOS（Chrome / Edge）**
+
+1. 同上打开正式 HTTPS 站点。
+2. 地址栏 **安装** 图标，或菜单 **「文件 → 安装万濮云…」**。
+3. 应用出现在 **应用程序** 文件夹，可拖到 Dock。
+
+**登录页引导**
+
+- 若浏览器支持安装，登录页会显示 **「安装到桌面」** 条；已安装为独立应用时自动隐藏。
+
+**无 PWA 时的兜底（零开发）**
+
+- Chrome：**「⋮ → 保存和分享 → 创建快捷方式 → 在窗口中打开」**（体验略逊于 PWA，仍有图标）。
+
+### 与 Web 发版的关系
+
+| 更新类型 | 桌面 PWA 用户 |
+|----------|----------------|
+| 仅后端 API | 打开即用，无需操作 |
+| 前端页面 / 功能 | **随 Web 发版自动更新**（Service Worker `autoUpdate` + 刷新）；无需重装 |
+| 登录会话 | 与浏览器相同（`localStorage` + httpOnly Cookie），**不是**免登录快捷方式 |
+
+### 运维 / 图标
+
+- PWA 图标源文件：`public/wanpu-logo.png`；生成物：`public/icons/icon-192.png`、`icon-512.png`。
+- 更换 Logo 后执行：`npm run pwa:icons`（需 Python3 + Pillow），再 `npm run build` 部署。
+- Nginx 需能正常提供 `manifest.webmanifest`（默认 MIME 即可）及 `sw.js`。
+
+### 验收（发版后抽查）
+
+1. Chrome/Edge 访问 HTTPS 域，可看到「安装」入口。
+2. 安装后独立窗口可登录、选租户、报工。
+3. DevTools → Application → Service Workers：已注册；Network 中 `/api/*` **不应**来自 SW Cache。
+
+---
+
 ## 本地开发（Mac / Windows）
 
 若拉取含 **Prisma 新列**（如 `report_display_template`、`route_report_display_values`）的代码后，在「系统设置 → 工序节点」保存报工展示模板报错：

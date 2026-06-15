@@ -1,8 +1,10 @@
 import { request, buildQs } from './_client';
 import type {
   KnowledgeFolderDto,
+  KnowledgeDocumentSummaryDto,
   KnowledgeDocumentDto,
   KnowledgeTreeResponse,
+  KnowledgeDocumentReferencesResponse,
   KnowledgeAssetUploadResponse,
 } from '../../types';
 
@@ -30,10 +32,15 @@ export const knowledgeBase = {
     }),
 
   listDocuments: (params?: { folderId?: string | null; search?: string }) =>
-    request<KnowledgeDocumentDto[]>(`/knowledge-base/documents${buildQs(params ?? {})}`),
+    request<KnowledgeDocumentSummaryDto[]>(`/knowledge-base/documents${buildQs(params ?? {})}`),
 
   getDocument: (id: string) =>
     request<KnowledgeDocumentDto>(`/knowledge-base/documents/${encodeURIComponent(id)}`),
+
+  getDocumentReferences: (id: string) =>
+    request<KnowledgeDocumentReferencesResponse>(
+      `/knowledge-base/documents/${encodeURIComponent(id)}/references`,
+    ),
 
   createDocument: (body: { title: string; folderId?: string | null; content?: string; sortOrder?: number }) =>
     request<KnowledgeDocumentDto>('/knowledge-base/documents', {
@@ -43,7 +50,13 @@ export const knowledgeBase = {
 
   updateDocument: (
     id: string,
-    body: { title?: string; folderId?: string | null; content?: string; sortOrder?: number },
+    body: {
+      title?: string;
+      folderId?: string | null;
+      content?: string;
+      sortOrder?: number;
+      expectedUpdatedAt?: string;
+    },
   ) =>
     request<KnowledgeDocumentDto>(`/knowledge-base/documents/${encodeURIComponent(id)}`, {
       method: 'PUT',

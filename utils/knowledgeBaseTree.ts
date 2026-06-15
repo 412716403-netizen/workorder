@@ -1,4 +1,4 @@
-import type { KnowledgeDocumentDto, KnowledgeFolderDto } from '../types';
+import type { KnowledgeDocumentSummaryDto, KnowledgeFolderDto } from '../types';
 
 export interface KnowledgeTreeNode {
   id: string;
@@ -7,13 +7,13 @@ export interface KnowledgeTreeNode {
   parentId: string | null;
   sortOrder: number;
   children: KnowledgeTreeNode[];
-  /** 仅 document */
-  doc?: KnowledgeDocumentDto;
+  /** 仅 document（摘要，树节点不含正文） */
+  doc?: KnowledgeDocumentSummaryDto;
 }
 
 export function buildKnowledgeTree(
   folders: KnowledgeFolderDto[],
-  documents: KnowledgeDocumentDto[],
+  documents: KnowledgeDocumentSummaryDto[],
 ): KnowledgeTreeNode[] {
   const folderMap = new Map<string, KnowledgeTreeNode>();
   for (const f of folders) {
@@ -65,7 +65,7 @@ export function buildKnowledgeTree(
 export function folderHasChildren(
   folderId: string,
   folders: KnowledgeFolderDto[],
-  documents: KnowledgeDocumentDto[],
+  documents: KnowledgeDocumentSummaryDto[],
 ): boolean {
   return (
     folders.some(f => f.parentId === folderId)
@@ -83,7 +83,7 @@ export interface KnowledgeTreeSibling {
 export function listSiblingsAtParent(
   parentId: string | null,
   folders: KnowledgeFolderDto[],
-  documents: KnowledgeDocumentDto[],
+  documents: KnowledgeDocumentSummaryDto[],
 ): KnowledgeTreeSibling[] {
   const items: KnowledgeTreeSibling[] = [];
   for (const f of folders) {
@@ -126,7 +126,7 @@ export function planFolderMove(
     | { type: 'root' }
     | { type: 'row'; kind: 'folder' | 'document'; itemId: string; position: KnowledgeDropPosition },
   folders: KnowledgeFolderDto[],
-  documents: KnowledgeDocumentDto[],
+  documents: KnowledgeDocumentSummaryDto[],
 ): { parentId: string | null; sortOrder: number } | null {
   const excludeSelf = (items: KnowledgeTreeSibling[]) =>
     items.filter(s => !(s.kind === 'folder' && s.id === folderId));
@@ -169,7 +169,7 @@ export function planDocumentMove(
     | { type: 'root' }
     | { type: 'row'; kind: 'folder' | 'document'; itemId: string; position: KnowledgeDropPosition },
   folders: KnowledgeFolderDto[],
-  documents: KnowledgeDocumentDto[],
+  documents: KnowledgeDocumentSummaryDto[],
 ): { folderId: string | null; sortOrder: number } | null {
   const excludeSelf = (items: KnowledgeTreeSibling[]) =>
     items.filter(s => !(s.kind === 'document' && s.id === docId));

@@ -232,59 +232,6 @@
   pointer-events: none;
 }
 
-.kb-slash-menu {
-  z-index: 50;
-  min-width: 220px;
-  max-height: 320px;
-  overflow-y: auto;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
-  padding: 6px;
-}
-
-.kb-slash-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  border: none;
-  background: transparent;
-  border-radius: 8px;
-  padding: 8px 10px;
-  text-align: left;
-  cursor: pointer;
-  font-size: 13px;
-  color: #334155;
-}
-
-.kb-slash-menu-item:hover,
-.kb-slash-menu-item.is-selected {
-  background: #f1f5f9;
-}
-
-.kb-slash-menu-item-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: #f8fafc;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
-  color: #64748b;
-  flex-shrink: 0;
-}
-
-.kb-slash-menu-group {
-  font-size: 11px;
-  font-weight: 700;
-  color: #94a3b8;
-  padding: 6px 10px 4px;
-}
-
 /* ── 飞书风格左侧 + 插入手柄 ── */
 
 .kb-insert-wrap {
@@ -472,4 +419,105 @@
 .kb-insert-table-cell.is-active {
   background: #818cf8;
   border-color: #6366f1;
+}
+
+/* 外部超链接 */
+.kb-editor .ProseMirror a.kb-external-link,
+.kb-editor .ProseMirror a {
+  color: #4f46e5;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.kb-editor .ProseMirror a.kb-external-link:hover,
+.kb-editor .ProseMirror a:hover {
+  color: #4338ca;
+}
+
+.kb-link-insert-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.kb-link-insert-dialog {
+  width: min(420px, calc(100vw - 32px));
+  border-radius: 12px;
+  border: 1px solid #e8ecf1;
+  background: #fff;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.14);
+  padding: 16px 18px;
+}
+
+.kb-link-insert-body {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+}
+
+.kb-link-insert-fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kb-link-insert-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.kb-link-insert-label {
+  flex-shrink: 0;
+  width: 32px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.kb-link-insert-input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 13px;
+  color: #334155;
+  outline: none;
+  background: #fff;
+}
+
+.kb-link-insert-input:focus {
+  border-color: #818cf8;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.kb-link-insert-input::placeholder {
+  color: #cbd5e1;
+}
+
+.kb-link-insert-confirm {
+  align-self: stretch;
+  min-width: 72px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 8px;
+  background: #94a3b8;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.kb-link-insert-confirm:hover {
+  background: #64748b;
 }

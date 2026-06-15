@@ -8,22 +8,22 @@ import {
   planFolderMove,
   resolveInsertSortOrder,
 } from './knowledgeBaseTree';
-import type { KnowledgeDocumentDto, KnowledgeFolderDto } from '../types';
+import type { KnowledgeDocumentSummaryDto, KnowledgeFolderDto } from '../types';
 
 const folders: KnowledgeFolderDto[] = [
   { id: 'f1', parentId: null, name: '工艺', sortOrder: 0, createdAt: '', updatedAt: '' },
   { id: 'f2', parentId: 'f1', name: '裁剪', sortOrder: 0, createdAt: '', updatedAt: '' },
 ];
 
-const documents: KnowledgeDocumentDto[] = [
-  { id: 'd1', folderId: 'f2', title: 'SOP-裁剪', content: '', sortOrder: 0, createdAt: '', updatedAt: '' },
-  { id: 'd2', folderId: null, title: '根文档', content: '', sortOrder: 1, createdAt: '', updatedAt: '' },
+const documents: KnowledgeDocumentSummaryDto[] = [
+  { id: 'd1', folderId: 'f2', title: 'SOP-裁剪', sortOrder: 0, createdAt: '', updatedAt: '' },
+  { id: 'd2', folderId: null, title: '根文档', sortOrder: 1, createdAt: '', updatedAt: '' },
 ];
 
 describe('buildKnowledgeTree', () => {
   it('shows 无标题 for empty document title', () => {
     const tree = buildKnowledgeTree([], [
-      { id: 'd0', folderId: null, title: '', content: '', sortOrder: 0, createdAt: '', updatedAt: '' },
+      { id: 'd0', folderId: null, title: '', sortOrder: 0, createdAt: '', updatedAt: '' },
     ]);
     expect(tree[0]?.name).toBe('无标题');
   });
@@ -88,7 +88,7 @@ describe('planDocumentMove', () => {
   it('reorders document before sibling in same folder', () => {
     const moreDocs: KnowledgeDocumentDto[] = [
       ...documents,
-      { id: 'd3', folderId: 'f2', title: 'SOP-缝制', content: '', sortOrder: 10, createdAt: '', updatedAt: '' },
+      { id: 'd3', folderId: 'f2', title: 'SOP-缝制', sortOrder: 10, createdAt: '', updatedAt: '' },
     ];
     const plan = planDocumentMove(
       'd3',

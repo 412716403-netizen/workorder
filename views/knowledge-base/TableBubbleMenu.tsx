@@ -1,7 +1,11 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import type { Editor } from '@tiptap/core';
 import { Columns2, Rows2, Trash2 } from 'lucide-react';
+import {
+  getKnowledgeTableBubbleAnchor,
+  shouldShowKnowledgeTableBubbleMenu,
+} from './tableBubbleAnchor';
 
 interface TableBubbleMenuProps {
   editor: Editor | null;
@@ -11,6 +15,23 @@ interface TableBubbleMenuProps {
 const preventBlur = (e: React.MouseEvent) => e.preventDefault();
 
 const TableBubbleMenu: React.FC<TableBubbleMenuProps> = ({ editor, editable }) => {
+  const getReferencedVirtualElement = useCallback(() => {
+    if (!editor) return null;
+    return getKnowledgeTableBubbleAnchor(editor);
+  }, [editor]);
+
+  const bubbleOptions = useMemo(() => {
+    const shell = editor?.view.dom.closest('.kb-editor-shell');
+    return {
+      placement: 'top-start' as const,
+      offset: 8,
+      strategy: 'fixed' as const,
+      flip: { padding: 8 },
+      shift: { padding: 8 },
+      scrollTarget: shell instanceof HTMLElement ? shell : window,
+    };
+  }, [editor]);
+
   if (!editor || !editable) return null;
 
   const run = (fn: () => boolean) => {
@@ -21,13 +42,10 @@ const TableBubbleMenu: React.FC<TableBubbleMenuProps> = ({ editor, editable }) =
     <BubbleMenu
       editor={editor}
       pluginKey="kbTableBubbleMenu"
-      shouldShow={({ editor: ed }) => ed.isActive('table')}
+      shouldShow={({ editor: ed, view }) => shouldShowKnowledgeTableBubbleMenu(ed, view)}
+      getReferencedVirtualElement={getReferencedVirtualElement}
       appendTo={() => document.body}
-      options={{
-        placement: 'top-start',
-        offset: 8,
-        strategy: 'fixed',
-      }}
+      options={bubbleOptions}
       className="kb-table-bubble-menu"
     >
       <button

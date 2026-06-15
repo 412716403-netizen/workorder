@@ -109,9 +109,9 @@
 |------|------|------|
 | `knowledge_folders` | `tenant_id` | 文件夹树，`parent_id` 自关联 |
 | `knowledge_documents` | `tenant_id` | 文档标题 + Tiptap HTML 正文 `content` |
-| `knowledge_assets` | `tenant_id` | 图片二进制 `data`（BYTEA），文档正文引用 `/api/knowledge-base/assets/:id` |
+| `knowledge_assets` | `tenant_id` | 图片二进制 `data`（BYTEA），文档正文引用 `/api/knowledge-base/assets/:id`；正文更新/删文档时 diff 清理无引用 asset |
 
-DTO 见 `shared/types.ts`（`KnowledgeFolderDto`、`KnowledgeDocumentDto`）；API 见 `/api/knowledge-base/*`。
+DTO 见 `shared/types.ts`（`KnowledgeFolderDto`、`KnowledgeDocumentSummaryDto`、`KnowledgeDocumentDto`）。`GET /knowledge-base/tree` 与 `GET /knowledge-base/documents`（列表/搜索）仅返回摘要（无 `content`）；单篇正文走 `GET /knowledge-base/documents/:id`。更新文档可传 `expectedUpdatedAt`（乐观锁，冲突 409）。删除前 `GET /documents/:id/references` 检查产品/开发款引用。图片不支持 SVG；正文保存时 HTML 白名单消毒。API 见 `/api/knowledge-base/*`。
 
 ---
 

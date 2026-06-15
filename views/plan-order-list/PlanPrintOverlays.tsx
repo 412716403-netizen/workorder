@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { buildPrintListRowsFromItemCodes, type ItemCodePrintContext } from '../../utils/printItemCodeRows';
 import { buildVirtualBatchPrintRow } from '../../utils/printVirtualBatch';
 import { mergeTenantPrintContext } from '../../utils/mergeTenantPrintContext';
+import { buildPlanPrintPdfFilename } from '../../utils/printDocumentTitle';
 import { formatBatchSerialLabel, formatItemCodeSerialLabelFromCode } from '../../utils/serialLabels';
 import { AppDictionaries, ItemCode, PlanOrder, PlanVirtualBatch, PrintTemplate, Product, ProductionOrder } from '../../types';
 
@@ -146,7 +147,7 @@ const PlanPrintOverlays: React.FC<PlanPrintOverlaysProps> = ({
                 },
                 tenantCtx?.tenantName,
               ),
-              filename: `${pickerPlan.planNumber}-单品码标签.pdf`,
+              filename: buildPlanPrintPdfFilename(pickerPlan.planNumber, pickerProduct?.name, '单品码标签'),
               onProgress: (done, total) => {
                 toast.loading(`正在生成 PDF（${done}/${total}）…`, { id: toastId });
               },

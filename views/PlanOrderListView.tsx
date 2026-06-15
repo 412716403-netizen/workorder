@@ -47,6 +47,7 @@ import { HiddenPrintSlot, usePrintTemplateAction } from '../components/print-edi
 import { createBlankCustomTemplate } from '../utils/printTemplateDefaults';
 import { mergeTenantPrintContext } from '../utils/mergeTenantPrintContext';
 import { buildPlanPrintListRows } from '../utils/buildPlanPrintListRows';
+import { buildPlanListPrintDocumentTitle } from '../utils/printDocumentTitle';
 import { filterPrintTemplatesByAllowedIds } from '../utils/printTemplateWhitelist';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -360,9 +361,16 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
     return mergeTenantPrintContext(raw, tenantCtx?.tenantName);
   }, [planListPrintRun, idlePlanPrintCtx, products, globalNodes, tenantCtx?.tenantName]);
 
+  const planListPrintDocumentTitle = useMemo(() => {
+    if (!planListPrintRun) return undefined;
+    const prod = products.find(p => p.id === planListPrintRun.plan.productId);
+    return buildPlanListPrintDocumentTitle(planListPrintRun.plan.planNumber, prod?.name);
+  }, [planListPrintRun, products]);
+
   const { printRef: planListPrintRef, handlePrint: handlePlanListPrint } = usePrintTemplateAction(
     planListActivePrintTemplate,
     planListActivePrintCtx,
+    planListPrintDocumentTitle,
   );
 
   useEffect(() => {

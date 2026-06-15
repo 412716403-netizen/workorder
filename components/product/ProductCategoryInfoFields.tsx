@@ -698,7 +698,7 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
               )}
               {activeCategory.linkPartner && (
                 <div className="space-y-1">
-                  <label className={productArchiveFormLabelClass}>首选供应商 (档案关联)</label>
+                  <label className={productArchiveFormLabelClass}>合作单位</label>
                   <div className="flex gap-2 items-stretch">
                     <div className="flex-1 min-w-0">
                       <SupplierSelect
@@ -707,7 +707,7 @@ const ProductCategoryInfoFields: React.FC<ProductCategoryInfoFieldsProps> = ({
                         value={working.supplierId || ''}
                         onChange={(_, id) => setWorking({ ...working, supplierId: id })}
                         valueMode="id"
-                        placeholder="未关联供应商"
+                        placeholder="未关联合作单位"
                         portalZIndex={embeddedInQuickCreateModal ? 10900 : undefined}
                         triggerClassName={productArchiveFormPartnerTriggerClass}
                       />

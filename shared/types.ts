@@ -509,21 +509,34 @@ export interface KnowledgeFolderDto {
   updatedAt: string;
 }
 
-/** 资料库文档 */
-export interface KnowledgeDocumentDto {
+/** 资料库文档摘要（树/列表/搜索，不含正文） */
+export interface KnowledgeDocumentSummaryDto {
   id: string;
   folderId: string | null;
   title: string;
-  content: string;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
 }
 
+/** 资料库文档（含正文） */
+export interface KnowledgeDocumentDto extends KnowledgeDocumentSummaryDto {
+  content: string;
+}
+
 export interface KnowledgeTreeResponse {
   folders: KnowledgeFolderDto[];
-  documents: KnowledgeDocumentDto[];
+  documents: KnowledgeDocumentSummaryDto[];
 }
+
+/** 删除文档前：被产品/开发款引用的情况 */
+export interface KnowledgeDocumentReferencesResponse {
+  products: Array<{ id: string; name: string; sku: string }>;
+  devStyles: Array<{ id: string; name: string }>;
+}
+
+/** 资料库正文最大字符数（与后端校验一致） */
+export const KNOWLEDGE_DOCUMENT_CONTENT_MAX_CHARS = 512 * 1024;
 
 export interface KnowledgeAssetUploadResponse {
   id: string;

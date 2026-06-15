@@ -13,6 +13,7 @@ import {
 interface InsertMenuPopupProps {
   editor: Editor;
   onPickImage?: () => void;
+  onOpenLinkDialog?: () => void;
   onClose?: () => void;
 }
 
@@ -201,9 +202,10 @@ function CommonRow({
 const InsertMenuPopup: React.FC<InsertMenuPopupProps> = ({
   editor,
   onPickImage,
+  onOpenLinkDialog,
   onClose,
 }) => {
-  const { basic, common } = buildInsertMenuItems(onPickImage);
+  const { basic, common } = buildInsertMenuItems(onPickImage, onOpenLinkDialog);
 
   const run = (fn: (ed: Editor) => void) => {
     fn(editor);

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { LogIn, UserPlus } from 'lucide-react';
 import { BRAND_LOGO_PATH, BRAND_NAME } from '../constants/branding';
 import { auth as authApi } from '../services/api';
+import PwaInstallBanner from '../components/PwaInstallBanner';
 
 const CN_PHONE_RE = /^1[3-9]\d{9}$/;
 
@@ -104,6 +105,7 @@ export default function LoginView({ onLogin }: LoginViewProps) {
         </header>
 
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
+          <PwaInstallBanner />
           <h2 className="text-xl font-semibold text-gray-800 mb-1">
             {isRegister ? '手机号注册' : '手机号登录'}
           </h2>

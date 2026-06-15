@@ -14,9 +14,10 @@ import {
 } from '@dnd-kit/core';
 import {
   BookOpen, ChevronRight, FileText, Folder, FolderPlus, MoreHorizontal,
-  Pencil, Plus, Trash2,
+  Pencil, Plus, Search, Trash2,
 } from 'lucide-react';
-import type { KnowledgeDocumentDto, KnowledgeFolderDto } from '../../types';
+import type { KnowledgeDocumentSummaryDto, KnowledgeFolderDto } from '../../types';
+import { useKnowledgeDocumentSearch } from '../../hooks/useKnowledgeBase';
 import {
   buildKnowledgeTree,
   folderHasChildren,
@@ -81,7 +82,7 @@ type DropHint = { rowId: string; position: KnowledgeDropPosition };
 
 interface KnowledgeTreeSidebarProps {
   folders: KnowledgeFolderDto[];
-  documents: KnowledgeDocumentDto[];
+  documents: KnowledgeDocumentSummaryDto[];
   selectedDocId: string | null;
   canCreateFolder: boolean;
   canEditFolder: boolean;
@@ -97,7 +98,7 @@ interface KnowledgeTreeSidebarProps {
   onRenameFolder: (folder: KnowledgeFolderDto) => void;
   onDeleteFolder: (folder: KnowledgeFolderDto) => void;
   onCreateDoc: (folderId: string | null) => void;
-  onDeleteDoc: (doc: KnowledgeDocumentDto) => void;
+  onDeleteDoc: (doc: KnowledgeDocumentSummaryDto) => void;
 }
 
 function TreeNodeRow({
@@ -141,10 +142,10 @@ function TreeNodeRow({
   canDeleteFolder: boolean;
   canDeleteDoc: boolean;
   folders: KnowledgeFolderDto[];
-  documents: KnowledgeDocumentDto[];
+  documents: KnowledgeDocumentSummaryDto[];
   onRenameFolder: (folder: KnowledgeFolderDto) => void;
   onDeleteFolder: (folder: KnowledgeFolderDto) => void;
-  onDeleteDoc: (doc: KnowledgeDocumentDto) => void;
+  onDeleteDoc: (doc: KnowledgeDocumentSummaryDto) => void;
   onCreateFolder: (parentId: string | null) => void;
   onCreateDoc: (folderId: string | null) => void;
   canCreateFolder: boolean;
@@ -374,8 +375,13 @@ const KnowledgeTreeSidebar: React.FC<KnowledgeTreeSidebarProps> = ({
   const [menuDocId, setMenuDocId] = useState<string | null>(null);
   const [draggingItem, setDraggingItem] = useState<DragItem | null>(null);
   const [dropHint, setDropHint] = useState<DropHint | null>(null);
+  const [search, setSearch] = useState('');
 
-  const dndEnabled = canMoveDoc || canMoveFolder;
+  const searchQuery = search.trim();
+  const { data: searchResults = [], isFetching: searchLoading } = useKnowledgeDocumentSearch(searchQuery);
+  const isSearchMode = searchQuery.length >= 1;
+
+  const dndEnabled = (canMoveDoc || canMoveFolder) && !isSearchMode;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -575,7 +581,29 @@ const KnowledgeTreeSidebar: React.FC<KnowledgeTreeSidebarProps> = ({
 
   const scrollArea = (
     <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2" onClick={() => { setMenuFolderId(null); setMenuDocId(null); }}>
-      {dndEnabled ? (
+      {isSearchMode ? (
+        searchLoading ? (
+          <p className="px-3 py-8 text-center text-xs text-slate-400">搜索中…</p>
+        ) : searchResults.length === 0 ? (
+          <p className="px-3 py-8 text-center text-xs text-slate-400">没有匹配的文档</p>
+        ) : (
+          searchResults.map(doc => (
+            <button
+              key={doc.id}
+              type="button"
+              onClick={() => onSelectDoc(doc.id)}
+              className={`mb-0.5 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${
+                selectedDocId === doc.id
+                  ? 'bg-indigo-50 text-indigo-700'
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <FileText className="h-4 w-4 shrink-0 text-slate-400" />
+              <span className="min-w-0 flex-1 truncate font-medium">{doc.title.trim() || '无标题'}</span>
+            </button>
+          ))
+        )
+      ) : dndEnabled ? (
         <RootDropArea active={Boolean(draggingItem)}>
           {treeContent}
         </RootDropArea>
@@ -613,6 +641,18 @@ const KnowledgeTreeSidebar: React.FC<KnowledgeTreeSidebarProps> = ({
               <Plus className="h-4 w-4" />
             </button>
           )}
+        </div>
+      </div>
+      <div className="border-b border-slate-200 px-3 py-2">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="搜索文档…"
+            className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-2 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+          />
         </div>
       </div>
       {dndEnabled ? (

@@ -1,6 +1,13 @@
 import path from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa';
+import {
+  PWA_APP_NAME,
+  PWA_BACKGROUND_COLOR,
+  PWA_SHORT_NAME,
+  PWA_THEME_COLOR,
+} from './constants/branding';
 
 export default defineConfig(({ mode }) => {
     const isProd = mode === 'production';
@@ -16,7 +23,40 @@ export default defineConfig(({ mode }) => {
           },
         },
       },
-      plugins: [react()],
+      plugins: [
+        react(),
+        VitePWA({
+          registerType: 'autoUpdate',
+          includeAssets: ['wanpu-logo.png', 'icons/icon-192.png', 'icons/icon-512.png'],
+          manifest: {
+            name: PWA_APP_NAME,
+            short_name: PWA_SHORT_NAME,
+            description: '制造业生产进度节点报工系统',
+            theme_color: PWA_THEME_COLOR,
+            background_color: PWA_BACKGROUND_COLOR,
+            display: 'standalone',
+            start_url: '/',
+            scope: '/',
+            lang: 'zh-CN',
+            icons: [
+              { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+              { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+              { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+            ],
+          },
+          workbox: {
+            /** SPA 深链回退；/api 走网络，不回落到 index.html */
+            navigateFallback: '/index.html',
+            navigateFallbackDenylist: [/^\/api/],
+            /** 不配置 /api 的 runtimeCaching，业务接口始终 NetworkOnly */
+            globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,webmanifest}'],
+          },
+          devOptions: {
+            /** localhost 开发时可验证 manifest / SW 注册 */
+            enabled: true,
+          },
+        }),
+      ],
       /**
        * react-draggable（react-grid-layout 的拖拽依赖）编译产物里有
        * `if (process.env.DRAGGABLE_DEBUG)`，而浏览器没有 process 全局，

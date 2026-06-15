@@ -113,7 +113,12 @@ ${labelsHtml}
   }, 300);
 }
 
-export function usePrintTemplateAction(template: PrintTemplate, _ctx: PrintRenderContext) {
+export function usePrintTemplateAction(
+  template: PrintTemplate,
+  _ctx: PrintRenderContext,
+  /** 浏览器「另存为 PDF」时的默认文件名；未传则用模版名称 */
+  documentTitleOverride?: string,
+) {
   const printRef = useRef<HTMLDivElement>(null);
   const ctxRef = useRef(_ctx);
   ctxRef.current = _ctx;
@@ -123,7 +128,10 @@ export function usePrintTemplateAction(template: PrintTemplate, _ctx: PrintRende
     () => `@page { size: ${widthMm}mm ${heightMm}mm; margin: 0; }`,
     [widthMm, heightMm],
   );
-  const documentTitle = useMemo(() => template.name || 'print', [template.name]);
+  const documentTitle = useMemo(
+    () => documentTitleOverride?.trim() || template.name || 'print',
+    [documentTitleOverride, template.name],
+  );
 
   const handlePrintLib = useReactToPrint({
     contentRef: printRef,

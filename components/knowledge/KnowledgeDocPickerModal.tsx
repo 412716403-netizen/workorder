@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Search, ChevronRight, Folder, FileText, Check, Loader2 } from 'lucide-react';
-import { useKnowledgeBaseTree, useKnowledgeDocument } from '../../hooks/useKnowledgeBase';
+import { useKnowledgeBaseTree, useKnowledgeDocument, useKnowledgeDocumentSearch } from '../../hooks/useKnowledgeBase';
 import { buildKnowledgeTree, type KnowledgeTreeNode } from '../../utils/knowledgeBaseTree';
 import type { KnowledgeFieldRef } from '../../utils/knowledgeFieldValue';
 import '../../views/knowledge-base/knowledge-editor.css';
+import { bindKnowledgeEditorLinkClick } from '../../views/knowledge-base/knowledgeEditorLinkClick';
 
 export interface KnowledgeDocPickerModalProps {
   isOpen: boolean;
@@ -104,12 +105,11 @@ export const KnowledgeDocPickerModal: React.FC<KnowledgeDocPickerModalProps> = (
   };
 
   const q = search.trim().toLowerCase();
+  const { data: serverSearchResults = [], isFetching: searchLoading } = useKnowledgeDocumentSearch(q);
   const searchResults = useMemo(() => {
     if (!q) return [];
-    return documents
-      .filter(d => (d.title || '').toLowerCase().includes(q))
-      .slice(0, 50);
-  }, [q, documents]);
+    return serverSearchResults.slice(0, 50);
+  }, [q, serverSearchResults]);
 
   const pickedDoc = pendingId ? documents.find(d => d.id === pendingId) : undefined;
 
@@ -157,7 +157,11 @@ export const KnowledgeDocPickerModal: React.FC<KnowledgeDocPickerModalProps> = (
           ) : documents.length === 0 ? (
             <p className="px-3 py-10 text-center text-sm text-slate-400">资料库暂无文档</p>
           ) : q ? (
-            searchResults.length === 0 ? (
+            searchLoading ? (
+              <div className="flex h-40 items-center justify-center text-sm text-slate-400">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 搜索中…
+              </div>
+            ) : searchResults.length === 0 ? (
               <p className="px-3 py-10 text-center text-sm text-slate-400">没有匹配的文档</p>
             ) : (
               searchResults.map(doc => (
@@ -223,6 +227,14 @@ export const KnowledgeDocPreviewModal: React.FC<KnowledgeDocPreviewModalProps> =
   stackZClass = 'z-[11300]',
 }) => {
   const { data: doc, isLoading, isError } = useKnowledgeDocument(isOpen ? docId : null);
+  const previewRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = previewRef.current?.querySelector('.ProseMirror');
+    if (!(root instanceof HTMLElement)) return;
+    return bindKnowledgeEditorLinkClick(root);
+  }, [doc?.content]);
+
   if (!isOpen) return null;
 
   return (
@@ -245,7 +257,7 @@ export const KnowledgeDocPreviewModal: React.FC<KnowledgeDocPreviewModalProps> =
           ) : isError || !doc ? (
             <p className="py-10 text-center text-sm text-slate-400">无法加载该文档（可能已删除或无权限）</p>
           ) : (
-            <div className="kb-editor">
+            <div ref={previewRef} className="kb-editor">
               <div className="ProseMirror" dangerouslySetInnerHTML={{ __html: doc.content || '<p></p>' }} />
             </div>
           )}

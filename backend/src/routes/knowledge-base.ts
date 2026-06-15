@@ -22,10 +22,11 @@ const createDocumentSchema = z.object({
 }).passthrough();
 
 const updateDocumentSchema = z.object({
-  title: z.string().trim().max(200).optional(),
+  title: z.string().trim().min(1).max(200).optional(),
   folderId: z.string().optional().nullable(),
   content: z.string().optional(),
   sortOrder: z.number().int().optional(),
+  expectedUpdatedAt: z.string().datetime().optional(),
 }).passthrough();
 
 const uploadAssetSchema = z.object({
@@ -41,6 +42,7 @@ router.put('/folders/:id', requireSubPermission('knowledge_base:folders:edit'), 
 router.delete('/folders/:id', requireSubPermission('knowledge_base:folders:delete'), ctrl.deleteFolder);
 
 router.get('/documents', requireSubPermission('knowledge_base:documents:view'), ctrl.listDocuments);
+router.get('/documents/:id/references', requireSubPermission('knowledge_base:documents:view'), ctrl.getDocumentReferences);
 router.get('/documents/:id', requireSubPermission('knowledge_base:documents:view'), ctrl.getDocument);
 router.post('/documents', requireSubPermission('knowledge_base:documents:create'), validate(createDocumentSchema), ctrl.createDocument);
 router.put('/documents/:id', requireSubPermission('knowledge_base:documents:edit'), validate(updateDocumentSchema), ctrl.updateDocument);

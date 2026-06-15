@@ -48,6 +48,11 @@ export const getDocument = asyncHandler(async (req, res) => {
   res.json(await svc.getDocument(db, str(req.params.id)));
 });
 
+export const getDocumentReferences = asyncHandler(async (req, res) => {
+  const db = getTenantPrisma(req.tenantId!);
+  res.json(await svc.getDocumentReferences(db, str(req.params.id)));
+});
+
 export const createDocument = asyncHandler(async (req, res) => {
   const tenantId = req.tenantId!;
   const db = getTenantPrisma(tenantId);

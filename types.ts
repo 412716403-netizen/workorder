@@ -73,9 +73,12 @@ export {
   type DevStageTemplateDto,
   type DevStageTemplateFieldDto,
   type KnowledgeFolderDto,
+  type KnowledgeDocumentSummaryDto,
   type KnowledgeDocumentDto,
   type KnowledgeTreeResponse,
+  type KnowledgeDocumentReferencesResponse,
   type KnowledgeAssetUploadResponse,
+  KNOWLEDGE_DOCUMENT_CONTENT_MAX_CHARS,
 } from './shared/types';
 
 export {

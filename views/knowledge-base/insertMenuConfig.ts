@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Heading1, Heading2, Heading3,
   List, ListOrdered, Table as TableIcon,
-  Minus, Image as ImageIcon, Highlighter,
+  Minus, Image as ImageIcon, Highlighter, Link2,
 } from 'lucide-react';
 
 export type InsertMenuIconTone = 'slate' | 'blue' | 'amber' | 'green' | 'violet' | 'rose' | 'sky' | 'orange';
@@ -28,7 +28,10 @@ export interface InsertCommonItem {
 
 export type InsertMenuItem = InsertBasicItem | InsertCommonItem;
 
-export function buildInsertMenuItems(onPickImage?: () => void): {
+export function buildInsertMenuItems(
+  onPickImage?: () => void,
+  onOpenLinkDialog?: () => void,
+): {
   basic: InsertBasicItem[];
   common: InsertCommonItem[];
 } {
@@ -50,6 +53,17 @@ export function buildInsertMenuItems(onPickImage?: () => void): {
       run: ed => {
         ed.chain().focus().run();
         onPickImage?.();
+      },
+    },
+    {
+      kind: 'common',
+      id: 'link',
+      label: '超链接',
+      icon: Link2,
+      tone: 'violet',
+      run: ed => {
+        ed.chain().focus().run();
+        onOpenLinkDialog?.();
       },
     },
     {

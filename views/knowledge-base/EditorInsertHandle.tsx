@@ -8,6 +8,7 @@ interface EditorInsertHandleProps {
   editor: Editor | null;
   editable: boolean;
   onPickImage?: () => void;
+  onOpenLinkDialog?: () => void;
 }
 
 interface HandlePos {
@@ -97,6 +98,7 @@ const EditorInsertHandle: React.FC<EditorInsertHandleProps> = ({
   editor,
   editable,
   onPickImage,
+  onOpenLinkDialog,
 }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const plusRef = useRef<HTMLButtonElement>(null);
@@ -270,6 +272,7 @@ const EditorInsertHandle: React.FC<EditorInsertHandleProps> = ({
           <InsertMenuPopup
             editor={editor}
             onPickImage={onPickImage}
+            onOpenLinkDialog={onOpenLinkDialog}
             onClose={closeMenu}
           />
         </div>,

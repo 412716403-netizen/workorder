@@ -3,4 +3,6 @@ export const knowledgeBaseQueryKeys = {
   tree: (tenantId: string | undefined) => [...knowledgeBaseQueryKeys.all, tenantId, 'tree'] as const,
   document: (tenantId: string | undefined, id: string | null) =>
     [...knowledgeBaseQueryKeys.all, tenantId, 'document', id] as const,
+  search: (tenantId: string | undefined, q: string) =>
+    [...knowledgeBaseQueryKeys.all, tenantId, 'search', q] as const,
 };
