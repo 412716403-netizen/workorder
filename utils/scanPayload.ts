@@ -159,6 +159,14 @@ export function parseScanPayload(raw: string): ScanPayload {
   return base;
 }
 
+/** 缓冲区内是否已形成可解析的完整扫码串（用于无 Enter 扫码枪的 idle 自动提交） */
+export function isRecognizableScanPayload(raw: string, minLength = 6): boolean {
+  const trimmed = String(raw ?? '').trim();
+  if (trimmed.length < minLength) return false;
+  const parsed = parseScanPayload(trimmed);
+  return parsed.kind !== 'UNKNOWN' && parsed.token != null;
+}
+
 /** 「最近扫码」芯片无产品名时的短文案：URL 则只显示路径末段 token，否则截断原串 */
 export function formatScanRecentChipText(raw: string): string {
   const s = String(raw ?? '').trim();

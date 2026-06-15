@@ -3,11 +3,29 @@ import {
   buildScanUrl,
   formatScanRecentChipText,
   getUnrecognizedScanImeHint,
+  isRecognizableScanPayload,
   parseScanPayload,
   rewriteScanApiErrorForIme,
   scanInputLikelyImeIssue,
   scanRawLooksLikeImeCorruption,
 } from './scanPayload';
+
+describe('isRecognizableScanPayload', () => {
+  it('returns true for item scan URL', () => {
+    const token = 'cabbaeb9.SBUEPxwv9TDYabcd';
+    expect(isRecognizableScanPayload(`https://x.com/scan/${token}`)).toBe(true);
+  });
+
+  it('returns true for bare dotted token', () => {
+    expect(isRecognizableScanPayload('deadbeef.AbCdEfGhIjKlMnOp')).toBe(true);
+  });
+
+  it('returns false for short or non-scan text', () => {
+    expect(isRecognizableScanPayload('0.193')).toBe(false);
+    expect(isRecognizableScanPayload('123456')).toBe(false);
+    expect(isRecognizableScanPayload('http://x/scan/short')).toBe(false);
+  });
+});
 
 describe('parseScanPayload', () => {
   it('parses item scan URL when token contains tenant prefix dot (cabbaeb9.xxx)', () => {
