@@ -27,6 +27,14 @@ describe('sanitizeKnowledgeHtml', () => {
     const out = sanitizeKnowledgeHtml('<a href="https://example.com">link</a>');
     expect(out).toContain('href="https://example.com"');
   });
+
+  it('keeps inline text color and highlight', () => {
+    const out = sanitizeKnowledgeHtml(
+      '<p><span style="color: #dc2626">红</span><mark style="background-color: #fef08a">亮</mark></p>',
+    );
+    expect(out).toContain('color');
+    expect(out).toContain('mark');
+  });
 });
 
 describe('knowledgeDocReferences helpers', () => {

@@ -70,6 +70,26 @@ export function useKnowledgeBaseMutations() {
     });
   };
 
+  const patchTreeFolder = (folder: KnowledgeFolderDto) => {
+    qc.setQueryData<KnowledgeTreeResponse | undefined>(treeKey, old => {
+      if (!old) return old;
+      return {
+        ...old,
+        folders: old.folders.map(f =>
+          f.id === folder.id
+            ? {
+                ...f,
+                name: folder.name,
+                parentId: folder.parentId,
+                sortOrder: folder.sortOrder,
+                updatedAt: folder.updatedAt,
+              }
+            : f,
+        ),
+      };
+    });
+  };
+
   const createFolder = useMutation({
     mutationFn: knowledgeBase.createFolder,
     onSuccess: invalidateTree,
@@ -78,7 +98,9 @@ export function useKnowledgeBaseMutations() {
   const updateFolder = useMutation({
     mutationFn: ({ id, body }: { id: string; body: Parameters<typeof knowledgeBase.updateFolder>[1] }) =>
       knowledgeBase.updateFolder(id, body),
-    onSuccess: invalidateTree,
+    onSuccess: (folder: KnowledgeFolderDto) => {
+      patchTreeFolder(folder);
+    },
   });
 
   const deleteFolder = useMutation({

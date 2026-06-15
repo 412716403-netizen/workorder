@@ -7,6 +7,7 @@ import {
   planDocumentMove,
   planFolderMove,
   resolveInsertSortOrder,
+  resolveKnowledgeDropPosition,
 } from './knowledgeBaseTree';
 import type { KnowledgeDocumentSummaryDto, KnowledgeFolderDto } from '../types';
 
@@ -54,6 +55,37 @@ describe('resolveInsertSortOrder', () => {
     expect(resolveInsertSortOrder(siblings, 1)).toBe(10);
     expect(resolveInsertSortOrder(siblings, 0)).toBe(-10);
     expect(resolveInsertSortOrder(siblings, 2)).toBe(30);
+  });
+});
+
+describe('resolveKnowledgeDropPosition', () => {
+  it('同层级文件夹之间优先上下排序而非嵌套', () => {
+    const pos = resolveKnowledgeDropPosition(
+      { kind: 'folder', itemId: 'f1' },
+      { top: 100, height: 40 },
+      120,
+      { type: 'folder', parentId: null },
+      folders,
+      documents,
+    );
+    expect(pos).toBe('after');
+  });
+
+  it('跨层级拖入文件夹仍为 inside', () => {
+    const moreFolders: KnowledgeFolderDto[] = [
+      ...folders,
+      { id: 'f3', parentId: null, name: '品质', sortOrder: 2, createdAt: '', updatedAt: '' },
+    ];
+    const pos = resolveKnowledgeDropPosition(
+      { kind: 'folder', itemId: 'f1' },
+      { top: 100, height: 40 },
+      120,
+      { type: 'folder', parentId: null },
+      moreFolders,
+      documents,
+    );
+    // f3 与 f1 同级，中间区域应变为 after 而非 inside
+    expect(pos).not.toBe('inside');
   });
 });
 

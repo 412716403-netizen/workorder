@@ -13,7 +13,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import {
-  BookOpen, ChevronRight, FileText, Folder, FolderPlus, MoreHorizontal,
+  BookOpen, ChevronLeft, ChevronRight, FileText, Folder, FolderPlus, GripVertical, MoreHorizontal,
   Pencil, Plus, Search, Trash2,
 } from 'lucide-react';
 import type { KnowledgeDocumentSummaryDto, KnowledgeFolderDto } from '../../types';
@@ -23,6 +23,7 @@ import {
   folderHasChildren,
   planDocumentMove,
   planFolderMove,
+  resolveKnowledgeDropPosition,
   type KnowledgeDropPosition,
   type KnowledgeTreeNode,
 } from '../../utils/knowledgeBaseTree';
@@ -47,31 +48,38 @@ function parseRowDndId(id: string): { kind: 'folder' | 'document'; itemId: strin
   return null;
 }
 
-function getDropPosition(event: DragOverEvent): KnowledgeDropPosition | null {
+function getDropPosition(
+  event: DragOverEvent,
+  draggingItem: DragItem | null,
+  folders: KnowledgeFolderDto[],
+  documents: KnowledgeDocumentSummaryDto[],
+): KnowledgeDropPosition | null {
   const over = event.over;
   if (!over) return null;
   const overId = String(over.id);
   if (overId === ROOT_DROP_ID) return 'inside';
 
+  const row = parseRowDndId(overId);
+  if (!row) return null;
+
   const translated = event.active.rect.current.translated;
-  if (!translated || !over.rect) {
-    if (overId.startsWith('kb-row:folder:')) return 'inside';
-    if (overId.startsWith('kb-row:doc:')) return 'after';
-    return null;
-  }
+  const dragCenterY = translated ? translated.top + translated.height / 2 : null;
 
-  const dragCenterY = translated.top + translated.height / 2;
-  const ratio = (dragCenterY - over.rect.top) / over.rect.height;
+  const draggingRef = draggingItem
+    ? {
+        type: draggingItem.type,
+        parentId: draggingItem.type === 'folder' ? draggingItem.parentId : draggingItem.folderId,
+      }
+    : null;
 
-  if (overId.startsWith('kb-row:folder:')) {
-    if (ratio < 0.25) return 'before';
-    if (ratio > 0.75) return 'after';
-    return 'inside';
-  }
-  if (overId.startsWith('kb-row:doc:')) {
-    return ratio < 0.5 ? 'before' : 'after';
-  }
-  return null;
+  return resolveKnowledgeDropPosition(
+    row,
+    over.rect ?? null,
+    dragCenterY,
+    draggingRef,
+    folders,
+    documents,
+  );
 }
 
 type DragItem =
@@ -171,11 +179,6 @@ function TreeNodeRow({
     id: rowDndId(node),
   });
 
-  const setRowRef = (el: HTMLDivElement | null) => {
-    setDropRef(el);
-    if (canDrag) setDragRef(el);
-  };
-
   const showInsideHighlight = isFolder && (
     (dropHint?.rowId === node.id && dropHint.position === 'inside')
     || (isOver && !dropHint)
@@ -188,14 +191,28 @@ function TreeNodeRow({
           <div className="absolute left-2 right-2 top-0 z-10 h-0.5 -translate-y-0.5 rounded-full bg-indigo-500" />
         )}
         <div
-          ref={setRowRef}
-          {...(canDrag ? { ...listeners, ...attributes } : {})}
-          className={`group flex items-center gap-1 rounded-lg pr-1 text-sm ${
+          ref={setDropRef}
+          className={`group flex items-center gap-0.5 rounded-lg pr-1 text-sm ${
             !isFolder && selectedDocId === node.id ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
           } ${showInsideHighlight ? 'bg-indigo-100/80 ring-2 ring-inset ring-indigo-300' : ''} ${
-            canDrag ? 'cursor-grab active:cursor-grabbing' : ''
-          } ${isDragging ? 'opacity-40' : ''}`}
+            isDragging ? 'opacity-40' : ''
+          }`}
         >
+          {canDrag ? (
+            <button
+              type="button"
+              ref={setDragRef}
+              {...listeners}
+              {...attributes}
+              className="mt-0.5 flex h-7 w-5 shrink-0 cursor-grab items-center justify-center rounded text-slate-300 opacity-0 transition-opacity hover:text-slate-500 group-hover:opacity-100 active:cursor-grabbing"
+              aria-label="拖动排序"
+              onClick={e => e.stopPropagation()}
+            >
+              <GripVertical className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <span className="w-5 shrink-0" />
+          )}
           {isFolder ? (
             <button
               type="button"
@@ -376,6 +393,7 @@ const KnowledgeTreeSidebar: React.FC<KnowledgeTreeSidebarProps> = ({
   const [draggingItem, setDraggingItem] = useState<DragItem | null>(null);
   const [dropHint, setDropHint] = useState<DropHint | null>(null);
   const [search, setSearch] = useState('');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const searchQuery = search.trim();
   const { data: searchResults = [], isFetching: searchLoading } = useKnowledgeDocumentSearch(searchQuery);
@@ -384,7 +402,7 @@ const KnowledgeTreeSidebar: React.FC<KnowledgeTreeSidebarProps> = ({
   const dndEnabled = (canMoveDoc || canMoveFolder) && !isSearchMode;
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
   );
 
   const tree = useMemo(() => buildKnowledgeTree(folders, documents), [folders, documents]);
@@ -435,7 +453,7 @@ const KnowledgeTreeSidebar: React.FC<KnowledgeTreeSidebarProps> = ({
   };
 
   const handleDragOver = (event: DragOverEvent) => {
-    const position = getDropPosition(event);
+    const position = getDropPosition(event, draggingItem, folders, documents);
     const overId = event.over?.id != null ? String(event.over.id) : null;
 
     if (!overId || !position) {
@@ -478,7 +496,7 @@ const KnowledgeTreeSidebar: React.FC<KnowledgeTreeSidebarProps> = ({
     setDropHint(null);
 
     const data = event.active.data.current;
-    const position = getDropPosition(event);
+    const position = getDropPosition(event, activeItem, folders, documents);
     const overId = event.over?.id != null ? String(event.over.id) : null;
 
     if (!overId || !position || !data || !activeItem) return;
@@ -613,14 +631,31 @@ const KnowledgeTreeSidebar: React.FC<KnowledgeTreeSidebarProps> = ({
     </div>
   );
 
+  if (sidebarCollapsed) {
+    return (
+      <aside className="flex h-full w-9 shrink-0 flex-col border-r border-slate-200 bg-slate-50/60">
+        <button
+          type="button"
+          className="mt-3 flex flex-col items-center justify-center gap-1.5 px-1 py-3 text-slate-400 transition-colors hover:bg-slate-100 hover:text-indigo-600"
+          title="展开文件列表"
+          aria-label="展开文件列表"
+          onClick={() => setSidebarCollapsed(false)}
+        >
+          <ChevronRight className="h-4 w-4" />
+          <BookOpen className="h-3.5 w-3.5" />
+        </button>
+      </aside>
+    );
+  }
+
   return (
-    <aside className="flex h-full w-[280px] shrink-0 flex-col border-r border-slate-200 bg-slate-50/60">
+    <aside className="flex h-full w-[280px] shrink-0 flex-col border-r border-slate-200 bg-slate-50/60 transition-[width] duration-200">
       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-        <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-          <BookOpen className="h-4 w-4 text-sky-500" />
-          资料库
+        <div className="flex min-w-0 flex-1 items-center gap-2 text-sm font-bold text-slate-700">
+          <BookOpen className="h-4 w-4 shrink-0 text-sky-500" />
+          <span className="truncate">资料库</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {canCreateFolder && (
             <button
               type="button"
@@ -641,6 +676,15 @@ const KnowledgeTreeSidebar: React.FC<KnowledgeTreeSidebarProps> = ({
               <Plus className="h-4 w-4" />
             </button>
           )}
+          <button
+            type="button"
+            title="隐藏文件列表"
+            aria-label="隐藏文件列表"
+            onClick={() => setSidebarCollapsed(true)}
+            className="rounded-lg p-1.5 text-slate-500 hover:bg-white hover:text-slate-700"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
         </div>
       </div>
       <div className="border-b border-slate-200 px-3 py-2">

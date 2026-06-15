@@ -149,6 +149,158 @@
   margin: 0 2px;
 }
 
+/* ── 选区行内格式浮动工具栏 ── */
+
+.kb-selection-bubble-menu {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid rgba(31, 35, 41, 0.08);
+  background: #fff;
+  box-shadow: 0 4px 16px rgba(31, 35, 41, 0.12);
+  z-index: 10075;
+}
+
+.kb-selection-bubble-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #51565d;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.kb-selection-bubble-btn:hover,
+.kb-selection-bubble-btn.is-active {
+  background: #f2f3f5;
+  color: #1f2329;
+}
+
+.kb-selection-bubble-divider {
+  width: 1px;
+  height: 18px;
+  background: #e5e7eb;
+  margin: 0 2px;
+}
+
+.kb-selection-bubble-picker-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.kb-selection-bubble-picker-trigger {
+  position: relative;
+  width: 32px;
+}
+
+.kb-selection-bubble-color-bar {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  width: 14px;
+  height: 2px;
+  transform: translateX(-50%);
+  border-radius: 1px;
+}
+
+.kb-selection-color-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(31, 35, 41, 0.08);
+  background: #fff;
+  box-shadow: 0 4px 16px rgba(31, 35, 41, 0.12);
+  z-index: 10080;
+}
+
+.kb-selection-highlight-menu {
+  left: auto;
+  right: 0;
+}
+
+.kb-selection-color-swatch,
+.kb-selection-highlight-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background 0.12s;
+}
+
+.kb-selection-color-swatch:hover,
+.kb-selection-highlight-swatch:hover {
+  background: #f2f3f5;
+}
+
+.kb-selection-color-default {
+  color: #1f2329;
+}
+
+.kb-selection-highlight-swatch span {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.kb-selection-highlight-none {
+  position: relative;
+  background: #fff !important;
+}
+
+.kb-selection-highlight-none::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top right,
+    transparent calc(50% - 0.5px),
+    #ef4444 calc(50% - 0.5px),
+    #ef4444 calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
+  border-radius: 4px;
+}
+
+.kb-editor .ProseMirror code {
+  background: #f1f5f9;
+  color: #be185d;
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  font-size: 0.9em;
+}
+
+.kb-editor .ProseMirror mark {
+  border-radius: 2px;
+  padding: 0.05em 0.1em;
+}
+
+.kb-editor .ProseMirror u {
+  text-underline-offset: 2px;
+}
+
 .kb-editor .ProseMirror th,
 .kb-editor .ProseMirror td {
   border: 1px solid #cbd5e1;
@@ -165,7 +317,7 @@
   max-width: 100%;
   margin: 0.5rem 0;
   line-height: 0;
-  cursor: pointer;
+  cursor: zoom-in;
 }
 
 .kb-editor .ProseMirror [data-node='image'] img {
@@ -173,6 +325,11 @@
   display: block;
   max-width: 100%;
   height: auto;
+  cursor: zoom-in;
+}
+
+.kb-editor .ProseMirror img {
+  cursor: zoom-in;
 }
 
 .kb-editor .ProseMirror [data-resize-wrapper] img {
@@ -520,4 +677,178 @@
 
 .kb-link-insert-confirm:hover {
   background: #64748b;
+}
+
+/* ── 图片放大预览 ── */
+
+.kb-image-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(15, 23, 42, 0.85);
+  animation: kb-image-preview-fade-in 0.15s ease-out;
+}
+
+@keyframes kb-image-preview-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.kb-image-preview-img {
+  max-width: min(96vw, 1200px);
+  max-height: 90vh;
+  border-radius: 0.5rem;
+  object-fit: contain;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+.kb-image-preview-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  border: none;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.kb-image-preview-close:hover {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+/* ── 文档目录索引 ── */
+
+.kb-doc-outline {
+  width: 200px;
+  border-left: 1px solid #f1f5f9;
+  background: #fafbfc;
+  transition: width 0.18s ease;
+}
+
+.kb-doc-outline-collapsed {
+  width: 36px;
+}
+
+.kb-doc-outline-expand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  width: 100%;
+  min-height: 72px;
+  margin-top: 0.75rem;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.kb-doc-outline-expand:hover {
+  background: #f1f5f9;
+  color: #4f46e5;
+}
+
+.kb-doc-outline-inner {
+  position: sticky;
+  top: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 1rem 0.75rem 1.5rem;
+}
+
+.kb-doc-outline-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.65rem;
+  padding: 0 0.35rem;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.kb-doc-outline-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.kb-doc-outline-toggle:hover {
+  background: #e2e8f0;
+  color: #64748b;
+}
+
+.kb-doc-outline-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kb-doc-outline-item {
+  display: block;
+  width: 100%;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #64748b;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.kb-doc-outline-item:hover {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.kb-doc-outline-item.is-active {
+  background: #eef2ff;
+  color: #4f46e5;
+  font-weight: 600;
+}
+
+.kb-doc-outline-level-1 {
+  padding-left: 0.5rem;
+  font-weight: 600;
+}
+
+.kb-doc-outline-level-2 {
+  padding-left: 1rem;
+}
+
+.kb-doc-outline-level-3 {
+  padding-left: 1.5rem;
+  font-size: 11px;
+}
+
+.kb-editor .ProseMirror h1,
+.kb-editor .ProseMirror h2,
+.kb-editor .ProseMirror h3 {
+  scroll-margin-top: 16px;
 }

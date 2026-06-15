@@ -120,6 +120,66 @@ export function resolveInsertSortOrder(
 /** folderId 是否为 ancestorId 的子孙文件夹 */
 export type KnowledgeDropPosition = 'before' | 'after' | 'inside';
 
+export type KnowledgeDragItemRef = {
+  type: 'folder' | 'document';
+  /** 文件夹 parentId 或文档 folderId */
+  parentId: string | null;
+};
+
+export function getKnowledgeRowParentId(
+  row: { kind: 'folder' | 'document'; itemId: string },
+  folders: KnowledgeFolderDto[],
+  documents: KnowledgeDocumentSummaryDto[],
+): string | null {
+  if (row.kind === 'folder') {
+    return folders.find(f => f.id === row.itemId)?.parentId ?? null;
+  }
+  return documents.find(d => d.id === row.itemId)?.folderId ?? null;
+}
+
+/** 拖拽项与目标行是否处于同一父级（用于优先上下排序而非嵌套） */
+export function areKnowledgeTreeSiblings(
+  dragging: KnowledgeDragItemRef,
+  row: { kind: 'folder' | 'document'; itemId: string },
+  folders: KnowledgeFolderDto[],
+  documents: KnowledgeDocumentSummaryDto[],
+): boolean {
+  return dragging.parentId === getKnowledgeRowParentId(row, folders, documents);
+}
+
+export function resolveKnowledgeDropPosition(
+  overRow: { kind: 'folder' | 'document'; itemId: string },
+  overRect: { top: number; height: number } | null,
+  dragCenterY: number | null,
+  dragging: KnowledgeDragItemRef | null,
+  folders: KnowledgeFolderDto[],
+  documents: KnowledgeDocumentSummaryDto[],
+): KnowledgeDropPosition {
+  const ratio = overRect && dragCenterY != null
+    ? (dragCenterY - overRect.top) / overRect.height
+    : 0.5;
+
+  let position: KnowledgeDropPosition;
+  if (overRow.kind === 'folder') {
+    if (ratio < 0.33) position = 'before';
+    else if (ratio > 0.67) position = 'after';
+    else position = 'inside';
+  } else {
+    position = ratio < 0.5 ? 'before' : 'after';
+  }
+
+  if (
+    position === 'inside'
+    && overRow.kind === 'folder'
+    && dragging
+    && areKnowledgeTreeSiblings(dragging, overRow, folders, documents)
+  ) {
+    position = ratio < 0.5 ? 'before' : 'after';
+  }
+
+  return position;
+}
+
 export function planFolderMove(
   folderId: string,
   target:

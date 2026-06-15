@@ -32,5 +32,7 @@ export function getKnowledgeTableBubbleAnchor(editor: Editor): VirtualElement | 
 
 export function shouldShowKnowledgeTableBubbleMenu(editor: Editor, view: { hasFocus: () => boolean }): boolean {
   if (!view.hasFocus()) return false;
-  return editor.isActive('table');
+  if (!editor.isActive('table')) return false;
+  // 选中文字时优先展示行内格式工具栏
+  return editor.state.selection.empty;
 }

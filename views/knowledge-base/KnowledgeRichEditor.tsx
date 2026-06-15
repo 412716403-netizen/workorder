@@ -12,6 +12,10 @@ import Link from '@tiptap/extension-link';
 import { ResizableImage } from './resizableImageExtension';
 import Placeholder from '@tiptap/extension-placeholder';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import Underline from '@tiptap/extension-underline';
+import Highlight from '@tiptap/extension-highlight';
+import { TextStyle } from '@tiptap/extension-text-style';
+import Color from '@tiptap/extension-color';
 import { common, createLowlight } from 'lowlight';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
@@ -20,11 +24,17 @@ import {
 } from '../../shared/knowledgeLinkUrl';
 import EditorInsertHandle from './EditorInsertHandle';
 import TableBubbleMenu from './TableBubbleMenu';
+import KnowledgeSelectionBubbleMenu from './KnowledgeSelectionBubbleMenu';
 import LinkInsertDialog from './LinkInsertDialog';
 import { insertKnowledgeExternalLink } from './knowledgeEditorInsert';
 import { bindKnowledgeEditorLinkClick } from './knowledgeEditorLinkClick';
+import { bindKnowledgeEditorImageClick } from './knowledgeEditorImageClick';
+import KnowledgeImagePreviewOverlay from './KnowledgeImagePreviewOverlay';
 import { tableDeleteShortcut } from './tableDeleteShortcut';
 import { focusDocumentTail, isClickBelowEditorContent } from './focusDocumentTail';
+import { shouldApplyRemoteContentHydrate } from '../../utils/knowledgeEditorHydrate';
+import { useKnowledgeDocOutline } from '../../hooks/useKnowledgeDocOutline';
+import KnowledgeDocOutline from './KnowledgeDocOutline';
 import './knowledge-editor.css';
 
 const lowlight = createLowlight(common);
@@ -64,8 +74,11 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydratingRef = useRef(true);
   const dirtyRef = useRef(false);
+  const prevDocumentIdRef = useRef<string | null>(null);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkDialogInitialText, setLinkDialogInitialText] = useState('');
+  const [imagePreviewSrc, setImagePreviewSrc] = useState<string | null>(null);
+  const editorScrollRef = useRef<HTMLDivElement>(null);
 
   documentIdRef.current = documentId;
   onSaveRef.current = onSave;
@@ -161,6 +174,10 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
         placeholder: '输入正文，或点击左侧 + 插入内容块…',
       }),
       CodeBlockLowlight.configure({ lowlight }),
+      Underline,
+      TextStyle,
+      Color.configure({ types: ['textStyle'] }),
+      Highlight.configure({ multicolor: true }),
       tableDeleteShortcut,
     ],
     content,
@@ -171,6 +188,11 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
     },
   }, []);
 
+  const { items: outlineItems, activeId: outlineActiveId, jumpTo: jumpToOutline } = useKnowledgeDocOutline(
+    editor,
+    editorScrollRef,
+  );
+
   useEffect(() => {
     titleRef.current = title;
     if (!editor || hydratingRef.current) return;
@@ -179,9 +201,30 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
     }
   }, [title, editor]);
 
-  /** 切换文档或服务端正文到达后：写入编辑器并以 Tiptap 序列化结果对齐保存基线，避免误触发自动保存 */
+  /**
+   * 切换文档或远端正文到达：写入编辑器并对齐保存基线。
+   * 同一文档自动保存回写时，若用户正在编辑则跳过 setContent，避免光标被重置到文末。
+   */
   useEffect(() => {
     if (!editor) return;
+
+    const documentSwitched = prevDocumentIdRef.current !== documentId;
+    prevDocumentIdRef.current = documentId;
+
+    const current = editor.getHTML();
+    const remoteContent = content || '<p></p>';
+    if (
+      !shouldApplyRemoteContentHydrate({
+        documentSwitched,
+        remoteContent,
+        editorHtml: current,
+        isDirty: dirtyRef.current,
+        isEditorFocused: editor.isFocused,
+      })
+    ) {
+      return;
+    }
+
     hydratingRef.current = true;
     dirtyRef.current = false;
     if (saveTimerRef.current) {
@@ -189,13 +232,12 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
       saveTimerRef.current = null;
     }
     titleRef.current = title;
-    const current = editor.getHTML();
-    if (content !== current) {
-      editor.commands.setContent(content || '<p></p>', false);
+    if (remoteContent !== current) {
+      editor.commands.setContent(remoteContent, false);
     }
     lastSavedRef.current = { title: titleRef.current, content: editor.getHTML() };
     hydratingRef.current = false;
-  }, [editor, content, documentId]);
+  }, [editor, content, documentId, title]);
 
   useEffect(() => {
     if (!editor) return;
@@ -256,6 +298,12 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
     return bindKnowledgeEditorLinkClick(root);
   }, [editor]);
 
+  useEffect(() => {
+    const root = editor?.view.dom;
+    if (!root) return;
+    return bindKnowledgeEditorImageClick(root, setImagePreviewSrc);
+  }, [editor]);
+
   const openLinkDialog = useCallback(() => {
     if (!editor) return;
     const { from, to, empty } = editor.state.selection;
@@ -273,7 +321,7 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
   const handleEditorShellMouseDown = (e: React.MouseEvent) => {
     if (!editor || !editable || e.button !== 0) return;
     const target = e.target as HTMLElement;
-    if (target.closest('.kb-insert-plus, .kb-insert-popup-portal, .kb-table-bubble-menu, .kb-insert-wrap, .kb-link-insert-overlay')) {
+    if (target.closest('.kb-insert-plus, .kb-insert-popup-portal, .kb-table-bubble-menu, .kb-selection-bubble-menu, .kb-selection-color-menu, .kb-insert-wrap, .kb-link-insert-overlay')) {
       return;
     }
 
@@ -331,21 +379,35 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
         )}
       </div>
 
-      <div
-        className="kb-editor-shell min-h-0 flex-1 overflow-y-auto px-8 py-6"
-        onMouseDown={handleEditorShellMouseDown}
-      >
-        <EditorInsertHandle
-          editor={editor}
-          editable={editable}
-          onPickImage={() => fileInputRef.current?.click()}
-          onOpenLinkDialog={openLinkDialog}
-        />
-        <div className="kb-editor">
-          <TableBubbleMenu editor={editor} editable={editable} />
-          <EditorContent editor={editor} />
+      <div className="flex min-h-0 flex-1">
+        <div
+          ref={editorScrollRef}
+          className="kb-editor-shell min-h-0 flex-1 overflow-y-auto px-8 py-6"
+          onMouseDown={handleEditorShellMouseDown}
+        >
+          <EditorInsertHandle
+            editor={editor}
+            editable={editable}
+            onPickImage={() => fileInputRef.current?.click()}
+            onOpenLinkDialog={openLinkDialog}
+          />
+          <div className="kb-editor">
+            <TableBubbleMenu editor={editor} editable={editable} />
+            <KnowledgeSelectionBubbleMenu
+              editor={editor}
+              editable={editable}
+              onOpenLinkDialog={openLinkDialog}
+            />
+            <EditorContent editor={editor} />
+          </div>
+          {editable && <div className="kb-editor-tail-hit" aria-hidden />}
         </div>
-        {editable && <div className="kb-editor-tail-hit" aria-hidden />}
+
+        <KnowledgeDocOutline
+          items={outlineItems}
+          activeId={outlineActiveId}
+          onJump={jumpToOutline}
+        />
       </div>
 
       <LinkInsertDialog
@@ -353,6 +415,11 @@ const KnowledgeRichEditor: React.FC<KnowledgeRichEditorProps> = ({
         initialText={linkDialogInitialText}
         onClose={() => setLinkDialogOpen(false)}
         onConfirm={handleLinkConfirm}
+      />
+
+      <KnowledgeImagePreviewOverlay
+        src={imagePreviewSrc}
+        onClose={() => setImagePreviewSrc(null)}
       />
 
       <input

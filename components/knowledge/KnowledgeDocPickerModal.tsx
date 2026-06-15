@@ -5,6 +5,14 @@ import { buildKnowledgeTree, type KnowledgeTreeNode } from '../../utils/knowledg
 import type { KnowledgeFieldRef } from '../../utils/knowledgeFieldValue';
 import '../../views/knowledge-base/knowledge-editor.css';
 import { bindKnowledgeEditorLinkClick } from '../../views/knowledge-base/knowledgeEditorLinkClick';
+import { bindKnowledgeEditorImageClick } from '../../views/knowledge-base/knowledgeEditorImageClick';
+import KnowledgeImagePreviewOverlay from '../../views/knowledge-base/KnowledgeImagePreviewOverlay';
+import KnowledgeDocOutline from '../../views/knowledge-base/KnowledgeDocOutline';
+import {
+  collectKnowledgeOutlineFromHtmlRoot,
+  scrollHtmlToKnowledgeOutline,
+  type KnowledgeOutlineItem,
+} from '../../utils/knowledgeDocOutline';
 
 export interface KnowledgeDocPickerModalProps {
   isOpen: boolean;
@@ -228,11 +236,27 @@ export const KnowledgeDocPreviewModal: React.FC<KnowledgeDocPreviewModalProps> =
 }) => {
   const { data: doc, isLoading, isError } = useKnowledgeDocument(isOpen ? docId : null);
   const previewRef = useRef<HTMLDivElement>(null);
+  const previewScrollRef = useRef<HTMLDivElement>(null);
+  const [imagePreviewSrc, setImagePreviewSrc] = useState<string | null>(null);
+  const [outlineItems, setOutlineItems] = useState<KnowledgeOutlineItem[]>([]);
+  const [outlineActiveId, setOutlineActiveId] = useState<string | null>(null);
 
   useEffect(() => {
     const root = previewRef.current?.querySelector('.ProseMirror');
-    if (!(root instanceof HTMLElement)) return;
-    return bindKnowledgeEditorLinkClick(root);
+    if (!(root instanceof HTMLElement)) {
+      setOutlineItems([]);
+      setOutlineActiveId(null);
+      return;
+    }
+    const unbindLink = bindKnowledgeEditorLinkClick(root);
+    const unbindImage = bindKnowledgeEditorImageClick(root, setImagePreviewSrc);
+    const items = collectKnowledgeOutlineFromHtmlRoot(root);
+    setOutlineItems(items);
+    setOutlineActiveId(items[0]?.id ?? null);
+    return () => {
+      unbindLink();
+      unbindImage();
+    };
   }, [doc?.content]);
 
   if (!isOpen) return null;
@@ -240,7 +264,7 @@ export const KnowledgeDocPreviewModal: React.FC<KnowledgeDocPreviewModalProps> =
   return (
     <div className={`fixed inset-0 ${stackZClass} flex items-center justify-center p-4`}>
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} role="presentation" />
-      <div className="relative flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+      <div className="relative flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <h2 className="min-w-0 flex-1 truncate text-lg font-bold text-slate-800">
             {doc?.title?.trim() || '资料库文件'}
@@ -249,20 +273,36 @@ export const KnowledgeDocPreviewModal: React.FC<KnowledgeDocPreviewModalProps> =
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="min-h-[200px] flex-1 overflow-y-auto px-8 py-6">
-          {isLoading ? (
-            <div className="flex h-40 items-center justify-center text-sm text-slate-400">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 加载中…
-            </div>
-          ) : isError || !doc ? (
-            <p className="py-10 text-center text-sm text-slate-400">无法加载该文档（可能已删除或无权限）</p>
-          ) : (
-            <div ref={previewRef} className="kb-editor">
-              <div className="ProseMirror" dangerouslySetInnerHTML={{ __html: doc.content || '<p></p>' }} />
-            </div>
-          )}
+        <div className="flex min-h-0 flex-1">
+          <div ref={previewScrollRef} className="min-h-[200px] flex-1 overflow-y-auto px-8 py-6">
+            {isLoading ? (
+              <div className="flex h-40 items-center justify-center text-sm text-slate-400">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 加载中…
+              </div>
+            ) : isError || !doc ? (
+              <p className="py-10 text-center text-sm text-slate-400">无法加载该文档（可能已删除或无权限）</p>
+            ) : (
+              <div ref={previewRef} className="kb-editor">
+                <div className="ProseMirror" dangerouslySetInnerHTML={{ __html: doc.content || '<p></p>' }} />
+              </div>
+            )}
+          </div>
+          <KnowledgeDocOutline
+            items={outlineItems}
+            activeId={outlineActiveId}
+            onJump={item => {
+              const scrollRoot = previewScrollRef.current;
+              if (!scrollRoot) return;
+              scrollHtmlToKnowledgeOutline(scrollRoot, item);
+              setOutlineActiveId(item.id);
+            }}
+          />
         </div>
       </div>
+      <KnowledgeImagePreviewOverlay
+        src={imagePreviewSrc}
+        onClose={() => setImagePreviewSrc(null)}
+      />
     </div>
   );
 };
