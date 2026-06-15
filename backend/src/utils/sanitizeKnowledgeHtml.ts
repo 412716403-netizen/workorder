@@ -13,7 +13,9 @@ let hrefSanitizeHookInstalled = false;
 function ensureHrefSanitizeHook(): void {
   if (hrefSanitizeHookInstalled) return;
   DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
-    if (data.attrName !== 'href' || node.tagName !== 'A') return;
+    // 后端 tsconfig 不含 DOM lib，用窄类型读取 tagName，避免 tsc 报 TS2812
+    const tagName = (node as { tagName?: string }).tagName;
+    if (data.attrName !== 'href' || tagName !== 'A') return;
     const raw = String(data.attrValue ?? '');
     if (!isAllowedKnowledgeExternalUrl(raw)) {
       data.keepAttr = false;
