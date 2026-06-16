@@ -171,7 +171,7 @@ export function resolveKnowledgeDropPosition(
   if (
     position === 'inside'
     && overRow.kind === 'folder'
-    && dragging
+    && dragging?.type === 'folder'
     && areKnowledgeTreeSiblings(dragging, overRow, folders, documents)
   ) {
     position = ratio < 0.5 ? 'before' : 'after';

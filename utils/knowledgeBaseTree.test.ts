@@ -71,7 +71,19 @@ describe('resolveKnowledgeDropPosition', () => {
     expect(pos).toBe('after');
   });
 
-  it('跨层级拖入文件夹仍为 inside', () => {
+  it('根目录文档拖入文件夹中间区域为 inside', () => {
+    const pos = resolveKnowledgeDropPosition(
+      { kind: 'folder', itemId: 'f1' },
+      { top: 100, height: 40 },
+      120,
+      { type: 'document', parentId: null },
+      folders,
+      documents,
+    );
+    expect(pos).toBe('inside');
+  });
+
+  it('跨层级文件夹拖入仍为 inside', () => {
     const moreFolders: KnowledgeFolderDto[] = [
       ...folders,
       { id: 'f3', parentId: null, name: '品质', sortOrder: 2, createdAt: '', updatedAt: '' },
