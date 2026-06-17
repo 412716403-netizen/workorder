@@ -6,6 +6,7 @@ import {
   type ReportablePmp,
   type ReportableProdRecord,
 } from '../../../shared/orderReportableAggregates.js';
+import { buildOutOfSequenceTemplateIds } from '../../../shared/processSequence.js';
 import type { ProcessSequenceMode, ProductionLinkMode } from '../types/index.js';
 import { OrderStatus } from '../../../shared/types.js';
 
@@ -100,8 +101,17 @@ export async function computeTemplateReportStats(
   if (templateIds.length === 0) return new Map();
 
   const config = await settingsService.getConfig(tenantId);
-  const processSequenceMode = (config.processSequenceMode as ProcessSequenceMode | undefined) ?? 'sequential';
+  // 工序顺序设置已下线：全局恒「按工序顺序生产」，例外由工序级 allowOutOfSequence 控制。
+  const processSequenceMode: ProcessSequenceMode = 'sequential';
   const productionLinkMode = (config.productionLinkMode as ProductionLinkMode | undefined) ?? 'order';
+
+  const outOfSequenceNodes = await db.globalNodeTemplate.findMany({
+    where: { allowOutOfSequence: true },
+    select: { id: true },
+  });
+  const outOfSequenceTemplateIds = buildOutOfSequenceTemplateIds(
+    outOfSequenceNodes.map(n => ({ id: n.id, allowOutOfSequence: true })),
+  );
 
   const [ordersRaw, pmpRaw, prodRecords] = await Promise.all([
     db.productionOrder.findMany({
@@ -141,5 +151,6 @@ export async function computeTemplateReportStats(
     prodRecords: prodRecords.map(mapProdRecord),
     processSequenceMode,
     productionLinkMode,
+    outOfSequenceTemplateIds,
   });
 }

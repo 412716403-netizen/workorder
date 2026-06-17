@@ -18,7 +18,6 @@ import type {
   PartnerCategory,
   PlanFormSettings,
   PrintTemplate,
-  ProcessSequenceMode,
   Product,
   ProductCategory,
   ProductionLinkMode,
@@ -89,7 +88,6 @@ export function mergeById<T extends { id: string }>(prev: T[], incoming: T[]): T
 export interface AppDataLoadCoreSetters {
   setDataLoading: Dispatch<SetStateAction<boolean>>;
   setProductionLinkMode: Dispatch<SetStateAction<ProductionLinkMode>>;
-  setProcessSequenceMode: Dispatch<SetStateAction<ProcessSequenceMode>>;
   setAllowExceedMaxReportQty: Dispatch<SetStateAction<boolean>>;
   setAllowExceedMaxOutsourceReceiveQty: Dispatch<SetStateAction<boolean>>;
   setWeightTolerancePercent: Dispatch<SetStateAction<number>>;
@@ -163,7 +161,7 @@ export async function executeAppDataLoadCore(
 
   const cfg = (settledVal<Record<string, unknown>>(coreResults, 0) || {}) as Record<string, unknown>;
   s.setProductionLinkMode((cfg.productionLinkMode as ProductionLinkMode) ?? 'order');
-  s.setProcessSequenceMode((cfg.processSequenceMode as ProcessSequenceMode) ?? 'sequential');
+  // 工序顺序设置已下线：系统全局恒「按工序顺序生产」，例外由工序级 allowOutOfSequence 控制。
   s.setAllowExceedMaxReportQty(cfg.allowExceedMaxReportQty === true);
   s.setAllowExceedMaxOutsourceReceiveQty(cfg.allowExceedMaxOutsourceReceiveQty === true);
   {

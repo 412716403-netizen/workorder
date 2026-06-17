@@ -17,6 +17,7 @@ import { bomHasConfiguredItems } from '../utils/bomEffective';
 import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
 import { productMatchesSearchQuery } from '../utils/productSearchMatch';
 import { compareProductsArchiveOrder } from '../utils/productSort';
+import { useConfigData, useOrdersData } from '../contexts/AppDataContext';
 
 const PRODUCT_ARCHIVE_ALL = '__all__';
 
@@ -63,6 +64,8 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   initialProductId,
   onClearInitialProductId,
 }) => {
+  const { productionLinkMode } = useConfigData();
+  const { orders } = useOrdersData();
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>(PRODUCT_ARCHIVE_ALL);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -164,6 +167,8 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
         onBack={() => setEditingProduct(null)}
         permCanDelete={permCanDelete}
         isPersistedProduct={products.some(p => p.id === editingProduct.id)}
+        productionLinkMode={productionLinkMode}
+        ordersForProcessLock={orders}
       />
     );
   }

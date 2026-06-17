@@ -80,6 +80,7 @@ export function sumOutsourceableByVariantProductMatrix(
     reworkByVariant?: Record<string, number>;
   },
   orders?: ProductionOrder[],
+  outOfSequenceTemplateIds?: ReadonlySet<string>,
 ): number {
   const variants = (product.variants ?? []) as ProductVariant[];
   if (variants.length === 0) return Number.POSITIVE_INFINITY;
@@ -104,6 +105,7 @@ export function sumOutsourceableByVariantProductMatrix(
       milestoneNodeIds,
       getDefectiveRework,
       orders,
+      outOfSequenceTemplateIds,
     );
     const dispatched = netOutsourceDispatchedProductNodeVariant(records, product.id, nodeId, vid);
     sum += Math.max(0, maxGood - dispatched);

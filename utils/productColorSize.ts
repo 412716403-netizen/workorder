@@ -1,4 +1,12 @@
 import type { Product, ProductCategory } from '../types';
+import { validateProductColorSizeForSave as validateProductColorSizeForSaveShared } from '../shared/productColorSize';
+
+export {
+  MSG_PRODUCT_COLOR_SIZE_REQUIRED_BOTH,
+  MSG_PRODUCT_COLOR_SIZE_REQUIRED_COLOR,
+  MSG_PRODUCT_COLOR_SIZE_REQUIRED_SIZE,
+  validateProductColorSizeForSave,
+} from '../shared/productColorSize';
 
 /**
  * 与工单报工（ReportModal）一致：类目启用颜色尺码，或产品上同时配置了颜色+尺码维度。
@@ -12,6 +20,18 @@ export function productColorSizeEnabled(
     Boolean(product?.colorIds?.length && product?.sizeIds?.length) ||
     Boolean(category?.hasColorSize)
   );
+}
+
+/** 保存产品档案前：分类已启用颜色尺码时须至少 1 色 1 码。返回错误文案，通过则 null。 */
+export function validateProductColorSizeSelection(
+  product: Pick<Product, 'colorIds' | 'sizeIds'>,
+  category: ProductCategory | undefined,
+): string | null {
+  return validateProductColorSizeForSaveShared({
+    hasColorSize: Boolean(category?.hasColorSize),
+    colorIds: product.colorIds,
+    sizeIds: product.sizeIds,
+  });
 }
 
 /**

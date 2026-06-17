@@ -39,6 +39,7 @@ import { Package } from 'lucide-react';
 import type { EditingReportState, ReportDetailBatch } from '../../../hooks/useReportBatchDetail';
 import type { BatchDetailMatrix } from './ReportBatchItemsTable';
 import { formStandardLabelClass } from '../../../styles/uiDensity';
+import { buildOutOfSequenceTemplateIds, findGatingPredecessorIndex, isProcessSequential } from '../../../shared/processSequence';
 
 function reportNodeUsesWeight(globalNodes: GlobalNodeTemplate[], templateId: string): boolean {
   return !!globalNodes.find(n => n.id === templateId)?.enableWeightOnReport;
@@ -50,16 +51,19 @@ function orderEffectiveRemainingAtTemplate(
   processSequenceMode: ProcessSequenceMode,
   getDefectiveRework: (orderId: string, tid: string) => { defective: number; rework: number },
   prodRecords: ProductionOpRecord[],
+  outOfSequenceTemplateIds?: ReadonlySet<string>,
 ): number {
   const orderTotal = order.items.reduce((s, i) => s + i.quantity, 0);
   const ms = order.milestones.find(m => m.templateId === templateId);
   if (!ms) return 0;
   const totalBase =
-    processSequenceMode === 'sequential'
+    isProcessSequential(processSequenceMode, templateId, outOfSequenceTemplateIds)
       ? (() => {
           const idx = order.milestones.findIndex(m => m.templateId === templateId);
-          if (idx <= 0) return orderTotal;
-          const prev = order.milestones[idx - 1];
+          const templateIds = order.milestones.map(m => m.templateId);
+          const gateIdx = findGatingPredecessorIndex(templateIds, idx, outOfSequenceTemplateIds);
+          if (gateIdx < 0) return orderTotal;
+          const prev = order.milestones[gateIdx];
           return prev?.completedQuantity ?? 0;
         })()
       : orderTotal;
@@ -108,24 +112,27 @@ const ReportBatchEditFlow: React.FC<Props> = ({
   const order = reportDetailBatch.source === 'order' ? orders.find(o => o.id === editingReport.orderId) : null;
   const milestone = order?.milestones.find(m => m.templateId === editingReport.templateId);
   const tid = editingReport.templateId;
+  const outOfSequenceTemplateIds = React.useMemo(() => buildOutOfSequenceTemplateIds(globalNodes), [globalNodes]);
   const editFlatUsesWeight = reportNodeUsesWeight(globalNodes, tid);
   const effectiveRemainingSaved =
     reportDetailBatch.source === 'order'
       ? [...new Set(reportDetailBatch.rows.map(r => r.order.id))].reduce<number>((sum, oid) => {
           const o = resolveOrderById(oid);
           if (!o) return sum;
-          return sum + orderEffectiveRemainingAtTemplate(o, tid, processSequenceMode, getDefectiveRework, prodRecords);
+          return sum + orderEffectiveRemainingAtTemplate(o, tid, processSequenceMode, getDefectiveRework, prodRecords, outOfSequenceTemplateIds);
         }, 0)
       : Math.max(
           0,
           (() => {
             const orderTotal = order ? order.items.reduce((s, i) => s + i.quantity, 0) : 0;
             const totalBase =
-              order && milestone && processSequenceMode === 'sequential'
+              order && milestone && isProcessSequential(processSequenceMode, tid, outOfSequenceTemplateIds)
                 ? (() => {
                     const idx = order.milestones.findIndex(m => m.templateId === tid);
-                    if (idx <= 0) return orderTotal;
-                    const prev = order.milestones[idx - 1];
+                    const templateIds = order.milestones.map(m => m.templateId);
+                    const gateIdx = findGatingPredecessorIndex(templateIds, idx, outOfSequenceTemplateIds);
+                    if (gateIdx < 0) return orderTotal;
+                    const prev = order.milestones[gateIdx];
                     return prev?.completedQuantity ?? 0;
                   })()
                 : orderTotal || 0;

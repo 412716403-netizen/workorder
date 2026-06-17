@@ -5,6 +5,7 @@
  * 抽出后可独立单测，避免在视图渲染中再生成函数对象。
  */
 import type { ProductionOpRecord } from '../types';
+import { isProcessSequential, findGatingPredecessorIndex } from '../shared/processSequence';
 
 /**
  * 关联工单模式下：把工单号反复去掉末尾 `-数字`，得到「根工单号」。
@@ -35,6 +36,7 @@ export function reworkRemainingAtNode(
   nodeId: string,
   // 接 string 而非 union，规避调用方默认参数推断为 string 的问题；运行时仅比较 'sequential'
   processSequenceMode: string,
+  outOfSequenceTemplateIds?: ReadonlySet<string>,
 ): number {
   const pathNodes = (r.reworkNodeIds && r.reworkNodeIds.length > 0)
     ? r.reworkNodeIds
@@ -43,10 +45,13 @@ export function reworkRemainingAtNode(
   if (idx < 0) return 0;
   const doneAtNode = r.reworkCompletedQuantityByNode?.[nodeId]
     ?? ((r.completedNodeIds ?? []).includes(nodeId) ? r.quantity : 0);
-  if (processSequenceMode === 'sequential' && idx > 0) {
-    const prevNodeId = pathNodes[idx - 1];
-    const doneAtPrev = r.reworkCompletedQuantityByNode?.[prevNodeId] ?? 0;
-    return Math.max(0, Math.min(doneAtPrev, r.quantity) - doneAtNode);
+  if (isProcessSequential(processSequenceMode as 'free' | 'sequential', nodeId, outOfSequenceTemplateIds)) {
+    const gateIdx = findGatingPredecessorIndex(pathNodes, idx, outOfSequenceTemplateIds);
+    if (gateIdx >= 0) {
+      const prevNodeId = pathNodes[gateIdx];
+      const doneAtPrev = r.reworkCompletedQuantityByNode?.[prevNodeId] ?? 0;
+      return Math.max(0, Math.min(doneAtPrev, r.quantity) - doneAtNode);
+    }
   }
   return Math.max(0, r.quantity - doneAtNode);
 }

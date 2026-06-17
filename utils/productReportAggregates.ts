@@ -7,6 +7,7 @@ import {
   productGroupMaxReportableSum,
   reworkMergeBucketOrderId,
 } from '../shared/orderReportableAggregates';
+import { isProcessSequential, findGatingPredecessorIndex } from '../shared/processSequence';
 
 export { sumBlockOrderQty, pmpCompletedAtTemplate, pmpDefectiveTotalAtTemplate, reworkMergeBucketOrderId, orderMaxReportableAtTemplateProductAware, productGroupMaxReportableSum };
 
@@ -119,15 +120,19 @@ export function variantMaxGoodProductMode(
   milestoneNodeIds: string[],
   getDefectiveRework: (orderId: string, tid: string) => { defective: number; rework: number; reworkByVariant: Record<string, number> },
   orderForest?: Pick<ProductionOrder, 'id' | 'parentOrderId'>[],
+  outOfSequenceTemplateIds?: ReadonlySet<string>,
 ): number {
   const tid = templateId;
   const idx = milestoneNodeIds.indexOf(tid);
   const Qv = sumVariantQtyInOrders(blockOrders, variantId);
   const curDone = combinedCompletedAtTemplateVariant(blockOrders, pmp, productId, tid, variantId);
   let baseV = Qv;
-  if (processSequenceMode === 'sequential' && idx > 0) {
-    const prevTid = milestoneNodeIds[idx - 1];
-    baseV = combinedCompletedAtTemplateVariant(blockOrders, pmp, productId, prevTid, variantId);
+  if (isProcessSequential(processSequenceMode, tid, outOfSequenceTemplateIds)) {
+    const gateIdx = findGatingPredecessorIndex(milestoneNodeIds, idx, outOfSequenceTemplateIds);
+    if (gateIdx >= 0) {
+      const prevTid = milestoneNodeIds[gateIdx];
+      baseV = combinedCompletedAtTemplateVariant(blockOrders, pmp, productId, prevTid, variantId);
+    }
   }
   const defectiveFromPmp = pmp
     .filter(p => p.productId === productId && p.milestoneTemplateId === tid && (p.variantId ?? '') === variantId)

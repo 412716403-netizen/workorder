@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Package, X } from 'lucide-react';
 import type { Product, ProductCategory } from '../types';
 import ProductEditForm from '../views/product-management/ProductEditForm';
-import { useMasterData, useAppActions } from '../contexts/AppDataContext';
+import { useMasterData, useAppActions, useConfigData, useOrdersData } from '../contexts/AppDataContext';
 
 export interface ProductArchiveCreateModalProps {
   isOpen: boolean;
@@ -48,6 +48,8 @@ export const ProductArchiveCreateModal: React.FC<ProductArchiveCreateModalProps>
   onCreated,
 }) => {
   const { products, categories, boms, dictionaries, partners, globalNodes, partnerCategories } = useMasterData();
+  const { productionLinkMode } = useConfigData();
+  const { orders } = useOrdersData();
   const { onUpdateProduct, onDeleteProduct, onUpdateBOM, refreshDictionaries, refreshPartners } = useAppActions();
   const [instanceKey, setInstanceKey] = useState(0);
 
@@ -129,6 +131,8 @@ export const ProductArchiveCreateModal: React.FC<ProductArchiveCreateModalProps>
             isPersistedProduct={false}
             embeddedInQuickCreateModal
             onProductPersisted={onCreated}
+            productionLinkMode={productionLinkMode}
+            ordersForProcessLock={orders}
           />
         </div>
       </div>

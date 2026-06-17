@@ -33,6 +33,12 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
 
   if (err instanceof Prisma.PrismaClientValidationError) {
     const msg = err.message;
+    if (msg.includes('processLocked')) {
+      res.status(500).json({
+        error: '保存产品时携带了只读字段 processLocked，请刷新页面后重试。',
+      });
+      return;
+    }
     // 按字段语义拆分提示：避免「工序 reportDisplayTemplate」误报成「产品 route_report_values」
     if (msg.includes('routeReportDisplayValues') || msg.includes('route_report_display_values')) {
       res.status(500).json({

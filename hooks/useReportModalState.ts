@@ -38,6 +38,7 @@ import type { ScanBatchApplyMeta } from '../components/scan/ScanBatchSessionModa
 import { scanItemResultToRowDetail, scanVirtualBatchResultToRowDetail } from '../utils/scanBatchRowDetail';
 import { calcUsageByWeight } from '../utils/bomMaterialUsageByWeight';
 import { coerceRouteReportDefaultForField, getEffectiveReportTemplate } from '../utils/effectiveReportTemplate';
+import { buildOutOfSequenceTemplateIds, findGatingPredecessorIndex, isProcessSequential } from '../shared/processSequence';
 import { productHasColorSizeMatrix } from '../utils/productColorSize';
 import { dataUrlToBlobUrl } from '../utils/routeReportFileUrls';
 import { generateNextReportNo } from '../utils/reportNoGen';
@@ -132,6 +133,8 @@ export function useReportModalState(args: UseReportModalStateArgs) {
     onReportSubmitProduct,
     getScanMaxQty,
   } = args;
+
+  const outOfSequenceTemplateIds = useMemo(() => buildOutOfSequenceTemplateIds(globalNodes), [globalNodes]);
 
   const [reportForm, setReportForm] = useState<ReportFormState>(() => {
     const initialData: Record<string, unknown> = {};
@@ -515,20 +518,26 @@ export function useReportModalState(args: UseReportModalStateArgs) {
 
     let tplIndex: number;
     let prevTemplateId: string | undefined;
+    let templateIdPath: string[] = [];
     if (productionLinkMode === 'product') {
       const product = productMap.get(productId);
       const nodeIds = product?.milestoneNodeIds || [];
+      templateIdPath = nodeIds;
       tplIndex = nodeIds.indexOf(milestoneTemplateId);
-      if (tplIndex > 0) prevTemplateId = nodeIds[tplIndex - 1];
     } else {
       const ref = allOrders.find(o => o.milestones.some(m => m.templateId === milestoneTemplateId)) ?? reportModal.order;
+      templateIdPath = ref.milestones.map(m => m.templateId);
       tplIndex = ref.milestones.findIndex(m => m.templateId === milestoneTemplateId);
-      if (tplIndex > 0) prevTemplateId = ref.milestones[tplIndex - 1].templateId;
     }
+    const gateIdx = findGatingPredecessorIndex(templateIdPath, tplIndex, outOfSequenceTemplateIds);
+    if (gateIdx >= 0) prevTemplateId = templateIdPath[gateIdx];
 
     const freshMilestone = allOrders.map(o => o.milestones.find(m => m.templateId === milestoneTemplateId)).find(Boolean);
 
-    if (tplIndex <= 0) {
+    // 脱链工序（不按顺序生产）或上游无按顺序工序：按规格总量计可报，不取前道完成量。
+    const seqConstrained = isProcessSequential(processSequenceMode, milestoneTemplateId, outOfSequenceTemplateIds);
+
+    if (!seqConstrained || gateIdx < 0) {
       if (!item) return 0;
       if (reportModal.productItems) {
         return item.quantity - (item.completedQuantity ?? 0);
@@ -581,7 +590,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
       }
     });
     return prevQty - curQty;
-  }, [reportModal.order, reportModal.milestone, reportModal.productItems, ordersInModal, productionLinkMode, productMap, productMilestoneProgresses]);
+  }, [reportModal.order, reportModal.milestone, reportModal.productItems, ordersInModal, productionLinkMode, productMap, productMilestoneProgresses, processSequenceMode, outOfSequenceTemplateIds]);
 
   const submitReport = useCallback(async () => {
     const tmpl = effectiveReportTemplate;

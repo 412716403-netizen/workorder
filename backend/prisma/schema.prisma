@@ -179,6 +179,8 @@ model GlobalNodeTemplate {
   enableEquipmentOnReport   Boolean  @default(false) @map("enable_equipment_on_report")
   enablePieceRate           Boolean  @default(false) @map("enable_piece_rate")
   allowOutsource            Boolean  @default(false) @map("allow_outsource")
+  /** 不按顺序生产：开启后该工序脱链，可按工单总量报工、不校验前道是否已报 */
+  allowOutOfSequence        Boolean  @default(false) @map("allow_out_of_sequence")
   /** 毛衣/外协等工序：报工/外协收货时录入本次交货重量，按 BOM 占比分摊为各子物料实际消耗 */
   enableWeightOnReport      Boolean  @default(false) @map("enable_weight_on_report")
   sortOrder                 Int      @default(0) @map("sort_order")

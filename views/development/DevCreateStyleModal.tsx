@@ -11,7 +11,7 @@ import type {
   Product,
   GlobalNodeTemplate,
 } from '../../types';
-import { productColorSizeEnabled } from '../../utils/productColorSize';
+import { validateProductColorSizeSelection } from '../../utils/productColorSize';
 import { devStyleToProductInfo, resolveDevStyleWithPublishedProduct } from '../../utils/productInfoDevStyleBridge';
 import { validateProductCatalogUnique } from '../../utils/productCatalogUnique';
 import { resolveProductSkuForSave } from '../../utils/productSkuAutoGen';
@@ -125,8 +125,9 @@ const DevCreateStyleModal: React.FC<DevCreateStyleModalProps> = ({
       return false;
     }
     const cat = categories.find((c) => c.id === style.categoryId);
-    if (productColorSizeEnabled(p, cat) && p.colorIds.length === 0 && p.sizeIds.length === 0) {
-      toast.error('该分类需要至少选择一个颜色或尺码');
+    const colorSizeErr = validateProductColorSizeSelection(p, cat);
+    if (colorSizeErr) {
+      toast.error(colorSizeErr);
       return false;
     }
     return true;

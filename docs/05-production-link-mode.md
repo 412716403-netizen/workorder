@@ -125,6 +125,21 @@
 - 新数据按新模式落库
 - 统计时根据真实数据归属决定聚合方式
 
+### 6.3 已下工单锁定工序
+
+产品模式下，同一 `productId` 的多张工单在工单中心、外协、返工等处按产品聚合；若产品在已有在产工单后仍允许修改 `milestoneNodeIds`，旧工单里程碑快照与新路线不一致，会导致可报/已报/剩余口径错位（如剩余变负）。
+
+因此：
+
+| 条件 | 行为 |
+|------|------|
+| `productionLinkMode = product` 且产品 `milestoneNodeIds` 非空 且存在非 `PENDING_PROCESS` 工单 | **禁止**再改工序增删与顺序（后端 `PUT /products/:id` 409） |
+| 产品原先 0 工序、首次配置路线 | **允许**（并触发 `backfillPendingProcessOrders`） |
+| 工单模式 `order` | 不锁（各工单独立里程碑快照） |
+| 工价 / 报工模板 / BOM | 锁定态仍可编辑 |
+
+API 列表/详情返回运行时字段 `processLocked: boolean`（非持久化），供产品编辑页禁用工序 UI。
+
 ---
 
 ## 7. 受影响的数据模型
@@ -250,11 +265,25 @@
 
 这是一道**保守兜底**，复杂的顺序工序 / 不良 / 返工细粒度规则仍由前端按场景计算。
 
+### 13.1 工序顺序与脱链（方案 X）
+
+全局恒「按工序顺序生产」；单道工序可在工序节点库开启「不按顺序生产」（`allowOutOfSequence`）。
+
+**透明链 gate**（`shared/processSequence.ts` → `findGatingPredecessorIndex`）：
+
+| 当前工序 | 可报基数 / gate |
+|----------|----------------|
+| 脱链（不按顺序） | 工单总量，不校验前道 |
+| 按顺序，上游无按顺序工序 | 工单总量（脱链前序被跳过） |
+| 按顺序，上游存在按顺序工序 | 最近上游按顺序工序的完成量 |
+
+工单中心、报工弹窗、外协待发/录入、返工剩余、后端统计聚合均走同一套纯函数，避免数字漂移。
+
 ---
 
-## 14. 模式切换前的提示
+## 14. 生产关联模式切换前的提示
 
-`views/settings/ProductionConfigTab.tsx` 切换 `productionLinkMode` / `processSequenceMode` 时使用 `useConfirm` 弹出影响说明，避免用户在不了解数据归属变化的情况下切换。
+`views/settings/ProductionConfigTab.tsx` 切换 `productionLinkMode` 时使用 `useConfirm` 弹出影响说明，避免用户在不了解数据归属变化的情况下切换。（全局「工序生产顺序」设置已下线，系统固定为按顺序生产，例外由工序级 `allowOutOfSequence` 控制。）
 
 ---
 

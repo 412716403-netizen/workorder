@@ -11,8 +11,8 @@ export function optStr(val: unknown): string | undefined {
   return undefined;
 }
 
-const UPDATE_EXCLUDE = new Set(['id', 'tenantId', 'createdAt', 'updatedAt']);
-const CREATE_EXCLUDE = new Set(['tenantId', 'updatedAt']);
+const UPDATE_EXCLUDE = new Set(['id', 'tenantId', 'createdAt', 'updatedAt', 'processLocked']);
+const CREATE_EXCLUDE = new Set(['tenantId', 'updatedAt', 'processLocked']);
 
 const JSON_FIELD_KEYS = new Set([
   'customData', 'customFields', 'assignments', 'reportTemplate', 'reportDisplayTemplate',

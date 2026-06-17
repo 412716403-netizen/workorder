@@ -122,7 +122,6 @@ export interface AppDataContextValue {
   productMilestoneProgresses: ProductMilestoneProgress[];
   // Config handlers
   onUpdateProductionLinkMode: (mode: ProductionLinkMode) => Promise<void>;
-  onUpdateProcessSequenceMode: (mode: ProcessSequenceMode) => Promise<void>;
   onUpdateAllowExceedMaxReportQty: (v: boolean) => Promise<void>;
   onUpdateAllowExceedMaxOutsourceReceiveQty: (v: boolean) => Promise<void>;
   onUpdateWeightTolerancePercent: (v: number) => Promise<void>;
@@ -414,7 +413,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       : `pt-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
   );
   const [productionLinkMode, setProductionLinkMode] = useState<ProductionLinkMode>('order');
-  const [processSequenceMode, setProcessSequenceMode] = useState<ProcessSequenceMode>('sequential');
+  // 工序顺序设置已下线：全局恒「按工序顺序生产」，工序级 allowOutOfSequence 控制例外。
+  const [processSequenceMode] = useState<ProcessSequenceMode>('sequential');
   const [allowExceedMaxReportQty, setAllowExceedMaxReportQty] = useState<boolean>(false);
   const [allowExceedMaxOutsourceReceiveQty, setAllowExceedMaxOutsourceReceiveQty] = useState<boolean>(false);
   const [weightTolerancePercent, setWeightTolerancePercent] = useState<number>(5);
@@ -426,7 +426,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   // App.tsx 通过 `key={`${userId}_${tenantCtx.tenantId}`}` 重建整个 Provider 子树，
   // 切换租户时所有 useState 自动回到初始值，故无需在此手动 setX([]) reset。
   useEffect(() => {
-    if (!activeTenantId) return;
+    if (!activeTenantId) {
+      setDataLoading(false);
+      return;
+    }
     let cancelled = false;
 
     setDataLoading(true);
@@ -436,7 +439,6 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         await executeAppDataLoadCore(activeTenantId, () => cancelled, {
           setDataLoading,
           setProductionLinkMode,
-          setProcessSequenceMode,
           setAllowExceedMaxReportQty,
           setAllowExceedMaxOutsourceReceiveQty,
           setWeightTolerancePercent,
@@ -468,6 +470,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         });
       } catch (err) {
         console.error('数据加载失败', err);
+      } finally {
         if (!cancelled) setDataLoading(false);
       }
     })();
@@ -573,7 +576,6 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   // ── Config update handlers ──
   const onUpdateProductionLinkMode = useCallback(async (mode: ProductionLinkMode) => { await api.settings.updateConfig('productionLinkMode', mode); setProductionLinkMode(mode); }, []);
-  const onUpdateProcessSequenceMode = useCallback(async (mode: ProcessSequenceMode) => { await api.settings.updateConfig('processSequenceMode', mode); setProcessSequenceMode(mode); }, []);
   const onUpdateAllowExceedMaxReportQty = useCallback(async (value: boolean) => { await api.settings.updateConfig('allowExceedMaxReportQty', value); setAllowExceedMaxReportQty(value); }, []);
   const onUpdateAllowExceedMaxOutsourceReceiveQty = useCallback(async (value: boolean) => { await api.settings.updateConfig('allowExceedMaxOutsourceReceiveQty', value); setAllowExceedMaxOutsourceReceiveQty(value); }, []);
   const onUpdateWeightTolerancePercent = useCallback(async (value: number) => {
@@ -1035,7 +1037,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }), [financeCategories, financeAccountTypes]);
 
   const actionsValue: AppDataActions = useMemo(() => ({
-    onUpdateProductionLinkMode, onUpdateProcessSequenceMode, onUpdateAllowExceedMaxReportQty, onUpdateAllowExceedMaxOutsourceReceiveQty, onUpdateWeightTolerancePercent,
+    onUpdateProductionLinkMode, onUpdateAllowExceedMaxReportQty, onUpdateAllowExceedMaxOutsourceReceiveQty, onUpdateWeightTolerancePercent,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
     onUpdatePurchaseOrderFormSettings, onUpdateSalesOrderFormSettings,
     onUpdatePurchaseBillFormSettings, onUpdateSalesBillFormSettings,
@@ -1057,7 +1059,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     refreshPrintTemplates,
     ensureDeferredLoaded,
   }), [
-    onUpdateProductionLinkMode, onUpdateProcessSequenceMode, onUpdateAllowExceedMaxReportQty, onUpdateAllowExceedMaxOutsourceReceiveQty, onUpdateWeightTolerancePercent,
+    onUpdateProductionLinkMode, onUpdateAllowExceedMaxReportQty, onUpdateAllowExceedMaxOutsourceReceiveQty, onUpdateWeightTolerancePercent,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
     onUpdatePurchaseOrderFormSettings, onUpdateSalesOrderFormSettings,
     onUpdatePurchaseBillFormSettings, onUpdateSalesBillFormSettings,

@@ -52,8 +52,8 @@ export default defineConfig(({ mode }) => {
             globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,webmanifest}'],
           },
           devOptions: {
-            /** localhost 开发时可验证 manifest / SW 注册 */
-            enabled: true,
+            /** 开发环境关闭 SW，避免与 HMR 冲突导致整页反复刷新、卡在「加载数据中」 */
+            enabled: false,
           },
         }),
       ],

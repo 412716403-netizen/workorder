@@ -367,7 +367,17 @@
 |--------|----------|------|
 | 产品分类管理 | `categories` | 支持 `customFields` 扩展；**名称租户内唯一**（新增/编辑，忽略首尾空白与大小写）；**「启用颜色尺码」开关仅毛衣工厂行业租户可见**（租户 `industryKind = sweater_factory`，由平台在企业管理中指定，经登录/选企业/租户列表接口透传到前端 `tenantCtx.industryKind`）；通用行业租户隐藏该开关，但已开启颜色尺码的分类仍显示开关便于关闭 |
 | 合作单位分类 | `partnerCategories` | 支持 `customFields` 扩展；名称租户内唯一 |
-| 工序节点库 | `globalNodes` | 维护工序名称、功能开关、`reportDisplayTemplate`（报工页展示内容）等；`reportTemplate`（报工自定义单据内容）在 **工单中心 → 表单配置 → 字段配置** 按工序维护；工序名称租户内唯一 |
+| 工序节点库 | `globalNodes` | 维护工序名称、功能开关（含「不按顺序生产」`allowOutOfSequence`）、`reportDisplayTemplate`（报工页展示内容）等；`reportTemplate`（报工自定义单据内容）在 **工单中心 → 表单配置 → 字段配置** 按工序维护；工序名称租户内唯一 |
+
+#### 工序生产顺序（方案 X）
+
+- 系统全局恒为「按工序顺序生产」（`processSequenceMode = sequential`，原全局设置 UI 已下线）。
+- 工序节点库可为单道工序开启 **「不按顺序生产」**（`GlobalNodeTemplate.allowOutOfSequence`）：该工序脱链，工单中心可按工单总量报工，不校验前道是否已报。
+- **透明链 gate 规则**（报工 / 外协 / 返工 / 可报最多统计共用 `shared/processSequence.ts`）：
+  - 脱链工序在顺序链中**透明跳过**，不作为下游按顺序工序的 gate。
+  - 一道「按顺序」工序的可报基数 gate 在**最近一道上游按顺序工序**的完成量上。
+  - 若其上游没有任何按顺序工序（前面全是脱链，或本身是首道按顺序工序），则按**工单总量**放开。
+- 示例：`横机(不按顺序) → 套口(按顺序) → 缩绒(按顺序)` 时，套口按总量可报；缩绒 gate 在套口完成量。`横机(按顺序) → 套口(不按顺序) → 缩绒(按顺序)` 时，缩绒 gate 在横机完成量（跳过套口）。
 | 仓库管理 | `warehouses` | 支持 code 自动生成或手工填写；仓库名称租户内唯一 |
 | 收付款类型 | `financeCategories` | 控制财务表单显示与关联项；类型名称租户内唯一（不区分收款/付款 kind） |
 | 收支账户类型 | `financeAccountTypes` | 控制收付款账户选项；类型名称租户内唯一 |
@@ -376,7 +386,7 @@
 
 | 子模块 | 管理实体 | 规则 |
 |--------|----------|------|
-| 产品与 BOM | `products`, `boms` | 支持产品编辑、变体管理、BOM 绑定；**改名级联**：修改产品名称/编号时，后端事务内同步刷新工单快照字段 `ProductionOrder.productName` / `ProductionOrder.sku`，保证工单中心、报工记录及相关单据展示与产品档案一致（PSI、财务、计划单等均按 `productId` 动态取名，无需级联；跨租户协作单据的 `senderProductName` 为发出时快照，刻意不随改名变化）；**规格删除限制**：取消勾选颜色/尺码即删除对应变体，若变体已被业务数据引用（工单明细、工单/产品报工记录、产品工序进度、生产操作记录、进销存流水、计划单明细、扫码批次、单品码）则禁止删除——前端取消勾选时经 `GET /products/:id/variant-usage` 预检提示，后端保存时同口径校验 409 兜底；变体写入为 diff 式（保留的 update、新增 create、移除先校验再 delete），被删变体的变体级 BOM（配置数据）随之清理 |
+| 产品与 BOM | `products`, `boms` | 支持产品编辑、变体管理、BOM 绑定；**产品模式工序锁定**：当租户 `productionLinkMode='product'` 且产品已有非 `PENDING_PROCESS` 的生产工单、且 `milestoneNodeIds` 非空时，禁止再修改工序增删与顺序（`PUT /products/:id` 改 `milestoneNodeIds` 返回 409）；产品首次从 0 工序配置路线仍放行；工价、报工模板、BOM 不受锁；前端产品编辑页根据 API 返回的 `processLocked` 禁用工序 UI；**颜色尺码保存**：分类 `hasColorSize` 为真时，保存产品须至少选择 1 个颜色与 1 个尺码（前后端同口径）；**改名级联**：修改产品名称/编号时，后端事务内同步刷新工单快照字段 `ProductionOrder.productName` / `ProductionOrder.sku`，保证工单中心、报工记录及相关单据展示与产品档案一致（PSI、财务、计划单等均按 `productId` 动态取名，无需级联；跨租户协作单据的 `senderProductName` 为发出时快照，刻意不随改名变化）；**规格删除限制**：取消勾选颜色/尺码即删除对应变体，若变体已被业务数据引用（工单明细、工单/产品报工记录、产品工序进度、生产操作记录、进销存流水、计划单明细、扫码批次、单品码）则禁止删除——前端取消勾选时经 `GET /products/:id/variant-usage` 预检提示，后端保存时同口径校验 409 兜底；变体写入为 diff 式（保留的 update、新增 create、移除先校验再 delete），被删变体的变体级 BOM（配置数据）随之清理 |
 | 合作单位 | `partners` | 关联 `partnerCategories`；**名称租户内唯一**（新增/编辑均校验，忽略首尾空白与大小写）；**单位编号**（`partnerListNo`）创建时按租户递增自动生成，**不可编辑**；**改名级联**：修改单位名称时，后端事务内同步更新名称快照字段 `ProductionOpRecord.partner`（外协/委外返工）、`PsiRecord.partner`（按 `partnerId` 或旧名称匹配）、`FinanceRecord.partner`，保证外协管理、外协流水及相关单据展示一致 |
 | 工人管理 | `workers` | 支持按工序派工 |
 | 设备管理 | `equipment` | 支持按工序派工 |

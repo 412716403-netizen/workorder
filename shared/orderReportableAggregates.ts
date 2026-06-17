@@ -4,6 +4,7 @@
  */
 
 import type { ProcessSequenceMode, ProductionLinkMode } from './types.js';
+import { isProcessSequential, findGatingPredecessorIndex } from './processSequence.js';
 
 export interface ReportableOrderItem {
   quantity: number;
@@ -278,25 +279,30 @@ export function orderMaxReportableAtTemplateProductAware(
     defective: number;
     rework: number;
     pmpByKey?: Map<string, number>;
+    outOfSequenceTemplateIds?: ReadonlySet<string>;
   },
 ): number {
-  const { processSequenceMode, productId, pmp, blockOrders, defective, rework, pmpByKey } = args;
+  const { processSequenceMode, productId, pmp, blockOrders, defective, rework, pmpByKey, outOfSequenceTemplateIds } = args;
   const idx = order.milestones.findIndex(m => m.templateId === templateId);
   if (idx < 0) return 0;
   const orderQty = order.items.reduce((s, i) => s + i.quantity, 0);
   let baseQty = orderQty;
-  if (processSequenceMode === 'sequential' && idx > 0) {
-    const prevMs = order.milestones[idx - 1];
-    const prevTid = prevMs.templateId;
-    const blockQty = sumBlockOrderQty(blockOrders);
-    const pmpPrevTotal = pmpCompletedAtTemplate(pmp, productId, prevTid, pmpByKey);
-    const fromMilestone = prevMs.completedQuantity ?? 0;
-    if (fromMilestone > 0) {
-      baseQty = Math.min(orderQty, fromMilestone);
-    } else if (blockQty > 0) {
-      baseQty = (orderQty * pmpPrevTotal) / blockQty;
-    } else {
-      baseQty = 0;
+  if (isProcessSequential(processSequenceMode, templateId, outOfSequenceTemplateIds)) {
+    const templateIds = order.milestones.map(m => m.templateId);
+    const gateIdx = findGatingPredecessorIndex(templateIds, idx, outOfSequenceTemplateIds);
+    if (gateIdx >= 0) {
+      const prevMs = order.milestones[gateIdx];
+      const prevTid = prevMs.templateId;
+      const blockQty = sumBlockOrderQty(blockOrders);
+      const pmpPrevTotal = pmpCompletedAtTemplate(pmp, productId, prevTid, pmpByKey);
+      const fromMilestone = prevMs.completedQuantity ?? 0;
+      if (fromMilestone > 0) {
+        baseQty = Math.min(orderQty, fromMilestone);
+      } else if (blockQty > 0) {
+        baseQty = (orderQty * pmpPrevTotal) / blockQty;
+      } else {
+        baseQty = 0;
+      }
     }
   }
   return Math.max(0, baseQty - defective + rework);
@@ -311,6 +317,7 @@ export function productGroupMaxReportableSum(
   getDefectiveRework: (orderId: string, tid: string) => DefectiveReworkEntry,
   pmpByKey?: Map<string, number>,
   orderForest?: Pick<ReportableOrder, 'id' | 'parentOrderId'>[],
+  outOfSequenceTemplateIds?: ReadonlySet<string>,
 ): number {
   const qtyByBucket = new Map<string, number>();
   if (orderForest?.length) {
@@ -340,6 +347,7 @@ export function productGroupMaxReportableSum(
         defective,
         rework,
         pmpByKey,
+        outOfSequenceTemplateIds,
       })
     );
   }, 0);
@@ -356,6 +364,7 @@ function orderModeMaxReportable(
   productTotalAcrossOrders: number,
   pmpByProductTpl: Map<string, number>,
   getDefectiveRework: (orderId: string, tid: string) => DefectiveReworkEntry,
+  outOfSequenceTemplateIds?: ReadonlySet<string>,
 ): number {
   const msIdx = order.milestones.findIndex(m => m.templateId === templateId);
   if (msIdx < 0) return 0;
@@ -370,9 +379,13 @@ function orderModeMaxReportable(
     return total * shareRatio;
   };
   let baseQty = orderTotalQty;
-  if (processSequenceMode === 'sequential' && msIdx > 0) {
-    const prev = order.milestones[msIdx - 1];
-    baseQty = (prev?.completedQuantity ?? 0) + pmpShareAt(prev.templateId);
+  if (isProcessSequential(processSequenceMode, templateId, outOfSequenceTemplateIds)) {
+    const templateIds = order.milestones.map(m => m.templateId);
+    const gateIdx = findGatingPredecessorIndex(templateIds, msIdx, outOfSequenceTemplateIds);
+    if (gateIdx >= 0) {
+      const prev = order.milestones[gateIdx];
+      baseQty = (prev?.completedQuantity ?? 0) + pmpShareAt(prev.templateId);
+    }
   }
   const { defective, rework } = getDefectiveRework(order.id, templateId);
   return Math.max(0, Math.round(baseQty - defective + rework));
@@ -478,6 +491,7 @@ export function computeTemplateReportStatsByTemplate(opts: {
   prodRecords: ReportableProdRecord[];
   processSequenceMode: ProcessSequenceMode;
   productionLinkMode: ProductionLinkMode;
+  outOfSequenceTemplateIds?: ReadonlySet<string>;
 }): Map<string, TemplateReportSnapshot> {
   const {
     templateIds,
@@ -486,6 +500,7 @@ export function computeTemplateReportStatsByTemplate(opts: {
     prodRecords,
     processSequenceMode,
     productionLinkMode,
+    outOfSequenceTemplateIds,
   } = opts;
   const drMap = buildDefectiveReworkByOrderMilestone(orders, prodRecords);
   const getDefectiveRework = (orderId: string, tid: string) =>
@@ -529,6 +544,7 @@ export function computeTemplateReportStatsByTemplate(opts: {
           getDefectiveRework,
           undefined,
           orders,
+          outOfSequenceTemplateIds,
         );
         const reported = productGroupReportedSum(blockOrders, tid, productId, pmp, true);
         maxSum += max;
@@ -544,6 +560,7 @@ export function computeTemplateReportStatsByTemplate(opts: {
           productTotals.get(order.productId) ?? 0,
           pmpByProductTpl,
           getDefectiveRework,
+          outOfSequenceTemplateIds,
         );
         const reported = orderModeReported(
           order,
@@ -571,6 +588,7 @@ export function sumMaxReportableByTemplate(opts: {
   prodRecords: ReportableProdRecord[];
   processSequenceMode: ProcessSequenceMode;
   productionLinkMode: ProductionLinkMode;
+  outOfSequenceTemplateIds?: ReadonlySet<string>;
 }): Map<string, number> {
   const stats = computeTemplateReportStatsByTemplate(opts);
   const totals = new Map<string, number>();

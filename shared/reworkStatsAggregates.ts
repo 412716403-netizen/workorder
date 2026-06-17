@@ -4,6 +4,7 @@
 
 import type { ProcessSequenceMode, ProductionLinkMode } from './types.js';
 import { orderBelongsToProductInList } from './orderReportableAggregates.js';
+import { isProcessSequential, findGatingPredecessorIndex } from './processSequence.js';
 
 export interface ReworkStatsRecord {
   type: string;
@@ -48,6 +49,7 @@ export function reworkRemainingAtNodeRecord(
   r: ReworkStatsRecord,
   nodeId: string,
   processSequenceMode: ProcessSequenceMode,
+  outOfSequenceTemplateIds?: ReadonlySet<string>,
 ): number {
   const pathNodes =
     r.reworkNodeIds && r.reworkNodeIds.length > 0
@@ -61,10 +63,13 @@ export function reworkRemainingAtNodeRecord(
   const doneAtNode =
     r.reworkCompletedQuantityByNode?.[nodeId]
     ?? ((r.completedNodeIds ?? []).includes(nodeId) ? qty : 0);
-  if (processSequenceMode === 'sequential' && idx > 0) {
-    const prevNodeId = pathNodes[idx - 1];
-    const doneAtPrev = r.reworkCompletedQuantityByNode?.[prevNodeId] ?? 0;
-    return Math.max(0, Math.min(doneAtPrev, qty) - doneAtNode);
+  if (isProcessSequential(processSequenceMode, nodeId, outOfSequenceTemplateIds)) {
+    const gateIdx = findGatingPredecessorIndex(pathNodes, idx, outOfSequenceTemplateIds);
+    if (gateIdx >= 0) {
+      const prevNodeId = pathNodes[gateIdx];
+      const doneAtPrev = r.reworkCompletedQuantityByNode?.[prevNodeId] ?? 0;
+      return Math.max(0, Math.min(doneAtPrev, qty) - doneAtNode);
+    }
   }
   return Math.max(0, qty - doneAtNode);
 }
@@ -102,6 +107,7 @@ export function computeReworkStatsByTemplate(opts: {
   productionLinkMode: ProductionLinkMode;
   periodStart: Date;
   periodEnd: Date;
+  outOfSequenceTemplateIds?: ReadonlySet<string>;
 }): Map<string, ReworkTemplateStats> {
   const {
     templateIds,
@@ -111,6 +117,7 @@ export function computeReworkStatsByTemplate(opts: {
     productionLinkMode,
     periodStart,
     periodEnd,
+    outOfSequenceTemplateIds,
   } = opts;
 
   const reworkRecords = records.filter(r => r.type === 'REWORK');
@@ -144,7 +151,7 @@ export function computeReworkStatsByTemplate(opts: {
         r.reworkCompletedQuantityByNode?.[tid]
         ?? ((r.completedNodeIds ?? []).includes(tid) || completed ? qty : 0);
       agg.completedQty += Math.min(qty, doneAtNode);
-      agg.pendingQty += reworkRemainingAtNodeRecord(r, tid, processSequenceMode);
+      agg.pendingQty += reworkRemainingAtNodeRecord(r, tid, processSequenceMode, outOfSequenceTemplateIds);
       byScope.set(key, agg);
     }
 

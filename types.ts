@@ -399,6 +399,12 @@ export interface GlobalNodeTemplate {
   /** 是否可外协；开启后该工序会在外协管理待发清单中显示，可按工单选择工序发出 */
   allowOutsource?: boolean;
   /**
+   * 是否「不按顺序生产」。系统全局恒按工序顺序生产；开启本开关后该工序脱链：
+   * 工单中心可按工单总量对该工序报工，不再校验前一道是否已报；
+   * 其下游工序仍取「上一道（即该脱链工序）的完成量」为可报基数。
+   */
+  allowOutOfSequence?: boolean;
+  /**
    * 是否开启「报工记录重量」。开启后：
    * 1) 本工序报工/外协收回时会要求录入本次交货重量（kg）；
    * 2) 报工记录写入时会按 BOM 子项 quantity（排除 `excludeFromWeightShare` 的辅料）自动派生占比，把交货重量拆成各子物料实际消耗快照 `ProductionOpRecord.materialBreakdown`；
@@ -512,6 +518,8 @@ export interface Product {
   nodeRates?: Record<string, number>;
   /** 各工序计价方式，未设置时使用系统默认；key 为工序节点 id */
   nodePricingModes?: Record<string, ProcessPricingMode>;
+  /** 产品模式下已下达生产工单时，后端计算的运行时只读标志：工序（milestoneNodeIds）不可再改 */
+  processLocked?: boolean;
 }
 
 export interface Warehouse {

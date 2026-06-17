@@ -64,7 +64,7 @@
 | purchaseBillFormSettings | `PurchaseBillFormSettings` | 采购入库表单配置 |
 | printTemplates | `PrintTemplate[]` | 打印模板配置 |
 | productionLinkMode | `ProductionLinkMode` | 生产关联模式 |
-| processSequenceMode | `ProcessSequenceMode` | 工序顺序模式 |
+| processSequenceMode | `ProcessSequenceMode` | 工序顺序模式（已固定为 `sequential`；历史 `free` 租户迁移为各工序开启 `allowOutOfSequence`） |
 | allowExceedMaxReportQty | `boolean` | 是否允许超额报工 |
 | allowExceedMaxOutsourceReceiveQty | `boolean` | 是否允许超额外协收货（已派 − 已收） |
 | weightTolerancePercent | `number` | 扫码称重容差百分比（默认 5，表示 ±5%） |
@@ -236,7 +236,11 @@ interface BOM {
 
 ## 6. 产品 (Product)
 
-详见 `types.ts`。核心：`categoryId`、`variants`、`nodeRates`（仅对工序节点开启计件工价的工序）、`categoryCustomData`。工价单位为元/件，仅当工序 `enablePieceRate` 为 true 时在产品与 BOM、计划详情中显示。
+详见 `types.ts`。核心：`categoryId`、`variants`、`milestoneNodeIds`（标准生产路线）、`nodeRates`（仅对工序节点开启计件工价的工序）、`categoryCustomData`。工价单位为元/件，仅当工序 `enablePieceRate` 为 true 时在产品与 BOM、计划详情中显示。
+
+| 字段 | 说明 |
+|------|------|
+| `processLocked` | **运行时只读**（API 计算，不落库）：产品模式且已有非 `PENDING_PROCESS` 工单且 `milestoneNodeIds` 非空时为 `true`，表示工序路线不可再改 |
 
 ### 6.1 产品分类 (ProductCategory)
 

@@ -37,6 +37,7 @@ import type {
 } from '../../types';
 import { DEFAULT_MATERIAL_FORM_SETTINGS, DEFAULT_OUTSOURCE_FORM_SETTINGS } from '../../types';
 import { PanelProps, hasOpsPerm, OutsourceModalType, type StockDocDetail } from './types';
+import { buildOutOfSequenceTemplateIds, findGatingPredecessorIndex, isProcessSequential } from '../../shared/processSequence';
 import { useDataIndexes } from './useDataIndexes';
 import * as api from '../../services/api';
 import {
@@ -144,6 +145,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
 }) => {
   const { currentUser, tenantCtx, userId } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
+  const outOfSequenceTemplateIds = useMemo(() => buildOutOfSequenceTemplateIds(globalNodes), [globalNodes]);
   const canViewMainList = hasOpsPerm(tenantRole, userPermissions, 'production:outsource_list:allow');
   const showOutsourceAmount = canViewAmount(tenantRole, userPermissions, AMOUNT_PERMISSION_KEYS.OUTSOURCE);
 
@@ -411,6 +413,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
                   getDr,
                   pmpByKey,
                   orders,
+                  outOfSequenceTemplateIds,
                 )
               : 0;
           // 关联产品 + 外协发出侧「已报」应同时覆盖 PMP 与工单里程碑写入（后者来自外协收回自动回写 / 关联工单直接报工），
@@ -440,6 +443,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
               (processSequenceMode ?? 'sequential') as ProcessSequenceMode,
               getDr,
               orders,
+              outOfSequenceTemplateIds,
             );
             if (Number.isFinite(capSum)) {
               availableQty = Math.min(availableQty, capSum);
@@ -493,10 +497,12 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
         if (!node?.allowOutsource) return;
         if (product && !(product.milestoneNodeIds || []).includes(ms.templateId)) return;
         let baseQty = rawOrderTotalQty;
-        if (processSequenceMode === 'sequential') {
-          const idx = order.milestones.findIndex(m => m.id === ms.id);
-          if (idx > 0) {
-            const prev = order.milestones[idx - 1];
+        if (isProcessSequential(processSequenceMode ?? 'sequential', ms.templateId, outOfSequenceTemplateIds)) {
+          const msIdx = order.milestones.findIndex(m => m.id === ms.id);
+          const templateIds = order.milestones.map(m => m.templateId);
+          const gateIdx = findGatingPredecessorIndex(templateIds, msIdx, outOfSequenceTemplateIds);
+          if (gateIdx >= 0) {
+            const prev = order.milestones[gateIdx];
             baseQty = prev?.completedQuantity ?? 0;
           }
         }
@@ -531,7 +537,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       if (ma !== mb) return ma - mb;
       return (a.orderNumber || '').localeCompare(b.orderNumber || '');
     });
-  }, [productionLinkMode, records, orders, products, globalNodes, productMilestoneProgresses, processSequenceMode, defectiveReworkByOrderForOutsource, idx]);
+  }, [productionLinkMode, records, orders, products, globalNodes, productMilestoneProgresses, processSequenceMode, defectiveReworkByOrderForOutsource, idx, outOfSequenceTemplateIds]);
 
   /**
    * 待收回清单：跨模式全收（方案 A）。

@@ -65,6 +65,7 @@ import {
   orderCreatedMs,
   type OrderCenterListBlock as OrderListBlock,
 } from '../utils/orderCenterSort';
+import { buildOutOfSequenceTemplateIds, findGatingPredecessorIndex, isProcessSequential } from '../shared/processSequence';
 
 interface OrderListViewProps {
   productionLinkMode?: 'order' | 'product';
@@ -202,6 +203,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   const confirm = useConfirm();
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+  /** 「不按顺序生产」工序 id 集合：全局恒按顺序，这些工序例外，可按工单总量报工 */
+  const outOfSequenceTemplateIds = useMemo(() => buildOutOfSequenceTemplateIds(globalNodes), [globalNodes]);
 
   const [detailOrderId, setDetailOrderId] = useState<string | null>(initialDetailOrderId ?? null);
   /** 是否从「工单流水」打开详情；关联产品模式下与详情弹窗联用以单工单布局展示 */
@@ -411,7 +414,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           cur.totalQty += r.quantity;
           const doneAtNode = r.reworkCompletedQuantityByNode?.[nodeId] ?? ((r.completedNodeIds ?? []).includes(nodeId) || completed ? r.quantity : 0);
           cur.completedQty += Math.min(r.quantity, doneAtNode);
-          cur.pendingSeq += reworkRemainingAtNode(r, nodeId, processSequenceMode);
+          cur.pendingSeq += reworkRemainingAtNode(r, nodeId, processSequenceMode, outOfSequenceTemplateIds);
           byNode.set(nodeId, cur);
         });
       });
@@ -432,7 +435,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
       if (list.length > 0) result.set(order.id, list);
     });
     return result;
-  }, [productionLinkMode, effectiveProdRecords, displayOrders, globalNodes, processSequenceMode]);
+  }, [productionLinkMode, effectiveProdRecords, displayOrders, globalNodes, processSequenceMode, outOfSequenceTemplateIds]);
 
   const showInList = (id: string) => orderFormSettings.standardFields.find(f => f.id === id)?.showInList ?? false;
 
@@ -671,12 +674,14 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
   const getDefectiveRework = (orderId: string, templateId: string) => defectiveAndReworkByOrderMilestone.get(`${orderId}|${templateId}`) ?? { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> };
 
-  /** 顺序模式下：判断某工单某工序是否允许报工（前一道有报工或本身为第一道） */
+  /** 顺序模式下：判断某工单某工序是否允许报工（上游最近按顺序工序有报工，或上游无按顺序工序则放开；脱链工序恒允许） */
   const canReportMilestone = (order: ProductionOrder, ms: Milestone): boolean => {
-    if (processSequenceMode !== 'sequential') return true;
+    if (!isProcessSequential(processSequenceMode, ms.templateId, outOfSequenceTemplateIds)) return true;
     const idx = order.milestones.findIndex(m => m.id === ms.id);
-    if (idx <= 0) return true;
-    const prev = order.milestones[idx - 1];
+    const templateIds = order.milestones.map(m => m.templateId);
+    const gateIdx = findGatingPredecessorIndex(templateIds, idx, outOfSequenceTemplateIds);
+    if (gateIdx < 0) return true;
+    const prev = order.milestones[gateIdx];
     if (!prev) return true;
     const hasReports = (prev.reports && prev.reports.length > 0) || prev.completedQuantity > 0;
     return hasReports;
@@ -687,15 +692,17 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     ms: Milestone,
     productAggregate?: { totalQty: number; completedQty: number; maxReportableQty?: number; orders: ProductionOrder[]; items?: { variantId?: string; quantity: number; completedQuantity: number }[] }
   ) => {
-    if (processSequenceMode === 'sequential') {
+    if (isProcessSequential(processSequenceMode, ms.templateId, outOfSequenceTemplateIds)) {
       const idx = order.milestones.findIndex(m => m.id === ms.id);
-      if (idx > 0) {
+      const templateIds = order.milestones.map(m => m.templateId);
+      const gateIdx = findGatingPredecessorIndex(templateIds, idx, outOfSequenceTemplateIds);
+      if (gateIdx >= 0) {
         const blockOrders = productAggregate?.orders ?? [order];
-        const prevTid = order.milestones[idx - 1].templateId;
+        const prevTid = order.milestones[gateIdx].templateId;
         const prevDone =
           productionLinkMode === 'product' && productMilestoneProgresses.length > 0
             ? pmpCompletedAtTemplate(productMilestoneProgresses, order.productId, prevTid)
-            : order.milestones[idx - 1].completedQuantity ?? 0;
+            : order.milestones[gateIdx].completedQuantity ?? 0;
         const blockQty = sumBlockOrderQty(blockOrders);
         const orderQty = order.items.reduce((s, i) => s + i.quantity, 0);
         const prevAlloc =
@@ -703,7 +710,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
             ? (orderQty * prevDone) / blockQty
             : prevDone;
         const prevReady =
-          (order.milestones[idx - 1].completedQuantity ?? 0) > 0 || prevAlloc > 0;
+          (order.milestones[gateIdx].completedQuantity ?? 0) > 0 || prevAlloc > 0;
         if (!canReportMilestone(order, ms) && !prevReady) return;
       } else if (!canReportMilestone(order, ms)) return;
     }
@@ -977,10 +984,12 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                               const currentCompletedRaw = ms.completedQuantity + pmpShareCur;
                               const currentCompleted = Math.round(currentCompletedRaw);
                               let baseQty = orderTotalQty;
-                              if (processSequenceMode === 'sequential') {
+                              if (isProcessSequential(processSequenceMode, ms.templateId, outOfSequenceTemplateIds)) {
                                 const idx = order.milestones.findIndex(m => m.id === ms.id);
-                                if (idx > 0) {
-                                  const prev = order.milestones[idx - 1];
+                                const templateIds = order.milestones.map(m => m.templateId);
+                                const gateIdx = findGatingPredecessorIndex(templateIds, idx, outOfSequenceTemplateIds);
+                                if (gateIdx >= 0) {
+                                  const prev = order.milestones[gateIdx];
                                   const pmpSharePrev = pmpShareAt(prev.templateId);
                                   baseQty = (prev?.completedQuantity ?? 0) + pmpSharePrev;
                                 }
@@ -1239,6 +1248,8 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                       return ia - ib;
                                     });
                                     return templateEntries.map(([tid, m], mIdx) => {
+                                    const templateIds = templateEntries.map(([t]) => t);
+                                    const gateIdx = findGatingPredecessorIndex(templateIds, mIdx, outOfSequenceTemplateIds);
                                     /** 关联产品报工写在 pmp，不良不在工单里程碑；顺序+产品时不能用「合计−里程碑不良」否则会漏扣 pmp 不良（如横机显示成下单总数 450） */
                                     const availableQty =
                                       productionLinkMode === 'product' && productMilestoneProgresses.length > 0
@@ -1251,11 +1262,12 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                             (oid, t) => getDefectiveRework(oid, t),
                                             undefined,
                                             orders,
+                                            outOfSequenceTemplateIds,
                                           )
                                         : (() => {
                                             let baseQty = totalQty;
-                                            if (processSequenceMode === 'sequential' && mIdx > 0) {
-                                              baseQty = templateEntries[mIdx - 1][1].completed;
+                                            if (isProcessSequential(processSequenceMode, tid, outOfSequenceTemplateIds) && gateIdx >= 0) {
+                                              baseQty = templateEntries[gateIdx][1].completed;
                                             }
                                             const defectiveSum = block.orders.reduce((s, o) => s + getDefectiveRework(o.id, tid).defective, 0);
                                             const reworkSum = block.orders.reduce((s, o) => s + getDefectiveRework(o.id, tid).rework, 0);
@@ -1277,9 +1289,9 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                         0,
                                       );
                                     const allowReport = (onReportSubmit || (productionLinkMode === 'product' && onReportSubmitProduct)) && (
-                                      processSequenceMode !== 'sequential' ||
-                                      mIdx === 0 ||
-                                      templateEntries[mIdx - 1][1].completed > 0
+                                      !isProcessSequential(processSequenceMode, tid, outOfSequenceTemplateIds) ||
+                                      gateIdx < 0 ||
+                                      templateEntries[gateIdx][1].completed > 0
                                     );
                                     const tooltipReadOnly = [
                                       `可报最多 ${availDisplay}`,

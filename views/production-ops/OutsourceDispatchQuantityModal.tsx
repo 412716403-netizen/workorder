@@ -18,6 +18,7 @@ import { SupplierSelect } from '../../components/SupplierSelect';
 import { PlanFormCustomFieldInput } from '../../components/PlanFormCustomFieldControls';
 import VariantQtyMatrixInputs from '../../components/variant-matrix/VariantQtyMatrixInputs';
 import { variantMaxGoodProductMode } from '../../utils/productReportAggregates';
+import { buildOutOfSequenceTemplateIds, findGatingPredecessorIndex, isProcessSequential } from '../../shared/processSequence';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import {
@@ -118,6 +119,7 @@ function buildDefaultDispatchQuantities(
   processSequenceMode: ProcessSequenceMode,
   productMilestoneProgresses: ProductMilestoneProgress[],
   defectiveReworkByOrderForOutsource: Map<string, { defective: number; rework: number; reworkByVariant?: Record<string, number> }>,
+  outOfSequenceTemplateIds: ReadonlySet<string>,
 ): Record<string, number> {
   const out: Record<string, number> = {};
   const selectedRows = outsourceDispatchRows.filter(row =>
@@ -180,7 +182,11 @@ function buildDefaultDispatchQuantities(
     if (variantsInOrder.length > 0) {
       const ms = msRow;
       const msIdx = order?.milestones?.findIndex(m => m.templateId === row.nodeId) ?? -1;
-      const prevMs = processSequenceMode === 'sequential' && msIdx > 0 ? order?.milestones?.[msIdx - 1] : undefined;
+      const templateIds = order?.milestones?.map(m => m.templateId) ?? [];
+      const gateIdx = findGatingPredecessorIndex(templateIds, msIdx, outOfSequenceTemplateIds);
+      const prevMs = isProcessSequential(processSequenceMode, row.nodeId, outOfSequenceTemplateIds) && gateIdx >= 0
+        ? order?.milestones?.[gateIdx]
+        : undefined;
       const outsourceForNode = records.filter(
         r => r.type === 'OUTSOURCE' && r.orderId === row.orderId && r.nodeId === row.nodeId,
       );
@@ -278,6 +284,7 @@ function buildDefaultDispatchQuantities(
           milestoneNodeIds,
           getDr,
           orders,
+          outOfSequenceTemplateIds,
         );
         const dispatched = netDispatchedForVariantProduct(variantId);
         return Math.max(0, maxGood - dispatched);
@@ -338,6 +345,7 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
   onClose,
   embedded = false,
 }) => {
+  const outOfSequenceTemplateIds = useMemo(() => buildOutOfSequenceTemplateIds(_globalNodes), [_globalNodes]);
   useLayoutEffect(() => {
     setDispatchFormQuantities(
       buildDefaultDispatchQuantities(
@@ -351,6 +359,7 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
         processSequenceMode,
         productMilestoneProgresses,
         defectiveReworkByOrderForOutsource,
+        outOfSequenceTemplateIds,
       ),
     );
   }, [
@@ -364,6 +373,7 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
     processSequenceMode,
     productMilestoneProgresses,
     defectiveReworkByOrderForOutsource,
+    outOfSequenceTemplateIds,
     setDispatchFormQuantities,
   ]);
 
@@ -424,7 +434,11 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
         </div>
         )}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-auto p-6">
+          <form
+            className="min-h-0 flex-1 overflow-auto p-6"
+            autoComplete="off"
+            onSubmit={e => e.preventDefault()}
+          >
             <div className={psiOrderBillFormCardClass}>
               <div className={psiOrderBillFormSectionStackClass}>
                 <div className="flex flex-wrap items-baseline gap-2.5 border-b border-slate-200 pb-2.5">
@@ -457,6 +471,8 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
                       </label>
                       <input
                         type="date"
+                        name="outsource-dispatch-delivery-date"
+                        autoComplete="off"
                         value={dispatchDeliveryDate}
                         onChange={e => setDispatchDeliveryDate(e.target.value)}
                         className={`box-border w-full max-w-xs rounded-lg border border-slate-200 bg-white py-2 px-2.5 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-200`}
@@ -540,7 +556,11 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
             if (variantsInOrder.length > 0) {
               const ms = msRow;
               const msIdx = order?.milestones?.findIndex(m => m.templateId === row.nodeId) ?? -1;
-              const prevMs = (processSequenceMode === 'sequential' && msIdx > 0) ? order?.milestones?.[msIdx - 1] : undefined;
+              const templateIds = order?.milestones?.map(m => m.templateId) ?? [];
+              const gateIdx = findGatingPredecessorIndex(templateIds, msIdx, outOfSequenceTemplateIds);
+              const prevMs = isProcessSequential(processSequenceMode, row.nodeId, outOfSequenceTemplateIds) && gateIdx >= 0
+                ? order?.milestones?.[gateIdx]
+                : undefined;
               const outsourceForNodeRender = records.filter(r => r.type === 'OUTSOURCE' && r.orderId === row.orderId && r.nodeId === row.nodeId);
               const drForNode = row.orderId ? (defectiveReworkByOrderForOutsource.get(`${row.orderId}|${row.nodeId}`) ?? { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> }) : { defective: 0, rework: 0, reworkByVariant: {} as Record<string, number> };
               const sumOtherVariantQtyOrder = (currentId: string) =>
@@ -688,6 +708,7 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
                   milestoneNodeIds,
                   getDr,
                   orders,
+                  outOfSequenceTemplateIds,
                 );
                 const dispatched = netDispatchedForVariantProductRender(variantId);
                 return Math.max(0, maxGood - dispatched);
@@ -832,6 +853,8 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
                     <div className="flex h-9 min-h-9 items-stretch gap-1">
                       <input
                         type="number"
+                        name="outsource-dispatch-qty"
+                        autoComplete="off"
                         min={0}
                         max={row.availableQty}
                         value={(dispatchFormQuantities[baseKey] ?? 0) === 0 ? '' : dispatchFormQuantities[baseKey]}
@@ -866,7 +889,7 @@ const OutsourceDispatchQuantityModal: React.FC<OutsourceDispatchQuantityModalPro
                 </div>
               </div>
             </div>
-          </div>
+          </form>
         </div>
         <div className="shrink-0 border-t border-slate-100 bg-slate-50/30 px-6 py-4 flex justify-end">
           <button type="button" onClick={onSubmit} className="flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-bold text-white transition-all hover:bg-indigo-700">

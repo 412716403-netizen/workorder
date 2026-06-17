@@ -9,14 +9,14 @@ export const listProducts = asyncHandler(async (req, res) => {
   const db = getTenantPrisma(req.tenantId!);
   const { all, page, pageSize } = listQueryFromRequest(req);
   if (all) warnListAllFromRequest('products.listProducts', req);
-  res.json(await productsService.listProducts(db, {
+  res.json(await productsService.listProducts(db, req.tenantId!, {
     categoryId: optStr(req.query.categoryId), search: optStr(req.query.search),
     all, page, pageSize,
   }));
 });
 
 export const getProduct = asyncHandler(async (req, res) => {
-  res.json(await productsService.getProduct(getTenantPrisma(req.tenantId!), str(req.params.id)));
+  res.json(await productsService.getProduct(getTenantPrisma(req.tenantId!), req.tenantId!, str(req.params.id)));
 });
 
 export const receiveUnitWeightAverages = asyncHandler(async (req, res) => {

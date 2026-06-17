@@ -31,13 +31,14 @@ import {
   Upload,
   ListChecks,
   BookOpen,
+  Lock,
 } from 'lucide-react';
-import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, BOMItem, AppDictionaries, ProductVariant, DictionaryItem, Partner } from '../../types';
+import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, BOMItem, AppDictionaries, ProductVariant, DictionaryItem, Partner, ProductionLinkMode, ProductionOrder } from '../../types';
 import { sortVariantsByColorThenSize } from '../../utils/sortVariantsByProduct';
 import BomVariantMatrix from '../../components/product/BomVariantMatrix';
 import { VariantNodeWeightSettingTrigger } from './VariantNodeWeightSection';
 import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
-import { productColorSizeEnabled } from '../../utils/productColorSize';
+import { productColorSizeEnabled, validateProductColorSizeSelection } from '../../utils/productColorSize';
 import { bomHasConfiguredItems } from '../../utils/bomEffective';
 import { isProductBlockedAsBomMaterial } from '../../utils/productBomMaterial';
 import { productMatchesSearchQuery } from '../../utils/productSearchMatch';
@@ -49,6 +50,7 @@ import {
 } from '../../utils/routeReportFileUrls';
 import { toast } from 'sonner';
 import { useConfirm } from '../../contexts/ConfirmContext';
+import { isProductProcessLocked, milestoneNodeIdsEqual } from '../../shared/productProcessLock';
 import * as api from '../../services/api';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import { SupplierSelect } from '../../components/SupplierSelect';
@@ -513,6 +515,9 @@ export interface ProductEditFormProps {
   embeddedInQuickCreateModal?: boolean;
   /** 保存产品资料成功后（在 onBack 之前）回调，便于外层选中新建产品 */
   onProductPersisted?: (product: Product) => void;
+  /** 工序锁定推算：由外层传入，避免本组件静态依赖 AppDataContext（防循环依赖 / HMR 整页重载） */
+  productionLinkMode?: ProductionLinkMode;
+  ordersForProcessLock?: ReadonlyArray<Pick<ProductionOrder, 'productId' | 'status'>>;
 }
 
 const ProductEditForm: React.FC<ProductEditFormProps> = ({
@@ -534,6 +539,8 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   isPersistedProduct,
   embeddedInQuickCreateModal = false,
   onProductPersisted,
+  productionLinkMode = 'order',
+  ordersForProcessLock = [],
 }) => {
   const confirm = useConfirm();
   const { weightEnabled } = useTraceabilityPlugin();
@@ -541,6 +548,40 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   /** 嵌在「新增产品」全屏弹窗（z=10800）内时，子层须更高，避免颜色/尺码等二级弹窗被挡住 */
   const nestedOverlayZ = embeddedInQuickCreateModal ? 'z-[11200]' : 'z-[10250]';
   const [workingProduct, setWorkingProduct] = useState<Product>(() => JSON.parse(JSON.stringify(initialProduct)));
+
+  /** 打开编辑时从 API 拉取工序锁定基线（列表缓存可能缺 processLocked / 工序） */
+  const [processLockBaseline, setProcessLockBaseline] = useState(() => ({
+    milestoneNodeIds: initialProduct.milestoneNodeIds ?? [],
+    processLocked: initialProduct.processLocked,
+  }));
+
+  useEffect(() => {
+    if (!isPersistedProduct) return;
+    let cancelled = false;
+    void api.products.get(initialProduct.id).then((p: Product) => {
+      if (cancelled) return;
+      setProcessLockBaseline({
+        milestoneNodeIds: p.milestoneNodeIds ?? [],
+        processLocked: p.processLocked,
+      });
+    }).catch(() => {
+      /* 拉取失败时沿用列表数据 + 本地 orders 推算 */
+    });
+    return () => { cancelled = true; };
+  }, [isPersistedProduct, initialProduct.id]);
+
+  const processLocked = useMemo(
+    () => isProductProcessLocked(
+      productionLinkMode,
+      {
+        id: initialProduct.id,
+        milestoneNodeIds: processLockBaseline.milestoneNodeIds,
+        processLocked: processLockBaseline.processLocked,
+      },
+      ordersForProcessLock,
+    ),
+    [productionLinkMode, initialProduct.id, processLockBaseline, ordersForProcessLock],
+  );
 
   const [modalType, setModalType] = useState<'color' | 'size' | null>(null);
   const [quickAddSpecOpen, setQuickAddSpecOpen] = useState<'color' | 'size' | null>(null);
@@ -916,6 +957,12 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
       toast.error('没有选择产品类型，请去系统设置中添加产品分类');
       return false;
     }
+    const category = categories.find(c => c.id === categoryId);
+    const colorSizeErr = validateProductColorSizeSelection(p, category);
+    if (colorSizeErr) {
+      toast.error(colorSizeErr);
+      return false;
+    }
     return true;
   };
 
@@ -928,6 +975,14 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
       setWorkingProduct(resolved);
     }
     if (!validateProductForSave(resolved, products)) return;
+    const milestoneChanged = !milestoneNodeIdsEqual(
+      processLockBaseline.milestoneNodeIds,
+      resolved.milestoneNodeIds ?? [],
+    );
+    if (processLocked && milestoneChanged) {
+      toast.error('该产品已下达生产工单，工序已锁定，不能修改工序路线。');
+      return;
+    }
     if (saveProductInFlightRef.current) return;
     saveProductInFlightRef.current = true;
     const toSave: Product = {
@@ -939,9 +994,10 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
       routeReportValues: normalizeRouteReportValuesFromApi(resolved.routeReportValues),
       routeReportDisplayValues: routeReportDisplayFieldValues,
     };
+    const { processLocked: _pl, ...payload } = toSave;
     setSaveProductBusy(true);
     try {
-      const saved = await onUpdateProduct(toSave);
+      const saved = await onUpdateProduct(payload);
       if (saved) {
         persistLastUnitPreference(saved.categoryId, saved.unitId);
         onProductPersisted?.(saved);
@@ -976,7 +1032,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   };
 
   const toggleNodeInProduct = (nodeId: string) => {
-    if (!workingProduct) return;
+    if (!workingProduct || processLocked) return;
     const current = [...workingProduct.milestoneNodeIds];
     const index = current.indexOf(nodeId);
     if (index > -1) {
@@ -988,7 +1044,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
   };
 
   const moveNode = (fromIdx: number, toIdx: number) => {
-    if (!workingProduct) return;
+    if (!workingProduct || processLocked) return;
     const current = [...workingProduct.milestoneNodeIds];
     const [moved] = current.splice(fromIdx, 1);
     current.splice(toIdx, 0, moved);
@@ -1051,13 +1107,14 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
     saveBomInFlightRef.current = true;
     setBomSaving(true);
     try {
-      const savedProduct = await onUpdateProduct({
+      const { processLocked: _plBom, ...bomProductPayload } = {
         ...resolved,
         name: resolved.name.trim(),
         sku: resolved.sku.trim(),
         salesPrice: resolved.salesPrice ?? 0,
         purchasePrice: resolved.purchasePrice ?? 0,
-      });
+      };
+      const savedProduct = await onUpdateProduct(bomProductPayload);
       if (!savedProduct) return;
       persistLastUnitPreference(savedProduct.categoryId, savedProduct.unitId);
       for (const it of workingBOM.items) {
@@ -1210,6 +1267,15 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
               ) : null}
             </div>
 
+            {processLocked ? (
+              <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3">
+                <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-xs font-medium text-amber-900 leading-snug">
+                  该产品已下达生产工单，工序已锁定。如需调整工序，请先撤销或完成相关工单。工价、报工模板与 BOM 仍可编辑。
+                </p>
+              </div>
+            ) : null}
+
             <div className="space-y-4">
               {/* 上：可选工序 */}
               <section className="rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50/90 to-white p-6 shadow-sm">
@@ -1225,8 +1291,9 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                       <button
                         key={gn.id}
                         type="button"
+                        disabled={processLocked}
                         onClick={() => toggleNodeInProduct(gn.id)}
-                        className={`p-3 rounded-lg border text-left transition-all flex items-center justify-between gap-2 ${isSelected ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'}`}
+                        className={`p-3 rounded-lg border text-left transition-all flex items-center justify-between gap-2 ${processLocked ? 'opacity-50 cursor-not-allowed border-slate-200 bg-slate-50' : isSelected ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'}`}
                       >
                         <span className={`text-xs font-semibold truncate ${isSelected ? 'text-indigo-900' : 'text-slate-600'}`}>{gn.name}</span>
                         {isSelected && <Check className="w-4 h-4 text-indigo-600 shrink-0" />}
@@ -1280,12 +1347,12 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                               </div>
                             )}
                           </div>
-                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className={`flex gap-0.5 transition-opacity ${processLocked ? 'opacity-30 pointer-events-none' : 'opacity-0 group-hover:opacity-100'}`}>
                             {idx > 0 && (
-                              <button type="button" title="上移" onClick={() => moveNode(idx, idx - 1)} className="p-1.5 hover:bg-indigo-50 rounded-lg text-slate-400 hover:text-indigo-600">↑</button>
+                              <button type="button" title="上移" disabled={processLocked} onClick={() => moveNode(idx, idx - 1)} className="p-1.5 hover:bg-indigo-50 rounded-lg text-slate-400 hover:text-indigo-600 disabled:cursor-not-allowed">↑</button>
                             )}
                             {idx < selectedNodesOrdered.length - 1 && (
-                              <button type="button" title="下移" onClick={() => moveNode(idx, idx + 1)} className="p-1.5 hover:bg-indigo-50 rounded-lg text-slate-400 hover:text-indigo-600">↓</button>
+                              <button type="button" title="下移" disabled={processLocked} onClick={() => moveNode(idx, idx + 1)} className="p-1.5 hover:bg-indigo-50 rounded-lg text-slate-400 hover:text-indigo-600 disabled:cursor-not-allowed">↓</button>
                             )}
                           </div>
                         </div>

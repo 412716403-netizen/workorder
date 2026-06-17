@@ -7,6 +7,7 @@ import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
 import { rewriteScanApiErrorForIme, type ScanPayload } from '../../utils/scanPayload';
 import type { ScanBatchRowDetail } from '../../utils/scanBatchRowDetail';
 import { scanItemResultToRowDetail, scanVirtualBatchResultToRowDetail } from '../../utils/scanBatchRowDetail';
+import { buildOutOfSequenceTemplateIds, findGatingPredecessorIndex, isProcessSequential } from '../../shared/processSequence';
 import {
   ProductionOpRecord,
   ProductionOrder,
@@ -170,6 +171,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
 
   const { order, nodeId: currentNodeId, outsourcePartner } = reworkReportModal;
   const isOutsourceRework = !!outsourcePartner;
+  const outOfSequenceTemplateIds = useMemo(() => buildOutOfSequenceTemplateIds(globalNodes), [globalNodes]);
   const weightReportEnabled = useMemo(
     () => !!globalNodes.find(n => n.id === currentNodeId)?.enableWeightOnReport,
     [globalNodes, currentNodeId],
@@ -181,10 +183,13 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
     const idx = pathNodes.indexOf(nodeId);
     if (idx < 0) return 0;
     const doneAtNode = r.reworkCompletedQuantityByNode?.[nodeId] ?? ((r.completedNodeIds ?? []).includes(nodeId) ? r.quantity : 0);
-    if (processSequenceMode === 'sequential' && idx > 0) {
-      const prevNodeId = pathNodes[idx - 1];
-      const doneAtPrev = r.reworkCompletedQuantityByNode?.[prevNodeId] ?? 0;
-      return Math.max(0, Math.min(doneAtPrev, r.quantity) - doneAtNode);
+    if (isProcessSequential(processSequenceMode, nodeId, outOfSequenceTemplateIds)) {
+      const gateIdx = findGatingPredecessorIndex(pathNodes, idx, outOfSequenceTemplateIds);
+      if (gateIdx >= 0) {
+        const prevNodeId = pathNodes[gateIdx];
+        const doneAtPrev = r.reworkCompletedQuantityByNode?.[prevNodeId] ?? 0;
+        return Math.max(0, Math.min(doneAtPrev, r.quantity) - doneAtNode);
+      }
     }
     return Math.max(0, r.quantity - doneAtNode);
   };
@@ -231,7 +236,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
       const totalPending = Object.values(pendingByVariant).reduce((s, q) => s + q, 0);
       return { pathKey, pathLabel, nodeIds, records: recs, totalPending, pendingByVariant };
     }).filter(p => p.totalPending > 0);
-  }, [records, order, currentNodeId, globalNodes, processSequenceMode, productionLinkMode, isOutsourceRework, outsourcePartner]);
+  }, [records, order, currentNodeId, globalNodes, processSequenceMode, productionLinkMode, isOutsourceRework, outsourcePartner, outOfSequenceTemplateIds]);
 
   const reworkReportProduct = useMemo(() => products.find(p => p.id === order.productId) ?? null, [order, products]);
   const reworkReportCategory = useMemo(() => reworkReportProduct ? categories.find(c => c.id === reworkReportProduct.categoryId) : null, [reworkReportProduct, categories]);
@@ -915,7 +920,7 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
                 )}
               </p>
               <p className="text-slate-500">
-                {processSequenceMode === 'sequential'
+                {isProcessSequential(processSequenceMode, currentNodeId, outOfSequenceTemplateIds)
                   ? '该工序暂无待返工数量（顺序模式：请先完成上一道返工工序的报工）'
                   : '该工序暂无待返工数量'}
               </p>

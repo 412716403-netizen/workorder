@@ -27,6 +27,7 @@ import {
   pageSubtitleClass,
 } from '../../styles/uiDensity';
 import { PanelProps, hasOpsPerm, getOrderFamilyIds, getOrderFamilyWithDepth, ReworkPendingRow } from './types';
+import { buildOutOfSequenceTemplateIds, findGatingPredecessorIndex, isProcessSequential } from '../../shared/processSequence';
 import { useDataIndexes } from './useDataIndexes';
 import { toLocalCompactYmd } from '../../utils/localDateTime';
 import {
@@ -102,6 +103,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
   psiRecords = [],
 }) => {
   const rfSettings = reworkFormSettings ?? DEFAULT_REWORK_FORM_SETTINGS;
+  const outOfSequenceTemplateIds = useMemo(() => buildOutOfSequenceTemplateIds(globalNodes), [globalNodes]);
   const canViewMainList = hasOpsPerm(tenantRole, userPermissions, 'production:rework_list:allow');
 
   /**
@@ -324,10 +326,13 @@ const ReworkPanel: React.FC<PanelProps> = ({
     const idx = pathNodes.indexOf(nodeId);
     if (idx < 0) return 0;
     const doneAtNode = r.reworkCompletedQuantityByNode?.[nodeId] ?? ((r.completedNodeIds ?? []).includes(nodeId) ? r.quantity : 0);
-    if (processSequenceMode === 'sequential' && idx > 0) {
-      const prevNodeId = pathNodes[idx - 1];
-      const doneAtPrev = r.reworkCompletedQuantityByNode?.[prevNodeId] ?? 0;
-      return Math.max(0, Math.min(doneAtPrev, r.quantity) - doneAtNode);
+    if (isProcessSequential(processSequenceMode, nodeId, outOfSequenceTemplateIds)) {
+      const gateIdx = findGatingPredecessorIndex(pathNodes, idx, outOfSequenceTemplateIds);
+      if (gateIdx >= 0) {
+        const prevNodeId = pathNodes[gateIdx];
+        const doneAtPrev = r.reworkCompletedQuantityByNode?.[prevNodeId] ?? 0;
+        return Math.max(0, Math.min(doneAtPrev, r.quantity) - doneAtNode);
+      }
     }
     return Math.max(0, r.quantity - doneAtNode);
   };
@@ -394,7 +399,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
       if (list.length > 0) result.set(pid, list);
     });
     return result;
-  }, [productionLinkMode, records, orders, products, globalNodes, processSequenceMode, idx]);
+  }, [productionLinkMode, records, orders, products, globalNodes, processSequenceMode, idx, outOfSequenceTemplateIds]);
 
   /** 返工管理·关联工单：按单 + 目标工序聚合 */
   const reworkStatsByOrderId = useMemo(() => {
@@ -453,7 +458,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
       if (list.length > 0) result.set(order.id, list);
     });
     return result;
-  }, [productionLinkMode, records, orders, globalNodes, processSequenceMode, idx]);
+  }, [productionLinkMode, records, orders, globalNodes, processSequenceMode, idx, outOfSequenceTemplateIds]);
 
   /** 处理不良品流水单号（生成返工 REWORK + 报损 SCRAP 共用）：FL + 日期(yyyyMMdd) + 序号(4位)，使两条流水单号连续 */
   const getNextReworkDocNo = () => {
@@ -704,7 +709,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
                                     ? (isAllDone
                                       ? `工序「${nodeName}」委外返工已收回·${outsourcePartner}：总 ${totalQty}，已返工 ${completedQty}（点击查看）`
                                       : `工序「${nodeName}」委外返工中·${outsourcePartner}：总 ${totalQty}，已返工 ${completedQty}，待收回 ${pendingQty}（点击收回）`)
-                                    : `工序「${nodeName}」返工：总 ${totalQty}，已返工 ${completedQty}，${processSequenceMode === 'sequential' ? '可报 ' : '未返工 '}${pendingQty}${processSequenceMode === 'sequential' ? '（顺序模式：上道流入可报数）' : ''}（点击报工）`}
+                                    : `工序「${nodeName}」返工：总 ${totalQty}，已返工 ${completedQty}，${isProcessSequential(processSequenceMode, nodeId, outOfSequenceTemplateIds) ? '可报 ' : '未返工 '}${pendingQty}${isProcessSequential(processSequenceMode, nodeId, outOfSequenceTemplateIds) ? '（顺序模式：上道流入可报数）' : ''}（点击报工）`}
                                   onClick={() => { setReworkReportModal({ order, nodeId, nodeName, outsourcePartner: outsourcePartner || undefined }); }}
                                   className={`flex flex-col items-center justify-center shrink-0 min-w-[88px] min-h-[118px] py-2.5 px-2 rounded-xl border transition-colors text-left cursor-pointer ${isOutsource ? 'border-slate-100 bg-slate-50 hover:bg-slate-100 hover:border-slate-200' : 'bg-slate-50 border-slate-100 hover:bg-indigo-50 hover:border-indigo-200'}`}
                                 >
@@ -826,7 +831,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
                                     ? (isAllDone
                                       ? `工序「${nodeName}」委外返工已收回·${outsourcePartner}：总 ${totalQty}，已返工 ${completedQty}（点击查看）`
                                       : `工序「${nodeName}」委外返工中·${outsourcePartner}：总 ${totalQty}，已返工 ${completedQty}，待收回 ${pendingQty}（点击收回）`)
-                                    : `工序「${nodeName}」返工（全产品汇总）：总 ${totalQty}，已返工 ${completedQty}，${processSequenceMode === 'sequential' ? '可报 ' : '未返工 '}${pendingQty}（点击报工，以首单为载体）`}
+                                    : `工序「${nodeName}」返工（全产品汇总）：总 ${totalQty}，已返工 ${completedQty}，${isProcessSequential(processSequenceMode, nodeId, outOfSequenceTemplateIds) ? '可报 ' : '未返工 '}${pendingQty}（点击报工，以首单为载体）`}
                                   onClick={() => {
                                     if (repOrder) setReworkReportModal({ order: repOrder, nodeId, nodeName, outsourcePartner: outsourcePartner || undefined });
                                   }}

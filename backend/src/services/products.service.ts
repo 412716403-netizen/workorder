@@ -5,6 +5,53 @@ import { AppError } from '../middleware/errorHandler.js';
 import { genId } from '../utils/genId.js';
 import { isProductBlockedAsBomMaterialDb } from '../utils/productBomMaterial.js';
 import { sanitizeUpdate, sanitizeCreate, sanitizeItems } from '../utils/request.js';
+import { validateProductColorSizeForSave } from '../../../shared/productColorSize.js';
+import { getProductionLinkMode, milestoneNodeIdsEqual, productionOrderWhereCountsForProcessLock } from '../utils/productionLinkMode.js';
+import type { ProductionLinkMode } from '../types/index.js';
+
+const MSG_PROCESS_LOCKED =
+  '该产品已下达生产工单，工序已锁定，不能修改。如需调整工序，请先撤销/完成相关工单。';
+
+async function getProductIdsWithActiveOrders(db: TenantPrismaClient): Promise<Set<string>> {
+  const rows = await db.productionOrder.groupBy({
+    by: ['productId'],
+    where: productionOrderWhereCountsForProcessLock(),
+    _count: { _all: true },
+  });
+  return new Set(rows.map(r => r.productId));
+}
+
+function attachProcessLocked<T extends { id: string; milestoneNodeIds?: unknown }>(
+  product: T,
+  mode: ProductionLinkMode,
+  activeOrderProductIds: Set<string>,
+): T & { processLocked: boolean } {
+  const nodeIds = (product.milestoneNodeIds as string[]) || [];
+  const processLocked = mode === 'product' && nodeIds.length > 0 && activeOrderProductIds.has(product.id);
+  return { ...product, processLocked };
+}
+
+async function assertProcessRouteEditableIfNeeded(
+  db: TenantPrismaClient,
+  tenantId: string,
+  productId: string,
+  oldNodeIds: string[],
+  newNodeIds: string[] | undefined,
+): Promise<void> {
+  if (newNodeIds === undefined) return;
+  if (milestoneNodeIdsEqual(oldNodeIds, newNodeIds)) return;
+  if (oldNodeIds.length === 0) return;
+
+  const mode = await getProductionLinkMode(tenantId);
+  if (mode !== 'product') return;
+
+  const orderCount = await db.productionOrder.count({
+    where: { productId, ...productionOrderWhereCountsForProcessLock() },
+  });
+  if (orderCount > 0) {
+    throw new AppError(409, MSG_PROCESS_LOCKED);
+  }
+}
 
 /** 产品保存时未选分类或分类无效（与前端「业务分类」一致） */
 const MSG_PRODUCT_CATEGORY_REQUIRED =
@@ -36,6 +83,44 @@ async function assertProductCategoryIdForWrite(
   const category = await db.productCategory.findFirst({ where: { id: s } });
   if (!category) throw new AppError(400, MSG_PRODUCT_CATEGORY_REQUIRED);
   data.categoryId = s;
+}
+
+async function assertProductColorSizeForWrite(
+  db: TenantPrismaClient,
+  data: Record<string, unknown>,
+  mode: 'create' | 'update',
+  existing?: { categoryId: string | null; colorIds: unknown; sizeIds: unknown },
+): Promise<void> {
+  const categoryId =
+    mode === 'create'
+      ? typeof data.categoryId === 'string'
+        ? data.categoryId.trim()
+        : ''
+      : data.categoryId !== undefined
+        ? data.categoryId === null
+          ? null
+          : String(data.categoryId).trim()
+        : (existing?.categoryId ?? null);
+  if (!categoryId) return;
+
+  const category = await db.productCategory.findFirst({ where: { id: categoryId } });
+  if (!category) return;
+
+  const colorIds =
+    data.colorIds !== undefined
+      ? (Array.isArray(data.colorIds) ? (data.colorIds as string[]) : [])
+      : (Array.isArray(existing?.colorIds) ? (existing!.colorIds as string[]) : []);
+  const sizeIds =
+    data.sizeIds !== undefined
+      ? (Array.isArray(data.sizeIds) ? (data.sizeIds as string[]) : [])
+      : (Array.isArray(existing?.sizeIds) ? (existing!.sizeIds as string[]) : []);
+
+  const err = validateProductColorSizeForSave({
+    hasColorSize: category.hasColorSize,
+    colorIds,
+    sizeIds,
+  });
+  if (err) throw new AppError(400, err);
 }
 
 // ── JSON field coercion ──
@@ -262,6 +347,7 @@ export async function getVariantUsage(
 
 export async function listProducts(
   db: TenantPrismaClient,
+  tenantId: string,
   opts: { categoryId?: string; search?: string; all?: boolean; page?: number; pageSize?: number },
 ) {
   const where: Record<string, unknown> = {};
@@ -270,8 +356,13 @@ export async function listProducts(
   const include = { category: true, variants: { orderBy: { id: 'asc' as const } } };
   const orderBy: any = [{ createdAt: 'desc' }, { id: 'asc' }];
 
+  const mode = await getProductionLinkMode(tenantId);
+  const activeOrderProductIds =
+    mode === 'product' ? await getProductIdsWithActiveOrders(db) : new Set<string>();
+
   if (opts.all) {
-    return db.product.findMany({ where, include, orderBy });
+    const rows = await db.product.findMany({ where, include, orderBy });
+    return rows.map(p => attachProcessLocked(p, mode, activeOrderProductIds));
   }
 
   const page = Math.max(1, opts.page ?? 1);
@@ -280,16 +371,24 @@ export async function listProducts(
     db.product.findMany({ where, include, orderBy, skip: (page - 1) * pageSize, take: pageSize }),
     db.product.count({ where }),
   ]);
-  return { data, total, page, pageSize };
+  return {
+    data: data.map(p => attachProcessLocked(p, mode, activeOrderProductIds)),
+    total,
+    page,
+    pageSize,
+  };
 }
 
-export async function getProduct(db: TenantPrismaClient, id: string) {
+export async function getProduct(db: TenantPrismaClient, tenantId: string, id: string) {
   const product = await db.product.findUnique({
     where: { id },
     include: { category: true, variants: true, boms: { include: { items: true } } },
   });
   if (!product) throw new AppError(404, '产品不存在');
-  return product;
+  const mode = await getProductionLinkMode(tenantId);
+  const activeOrderProductIds =
+    mode === 'product' ? await getProductIdsWithActiveOrders(db) : new Set<string>();
+  return attachProcessLocked(product, mode, activeOrderProductIds);
 }
 
 export async function createProduct(
@@ -310,6 +409,7 @@ export async function createProduct(
   omitUndefinedValues(data);
 
   await assertProductCategoryIdForWrite(db, data, 'create');
+  await assertProductColorSizeForWrite(db, data, 'create');
 
   const dupSku = await basePrisma.product.findFirst({ where: { tenantId, sku } });
   if (dupSku) throw new AppError(409, '产品编号已存在');
@@ -354,6 +454,11 @@ export async function updateProduct(
   omitUndefinedValues(data);
 
   await assertProductCategoryIdForWrite(db, data, 'update');
+  await assertProductColorSizeForWrite(db, data, 'update', {
+    categoryId: existing.categoryId,
+    colorIds: existing.colorIds,
+    sizeIds: existing.sizeIds,
+  });
 
   const dupSku = await basePrisma.product.findFirst({ where: { tenantId, sku, id: { not: productId } } });
   if (dupSku) throw new AppError(409, '产品编号已存在');
@@ -361,6 +466,8 @@ export async function updateProduct(
   if (dupName) throw new AppError(409, '产品名称已存在');
 
   const oldNodeIds = (existing.milestoneNodeIds as string[]) || [];
+  const newNodeIds = (data.milestoneNodeIds as string[] | undefined) ?? oldNodeIds;
+  await assertProcessRouteEditableIfNeeded(db, tenantId, productId, oldNodeIds, data.milestoneNodeIds as string[] | undefined);
   // 工单上的 productName/sku 是创建时的快照；产品改名/改编号后同步刷新，保持单据展示与档案一致
   const nameOrSkuChanged = name !== existing.name || sku !== existing.sku;
 
@@ -380,12 +487,16 @@ export async function updateProduct(
     if (variantPlan) await applyVariantWritePlan(tx, productId, variantPlan);
   });
 
-  const newNodeIds = (data.milestoneNodeIds as string[] | undefined) ?? oldNodeIds;
   if (oldNodeIds.length === 0 && newNodeIds.length > 0) {
     await backfillPendingProcessOrders(productId, tenantId, newNodeIds);
   }
 
-  return db.product.findUnique({ where: { id: productId }, include: { variants: true } });
+  const updated = await db.product.findUnique({ where: { id: productId }, include: { variants: true } });
+  if (!updated) throw new AppError(404, '产品不存在');
+  const mode = await getProductionLinkMode(tenantId);
+  const activeOrderProductIds =
+    mode === 'product' ? await getProductIdsWithActiveOrders(db) : new Set<string>();
+  return attachProcessLocked(updated, mode, activeOrderProductIds);
 }
 
 export async function deleteProduct(

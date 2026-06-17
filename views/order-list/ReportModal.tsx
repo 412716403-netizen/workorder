@@ -39,6 +39,7 @@ import {
 } from '../../utils/productReportAggregates';
 import { buildDefectiveReworkByOrderMilestone } from '../../utils/defectiveReworkByOrderMilestone';
 import { reworkMergeBucketOrderId } from '../../utils/reworkMergeBucketOrderId';
+import { buildOutOfSequenceTemplateIds, findGatingPredecessorIndex, isProcessSequential } from '../../shared/processSequence';
 import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
 import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
@@ -113,6 +114,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
   const equipmentFeaturesOn = useEquipmentFeaturesEffective();
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
+  const outOfSequenceTemplateIds = useMemo(() => buildOutOfSequenceTemplateIds(globalNodes), [globalNodes]);
 
   const defectiveAndReworkByOrderMilestone = useMemo(
     () => buildDefectiveReworkByOrderMilestone(orders, prodRecords),
@@ -238,12 +240,14 @@ const ReportModal: React.FC<ReportModalProps> = ({
   const useProductPmp = productionLinkMode === 'product' && productMilestoneProgresses.length > 0;
   void pmpCompletedAtTemplate;
   const totalBase = useProductPmp
-    ? productGroupMaxReportableSum(ordersInModal, tid, pid, productMilestoneProgresses, processSequenceMode, (oid, t) => getDefectiveRework(oid, t), undefined, orders)
-    : processSequenceMode === 'sequential'
+    ? productGroupMaxReportableSum(ordersInModal, tid, pid, productMilestoneProgresses, processSequenceMode, (oid, t) => getDefectiveRework(oid, t), undefined, orders, outOfSequenceTemplateIds)
+    : isProcessSequential(processSequenceMode, tid, outOfSequenceTemplateIds)
       ? ordersInModal.reduce((s, o) => {
           const idx = o.milestones.findIndex(m => m.templateId === tid);
-          if (idx <= 0) return s + o.items.reduce((a, i) => a + i.quantity, 0);
-          const prev = o.milestones[idx - 1];
+          const templateIds = o.milestones.map(m => m.templateId);
+          const gateIdx = findGatingPredecessorIndex(templateIds, idx, outOfSequenceTemplateIds);
+          if (gateIdx < 0) return s + o.items.reduce((a, i) => a + i.quantity, 0);
+          const prev = o.milestones[gateIdx];
           return s + (prev?.completedQuantity ?? 0);
         }, 0)
       : ordersInModal.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0);
@@ -305,12 +309,16 @@ const ReportModal: React.FC<ReportModalProps> = ({
   const hintMaxReportableRaw =
     reportModal.productMaxReportableQty ??
     (useProductPmp
-      ? productGroupMaxReportableSum(ordersInModal, tid, pid, productMilestoneProgresses, processSequenceMode, (oid, t) => getDefectiveRework(oid, t), undefined, orders)
+      ? productGroupMaxReportableSum(ordersInModal, tid, pid, productMilestoneProgresses, processSequenceMode, (oid, t) => getDefectiveRework(oid, t), undefined, orders, outOfSequenceTemplateIds)
       : ordersInModal.reduce((s, o) => {
           const idx = o.milestones.findIndex(m => m.templateId === tid);
           let base = o.items.reduce((a, i) => a + i.quantity, 0);
-          if (processSequenceMode === 'sequential' && idx > 0) {
-            base = o.milestones[idx - 1]?.completedQuantity ?? 0;
+          if (isProcessSequential(processSequenceMode, tid, outOfSequenceTemplateIds)) {
+            const templateIds = o.milestones.map(m => m.templateId);
+            const gateIdx = findGatingPredecessorIndex(templateIds, idx, outOfSequenceTemplateIds);
+            if (gateIdx >= 0) {
+              base = o.milestones[gateIdx]?.completedQuantity ?? 0;
+            }
           }
           const { defective, rework } = getDefectiveRework(o.id, tid);
           return s + Math.max(0, base - defective + rework);
@@ -436,6 +444,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
                 productMilestoneProgresses={productMilestoneProgresses}
                 productionLinkMode={productionLinkMode}
                 processSequenceMode={processSequenceMode}
+                outOfSequenceTemplateIds={outOfSequenceTemplateIds}
                 dictionaries={dictionaries}
                 matrixTotalQty={matrixTotalQty}
                 effectiveRemainingForModal={effectiveRemainingForModal}

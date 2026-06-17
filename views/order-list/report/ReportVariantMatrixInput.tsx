@@ -18,6 +18,7 @@ import { buildVariantQtyMatrixLayout } from '../../../utils/variantQtyMatrix';
 import QtyMatrixTable, { type QtyMatrixTableRow } from '../../../components/variant-matrix/QtyMatrixTable';
 import { variantMaxGoodProductMode } from '../../../utils/productReportAggregates';
 import { reworkMergeBucketOrderId } from '../../../utils/reworkMergeBucketOrderId';
+import { isProcessSequential } from '../../../shared/processSequence';
 import {
   VARIANT_QTY_MATRIX_CONTAINER_ATTR,
   handleVariantQtyMatrixKeyDown,
@@ -44,6 +45,7 @@ interface Props {
   productMilestoneProgresses: ProductMilestoneProgress[];
   productionLinkMode: 'order' | 'product';
   processSequenceMode: ProcessSequenceMode;
+  outOfSequenceTemplateIds?: ReadonlySet<string>;
   dictionaries: AppDictionaries;
   matrixTotalQty: number;
   effectiveRemainingForModal: number;
@@ -69,6 +71,7 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
   productMilestoneProgresses,
   productionLinkMode,
   processSequenceMode,
+  outOfSequenceTemplateIds,
   dictionaries,
   matrixTotalQty,
   effectiveRemainingForModal,
@@ -113,6 +116,7 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
           milestoneNodeIds,
           (oid, t) => getDefectiveRework(oid, t),
           orders,
+          outOfSequenceTemplateIds,
         ) - (outsourcedByVariantId[variant.id] ?? 0);
       variantRemainingBaseMap.set(variant.id, Math.max(0, rawMax));
       continue;
@@ -120,7 +124,7 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
     const item = Array.isArray(itemsSource) ? itemsSource.find((i: { variantId?: string }) => (i.variantId || '') === variant.id) : undefined;
     const completedInMilestone = (currentMs?.reports || []).filter((r: { variantId?: string }) => (r.variantId || '') === variant.id).reduce((s: number, r: { quantity?: number }) => s + (r.quantity ?? 0), 0);
     const defectiveForThisVariant = (currentMs?.reports || []).filter((r: { variantId?: string; defectiveQuantity?: number }) => (r.variantId || '') === variant.id).reduce((s: number, r: { defectiveQuantity?: number }) => s + (r.defectiveQuantity ?? 0), 0);
-    const base = processSequenceMode === 'sequential'
+    const base = isProcessSequential(processSequenceMode, tid, outOfSequenceTemplateIds)
       ? Math.max(0, getSeqRemainingForVariant(variant.id) - defectiveForThisVariant)
       : (item ? Math.max(0, (item.quantity ?? 0) - completedInMilestone - defectiveForThisVariant) : 0);
     const reworkForVariant = reworkByVariant[variant.id] ?? 0;

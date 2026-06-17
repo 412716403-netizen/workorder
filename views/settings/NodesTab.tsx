@@ -10,6 +10,7 @@ import {
   DollarSign,
   Truck,
   Scale,
+  Shuffle,
   ToggleLeft,
   ToggleRight,
   Trash2,
@@ -59,7 +60,7 @@ const NodesTab: React.FC<NodesTabProps> = ({
           name, reportTemplate: [], reportDisplayTemplate: [], hasBOM: false,
           enableAssignment: false, enableWorkerAssignment: false,
           enableEquipmentAssignment: false, enableEquipmentOnReport: false,
-          enablePieceRate: false, allowOutsource: false,
+          enablePieceRate: false, allowOutsource: false, allowOutOfSequence: false,
         }) as GlobalNodeTemplate;
         setNewNodeName('');
         setEditingNodeId(created.id);
@@ -272,6 +273,18 @@ const NodesTab: React.FC<NodesTabProps> = ({
                                    </button>
                                 </div>
                                 <p className="text-[10px] text-slate-400 font-medium">开启后该工序会在外协管理待发清单中显示，可按工单选择工序发出。</p>
+                             </div>
+                             <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                                <div className="flex items-center justify-between mb-2">
+                                   <div className="flex items-center gap-2">
+                                     <Shuffle className="w-4 h-4 text-indigo-400" />
+                                     <span className="text-sm font-bold text-slate-800">不按顺序生产</span>
+                                   </div>
+                                   <button onClick={() => updateNodeConfig(node.id, { allowOutOfSequence: !node.allowOutOfSequence })}>
+                                     {node.allowOutOfSequence ? <ToggleRight className="w-8 h-8 text-indigo-600" /> : <ToggleLeft className="w-8 h-8 text-slate-300" />}
+                                   </button>
+                                </div>
+                                <p className="text-[10px] text-slate-400 font-medium">默认全系统按工序顺序生产。开启后本工序脱离顺序约束：工单中心可按工单总量对该工序报工，无需等前一道工序完成。</p>
                              </div>
                              <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
                                 <div className="flex items-center justify-between mb-2">

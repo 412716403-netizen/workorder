@@ -69,8 +69,6 @@ const SettingsView: React.FC = () => {
   const onRefreshFinanceAccountTypes = a.refreshFinanceAccountTypes;
   const productionLinkMode = c.productionLinkMode;
   const onUpdateProductionLinkMode = a.onUpdateProductionLinkMode;
-  const processSequenceMode = c.processSequenceMode;
-  const onUpdateProcessSequenceMode = a.onUpdateProcessSequenceMode;
   const allowExceedMaxReportQty = c.allowExceedMaxReportQty;
   const onUpdateAllowExceedMaxReportQty = a.onUpdateAllowExceedMaxReportQty;
   const allowExceedMaxOutsourceReceiveQty = c.allowExceedMaxOutsourceReceiveQty;
@@ -236,8 +234,6 @@ const SettingsView: React.FC = () => {
           <ProductionConfigTab
             productionLinkMode={productionLinkMode}
             onUpdateProductionLinkMode={onUpdateProductionLinkMode}
-            processSequenceMode={processSequenceMode}
-            onUpdateProcessSequenceMode={onUpdateProcessSequenceMode}
             allowExceedMaxReportQty={allowExceedMaxReportQty}
             onUpdateAllowExceedMaxReportQty={onUpdateAllowExceedMaxReportQty}
             allowExceedMaxOutsourceReceiveQty={allowExceedMaxOutsourceReceiveQty}
