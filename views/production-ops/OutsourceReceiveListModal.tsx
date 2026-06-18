@@ -11,7 +11,7 @@ import {
 } from '../../hooks/useOutsourceReceiveScan';
 import type { ScanPayload } from '../../utils/scanPayload';
 import type { ScanBatchRowDetail } from '../../utils/scanBatchRowDetail';
-import { useConfigData } from '../../contexts/AppDataContext';
+import { useConfigData, useMasterData } from '../../contexts/AppDataContext';
 import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
 import { getVariantNodeUnitWeightKg } from '../../utils/variantNodeUnitWeight';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
@@ -94,7 +94,18 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
   onClose,
 }) => {
   const { weightTolerancePercent } = useConfigData();
+  const { globalNodes } = useMasterData();
   const { scanEnabled, weightEnabled } = useTraceabilityPlugin();
+  // 外协收货扫码弹窗在首扫前未锁定工序，故按待收回行涉及的工序是否开启「扫码称重」决定是否显示秤框
+  const scanWeighingEnabled = useMemo(() => {
+    if (!weightEnabled) return false;
+    const weighingNodeIds = new Set(
+      globalNodes.filter(n => n.enableScanWeighing).map(n => n.id),
+    );
+    return [...outsourceReceiveRows, ...(outsourceReceiveAllAggregates ?? [])].some(r =>
+      weighingNodeIds.has(r.nodeId),
+    );
+  }, [weightEnabled, globalNodes, outsourceReceiveRows, outsourceReceiveAllAggregates]);
   const getUnitWeightKg = useCallback(
     (productId: string, variantId: string, nodeId: string) =>
       getVariantNodeUnitWeightKg(products, productId, variantId, nodeId),
@@ -637,7 +648,7 @@ const OutsourceReceiveListModal: React.FC<OutsourceReceiveListModalProps> = ({
         scanDisabled={!scanPartner}
         scanDisabledHint="请先在上方选择加工厂后再开始扫码。"
         sessionResetKey={scanPartner}
-        enableWeightCheck={weightEnabled}
+        enableWeightCheck={scanWeighingEnabled}
         weightTolerancePercent={weightTolerancePercent}
         getUnitWeightKg={getUnitWeightKg}
       />

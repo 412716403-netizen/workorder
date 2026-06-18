@@ -117,7 +117,7 @@ export function VariantNodeWeightSection({
   if (nodes.length === 0) {
     return (
       <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-6 text-center text-xs text-slate-500">
-        请先在上方选择生产工序后，再维护各规格的单件标准重量。
+        请先在标准路线中加入已开启「扫码称重」的工序，再维护各规格的单件标准重量。
       </p>
     );
   }
@@ -225,7 +225,7 @@ export function VariantNodeWeightSettingTrigger({
   const canOpen = nodes.length > 0 && product.variants.length > 0;
 
   const summaryText = useMemo(() => {
-    if (nodes.length === 0) return '请先在上方选择生产工序';
+    if (nodes.length === 0) return '请先在标准路线中加入已开启「扫码称重」的工序';
     if (product.variants.length === 0) return '请先配置产品颜色/尺码规格';
     if (filled === 0) return '尚未维护标准重量';
     if (filled >= total) return `已全部维护（${total} 项）`;
@@ -316,6 +316,8 @@ export function VariantNodeWeightSettingTrigger({
           document.body,
         )
       : null;
+
+  if (nodes.length === 0) return null;
 
   return (
     <>

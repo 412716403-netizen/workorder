@@ -61,6 +61,8 @@ model Tenant {
   industryKind              String    @default("generic") @map("industry_kind") @db.VarChar(40)
   /** 行业预设数据首次灌入成功的时间；非空则不再自动灌入 */
   industryPresetAppliedAt   DateTime? @map("industry_preset_applied_at") @db.Timestamptz()
+  /** 生产关联模式：`order` 关联工单 / `product` 关联产品；由平台管理员在企业管理中配置 */
+  productionLinkMode        String    @default("order") @map("production_link_mode") @db.VarChar(20)
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
@@ -183,6 +185,8 @@ model GlobalNodeTemplate {
   allowOutOfSequence        Boolean  @default(false) @map("allow_out_of_sequence")
   /** 毛衣/外协等工序：报工/外协收货时录入本次交货重量，按 BOM 占比分摊为各子物料实际消耗 */
   enableWeightOnReport      Boolean  @default(false) @map("enable_weight_on_report")
+  /** 扫码称重：开启后扫码会话（报工/返工/外协收货）显示电子秤捕获框并做理论/实测比对；与 enableWeightOnReport 同开时实测重量同步到报工/收货表单 */
+  enableScanWeighing        Boolean  @default(false) @map("enable_scan_weighing")
   sortOrder                 Int      @default(0) @map("sort_order")
   createdAt                 DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt                 DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()

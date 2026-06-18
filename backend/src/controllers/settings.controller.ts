@@ -111,5 +111,7 @@ export const getConfig = asyncHandler(async (req, res) => {
   res.json(await settingsService.getConfig(req.tenantId!));
 });
 export const updateConfig = asyncHandler(async (req, res) => {
-  res.json(await settingsService.updateConfig(req.tenantId!, str(req.params.key), req.body.value));
+  const key = str(req.params.key);
+  settingsService.assertTenantConfigKeyEditable(key);
+  res.json(await settingsService.updateConfig(req.tenantId!, key, req.body.value));
 });

@@ -40,6 +40,8 @@ export {
   type CollabAcceptTransferBody,
   type ProcessPricingMode,
   type ProductionLinkMode,
+  PRODUCTION_LINK_MODE_LABELS,
+  normalizeProductionLinkMode,
   type ProcessSequenceMode,
   type FinanceCategoryKind,
   type TenantIndustryKind,
@@ -411,6 +413,13 @@ export interface GlobalNodeTemplate {
    * 3) 生产物料面板的"报工耗材"列会把该工序报工对应的子物料消耗从"件数×BOM"切换为"重量×占比"，使"结余"自然变为真实损耗量。
    */
   enableWeightOnReport?: boolean;
+  /**
+   * 是否开启「扫码称重」。开启后（且追溯码插件开启）：报工 / 返工 / 外协收货的扫码会话顶部出现电子秤捕获框，
+   * 每次扫码快照秤读数并与「单件标准重量 × 数量」做理论/实测比对。
+   * 仅控制秤框显示与比对，本身不落库重量；若该工序同时开启 `enableWeightOnReport`，
+   * 扫码会话累计实测总重会自动同步到报工 / 收货表单的交货重量字段。
+   */
+  enableScanWeighing?: boolean;
 }
 
 export interface ProductCategory {

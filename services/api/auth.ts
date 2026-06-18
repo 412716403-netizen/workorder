@@ -164,6 +164,8 @@ export type AdminTenantRow = {
   equipmentFeaturesEnabled?: boolean;
   industryKind: string;
   industryPresetAppliedAt: string | null;
+  productionLinkMode: 'order' | 'product';
+  productionLinkModeLocked?: boolean;
   memberCount: number;
   owner: { id: string; username: string; displayName: string | null; phone: string | null } | null;
   createdAt: string;
@@ -177,6 +179,8 @@ export type AdminTenantUpdateResponse = {
   equipmentFeaturesEnabled?: boolean;
   industryKind: string;
   industryPresetAppliedAt: string | null;
+  productionLinkMode: 'order' | 'product';
+  productionLinkModeLocked: boolean;
   presetSkippedReason?: string;
 };
 
@@ -193,6 +197,7 @@ export const adminTenants = {
       status?: string;
       equipmentModuleEnabled?: boolean;
       industryKind?: string;
+      productionLinkMode?: 'order' | 'product';
     },
   ) =>
     request<AdminTenantUpdateResponse>(`/admin/tenants/${id}`, {

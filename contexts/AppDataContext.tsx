@@ -121,7 +121,6 @@ export interface AppDataContextValue {
   weightTolerancePercent: number;
   productMilestoneProgresses: ProductMilestoneProgress[];
   // Config handlers
-  onUpdateProductionLinkMode: (mode: ProductionLinkMode) => Promise<void>;
   onUpdateAllowExceedMaxReportQty: (v: boolean) => Promise<void>;
   onUpdateAllowExceedMaxOutsourceReceiveQty: (v: boolean) => Promise<void>;
   onUpdateWeightTolerancePercent: (v: number) => Promise<void>;
@@ -575,7 +574,6 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }, [refreshPrintTemplates]);
 
   // ── Config update handlers ──
-  const onUpdateProductionLinkMode = useCallback(async (mode: ProductionLinkMode) => { await api.settings.updateConfig('productionLinkMode', mode); setProductionLinkMode(mode); }, []);
   const onUpdateAllowExceedMaxReportQty = useCallback(async (value: boolean) => { await api.settings.updateConfig('allowExceedMaxReportQty', value); setAllowExceedMaxReportQty(value); }, []);
   const onUpdateAllowExceedMaxOutsourceReceiveQty = useCallback(async (value: boolean) => { await api.settings.updateConfig('allowExceedMaxOutsourceReceiveQty', value); setAllowExceedMaxOutsourceReceiveQty(value); }, []);
   const onUpdateWeightTolerancePercent = useCallback(async (value: number) => {
@@ -1037,7 +1035,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }), [financeCategories, financeAccountTypes]);
 
   const actionsValue: AppDataActions = useMemo(() => ({
-    onUpdateProductionLinkMode, onUpdateAllowExceedMaxReportQty, onUpdateAllowExceedMaxOutsourceReceiveQty, onUpdateWeightTolerancePercent,
+    onUpdateAllowExceedMaxReportQty, onUpdateAllowExceedMaxOutsourceReceiveQty, onUpdateWeightTolerancePercent,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
     onUpdatePurchaseOrderFormSettings, onUpdateSalesOrderFormSettings,
     onUpdatePurchaseBillFormSettings, onUpdateSalesBillFormSettings,
@@ -1059,7 +1057,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     refreshPrintTemplates,
     ensureDeferredLoaded,
   }), [
-    onUpdateProductionLinkMode, onUpdateAllowExceedMaxReportQty, onUpdateAllowExceedMaxOutsourceReceiveQty, onUpdateWeightTolerancePercent,
+    onUpdateAllowExceedMaxReportQty, onUpdateAllowExceedMaxOutsourceReceiveQty, onUpdateWeightTolerancePercent,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
     onUpdatePurchaseOrderFormSettings, onUpdateSalesOrderFormSettings,
     onUpdatePurchaseBillFormSettings, onUpdateSalesBillFormSettings,

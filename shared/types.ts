@@ -79,6 +79,21 @@ export function isOrderDispatchStatus(v: unknown): v is OrderDispatchStatus {
 
 export type ProcessPricingMode = 'per_piece' | 'per_hour';
 export type ProductionLinkMode = 'order' | 'product';
+
+export const PRODUCTION_LINK_MODE_LABELS: Record<ProductionLinkMode, string> = {
+  order: '关联工单',
+  product: '关联产品',
+};
+
+export function isProductionLinkMode(value: string): value is ProductionLinkMode {
+  return value === 'order' || value === 'product';
+}
+
+/** 非法或空值归一为 `order` */
+export function normalizeProductionLinkMode(value: string | null | undefined): ProductionLinkMode {
+  if (value != null && value !== '' && isProductionLinkMode(value)) return value;
+  return 'order';
+}
 export type ProcessSequenceMode = 'free' | 'sequential';
 export type FinanceCategoryKind = 'RECEIPT' | 'PAYMENT';
 

@@ -140,12 +140,13 @@ export async function seedTenantIndustryPresetForKind(
     hasBom: boolean;
     allowOutsource: boolean;
     enableWeightOnReport: boolean;
+    enableScanWeighing: boolean;
     sortOrder: number;
   }> = [
-    { name: '横机', hasBom: true, allowOutsource: true, enableWeightOnReport: true, sortOrder: 0 },
-    { name: '套口', hasBom: false, allowOutsource: true, enableWeightOnReport: false, sortOrder: 1 },
-    { name: '洗水', hasBom: false, allowOutsource: true, enableWeightOnReport: false, sortOrder: 2 },
-    { name: '后道', hasBom: false, allowOutsource: true, enableWeightOnReport: false, sortOrder: 3 },
+    { name: '横机', hasBom: true, allowOutsource: true, enableWeightOnReport: true, enableScanWeighing: true, sortOrder: 0 },
+    { name: '套口', hasBom: false, allowOutsource: true, enableWeightOnReport: false, enableScanWeighing: false, sortOrder: 1 },
+    { name: '洗水', hasBom: false, allowOutsource: true, enableWeightOnReport: false, enableScanWeighing: false, sortOrder: 2 },
+    { name: '后道', hasBom: false, allowOutsource: true, enableWeightOnReport: false, enableScanWeighing: false, sortOrder: 3 },
   ];
 
   for (const row of nodeRows) {
@@ -164,6 +165,7 @@ export async function seedTenantIndustryPresetForKind(
         enablePieceRate: false,
         allowOutsource: row.allowOutsource,
         enableWeightOnReport: row.enableWeightOnReport,
+        enableScanWeighing: row.enableScanWeighing,
         sortOrder: row.sortOrder,
       },
     });

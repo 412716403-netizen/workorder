@@ -445,6 +445,13 @@ export async function getConfig(tenantId: string) {
   return config;
 }
 
+/** 租户侧 PUT /settings/config/:key 禁止修改的键（平台内部 sync 走 updateConfig 不经此校验） */
+export function assertTenantConfigKeyEditable(key: string): void {
+  if (key === 'productionLinkMode') {
+    throw new AppError(403, '生产关联模式由平台管理员在企业管理中配置，租户不可修改');
+  }
+}
+
 export async function updateConfig(tenantId: string, key: string, value: unknown) {
   if (getRedis()) {
     await redisDel(tenantConfigCacheKey(tenantId));

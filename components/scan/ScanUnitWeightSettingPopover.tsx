@@ -7,6 +7,7 @@ import { useAppActions, useConfigData, useMasterData } from '../../contexts/AppD
 import { useAuth } from '../../contexts/AuthContext';
 import { hasSubPermission } from '../../utils/hasSubPermission';
 import { VariantNodeWeightSection } from '../../views/product-management/VariantNodeWeightSection';
+import { getProductScanWeighingNodes } from '../../utils/variantNodeUnitWeight';
 import { useReceiveUnitWeightAverages } from '../../hooks/useReceiveUnitWeightAverages';
 import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
 
@@ -52,12 +53,10 @@ export function ScanUnitWeightSettingPopover({
   const product = products.find(p => p.id === productId);
   const avgReceiveUnitWeightKg = useReceiveUnitWeightAverages(productId, open && weightEnabled);
 
-  const weightNodes = useMemo(() => {
-    if (!product?.milestoneNodeIds?.length) return [];
-    return product.milestoneNodeIds
-      .map(id => globalNodes.find(n => n.id === id))
-      .filter((n): n is NonNullable<typeof n> => !!n);
-  }, [product, globalNodes]);
+  const weightNodes = useMemo(
+    () => getProductScanWeighingNodes(product?.milestoneNodeIds ?? [], globalNodes),
+    [product?.milestoneNodeIds, globalNodes],
+  );
 
   useEffect(() => {
     if (!open || !product) return;

@@ -1,5 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Camera, Keyboard, X } from 'lucide-react';
+import { useScanPassthroughInputSubmit } from '../../hooks/useScanPassthroughInputSubmit';
+import { notifyScanImeCompositionStart } from '../../utils/scanPassthroughInput';
 
 export interface CameraScannerModalProps {
   onClose: () => void;
@@ -12,8 +14,37 @@ export interface CameraScannerModalProps {
 export function CameraScannerModal({ onClose, onScan }: CameraScannerModalProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [manual, setManual] = useState('');
+  const manualRef = useRef('');
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(true);
+
+  const { handleValue: handlePassthroughScan, cancel: cancelPassthroughScan } =
+    useScanPassthroughInputSubmit(
+      raw => {
+        onScan(raw);
+        setManual('');
+        manualRef.current = '';
+      },
+      {
+        onUnrecognized: () => {
+          setManual('');
+          manualRef.current = '';
+        },
+      },
+    );
+
+  // 显式提交（Enter / 确认）：先取消流式防抖，避免随后误触发重复 onScan
+  const submitManual = useCallback(
+    (raw: string) => {
+      cancelPassthroughScan();
+      const v = raw.trim();
+      if (!v) return;
+      onScan(v);
+      setManual('');
+      manualRef.current = '';
+    },
+    [cancelPassthroughScan, onScan],
+  );
 
   useEffect(() => {
     let controls: { stop: () => void } | null = null;
@@ -81,10 +112,16 @@ export function CameraScannerModal({ onClose, onScan }: CameraScannerModalProps)
             <input
               type="text"
               value={manual}
-              onChange={e => setManual(e.target.value)}
+              onChange={e => {
+                const v = e.target.value;
+                setManual(v);
+                manualRef.current = v;
+                handlePassthroughScan(v, () => manualRef.current);
+              }}
+              onCompositionStart={() => notifyScanImeCompositionStart()}
               onKeyDown={e => {
                 if (e.key === 'Enter' && manual.trim()) {
-                  onScan(manual.trim());
+                  submitManual(manual);
                 }
               }}
               className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
@@ -93,7 +130,7 @@ export function CameraScannerModal({ onClose, onScan }: CameraScannerModalProps)
             />
             <button
               type="button"
-              onClick={() => manual.trim() && onScan(manual.trim())}
+              onClick={() => submitManual(manual)}
               className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40"
               disabled={!manual.trim()}
             >

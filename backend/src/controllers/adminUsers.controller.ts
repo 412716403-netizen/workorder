@@ -1,5 +1,6 @@
 import * as adminUsersService from '../services/adminUsers.service.js';
 import * as adminTenantsService from '../services/adminTenants.service.js';
+import { normalizeProductionLinkMode } from '../../../shared/types.js';
 import { str } from '../utils/request.js';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
@@ -43,7 +44,7 @@ export const listTenants = asyncHandler(async (req, res) => {
     },
   };
 
-  const toRow = (t: {
+  const toRow = async (t: {
     id: string;
     name: string;
     status: string;
@@ -51,11 +52,13 @@ export const listTenants = asyncHandler(async (req, res) => {
     equipmentModuleEnabled: boolean | null;
     industryKind: string;
     industryPresetAppliedAt: Date | null;
+    productionLinkMode: string;
     createdAt: Date;
     memberships: Array<{ user: { id: string; username: string; displayName: string | null; phone: string | null } | null }>;
     _count: { memberships: number };
   }) => {
     const owner = t.memberships[0]?.user;
+    const productionLinkModeLocked = await adminTenantsService.getTenantProductionLinkModeLocked(t.id);
     return {
       id: t.id,
       name: t.name,
@@ -64,6 +67,8 @@ export const listTenants = asyncHandler(async (req, res) => {
       equipmentFeaturesEnabled: t.equipmentModuleEnabled !== false,
       industryKind: t.industryKind,
       industryPresetAppliedAt: t.industryPresetAppliedAt?.toISOString() ?? null,
+      productionLinkMode: normalizeProductionLinkMode(t.productionLinkMode),
+      productionLinkModeLocked,
       memberCount: t._count.memberships,
       owner: owner ? { id: owner.id, username: owner.username, displayName: owner.displayName, phone: owner.phone } : null,
       createdAt: t.createdAt.toISOString(),
@@ -72,7 +77,8 @@ export const listTenants = asyncHandler(async (req, res) => {
 
   if (all) {
     const tenants = await prisma.tenant.findMany({ where, orderBy, include });
-    res.json(tenants.map(toRow));
+    const rows = await Promise.all(tenants.map(toRow));
+    res.json(rows);
     return;
   }
 
@@ -80,7 +86,8 @@ export const listTenants = asyncHandler(async (req, res) => {
     prisma.tenant.findMany({ where, orderBy, include, skip: (page - 1) * pageSize, take: pageSize }),
     prisma.tenant.count({ where }),
   ]);
-  res.json({ data: tenants.map(toRow), total, page, pageSize });
+  const data = await Promise.all(tenants.map(toRow));
+  res.json({ data, total, page, pageSize });
 });
 
 export const updateTenant = asyncHandler(async (req, res) => {

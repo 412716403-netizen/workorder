@@ -23,8 +23,11 @@ import { adminUsers, adminTenants, type AdminUserRow, type AdminTenantRow } from
 import {
   TENANT_INDUSTRY_KINDS,
   TENANT_INDUSTRY_KIND_LABELS,
+  PRODUCTION_LINK_MODE_LABELS,
   isTenantIndustryKind,
+  normalizeProductionLinkMode,
   type TenantIndustryKind,
+  type ProductionLinkMode,
 } from '../types';
 import { pageSubtitleClass, pageTitleClass, primaryToolbarButtonClass } from '../styles/uiDensity';
 import { useSetMainScrollSegment } from '../contexts/MainScrollSegmentContext';
@@ -82,6 +85,7 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
   const [tenantExpiresAtInput, setTenantExpiresAtInput] = useState('');
   const [tenantEquipmentModule, setTenantEquipmentModule] = useState(true);
   const [tenantIndustryKind, setTenantIndustryKind] = useState<TenantIndustryKind>('generic');
+  const [tenantProductionLinkMode, setTenantProductionLinkMode] = useState<ProductionLinkMode>('order');
   const [tenantSaving, setTenantSaving] = useState(false);
   const [tenantError, setTenantError] = useState('');
   const [tenantSuccessHint, setTenantSuccessHint] = useState('');
@@ -106,6 +110,7 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
     setTenantSuccessHint('');
     setTenantEquipmentModule(t.equipmentFeaturesEnabled !== false);
     setTenantIndustryKind(isTenantIndustryKind(t.industryKind) ? t.industryKind : 'generic');
+    setTenantProductionLinkMode(normalizeProductionLinkMode(t.productionLinkMode));
     if (action === 'approve') {
       setTenantNoExpiry(true);
       setTenantExpiresAtInput('');
@@ -135,6 +140,7 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
           expiresAt,
           equipmentModuleEnabled: tenantEquipmentModule,
           industryKind: tenantIndustryKind,
+          productionLinkMode: tenantProductionLinkMode,
         });
         setTenantSuccessHint(res.presetSkippedReason ?? '');
       }
@@ -376,6 +382,7 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500 text-center">成员数</th>
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500 text-center">设备模块</th>
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">行业类型</th>
+                      <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">生产模式</th>
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">状态</th>
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">到期时间</th>
                       <th className="px-4 py-3.5 text-xs font-black uppercase tracking-wide text-slate-500">创建时间</th>
@@ -407,6 +414,14 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
                           </div>
                           {t.industryPresetAppliedAt && (
                             <div className="text-[10px] text-slate-400 mt-0.5">行业模板已应用</div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5 text-[13px] text-slate-600 whitespace-nowrap">
+                          <div className="font-medium">
+                            {PRODUCTION_LINK_MODE_LABELS[normalizeProductionLinkMode(t.productionLinkMode)]}
+                          </div>
+                          {t.productionLinkModeLocked && (
+                            <div className="text-[10px] text-slate-400 mt-0.5">已锁定</div>
                           )}
                         </td>
                         <td className="px-4 py-3.5 whitespace-nowrap">
@@ -509,6 +524,51 @@ export default function UserAdminView({ currentUserId }: UserAdminViewProps) {
                     <p className="text-[11px] text-slate-500 font-medium mt-2 leading-snug">
                       选择「毛衣工厂」且该企业下尚无产品分类、合作单位分类、仓库、财务类型与工序节点时，将自动灌入默认数据；否则跳过并提示原因。
                     </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 bg-white p-3">
+                    <label className="block text-xs font-bold text-slate-500 mb-2">生产关联模式</label>
+                    {tenantModal.tenant.productionLinkModeLocked ? (
+                      <div className="rounded-lg bg-slate-50 px-3 py-2.5">
+                        <p className="text-sm font-bold text-slate-800">
+                          {PRODUCTION_LINK_MODE_LABELS[normalizeProductionLinkMode(tenantModal.tenant.productionLinkMode)]}
+                        </p>
+                        <p className="text-[11px] text-slate-500 font-medium mt-1 leading-snug">
+                          该企业已有生产数据，模式不可变更。如需调整请联系技术支持。
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {(['order', 'product'] as const).map(mode => (
+                          <label
+                            key={mode}
+                            className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 cursor-pointer ${
+                              tenantProductionLinkMode === mode
+                                ? 'border-indigo-300 bg-indigo-50/40'
+                                : 'border-slate-100 hover:border-slate-200'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="tenantProductionLinkMode"
+                              checked={tenantProductionLinkMode === mode}
+                              onChange={() => setTenantProductionLinkMode(mode)}
+                              className="mt-0.5 text-indigo-600"
+                            />
+                            <div>
+                              <span className="text-sm font-bold text-slate-800">{PRODUCTION_LINK_MODE_LABELS[mode]}</span>
+                              <p className="text-[11px] text-slate-500 font-medium mt-0.5 leading-snug">
+                                {mode === 'order'
+                                  ? '计划/工单显示客户、交期；领料、报工、外协、返工、入库均关联工单。'
+                                  : '计划弱化客户；领料、报工等按产品关联；工单中心按产品分组。'}
+                              </p>
+                            </div>
+                          </label>
+                        ))}
+                        <p className="text-[11px] text-slate-400 leading-snug">
+                          开通后选定即生效；一旦产生生产数据将锁定，不可再改。
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <div className="rounded-xl border border-slate-100 bg-white p-3">
                     <label className="flex items-start gap-2.5 cursor-pointer">

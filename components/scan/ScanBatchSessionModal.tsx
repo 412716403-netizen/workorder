@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScanLine, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { useScanGun, useScanGunParallel } from '../../hooks/useScanGun';
+import { useScanGun } from '../../hooks/useScanGun';
+import { useScanPassthroughInputSubmit } from '../../hooks/useScanPassthroughInputSubmit';
 import { itemCodesApi, planVirtualBatchesApi } from '../../services/api';
 import {
   getUnrecognizedScanImeHint,
@@ -20,6 +21,7 @@ import {
   formatWeightKg,
 } from '../../utils/scanWeightCheck';
 import { extractWeightFromCaptureText, looksLikeScanPollutedInput } from '../../utils/parseScaleInput';
+import { createScanSubmitDedupeGate } from '../../utils/scanPassthroughInput';
 import { ScaleWeightInput, type ScaleWeightInputHandle } from './ScaleWeightInput';
 import { ScanUnitWeightSettingPopover } from './ScanUnitWeightSettingPopover';
 import { useMasterData } from '../../contexts/AppDataContext';
@@ -147,6 +149,7 @@ export function ScanBatchSessionModal({
   const sessionBatchScannedIdsRef = useRef<Set<string>>(new Set());
   const sessionItemParentBatchIdsRef = useRef<Set<string>>(new Set());
   const serialChainRef = useRef<Promise<void>>(Promise.resolve());
+  const ingestDedupeRef = useRef(createScanSubmitDedupeGate());
   const resolveRef = useRef(resolveRowPreview);
   resolveRef.current = resolveRowPreview;
 
@@ -199,8 +202,33 @@ export function ScanBatchSessionModal({
     [commitWeightKg],
   );
 
+  const refocusScaleCapture = useCallback(() => {
+    if (!enableWeightCheck || !open) return;
+    window.setTimeout(() => {
+      if (document.activeElement?.closest('[data-scan-manual-input]')) return;
+      scaleCaptureRef.current?.focus();
+    }, 80);
+  }, [enableWeightCheck, open]);
+
+  const ingestRawRef = useRef<(raw: string) => void>(() => {});
+
+  const { handleValue: handleScanPassthroughFromScale, flush: flushScanPassthroughFromScale } =
+    useScanPassthroughInputSubmit(raw => ingestRawRef.current(raw), {
+      onUnrecognized: () => {
+        clearScaleCapture();
+        refocusScaleCapture();
+      },
+    });
+
   const handleScaleCaptureInput = useCallback(
     (raw: string) => {
+      if (handleScanPassthroughFromScale(raw, () => scaleCaptureRef.current?.getRaw() ?? raw)) {
+        if (looksLikeScanPollutedInput(raw)) {
+          setScaleCaptureRaw(raw);
+        }
+        return;
+      }
+
       applyScaleCaptureRaw(raw);
       if (scaleIdleTimerRef.current) clearTimeout(scaleIdleTimerRef.current);
       scaleIdleTimerRef.current = setTimeout(() => {
@@ -209,16 +237,20 @@ export function ScanBatchSessionModal({
         if (latest !== raw) applyScaleCaptureRaw(latest);
       }, 320);
     },
-    [applyScaleCaptureRaw],
+    [applyScaleCaptureRaw, handleScanPassthroughFromScale],
   );
 
-  const refocusScaleCapture = useCallback(() => {
-    if (!enableWeightCheck || !open) return;
-    window.setTimeout(() => {
-      if (document.activeElement?.closest('[data-scan-manual-input]')) return;
-      scaleCaptureRef.current?.focus();
-    }, 80);
-  }, [enableWeightCheck, open]);
+  const handleScaleCaptureSubmit = useCallback(
+    (raw: string) => {
+      // Enter（扫码枪结束符）：若是扫码串立即提交；否则当作秤重读取
+      if (flushScanPassthroughFromScale(raw)) {
+        if (looksLikeScanPollutedInput(raw)) setScaleCaptureRaw(raw);
+        return;
+      }
+      applyScaleCaptureRaw(raw);
+    },
+    [applyScaleCaptureRaw, flushScanPassthroughFromScale],
+  );
 
   useEffect(() => {
     if (!open || !enableWeightCheck) return;
@@ -309,6 +341,10 @@ export function ScanBatchSessionModal({
 
   const ingestRaw = useCallback(
     (raw: string) => {
+      const trimmed = String(raw ?? '').trim();
+      if (ingestDedupeRef.current.shouldSkip(trimmed)) return;
+      ingestDedupeRef.current.mark(trimmed);
+
       if (scanDisabled) {
         if (scanDisabledHint) toast.warning(scanDisabledHint);
         playScanErrorSound();
@@ -354,7 +390,7 @@ export function ScanBatchSessionModal({
 
             const key = rowKey(payload);
             if (keysRef.current.has(key)) {
-              toast.warning('该码已在列表中');
+              toast.warning('该码已在列表中', { id: `scan-batch-dup-${key}` });
               playScanErrorSound();
               return;
             }
@@ -430,13 +466,12 @@ export function ScanBatchSessionModal({
     [pushRow, showScanIntentToggle, scanIntent, scanDisabled, scanDisabledHint, enableWeightCheck, snapshotWeightKg, enrichDetailWithWeight, refocusScaleCapture, clearScaleCapture],
   );
 
+  useEffect(() => {
+    ingestRawRef.current = ingestRaw;
+  }, [ingestRaw]);
+
   useScanGun({
     active: open && !enableWeightCheck,
-    onScan: ingestRaw,
-  });
-
-  useScanGunParallel({
-    active: open && enableWeightCheck,
     onScan: ingestRaw,
   });
 
@@ -542,6 +577,7 @@ export function ScanBatchSessionModal({
               ref={scaleCaptureRef}
               weightKg={currentWeightKg}
               onCaptureInput={handleScaleCaptureInput}
+              onCaptureSubmit={handleScaleCaptureSubmit}
               onCaptureBlur={refocusScaleCapture}
             />
           </div>

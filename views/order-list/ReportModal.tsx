@@ -141,9 +141,14 @@ const ReportModal: React.FC<ReportModalProps> = ({
     () => !!globalNodes.find(n => n.id === reportModal.milestone.templateId)?.enableWeightOnReport,
     [globalNodes, reportModal.milestone.templateId],
   );
+  const scanWeighingEnabled = useMemo(
+    () => !!globalNodes.find(n => n.id === reportModal.milestone.templateId)?.enableScanWeighing,
+    [globalNodes, reportModal.milestone.templateId],
+  );
 
   const { scanEnabled, weightEnabled } = useTraceabilityPlugin();
-  const scanWeightCheckEnabled = weightReportEnabled && weightEnabled;
+  // 秤框/称重比对由工序「扫码称重」开关控制；「报工时记录重量」只决定是否把实测重量写入报工表单
+  const scanWeightCheckEnabled = scanWeighingEnabled && weightEnabled;
 
   const getUnitWeightKg = useCallback(
     (productId: string, variantId: string, nodeId: string) =>

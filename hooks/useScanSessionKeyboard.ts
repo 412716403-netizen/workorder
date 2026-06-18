@@ -70,6 +70,7 @@ export function useScanSessionKeyboard(params: {
 
     const handler = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
+      if (e.isComposing) return;
       const target = e.target as HTMLElement | null;
       if (target?.closest('[data-scan-manual-input]')) return;
 

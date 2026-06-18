@@ -37,6 +37,7 @@ import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, BOM
 import { sortVariantsByColorThenSize } from '../../utils/sortVariantsByProduct';
 import BomVariantMatrix from '../../components/product/BomVariantMatrix';
 import { VariantNodeWeightSettingTrigger } from './VariantNodeWeightSection';
+import { getProductScanWeighingNodes } from '../../utils/variantNodeUnitWeight';
 import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
 import { productColorSizeEnabled, validateProductColorSizeSelection } from '../../utils/productColorSize';
 import { bomHasConfiguredItems } from '../../utils/bomEffective';
@@ -1181,6 +1182,7 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
 
   const nodeIds = (workingProduct.milestoneNodeIds as string[]);
   const selectedNodesOrdered = nodeIds.map(id => globalNodes.find(gn => gn.id === id)).filter(Boolean) as GlobalNodeTemplate[];
+  const scanWeighingNodes = getProductScanWeighingNodes(nodeIds, globalNodes);
   const enabledBOMNodes = selectedNodesOrdered.filter(n => n.hasBOM);
 
   const singleSkuVariantId = `single-${workingProduct.id}`;
@@ -1256,10 +1258,10 @@ const ProductEditForm: React.FC<ProductEditFormProps> = ({
                 <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600 shrink-0"><ClipboardCheck className="w-4 h-4" /></div>
                 <h3 className={sectionTitleClass}>2. 生产工序与工艺 BOM</h3>
               </div>
-              {weightEnabled ? (
+              {weightEnabled && scanWeighingNodes.length > 0 ? (
               <VariantNodeWeightSettingTrigger
                 product={workingProduct}
-                nodes={selectedNodesOrdered}
+                nodes={scanWeighingNodes}
                 dictionaries={dictionaries}
                 onChange={variants => setWorkingProduct({ ...workingProduct, variants })}
                 overlayClassName={embeddedInQuickCreateModal ? nestedOverlayZ : 'z-[110]'}

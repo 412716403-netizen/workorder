@@ -39,6 +39,8 @@ const tenantUpdateSchema = z
     equipmentModuleEnabled: z.boolean().optional(),
     /** 行业类型：与 `shared/types` 中 `TenantIndustryKind` 一致 */
     industryKind: z.enum(['generic', 'sweater_factory']).optional(),
+    /** 生产关联模式：与 `shared/types` 中 `ProductionLinkMode` 一致 */
+    productionLinkMode: z.enum(['order', 'product']).optional(),
   })
   .refine((b) => Object.keys(b).length > 0, { message: '至少提供一项要修改的字段' });
 

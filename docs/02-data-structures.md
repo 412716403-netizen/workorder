@@ -329,6 +329,11 @@ interface ProductionOpRecord {
 - `StockMaterialPanel` 的"报工耗材"列会在对应工序开启后改用 `actualWeight` 汇总，从而让"结余"列天然体现真实物料损耗/结余。
 - 详细业务规则见 [01-business-rules.md §5.4](./01-business-rules.md)。
 
+**扫码称重（`GlobalNodeTemplate.enableScanWeighing`）**：
+- 工序级开关，独立于 `enableWeightOnReport`。开启后（且追溯码插件开启），报工 / 返工 / 外协收货的扫码会话顶部显示电子秤捕获框，并按「单件标准重量 × 数量」与实测重量做理论/实测比对（超容差仅告警，不拦截）。
+- **本身不落库重量**：只负责秤框与比对。若该工序**同时**开启 `enableWeightOnReport`，扫码会话累计实测总重会自动同步到报工 / 返工 / 收货表单的交货重量字段（仍可手改），最终由 `enableWeightOnReport` 链路写入 `weight` + `materialBreakdown`。
+- 存量迁移：原 `enableWeightOnReport=true` 的工序回填 `enableScanWeighing=true`，保留上线前行为。
+
 ---
 
 ## 9. 产品工序进度 (ProductMilestoneProgress)

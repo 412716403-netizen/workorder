@@ -42,6 +42,7 @@ const NodesTab: React.FC<NodesTabProps> = ({
 }) => {
   const equipmentFeaturesOn = useEquipmentFeaturesEffective();
   const { isPluginEnabled } = useFeaturePlugins();
+  const scanWeighingAvailable = isPluginEnabled('traceability');
   const displayAllowedTypes: CustomDocFieldType[] = isPluginEnabled('knowledge_base')
     ? ['text', 'file', 'knowledge']
     : ['text', 'file'];
@@ -298,6 +299,20 @@ const NodesTab: React.FC<NodesTabProps> = ({
                                 </div>
                                 <p className="text-[10px] text-slate-400 font-medium">开启后，本工序报工/外协收回时需录入本次交货重量（kg），并按 BOM 子料用量自动分摊为各子物料实际消耗，替代"件数×BOM"的理论口径，用于计算物料损耗。</p>
                              </div>
+                             {scanWeighingAvailable && (
+                             <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                                <div className="flex items-center justify-between mb-2">
+                                   <div className="flex items-center gap-2">
+                                     <Scale className="w-4 h-4 text-indigo-400" />
+                                     <span className="text-sm font-bold text-slate-800">扫码称重</span>
+                                   </div>
+                                   <button onClick={() => updateNodeConfig(node.id, { enableScanWeighing: !node.enableScanWeighing })}>
+                                     {node.enableScanWeighing ? <ToggleRight className="w-8 h-8 text-indigo-600" /> : <ToggleLeft className="w-8 h-8 text-slate-300" />}
+                                   </button>
+                                </div>
+                                <p className="text-[10px] text-slate-400 font-medium">开启后，本工序在外协收货/报工/返工扫码时显示电子秤捕获框，按「单件标准重量×数量」与实测重量比对（超容差仅告警不拦截）。若同时开启「报工时记录重量」，扫码累计实测总重会自动填入报工/收货的交货重量。</p>
+                             </div>
+                             )}
                           </div>
                        </div>
 

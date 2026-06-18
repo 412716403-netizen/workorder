@@ -101,6 +101,7 @@ const PlanFormDateCustomInput: React.FC<{
       className={controlClassName}
       value={inputValue}
       step={withTime ? 60 : undefined}
+      autoComplete="off"
       onChange={e => onChange(e.target.value)}
     />
   );
@@ -206,6 +207,7 @@ export const PlanFormCustomFieldInput: React.FC<PlanFormCustomFieldInputProps> =
       type="text"
       className={controlClassName}
       value={strVal}
+      autoComplete="off"
       onChange={e => onChange(e.target.value)}
       placeholder={cf.label}
     />

@@ -1,4 +1,14 @@
-import type { Product, ProductVariant } from '../types';
+import type { GlobalNodeTemplate, Product, ProductVariant } from '../types';
+
+/** 按产品标准路线顺序，取已开启「扫码称重」的工序 */
+export function getProductScanWeighingNodes(
+  milestoneNodeIds: string[],
+  globalNodes: GlobalNodeTemplate[],
+): GlobalNodeTemplate[] {
+  return milestoneNodeIds
+    .map(id => globalNodes.find(n => n.id === id))
+    .filter((n): n is GlobalNodeTemplate => !!n && !!n.enableScanWeighing);
+}
 
 /** 从产品档案读取规格×工序单件标准重量(kg) */
 export function getVariantNodeUnitWeightKg(

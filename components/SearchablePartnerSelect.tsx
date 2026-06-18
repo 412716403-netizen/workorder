@@ -229,7 +229,9 @@ export function SearchablePartnerSelect({
           />
           <input
             autoFocus
-            type="text"
+            type="search"
+            name="partner-filter-q"
+            autoComplete="off"
             className={searchInputCls}
             placeholder="搜索单位名称、联系人..."
             value={search}
@@ -405,6 +407,7 @@ export function SearchablePartnerSelect({
               aria-modal="true"
               aria-labelledby="partner-quick-create-title"
             >
+            <form autoComplete="off" onSubmit={e => e.preventDefault()}>
               <h4 id="partner-quick-create-title" className="text-sm font-black text-slate-900">
                 快捷新建合作单位
               </h4>
@@ -413,9 +416,14 @@ export function SearchablePartnerSelect({
               </p>
               <div className="mt-4 space-y-3">
                 <div>
-                  <label className={`${psiOrderBillCompactLineLabelClass} mb-1.5`}>单位名称</label>
+                  <label className={`${psiOrderBillCompactLineLabelClass} mb-1.5`} htmlFor="partner-quick-create-name">
+                    单位名称
+                  </label>
                   <input
+                    id="partner-quick-create-name"
                     type="text"
+                    name="organization"
+                    autoComplete="organization"
                     className={psiOrderBillCompactLineInputClass}
                     placeholder="请输入单位名称"
                     value={quickName}
@@ -424,8 +432,13 @@ export function SearchablePartnerSelect({
                   />
                 </div>
                 <div>
-                  <label className={`${psiOrderBillCompactLineLabelClass} mb-1.5`}>合作单位分类</label>
+                  <label className={`${psiOrderBillCompactLineLabelClass} mb-1.5`} htmlFor="partner-quick-create-category">
+                    合作单位分类
+                  </label>
                   <select
+                    id="partner-quick-create-category"
+                    name="partner-category"
+                    autoComplete="off"
                     className={`${psiOrderBillCompactLineInputClass} cursor-pointer`}
                     value={quickFormCategoryId}
                     onChange={e => setQuickFormCategoryId(e.target.value)}
@@ -449,7 +462,7 @@ export function SearchablePartnerSelect({
                   取消
                 </button>
                 <button
-                  type="button"
+                  type="submit"
                   disabled={quickSubmitting}
                   onClick={async () => {
                     const name = quickName.trim();
@@ -498,6 +511,7 @@ export function SearchablePartnerSelect({
                   {quickSubmitting ? '保存中…' : '保存并选用'}
                 </button>
               </div>
+            </form>
             </div>
           </div>,
           document.body,

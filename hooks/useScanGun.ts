@@ -1,5 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { isRecognizableScanPayload } from '../utils/scanPayload';
+import {
+  isScanCaptureCompositionTarget,
+  notifyScanImeCompositionStart,
+} from '../utils/scanPassthroughInput';
 
 /** 扫码枪连打结束后无 Enter 时，停顿多久自动提交（ms）；0 表示禁用 */
 export const DEFAULT_SCAN_IDLE_MS = 100;
@@ -54,6 +58,7 @@ function installScanGunKeydownListener(options: {
 
   const handler = (e: KeyboardEvent) => {
     if (e.defaultPrevented) return;
+    if (e.isComposing) return;
     if (!shouldHandleEvent(e)) return;
 
     const now = performance.now();
@@ -102,6 +107,16 @@ function installScanGunKeydownListener(options: {
   };
 }
 
+function installScanCaptureCompositionListener(): () => void {
+  const onCompositionStart = (e: CompositionEvent) => {
+    if (isScanCaptureCompositionTarget(e.target)) {
+      notifyScanImeCompositionStart();
+    }
+  };
+  window.addEventListener('compositionstart', onCompositionStart, true);
+  return () => window.removeEventListener('compositionstart', onCompositionStart, true);
+}
+
 /**
  * 扫码枪监听 hook。
  *
@@ -127,7 +142,8 @@ export function useScanGun(params: UseScanGunParams): void {
   useEffect(() => {
     if (!active) return;
 
-    return installScanGunKeydownListener({
+    const removeComposition = installScanCaptureCompositionListener();
+    const removeKeydown = installScanGunKeydownListener({
       minLength,
       fastIntervalMs,
       scanIdleMs,
@@ -136,7 +152,12 @@ export function useScanGun(params: UseScanGunParams): void {
       shouldHandleEvent: e => {
         const target = e.target;
         if (target instanceof HTMLElement) {
-          if (target.closest('[data-scan-manual-input], [data-scale-capture-input]')) return false;
+          // 秤框 / passthrough 输入框由 input 事件 + useScanPassthroughInputSubmit 处理，避免与 keydown 双提交
+          if (
+            target.closest('[data-scan-manual-input], [data-scale-capture-input], [data-scan-gun-passthrough]')
+          ) {
+            return false;
+          }
 
           const tag = target.tagName;
           const isEditable =
@@ -144,56 +165,24 @@ export function useScanGun(params: UseScanGunParams): void {
             tag === 'TEXTAREA' ||
             tag === 'SELECT' ||
             target.isContentEditable;
-          if (isEditable && !target.hasAttribute('data-scan-gun-passthrough')) {
+          if (isEditable) {
             return false;
           }
         }
         return true;
       },
     });
+    return () => {
+      removeComposition();
+      removeKeydown();
+    };
   }, [active, minLength, fastIntervalMs, scanIdleMs]);
 }
 
 /**
- * 与 HID 秤并存：绝不拦截可打印字符（秤可完整写入输入框），
- * 在检测到快速扫码序列 + Enter（或 idle 停顿）时触发 onScan。
- * 用于 `[data-scale-capture-input]` 获焦时的报工称重场景。
+ * @deprecated 称重场景改由 `[data-scale-capture-input]` 的 input 事件 + `useScanPassthroughInputSubmit` 提交。
+ * 与 keydown 并行监听会导致同一扫码多次触发 onScan。保留空实现以免旧引用报错。
  */
-export function useScanGunParallel(params: UseScanGunParams): void {
-  const {
-    active,
-    onScan,
-    minLength = 6,
-    fastIntervalMs = 35,
-    scanIdleMs = DEFAULT_SCAN_IDLE_MS,
-  } = params;
-
-  const onScanRef = useRef(onScan);
-
-  useEffect(() => {
-    onScanRef.current = onScan;
-  }, [onScan]);
-
-  useEffect(() => {
-    if (!active) return;
-
-    return installScanGunKeydownListener({
-      minLength,
-      fastIntervalMs,
-      scanIdleMs,
-      gapClearsBuffer: 'gte',
-      onScan: value => onScanRef.current(value),
-      shouldHandleEvent: e => {
-        const target = e.target;
-        if (
-          target instanceof HTMLElement &&
-          target.closest('[data-scan-manual-input]') &&
-          !target.closest('[data-scale-capture-input]')
-        ) {
-          return false;
-        }
-        return true;
-      },
-    });
-  }, [active, minLength, fastIntervalMs, scanIdleMs]);
+export function useScanGunParallel(_params: UseScanGunParams): void {
+  /* no-op */
 }

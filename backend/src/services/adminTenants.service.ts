@@ -2,13 +2,21 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { seedTenantIndustryPresetForKind } from '../lib/tenantIndustryPresets.js';
-import { normalizeTenantIndustryKind, type TenantIndustryKind } from '../../../shared/types.js';
+import {
+  normalizeTenantIndustryKind,
+  normalizeProductionLinkMode,
+  type ProductionLinkMode,
+  type TenantIndustryKind,
+} from '../../../shared/types.js';
+import * as settingsService from './settings.service.js';
+import { tenantHasProductionActivity } from '../utils/tenantProductionActivity.js';
 
 export type AdminTenantUpdateBody = {
   expiresAt?: string | null;
   status?: 'active' | 'rejected' | 'pending';
   equipmentModuleEnabled?: boolean;
   industryKind?: string;
+  productionLinkMode?: ProductionLinkMode;
 };
 
 export type AdminTenantUpdateResult = {
@@ -19,8 +27,14 @@ export type AdminTenantUpdateResult = {
   equipmentFeaturesEnabled: boolean;
   industryKind: TenantIndustryKind;
   industryPresetAppliedAt: string | null;
+  productionLinkMode: ProductionLinkMode;
+  productionLinkModeLocked: boolean;
   presetSkippedReason?: string;
 };
+
+export async function getTenantProductionLinkModeLocked(tenantId: string): Promise<boolean> {
+  return tenantHasProductionActivity(tenantId);
+}
 
 export async function updatePlatformTenant(
   tenantId: string,
@@ -38,6 +52,22 @@ export async function updatePlatformTenant(
   }
   if (body.equipmentModuleEnabled !== undefined && typeof body.equipmentModuleEnabled !== 'boolean') {
     throw new AppError(400, 'equipmentModuleEnabled 须为布尔值');
+  }
+
+  const activating = body.status === 'active' && existing.status === 'pending';
+  if (activating && body.productionLinkMode === undefined) {
+    throw new AppError(400, '审核通过时必须选择生产关联模式');
+  }
+
+  let nextProductionLinkMode: ProductionLinkMode = normalizeProductionLinkMode(existing.productionLinkMode);
+  if (body.productionLinkMode !== undefined) {
+    nextProductionLinkMode = normalizeProductionLinkMode(body.productionLinkMode);
+    if (nextProductionLinkMode !== normalizeProductionLinkMode(existing.productionLinkMode)) {
+      const locked = await tenantHasProductionActivity(tenantId);
+      if (locked) {
+        throw new AppError(409, '该企业已有生产数据，生产关联模式不可变更');
+      }
+    }
   }
 
   let presetSkippedReason: string | undefined;
@@ -85,6 +115,9 @@ export async function updatePlatformTenant(
     if (body.industryKind !== undefined) {
       updateData.industryKind = nextIndustryKind;
     }
+    if (body.productionLinkMode !== undefined || activating) {
+      updateData.productionLinkMode = nextProductionLinkMode;
+    }
     if (shouldSeed) {
       updateData.industryPresetAppliedAt = new Date();
       updateData.industryKind = nextIndustryKind;
@@ -106,6 +139,12 @@ export async function updatePlatformTenant(
     return { tenant: updated };
   });
 
+  if (body.productionLinkMode !== undefined || activating) {
+    await settingsService.updateConfig(tenantId, 'productionLinkMode', nextProductionLinkMode);
+  }
+
+  const productionLinkModeLocked = await tenantHasProductionActivity(tenantId);
+
   return {
     id: t.id,
     name: t.name,
@@ -114,6 +153,8 @@ export async function updatePlatformTenant(
     equipmentFeaturesEnabled: t.equipmentModuleEnabled !== false,
     industryKind: normalizeTenantIndustryKind(t.industryKind),
     industryPresetAppliedAt: t.industryPresetAppliedAt?.toISOString() ?? null,
+    productionLinkMode: normalizeProductionLinkMode(t.productionLinkMode),
+    productionLinkModeLocked,
     ...(presetSkippedReason ? { presetSkippedReason } : {}),
   };
 }

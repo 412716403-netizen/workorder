@@ -1,7 +1,9 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScanLine, Camera, Keyboard } from 'lucide-react';
 import { useScanGun } from '../../hooks/useScanGun';
+import { useScanPassthroughInputSubmit } from '../../hooks/useScanPassthroughInputSubmit';
 import { formatScanRecentChipText, parseScanPayload, type ScanPayload } from '../../utils/scanPayload';
+import { notifyScanImeCompositionStart } from '../../utils/scanPassthroughInput';
 import { playScanErrorSound, playScanSuccessSound } from '../../utils/scanFeedbackSound';
 import { CameraScannerModal } from './CameraScannerModal';
 import { formStandardLabelClass } from '../../styles/uiDensity';
@@ -30,6 +32,7 @@ export function ScanPanel({
 }) {
   const [active, setActive] = useState(autoActivate);
   const [manual, setManual] = useState('');
+  const manualRef = useRef('');
   const [cameraOpen, setCameraOpen] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
 
@@ -45,6 +48,34 @@ export function ScanPanel({
       onScan(payload);
     },
     [onScan, suppressDispatchSounds],
+  );
+
+  const { handleValue: handlePassthroughScan, cancel: cancelPassthroughScan } =
+    useScanPassthroughInputSubmit(
+      raw => {
+        dispatch(raw);
+        setManual('');
+        manualRef.current = '';
+      },
+      {
+        onUnrecognized: () => {
+          setManual('');
+          manualRef.current = '';
+        },
+      },
+    );
+
+  // 显式提交（Enter / 查询）：先取消流式防抖，避免随后误触发重复 dispatch
+  const submitManual = useCallback(
+    (raw: string) => {
+      cancelPassthroughScan();
+      const v = raw.trim();
+      if (!v) return;
+      dispatch(v);
+      setManual('');
+      manualRef.current = '';
+    },
+    [cancelPassthroughScan, dispatch],
   );
 
   useScanGun({ active: active && (!showCameraButton || !cameraOpen), onScan: dispatch });
@@ -90,11 +121,16 @@ export function ScanPanel({
         <input
           type="text"
           value={manual}
-          onChange={e => setManual(e.target.value)}
+          onChange={e => {
+            const v = e.target.value;
+            setManual(v);
+            manualRef.current = v;
+            handlePassthroughScan(v, () => manualRef.current);
+          }}
+          onCompositionStart={() => notifyScanImeCompositionStart()}
           onKeyDown={e => {
             if (e.key === 'Enter' && manual.trim()) {
-              dispatch(manual.trim());
-              setManual('');
+              submitManual(manual);
             }
           }}
           placeholder="粘贴 URL 或 token，按回车"
@@ -103,12 +139,7 @@ export function ScanPanel({
         />
         <button
           type="button"
-          onClick={() => {
-            if (manual.trim()) {
-              dispatch(manual.trim());
-              setManual('');
-            }
-          }}
+          onClick={() => submitManual(manual)}
           disabled={!manual.trim()}
           className="px-4 h-10 rounded-xl text-sm font-bold bg-indigo-600 text-white disabled:opacity-40"
         >

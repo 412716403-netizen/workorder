@@ -495,11 +495,19 @@
 
 ### 5.4.3 扫码称重校验（电子秤 + 标准重量）
 
-**插件开关**：以上扫码累加、追溯码生成/查询、以及本节称重能力均依赖租户插件 **`traceability`（追溯码）**。插件中心关闭后：侧栏/快捷「扫码追溯」、计划详情追溯码区块、报工/外协/返工/待入库扫码按钮、工序「报工时记录重量」、单件标准重量与容差设置等 UI 均不可用（存量租户在插件上线前未写入 `featurePlugins.traceability` 键时视为已开启；新建租户默认关闭）。
+**插件开关**：以上扫码累加、追溯码生成/查询、以及本节称重能力均依赖租户插件 **`traceability`（追溯码）**。插件中心关闭后：侧栏/快捷「扫码追溯」、计划详情追溯码区块、报工/外协/返工/待入库扫码按钮、工序「报工时记录重量」「扫码称重」、单件标准重量与容差设置等 UI 均不可用（存量租户在插件上线前未写入 `featurePlugins.traceability` 键时视为已开启；新建租户默认关闭）。
 
-**适用入口**：工序报工、外协收货扫码、返工报工批量扫码会话（**不含**待入库扫码；待入库扫码亦受追溯码插件总开关控制）。
+**工序级开关（两个，互相独立）**：
 
-**标准重量维护**：产品档案 → 编辑产品 → 点击「设置单件标准重量」打开弹窗，按 **规格 × 工序** 录入 kg；数据存 `product_variants.node_unit_weights`（JSON）。弹窗矩阵输入框右侧「均 X kg」为历史外协收货单件重量均值（Σ交货重÷Σ收货件数，仅统计已落库的 `OUTSOURCE` 已收回且含重量记录）。
+- **`enableScanWeighing`（扫码称重）**：控制扫码会话是否出现**电子秤捕获框 + 理论/实测比对**。**本身不落库重量**。
+- **`enableWeightOnReport`（报工时记录重量）**：控制报工/收货表单是否有**交货重量字段**，并按 BOM 占比把重量写入 `weight` + `materialBreakdown`。
+- **两者同开**：扫码称到的累计实测总重自动同步到报工/返工/收货表单的交货重量字段（仍可手改）。
+- **仅开扫码称重**：现场称重比对，但重量不进表单、不落库（适合只想核对、不做物料损耗核算的收货场景）。
+- 存量迁移：原 `enableWeightOnReport=true` 的工序回填 `enableScanWeighing=true`，保留上线前行为。
+
+**适用入口**：工序报工、外协收货扫码、返工报工批量扫码会话（**不含**待入库扫码；待入库扫码亦受追溯码插件总开关控制）。外协收货扫码弹窗在首扫前未锁定工序，按「待收回行涉及的工序中是否有开启扫码称重」决定是否显示秤框。
+
+**标准重量维护**：产品档案 → 编辑产品 → 点击「设置单件标准重量」打开弹窗，按 **规格 × 已开启扫码称重的工序** 录入 kg（若标准路线中无一工序开启扫码称重，则不显示该按钮）；数据存 `product_variants.node_unit_weights`（JSON）。弹窗矩阵输入框右侧「均 X kg」为历史外协收货单件重量均值（Σ交货重÷Σ收货件数，仅统计已落库的 `OUTSOURCE` 已收回且含重量记录）。
 
 **容差**：租户级 `SystemSetting.weightTolerancePercent`（默认 5），在「设置 → 生产业务配置 → 数量上限」区块维护。
 
@@ -510,7 +518,7 @@
 2. 每次扫码成功时快照当前秤读数；期望重量 = `nodeUnitWeights[nodeId] × 扫码数量`（批次码数量取 `PlanVirtualBatch.quantity`，单品码为 1）。
 3. 扫码列表每行**同一行**展示理论重量与实测重量（`理论 X kg · 实测 Y kg`）；未维护理论重量时显示「未设置」。有 `basic:products:edit` 权限时，行内**设置**按钮打开弹窗，维护该产品**全部规格 × 工序**的单件标准重量矩阵（与产品档案编辑页一致，写回 `nodeUnitWeights`）。
 4. 偏差超过容差 → 列表行标红 + toast 告警 + 错误提示音；**不强制拦截**，用户仍可确认应用。
-5. 实测重量**不落库**；若当前工序开启 `enableWeightOnReport`，报工扫码确认后会把会话累计实测总重自动填入报工表单的「交货总重」字段（用户可改）。
+5. 实测重量**不落库**；若当前工序**同时**开启 `enableWeightOnReport`，报工扫码确认后会把会话累计实测总重自动填入报工表单的「交货总重」字段（用户可改）。仅开 `enableScanWeighing` 时只做现场比对，不写入表单。
 
 **实现锚点**：[`hooks/useScanSessionKeyboard.ts`](../hooks/useScanSessionKeyboard.ts)、[`utils/scanSessionKeyboardLogic.ts`](../utils/scanSessionKeyboardLogic.ts)、[`components/scan/ScaleWeightInput.tsx`](../components/scan/ScaleWeightInput.tsx)、[`components/scan/ScanBatchSessionModal.tsx`](../components/scan/ScanBatchSessionModal.tsx)、[`components/scan/ScanUnitWeightSettingPopover.tsx`](../components/scan/ScanUnitWeightSettingPopover.tsx)、[`utils/scanWeightCheck.ts`](../utils/scanWeightCheck.ts)。
 

@@ -176,7 +176,12 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
     () => !!globalNodes.find(n => n.id === currentNodeId)?.enableWeightOnReport,
     [globalNodes, currentNodeId],
   );
-  const scanWeightCheckEnabled = weightReportEnabled && weightEnabled;
+  const scanWeighingEnabled = useMemo(
+    () => !!globalNodes.find(n => n.id === currentNodeId)?.enableScanWeighing,
+    [globalNodes, currentNodeId],
+  );
+  // 秤框/称重比对由「扫码称重」控制；实测总重仅在「报工时记录重量」也开启时同步到返工表单
+  const scanWeightCheckEnabled = scanWeighingEnabled && weightEnabled;
 
   const reworkRemainingAtNode = (r: ProductionOpRecord, nodeId: string): number => {
     const pathNodes = (r.reworkNodeIds && r.reworkNodeIds.length > 0) ? r.reworkNodeIds : (r.nodeId ? [r.nodeId] : []);
@@ -536,12 +541,13 @@ const ReworkReportSubmitModal: React.FC<ReworkReportSubmitModalProps> = ({
       for (const p of payloads) {
         if (!(await applyReworkScanPayload(p))) return false;
       }
-      if (scanWeightCheckEnabled && meta && meta.totalMeasuredWeightKg > 0) {
+      // 仅当工序同时开启「报工时记录重量」时，把扫码实测总重同步到返工表单交货重量
+      if (weightReportEnabled && scanWeightCheckEnabled && meta && meta.totalMeasuredWeightKg > 0) {
         setReworkReportWeight(meta.totalMeasuredWeightKg);
       }
       return true;
     },
-    [applyReworkScanPayload, scanWeightCheckEnabled],
+    [applyReworkScanPayload, weightReportEnabled, scanWeightCheckEnabled],
   );
 
   const handleSubmit = async () => {

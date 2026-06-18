@@ -1,11 +1,16 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Scale } from 'lucide-react';
 import { formatWeightKg } from '../../utils/scanWeightCheck';
+import { notifyScanImeCompositionStart } from '../../utils/scanPassthroughInput';
 
 export interface ScaleWeightInputProps {
   weightKg: number | null;
   onCaptureInput: (raw: string) => void;
+  /** Enter（扫码枪结束符）按下时回调；用于立即提交，不等防抖 */
+  onCaptureSubmit?: (raw: string) => void;
   onCaptureBlur?: () => void;
+  /** 中文输入法开始组字时回调（用于提示切换英文半角后再扫码） */
+  onImeCompositionStart?: () => void;
 }
 
 export interface ScaleWeightInputHandle {
@@ -19,10 +24,17 @@ export interface ScaleWeightInputHandle {
  * 标记 data-scan-manual-input，扫码 hook 不拦截按键。
  */
 export const ScaleWeightInput = forwardRef<ScaleWeightInputHandle, ScaleWeightInputProps>(
-  function ScaleWeightInput({ weightKg, onCaptureInput, onCaptureBlur }, ref) {
+  function ScaleWeightInput(
+    { weightKg, onCaptureInput, onCaptureSubmit, onCaptureBlur, onImeCompositionStart },
+    ref,
+  ) {
     const inputRef = useRef<HTMLInputElement>(null);
     const onCaptureRef = useRef(onCaptureInput);
     onCaptureRef.current = onCaptureInput;
+    const onCaptureSubmitRef = useRef(onCaptureSubmit);
+    onCaptureSubmitRef.current = onCaptureSubmit;
+    const onImeCompositionStartRef = useRef(onImeCompositionStart);
+    onImeCompositionStartRef.current = onImeCompositionStart;
 
     useImperativeHandle(ref, () => ({
       clear: () => {
@@ -65,10 +77,15 @@ export const ScaleWeightInput = forwardRef<ScaleWeightInputHandle, ScaleWeightIn
               ref={inputRef}
               type="text"
               defaultValue=""
+              onCompositionStart={() =>
+                onImeCompositionStartRef.current?.() ?? notifyScanImeCompositionStart()
+              }
               onKeyDown={e => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  onCaptureRef.current(e.currentTarget.value);
+                  const v = e.currentTarget.value;
+                  if (onCaptureSubmitRef.current) onCaptureSubmitRef.current(v);
+                  else onCaptureRef.current(v);
                 }
               }}
               onBlur={onCaptureBlur}
