@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import * as ctrl from '../controllers/settings.controller.js';
-import { requireSubPermission } from '../middleware/tenant.js';
+import { requireSubPermission, requireTenantConfigEdit, requireTenantConfigRead } from '../middleware/tenant.js';
 import { validate } from '../middleware/validate.js';
 
 const router = Router();
@@ -55,7 +55,7 @@ router.put('/finance-account-types/:id',  requireSubPermission('settings:finance
 router.delete('/finance-account-types/:id', requireSubPermission('settings:finance_account_types:delete'), ctrl.deleteFinanceAccountType);
 
 // 系统配置
-router.get('/config',      requireSubPermission('settings:config:view'), ctrl.getConfig);
-router.put('/config/:key', requireSubPermission('settings:config:edit'), validate(updateConfigSchema), ctrl.updateConfig);
+router.get('/config',      requireTenantConfigRead(), ctrl.getConfig);
+router.put('/config/:key', requireTenantConfigEdit(), validate(updateConfigSchema), ctrl.updateConfig);
 
 export default router;

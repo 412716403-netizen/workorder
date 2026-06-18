@@ -143,6 +143,16 @@ export async function executeAppDataLoadCore(
   const coreFailed = coreResults.filter(r => r.status === 'rejected');
   if (coreFailed.length) console.warn(`核心数据加载: ${coreFailed.length}/${coreResults.length} 个请求失败`, coreFailed.map(r => (r as PromiseRejectedResult).reason?.message));
 
+  if (coreResults[0]?.status === 'rejected') {
+    const msg = (coreResults[0] as PromiseRejectedResult).reason?.message || '未知错误';
+    const isForbidden = /无权|403|Forbidden/i.test(msg);
+    if (isForbidden) {
+      toast.error(
+        `租户业务配置加载失败：${msg}。请在「成员管理」中为账号勾选「系统设置 → 业务配置」查看权限，或对应生产模块的「表单配置」权限；否则表单配置开关会显示为默认未勾选。`,
+      );
+    }
+  }
+
   if (coreResults[9]?.status === 'rejected') {
     const msg = (coreResults[9] as PromiseRejectedResult).reason?.message || '未知错误';
     const isForbidden = /无权|403|Forbidden/i.test(msg) || msg.includes('请先选择或创建企业');

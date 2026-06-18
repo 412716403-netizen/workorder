@@ -337,3 +337,55 @@ export function requireFinanceRecordWrite(action: 'create' | 'edit' | 'delete'):
       .catch(next);
   };
 }
+
+/**
+ * `system_settings` 中各业务表单配置 key → 生产模块「表单配置」细粒度权限。
+ * UI 入口按右侧 `production:*_form_config:allow` 控制，但持久化走 `PUT /settings/config/:key`；
+ * 若仅校验 `settings:config:*`，子账号能打开配置弹窗却读不到/写不进租户真源（前端会落默认项，保存后重开仍显示未勾选）。
+ */
+export const TENANT_CONFIG_KEY_FORM_CONFIG_ALLOW: Record<string, string> = {
+  orderFormSettings: 'production:orders_form_config:allow',
+  materialFormSettings: 'production:material_form_config:allow',
+  materialPanelSettings: 'production:material_form_config:allow',
+  outsourceFormSettings: 'production:outsource_form_config:allow',
+  reworkFormSettings: 'production:rework_form_config:allow',
+};
+
+/** 纯函数：是否可读租户 `GET /settings/config`（供单测与中间件共用）。 */
+export function canReadTenantConfig(perms: string[]): boolean {
+  if (hasSubPermission(perms, 'settings:config:view')) return true;
+  return Object.values(TENANT_CONFIG_KEY_FORM_CONFIG_ALLOW).some(p => hasSubPermission(perms, p));
+}
+
+/** 纯函数：是否可写 `PUT /settings/config/:key`（供单测与中间件共用）。 */
+export function canEditTenantConfigKey(perms: string[], key: string): boolean {
+  if (hasSubPermission(perms, 'settings:config:edit')) return true;
+  const formAllow = TENANT_CONFIG_KEY_FORM_CONFIG_ALLOW[key];
+  return formAllow ? hasSubPermission(perms, formAllow) : false;
+}
+
+/** `GET /settings/config`：系统设置业务配置查看，或持有任一生产表单配置权限。 */
+export function requireTenantConfigRead(): RequestHandler {
+  return guardAny(canReadTenantConfig);
+}
+
+/** `PUT /settings/config/:key`：系统设置业务配置编辑，或持有该 key 对应的生产表单配置权限。 */
+export function requireTenantConfigEdit(): RequestHandler {
+  return (req, res, next) => {
+    const { tenantRole } = req.user || {};
+    if (isTenantElevatedRole(tenantRole)) {
+      next();
+      return;
+    }
+    const key = typeof req.params.key === 'string' ? req.params.key : '';
+    resolvePermissions(req)
+      .then(perms => {
+        if (canEditTenantConfigKey(perms, key)) {
+          next();
+          return;
+        }
+        res.status(403).json({ error: '无权执行该操作' });
+      })
+      .catch(next);
+  };
+}
