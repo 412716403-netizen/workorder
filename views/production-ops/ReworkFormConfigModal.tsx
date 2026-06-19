@@ -12,7 +12,8 @@ import { reworkFormConfigSchema } from '../../components/form-config/schemas/rew
 interface ReworkFormConfigModalProps {
   open: boolean;
   onClose: () => void;
-  defaultTabWhenOpen?: 'fields' | 'print';
+  defaultTabWhenOpen?: 'fields' | 'print' | 'list';
+  productionLinkMode?: 'order' | 'product';
   reworkFormSettings: ReworkFormSettings;
   onUpdateReworkFormSettings: (settings: ReworkFormSettings) => void;
   printTemplates: PrintTemplate[];
@@ -27,6 +28,7 @@ const ReworkFormConfigModal: React.FC<ReworkFormConfigModalProps> = ({
   open,
   onClose,
   defaultTabWhenOpen,
+  productionLinkMode = 'order',
   reworkFormSettings,
   onUpdateReworkFormSettings,
   printTemplates,
@@ -46,6 +48,7 @@ const ReworkFormConfigModal: React.FC<ReworkFormConfigModalProps> = ({
     printTemplates={printTemplates}
     onUpdatePrintTemplates={onUpdatePrintTemplates}
     onRefreshPrintTemplates={onRefreshPrintTemplates}
+    productionLinkMode={productionLinkMode}
     plans={plans}
     orders={orders}
     products={products}

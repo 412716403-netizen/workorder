@@ -1,7 +1,8 @@
 import type { MaterialFormSettings, MaterialPanelSettings } from '../../../types';
-import { normalizeMaterialFormSettings } from '../../../contexts/AppDataContext';
+import { normalizeMaterialFormSettings, normalizeMaterialPanelSettings } from '../../../contexts/AppDataContext';
 import { DEFAULT_MATERIAL_FORM_SETTINGS, DEFAULT_MATERIAL_PANEL_SETTINGS } from '../../../types';
 import type { FormConfigSchema } from '../formConfigSchema';
+import { onlyShowNotCompletedOrderSlot } from '../onlyShowNotCompletedOrderSlot';
 
 /**
  * 生产物料配置同时管两块 settings：
@@ -31,7 +32,7 @@ export const materialFormConfigSchema: FormConfigSchema<MaterialFormConfigDraft>
     const obj = (v ?? {}) as Partial<MaterialFormConfigDraft>;
     const { __panel, ...rest } = obj;
     const form = normalizeMaterialFormSettings(rest as MaterialFormSettings | null | undefined);
-    return { ...form, __panel: __panel ?? DEFAULT_MATERIAL_PANEL_SETTINGS };
+    return { ...form, __panel: normalizeMaterialPanelSettings(__panel ?? DEFAULT_MATERIAL_PANEL_SETTINGS) };
   },
   transformOnSave: v => {
     // 写入 materialFormSettings 时剥离 panel；panel 通过 sideEffectSaves 写入 materialPanelSettings
@@ -154,6 +155,14 @@ export const materialFormConfigSchema: FormConfigSchema<MaterialFormConfigDraft>
           path: '__panel.groupByOutsourcePartner',
           defaultChecked: false,
         },
+        onlyShowNotCompletedOrderSlot(
+          'materialOnlyShowNotCompletedOrder',
+          ctx => (ctx.get('__panel') as MaterialPanelSettings | undefined)?.onlyShowNotCompletedOrder === true,
+          (ctx, checked) => {
+            const panel = (ctx.get('__panel') as MaterialPanelSettings | undefined) ?? DEFAULT_MATERIAL_PANEL_SETTINGS;
+            ctx.set('__panel', { ...panel, onlyShowNotCompletedOrder: checked });
+          },
+        ),
       ],
     },
   ],

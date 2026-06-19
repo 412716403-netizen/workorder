@@ -59,6 +59,7 @@ import {
   DEFAULT_SALES_ORDER_FORM_SETTINGS,
   normalizeDecimals,
   normalizeMaterialFormSettings,
+  normalizeMaterialPanelSettings,
   normalizeOrderFormSettings,
   normalizeOutsourceFormSettings,
   normalizePaymentFormSettings,
@@ -217,7 +218,9 @@ export async function executeAppDataLoadCore(
     const pf = (cfg.paymentFormSettings as PaymentFormSettings) ?? DEFAULT_PAYMENT_FORM_SETTINGS;
     s.setPaymentFormSettings(normalizePaymentFormSettings(pf));
   }
-  s.setMaterialPanelSettings((cfg.materialPanelSettings as MaterialPanelSettings) ?? DEFAULT_MATERIAL_PANEL_SETTINGS);
+  s.setMaterialPanelSettings(
+    normalizeMaterialPanelSettings((cfg.materialPanelSettings as MaterialPanelSettings) ?? DEFAULT_MATERIAL_PANEL_SETTINGS),
+  );
   s.setMaterialFormSettings(normalizeMaterialFormSettings((cfg.materialFormSettings as MaterialFormSettings) ?? DEFAULT_MATERIAL_FORM_SETTINGS));
   s.setOutsourceFormSettings(normalizeOutsourceFormSettings((cfg.outsourceFormSettings as OutsourceFormSettings) ?? DEFAULT_OUTSOURCE_FORM_SETTINGS));
   s.setReworkFormSettings(normalizeReworkFormSettings((cfg.reworkFormSettings as ReworkFormSettings) ?? DEFAULT_REWORK_FORM_SETTINGS));

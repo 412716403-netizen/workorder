@@ -2,9 +2,13 @@ import type { ReworkFormSettings } from '../../../types';
 import { normalizeReworkFormSettings } from '../../../contexts/AppDataContext';
 import { DEFAULT_REWORK_FORM_SETTINGS } from '../../../types';
 import type { FormConfigSchema } from '../formConfigSchema';
+import { onlyShowNotCompletedOrderSlot } from '../onlyShowNotCompletedOrderSlot';
 
 export const reworkFormConfigSchema: FormConfigSchema<ReworkFormSettings> = {
   title: '返工管理表单配置',
+  subtitle: {
+    list: '以下选项影响返工主列表与「待处理不良」的默认展示。',
+  },
   settingsKey: 'reworkFormSettings',
   defaultValue: DEFAULT_REWORK_FORM_SETTINGS,
   normalize: v => normalizeReworkFormSettings(v as ReworkFormSettings | null | undefined),
@@ -61,6 +65,19 @@ export const reworkFormConfigSchema: FormConfigSchema<ReworkFormSettings> = {
             defaultChecked: false,
           },
         },
+      ],
+    },
+    {
+      id: 'list',
+      label: '列表显示',
+      sections: [
+        onlyShowNotCompletedOrderSlot(
+          'reworkOnlyShowNotCompletedOrder',
+          ctx => ctx.get<boolean>('onlyShowNotCompletedOrder') === true,
+          (ctx, checked) => {
+            ctx.set('onlyShowNotCompletedOrder', checked);
+          },
+        ),
       ],
     },
   ],

@@ -14,11 +14,13 @@ import type {
   ReceiptFormSettings,
   PaymentFormSettings,
   MaterialFormSettings,
+  MaterialPanelSettings,
   OutsourceFormSettings,
   ReworkFormSettings,
 } from '../types';
 import {
   DEFAULT_MATERIAL_FORM_SETTINGS,
+  DEFAULT_MATERIAL_PANEL_SETTINGS,
   DEFAULT_OUTSOURCE_FORM_SETTINGS,
   DEFAULT_REWORK_FORM_SETTINGS,
 } from '../types';
@@ -291,6 +293,14 @@ export function normalizeOrderFormSettings(raw: OrderFormSettings | null | undef
   };
 }
 
+export function normalizeMaterialPanelSettings(raw: MaterialPanelSettings | null | undefined): MaterialPanelSettings {
+  const s = raw ?? DEFAULT_MATERIAL_PANEL_SETTINGS;
+  return {
+    groupByOutsourcePartner: s.groupByOutsourcePartner === true,
+    onlyShowNotCompletedOrder: s.onlyShowNotCompletedOrder === true,
+  };
+}
+
 export function normalizeMaterialFormSettings(raw: MaterialFormSettings | null | undefined): MaterialFormSettings {
   const s = raw ?? DEFAULT_MATERIAL_FORM_SETTINGS;
   const issue = normalizePlanFormFieldConfigArray(s.materialIssueCustomFields ?? []);
@@ -337,6 +347,8 @@ export function normalizeOutsourceFormSettings(raw: OutsourceFormSettings | null
     outsourceReceiveCustomFields: receive,
     showPartnerFlowDetailOnList: s.showPartnerFlowDetailOnList === true,
     showOutsourceDispatchDeliveryDate: s.showOutsourceDispatchDeliveryDate === true,
+    hideZeroPendingPartnerOnList: s.hideZeroPendingPartnerOnList === true,
+    onlyShowNotCompletedOrder: s.onlyShowNotCompletedOrder === true,
   };
   const ocp = base.outsourceCenterPrint;
   if (!ocp) {
@@ -365,6 +377,7 @@ export function normalizeReworkFormSettings(raw: ReworkFormSettings | null | und
     ...s,
     defectTreatmentCustomFields: defect,
     reworkReportCustomFields: report,
+    onlyShowNotCompletedOrder: s.onlyShowNotCompletedOrder === true,
   };
   const rcp = base.reworkCenterPrint;
   if (!rcp) {

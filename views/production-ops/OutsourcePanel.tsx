@@ -60,6 +60,7 @@ import {
   orderCreatedMs,
   productNewestOrderCreatedMs,
 } from '../../utils/orderCenterSort';
+import { shouldShowOrderInIncompleteListFilter } from '../../utils/orderDispatchListFilter';
 import { buildDefectiveReworkByOrderMilestone } from '../../utils/defectiveReworkByOrderMilestone';
 import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 import {
@@ -146,6 +147,8 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   const { currentUser, tenantCtx, userId } = useAuth();
   const docOperator = currentOperatorDisplayName(currentUser);
   const outOfSequenceTemplateIds = useMemo(() => buildOutOfSequenceTemplateIds(globalNodes), [globalNodes]);
+  const onlyShowIncompleteOrders =
+    productionLinkMode === 'order' && outsourceFormSettings.onlyShowNotCompletedOrder === true;
   const canViewMainList = hasOpsPerm(tenantRole, userPermissions, 'production:outsource_list:allow');
   const showOutsourceAmount = canViewAmount(tenantRole, userPermissions, AMOUNT_PERMISSION_KEYS.OUTSOURCE);
 
@@ -306,6 +309,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   const debouncedOutsourceSearch = useDebouncedValue(outsourceSearch, 300);
   useEffect(() => { setOutsPage(1); }, [productionLinkMode]);
   useEffect(() => { setOutsPage(1); }, [debouncedOutsourceSearch]);
+  useEffect(() => { setOutsPage(1); }, [outsourceFormSettings.onlyShowNotCompletedOrder]);
   useEffect(() => {
     if (dispatchFormModalOpen) {
       setDispatchCustomValues({});
@@ -490,6 +494,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
      * 聚合 key 是 orderId|nodeId，父子 orderId 不同，无双计风险。
      */
     orders.forEach(order => {
+      if (onlyShowIncompleteOrders && !shouldShowOrderInIncompleteListFilter(order, true)) return;
       const rawOrderTotalQty = order.items.reduce((s, i) => s + i.quantity, 0);
       const product = idx.productsById.get(order.productId);
       order.milestones.forEach(ms => {
@@ -537,7 +542,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       if (ma !== mb) return ma - mb;
       return (a.orderNumber || '').localeCompare(b.orderNumber || '');
     });
-  }, [productionLinkMode, records, orders, products, globalNodes, productMilestoneProgresses, processSequenceMode, defectiveReworkByOrderForOutsource, idx, outOfSequenceTemplateIds]);
+  }, [productionLinkMode, records, orders, products, globalNodes, productMilestoneProgresses, processSequenceMode, defectiveReworkByOrderForOutsource, idx, outOfSequenceTemplateIds, onlyShowIncompleteOrders]);
 
   /**
    * 待收回清单：跨模式全收（方案 A）。
@@ -769,10 +774,23 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
   }, [productionLinkMode, records, orders, products, globalNodes, productMilestoneProgresses, idx]);
 
   const displayOutsourceStats = useMemo(() => {
+    let base = outsourceStatsByOrder;
+    if (outsourceFormSettings.hideZeroPendingPartnerOnList === true) {
+      base = base
+        .map(item => ({ ...item, partners: item.partners.filter(p => p.pending > 0) }))
+        .filter(item => item.partners.length > 0);
+    }
+    if (onlyShowIncompleteOrders) {
+      base = base.filter(item => {
+        if (!('orderId' in item) || item.orderId == null) return true;
+        const order = idx.ordersById.get(item.orderId);
+        return order ? shouldShowOrderInIncompleteListFilter(order, true) : true;
+      });
+    }
     const q = debouncedOutsourceSearch.trim().toLowerCase();
-    if (!q) return outsourceStatsByOrder;
+    if (!q) return base;
     const isProductMode = productionLinkMode === 'product';
-    return outsourceStatsByOrder.filter(item => {
+    return base.filter(item => {
       const parts: string[] = [];
       if ('productName' in item) parts.push(String(item.productName ?? ''));
       if ('orderNumber' in item && item.orderNumber != null) parts.push(String(item.orderNumber));
@@ -793,7 +811,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       const hay = parts.join('\u0000').toLowerCase();
       return hay.includes(q);
     });
-  }, [outsourceStatsByOrder, debouncedOutsourceSearch, productionLinkMode, idx]);
+  }, [outsourceStatsByOrder, debouncedOutsourceSearch, productionLinkMode, idx, outsourceFormSettings.hideZeroPendingPartnerOnList, onlyShowIncompleteOrders]);
 
   // Phase 3.E：outsourceFlowSummaryRows 已搬入 OutsourceFlowListModal 内部，
   // 由弹窗自身按日期窗口窄拉 records + 现场聚合；panel 不再预算这份数据。
@@ -1311,7 +1329,11 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
             </div>
           ) : displayOutsourceStats.length === 0 ? (
             <div className="bg-white rounded-[32px] border border-slate-200 p-12 text-center">
-              <p className="text-slate-400 text-sm">无匹配项，请调整搜索关键词。</p>
+              <p className="text-slate-400 text-sm">
+                {outsourceFormSettings.hideZeroPendingPartnerOnList === true && !debouncedOutsourceSearch.trim()
+                  ? '暂无待收回外协（剩余均为 0）'
+                  : '无匹配项，请调整搜索关键词。'}
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-2">
@@ -1955,6 +1977,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
           open={showOutsourceConfig}
           onClose={() => setShowOutsourceConfig(false)}
           defaultTabWhenOpen={outsourceConfigDefaultTab}
+          productionLinkMode={productionLinkMode}
           outsourceFormSettings={outsourceFormSettings}
           onUpdateOutsourceFormSettings={next => {
             void onUpdateOutsourceFormSettings(next);

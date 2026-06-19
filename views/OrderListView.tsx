@@ -25,6 +25,10 @@ import {
   OrderDispatchStatus,
 } from '../types';
 import { getOrderDispatchStatusStyle } from '../utils/dispatchStatusStyle';
+import {
+  buildOrderDispatchToggleConfirmMessage,
+  ORDER_DISPATCH_STATUS_CONFIRM_TITLE,
+} from '../utils/orderDispatchStatusConfirm';
 import PlanProductDetail from './plan-order-list/PlanProductDetail';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { getRootOrderNumber, reworkRemainingAtNode } from '../utils/orderListHelpers';
@@ -33,11 +37,12 @@ import { fetchProductionByFilter } from './production-ops/sharedFlowListHelpers'
 import { orders as ordersApi, production as productionApi } from '../services/api';
 import { normalizeDecimals } from '../contexts/formSettingsDefaults';
 import OrderDetailModal from './OrderDetailModal';
+import ProductProductionDetailModal from './order-list/ProductProductionDetailModal';
 import OrderFlowView from './OrderFlowView';
 import PendingStockPanel from './order-list/PendingStockPanel';
 import MaterialIssueModal from './order-list/MaterialIssueModal';
 import ReportModal from './order-list/ReportModal';
-import ReportHistoryModal from './order-list/ReportHistoryModal';
+import ReportHistoryModal, { type ReportHistoryInitialSeed } from './order-list/ReportHistoryModal';
 import ReportBatchDetailModal from './order-list/ReportBatchDetailModal';
 import OrderFormConfigModal from './order-list/OrderFormConfigModal';
 import ReworkDetailModal from './order-list/ReworkDetailModal';
@@ -207,21 +212,31 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   const outOfSequenceTemplateIds = useMemo(() => buildOutOfSequenceTemplateIds(globalNodes), [globalNodes]);
 
   const [detailOrderId, setDetailOrderId] = useState<string | null>(initialDetailOrderId ?? null);
-  /** 是否从「工单流水」打开详情；关联产品模式下与详情弹窗联用以单工单布局展示 */
+  /** 产品模式下产品组「详情」 */
+  const [detailProductId, setDetailProductId] = useState<string | null>(null);
+  /** 是否从「工单流水」打开详情；两种模式下均启用 detailFromFlowLayout 单工单流水布局 */
   const [orderDetailFromFlow, setOrderDetailFromFlow] = useState(false);
   const openOrderDetail = useCallback((orderId: string, fromOrderFlow = false) => {
     setDetailOrderId(orderId);
     setOrderDetailFromFlow(fromOrderFlow);
+  }, []);
+  const openProductDetail = useCallback((productId: string) => {
+    setDetailProductId(productId);
   }, []);
   const closeOrderDetail = useCallback(() => {
     setDetailOrderId(null);
     setOrderDetailFromFlow(false);
     onClearDetailOrderIdFromState?.();
   }, [onClearDetailOrderIdFromState]);
+  const closeProductDetail = useCallback(() => {
+    setDetailProductId(null);
+  }, []);
   const [showOrderFlowModal, setShowOrderFlowModal] = useState(false);
   /** 从产品卡片打开工单流水时传入，用于预填搜索筛选 */
   const [orderFlowProductId, setOrderFlowProductId] = useState<string | null>(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  /** 从工单详情打开报工流水时预填筛选 */
+  const [reportHistorySeed, setReportHistorySeed] = useState<ReportHistoryInitialSeed | null>(null);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 300);
   const [currentPage, setCurrentPage] = useState(1);
@@ -770,7 +785,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
           {hasOrderPerm('production:orders_report_records:view') && (
           <button 
             type="button"
-            onClick={() => setShowHistoryModal(true)}
+            onClick={() => { setReportHistorySeed(null); setShowHistoryModal(true); }}
             className={outlineToolbarButtonClass}
           >
             <History className="w-4 h-4 shrink-0" />
@@ -851,13 +866,12 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                           */}
                           {productionLinkMode === 'order' && (() => {
                             const dispatchStyle = getOrderDispatchStatusStyle(order.dispatchStatus);
-                            const canToggle = !!onUpdateOrderDispatchStatus && hasOrderPerm('production:orders:edit');
+                            const canToggle = !!onUpdateOrderDispatchStatus && hasOrderPerm('production:orders_detail:edit');
                             const currentLabel = dispatchStyle.label;
                             const nextStatus =
                               order.dispatchStatus === OrderDispatchStatus.COMPLETED
                                 ? OrderDispatchStatus.IN_PROGRESS
                                 : OrderDispatchStatus.COMPLETED;
-                            const nextLabel = getOrderDispatchStatusStyle(nextStatus).label;
                             const badgeClass = `text-[10px] font-bold px-2 py-0.5 rounded ${dispatchStyle.className}`;
                             const tooltip = canToggle
                               ? '点击切换状态（手动覆盖后自动入库不再修改本工单）'
@@ -874,8 +888,12 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                                    *   该行为不可由 UI 撤销（如需恢复自动判定需后端重置 manual 标记）。
                                    */
                                   const ok = await confirm({
-                                    title: '切换工单完成状态',
-                                    message: `工单【${order.orderNumber}】将从「${currentLabel}」切换为「${nextLabel}」。\n切换后该工单将被标记为手动状态，后续入库（STOCK_IN）的自动推进逻辑将不再修改本工单状态。是否确认？`,
+                                    title: ORDER_DISPATCH_STATUS_CONFIRM_TITLE,
+                                    message: buildOrderDispatchToggleConfirmMessage(
+                                      order.orderNumber,
+                                      order.dispatchStatus ?? OrderDispatchStatus.IN_PROGRESS,
+                                      nextStatus,
+                                    ),
                                     confirmText: '确认切换',
                                     cancelText: '取消',
                                   });
@@ -1416,7 +1434,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
                               {hasOrderPerm('production:orders_detail:view') && (
                               <button
                                 type="button"
-                                onClick={() => { setOrderFlowProductId(block.productId); setShowOrderFlowModal(true); }}
+                                onClick={() => openProductDetail(block.productId)}
                                 className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-black rounded-xl border border-indigo-100 text-indigo-600 bg-white hover:bg-indigo-50 transition-all w-full justify-center"
                               >
                                 <FileText className="w-3.5 h-3.5" /> 详情
@@ -1567,7 +1585,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
 
       <ReportHistoryModal
         open={showHistoryModal}
-        onClose={() => { setShowHistoryModal(false); setReportDetailBatch(null); }}
+        onClose={() => { setShowHistoryModal(false); setReportDetailBatch(null); setReportHistorySeed(null); }}
         orders={orders}
         products={products}
         globalNodes={globalNodes}
@@ -1576,6 +1594,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         productMilestoneProgresses={productMilestoneProgresses}
         prodRecords={effectiveProdRecords}
         onOpenBatchDetail={(batch) => setReportDetailBatch(batch)}
+        initialSeed={reportHistorySeed}
       />
 
       {/* 待入库清单弹窗 */}
@@ -1641,11 +1660,47 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         />
       )}
 
+      <ProductProductionDetailModal
+        productId={detailProductId}
+        onClose={closeProductDetail}
+        orders={orders}
+        products={products}
+        boms={boms}
+        categories={categories}
+        dictionaries={dictionaries}
+        prodRecords={effectiveProdRecords}
+        productMilestoneProgresses={productMilestoneProgresses ?? []}
+        globalNodes={globalNodes}
+        outsourceFormSettings={outsourceFormSettings}
+        partners={partners}
+        partnerCategories={partnerCategories}
+        userPermissions={userPermissions}
+        tenantRole={tenantRole}
+        canViewReportHistory={hasOrderPerm('production:orders_report_records:view')}
+        onOpenReportHistory={(seed) => {
+          setReportHistorySeed(seed);
+          setShowHistoryModal(true);
+        }}
+        onOpenOrderDetail={
+          hasOrderPerm('production:orders_detail:view')
+            ? (id) => {
+                closeProductDetail();
+                openOrderDetail(id, true);
+              }
+            : undefined
+        }
+        onAddRecord={onAddRecord}
+        onAddRecordBatch={onAddRecordBatch}
+        onUpdateRecord={onUpdateRecord}
+        onDeleteRecord={onDeleteRecord}
+      />
+
       <OrderDetailModal
         orderId={detailOrderId}
         onClose={closeOrderDetail}
         orders={orders}
         products={products}
+        boms={boms}
         prodRecords={effectiveProdRecords}
         dictionaries={dictionaries}
         categories={categories}
@@ -1655,9 +1710,24 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         productionLinkMode={productionLinkMode}
         productMilestoneProgresses={productMilestoneProgresses}
         globalNodes={globalNodes}
-        productModeSingleOrderLayout={productionLinkMode === 'product' && orderDetailFromFlow}
+        detailFromFlowLayout={orderDetailFromFlow}
         onUpdateOrder={hasOrderPerm('production:orders_detail:edit') ? onUpdateOrder : undefined}
         onDeleteOrder={hasOrderPerm('production:orders_detail:delete') && onDeleteOrder ? (id) => { onDeleteOrder(id); closeOrderDetail(); } : undefined}
+        canViewReportHistory={hasOrderPerm('production:orders_report_records:view')}
+        onOpenReportHistory={(seed) => {
+          setReportHistorySeed(seed);
+          setShowHistoryModal(true);
+        }}
+        outsourceFormSettings={outsourceFormSettings}
+        planFormSettings={planFormSettings}
+        partners={partners}
+        partnerCategories={partnerCategories}
+        userPermissions={userPermissions}
+        tenantRole={tenantRole}
+        onAddRecord={onAddRecord}
+        onAddRecordBatch={onAddRecordBatch}
+        onUpdateRecord={onUpdateRecord}
+        onDeleteRecord={onDeleteRecord}
       />
 
       {filePreviewUrl && (

@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useCallback, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
-import { Layers, Check, ClipboardList, Truck, FileText, Clock } from 'lucide-react';
+import { Layers, Check, ClipboardList, Truck, FileText, Clock, History } from 'lucide-react';
 import {
   ProductionOrder,
   Product,
+  BOM,
   OrderFormSettings,
   ProductionOpRecord,
   OrderItem,
@@ -17,12 +18,17 @@ import {
   PrintRenderContext,
   PlanFormFieldConfig,
   ReportFieldDefinition,
+  OutsourceFormSettings,
+  PlanFormSettings,
+  Partner,
+  PartnerCategory,
+  DEFAULT_OUTSOURCE_FORM_SETTINGS,
 } from '../types';
 import { productHasColorSizeMatrix } from '../utils/productColorSize';
 import { combinedCompletedAtTemplate } from '../utils/productReportAggregates';
+import { getOrderStockInAggregates, getProductStockInAggregates } from '../utils/pendingStockCompute';
 import { buildVariantQtyMatrixLayout } from '../utils/variantQtyMatrix';
 import QtyMatrixTable, { type QtyMatrixTableRow } from '../components/variant-matrix/QtyMatrixTable';
-import { getEffectiveReportTemplate, getReportCustomDataDisplayEntries } from '../utils/effectiveReportTemplate';
 import { buildPrintListRowsFromOrderItemsMatrix } from '../utils/printListPagination';
 import { OrderCenterDetailPrintBlock } from '../components/order-print/OrderCenterDetailPrintBlock';
 import {
@@ -35,6 +41,11 @@ import {
 import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
 import DocPhaseModal, { DocPhaseEditToolbarPortalContext } from '../components/DocPhaseModal';
 import { DocSummaryCard, DocInlineMetaRow, DocCustomFieldInlineReadList } from '../components/doc-modal';
+import OutsourceFlowListModal, { type OutsourceFlowOpenSeed } from './production-ops/OutsourceFlowListModal';
+import OutsourcePartnerFlowDetailModal, { type PartnerFlowDetailSeed } from './production-ops/OutsourcePartnerFlowDetailModal';
+import OutsourceFlowDocumentDetailModal from './production-ops/OutsourceFlowDocumentDetailModal';
+import { hasOpsPerm } from './production-ops/types';
+import OrderMaterialInfoSection from './order-list/OrderMaterialInfoSection';
 
 function reportFieldToPlanForm(cf: ReportFieldDefinition): PlanFormFieldConfig {
   return {
@@ -81,6 +92,7 @@ interface OrderDetailModalProps {
   onClose: () => void;
   orders: ProductionOrder[];
   products: Product[];
+  boms: BOM[];
   prodRecords: ProductionOpRecord[];
   dictionaries?: AppDictionaries;
   categories?: ProductCategory[];
@@ -91,16 +103,29 @@ interface OrderDetailModalProps {
   /** 关联产品模式下展示产品工序进度 */
   productMilestoneProgresses?: ProductMilestoneProgress[];
   globalNodes?: GlobalNodeTemplate[];
-  /** 关联产品模式下：为 true 时按「单张工单」展示详情（如工单流水入口），与关联工单详情一致；为 false 时保留产品汇总卡片 */
-  productModeSingleOrderLayout?: boolean;
+  /** 从工单流水打开详情时为 true：单工单布局（两种 productionLinkMode 共用）；为 false 时产品模式保留产品汇总简版 */
+  detailFromFlowLayout?: boolean;
   /** 详情打印：打开工单表单配置「打印模版」页签 */
   onOpenOrderFormPrintTab?: () => void;
+  /** 工单模式下：打开报工流水并预填本工单筛选 */
+  onOpenReportHistory?: (seed: { orderNumber: string; dateFrom: string; dateTo: string }) => void;
+  canViewReportHistory?: boolean;
+  outsourceFormSettings?: OutsourceFormSettings;
+  planFormSettings?: PlanFormSettings;
+  partners?: Partner[];
+  partnerCategories?: PartnerCategory[];
+  userPermissions?: string[];
+  tenantRole?: string;
+  onAddRecord?: (record: ProductionOpRecord) => void;
+  onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
+  onUpdateRecord?: (record: ProductionOpRecord) => void;
+  onDeleteRecord?: (recordId: string) => void;
   onUpdateOrder?: (orderId: string, updates: Partial<ProductionOrder>) => void;
   onDeleteOrder?: (orderId: string) => void;
 }
 
 const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
-  orderId, onClose, orders, products, prodRecords, dictionaries, categories, orderFormSettings, printTemplates = [], productionLinkMode, productMilestoneProgresses = [], globalNodes = [], productModeSingleOrderLayout = false, onOpenOrderFormPrintTab, onUpdateOrder, onDeleteOrder
+  orderId, onClose, orders, products, boms, prodRecords, dictionaries, categories, orderFormSettings, printTemplates = [], productionLinkMode, productMilestoneProgresses = [], globalNodes = [], detailFromFlowLayout = false, onOpenOrderFormPrintTab, onOpenReportHistory, canViewReportHistory = false, outsourceFormSettings = DEFAULT_OUTSOURCE_FORM_SETTINGS, planFormSettings, partners = [], partnerCategories = [], userPermissions, tenantRole, onAddRecord, onAddRecordBatch, onUpdateRecord, onDeleteRecord, onUpdateOrder, onDeleteOrder
 }) => {
   const showInDetail = (id: string) => orderFormSettings?.standardFields.find(f => f.id === id)?.showInDetail ?? true;
   const order = orders.find(o => o.id === orderId);
@@ -116,8 +141,78 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     startDate: string;
     items: OrderItem[];
   }>({ customer: '', dueDate: '', startDate: '', items: [] });
+  const [showOutsourceFlow, setShowOutsourceFlow] = useState(false);
+  const [flowOpenSeed, setFlowOpenSeed] = useState<OutsourceFlowOpenSeed>(null);
+  const [flowOpenNonce, setFlowOpenNonce] = useState(0);
+  const [partnerQtyDetailSeed, setPartnerQtyDetailSeed] = useState<PartnerFlowDetailSeed | null>(null);
+  const [flowDetailKey, setFlowDetailKey] = useState<string | null>(null);
+  const [flowDetailExtraRecords, setFlowDetailExtraRecords] = useState<ProductionOpRecord[] | null>(null);
+  const [flowDocPhase, setFlowDocPhase] = useState<'detail' | 'edit'>('detail');
+
+  const showOrderDueDateColumn =
+    productionLinkMode !== 'product' && planFormSettings?.listDisplay?.showDeliveryDate === true;
+
+  const flowDetailRecordsForPrint = useMemo(() => {
+    if (!flowDetailKey) return [];
+    const fromPanel = prodRecords.filter(r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey);
+    if (fromPanel.length > 0) return fromPanel;
+    return (flowDetailExtraRecords ?? []).filter(r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey);
+  }, [prodRecords, flowDetailKey, flowDetailExtraRecords]);
+
+  const recordsForFlowDetailModal = useMemo(() => {
+    if (!flowDetailKey) return prodRecords;
+    const fromPanel = prodRecords.filter(r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey);
+    const extraMatch = (flowDetailExtraRecords ?? []).filter(
+      r => r.type === 'OUTSOURCE' && r.docNo === flowDetailKey,
+    );
+    if (extraMatch.length === 0) return prodRecords;
+    if (fromPanel.length > 0) return prodRecords;
+    const byId = new Map<string, ProductionOpRecord>(prodRecords.map(r => [r.id, r]));
+    for (const r of extraMatch) byId.set(r.id, r);
+    return Array.from(byId.values());
+  }, [prodRecords, flowDetailKey, flowDetailExtraRecords]);
+
+  const flowDetailPrintIsReceive = flowDetailRecordsForPrint[0]?.status === '已收回';
+
+  const openOutsourcePartnerFlow = useCallback(
+    (row: { partner: string; nodeId: string; nodeName: string }) => {
+      if (!order) return;
+      const seed: PartnerFlowDetailSeed = {
+        productionLinkMode: productionLinkMode ?? 'order',
+        orderId: productionLinkMode === 'product' ? undefined : order.id,
+        productId: order.productId,
+        productName: order.productName,
+        orderNumber: productionLinkMode === 'product' ? undefined : order.orderNumber,
+        nodeId: row.nodeId,
+        nodeName: row.nodeName,
+        partner: row.partner,
+      };
+      if (outsourceFormSettings.showPartnerFlowDetailOnList) {
+        setPartnerQtyDetailSeed(seed);
+        return;
+      }
+      setFlowOpenSeed({
+        orderKeyword: productionLinkMode === 'product' ? '' : (order.orderNumber ?? ''),
+        productKeyword: order.productName ?? product?.name ?? '',
+        milestoneNodeId: row.nodeId,
+        partnerKeyword: row.partner,
+      });
+      setFlowOpenNonce(n => n + 1);
+      setPartnerQtyDetailSeed(null);
+      setShowOutsourceFlow(true);
+    },
+    [order, product?.name, productionLinkMode, outsourceFormSettings.showPartnerFlowDetailOnList],
+  );
 
   const orderTotalQty = useMemo(() => order?.items.reduce((s, i) => s + i.quantity, 0) || 0, [order]);
+  const stockInAggregates = useMemo(
+    () => (order ? getOrderStockInAggregates(order, prodRecords) : { alreadyIn: 0, alreadyInByVariant: {} as Record<string, number> }),
+    [order, prodRecords],
+  );
+  const productStockInAggregates = useMemo(
+    () => (order?.productId ? getProductStockInAggregates(order.productId, prodRecords) : { alreadyIn: 0, alreadyInByVariant: {} as Record<string, number> }),
+    [order?.productId, prodRecords],
+  );
 
   /** 产品分类扩展属性（有填写值的项） */
   const productCategoryCustomEntries = useMemo(
@@ -129,10 +224,12 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     [product, category],
   );
 
-  /** 该工单的外协统计：按外协工厂+工序汇总 发出/收回/未收（用于详情页外协管理小便签） */
+  /** 该工单的外协统计：按外协工厂+工序汇总 发出/收回/剩余（与外协管理主列表口径一致） */
   const outsourceStatsForOrder = useMemo(() => {
     if (!order) return [];
-    const outsourceRecs = prodRecords.filter(r => r.type === 'OUTSOURCE' && r.orderId === order.id && r.partner);
+    const outsourceRecs = prodRecords.filter(
+      r => r.type === 'OUTSOURCE' && !r.sourceReworkId && r.orderId === order.id && r.partner,
+    );
     const byKey: Record<string, { partner: string; nodeId: string; dispatched: number; received: number }> = {};
     outsourceRecs.forEach(r => {
       const nodeId = r.nodeId ?? '';
@@ -149,11 +246,16 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       .map(v => ({
         ...v,
         nodeName: order.milestones?.find(m => m.templateId === v.nodeId)?.name ?? (v.nodeId || '—'),
-        pending: Math.max(0, v.dispatched - v.received)
+        pending: Math.max(0, v.dispatched - v.received),
       }))
       .filter(v => v.dispatched > 0 || v.received > 0)
       .sort((a, b) => milestoneIndex(a.nodeId) - milestoneIndex(b.nodeId));
   }, [order?.id, order?.milestones, prodRecords]);
+
+  const displayOutsourceStatsForOrder = useMemo(() => {
+    if (outsourceFormSettings.hideZeroPendingPartnerOnList !== true) return outsourceStatsForOrder;
+    return outsourceStatsForOrder.filter(r => r.pending > 0);
+  }, [outsourceStatsForOrder, outsourceFormSettings.hideZeroPendingPartnerOnList]);
 
   React.useEffect(() => {
     if (order && product) {
@@ -343,8 +445,8 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     ? editForm.items.reduce((s, i) => s + i.quantity, 0)
     : orderTotalQty;
 
-  const showCustomerField = showInDetail('customer') && productionLinkMode !== 'product';
-  const showDueField = showInDetail('dueDate') && productionLinkMode !== 'product';
+  const showCustomerField = showInDetail('customer') && productionLinkMode !== 'product' && !detailFromFlowLayout;
+  const showDueField = showInDetail('dueDate') && productionLinkMode !== 'product' && !detailFromFlowLayout;
   const hasStandardFieldsBlock = showCustomerField || showDueField;
   const createdTimeDisplay = (() => {
     const raw = order.createdAt?.trim();
@@ -372,7 +474,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     return msg;
   })();
 
-  if (productionLinkMode === 'product' && !productModeSingleOrderLayout) {
+  if (productionLinkMode === 'product' && !detailFromFlowLayout) {
     return (
       <DocPhaseModal
         zIndexClass="z-[85]"
@@ -403,6 +505,10 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   <p className="text-sm font-bold text-indigo-600">{productTotalQty} {unitName}</p>
                 </div>
                 <div className="bg-slate-50 rounded-xl px-4 py-2">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">入库数量</p>
+                  <p className="text-sm font-bold text-emerald-600">{productStockInAggregates.alreadyIn} {unitName}</p>
+                </div>
+                <div className="bg-slate-50 rounded-xl px-4 py-2">
                   <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">工单数</p>
                   <p className="text-sm font-bold text-slate-800">{productOrders.length}</p>
                 </div>
@@ -413,12 +519,20 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 <ClipboardList className="w-3.5 h-3.5" /> 关联工单
               </h4>
               <ul className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100">
-                {productOrders.map(o => (
-                  <li key={o.id} className="px-4 py-3 flex items-center justify-between bg-white hover:bg-slate-50/50">
+                {productOrders.map(o => {
+                  const orderStockIn = getOrderStockInAggregates(o, prodRecords).alreadyIn;
+                  return (
+                  <li key={o.id} className="px-4 py-3 flex items-center justify-between gap-3 bg-white hover:bg-slate-50/50">
                     <span className="font-bold text-slate-800">{o.orderNumber}</span>
-                    <span className="text-sm text-slate-600">{o.items.reduce((s, i) => s + i.quantity, 0)} {unitName}</span>
+                    <span className="text-sm text-slate-600 text-right shrink-0">
+                      <span className="tabular-nums">{o.items.reduce((s, i) => s + i.quantity, 0)} {unitName}</span>
+                      {orderStockIn > 0 ? (
+                        <span className="ml-2 text-emerald-600 tabular-nums">已入库 {orderStockIn}</span>
+                      ) : null}
+                    </span>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </div>
             {progressByMilestone.length > 0 && (
@@ -446,13 +560,138 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 </div>
               </div>
             )}
+            {orderId ? (
+              <OrderMaterialInfoSection
+                orderId={orderId}
+                orders={orders}
+                products={products}
+                boms={boms}
+                categories={categories}
+                globalNodes={globalNodes ?? []}
+                productionLinkMode="product"
+                productMilestoneProgresses={productMilestoneProgresses}
+              />
+            ) : null}
           </div>
         }
       />
     );
   }
 
+  const renderOutsourceOverlays = () => (
+    <>
+      {showOutsourceFlow ? (
+        <OutsourceFlowListModal
+          productionLinkMode={productionLinkMode ?? 'order'}
+          showOrderDueDateColumn={showOrderDueDateColumn}
+          orders={orders}
+          products={products}
+          globalNodes={globalNodes ?? []}
+          userPermissions={userPermissions}
+          tenantRole={tenantRole}
+          overlayZIndexClass="z-[90]"
+          onOpenDetail={(docNo, recs) => {
+            if (!onAddRecord) return;
+            setFlowDetailExtraRecords(recs);
+            setFlowDetailKey(docNo);
+          }}
+          flowOpenSeed={flowOpenSeed}
+          flowOpenNonce={flowOpenNonce}
+          onClose={() => {
+            setShowOutsourceFlow(false);
+            setFlowDetailKey(null);
+            setFlowDetailExtraRecords(null);
+            setFlowOpenSeed(null);
+            setPartnerQtyDetailSeed(null);
+          }}
+        />
+      ) : null}
+      <OutsourcePartnerFlowDetailModal
+        open={partnerQtyDetailSeed != null}
+        seed={partnerQtyDetailSeed}
+        onClose={() => setPartnerQtyDetailSeed(null)}
+        records={prodRecords}
+        products={products}
+        orders={orders}
+        categories={categories ?? []}
+        dictionaries={dictionaries}
+        outsourceFormSettings={outsourceFormSettings}
+        overlayZIndexClass="z-[90]"
+      />
+      {flowDetailKey && showOutsourceFlow && onAddRecord ? (
+        <DocPhaseModal
+          open
+          phase={flowDocPhase}
+          editingDocNumber={flowDetailKey}
+          detailTitle={flowDetailPrintIsReceive ? '外协收回详情' : '外协发出详情'}
+          editTitle="编辑外协单据"
+          newTitle="外协单据"
+          showPrint={false}
+          zIndexClass="z-[92]"
+          hasPerm={p => hasOpsPerm(tenantRole, userPermissions, p)}
+          viewPerm="production:outsource_records:view"
+          editPerm="production:outsource_records:edit"
+          deletePerm={onDeleteRecord ? 'production:outsource_records:delete' : undefined}
+          deleteConfirmMessage="确定要删除该张外协单的所有记录吗？此操作不可恢复。"
+          onDelete={
+            onDeleteRecord && flowDetailRecordsForPrint.length > 0
+              ? async () => {
+                  await Promise.all(
+                    flowDetailRecordsForPrint.map(r => Promise.resolve(onDeleteRecord(r.id))),
+                  );
+                  setFlowDetailKey(null);
+                  setFlowDocPhase('detail');
+                }
+              : undefined
+          }
+          onClose={() => {
+            setFlowDetailKey(null);
+            setFlowDocPhase('detail');
+            setFlowDetailExtraRecords(null);
+          }}
+          onEnterEdit={() => setFlowDocPhase('edit')}
+          onCancelEdit={() => setFlowDocPhase('detail')}
+          renderContent={() => (
+            <OutsourceFlowDocumentDetailModal
+              layout="docPhase"
+              phase={flowDocPhase}
+              onAfterSave={() => {
+                setFlowDetailKey(null);
+                setFlowDocPhase('detail');
+                setFlowDetailExtraRecords(null);
+              }}
+              productionLinkMode={productionLinkMode ?? 'order'}
+              flowDetailKey={flowDetailKey}
+              records={recordsForFlowDetailModal}
+              orders={orders}
+              products={products}
+              categories={categories ?? []}
+              dictionaries={dictionaries}
+              globalNodes={globalNodes ?? []}
+              partners={partners}
+              partnerCategories={partnerCategories ?? []}
+              userPermissions={userPermissions}
+              tenantRole={tenantRole}
+              onAddRecord={onAddRecord}
+              onAddRecordBatch={onAddRecordBatch}
+              onUpdateRecord={onUpdateRecord}
+              onDeleteRecord={onDeleteRecord}
+              onClose={() => {
+                setFlowDetailKey(null);
+                setFlowDocPhase('detail');
+                setFlowDetailExtraRecords(null);
+              }}
+              outsourceFormSettings={outsourceFormSettings}
+              printTemplates={printTemplates}
+            />
+          )}
+        />
+      ) : null}
+    </>
+  );
+
   return (
+    <>
     <DocPhaseModal
       zIndexClass="z-[85]"
       open
@@ -463,7 +702,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       newTitle=""
       showPrint={false}
       leadingDetailActions={
-        (productionLinkMode !== 'product' || productModeSingleOrderLayout) ? (
+        (productionLinkMode !== 'product' || detailFromFlowLayout) ? (
           <OrderCenterDetailPrintBlock
             printSlot={orderFormSettings?.orderCenterPrint?.orderDetail}
             printTemplates={printTemplates}
@@ -567,24 +806,32 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               </>
             }
             side={
-              <div className="min-w-[6.5rem] md:text-right">
-                <p className="mb-0.5 text-[10px] font-black uppercase text-slate-400">合计数量</p>
-                {isEditing && !hasColorSize ? (
-                  <div className="flex flex-wrap items-baseline justify-start gap-1.5 md:justify-end">
-                    <input
-                      type="number"
-                      min={0}
-                      value={displayTotalQty}
-                      onChange={e => handleSingleQuantityChange(parseInt(e.target.value, 10) || 0)}
-                      className="h-10 w-[7rem] rounded-xl border border-slate-200 bg-white px-3 text-right text-sm font-black tabular-nums text-slate-800 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                    />
-                    <span className="font-black text-slate-600">{unitName}</span>
-                  </div>
-                ) : (
-                  <p className="font-black tabular-nums text-slate-800">
-                    {displayTotalQty.toLocaleString()} {unitName}
+              <div className="min-w-[6.5rem] space-y-3 md:text-right">
+                <div>
+                  <p className="mb-0.5 text-[10px] font-black uppercase text-slate-400">合计数量</p>
+                  {isEditing && !hasColorSize ? (
+                    <div className="flex flex-wrap items-baseline justify-start gap-1.5 md:justify-end">
+                      <input
+                        type="number"
+                        min={0}
+                        value={displayTotalQty}
+                        onChange={e => handleSingleQuantityChange(parseInt(e.target.value, 10) || 0)}
+                        className="h-10 w-[7rem] rounded-xl border border-slate-200 bg-white px-3 text-right text-sm font-black tabular-nums text-slate-800 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200"
+                      />
+                      <span className="font-black text-slate-600">{unitName}</span>
+                    </div>
+                  ) : (
+                    <p className="font-black tabular-nums text-slate-800">
+                      {displayTotalQty.toLocaleString()} {unitName}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <p className="mb-0.5 text-[10px] font-black uppercase text-slate-400">入库数量</p>
+                  <p className="font-black tabular-nums text-emerald-600">
+                    {stockInAggregates.alreadyIn.toLocaleString()} {unitName}
                   </p>
-                )}
+                </div>
               </div>
             }
           />
@@ -602,6 +849,7 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 const renderQtyCell = (variant: ProductVariant) => {
                   const qty = getQuantityByVariant(variant.id);
                   const completed = getItemForVariant(variant.id)?.completedQuantity ?? 0;
+                  const stockInQty = stockInAggregates.alreadyInByVariant[variant.id] ?? 0;
                   return (
                     <div key={variant.id} className="flex min-w-0 flex-col gap-1">
                       {isEditing ? (
@@ -626,6 +874,9 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                           <span className="text-sm font-bold text-indigo-600 tabular-nums">{qty}</span>
                           {completed > 0 ? (
                             <span className="text-[10px] font-medium tabular-nums text-slate-400">已下工 {completed}</span>
+                          ) : null}
+                          {stockInQty > 0 ? (
+                            <span className="text-[10px] font-medium tabular-nums text-emerald-600">已入库 {stockInQty}</span>
                           ) : null}
                         </>
                       )}
@@ -672,11 +923,30 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           )}
 
           {/* 各工序报工汇总（仅关联工单模式下显示） */}
-          {productionLinkMode !== 'product' && order.milestones.some(m => (m.reports?.length ?? 0) > 0) && (
+          {productionLinkMode !== 'product' && !detailFromFlowLayout && order.milestones.some(m => (m.reports?.length ?? 0) > 0) && (
             <div>
-              <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-3">
-                <ClipboardList className="w-3.5 h-3.5" /> 各工序报工汇总
-              </h4>
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <ClipboardList className="w-3.5 h-3.5" /> 各工序报工汇总
+                </h4>
+                {canViewReportHistory && onOpenReportHistory ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const ymds = order.milestones.flatMap(m =>
+                        (m.reports ?? []).map(r => toLocalDateYmd(r.timestamp)).filter(Boolean),
+                      );
+                      const today = toLocalDateYmd(new Date().toISOString());
+                      const dateFrom = ymds.length > 0 ? ymds.reduce((a, b) => (a < b ? a : b)) : today;
+                      const dateTo = ymds.length > 0 ? ymds.reduce((a, b) => (a > b ? a : b)) : today;
+                      onOpenReportHistory({ orderNumber: order.orderNumber ?? '', dateFrom, dateTo });
+                    }}
+                    className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+                  >
+                    <History className="w-3.5 h-3.5" /> 报工明细流水
+                  </button>
+                ) : null}
+              </div>
               <div className="border border-slate-200 rounded-2xl overflow-hidden">
                 <table className="w-full text-left">
                   <thead>
@@ -710,63 +980,27 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             </div>
           )}
 
-          {productionLinkMode !== 'product' && order.milestones.some(m => (m.reports?.length ?? 0) > 0) && (
-            <div className="mt-6">
-              <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-3">
-                <ClipboardList className="w-3.5 h-3.5" /> 报工明细（含填报项）
-              </h4>
-              <div className="space-y-4">
-                {order.milestones.map(m => {
-                  const reports = m.reports || [];
-                  if (reports.length === 0) return null;
-                  const tmpl = getEffectiveReportTemplate(m, globalNodes);
-                  return (
-                    <div key={m.id} className="border border-slate-200 rounded-2xl overflow-hidden bg-white">
-                      <div className="bg-slate-50 px-4 py-2 border-b border-slate-100 text-xs font-black text-slate-700">{m.name}</div>
-                      <div className="divide-y divide-slate-100">
-                        {reports.map(r => {
-                          const entries = getReportCustomDataDisplayEntries(r.customData, tmpl);
-                          return (
-                            <div key={r.id} className="px-4 py-3 space-y-2">
-                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-600">
-                                <span>{fmtReportDetailTs(r.timestamp)}</span>
-                                <span>操作人：{r.operator}</span>
-                                <span className="font-bold text-emerald-600">良品 {r.quantity} {unitName}</span>
-                                {(r.defectiveQuantity ?? 0) > 0 && (
-                                  <span className="font-bold text-amber-600">不良 {(r.defectiveQuantity ?? 0)} {unitName}</span>
-                                )}
-                                {r.reportNo && <span className="text-slate-500">单号 {r.reportNo}</span>}
-                              </div>
-                              {entries.length > 0 && (
-                                <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-3 py-2 space-y-1">
-                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">填报项</p>
-                                  {entries.map(e => (
-                                    <p key={e.fieldId} className="text-xs leading-relaxed">
-                                      <span className="font-bold text-slate-600">{e.label}：</span>
-                                      <span className="text-slate-800 break-all">{e.display}</span>
-                                    </p>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          {orderId ? (
+            <OrderMaterialInfoSection
+              orderId={orderId}
+              orders={orders}
+              products={products}
+              boms={boms}
+              categories={categories}
+              globalNodes={globalNodes ?? []}
+              productionLinkMode={productionLinkMode ?? 'order'}
+              productMilestoneProgresses={productMilestoneProgresses}
+            />
+          ) : null}
 
           {/* 外协管理：该工单对应的小便签（仅当有外协数据时显示） */}
-          {outsourceStatsForOrder.length > 0 && (
+          {displayOutsourceStatsForOrder.length > 0 && (
             <div>
               <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-3">
                 <Truck className="w-3.5 h-3.5" /> 外协管理
               </h4>
               <div className="flex flex-wrap gap-4">
-                {outsourceStatsForOrder.map((row, idx) => (
+                {displayOutsourceStatsForOrder.map((row, idx) => (
                   <div
                     key={`${row.partner}|${row.nodeId}|${idx}`}
                     className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 min-w-[140px] flex flex-col items-center gap-2"
@@ -775,12 +1009,26 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       <p className="text-[11px] font-bold text-emerald-600">{row.nodeName}</p>
                       <p className="text-sm font-bold text-slate-900 truncate" title={row.partner}>{row.partner}</p>
                     </div>
-                    <div className="w-16 h-16 rounded-full border-2 border-violet-200 bg-violet-50/50 flex items-center justify-center shrink-0">
-                      <span className="text-xl font-black text-slate-900">{row.dispatched}</span>
+                    <div
+                      className={`w-16 h-16 rounded-full border-2 bg-white flex items-center justify-center shrink-0 ${row.pending > 0 ? 'border-indigo-300' : 'border-emerald-400'}`}
+                      title="已收回数量"
+                    >
+                      <span className="text-xl font-black text-slate-900">{row.received}</span>
                     </div>
                     <div className="flex items-center justify-center gap-1.5 w-full">
-                      <span className="text-xs font-bold text-slate-600">{row.dispatched}/{row.received}</span>
-                      <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="text-xs font-bold text-slate-600" title="发出 / 剩余">{row.dispatched} / {row.pending}</span>
+                      <button
+                        type="button"
+                        onClick={() => openOutsourcePartnerFlow(row)}
+                        className="p-0.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
+                        title={
+                          outsourceFormSettings.showPartnerFlowDetailOnList
+                            ? '加工厂往来数量明细'
+                            : '查看外协流水'
+                        }
+                      >
+                        <FileText className="w-4 h-4 shrink-0" />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -791,6 +1039,8 @@ const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         </>
       )}
     />
+    {renderOutsourceOverlays()}
+    </>
   );
 };
 

@@ -33,6 +33,7 @@ import type {
 import { DEFAULT_MATERIAL_PANEL_SETTINGS, DEFAULT_MATERIAL_FORM_SETTINGS } from '../../types';
 import { PanelProps, hasOpsPerm, getOrderFamilyIds, type StockDocDetail } from './types';
 import { orderCreatedMs } from '../../utils/orderCenterSort';
+import { shouldShowOrderInIncompleteListFilter } from '../../utils/orderDispatchListFilter';
 import { buildMaterialStockCustomCollabPayload } from '../../utils/productionOpCollab/material';
 import { getProductCategoryCustomFieldEntries } from '../../utils/reportCustomDocField';
 import { categoryUsesBatchManagement, BATCH_NO_UNTAGGED } from '../../types';
@@ -40,6 +41,10 @@ import { clampBatchNoInput } from '../../hooks/useBatchPicker';
 import * as api from '../../services/api';
 import { toast } from 'sonner';
 
+import {
+  computeAllParentMaterialStats,
+  computeAllProductMaterialStats,
+} from '../../utils/computeOrderMaterialStats';
 import {
   filterMaterialRowsWithActivity,
   displayMaterialsForKeyword,
@@ -188,8 +193,12 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   const debouncedMaterialSearch = useDebouncedValue(materialSearch, 300);
 
   const PAGE_SIZE = materialPanelSettings.groupByOutsourcePartner ? 5 : 10;
+  const onlyShowIncompleteOrders =
+    productionLinkMode === 'order' && materialPanelSettings.onlyShowNotCompletedOrder === true;
   const [stockPage, setStockPage] = useState(1);
-  useEffect(() => { setStockPage(1); }, [productionLinkMode, materialPanelSettings.groupByOutsourcePartner, debouncedMaterialSearch]);
+  useEffect(() => {
+    setStockPage(1);
+  }, [productionLinkMode, materialPanelSettings.groupByOutsourcePartner, materialPanelSettings.onlyShowNotCompletedOrder, debouncedMaterialSearch]);
 
   const idx = useDataIndexes(orders, products, boms, [] /* no globalNodes needed */, productMilestoneProgresses);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
@@ -222,259 +231,28 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
   const parentOrders = useMemo(() => orders.filter(o => !o.parentOrderId), [orders]);
 
   /** 按父工单聚合：父工单 id -> 该父工单及所有子工单下各物料的 领料/退料/净领用/报工理论耗材 汇总；含 BOM 全部物料（无记录时也显示） */
-  const parentMaterialStats = useMemo(() => {
-    const { productsById, bomsById, bomsByParentProduct, childrenByParentId } = idx;
-    const result = new Map<string, { productId: string; issue: number; returnQty: number; theoryCost: number }[]>();
-    const parentList = orders.filter(o => !o.parentOrderId);
-
-    const stockRecordsByOrder = new Map<string, typeof records>();
-    for (const r of records) {
-      if (r.type !== 'STOCK_OUT' && r.type !== 'STOCK_RETURN') continue;
-      if (!r.orderId) continue;
-      let arr = stockRecordsByOrder.get(r.orderId);
-      if (!arr) { arr = []; stockRecordsByOrder.set(r.orderId, arr); }
-      arr.push(r);
-    }
-
-    parentList.forEach(parent => {
-      const familyIds = new Set(getOrderFamilyIds(orders, parent.id, childrenByParentId));
-      const prodMap = new Map<string, { issue: number; returnQty: number; theoryCost: number }>();
-      const addTheory = (bi: { productId: string; quantity: number }, qty: number) => {
-        const theory = Number(bi.quantity) * qty;
-        if (!prodMap.has(bi.productId)) prodMap.set(bi.productId, { issue: 0, returnQty: 0, theoryCost: 0 });
-        prodMap.get(bi.productId)!.theoryCost += theory;
-      };
-      const familyOrders = orders.filter(o => familyIds.has(o.id));
-      const addMaterialTheory = (productId: string, amount: number) => {
-        if (!prodMap.has(productId)) prodMap.set(productId, { issue: 0, returnQty: 0, theoryCost: 0 });
-        prodMap.get(productId)!.theoryCost += amount;
-      };
-      familyOrders.forEach(ord => {
-        const ordProduct = productsById.get(ord.productId);
-        const variants = ordProduct?.variants ?? [];
-        // 基于报工流水（milestone reports）计算完成量，包含工单报工 + 外协收回
-        const bestMsIdx = ord.milestones.reduce((bi, ms, i) => ms.completedQuantity > (ord.milestones[bi]?.completedQuantity ?? 0) ? i : bi, 0);
-        const bestMs = ord.milestones[bestMsIdx];
-        const variantCompletedMap = new Map<string, number>();
-        let totalCompleted = 0;
-        if (bestMs) {
-          const bestMsWeightOn = !!nodeWeightEnabledMap.get(bestMs.templateId);
-          (bestMs.reports || []).forEach(r => {
-            // 开启称重报工的工序：优先按 materialBreakdown 快照回填实际重量，跳过 BOM×件数 口径
-            if (applyMaterialBreakdown(r, addMaterialTheory, bestMsWeightOn)) return;
-            const qty = Number(r.quantity);
-            totalCompleted += qty;
-            const vid = r.variantId ?? '';
-            variantCompletedMap.set(vid, (variantCompletedMap.get(vid) ?? 0) + qty);
-          });
-        } else {
-          totalCompleted = ord.milestones.reduce((max, ms) => Math.max(max, ms.completedQuantity), 0);
-        }
-
-        const hasReportQtyForAnyProductVariant = variants.some(v => (variantCompletedMap.get(v.id) ?? 0) > 0);
-        if (variants.length > 0 && variantCompletedMap.size > 0 && hasReportQtyForAnyProductVariant) {
-          variants.forEach(v => {
-            const vCompleted = variantCompletedMap.get(v.id) ?? 0;
-            if (vCompleted <= 0) return;
-            const seenBomIds = new Set<string>();
-            if (v.nodeBoms && Object.keys(v.nodeBoms).length > 0) {
-              (Object.values(v.nodeBoms) as string[]).forEach(bomId => {
-                if (seenBomIds.has(bomId)) return;
-                seenBomIds.add(bomId);
-                const bom = bomsById.get(bomId);
-                bom?.items.forEach(bi => addTheory(bi, vCompleted));
-              });
-            } else {
-              (bomsByParentProduct.get(ordProduct!.id) ?? []).filter(b => b.variantId === v.id && b.nodeId).forEach(bom => {
-                if (seenBomIds.has(bom.id)) return;
-                seenBomIds.add(bom.id);
-                bom.items.forEach(bi => addTheory(bi, vCompleted));
-              });
-            }
-          });
-        } else if (variants.length > 0) {
-          variants.forEach(v => {
-            const seenBomIds = new Set<string>();
-            if (v.nodeBoms && Object.keys(v.nodeBoms).length > 0) {
-              (Object.values(v.nodeBoms) as string[]).forEach(bomId => {
-                if (seenBomIds.has(bomId)) return;
-                seenBomIds.add(bomId);
-                const bom = bomsById.get(bomId);
-                bom?.items.forEach(bi => addTheory(bi, totalCompleted));
-              });
-            }
-          });
-          if (prodMap.size === 0 && ordProduct) {
-            (bomsByParentProduct.get(ordProduct.id) ?? []).filter(b => b.nodeId).forEach(bom => {
-              bom.items.forEach(bi => addTheory(bi, totalCompleted));
-            });
-          }
-        } else if (ordProduct) {
-          (bomsByParentProduct.get(ordProduct.id) ?? []).filter(b => b.nodeId).forEach(bom => {
-            bom.items.forEach(bi => addTheory(bi, totalCompleted));
-          });
-        }
-      });
-
-      familyIds.forEach(fid => {
-        const recs = stockRecordsByOrder.get(fid);
-        if (!recs) return;
-        for (const r of recs) {
-          if (!prodMap.has(r.productId)) prodMap.set(r.productId, { issue: 0, returnQty: 0, theoryCost: 0 });
-          const cur = prodMap.get(r.productId)!;
-          if (r.type === 'STOCK_OUT') cur.issue += r.quantity;
-          else cur.returnQty += r.quantity;
-        }
-      });
-      result.set(parent.id, Array.from(prodMap.entries()).map(([productId, v]) => ({ productId, ...v })));
-    });
-    return result;
-  }, [records, orders, boms, products, idx, nodeWeightEnabledMap]);
+  const parentMaterialStats = useMemo(
+    () =>
+      computeAllParentMaterialStats({
+        orders,
+        idx,
+        stockRecords: records,
+        nodeWeightEnabledMap,
+      }),
+    [records, orders, idx, nodeWeightEnabledMap],
+  );
 
   /** 关联产品模式：按成品聚合物料（多工单同产品合并一行卡片） */
   const productMaterialStatsByProduct = useMemo(() => {
     if (productionLinkMode !== 'product') return null as Map<string, { productId: string; issue: number; returnQty: number; theoryCost: number }[]> | null;
-    const { productsById, bomsById, bomsByParentProduct, childrenByParentId, rootOrdersByProductId, ordersByProductId, ordersById, pmpByKey } = idx;
-    const result = new Map<string, { productId: string; issue: number; returnQty: number; theoryCost: number }[]>();
-    const resolveOrderRootId = (orderId: string): string => {
-      let cur = orderId;
-      for (let i = 0; i < 24; i++) {
-        const o = ordersById.get(cur);
-        if (!o) return cur;
-        if (!o.parentOrderId) return o.id;
-        cur = o.parentOrderId;
-      }
-      return cur;
-    };
-    const finishedProductHasBom = (fpId: string): boolean => {
-      const ordProduct = productsById.get(fpId);
-      if (!ordProduct) return false;
-      const variants = ordProduct.variants ?? [];
-      if (variants.length > 0) {
-        for (const v of variants) {
-          if (v.nodeBoms) {
-            for (const bomId of Object.values(v.nodeBoms) as string[]) {
-              const bom = bomsById.get(bomId);
-              if (bom && bom.items.length > 0) return true;
-            }
-          }
-        }
-      }
-      const parentBoms = bomsByParentProduct.get(ordProduct.id) ?? [];
-      return parentBoms.some(b => b.nodeId && b.items.length > 0);
-    };
-
-    const pmpByProduct = new Map<string, number>();
-    if (productMilestoneProgresses.length > 0) {
-      for (const p of productMilestoneProgresses) {
-        pmpByProduct.set(p.productId, Math.max(pmpByProduct.get(p.productId) ?? 0, p.completedQuantity ?? 0));
-      }
-    }
-
-    const finishedIds = ([...new Set(orders.map(o => o.productId))] as string[])
-      .filter(Boolean)
-      .filter(fpId => finishedProductHasBom(fpId));
-    for (const fpId of finishedIds) {
-      const roots = rootOrdersByProductId.get(fpId) ?? [];
-      const ordersForThisProduct = ordersByProductId.get(fpId) ?? [];
-      const allFamilyIds = new Set<string>();
-      if (roots.length > 0) {
-        roots.forEach(p => getOrderFamilyIds(orders, p.id, childrenByParentId).forEach(id => allFamilyIds.add(id)));
-      } else {
-        ordersForThisProduct.forEach(o => {
-          const rootId = resolveOrderRootId(o.id);
-          getOrderFamilyIds(orders, rootId, childrenByParentId).forEach(id => allFamilyIds.add(id));
-        });
-      }
-      const prodMap = new Map<string, { issue: number; returnQty: number; theoryCost: number }>();
-      const fpProduct = productsById.get(fpId);
-
-      const addMaterialTheory2 = (productId: string, amount: number) => {
-        if (!prodMap.has(productId)) prodMap.set(productId, { issue: 0, returnQty: 0, theoryCost: 0 });
-        prodMap.get(productId)!.theoryCost += amount;
-      };
-      const applyBomForNode = (nodeId: string, variantId: string, qty: number) => {
-        if (!fpProduct || qty <= 0 || !nodeId) return false;
-        const bomItems = resolveBomItems(productsById, bomsById, bomsByParentProduct, fpId, nodeId, variantId || undefined);
-        if (bomItems.length === 0) return false;
-        for (const bi of bomItems) addMaterialTheory2(bi.productId, Number(bi.quantity) * qty);
-        return true;
-      };
-
-      /**
-       * 关键修复：把报工流水按 (milestoneTemplateId, variantId) 分桶，每桶用自己工序的 BOM 折算；
-       * 未配 BOM 的工序（验布/缝合等）天然不会被串成横机 BOM 的物料消耗。
-       * 旧实现把所有工序 reports 累加到 variantCompletedMap，再一把扣到 BOM 上，造成本厂理论 ~N 倍膨胀。
-       */
-      let usedPmp = false;
-      if (productMilestoneProgresses.length > 0) {
-        const pmpForProduct = productMilestoneProgresses.filter(p => p.productId === fpId);
-        for (const p of pmpForProduct) {
-          const nodeId = p.milestoneTemplateId;
-          const nodeWeightOn = !!nodeWeightEnabledMap.get(nodeId);
-          const byVid = new Map<string, number>();
-          for (const r of p.reports ?? []) {
-            if (applyMaterialBreakdown(r, addMaterialTheory2, nodeWeightOn)) {
-              usedPmp = true;
-              continue;
-            }
-            const qty = Number(r.quantity) || 0;
-            if (qty <= 0) continue;
-            const vid = r.variantId ?? p.variantId ?? '';
-            byVid.set(vid, (byVid.get(vid) ?? 0) + qty);
-          }
-          for (const [vid, qty] of byVid.entries()) {
-            if (applyBomForNode(nodeId, vid, qty)) usedPmp = true;
-          }
-        }
-      }
-
-      /**
-       * PMP 无数据时回退到工单 milestone reports：与 PMP 同口径——按 (milestone.templateId, variantId) 分桶、
-       * 各自匹配 BOM；不再"一把扣到 best milestone × 全部 BOM"。
-       */
-      if (!usedPmp) {
-        const accumulateMilestoneForOrder = (ord: ProductionOrder) => {
-          for (const ms of ord.milestones) {
-            if (!ms?.templateId) continue;
-            const msWeightOn = !!nodeWeightEnabledMap.get(ms.templateId);
-            const byVid = new Map<string, number>();
-            for (const r of ms.reports ?? []) {
-              if (applyMaterialBreakdown(r, addMaterialTheory2, msWeightOn)) continue;
-              const qty = Number(r.quantity) || 0;
-              if (qty <= 0) continue;
-              const vid = r.variantId ?? '';
-              byVid.set(vid, (byVid.get(vid) ?? 0) + qty);
-            }
-            for (const [vid, qty] of byVid.entries()) {
-              applyBomForNode(ms.templateId, vid, qty);
-            }
-          }
-        };
-        if (roots.length > 0) {
-          roots.forEach(parent => {
-            const familyIds = new Set(getOrderFamilyIds(orders, parent.id, childrenByParentId));
-            orders.filter(o => familyIds.has(o.id)).forEach(accumulateMilestoneForOrder);
-          });
-        } else {
-          ordersForThisProduct.forEach(accumulateMilestoneForOrder);
-        }
-      }
-
-      records.forEach(r => {
-        if (r.type !== 'STOCK_OUT' && r.type !== 'STOCK_RETURN') return;
-        const bySource = r.sourceProductId === fpId;
-        const byOrder = r.orderId && allFamilyIds.has(r.orderId);
-        if (!bySource && !byOrder) return;
-        if (!prodMap.has(r.productId)) prodMap.set(r.productId, { issue: 0, returnQty: 0, theoryCost: 0 });
-        const cur = prodMap.get(r.productId)!;
-        if (r.type === 'STOCK_OUT') cur.issue += r.quantity;
-        else cur.returnQty += r.quantity;
-      });
-      result.set(fpId, Array.from(prodMap.entries()).map(([productId, v]) => ({ productId, ...v })));
-    }
-    return result;
-  }, [productionLinkMode, records, orders, boms, products, productMilestoneProgresses, idx, nodeWeightEnabledMap]);
+    return computeAllProductMaterialStats({
+      orders,
+      idx,
+      stockRecords: records,
+      productMilestoneProgresses,
+      nodeWeightEnabledMap,
+    });
+  }, [productionLinkMode, records, orders, productMilestoneProgresses, idx, nodeWeightEnabledMap]);
 
   /** 开启「按委外加工厂展示」时：按 partner 拆分领退 + 理论耗材 */
   const partnerMaterialGroups = useMemo(() => {
@@ -636,19 +414,31 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
         const partnerHit =
           (pg.partnerLabel || '').toLowerCase().includes(materialKw) ||
           (pg.partnerKey !== '__internal__' && (pg.partnerKey || '').toLowerCase().includes(materialKw));
-        if (partnerHit) return pg;
+        if (partnerHit) {
+          if (!onlyShowIncompleteOrders || productionLinkMode === 'product') return pg;
+          const next = new Map<string, MatRow[]>();
+          for (const [scopeKey, materials] of pg.data.entries()) {
+            const order = idx.ordersById.get(scopeKey);
+            if (order && !shouldShowOrderInIncompleteListFilter(order, true)) continue;
+            next.set(scopeKey, materials);
+          }
+          return { ...pg, data: next };
+        }
 
         const next = new Map<string, MatRow[]>();
         for (const [scopeKey, materials] of pg.data.entries()) {
-          const ok = productionLinkMode === 'product'
-            ? productScopeHit(scopeKey, materials)
-            : orderScopeHit(scopeKey, materials);
-          if (ok) next.set(scopeKey, materials);
+          if (productionLinkMode === 'product') {
+            if (productScopeHit(scopeKey, materials)) next.set(scopeKey, materials);
+          } else {
+            const order = idx.ordersById.get(scopeKey);
+            if (order && !shouldShowOrderInIncompleteListFilter(order, onlyShowIncompleteOrders)) continue;
+            if (orderScopeHit(scopeKey, materials)) next.set(scopeKey, materials);
+          }
         }
         return { ...pg, data: next };
       })
       .filter(pg => pg.data.size > 0);
-  }, [materialPanelSettings.groupByOutsourcePartner, partnerMaterialGroups, materialKw, productionLinkMode, idx]);
+  }, [materialPanelSettings.groupByOutsourcePartner, partnerMaterialGroups, materialKw, productionLinkMode, idx, onlyShowIncompleteOrders]);
 
   const productEntriesForDisplay = useMemo(() => {
     if (!productMaterialStatsByProduct) return null;
@@ -700,11 +490,12 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
           );
         });
     return sortByNewest(
-      nameMatched.filter(parent =>
-        visibleMaterialRowsForList(parentMaterialStats.get(parent.id) ?? [], materialKw, idx.productsById).length > 0,
-      ),
+      nameMatched.filter(parent => {
+        if (!shouldShowOrderInIncompleteListFilter(parent, onlyShowIncompleteOrders)) return false;
+        return visibleMaterialRowsForList(parentMaterialStats.get(parent.id) ?? [], materialKw, idx.productsById).length > 0;
+      }),
     );
-  }, [parentOrders, parentMaterialStats, materialKw, idx]);
+  }, [parentOrders, parentMaterialStats, materialKw, idx, onlyShowIncompleteOrders]);
 
   /** 有搜索词时表格内只显示名称/SKU 含关键词的物料行；若当前卡片因工单/产品名等命中、但物料名都不含关键词，则仍显示全部行 */
   const displayMaterialsForSearch = useCallback(
@@ -1432,6 +1223,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
           onUpdateMaterialFormSettings={onUpdateMaterialFormSettings}
           materialPanelSettings={materialPanelSettings}
           onUpdateMaterialPanelSettings={onUpdateMaterialPanelSettings}
+          productionLinkMode={productionLinkMode}
           printTemplates={printTemplates}
           onUpdatePrintTemplates={onUpdatePrintTemplates ?? (async () => {})}
           onRefreshPrintTemplates={onRefreshPrintTemplates}

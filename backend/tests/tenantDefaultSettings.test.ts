@@ -6,8 +6,12 @@ describe('TENANT_DEFAULT_SETTINGS.outsourceFormSettings', () => {
     const outsource = TENANT_DEFAULT_SETTINGS.outsourceFormSettings as {
       showOutsourceDispatchDeliveryDate?: boolean;
       showPartnerFlowDetailOnList?: boolean;
+      hideZeroPendingPartnerOnList?: boolean;
+      onlyShowNotCompletedOrder?: boolean;
     };
     expect(outsource.showOutsourceDispatchDeliveryDate).toBe(false);
     expect(outsource.showPartnerFlowDetailOnList).toBe(false);
+    expect(outsource.hideZeroPendingPartnerOnList).toBe(false);
+    expect(outsource.onlyShowNotCompletedOrder).toBe(false);
   });
 });

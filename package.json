@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "dev:all": "node scripts/dev-all.mjs",
+    "dev:all:persist": "node scripts/dev-all.mjs --persist",
+    "dev:stop": "node scripts/dev-all-stop.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",

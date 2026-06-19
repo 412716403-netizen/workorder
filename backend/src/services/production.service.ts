@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type { TenantPrismaClient } from '../lib/prisma.js';
 import { prisma as basePrisma } from '../lib/prisma.js';
-import { OrderDispatchStatus } from '../types/index.js';
+import { OrderDispatchStatus, type DispatchCompletionPending } from '../types/index.js';
 import { generateDocNo, generateDocNoWithLock } from '../utils/docNumber.js';
 import {
   nextOutsourceDocNoForPartner,
@@ -340,27 +340,28 @@ export async function getRecord(db: TenantPrismaClient, id: string) {
  *
  * 规则（与「关联工单模式」下计划单/工单状态徽章保持一致）：
  * - `dispatchStatusManual = true`：跳过自动逻辑（用户手动覆盖优先）。
- * - 入库累计 (`SUM(quantity) WHERE type='STOCK_IN' AND orderId=order.id`) ≥ 工单 `items` 总量 → COMPLETED。
- * - 否则 → IN_PROGRESS（用于删除/退库导致回退的场景）。
+ * - 入库累计 (`SUM(quantity) WHERE type='STOCK_IN' AND orderId=order.id`) ≥ 工单 `items` 总量
+ *   且当前为 `IN_PROGRESS` → 返回 `DispatchCompletionPending`，**不**直接写 COMPLETED（由前端确认后 PATCH）。
+ * - 入库不足或删除入库导致回退 → 自动写 `IN_PROGRESS`。
  *
  * 调用点：所有可能改变 `STOCK_IN` 数据的入口（createRecord / createRecordBatch 内单条 / updateRecord / deleteRecord）。
- * 事务上下文：传入的 `db` 在批量路径下是 tx；非事务路径下是 TenantPrismaClient（Proxy）。两者都支持 `productionOrder.update`。
  */
 export async function recalcOrderDispatchStatusByStockIn(
   orderId: string,
   db: TenantPrismaClient,
-): Promise<void> {
+): Promise<DispatchCompletionPending | null> {
   const order = await db.productionOrder.findUnique({
     where: { id: orderId },
     select: {
       id: true,
+      orderNumber: true,
       dispatchStatus: true,
       dispatchStatusManual: true,
       items: { select: { quantity: true } },
     },
   });
-  if (!order) return;
-  if (order.dispatchStatusManual) return;
+  if (!order) return null;
+  if (order.dispatchStatusManual) return null;
 
   const inSum = await db.productionOpRecord.aggregate({
     where: { orderId, type: 'STOCK_IN' },
@@ -368,15 +369,20 @@ export async function recalcOrderDispatchStatusByStockIn(
   });
   const totalIn = Number(inSum._sum.quantity ?? 0);
   const orderQty = order.items.reduce((s, i) => s + Number(i.quantity), 0);
-  const next = orderQty > 0 && totalIn >= orderQty
-    ? OrderDispatchStatus.COMPLETED
-    : OrderDispatchStatus.IN_PROGRESS;
-  if (next === order.dispatchStatus) return;
+  const wouldComplete = orderQty > 0 && totalIn >= orderQty;
+
+  if (wouldComplete) {
+    if (order.dispatchStatus === OrderDispatchStatus.COMPLETED) return null;
+    return { orderId: order.id, orderNumber: order.orderNumber };
+  }
+
+  if (order.dispatchStatus === OrderDispatchStatus.IN_PROGRESS) return null;
 
   await db.productionOrder.update({
     where: { id: orderId },
-    data: { dispatchStatus: next },
+    data: { dispatchStatus: OrderDispatchStatus.IN_PROGRESS },
   });
+  return null;
 }
 
 export async function createRecord(
@@ -485,13 +491,13 @@ export async function createRecord(
     await applyOutsourceProgress({ ...record, tenantId: tenantId ?? null });
   }
 
-  // STOCK_IN 写入后推进工单 dispatchStatus（仅当关联工单非空，且未被手动覆盖）。
-  // 与「关联工单模式」下计划单/工单状态徽章联动；产品模式不展示徽章但字段仍写入避免切模式数据丢失。
+  const dispatchCompletionPending: DispatchCompletionPending[] = [];
   if ((record as { type?: string }).type === 'STOCK_IN' && (record as { orderId?: string }).orderId) {
-    await recalcOrderDispatchStatusByStockIn(String((record as { orderId: string }).orderId), db);
+    const pending = await recalcOrderDispatchStatusByStockIn(String((record as { orderId: string }).orderId), db);
+    if (pending) dispatchCompletionPending.push(pending);
   }
 
-  return record;
+  return { record, dispatchCompletionPending };
 }
 
 /**
@@ -520,7 +526,9 @@ export async function createRecordBatch(
   records: Record<string, unknown>[],
   tenantId?: string,
 ) {
-  if (!Array.isArray(records) || records.length === 0) return [];
+  if (!Array.isArray(records) || records.length === 0) {
+    return { records: [] as unknown[], dispatchCompletionPending: [] as DispatchCompletionPending[] };
+  }
 
   const types = new Set(records.map(r => r.type));
   const hasDocNo = records.some(r => r.docNo != null && String(r.docNo).trim() !== '');
@@ -554,12 +562,20 @@ export async function createRecordBatch(
       }
 
       const out: unknown[] = [];
+      const pendingByOrder = new Map<string, DispatchCompletionPending>();
       for (const r of records) {
         const body = { ...r };
         if (!body.docNo && sharedDocNo) body.docNo = sharedDocNo;
-        out.push(await createRecord(txDb, body, tenantId, { skipNestedStockTransaction: true }));
+        const result = await createRecord(txDb, body, tenantId, { skipNestedStockTransaction: true });
+        out.push(result.record);
+        for (const p of result.dispatchCompletionPending ?? []) {
+          pendingByOrder.set(p.orderId, p);
+        }
       }
-      return out;
+      return {
+        records: out,
+        dispatchCompletionPending: [...pendingByOrder.values()],
+      };
     },
     {
       // STOCK_IN/OUTSOURCE 等批量写入可能触发库存批次校验与外协进度回写，预留较长超时。
@@ -641,11 +657,15 @@ export async function updateRecord(
   if ((record as { type?: string }).type === 'STOCK_IN' && (record as { orderId?: string }).orderId) {
     affected.add(String((record as { orderId: string }).orderId));
   }
+  const dispatchCompletionPending: DispatchCompletionPending[] = [];
+  const pendingByOrder = new Map<string, DispatchCompletionPending>();
   for (const oid of affected) {
-    await recalcOrderDispatchStatusByStockIn(oid, db);
+    const pending = await recalcOrderDispatchStatusByStockIn(oid, db);
+    if (pending) pendingByOrder.set(pending.orderId, pending);
   }
+  dispatchCompletionPending.push(...pendingByOrder.values());
 
-  return record;
+  return { record, dispatchCompletionPending };
 }
 
 export async function deleteRecord(db: TenantPrismaClient, id: string) {

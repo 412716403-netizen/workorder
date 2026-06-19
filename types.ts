@@ -12,6 +12,8 @@ export {
   isPlanDispatchStatus,
   isOrderDispatchStatus,
   FINANCE_DOC_NO_PREFIX,
+  PLAN_DOC_NO_PREFIX,
+  WORK_ORDER_DOC_NO_PREFIX,
   SCAN_ITEM_CODE_IDS_KEY,
   WEIGHT_TOLERANCE_PERCENT_KEY,
   DEFAULT_WEIGHT_TOLERANCE_PERCENT,
@@ -826,9 +828,15 @@ export interface OrderFormSettings extends PlanFormSettings {
 export interface MaterialPanelSettings {
   /** 列表按 加工厂 → 成品/工单 → 物料 展示 */
   groupByOutsourcePartner: boolean;
+  /**
+   * 关联工单模式：为 true 时主列表隐藏 `dispatchStatus=COMPLETED` 的工单行。
+   * 见 `onlyShowNotCompletedOrder` 业务说明（生产物料 / 外协 / 返工三模块共用字段名）。
+   */
+  onlyShowNotCompletedOrder?: boolean;
 }
 export const DEFAULT_MATERIAL_PANEL_SETTINGS: MaterialPanelSettings = {
   groupByOutsourcePartner: false,
+  onlyShowNotCompletedOrder: false,
 };
 
 /** 生产物料：领料/退料流水详情弹窗的打印入口与白名单 */
@@ -880,6 +888,13 @@ export interface OutsourceFormSettings {
   showPartnerFlowDetailOnList?: boolean;
   /** 为 true 时，外协发出新增/详情/编辑显示交货日期，加工厂往来明细表增加交货日期列；入口在表单配置「列表显示」（`collabData.outsourceDispatchDeliveryDate`）。 */
   showOutsourceDispatchDeliveryDate?: boolean;
+  /** 为 true 时，外协主列表隐藏加工厂剩余 pending<=0 的小卡；无可见加工厂时隐藏整行。 */
+  hideZeroPendingPartnerOnList?: boolean;
+  /**
+   * 关联工单模式：为 true 时主列表与「待发清单」隐藏 `dispatchStatus=COMPLETED` 的工单行；
+   * 「待收回清单」始终不过滤。
+   */
+  onlyShowNotCompletedOrder?: boolean;
 }
 
 export const DEFAULT_OUTSOURCE_FORM_SETTINGS: OutsourceFormSettings = {
@@ -887,6 +902,8 @@ export const DEFAULT_OUTSOURCE_FORM_SETTINGS: OutsourceFormSettings = {
   outsourceReceiveCustomFields: [],
   showPartnerFlowDetailOnList: false,
   showOutsourceDispatchDeliveryDate: false,
+  hideZeroPendingPartnerOnList: false,
+  onlyShowNotCompletedOrder: false,
 };
 
 /** 返工管理：处理不良流水详情 / 返工报工流水详情打印入口与白名单 */
@@ -904,11 +921,16 @@ export interface ReworkFormSettings {
   /** 返工报工（REWORK_REPORT 同 docNo）自定义；快照键 `collabData.reworkReportCustomData` */
   reworkReportCustomFields?: PlanFormFieldConfig[];
   reworkCenterPrint?: ReworkCenterPrintSettings;
+  /**
+   * 关联工单模式：为 true 时主列表与「待处理不良」隐藏 `dispatchStatus=COMPLETED` 的工单行。
+   */
+  onlyShowNotCompletedOrder?: boolean;
 }
 
 export const DEFAULT_REWORK_FORM_SETTINGS: ReworkFormSettings = {
   defectTreatmentCustomFields: [],
   reworkReportCustomFields: [],
+  onlyShowNotCompletedOrder: false,
 };
 
 // ── 打印模板（标签 / 单据可视化设计） ──
@@ -1500,7 +1522,7 @@ export interface ProductionOrder {
   updatedAt?: string;
   /**
    * 工单派发完成状态（持久化）。
-   * 由 STOCK_IN 入库累计与本单 items 总量自动推进；用户在工单中心手动点击可覆盖。
+   * 入库累计达标后由前端确认再写 COMPLETED；用户在工单中心手动点击可覆盖。
    * 仅在「关联工单模式 productionLinkMode='order'」的列表上展示徽章；产品模式不展示但字段仍写入。
    */
   dispatchStatus?: OrderDispatchStatus;

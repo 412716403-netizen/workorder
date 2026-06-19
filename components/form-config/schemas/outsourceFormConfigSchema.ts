@@ -2,6 +2,7 @@ import type { OutsourceFormSettings } from '../../../types';
 import { normalizeOutsourceFormSettings } from '../../../contexts/AppDataContext';
 import { DEFAULT_OUTSOURCE_FORM_SETTINGS } from '../../../types';
 import type { FormConfigSchema } from '../formConfigSchema';
+import { onlyShowNotCompletedOrderSlot } from '../onlyShowNotCompletedOrderSlot';
 
 export const outsourceFormConfigSchema: FormConfigSchema<OutsourceFormSettings> = {
   title: '外协管理表单配置',
@@ -89,6 +90,22 @@ export const outsourceFormConfigSchema: FormConfigSchema<OutsourceFormSettings> 
           path: 'showPartnerFlowDetailOnList',
           defaultChecked: false,
         },
+        {
+          kind: 'toggle',
+          id: 'hideZeroPendingPartnerOnList',
+          label: '加工厂剩余为 0 时不显示',
+          description:
+            '勾选后，外协主列表中某加工厂「剩余」为 0（已全部收回）时隐藏该小卡；若工单/产品下加工厂均被隐藏，则整行也不显示。',
+          path: 'hideZeroPendingPartnerOnList',
+          defaultChecked: false,
+        },
+        onlyShowNotCompletedOrderSlot(
+          'outsourceOnlyShowNotCompletedOrder',
+          ctx => ctx.get<boolean>('onlyShowNotCompletedOrder') === true,
+          (ctx, checked) => {
+            ctx.set('onlyShowNotCompletedOrder', checked);
+          },
+        ),
       ],
     },
   ],

@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { History, X, Filter, FileText, Loader2 } from 'lucide-react';
 import {
@@ -25,6 +25,14 @@ import FlowListSummaryFooter from '../../components/flow/FlowListSummaryFooter';
 import FlowListTableShell from '../../components/flow/FlowListTableShell';
 import FlowListProductCell from '../../components/flow/FlowListProductCell';
 
+export type ReportHistoryInitialSeed = {
+  orderNumber?: string;
+  /** 产品名模糊搜索（报工流水筛选「产品」字段） */
+  productKeyword?: string;
+  dateFrom?: string;
+  dateTo?: string;
+};
+
 interface ReportHistoryModalProps {
   open: boolean;
   onClose: () => void;
@@ -36,6 +44,8 @@ interface ReportHistoryModalProps {
   productMilestoneProgresses: ProductMilestoneProgress[];
   prodRecords: ProductionOpRecord[];
   onOpenBatchDetail: (batch: any) => void;
+  /** 从工单详情等入口打开时预填筛选（日期范围覆盖默认「当天」） */
+  initialSeed?: ReportHistoryInitialSeed | null;
 }
 
 const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
@@ -49,6 +59,7 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
   productMilestoneProgresses,
   prodRecords,
   onOpenBatchDetail,
+  initialSeed = null,
 }) => {
   const todayDate = useMemo(() => isoToDateInput(getTodayRangeIso().from), []);
   const [reportHistoryFilter, setReportHistoryFilter] = useState<{
@@ -60,6 +71,31 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
     dateTo: string;
     reportNo: string;
   }>({ productId: '', orderNumber: '', milestoneName: '', operator: '', dateFrom: todayDate, dateTo: todayDate, reportNo: '' });
+
+  useEffect(() => {
+    if (!open) return;
+    if (initialSeed) {
+      setReportHistoryFilter({
+        productId: initialSeed.productKeyword ?? '',
+        orderNumber: initialSeed.orderNumber ?? '',
+        milestoneName: '',
+        operator: '',
+        dateFrom: initialSeed.dateFrom ?? todayDate,
+        dateTo: initialSeed.dateTo ?? todayDate,
+        reportNo: '',
+      });
+      return;
+    }
+    setReportHistoryFilter({
+      productId: '',
+      orderNumber: '',
+      milestoneName: '',
+      operator: '',
+      dateFrom: todayDate,
+      dateTo: todayDate,
+      reportNo: '',
+    });
+  }, [open, initialSeed, todayDate]);
 
   /**
    * Phase 3.E：报工流水改走后端窄查接口，按日期窗口扁平展开 milestone.reports + PMP.reports。
@@ -308,7 +344,7 @@ const ReportHistoryModal: React.FC<ReportHistoryModalProps> = ({
   const f = reportHistoryFilter;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[88] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
       <div className="relative bg-white w-full max-w-6xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">

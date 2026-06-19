@@ -61,6 +61,8 @@ export interface OutsourceFlowListModalProps {
   flowOpenSeed?: OutsourceFlowOpenSeed;
   /** 每次打开外协流水时递增，用于在 seed 不变时也能重新应用 */
   flowOpenNonce?: number;
+  /** 流水弹窗层级（嵌套在其它弹窗内时可传 z-[90]） */
+  overlayZIndexClass?: string;
 }
 
 const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
@@ -75,6 +77,7 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
   onClose,
   flowOpenSeed = null,
   flowOpenNonce = 0,
+  overlayZIndexClass = 'z-[80]',
 }) => {
   const todayDate = useMemo(() => isoToDateInput(getTodayRangeIso().from), []);
   const [flowFilterDateFrom, setFlowFilterDateFrom] = useState(todayDate);
@@ -307,7 +310,7 @@ const OutsourceFlowListModal: React.FC<OutsourceFlowListModalProps> = ({
   }, [filteredOutsourceFlowRows]);
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+    <div className={`fixed inset-0 ${overlayZIndexClass} flex items-center justify-center p-4`}>
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
       <div className="relative bg-white w-full max-w-6xl max-h-[90vh] rounded-[32px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">

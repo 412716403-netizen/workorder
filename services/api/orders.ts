@@ -6,6 +6,9 @@ import type {
   MilestoneReport,
   ReportFieldDefinition,
   GlobalNodeTemplate,
+  DispatchCompletionPending,
+  ProductionRecordWriteResponse,
+  ProductionRecordBatchWriteResponse,
 } from '../../types';
 import type { OrderDispatchStatus } from '../../types';
 
@@ -92,12 +95,25 @@ const productionCrud = crud<ProductionOpRecord>('/production/records');
 
 export const production = {
   ...productionCrud,
+  create: (record: ProductionOpRecord) =>
+    request<ProductionRecordWriteResponse>('/production/records', {
+      method: 'POST',
+      body: JSON.stringify(record),
+    }),
   /**
    * 批量写入；后端会在"全部记录同 type、全部缺省 docNo、且 OUTSOURCE 时 partner 一致"的情况下，
    * **共享分配**一个 docNo 给整批；其它情况退化为逐条 createRecord 的语义。
    */
   createBatch: (records: ProductionOpRecord[]) =>
-    request<ProductionOpRecord[]>('/production/records/batch', { method: 'POST', body: JSON.stringify({ records }) }),
+    request<ProductionRecordBatchWriteResponse>('/production/records/batch', {
+      method: 'POST',
+      body: JSON.stringify({ records }),
+    }),
+  update: (id: string, record: Partial<ProductionOpRecord>) =>
+    request<ProductionRecordWriteResponse>(`/production/records/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(record),
+    }),
   /** 分页接口，必须返回 { data, total, page, pageSize }；不要叠 all=true */
   listPaginated: (params: PaginationParams | Record<string, string>) =>
     request<PaginatedResponse<ProductionOpRecord>>(`/production/records${buildQs(params)}`),

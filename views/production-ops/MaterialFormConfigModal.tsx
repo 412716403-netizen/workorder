@@ -17,6 +17,7 @@ interface MaterialFormConfigModalProps {
   open: boolean;
   onClose: () => void;
   defaultTabWhenOpen?: 'fields' | 'print' | 'list';
+  productionLinkMode?: 'order' | 'product';
   materialFormSettings: MaterialFormSettings;
   onUpdateMaterialFormSettings: (settings: MaterialFormSettings) => void | Promise<void>;
   materialPanelSettings: MaterialPanelSettings;
@@ -33,6 +34,7 @@ const MaterialFormConfigModal: React.FC<MaterialFormConfigModalProps> = ({
   open,
   onClose,
   defaultTabWhenOpen,
+  productionLinkMode = 'order',
   materialFormSettings,
   onUpdateMaterialFormSettings,
   materialPanelSettings,
@@ -67,6 +69,7 @@ const MaterialFormConfigModal: React.FC<MaterialFormConfigModalProps> = ({
       printTemplates={printTemplates}
       onUpdatePrintTemplates={onUpdatePrintTemplates}
       onRefreshPrintTemplates={onRefreshPrintTemplates}
+      productionLinkMode={productionLinkMode}
       plans={plans}
       orders={orders}
       products={products}

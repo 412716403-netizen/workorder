@@ -168,6 +168,8 @@ interface PlanOrder {
 |------|------|
 | `showDeliveryDate` | 计划列表/表单/打印交期；工单模式外协与工单中心交期列 |
 | `onlyShowNotCompleted` | 列表默认隐藏已完成：计划单排除派生 `COMPLETED`；工单中心排除 `dispatchStatus=COMPLETED`（仅关联工单模式 UI） |
+
+`MaterialPanelSettings` / `OutsourceFormSettings` / `ReworkFormSettings` 另有 `onlyShowNotCompletedOrder?: boolean`（默认 `false`）：关联工单模式下主列表等按 `dispatchStatus=COMPLETED` 隐藏已完成工单；外协「待收回清单」与各类历史流水弹窗不受此开关影响。详见 `docs/01-business-rules.md` §3.9。
   status: PlanStatus;
   customer: string;
   priority: 'High' | 'Medium' | 'Low';

@@ -38,6 +38,7 @@ import {
   reworkMainListBlockCreatedMs,
   reworkMainListBlockTieId,
 } from '../../utils/orderCenterSort';
+import { shouldShowOrderInIncompleteListFilter } from '../../utils/orderDispatchListFilter';
 import ReworkPendingDefectiveModal from './ReworkPendingDefectiveModal';
 import ReworkOrderDetailModal from './ReworkOrderDetailModal';
 import ReworkMaterialIssueModal from './ReworkMaterialIssueModal';
@@ -103,6 +104,8 @@ const ReworkPanel: React.FC<PanelProps> = ({
   psiRecords = [],
 }) => {
   const rfSettings = reworkFormSettings ?? DEFAULT_REWORK_FORM_SETTINGS;
+  const onlyShowIncompleteOrders =
+    productionLinkMode === 'order' && rfSettings.onlyShowNotCompletedOrder === true;
   const outOfSequenceTemplateIds = useMemo(() => buildOutOfSequenceTemplateIds(globalNodes), [globalNodes]);
   const canViewMainList = hasOpsPerm(tenantRole, userPermissions, 'production:rework_list:allow');
 
@@ -163,6 +166,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
   const debouncedReworkMainSearch = useDebouncedValue(reworkMainSearch, 300);
   useEffect(() => { setReworkPage(1); }, [productionLinkMode]);
   useEffect(() => { setReworkPage(1); }, [debouncedReworkMainSearch]);
+  useEffect(() => { setReworkPage(1); }, [rfSettings.onlyShowNotCompletedOrder]);
 
   const idx = useDataIndexes(orders, products, boms, globalNodes, productMilestoneProgresses);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
@@ -203,6 +207,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
         });
       const rows: ReworkPendingRow[] = [];
       orders.forEach(order => {
+        if (onlyShowIncompleteOrders && !shouldShowOrderInIncompleteListFilter(order, true)) return;
         const product = idx.productsById.get(order.productId);
         order.milestones.forEach(ms => {
           const defectiveTotal = (ms.reports || []).reduce((s, r) => s + (r.defectiveQuantity ?? 0), 0);
@@ -318,7 +323,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
       return milestoneIndexInProduct(pa, a.nodeId) - milestoneIndexInProduct(pb, b.nodeId);
     });
     return rows;
-  }, [productionLinkMode, records, orders, products, productMilestoneProgresses, globalNodes, idx]);
+  }, [productionLinkMode, records, orders, products, productMilestoneProgresses, globalNodes, idx, onlyShowIncompleteOrders]);
 
   /** 顺序模式：单条返工记录在工序 nodeId 上的「剩余可报数」= 上道已完成流入本道 - 本道已完成 */
   const reworkRemainingAtNode = (r: ProductionOpRecord, nodeId: string): number => {
@@ -522,9 +527,23 @@ const ReworkPanel: React.FC<PanelProps> = ({
     );
   }, [productionLinkMode, parentOrders, orders, reworkStatsByOrderId, reworkStatsByProductId, products, productMilestoneProgresses, idx]);
 
+  const reworkListBlocksForDisplay = useMemo(() => {
+    if (!onlyShowIncompleteOrders) return reworkListBlocks;
+    return reworkListBlocks.filter(block => {
+      if (block.type === 'productAggregate') return true;
+      if (block.type === 'single') {
+        return shouldShowOrderInIncompleteListFilter(block.order, true);
+      }
+      const family = [block.parent, ...block.children];
+      return family.some(
+        o => shouldShowOrderInIncompleteListFilter(o, true) && (reworkStatsByOrderId.get(o.id)?.length ?? 0) > 0,
+      );
+    });
+  }, [reworkListBlocks, onlyShowIncompleteOrders, reworkStatsByOrderId]);
+
   const displayReworkListBlocks = useMemo(() => {
     const q = debouncedReworkMainSearch.trim().toLowerCase();
-    if (!q) return reworkListBlocks;
+    if (!q) return reworkListBlocksForDisplay;
     const orderHay = (order: ProductionOrder) => {
       const p = idx.productsById.get(order.productId);
       return [order.orderNumber, order.productName, order.sku, order.customer, p?.name, p?.sku]
@@ -532,7 +551,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
         .join('\0')
         .toLowerCase();
     };
-    return reworkListBlocks.filter(block => {
+    return reworkListBlocksForDisplay.filter(block => {
       if (block.type === 'productAggregate') {
         const fp = idx.productsById.get(block.productId);
         const stats = reworkStatsByProductId.get(block.productId) ?? [];
@@ -548,7 +567,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
       const childHay = block.children.map(orderHay).join('\0');
       return (orderHay(block.parent) + '\0' + childHay).includes(q);
     });
-  }, [reworkListBlocks, debouncedReworkMainSearch, idx, reworkStatsByProductId]);
+  }, [reworkListBlocksForDisplay, debouncedReworkMainSearch, idx, reworkStatsByProductId]);
 
   // ── JSX ──────────────────────────────────────────────────────────────────
   return (
@@ -905,7 +924,16 @@ const ReworkPanel: React.FC<PanelProps> = ({
                 return <div key={block.order.id}>{renderReworkCard(block.order)}</div>;
               }
               const { parent, children: childList } = block;
+              void childList;
               const allWithDepth = getOrderFamilyWithDepth(orders, parent.id, idx.ordersById, idx.childrenByParentId);
+              const visibleFamily = allWithDepth.filter(({ order }) => {
+                if (!shouldShowOrderInIncompleteListFilter(order, onlyShowIncompleteOrders)) return false;
+                if (onlyShowIncompleteOrders) {
+                  return (reworkStatsByOrderId.get(order.id)?.length ?? 0) > 0;
+                }
+                return true;
+              });
+              const collapsedOrder = onlyShowIncompleteOrders ? visibleFamily[0]?.order : parent;
               const isExpanded = reworkExpandedParents.has(parent.id);
               return (
                 <div key={`rework-parentChild-${parent.id}`} className="rounded-2xl border-2 border-slate-300 bg-slate-50/50 overflow-hidden">
@@ -917,10 +945,16 @@ const ReworkPanel: React.FC<PanelProps> = ({
                   >
                     {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-600 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-600 shrink-0" />}
                     <Plus className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-                    <span className="text-xs font-bold text-slate-800">主工单及子工单（共 {allWithDepth.length} 条）</span>
+                    <span className="text-xs font-bold text-slate-800">主工单及子工单（共 {onlyShowIncompleteOrders ? visibleFamily.length : allWithDepth.length} 条）</span>
                   </button>
                   <div className="p-2.5 space-y-1.5">
-                    {isExpanded ? allWithDepth.map(({ order, depth }) => renderReworkCard(order, depth > 0, depth > 0 ? 24 * depth : 0)) : renderReworkCard(parent)}
+                    {isExpanded
+                      ? (onlyShowIncompleteOrders
+                        ? visibleFamily.map(({ order, depth }) => renderReworkCard(order, depth > 0, depth > 0 ? 24 * depth : 0))
+                        : allWithDepth.map(({ order, depth }) => renderReworkCard(order, depth > 0, depth > 0 ? 24 * depth : 0)))
+                      : collapsedOrder
+                        ? renderReworkCard(collapsedOrder)
+                        : null}
                   </div>
                 </div>
               );
@@ -1126,6 +1160,7 @@ const ReworkPanel: React.FC<PanelProps> = ({
             open={showReworkFormConfigModal}
             onClose={() => setShowReworkFormConfigModal(false)}
             defaultTabWhenOpen={reworkFormConfigDefaultTab}
+            productionLinkMode={productionLinkMode}
             reworkFormSettings={rfSettings}
             onUpdateReworkFormSettings={s => {
               void onUpdateReworkFormSettings(s);

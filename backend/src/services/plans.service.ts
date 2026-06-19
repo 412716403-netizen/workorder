@@ -2,7 +2,7 @@ import type { PlanItem, PlanOrder, Prisma } from '@prisma/client';
 import type { TenantPrismaClient } from '../lib/prisma.js';
 import { prisma as basePrisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
-import { getNextPlanNumber } from '../utils/docNumber.js';
+import { getNextPlanNumber, planNumberToOrderNumber } from '../utils/docNumber.js';
 import { genId } from '../utils/genId.js';
 import { sanitizeCreate, sanitizeUpdate, sanitizeItems, normalizeDates } from '../utils/request.js';
 import { deleteItemCodesAndVirtualBatchesForPlan } from './itemCodes.service.js';
@@ -270,17 +270,15 @@ export async function convertPlanToOrders(db: TenantPrismaClient, tenantId: stri
     );
   }
 
-  const existingOrders = await db.productionOrder.findMany({ select: { orderNumber: true } });
-  const existingOrderNumbers = new Set(existingOrders.map(o => o.orderNumber));
-  let maxNum = 0;
-  for (const o of existingOrders) {
-    const m = o.orderNumber.match(/^WO-?(\d+)/);
-    if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
-  }
+  const existingOrders = await db.productionOrder.findMany({
+    where: { tenantId },
+    select: { id: true, orderNumber: true, planOrderId: true, productId: true },
+  });
+  const existingByNumber = new Map(existingOrders.map(o => [o.orderNumber, o]));
 
   const nodes = await db.globalNodeTemplate.findMany({});
   const planToOrderMap = new Map<string, string>();
-  const orders: Array<{
+  const ordersToCreate: Array<{
     id: string;
     tenantId: string;
     orderNumber: string;
@@ -299,18 +297,75 @@ export async function convertPlanToOrders(db: TenantPrismaClient, tenantId: stri
     items: Array<{ variantId: string | null; quantity: number; completedQuantity: number }>;
     milestones: Prisma.MilestoneCreateWithoutProductionOrderInput[];
   }> = [];
+  const ordersToReuse: Array<{
+    existingId: string;
+    planOrderId: string;
+    parentOrderId: string | null;
+    bomNodeId: string | null;
+    sourcePlanId: string;
+    customer: string | null;
+    startDate: Date | null;
+    dueDate: Date | null;
+    priority: string;
+    productName: string;
+    sku: string;
+  }> = [];
+  const resultOrderIds: string[] = [];
+
+  const resolveParentOrderId = async (p: PlanWithItems): Promise<string | null> => {
+    if (!p.parentPlanId) return null;
+    const mapped = planToOrderMap.get(p.parentPlanId);
+    if (mapped) return mapped;
+    const existingParentOrder = await basePrisma.productionOrder.findFirst({
+      where: { planOrderId: p.parentPlanId, tenantId },
+    });
+    return existingParentOrder?.id ?? null;
+  };
 
   for (const p of plansToConvert) {
-    let orderNumber = p.planNumber.replace(/^PLN/, 'WO');
-    if (existingOrderNumbers.has(orderNumber)) {
-      maxNum++;
-      orderNumber = `WO${maxNum}`;
+    const orderNumber = planNumberToOrderNumber(p.planNumber);
+    const existing = existingByNumber.get(orderNumber);
+    const prod = p.id === plan.id ? product : await db.product.findUnique({ where: { id: p.productId } });
+    const parentOrderId = await resolveParentOrderId(p);
+
+    if (existing) {
+      if (existing.planOrderId === p.id) {
+        planToOrderMap.set(p.id, existing.id);
+        resultOrderIds.push(existing.id);
+        continue;
+      }
+      if (existing.planOrderId != null) {
+        throw new AppError(
+          409,
+          `工单号 ${orderNumber} 已被其他计划占用，无法从计划 ${p.planNumber} 下达`,
+        );
+      }
+      if (existing.productId !== p.productId) {
+        throw new AppError(
+          409,
+          `工单号 ${orderNumber} 已被其他产品工单占用（可能被协作接单占用），无法从计划 ${p.planNumber} 下达`,
+        );
+      }
+      planToOrderMap.set(p.id, existing.id);
+      ordersToReuse.push({
+        existingId: existing.id,
+        planOrderId: p.id,
+        parentOrderId,
+        bomNodeId: p.bomNodeId ?? null,
+        sourcePlanId: plan.id,
+        customer: p.customer,
+        startDate: p.startDate,
+        dueDate: p.dueDate,
+        priority: p.priority,
+        productName: prod?.name ?? '',
+        sku: prod?.sku ?? '',
+      });
+      resultOrderIds.push(existing.id);
+      continue;
     }
-    existingOrderNumbers.add(orderNumber);
+
     const orderId = genId('order');
     planToOrderMap.set(p.id, orderId);
-
-    const prod = p.id === plan.id ? product : await db.product.findUnique({ where: { id: p.productId } });
 
     const milestoneNodeIds = (prod?.milestoneNodeIds as string[]) || [];
     const milestones = milestoneNodeIds.map((nodeId, idx) => {
@@ -330,18 +385,7 @@ export async function convertPlanToOrders(db: TenantPrismaClient, tenantId: stri
       };
     });
 
-    let parentOrderId: string | null = null;
-    if (p.parentPlanId) {
-      parentOrderId = planToOrderMap.get(p.parentPlanId) || null;
-      if (!parentOrderId) {
-        const existingParentOrder = await basePrisma.productionOrder.findFirst({
-          where: { planOrderId: p.parentPlanId, tenantId },
-        });
-        parentOrderId = existingParentOrder?.id || null;
-      }
-    }
-
-    orders.push({
+    ordersToCreate.push({
       id: orderId,
       tenantId,
       orderNumber,
@@ -364,10 +408,28 @@ export async function convertPlanToOrders(db: TenantPrismaClient, tenantId: stri
       })) || [],
       milestones,
     });
+    resultOrderIds.push(orderId);
   }
 
   await basePrisma.$transaction(async (tx) => {
-    for (const order of orders) {
+    for (const reuse of ordersToReuse) {
+      await tx.productionOrder.update({
+        where: { id: reuse.existingId },
+        data: {
+          planOrderId: reuse.planOrderId,
+          parentOrderId: reuse.parentOrderId,
+          bomNodeId: reuse.bomNodeId,
+          sourcePlanId: reuse.sourcePlanId,
+          customer: reuse.customer,
+          startDate: reuse.startDate,
+          dueDate: reuse.dueDate,
+          priority: reuse.priority,
+          productName: reuse.productName,
+          sku: reuse.sku,
+        },
+      });
+    }
+    for (const order of ordersToCreate) {
       const { items, milestones, ...orderData } = order;
       await tx.productionOrder.create({
         data: {
@@ -383,7 +445,11 @@ export async function convertPlanToOrders(db: TenantPrismaClient, tenantId: stri
     });
   });
 
-  return { message: `已下达 ${orders.length} 条工单`, orderIds: orders.map(o => o.id) };
+  const dispatchedCount = ordersToCreate.length + ordersToReuse.length;
+  return {
+    message: dispatchedCount > 0 ? `已下达 ${dispatchedCount} 条工单` : '计划单已关联工单',
+    orderIds: resultOrderIds,
+  };
 }
 
 export async function createSubPlans(

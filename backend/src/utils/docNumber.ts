@@ -1,6 +1,9 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { withDocNoAdvisoryLock, withDocNoAdvisoryLockTx } from './docNumberLock.js';
+import { PLAN_DOC_NO_PREFIX, WORK_ORDER_DOC_NO_PREFIX } from '../types/index.js';
+
+export { PLAN_DOC_NO_PREFIX, WORK_ORDER_DOC_NO_PREFIX };
 
 function todayStr() {
   const d = new Date();
@@ -134,55 +137,69 @@ export async function generateDocNoWithLock(
 }
 
 /**
- * @param db 默认用全局 prisma；在事务内批量生成单号时必须传入事务 client（tx），否则读不到本事务内已插入的行，会重复单号并触发唯一约束。
+ * 解析计划单号 / 工单号的主序号（PLN40、PLN-40、WO40、PLN40-S1 均取 40）。
  */
-export async function getNextPlanNumber(
-  tenantId?: string,
-  db: Pick<PrismaClient, 'planOrder'> = prisma,
-): Promise<string> {
-  const where = tenantId ? { tenantId } : {};
-  const rows = await db.planOrder.findMany({
-    where,
-    select: { planNumber: true },
-  });
-  let maxNum = 0;
-  for (const r of rows) {
-    const m = r.planNumber.match(/^PLN-?(\d+)/);
-    if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
-  }
-  return `PLN${maxNum + 1}`;
+export function parsePlnWoPrimarySeq(docNo: string): number | null {
+  const m = (docNo || '').trim().match(/^(?:PLN|WO)-?(\d+)/i);
+  return m ? parseInt(m[1], 10) : null;
 }
 
-export async function getNextOrderNumber(tenantId?: string): Promise<string> {
-  const where = tenantId ? { tenantId } : {};
-  const rows = await prisma.productionOrder.findMany({
-    where,
-    select: { orderNumber: true },
-  });
+/** 计划单号 → 工单号：PLN40 → WO40，PLN40-S1 → WO40-S1 */
+export function planNumberToOrderNumber(planNumber: string): string {
+  return planNumber.replace(/^PLN-?/i, WORK_ORDER_DOC_NO_PREFIX);
+}
+
+type PlnWoSeqDb = Pick<PrismaClient, 'planOrder' | 'productionOrder'>;
+
+/**
+ * 租户下计划单与工单主序号的最大值（共用取号池，含协作接单自动建单）。
+ * @param db 事务内须传入 tx，否则读不到本事务内已插入的行。
+ */
+export async function getMaxPlnWoPrimarySeq(
+  tenantId: string,
+  db: PlnWoSeqDb = prisma,
+): Promise<number> {
+  const where = { tenantId };
+  const [planRows, orderRows] = await Promise.all([
+    db.planOrder.findMany({ where, select: { planNumber: true } }),
+    db.productionOrder.findMany({ where, select: { orderNumber: true } }),
+  ]);
   let maxNum = 0;
-  for (const r of rows) {
-    const m = r.orderNumber.match(/^WO-?(\d+)/);
-    if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
+  for (const r of planRows) {
+    const seq = parsePlnWoPrimarySeq(r.planNumber);
+    if (seq != null) maxNum = Math.max(maxNum, seq);
   }
-  return `WO${maxNum + 1}`;
+  for (const r of orderRows) {
+    const seq = parsePlnWoPrimarySeq(r.orderNumber);
+    if (seq != null) maxNum = Math.max(maxNum, seq);
+  }
+  return maxNum;
 }
 
 /**
- * 扫描租户下全部工单号，取 WO 后第一段数字的最大值 +1（与计划转工单 WO2-1-2 等规则一致，忽略 CO- 等前缀）
+ * @param db 默认用全局 prisma；在事务内批量生成单号时必须传入事务 client（tx），否则读不到本事务内已插入的行，会重复单号并触发唯一约束。
+ */
+export async function getNextPlanNumber(
+  tenantId: string,
+  db: Pick<PrismaClient, 'planOrder' | 'productionOrder'> = prisma,
+): Promise<string> {
+  const maxNum = await getMaxPlnWoPrimarySeq(tenantId, db);
+  return `${PLAN_DOC_NO_PREFIX}${maxNum + 1}`;
+}
+
+/** @deprecated 使用 getNextWorkOrderNumber(tenantId) */
+export async function getNextOrderNumber(tenantId: string): Promise<string> {
+  return getNextWorkOrderNumber(tenantId);
+}
+
+/**
+ * 扫描租户下计划单 + 工单主序号取 max+1（与计划转工单 WO2-1-2 等后缀规则一致）。
  * @param db 事务内须传入 tx，否则读不到本事务内已插入的工单号、会重复单号。
  */
 export async function getNextWorkOrderNumber(
   tenantId: string,
-  db: Pick<PrismaClient, 'productionOrder'> = prisma,
+  db: Pick<PrismaClient, 'planOrder' | 'productionOrder'> = prisma,
 ): Promise<string> {
-  const rows = await db.productionOrder.findMany({
-    where: { tenantId },
-    select: { orderNumber: true },
-  });
-  let maxNum = 0;
-  for (const o of rows) {
-    const m = o.orderNumber.match(/^WO(\d+)/);
-    if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
-  }
-  return `WO${maxNum + 1}`;
+  const maxNum = await getMaxPlnWoPrimarySeq(tenantId, db);
+  return `${WORK_ORDER_DOC_NO_PREFIX}${maxNum + 1}`;
 }

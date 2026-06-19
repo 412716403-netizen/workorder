@@ -27,8 +27,9 @@ export enum PlanStatus {
 /**
  * 工单派发完成状态（持久化字段，`ProductionOrder.dispatchStatus`）。
  * - `IN_PROGRESS`：进行中（默认值，或入库未达计划数）
- * - `COMPLETED`：已完成（入库累计 ≥ 计划数 自动写入；或用户手动覆盖）
- * 自动推进规则见 `recalcOrderDispatchStatusByStockIn`：当 `dispatchStatusManual=true` 时跳过自动逻辑。
+ * - `COMPLETED`：已完成（入库累计达标后用户确认写入；或用户手动覆盖）
+ * 自动推进规则见 `recalcOrderDispatchStatusByStockIn`：入库达标时返回 `DispatchCompletionPending` 供前端确认；
+ * 当 `dispatchStatusManual=true` 时跳过自动逻辑。
  */
 export enum OrderDispatchStatus {
   IN_PROGRESS = 'IN_PROGRESS',
@@ -75,6 +76,24 @@ export function isPlanDispatchStatus(v: unknown): v is PlanDispatchStatus {
 
 export function isOrderDispatchStatus(v: unknown): v is OrderDispatchStatus {
   return v === OrderDispatchStatus.IN_PROGRESS || v === OrderDispatchStatus.COMPLETED;
+}
+
+/** 入库累计达标、待用户确认将工单标为「已完成」时由生产流水写入接口附带。 */
+export interface DispatchCompletionPending {
+  orderId: string;
+  orderNumber: string;
+}
+
+/** `POST/PUT /production/records` 写入响应（单条）。 */
+export interface ProductionRecordWriteResponse {
+  record: Record<string, unknown>;
+  dispatchCompletionPending?: DispatchCompletionPending[];
+}
+
+/** `POST /production/records/batch` 写入响应。 */
+export interface ProductionRecordBatchWriteResponse {
+  records: Record<string, unknown>[];
+  dispatchCompletionPending?: DispatchCompletionPending[];
 }
 
 export type ProcessPricingMode = 'per_piece' | 'per_hour';
@@ -132,6 +151,11 @@ export const FINANCE_DOC_NO_PREFIX: Record<FinanceOpType, string> = {
   RECONCILIATION: 'DZD',
   SETTLEMENT: 'GZD',
 };
+
+/** 生产计划单号前缀（如 PLN40） */
+export const PLAN_DOC_NO_PREFIX = 'PLN' as const;
+/** 生产工单号前缀（如 WO40；主计划下达时由计划单号 PLN→WO 转换） */
+export const WORK_ORDER_DOC_NO_PREFIX = 'WO' as const;
 
 /** 采购订单 `customData`：由生产计划详情生成 PO 时写入，进销存列表/详情展示来源计划 */
 export const PSI_PO_CUSTOM_DATA_SOURCE_PLAN_ID = 'sourcePlanId' as const;

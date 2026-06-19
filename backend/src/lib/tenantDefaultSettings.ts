@@ -74,6 +74,7 @@ export const TENANT_DEFAULT_SETTINGS: Record<string, unknown> = {
   },
   materialPanelSettings: {
     groupByOutsourcePartner: false,
+    onlyShowNotCompletedOrder: false,
   },
   materialFormSettings: {
     materialIssueCustomFields: [],
@@ -92,6 +93,8 @@ export const TENANT_DEFAULT_SETTINGS: Record<string, unknown> = {
     outsourceReceiveCustomFields: [],
     showOutsourceDispatchDeliveryDate: false,
     showPartnerFlowDetailOnList: false,
+    hideZeroPendingPartnerOnList: false,
+    onlyShowNotCompletedOrder: false,
     outsourceCenterPrint: {
       dispatchFlowDetail: { showPrintButton: false },
       receiveFlowDetail: { showPrintButton: false },
@@ -100,6 +103,7 @@ export const TENANT_DEFAULT_SETTINGS: Record<string, unknown> = {
   reworkFormSettings: {
     defectTreatmentCustomFields: [],
     reworkReportCustomFields: [],
+    onlyShowNotCompletedOrder: false,
     reworkCenterPrint: {
       defectTreatmentFlowDetail: { showPrintButton: false },
       reworkReportFlowDetail: { showPrintButton: false },

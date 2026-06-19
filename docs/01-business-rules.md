@@ -215,10 +215,17 @@
 
 | 类型 | 格式 | 规则 |
 |------|------|------|
-| 计划单号 | `PLN1`, `PLN2`, ... | 从已有计划单号中解析最大编号后递增 |
+| 计划单号 | `PLN1`, `PLN2`, ... | 与无计划来源的新工单号（含协作接单自动建单）**共用主序号池**：取 `max(计划主序号, 工单主序号) + 1` |
 | 子计划单号 | `PLN1-S1`, `PLN1-S2`, ... | 从父计划派生；多级继续追加 `-S{序号}` |
-| 工单号 | `WO1`, `WO2`, ... | 主计划下达时由计划单号转换 |
+| 工单号 | `WO1`, `WO2`, ... | 主计划下达时由计划单号严格转换（`PLN40` → `WO40`），**不再**因冲突静默改号 |
 | 子工单号 | `WO1-S1`, `WO1-S2`, ... | 由子计划单号转换得到 |
+
+**下达与冲突**：
+
+- 计划下达时目标工单号 = 计划单号 `PLN` → `WO` 替换（后缀保留）。
+- 若目标号已被**无 `planOrderId` 的协作孤儿工单**占用，且**产品一致** → 挂接该工单（写入 `planOrderId` 等），不新建第二条。
+- 若目标号已被其他计划占用，或已被不同产品工单占用 → 返回 409，提示检查协作接单占用。
+- 历史已存在的不一致编号不做自动迁移。
 
 ### 3.4 子计划 / 子工单层级
 
@@ -264,7 +271,24 @@
 
 回退后计划单派生状态为「未下单」，可再次「下达工单」，详情中的数量明细与 BOM 汇总恢复可编辑。
 
-### 3.9 工单表单配置
+### 3.10 工单详情 · 生产物料
+
+工单中心打开单工单详情（`OrderDetailModal`）时，在报工汇总与外协卡片之间**只读展示**生产物料统计表，口径与「生产物料」Tab 一致：
+
+| 列 | 含义 |
+|----|------|
+| 生产领料(+) | `STOCK_OUT` 累计 |
+| 生产退料(-) | `STOCK_RETURN` 累计 |
+| 净领用 | 领料 − 退料 |
+| 报工耗材(理论) | BOM × 完成量，或称重工序的 `materialBreakdown` 快照 |
+| 当前结余 | 净领用 − 理论消耗 |
+
+- **关联工单模式**：按父工单族（含子工单）聚合；子工单详情与父工单展示同一族数据。
+- **关联产品模式**：按成品 `sourceProductId` 聚合物料，并标注「产品维度聚合（含本产品下多张工单）」。
+- 领退料数据由详情页按需窄拉 `STOCK_OUT/STOCK_RETURN`（不依赖工单中心列表的 `orderCenterProdNarrow` 类型集）；写入领退料后随 `invalidateAllProdRecords` 刷新。
+- 详情页不提供领退料操作；发料仍通过列表「物料」按钮或「生产物料」Tab。
+
+### 3.11 工单表单配置
 
 `OrderFormSettings` 结构与计划单表单配置一致，控制列表 / 详情页展示字段。
 
@@ -284,6 +308,16 @@
 
 计划单表单配置 **列表显示** 页签另有「仅显示未完成 / 未下单」（`planFormSettings.listDisplay.onlyShowNotCompleted`），列表传 `excludeCompleted=true`，后端按派生 `PlanDispatchStatus` 内存过滤（隐藏 `COMPLETED`）。
 
+**生产物料 / 外协管理 / 返工管理** 表单配置 **列表显示** 页签（仅关联工单模式 UI）另有「仅显示工单未完成」（字段名 `onlyShowNotCompletedOrder`，分别存于 `materialPanelSettings` / `outsourceFormSettings` / `reworkFormSettings`）：
+
+| 模块 | 过滤范围 | 不过滤 |
+|------|----------|--------|
+| 生产物料 | 主列表（含按委外加工厂展示时的工单 scope） | 领料退料流水 |
+| 外协管理 | 主列表、**待发清单** | **待收回清单**、外协流水 |
+| 返工管理 | 主列表、**待处理不良** | 处理不良/返工报工流水 |
+
+判定：前端内存过滤 `ProductionOrder.dispatchStatus === COMPLETED`（`undefined` 视为进行中）。三模块开关相互独立，不与工单中心 `orderFormSettings.listDisplay.onlyShowNotCompleted` 联动。
+
 ### 3.10 派发完成状态徽章（关联工单模式专属）
 
 仅在「关联工单模式」(`productionLinkMode === 'order'`) 的工单中心与计划单列表展示。
@@ -293,9 +327,9 @@
 | 状态 | 中文 | 判定 |
 |------|------|------|
 | `IN_PROGRESS` | 进行中 | 默认；入库累计不足或被回退 |
-| `COMPLETED`   | 已完成 | `sum(STOCK_IN.quantity WHERE orderId=order.id) ≥ sum(items.quantity)` |
+| `COMPLETED`   | 已完成 | 入库累计达标后用户确认写入；或用户手动覆盖 |
 
-- **自动推进**：所有改变 `STOCK_IN` 数据的入口（`createRecord` / `createRecordBatch` 内单条 / `updateRecord` / `deleteRecord`）在事务后调用 `recalcOrderDispatchStatusByStockIn`，当 `dispatchStatusManual=false` 时自动推进。
+- **自动推进**：所有改变 `STOCK_IN` 数据的入口在事务后调用 `recalcOrderDispatchStatusByStockIn`。当入库累计 ≥ 工单总量且当前为 `IN_PROGRESS` 时，**不**直接写 `COMPLETED`，而是在 API 响应中附带 `dispatchCompletionPending`，由前端弹出与手动切换相同的确认框；用户确认后调用 `PATCH /api/orders/:id/dispatch-status` 写入 `COMPLETED` 并置 `dispatchStatusManual=true`。删除/退库导致入库量回落时，若 `manual=false` 仍会自动从 `COMPLETED` 退回 `IN_PROGRESS`。
 - **手动覆盖**：用户在工单中心点击徽章 → `PATCH /api/orders/:id/dispatch-status`，后端写 `dispatchStatusManual=true`，自动逻辑不再覆盖该工单。
 - **回退**：删除 `STOCK_IN` 导致入库量回落，若 `manual=false` 会自动从 COMPLETED 退回 IN_PROGRESS。
 - **本期不提供**「恢复自动判定」按钮，需手动覆盖后保持手动状态；后续可补 `dispatchStatusManual=false` 的"恢复自动"动作。
@@ -464,6 +498,8 @@
 - 该键以 `__` 前缀标记为内部元数据，报工详情/打印不展示（见 [`effectiveReportTemplate.ts`](../utils/effectiveReportTemplate.ts) 的 `INTERNAL_CUSTOM_DATA_KEYS`）。
 - **例外**：外协收货（[`OutsourcePanel.handleReceiveFormSubmit`](../views/production-ops/OutsourcePanel.tsx)）单品码模式采用「逐件单独落一条 qty1 记录、各挂自己的 `item_code_id`」实现同样效果，不走 `__scanItemCodeIds` 列表（见 5.4.2）。
 
+**外协主列表显示**（表单配置 → 外协管理 →「列表显示」）：`outsourceFormSettings.hideZeroPendingPartnerOnList` 为 true 时，主列表隐藏加工厂「剩余」为 0（已全部收回）的小卡；若工单/产品下加工厂均被隐藏则整行也不显示。仅影响主列表展示，不影响外协流水、待收回清单与收货业务。
+
 ### 5.4.2 外协收货：清单弹窗扫码 → 自动跳录入弹窗
 
 **入口**：「外协管理 → 待收回清单」弹窗（[`OutsourceReceiveListModal`](../views/production-ops/OutsourceReceiveListModal.tsx)）底部「扫码收货」按钮，与「收货」按钮并列。
@@ -531,6 +567,7 @@
 - **复用本地同名/SKU 产品**：接受时除同步色码字典外，可按同一 `categoryDecision` 补绑分类、或在新增色码时将分类 `hasColorSize` 升为 `true`（仍受上述互斥守卫约束）。
 - **外协链转发**：中间站转发给下游的派发 `payload.categoryName` 优先取**链头甲方**最早派发单上的分类名（与色码沿用链头一致），避免中间站本地分类名污染下游默认展示。
 - **规格标签归一**：协作侧颜色/尺码名称使用 `normalizeCollabSpecLabel`（NFKC + 折叠空白），前后端一致，减少重复字典项。
+- **乙方自动建工单与编号**：`acceptTransfer` 接受派发时会自动创建 `ProductionOrder`（不经计划单），工单号走与计划单相同的**主序号池**（`getNextWorkOrderNumber`）。若协作先占用 `WO40`、后创建并下达 `PLN40` 且产品一致，计划下达时**挂接**该孤儿工单而非改号；新计划创建时若协作已占 `WO40`，下一计划号从 `PLN41` 起，避免制造无法下达的 `PLN40`。
 
 ### 5.6 单价/金额查看权限
 

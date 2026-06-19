@@ -4,6 +4,7 @@ import {
   normalizePlanFormSettings,
   repairPlanLabelPrintWhitelistMissingPlanLabelTemplates,
   normalizeMaterialFormSettings,
+  normalizeMaterialPanelSettings,
   normalizeOutsourceFormSettings,
   normalizeReworkFormSettings,
   normalizePurchaseOrderFormSettings,
@@ -281,7 +282,21 @@ describe('normalizeMaterialFormSettings materialCenterPrint', () => {
   });
 });
 
+describe('normalizeMaterialPanelSettings', () => {
+  it('defaults onlyShowNotCompletedOrder to false', () => {
+    expect(normalizeMaterialPanelSettings({ groupByOutsourcePartner: false }).onlyShowNotCompletedOrder).toBe(false);
+  });
+
+  it('onlyShowNotCompletedOrder is true only when explicitly set', () => {
+    expect(normalizeMaterialPanelSettings({ groupByOutsourcePartner: true, onlyShowNotCompletedOrder: true }).onlyShowNotCompletedOrder).toBe(true);
+  });
+});
+
 describe('normalizeReworkFormSettings reworkCenterPrint', () => {
+  it('defaults onlyShowNotCompletedOrder to false', () => {
+    expect(normalizeReworkFormSettings({}).onlyShowNotCompletedOrder).toBe(false);
+  });
+
   it('injects default slots without auto template whitelist', () => {
     const n = normalizeReworkFormSettings({});
     expect(n.reworkCenterPrint?.defectTreatmentFlowDetail?.allowedTemplateIds).toBeUndefined();
@@ -320,6 +335,8 @@ describe('normalizeOutsourceFormSettings', () => {
     const n = normalizeOutsourceFormSettings({});
     expect(n.showOutsourceDispatchDeliveryDate).toBe(false);
     expect(n.showPartnerFlowDetailOnList).toBe(false);
+    expect(n.hideZeroPendingPartnerOnList).toBe(false);
+    expect(n.onlyShowNotCompletedOrder).toBe(false);
     expect(n.outsourceCenterPrint?.dispatchFlowDetail?.allowedTemplateIds).toBeUndefined();
     expect(n.outsourceCenterPrint?.receiveFlowDetail?.allowedTemplateIds).toBeUndefined();
     expect(n.outsourceCenterPrint?.dispatchFlowDetail?.showPrintButton).toBe(false);
@@ -371,15 +388,21 @@ describe('normalizeOutsourceFormSettings', () => {
     });
     expect(n.showOutsourceDispatchDeliveryDate).toBe(false);
     expect(n.showPartnerFlowDetailOnList).toBe(false);
+    expect(n.hideZeroPendingPartnerOnList).toBe(false);
+    expect(n.onlyShowNotCompletedOrder).toBe(false);
   });
 
   it('list display toggles only stay on when explicitly true', () => {
     const n = normalizeOutsourceFormSettings({
       showOutsourceDispatchDeliveryDate: true,
       showPartnerFlowDetailOnList: true,
+      hideZeroPendingPartnerOnList: true,
+      onlyShowNotCompletedOrder: true,
     });
     expect(n.showOutsourceDispatchDeliveryDate).toBe(true);
     expect(n.showPartnerFlowDetailOnList).toBe(true);
+    expect(n.hideZeroPendingPartnerOnList).toBe(true);
+    expect(n.onlyShowNotCompletedOrder).toBe(true);
   });
 });
 

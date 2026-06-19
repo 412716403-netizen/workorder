@@ -32,6 +32,8 @@ export interface OutsourcePartnerFlowDetailModalProps {
   categories: ProductCategory[];
   dictionaries?: AppDictionaries;
   outsourceFormSettings?: OutsourceFormSettings;
+  /** 流水弹窗层级（嵌套在其它弹窗内时可传 z-[90]） */
+  overlayZIndexClass?: string;
 }
 
 type DetailDocTypeFilter = 'all' | 'dispatch' | 'receive';
@@ -86,6 +88,7 @@ const OutsourcePartnerFlowDetailModal: React.FC<OutsourcePartnerFlowDetailModalP
   categories,
   dictionaries,
   outsourceFormSettings = DEFAULT_OUTSOURCE_FORM_SETTINGS,
+  overlayZIndexClass = 'z-[85]',
 }) => {
   const [detailDateFrom, setDetailDateFrom] = useState('');
   const [detailDateTo, setDetailDateTo] = useState('');
@@ -166,7 +169,7 @@ const OutsourcePartnerFlowDetailModal: React.FC<OutsourcePartnerFlowDetailModalP
   };
 
   return (
-    <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
+    <div className={`fixed inset-0 ${overlayZIndexClass} flex items-center justify-center p-4`}>
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} aria-hidden />
       <div
         className="relative flex w-full max-w-6xl max-h-[90vh] flex-col overflow-hidden rounded-[32px] bg-white shadow-2xl animate-in zoom-in-95"

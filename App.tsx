@@ -115,11 +115,13 @@ function AuthRouter() {
   }
 
   return (
-    <React.Fragment key={`${userId}_${tenantCtx!.tenantId}`}>
-      <AppDataProvider>
-        <AppLayout />
-      </AppDataProvider>
-    </React.Fragment>
+    <ConfirmProvider>
+      <React.Fragment key={`${userId}_${tenantCtx!.tenantId}`}>
+        <AppDataProvider>
+          <AppLayout />
+        </AppDataProvider>
+      </React.Fragment>
+    </ConfirmProvider>
   );
 }
 
@@ -182,7 +184,6 @@ function AppLayout() {
   }
 
   return (
-    <ConfirmProvider>
     <div className="flex h-screen bg-slate-50 text-slate-900 font-sans">
       {/* Sidebar — 打印模板编辑页隐藏，便于全宽画布 */}
       {!printEditorFullscreen && (
@@ -353,7 +354,6 @@ function AppLayout() {
         </ErrorBoundary>
       </div>
     </div>
-    </ConfirmProvider>
   );
 }
 

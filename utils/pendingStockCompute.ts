@@ -31,6 +31,23 @@ function stockInAggregatesForOrder(order: ProductionOrder, prodRecords: Producti
   return { alreadyIn, alreadyInByVariant };
 }
 
+/** 工单维度生产入库（STOCK_IN）累计，与待入库清单口径一致。 */
+export function getOrderStockInAggregates(order: ProductionOrder, prodRecords: ProductionOpRecord[]) {
+  return stockInAggregatesForOrder(order, prodRecords);
+}
+
+/** 产品维度生产入库（STOCK_IN）累计：同 productId 下全部入库流水，与产品模式待入库清单一致。 */
+export function getProductStockInAggregates(productId: string, prodRecords: ProductionOpRecord[]) {
+  const stockInRecords = prodRecords.filter(r => r.type === 'STOCK_IN' && r.productId === productId);
+  const alreadyIn = stockInRecords.reduce((s, r) => s + (Number(r.quantity) || 0), 0);
+  const alreadyInByVariant: Record<string, number> = {};
+  stockInRecords.forEach(r => {
+    const vid = r.variantId ?? '';
+    alreadyInByVariant[vid] = (alreadyInByVariant[vid] ?? 0) + (Number(r.quantity) || 0);
+  });
+  return { alreadyIn, alreadyInByVariant };
+}
+
 /**
  * 产品在「最后一道工序模板」上的全局完成量（按规格汇总）。
  * 同时汇总 PMP（关联产品报工）与工单里程碑（关联工单报工 / 外协收回）两路数据——

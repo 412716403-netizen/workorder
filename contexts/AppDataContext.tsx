@@ -37,7 +37,13 @@ import type {
   Worker,
   Equipment,
   OrderDispatchStatus,
+  DispatchCompletionPending,
 } from '../types';
+import { useConfirm } from './ConfirmContext';
+import {
+  buildOrderDispatchCompletionConfirmMessage,
+  ORDER_DISPATCH_STATUS_CONFIRM_TITLE,
+} from '../utils/orderDispatchStatusConfirm';
 import {
   DEFAULT_MATERIAL_PANEL_SETTINGS,
   DEFAULT_MATERIAL_FORM_SETTINGS,
@@ -74,6 +80,7 @@ import {
   normalizeReceiptFormSettings,
   normalizePaymentFormSettings,
   normalizeMaterialFormSettings,
+  normalizeMaterialPanelSettings,
   normalizeOutsourceFormSettings,
   normalizeReworkFormSettings,
 } from './formSettingsDefaults';
@@ -285,6 +292,7 @@ const ActionsCtx = createContext<AppDataActions | null>(null);
 
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const { currentUser, tenantCtx } = useAuth();
+  const confirm = useConfirm();
   const qc = useQueryClient();
   /**
    * Phase 3.D follow-up + Phase 3.E：context 不再持有 prodRecords / psiRecords / financeRecords 全量数组；
@@ -334,6 +342,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       'flow.reportHistory',
       'materialIssueStockProd',
       'materialIssueTodayStockOut',
+      'orderDetailMaterialStats',
       'pendingStockPanel.stockIn',
     ];
     qc.invalidateQueries({
@@ -648,10 +657,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     makeFormSettingsSaver('reworkFormSettings', normalizeReworkFormSettings, setReworkFormSettings),
     [],
   );
-  // MaterialPanelSettings 无 normalize；保留 inline 形式
+  // MaterialPanelSettings 归一化后写入
   const onUpdateMaterialPanelSettings = useCallback(async (v: MaterialPanelSettings) => {
-    await api.settings.updateConfig('materialPanelSettings', v);
-    setMaterialPanelSettings(v);
+    const next = normalizeMaterialPanelSettings(v);
+    await api.settings.updateConfig('materialPanelSettings', next);
+    setMaterialPanelSettings(next);
   }, []);
   const onUpdatePrintTemplates = useCallback(async (v: PrintTemplate[]) => {
     await api.settings.updateConfig('printTemplates', v);
@@ -866,11 +876,32 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       try {
         const updated = await api.orders.updateDispatchStatus(orderId, status);
         setOrders(prev => prev.map(o => o.id === orderId ? norm1(updated) : o));
+        // 计划单 derivedStatus 由关联工单 dispatchStatus 聚合，切换后需重拉计划列表
+        await refreshPlans();
       } catch (err: any) {
         toast.error(err.message || '切换工单状态失败');
       }
     },
-    [],
+    [refreshPlans],
+  );
+
+  /** 入库累计达标后弹出确认，用户同意再标为「已完成」。 */
+  const promptDispatchCompletion = useCallback(
+    async (pending: DispatchCompletionPending[]) => {
+      if (pending.length === 0) return;
+      for (const p of pending) {
+        const ok = await confirm({
+          title: ORDER_DISPATCH_STATUS_CONFIRM_TITLE,
+          message: buildOrderDispatchCompletionConfirmMessage(p.orderNumber),
+          confirmText: '确认切换',
+          cancelText: '取消',
+        });
+        if (ok) {
+          await onUpdateOrderDispatchStatus(p.orderId, OrderDispatchStatus.COMPLETED);
+        }
+      }
+    },
+    [confirm, onUpdateOrderDispatchStatus],
   );
 
   const onDeleteOrder = useCallback(async (orderId: string) => {
@@ -888,15 +919,17 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
    */
   const onAddProdRecord = useCallback(async (record: ProductionOpRecord): Promise<ProductionOpRecord | null> => {
     try {
-      const created = await api.production.create(record);
+      const result = await api.production.create(record);
+      const created = norm1(result.record as ProductionOpRecord);
       invalidateAllProdRecords();
       void Promise.allSettled([refreshOrders(), refreshPMP()]);
-      return created ?? null;
+      await promptDispatchCompletion(result.dispatchCompletionPending ?? []);
+      return created;
     } catch (err: any) {
       toast.error(err.message || '添加记录失败');
       return null;
     }
-  }, [refreshOrders, refreshPMP, invalidateAllProdRecords]);
+  }, [refreshOrders, refreshPMP, invalidateAllProdRecords, promptDispatchCompletion]);
 
   const onAddProdRecordBatch = useCallback(async (records: ProductionOpRecord[]): Promise<ProductionOpRecord[]> => {
     try {
@@ -909,22 +942,29 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
        * 让 view 层（StockMaterialPanel 等）可以在弹窗里展示真实单号，
        * 而不需要再各自维护一份客户端 docNo 生成逻辑。
        */
-      const created: ProductionOpRecord[] | null | undefined = await api.production.createBatch(records);
+      const result = await api.production.createBatch(records);
+      const created = (result.records ?? []).map(r => norm1(r as ProductionOpRecord));
       invalidateAllProdRecords();
       void Promise.allSettled([refreshOrders(), refreshPMP()]);
-      return Array.isArray(created) ? created : [];
+      await promptDispatchCompletion(result.dispatchCompletionPending ?? []);
+      return created;
     } catch (err: any) {
       toast.error(err.message || '批量添加记录失败');
       return [];
     }
-  }, [refreshOrders, refreshPMP, invalidateAllProdRecords]);
+  }, [refreshOrders, refreshPMP, invalidateAllProdRecords, promptDispatchCompletion]);
 
   const onUpdateProdRecord = useCallback(async (r: ProductionOpRecord) => {
     try {
-      await api.production.update(r.id, r);
+      const result = await api.production.update(r.id, r);
       invalidateAllProdRecords();
+      const touchesStockIn = r.type === 'STOCK_IN';
+      if (touchesStockIn) {
+        void Promise.allSettled([refreshOrders(), refreshPMP()]);
+        await promptDispatchCompletion(result.dispatchCompletionPending ?? []);
+      }
     } catch (err: any) { toast.error(err.message || '更新记录失败'); }
-  }, [invalidateAllProdRecords]);
+  }, [invalidateAllProdRecords, refreshOrders, refreshPMP, promptDispatchCompletion]);
 
   const onDeleteProdRecord = useCallback(async (id: string) => {
     try {
@@ -1118,6 +1158,7 @@ export {
   normalizeReceiptFormSettings,
   normalizePaymentFormSettings,
   normalizeMaterialFormSettings,
+  normalizeMaterialPanelSettings,
   normalizeOutsourceFormSettings,
   normalizeReworkFormSettings,
 } from './formSettingsDefaults';

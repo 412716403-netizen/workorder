@@ -12,7 +12,8 @@ import { outsourceFormConfigSchema } from '../../components/form-config/schemas/
 interface OutsourceFormConfigModalProps {
   open: boolean;
   onClose: () => void;
-  defaultTabWhenOpen?: 'fields' | 'print';
+  defaultTabWhenOpen?: 'fields' | 'print' | 'list';
+  productionLinkMode?: 'order' | 'product';
   outsourceFormSettings: OutsourceFormSettings;
   onUpdateOutsourceFormSettings: (settings: OutsourceFormSettings) => void;
   printTemplates: PrintTemplate[];
@@ -27,6 +28,7 @@ const OutsourceFormConfigModal: React.FC<OutsourceFormConfigModalProps> = ({
   open,
   onClose,
   defaultTabWhenOpen,
+  productionLinkMode = 'order',
   outsourceFormSettings,
   onUpdateOutsourceFormSettings,
   printTemplates,
@@ -46,6 +48,7 @@ const OutsourceFormConfigModal: React.FC<OutsourceFormConfigModalProps> = ({
     printTemplates={printTemplates}
     onUpdatePrintTemplates={onUpdatePrintTemplates}
     onRefreshPrintTemplates={onRefreshPrintTemplates}
+    productionLinkMode={productionLinkMode}
     plans={plans}
     orders={orders}
     products={products}
