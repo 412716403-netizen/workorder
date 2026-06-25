@@ -310,6 +310,18 @@
 
 计划单表单配置 **列表显示** 页签另有「仅显示未完成 / 未下单」（`planFormSettings.listDisplay.onlyShowNotCompleted`），列表传 `excludeCompleted=true`，后端按派生 `PlanDispatchStatus` 内存过滤（隐藏 `COMPLETED`）。
 
+计划单表单配置 **列表显示** 页签另有「物料损耗计算」（`planFormSettings.listDisplay.materialLossEnabled`）：开启后计划详情「用料清单」在物料名称后显示「损耗」列，可按物料行填写损耗百分比。
+
+- 口径：理论总需量 = 基础理论量 × `(1 + 损耗% / 100)`（如输入 5 → +5%）；负值/非法视为 0。
+- 联动：放大后的理论总需量参与 `缺料数 = max(0, 理论总需量 − 库存)` → 默认回填「计划用量」→ 生成采购订单数量，自动随损耗变化；多级 BOM 逐级向下传导。
+- 持久化：损耗率按计划单存于 `PlanOrder.customData.materialLossRates`（键为行 rowKey `materialId-nodeId-parentId`），随计划详情「保存」按钮落库；关闭开关后已存值保留但不参与计算。
+
+计划单表单配置 **列表显示** 页签另有「列表上显示采购订单进度」（`planFormSettings.listDisplay.showPurchaseProgress`）：开启后计划单列表每行显示该计划关联采购订单的**汇总到货进度**（单一总百分比 + 迷你进度条），不展示每个物料的明细。
+
+- 口径：与详情面板单物料一致，进度 = `已收 / 已订购`；总进度按**数量加权** `Σ已收 / Σ已订购`，超收（received > ordered）截断为 100% 并标记「已超收」。
+- 关联范围：与详情面板同口径（PO 的 `customData.sourcePlanId / sourcePlanNumber`，及历史 `note` 含 `计划单[<no>]`），子计划行包含其**祖先计划**的采购订单。
+- 数据来源：列表当前页（含展开的子孙计划）经 `POST /api/psi/plans-purchase-progress` 批量取回；`已订购 = 0`（无关联采购订单）的行不显示进度。
+
 **生产物料 / 外协管理 / 返工管理** 表单配置 **列表显示** 页签（仅关联工单模式 UI）另有「仅显示工单未完成」（字段名 `onlyShowNotCompletedOrder`，分别存于 `materialPanelSettings` / `outsourceFormSettings` / `reworkFormSettings`）：
 
 | 模块 | 过滤范围 | 不过滤 |

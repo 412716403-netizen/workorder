@@ -64,6 +64,15 @@ export const psi = {
       })}`,
     ),
   /**
+   * 计划单列表「采购订单进度」批量汇总：按数量加权返回每个计划的 { received, ordered }，
+   * 百分比由前端计算（Σ已收 / Σ已订购）。开关 listDisplay.showPurchaseProgress 开启时调用。
+   */
+  plansPurchaseProgress: (plans: Array<{ planId: string; planNumbers?: string[] }>) =>
+    request<Array<{ planId: string; received: number; ordered: number }>>(
+      '/psi/plans-purchase-progress',
+      { method: 'POST', body: JSON.stringify({ plans }) },
+    ),
+  /**
    * Phase 3.D follow-up：按合作单位预生成 PSI 单号。
    * - prefix 必填；psiType 必填（PURCHASE_ORDER / PURCHASE_BILL / SALES_ORDER / SALES_BILL）。
    * - 后端会按 (partnerId 或 partnerName) 精确匹配；legacyPrefixes 可叠加旧前缀（如 SB → XS 改前缀场景）。

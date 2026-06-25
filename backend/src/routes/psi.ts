@@ -81,7 +81,22 @@ const lastPurchasePriceSchema = z.object({
   ).min(0).max(500),
 });
 
+const plansPurchaseProgressSchema = z.object({
+  plans: z.array(
+    z.object({
+      planId: z.string().min(1),
+      planNumbers: z.array(z.string()).optional(),
+    }),
+  ).min(0).max(100),
+});
+
 router.get('/plan-related', requireSubPermission('production:plans:view'), ctrl.listPlanRelated);
+router.post(
+  '/plans-purchase-progress',
+  requireSubPermission('production:plans:view'),
+  validate(plansPurchaseProgressSchema),
+  ctrl.listPlansPurchaseProgress,
+);
 router.get('/next-doc-number', requirePsiOrProductionRead(), ctrl.nextDocNumber);
 router.post(
   '/last-purchase-prices',

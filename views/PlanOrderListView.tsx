@@ -62,6 +62,7 @@ import PlanProductDetail from './plan-order-list/PlanProductDetail';
 import PlanDetailPanel from './plan-order-list/PlanDetailPanel';
 import { PlanPrintTemplateManageDialog } from '../components/plan-print/PlanPrintTemplateManageDialog';
 import { plans as plansApi } from '../services/api';
+import { usePlanPurchaseProgress, type PlanPurchaseProgress } from '../hooks/usePlanPurchaseProgress';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { formatPlanOrderCreatedAtForList, toLocalDateYmd } from '../utils/localDateTime';
 import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
@@ -129,6 +130,41 @@ function sumPlanItemsQty(plan: PlanOrder): number {
 function planListQtyUnitName(product: Product | undefined, units: AppDictionaries['units']): string {
   if (!product?.unitId) return 'PCS';
   return units?.find(u => u.id === product.unitId)?.name ?? 'PCS';
+}
+
+/**
+ * 计划单列表「采购订单进度」单元：迷你进度条 + 总百分比（口径与详情面板一致）。
+ * 无关联采购订单（pct == null）返回 null，列表留空。
+ */
+function renderPlanListPurchaseProgress(progress: PlanPurchaseProgress | undefined): React.ReactNode {
+  if (!progress || progress.pct == null) return null;
+  const pct = progress.pct;
+  const isComplete = pct >= 1 && !progress.overReceived;
+  const label = progress.overReceived
+    ? `采购已超收`
+    : isComplete
+      ? `采购已完成`
+      : `采购 ${Math.round(pct * 100)}%`;
+  return (
+    <span className="flex items-center gap-1.5 shrink-0" title="关联采购订单到货进度（已收 / 已订购）">
+      <span className="h-1.5 w-16 bg-slate-100 rounded-full overflow-hidden flex">
+        {progress.overReceived ? (
+          <>
+            <span className="h-full bg-emerald-500" style={{ width: `${(progress.ordered / progress.received) * 100}%` }} />
+            <span className="h-full bg-rose-500" style={{ width: `${((progress.received - progress.ordered) / progress.received) * 100}%` }} />
+          </>
+        ) : (
+          <span
+            className={`h-full rounded-full ${isComplete ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+            style={{ width: `${Math.min(100, pct * 100)}%` }}
+          />
+        )}
+      </span>
+      <span className={`text-[10px] font-bold ${isComplete || progress.overReceived ? 'text-emerald-600' : 'text-slate-600'}`}>
+        {label}
+      </span>
+    </span>
+  );
 }
 
 function renderPlanListCustomFieldValue(
@@ -272,6 +308,23 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
   const displayPlans = fetchedPlans.length > 0 || debouncedPlanSearch || planPage > 1 ? fetchedPlans : plans;
   /** 列表统一按单据生成时间新在前（与后端分页 orderBy 一致，并修正子计划与父计划交错时的展示顺序） */
   const plansForView = useMemo(() => [...displayPlans].sort(comparePlansNewestFirst), [displayPlans]);
+  const showPurchaseProgress = planFormSettings.listDisplay?.showPurchaseProgress === true;
+  // 列表会展开父/子计划，进度需覆盖当前页计划及其全部子孙
+  const plansForPurchaseProgress = useMemo(() => {
+    if (!showPurchaseProgress) return [] as PlanOrder[];
+    const seen = new Set<string>();
+    const result: PlanOrder[] = [];
+    for (const p of plansForView) {
+      for (const id of collectSubtreePlanIdsForPlan(p.id, plans)) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const pl = plans.find(x => x.id === id) ?? (p.id === id ? p : undefined);
+        if (pl) result.push(pl);
+      }
+    }
+    return result;
+  }, [showPurchaseProgress, plansForView, plans]);
+  const purchaseProgressByPlan = usePlanPurchaseProgress(plansForPurchaseProgress, plans, showPurchaseProgress);
   const categoryMap = useMemo(() => new Map(categories.map(c => [c.id, c])), [categories]);
   const renderProductCustomTags = useCallback(
     (product: Product | undefined) => {
@@ -640,6 +693,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                               交货 {toLocalDateYmd(plan.dueDate) || String(plan.dueDate).slice(0, 10)}
                             </span>
                           )}
+                          {showPurchaseProgress && renderPlanListPurchaseProgress(purchaseProgressByPlan.get(plan.id))}
                           {customListFields.map(cf =>
                             renderPlanListCustomFieldValue(cf, plan, setImagePreviewUrl, setFilePreviewUrl, setFilePreviewType),
                           )}
@@ -737,6 +791,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                       交货 {toLocalDateYmd(plan.dueDate) || String(plan.dueDate).slice(0, 10)}
                                     </span>
                                   )}
+                                  {showPurchaseProgress && renderPlanListPurchaseProgress(purchaseProgressByPlan.get(plan.id))}
                                   {customListFields.map(cf =>
                             renderPlanListCustomFieldValue(cf, plan, setImagePreviewUrl, setFilePreviewUrl, setFilePreviewType),
                           )}
@@ -840,6 +895,7 @@ const PlanOrderListView: React.FC<PlanOrderListViewProps> = ({ productionLinkMod
                                     交货 {toLocalDateYmd(plan.dueDate) || String(plan.dueDate).slice(0, 10)}
                                   </span>
                                 )}
+                                {showPurchaseProgress && renderPlanListPurchaseProgress(purchaseProgressByPlan.get(plan.id))}
                                 {customListFields.map(cf =>
                             renderPlanListCustomFieldValue(cf, plan, setImagePreviewUrl, setFilePreviewUrl, setFilePreviewType),
                           )}

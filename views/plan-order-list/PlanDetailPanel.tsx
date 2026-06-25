@@ -78,6 +78,7 @@ import {
   effectiveSupplierIdFromProduct,
   purchaseOrderRecordMatchesPlanPanel,
 } from '../../utils/planDetailHelpers';
+import { getMaterialLossRates, applyLoss, MATERIAL_LOSS_RATES_KEY } from '../../utils/materialLoss';
 
 // formatPlanCreatedDateList / effectiveSupplierIdFromProduct / purchaseOrderRecordMatchesPlanPanel
 // 已抽离至 utils/planDetailHelpers.ts
@@ -419,6 +420,29 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
     return fallback;
   };
 
+  /** 物料损耗计算开关（表单配置-列表显示）；损耗率按计划单存于 customData.materialLossRates */
+  const materialLossEnabled = planFormSettings.listDisplay?.materialLossEnabled === true;
+  const lossRates = useMemo(
+    () => getMaterialLossRates(tempPlanInfo.customData),
+    [tempPlanInfo.customData],
+  );
+  /** 写入某物料行的损耗百分比（0/空 → 删除该键），随「保存」落库 */
+  const setMaterialLossRate = useCallback((rowKey: string, pct: number | null) => {
+    setTempPlanInfo(prev => {
+      const prevRates = (prev.customData?.[MATERIAL_LOSS_RATES_KEY] ?? {}) as Record<string, number>;
+      const nextRates: Record<string, number> = { ...prevRates };
+      if (pct == null || !(pct > 0)) {
+        delete nextRates[rowKey];
+      } else {
+        nextRates[rowKey] = pct;
+      }
+      return {
+        ...prev,
+        customData: { ...(prev.customData ?? {}), [MATERIAL_LOSS_RATES_KEY]: nextRates },
+      };
+    });
+  }, []);
+
   const materialRequirements = useMemo(() => {
     if (!viewPlan || !viewProduct || !tempPlanInfo.items) return [];
     type ReqEntry = { materialId: string; nodeId: string; quantity: number; level: number; parentProductId?: string };
@@ -464,10 +488,10 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
       const node = globalNodes.find(n => n.id === req.nodeId);
       const stockQty = getServerStockQty(req.materialId);
       const stock = stockQty ?? 0;
-      const totalNeeded = req.quantity;
-      const shortage = stockQty === null ? 0 : Math.max(0, totalNeeded - stockQty);
       const parentId = req.parentProductId ?? viewProduct.id;
       const rowKey = `${req.materialId}-${req.nodeId}-${parentId}`;
+      const totalNeeded = materialLossEnabled ? applyLoss(req.quantity, lossRates[rowKey]) : req.quantity;
+      const shortage = stockQty === null ? 0 : Math.max(0, totalNeeded - stockQty);
       const plannedQty = getEffectiveQty(req.materialId, req.nodeId, plannedQtyByKey[rowKey] !== undefined ? (plannedQtyByKey[rowKey] ?? 0) : shortage);
       list.push({
         rowKey,
@@ -501,13 +525,14 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
         const parentRow = list.find(r => r.materialId === parentProductId && r.nodeId === nodeId);
         const parentFallback = parentRow ? (plannedQtyByKey[parentRow.rowKey] !== undefined ? (plannedQtyByKey[parentRow.rowKey] ?? 0) : parentRow.shortage) : 0;
         const parentPlannedQty = parentRow ? getEffectiveQty(parentProductId, nodeId, parentFallback) : 0;
-        const totalNeeded = parentPlannedQty * unitPerParent;
+        const rowKey = `${productId}-${nodeId}-${parentProductId}`;
+        const baseNeeded = parentPlannedQty * unitPerParent;
+        const totalNeeded = materialLossEnabled ? applyLoss(baseNeeded, lossRates[rowKey]) : baseNeeded;
         const material = products.find(p => p.id === productId);
         const node = globalNodes.find(n => n.id === nodeId);
         const stockQty = getServerStockQty(productId);
         const stock = stockQty ?? 0;
         const shortage = stockQty === null ? 0 : Math.max(0, totalNeeded - stockQty);
-        const rowKey = `${productId}-${nodeId}-${parentProductId}`;
         const plannedQty = plannedQtyByKey[rowKey] !== undefined ? (plannedQtyByKey[rowKey] ?? 0) : shortage;
         list.push({
           rowKey,
@@ -542,7 +567,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
       ...r,
       parentMaterialName: r.parentProductId ? (products.find(p => p.id === r.parentProductId)?.name) : undefined
     }));
-  }, [viewPlan, viewProduct, tempPlanInfo.items, boms, products, globalNodes, plannedQtyByKey, plans, effectivePlanForMaterial, stockReady, serverStockMap]);
+  }, [viewPlan, viewProduct, tempPlanInfo.items, boms, products, globalNodes, plannedQtyByKey, plans, effectivePlanForMaterial, stockReady, serverStockMap, materialLossEnabled, lossRates]);
 
   const hasProducibleNeedingSubPlan = (materialRequirements as any[]).some((r: any) => {
     const p = products.find(px => px.id === r.materialId);
@@ -1447,6 +1472,9 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                       <thead>
                          <tr className="bg-slate-50/50 border-b border-slate-100">
                             <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">物料名称 / SKU</th>
+                            {materialLossEnabled && (
+                              <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center min-w-[120px]">损耗</th>
+                            )}
                             <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">理论总需量</th>
                             <th className="px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">
                               <div className="inline-flex flex-col items-center gap-1 max-w-[120px] mx-auto">
@@ -1475,7 +1503,7 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                       </thead>
                       <tbody className="divide-y divide-slate-50">
                          {(materialRequirements as any[]).length === 0 ? (
-                            <tr><td colSpan={6} className="px-8 py-10 text-center text-slate-300 italic text-sm">尚未配置 BOM 详情</td></tr>
+                            <tr><td colSpan={materialLossEnabled ? 7 : 6} className="px-8 py-10 text-center text-slate-300 italic text-sm">尚未配置 BOM 详情</td></tr>
                          ) : (
                             (materialRequirements as any[]).map((req: any, idx: number) => (
                                <tr
@@ -1526,6 +1554,27 @@ const PlanDetailPanel: React.FC<PlanDetailPanelProps> = ({
                                         </div>
                                      </div>
                                   </td>
+                                  {materialLossEnabled && (
+                                    <td className="px-8 py-4 text-center">
+                                       <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                                          <input
+                                             type="number"
+                                             min={0}
+                                             step="1"
+                                             placeholder="0"
+                                             value={lossRates[req.rowKey] != null ? String(lossRates[req.rowKey]) : ''}
+                                             onChange={e => {
+                                                const raw = e.target.value.trim();
+                                                if (raw === '') { setMaterialLossRate(req.rowKey, null); return; }
+                                                const v = parseFloat(raw);
+                                                setMaterialLossRate(req.rowKey, isNaN(v) || v <= 0 ? null : Math.round(v * 100) / 100);
+                                             }}
+                                             className="w-20 bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-sm font-bold text-slate-800 text-right focus:ring-2 focus:ring-indigo-500 outline-none shrink-0"
+                                          />
+                                          <span className="text-[10px] font-bold text-slate-400 shrink-0">%</span>
+                                       </span>
+                                    </td>
+                                  )}
                                   <td className="px-8 py-4">
                                      <span className="text-sm font-black text-slate-600 whitespace-nowrap">{Number(req.totalNeeded).toFixed(2)} {getUnitName(req.materialId)}</span>
                                   </td>

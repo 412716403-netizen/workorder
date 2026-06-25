@@ -361,6 +361,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const invalidateAllPsiRecords = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['psiOpsRecords'] });
     qc.invalidateQueries({ queryKey: ['planRelatedPsi'] });
+    // 计划详情面板「计划相关 PSI」与列表「采购订单进度」窄查
+    qc.invalidateQueries({ queryKey: ['plan.relatedPsi'] });
+    qc.invalidateQueries({ queryKey: ['plan.purchaseProgress'] });
     qc.invalidateQueries({ queryKey: ['finance-detail', 'psi'] });
     qc.invalidateQueries({
       predicate: (q) => {

@@ -101,6 +101,20 @@ export const listPlanRelated = asyncHandler(async (req, res) => {
   );
 });
 
+/** 计划单列表「采购订单进度」批量汇总端点（POST，body: { plans: [{ planId, planNumbers }] }） */
+export const listPlansPurchaseProgress = asyncHandler(async (req, res) => {
+  const rawPlans = Array.isArray(req.body?.plans) ? req.body.plans : [];
+  // 单次最多 100 个计划、每计划最多 100 个 planNumber，避免被构造大查询
+  const plans = rawPlans.slice(0, 100).map((p: { planId?: unknown; planNumbers?: unknown }) => ({
+    planId: String(p?.planId ?? '').trim(),
+    planNumbers: (Array.isArray(p?.planNumbers) ? p.planNumbers : [])
+      .slice(0, 100)
+      .map((n: unknown) => String(n ?? '').trim())
+      .filter(Boolean),
+  }));
+  res.json(await psiService.listPlansPurchaseProgress(getTenantPrisma(req.tenantId!), plans));
+});
+
 /** Phase 3.D follow-up：按合作单位预生成 PSI 单号（PO/PB/SO/SB 等） */
 export const nextDocNumber = asyncHandler(async (req, res) => {
   const prefix = optStr(req.query.prefix) ?? '';

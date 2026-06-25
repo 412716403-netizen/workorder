@@ -708,6 +708,17 @@ export interface PlanListDisplaySettings {
    * 关联工单模式下生效；筛选走后端 `excludeCompleted` 参数（内存分页，与状态关键字搜索同路径）。
    */
   onlyShowNotCompleted?: boolean;
+  /**
+   * 为 true 时计划单列表每行显示该计划关联采购订单的汇总到货进度（Σ已收/Σ已订购，单一百分比）。
+   * 数据由 `psi.plansPurchaseProgress` 批量取回；无关联采购订单的行不展示。
+   */
+  showPurchaseProgress?: boolean;
+  /**
+   * 为 true 时计划详情「用料清单」显示「损耗」列，可按物料行填写损耗百分比；
+   * 理论总需量按 (1 + 损耗%) 放大，并联动缺料数/计划用量/采购数量。
+   * 损耗率按计划单持久化于 `PlanOrder.customData.materialLossRates`（按 rowKey）。
+   */
+  materialLossEnabled?: boolean;
 }
 
 /** 计划单表单配置：列表/新增/详情页显示哪些字段，及自定义项 */

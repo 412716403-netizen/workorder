@@ -724,6 +724,105 @@ export async function listPlanRelatedPsi(
 }
 
 /**
+ * 计划单列表「采购订单进度」批量汇总（开关 listDisplay.showPurchaseProgress 开启时调用）。
+ *
+ * 与 `listPlanRelatedPsi` 同口径软关联（customData.sourcePlanId / sourcePlanNumber，
+ * 历史 note 含 `计划单[<no>]`），但：
+ *  - 一次性按所有 planId/planNumbers 的并集查 PO/PB（每页一次往返，避免逐计划 N 次查询）；
+ *  - 只取聚合所需字段，跳过 enrichPsiRecordsWithProductMeta；
+ *  - 每个计划聚合为 `{ received, ordered }`（received = Σ对应已收，ordered = Σ订购量），
+ *    百分比由前端按 `Σ已收 / Σ已订购` 计算（与详情面板单物料口径一致）。
+ *
+ * 调用方：`POST /api/psi/plans-purchase-progress`，body `{ plans: [{ planId, planNumbers }] }`。
+ */
+export async function listPlansPurchaseProgress(
+  db: TenantPrismaClient,
+  plans: Array<{ planId: string; planNumbers: string[] }>,
+): Promise<Array<{ planId: string; received: number; ordered: number }>> {
+  const normalized = (plans ?? [])
+    .map(p => ({
+      planId: String(p?.planId ?? '').trim(),
+      planNumbers: (p?.planNumbers ?? []).map(n => String(n ?? '').trim()).filter(Boolean),
+    }))
+    .filter(p => p.planId || p.planNumbers.length > 0);
+
+  if (normalized.length === 0) return [];
+
+  const allPlanIds = new Set<string>();
+  const allPlanNumbers = new Set<string>();
+  for (const p of normalized) {
+    if (p.planId) allPlanIds.add(p.planId);
+    for (const n of p.planNumbers) allPlanNumbers.add(n);
+  }
+
+  const orClauses: Prisma.PsiRecordWhereInput[] = [];
+  for (const id of allPlanIds) {
+    orClauses.push({ customData: { path: ['sourcePlanId'], equals: id } });
+  }
+  for (const pn of allPlanNumbers) {
+    orClauses.push({ customData: { path: ['sourcePlanNumber'], equals: pn } });
+    orClauses.push({ note: { contains: `计划单[${pn}]` } });
+  }
+  if (orClauses.length === 0) {
+    return normalized.map(p => ({ planId: p.planId, received: 0, ordered: 0 }));
+  }
+
+  const purchaseOrders = await db.psiRecord.findMany({
+    where: { type: 'PURCHASE_ORDER', OR: orClauses },
+    select: { id: true, docNumber: true, quantity: true, customData: true, note: true },
+  });
+
+  const poDocNumbers = [
+    ...new Set(
+      purchaseOrders
+        .map(r => r.docNumber)
+        .filter((d): d is string => typeof d === 'string' && d.length > 0),
+    ),
+  ];
+
+  const purchaseBills = poDocNumbers.length
+    ? await db.psiRecord.findMany({
+        where: { type: 'PURCHASE_BILL', sourceOrderNumber: { in: poDocNumbers } },
+        select: { quantity: true, sourceOrderNumber: true, sourceLineId: true },
+      })
+    : [];
+
+  const receivedByOrderLine = new Map<string, number>();
+  for (const r of purchaseBills) {
+    if (!r.sourceOrderNumber || !r.sourceLineId) continue;
+    const key = `${r.sourceOrderNumber}::${r.sourceLineId}`;
+    receivedByOrderLine.set(key, (receivedByOrderLine.get(key) ?? 0) + Number(r.quantity ?? 0));
+  }
+
+  const matchesPlan = (
+    po: { customData: Prisma.JsonValue; note: string | null },
+    planId: string,
+    planNumbers: string[],
+  ): boolean => {
+    const cd =
+      po.customData && typeof po.customData === 'object' && !Array.isArray(po.customData)
+        ? (po.customData as Record<string, unknown>)
+        : {};
+    if (planId && String(cd.sourcePlanId ?? '').trim() === planId) return true;
+    const sn = String(cd.sourcePlanNumber ?? '').trim();
+    if (sn && planNumbers.includes(sn)) return true;
+    const note = String(po.note ?? '');
+    return planNumbers.some(pn => note.includes(`计划单[${pn}]`));
+  };
+
+  return normalized.map(p => {
+    let ordered = 0;
+    let received = 0;
+    for (const po of purchaseOrders) {
+      if (!matchesPlan(po, p.planId, p.planNumbers)) continue;
+      ordered += Number(po.quantity ?? 0);
+      received += receivedByOrderLine.get(`${po.docNumber}::${po.id}`) ?? 0;
+    }
+    return { planId: p.planId, received, ordered };
+  });
+}
+
+/**
  * Phase 3.D follow-up：按合作单位预生成 PSI 单号（取代前端 `nextPsiDocNumber` 扫全表）。
  * 同时支持 legacy 前缀（如 SALES_BILL 的旧前缀 SB 与新前缀 XS 共用同一合作单位序号空间）。
  */
