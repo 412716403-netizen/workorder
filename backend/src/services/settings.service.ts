@@ -151,8 +151,35 @@ export async function updateCategory(
 }
 
 export async function deleteCategory(db: TenantPrismaClient, id: string) {
+  const existing = await db.productCategory.findFirst({ where: { id } });
+  if (!existing) throw new AppError(404, '产品分类不存在');
+
+  // 产品分类被产品 / 开发款式按 categoryId 引用；被引用时禁止删除，避免悬空 id 导致分类名称解析失效
+  const blockers: string[] = [];
+  const [productCount, devStyleCount] = await Promise.all([
+    db.product.count({ where: { categoryId: id } }),
+    db.devStyle.count({ where: { categoryId: id } }),
+  ]);
+  if (productCount > 0) blockers.push(`${productCount} 个产品`);
+  if (devStyleCount > 0) blockers.push(`${devStyleCount} 个开发款式`);
+  if (blockers.length > 0) {
+    throw new AppError(409, `无法删除产品分类「${existing.name}」：已被 ${blockers.join('、')}调用。请先调整相关数据后再删除。`);
+  }
+
   await db.productCategory.delete({ where: { id } });
   return { message: '已删除' };
+}
+
+/** 返回被产品 / 开发款式引用的产品分类 id 列表（供前端置灰删除按钮） */
+export async function getCategoryUsage(db: TenantPrismaClient): Promise<string[]> {
+  const [products, devStyles] = await Promise.all([
+    db.product.findMany({ where: { categoryId: { not: null } }, select: { categoryId: true }, distinct: ['categoryId'] }),
+    db.devStyle.findMany({ where: { categoryId: { not: null } }, select: { categoryId: true }, distinct: ['categoryId'] }),
+  ]);
+  const used = new Set<string>();
+  for (const r of products) if (r.categoryId) used.add(r.categoryId);
+  for (const r of devStyles) if (r.categoryId) used.add(r.categoryId);
+  return [...used];
 }
 
 // ── 合作单位分类 ──
@@ -196,8 +223,25 @@ export async function updatePartnerCategory(
 }
 
 export async function deletePartnerCategory(db: TenantPrismaClient, id: string) {
+  const existing = await db.partnerCategory.findFirst({ where: { id } });
+  if (!existing) throw new AppError(404, '合作单位分类不存在');
+
+  // 合作单位分类被合作单位按 categoryId 引用；被引用时禁止删除，避免悬空 id 导致分类名称解析失效
+  const partnerCount = await db.partner.count({ where: { categoryId: id } });
+  if (partnerCount > 0) {
+    throw new AppError(409, `无法删除合作单位分类「${existing.name}」：已被 ${partnerCount} 个合作单位调用。请先调整相关合作单位后再删除。`);
+  }
+
   await db.partnerCategory.delete({ where: { id } });
   return { message: '已删除' };
+}
+
+/** 返回被合作单位引用的合作单位分类 id 列表（供前端置灰删除按钮） */
+export async function getPartnerCategoryUsage(db: TenantPrismaClient): Promise<string[]> {
+  const rows = await db.partner.findMany({ where: { categoryId: { not: null } }, select: { categoryId: true }, distinct: ['categoryId'] });
+  const used = new Set<string>();
+  for (const r of rows) if (r.categoryId) used.add(r.categoryId);
+  return [...used];
 }
 
 // ── 工序节点 ──
@@ -261,6 +305,20 @@ export async function updateNode(
 }
 
 export async function deleteNode(db: TenantPrismaClient, id: string) {
+  const existing = await db.globalNodeTemplate.findFirst({ where: { id } });
+  if (!existing) throw new AppError(404, '工序不存在');
+
+  // 工序被产品信息按 id 引用（产品标准生产路线 milestoneNodeIds）；被引用时禁止删除，避免悬空 id 导致路线/报工解析失效
+  const productCount = await db.product.count({
+    where: { milestoneNodeIds: { array_contains: id } },
+  });
+  if (productCount > 0) {
+    throw new AppError(
+      409,
+      `无法删除工序「${existing.name}」：已被 ${productCount} 个产品的生产路线调用。请先在相关产品信息中移除该工序后再删除。`,
+    );
+  }
+
   await db.globalNodeTemplate.delete({ where: { id } });
   return { message: '已删除' };
 }
@@ -355,8 +413,50 @@ export async function updateWarehouse(
 }
 
 export async function deleteWarehouse(db: TenantPrismaClient, id: string) {
+  const existing = await db.warehouse.findFirst({ where: { id } });
+  if (!existing) throw new AppError(404, '仓库不存在');
+
+  // 仓库被进销存单据（入/出/调拨/盘点）与生产操作记录按 warehouseId 引用（无外键约束，需手动校验）；被引用时禁止删除
+  const blockers: string[] = [];
+  const [psiCount, opCount] = await Promise.all([
+    db.psiRecord.count({
+      where: {
+        OR: [
+          { warehouseId: id },
+          { fromWarehouseId: id },
+          { toWarehouseId: id },
+          { allocationWarehouseId: id },
+        ],
+      },
+    }),
+    db.productionOpRecord.count({ where: { warehouseId: id } }),
+  ]);
+  if (psiCount > 0) blockers.push(`${psiCount} 条进销存单据`);
+  if (opCount > 0) blockers.push(`${opCount} 条生产操作记录`);
+  if (blockers.length > 0) {
+    throw new AppError(409, `无法删除仓库「${existing.name}」：已被 ${blockers.join('、')}调用。请先调整相关单据后再删除。`);
+  }
+
   await db.warehouse.delete({ where: { id } });
   return { message: '已删除' };
+}
+
+/** 返回被进销存单据 / 生产操作记录引用的仓库 id 列表（供前端置灰删除按钮） */
+export async function getWarehouseUsage(db: TenantPrismaClient): Promise<string[]> {
+  const [wh, from, to, alloc, op] = await Promise.all([
+    db.psiRecord.findMany({ where: { warehouseId: { not: null } }, select: { warehouseId: true }, distinct: ['warehouseId'] }),
+    db.psiRecord.findMany({ where: { fromWarehouseId: { not: null } }, select: { fromWarehouseId: true }, distinct: ['fromWarehouseId'] }),
+    db.psiRecord.findMany({ where: { toWarehouseId: { not: null } }, select: { toWarehouseId: true }, distinct: ['toWarehouseId'] }),
+    db.psiRecord.findMany({ where: { allocationWarehouseId: { not: null } }, select: { allocationWarehouseId: true }, distinct: ['allocationWarehouseId'] }),
+    db.productionOpRecord.findMany({ where: { warehouseId: { not: null } }, select: { warehouseId: true }, distinct: ['warehouseId'] }),
+  ]);
+  const used = new Set<string>();
+  for (const r of wh) if (r.warehouseId) used.add(r.warehouseId);
+  for (const r of from) if (r.fromWarehouseId) used.add(r.fromWarehouseId);
+  for (const r of to) if (r.toWarehouseId) used.add(r.toWarehouseId);
+  for (const r of alloc) if (r.allocationWarehouseId) used.add(r.allocationWarehouseId);
+  for (const r of op) if (r.warehouseId) used.add(r.warehouseId);
+  return [...used];
 }
 
 // ── 收付款类型 ──
@@ -400,8 +500,25 @@ export async function updateFinanceCategory(
 }
 
 export async function deleteFinanceCategory(db: TenantPrismaClient, id: string) {
+  const existing = await db.financeCategory.findFirst({ where: { id } });
+  if (!existing) throw new AppError(404, '收付款类型不存在');
+
+  // 收付款类型被财务记录按 categoryId 引用；被引用时禁止删除，避免悬空 id 导致类型名称解析失效
+  const recordCount = await db.financeRecord.count({ where: { categoryId: id } });
+  if (recordCount > 0) {
+    throw new AppError(409, `无法删除收付款类型「${existing.name}」：已被 ${recordCount} 条财务记录调用。请先调整相关财务记录后再删除。`);
+  }
+
   await db.financeCategory.delete({ where: { id } });
   return { message: '已删除' };
+}
+
+/** 返回被财务记录引用的收付款类型 id 列表（供前端置灰删除按钮） */
+export async function getFinanceCategoryUsage(db: TenantPrismaClient): Promise<string[]> {
+  const rows = await db.financeRecord.findMany({ where: { categoryId: { not: null } }, select: { categoryId: true }, distinct: ['categoryId'] });
+  const used = new Set<string>();
+  for (const r of rows) if (r.categoryId) used.add(r.categoryId);
+  return [...used];
 }
 
 // ── 收支账户类型 ──

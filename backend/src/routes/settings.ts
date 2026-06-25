@@ -24,12 +24,14 @@ const updateConfigSchema = z.object({
 
 // 产品分类
 router.get('/categories',      requireSubPermission('settings:categories:view'),   ctrl.listCategories);
+router.get('/categories/usage', requireSubPermission('settings:categories:view'),  ctrl.getCategoryUsage);
 router.post('/categories',     requireSubPermission('settings:categories:create'), validate(nameRequiredSchema), ctrl.createCategory);
 router.put('/categories/:id',  requireSubPermission('settings:categories:edit'),   validate(updateNameSchema), ctrl.updateCategory);
 router.delete('/categories/:id', requireSubPermission('settings:categories:delete'), ctrl.deleteCategory);
 
 // 合作单位分类
 router.get('/partner-categories',      requireSubPermission('settings:partner_categories:view'),   ctrl.listPartnerCategories);
+router.get('/partner-categories/usage', requireSubPermission('settings:partner_categories:view'),  ctrl.getPartnerCategoryUsage);
 router.post('/partner-categories',     requireSubPermission('settings:partner_categories:create'), validate(nameRequiredSchema), ctrl.createPartnerCategory);
 router.put('/partner-categories/:id',  requireSubPermission('settings:partner_categories:edit'),   validate(updateNameSchema), ctrl.updatePartnerCategory);
 router.delete('/partner-categories/:id', requireSubPermission('settings:partner_categories:delete'), ctrl.deletePartnerCategory);
@@ -43,12 +45,14 @@ router.delete('/nodes/:id', requireSubPermission('settings:nodes:delete'), ctrl.
 
 // 仓库
 router.get('/warehouses',      requireSubPermission('settings:warehouses:view'),   ctrl.listWarehouses);
+router.get('/warehouses/usage', requireSubPermission('settings:warehouses:view'),  ctrl.getWarehouseUsage);
 router.post('/warehouses',     requireSubPermission('settings:warehouses:create'), validate(nameRequiredSchema), ctrl.createWarehouse);
 router.put('/warehouses/:id',  requireSubPermission('settings:warehouses:edit'),   validate(updateNameSchema), ctrl.updateWarehouse);
 router.delete('/warehouses/:id', requireSubPermission('settings:warehouses:delete'), ctrl.deleteWarehouse);
 
 // 收付款类型
 router.get('/finance-categories',      requireSubPermission('settings:finance_categories:view'),   ctrl.listFinanceCategories);
+router.get('/finance-categories/usage', requireSubPermission('settings:finance_categories:view'),  ctrl.getFinanceCategoryUsage);
 router.post('/finance-categories',     requireSubPermission('settings:finance_categories:create'), validate(nameRequiredSchema), ctrl.createFinanceCategory);
 router.put('/finance-categories/:id',  requireSubPermission('settings:finance_categories:edit'),   validate(updateNameSchema), ctrl.updateFinanceCategory);
 router.delete('/finance-categories/:id', requireSubPermission('settings:finance_categories:delete'), ctrl.deleteFinanceCategory);

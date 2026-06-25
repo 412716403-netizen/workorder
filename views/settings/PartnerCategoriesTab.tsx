@@ -13,6 +13,7 @@ import * as api from '../../services/api';
 import { ReportCustomFieldsConfigTable } from '../../components/form-config/CustomFieldsEditorTable';
 import { formStandardControlClass } from '../../styles/uiDensity';
 import { hasSettingsNameConflict } from '../../utils/settingsNameUnique';
+import { useSettingsUsedIds } from '../../hooks/useSettingsUsedIds';
 
 interface PartnerCategoriesTabProps {
   partnerCategories: PartnerCategory[];
@@ -31,6 +32,7 @@ const PartnerCategoriesTab: React.FC<PartnerCategoriesTabProps> = ({
   const [editingPCatId, setEditingPCatId] = useState<string | null>(null);
   const [partnerCatNameDraft, setPartnerCatNameDraft] = useState('');
   const addLock = useAsyncSubmitLock();
+  const usedIds = useSettingsUsedIds(api.settings.partnerCategories.usage);
 
   const addPartnerCategory = async () => {
     if (!newPCatName.trim()) return;
@@ -109,7 +111,22 @@ const PartnerCategoriesTab: React.FC<PartnerCategoriesTabProps> = ({
               <div key={cat.id}>
                 <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                   <h2 className="font-black text-slate-800 text-lg">编辑单位分类：{partnerCatNameDraft || cat.name}</h2>
-                  {canDelete && <button onClick={() => removePartnerCategory(cat.id)} className="text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition-all"><Trash2 className="w-5 h-5" /></button>}
+                  {canDelete && (() => {
+                    const inUse = usedIds.has(cat.id);
+                    return (
+                      <button
+                        onClick={() => {
+                          if (inUse) { toast.warning(`分类"${cat.name}"已被合作单位调用，无法删除`); return; }
+                          void removePartnerCategory(cat.id);
+                        }}
+                        disabled={inUse}
+                        title={inUse ? '该分类已被合作单位调用，无法删除' : '删除分类'}
+                        className={`p-2 rounded-xl transition-all ${inUse ? 'text-slate-300 cursor-not-allowed' : 'text-rose-500 hover:bg-rose-50'}`}
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    );
+                  })()}
                 </div>
                 <div className="p-8 space-y-12">
                   <div className="space-y-4">

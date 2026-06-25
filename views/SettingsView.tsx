@@ -1,4 +1,4 @@
-import React, { useState, useLayoutEffect, useEffect } from 'react';
+import React, { useState, useLayoutEffect, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { 
   Tag, 
@@ -62,6 +62,14 @@ const SettingsView: React.FC = () => {
   const categories = m.categories;
   const partnerCategories = m.partnerCategories;
   const globalNodes = m.globalNodes;
+  const products = m.products;
+  const usedNodeIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of products) {
+      for (const id of (p.milestoneNodeIds ?? [])) set.add(id);
+    }
+    return set;
+  }, [products]);
   const warehouses = m.warehouses;
   const financeCategories = f.financeCategories;
   const onRefreshFinanceCategories = a.refreshFinanceCategories;
@@ -205,6 +213,7 @@ const SettingsView: React.FC = () => {
         {activeTab === 'nodes' && (
           <NodesTab
             globalNodes={globalNodes}
+            usedNodeIds={usedNodeIds}
             onRefreshGlobalNodes={onRefreshGlobalNodes}
             onApplyGlobalNodes={onApplyGlobalNodes}
             canCreate={canCreate('nodes')}

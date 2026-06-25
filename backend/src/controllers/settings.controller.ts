@@ -20,6 +20,9 @@ export const updateCategory = asyncHandler(async (req, res) => {
 export const deleteCategory = asyncHandler(async (req, res) => {
   res.json(await settingsService.deleteCategory(getTenantPrisma(req.tenantId!), str(req.params.id)));
 });
+export const getCategoryUsage = asyncHandler(async (req, res) => {
+  res.json({ usedIds: await settingsService.getCategoryUsage(getTenantPrisma(req.tenantId!)) });
+});
 
 // ── 合作单位分类 ──
 export const listPartnerCategories = asyncHandler(async (req, res) => {
@@ -36,6 +39,9 @@ export const updatePartnerCategory = asyncHandler(async (req, res) => {
 });
 export const deletePartnerCategory = asyncHandler(async (req, res) => {
   res.json(await settingsService.deletePartnerCategory(getTenantPrisma(req.tenantId!), str(req.params.id)));
+});
+export const getPartnerCategoryUsage = asyncHandler(async (req, res) => {
+  res.json({ usedIds: await settingsService.getPartnerCategoryUsage(getTenantPrisma(req.tenantId!)) });
 });
 
 // ── 工序节点 ──
@@ -75,6 +81,9 @@ export const updateWarehouse = asyncHandler(async (req, res) => {
 export const deleteWarehouse = asyncHandler(async (req, res) => {
   res.json(await settingsService.deleteWarehouse(getTenantPrisma(req.tenantId!), str(req.params.id)));
 });
+export const getWarehouseUsage = asyncHandler(async (req, res) => {
+  res.json({ usedIds: await settingsService.getWarehouseUsage(getTenantPrisma(req.tenantId!)) });
+});
 
 // ── 收付款类型 ──
 export const listFinanceCategories = asyncHandler(async (req, res) => {
@@ -91,6 +100,9 @@ export const updateFinanceCategory = asyncHandler(async (req, res) => {
 });
 export const deleteFinanceCategory = asyncHandler(async (req, res) => {
   res.json(await settingsService.deleteFinanceCategory(getTenantPrisma(req.tenantId!), str(req.params.id)));
+});
+export const getFinanceCategoryUsage = asyncHandler(async (req, res) => {
+  res.json({ usedIds: await settingsService.getFinanceCategoryUsage(getTenantPrisma(req.tenantId!)) });
 });
 
 // ── 收支账户类型 ──

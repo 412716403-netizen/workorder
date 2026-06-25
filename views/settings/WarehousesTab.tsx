@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import * as api from '../../services/api';
 import { formStandardControlClass } from '../../styles/uiDensity';
 import { hasSettingsNameConflict } from '../../utils/settingsNameUnique';
+import { useSettingsUsedIds } from '../../hooks/useSettingsUsedIds';
 
 interface WarehousesTabProps {
   warehouses: Warehouse[];
@@ -28,6 +29,7 @@ const WarehousesTab: React.FC<WarehousesTabProps> = ({
   const [editingWhId, setEditingWhId] = useState<string | null>(null);
   const [whDraft, setWhDraft] = useState({ name: '' });
   const addLock = useAsyncSubmitLock();
+  const usedIds = useSettingsUsedIds(api.settings.warehouses.usage);
 
   const handleAddWarehouse = async () => {
     if (!newWhName.trim()) return;
@@ -103,7 +105,22 @@ const WarehousesTab: React.FC<WarehousesTabProps> = ({
                  <div key={wh.id}>
                     <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                       <h2 className="font-black text-slate-800 text-lg">编辑仓库：{whDraft.name || wh.name}</h2>
-                      {canDelete && <button onClick={() => removeWarehouse(wh.id)} className="text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition-all"><Trash2 className="w-5 h-5" /></button>}
+                      {canDelete && (() => {
+                        const inUse = usedIds.has(wh.id);
+                        return (
+                          <button
+                            onClick={() => {
+                              if (inUse) { toast.warning(`仓库"${wh.name}"已被业务单据调用，无法删除`); return; }
+                              void removeWarehouse(wh.id);
+                            }}
+                            disabled={inUse}
+                            title={inUse ? '该仓库已被进销存/生产单据调用，无法删除' : '删除仓库'}
+                            className={`p-2 rounded-xl transition-all ${inUse ? 'text-slate-300 cursor-not-allowed' : 'text-rose-500 hover:bg-rose-50'}`}
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        );
+                      })()}
                     </div>
                     <div className="p-8 space-y-10">
                        <div className="space-y-1 max-w-xl">

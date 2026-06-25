@@ -22,6 +22,7 @@ import { ExtFieldLabelInput } from './shared';
 import { ReportCustomFieldsConfigTable } from '../../components/form-config/CustomFieldsEditorTable';
 import { formStandardControlClass } from '../../styles/uiDensity';
 import { hasSettingsNameConflict } from '../../utils/settingsNameUnique';
+import { useSettingsUsedIds } from '../../hooks/useSettingsUsedIds';
 
 interface FinanceCategoriesTabProps {
   financeCategories: FinanceCategory[];
@@ -40,6 +41,7 @@ const FinanceCategoriesTab: React.FC<FinanceCategoriesTabProps> = ({
   const [editingFinanceCatId, setEditingFinanceCatId] = useState<string | null>(null);
   const [financeCatNameDraft, setFinanceCatNameDraft] = useState('');
   const addLock = useAsyncSubmitLock();
+  const usedIds = useSettingsUsedIds(api.settings.financeCategories.usage);
 
   const addFinanceCategory = async () => {
     const trimmed = newFinanceCatName.trim();
@@ -123,7 +125,22 @@ const FinanceCategoriesTab: React.FC<FinanceCategoriesTabProps> = ({
               <div key={cat.id}>
                 <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                   <h2 className="font-black text-slate-800 text-lg">编辑收付款类型：{financeCatNameDraft || cat.name}</h2>
-                  {canDelete && <button onClick={() => removeFinanceCategory(cat.id)} className="text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition-all"><Trash2 className="w-5 h-5" /></button>}
+                  {canDelete && (() => {
+                    const inUse = usedIds.has(cat.id);
+                    return (
+                      <button
+                        onClick={() => {
+                          if (inUse) { toast.warning(`收付款类型"${cat.name}"已被财务记录调用，无法删除`); return; }
+                          void removeFinanceCategory(cat.id);
+                        }}
+                        disabled={inUse}
+                        title={inUse ? '该收付款类型已被财务记录调用，无法删除' : '删除收付款类型'}
+                        className={`p-2 rounded-xl transition-all ${inUse ? 'text-slate-300 cursor-not-allowed' : 'text-rose-500 hover:bg-rose-50'}`}
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    );
+                  })()}
                 </div>
                 <div className="p-8 space-y-12">
                   <div className="space-y-4">

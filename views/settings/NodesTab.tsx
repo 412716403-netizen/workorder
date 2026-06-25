@@ -45,6 +45,7 @@ import { isEquipmentAssignmentEnabled, isWorkerAssignmentEnabled } from '../../u
 
 interface NodesTabProps {
   globalNodes: GlobalNodeTemplate[];
+  usedNodeIds: Set<string>;
   onRefreshGlobalNodes: () => Promise<void>;
   onApplyGlobalNodes: (list: GlobalNodeTemplate[]) => void;
   canCreate: boolean;
@@ -108,6 +109,7 @@ function SortableNodeRow({
 
 const NodesTab: React.FC<NodesTabProps> = ({
   globalNodes,
+  usedNodeIds,
   onRefreshGlobalNodes,
   onApplyGlobalNodes,
   canCreate,
@@ -244,7 +246,22 @@ const NodesTab: React.FC<NodesTabProps> = ({
               <div key={node.id}>
                     <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                       <h2 className="font-black text-slate-800 text-lg">编辑工序：{nodeNameDraft || node.name}</h2>
-                      {canDelete && <button onClick={() => removeNode(node.id)} className="text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition-all"><Trash2 className="w-5 h-5" /></button>}
+                      {canDelete && (() => {
+                        const inUse = usedNodeIds.has(node.id);
+                        return (
+                          <button
+                            onClick={() => {
+                              if (inUse) { toast.warning(`工序"${node.name}"已被产品信息调用，无法删除`); return; }
+                              void removeNode(node.id);
+                            }}
+                            disabled={inUse}
+                            title={inUse ? '该工序已被产品信息调用，无法删除' : '删除工序'}
+                            className={`p-2 rounded-xl transition-all ${inUse ? 'text-slate-300 cursor-not-allowed' : 'text-rose-500 hover:bg-rose-50'}`}
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        );
+                      })()}
                     </div>
                     <div className="p-8 space-y-10">
                        <div className="space-y-4">

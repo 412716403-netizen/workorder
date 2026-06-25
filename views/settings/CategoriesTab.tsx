@@ -23,6 +23,7 @@ import { ReportCustomFieldsConfigTable } from '../../components/form-config/Cust
 import { formStandardControlClass } from '../../styles/uiDensity';
 import { useFeaturePlugins } from '../../hooks/useFeaturePlugins';
 import { hasSettingsNameConflict } from '../../utils/settingsNameUnique';
+import { useSettingsUsedIds } from '../../hooks/useSettingsUsedIds';
 
 interface CategoriesTabProps {
   categories: ProductCategory[];
@@ -41,6 +42,7 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [categoryNameDraft, setCategoryNameDraft] = useState('');
   const addLock = useAsyncSubmitLock();
+  const usedIds = useSettingsUsedIds(api.settings.categories.usage);
   const { isPluginEnabled } = useFeaturePlugins();
   const auth = useAuthOptional();
   /** 「启用颜色尺码」仅对毛衣工厂行业租户开放（平台在企业管理中指定行业类型） */
@@ -153,7 +155,22 @@ const CategoriesTab: React.FC<CategoriesTabProps> = ({
               <div key={cat.id}>
                 <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                   <h2 className="font-black text-slate-800 text-lg">编辑产品分类：{categoryNameDraft || cat.name}</h2>
-                  {canDelete && <button onClick={() => removeCategory(cat.id)} className="text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition-all"><Trash2 className="w-5 h-5" /></button>}
+                  {canDelete && (() => {
+                    const inUse = usedIds.has(cat.id);
+                    return (
+                      <button
+                        onClick={() => {
+                          if (inUse) { toast.warning(`分类"${cat.name}"已被产品或开发款式调用，无法删除`); return; }
+                          void removeCategory(cat.id);
+                        }}
+                        disabled={inUse}
+                        title={inUse ? '该分类已被产品或开发款式调用，无法删除' : '删除分类'}
+                        className={`p-2 rounded-xl transition-all ${inUse ? 'text-slate-300 cursor-not-allowed' : 'text-rose-500 hover:bg-rose-50'}`}
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    );
+                  })()}
                 </div>
                 <div className="p-8 space-y-12">
                   <div className="space-y-4">
