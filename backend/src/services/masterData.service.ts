@@ -1,4 +1,5 @@
 import type { DictionaryItem } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { TenantPrismaClient } from '../lib/prisma.js';
 import { prisma as basePrisma } from '../lib/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -183,14 +184,18 @@ export async function importPartners(
           : {};
 
       await db.partner.create({
+        /**
+         * tenantId 由 getTenantPrisma 的 create 扩展在运行时自动注入（Partner 属于 TENANT_MODELS），
+         * 故此处类型上省略；customData 已是校验过的 JSON 对象。
+         */
         data: {
           id: genId('partner'),
           name,
           categoryId,
           contact: null,
-          customData,
+          customData: customData as Prisma.InputJsonValue,
           partnerListNo: nextListNo++,
-        },
+        } as Prisma.PartnerUncheckedCreateInput,
       });
 
       existingNames.add(nameKey);
