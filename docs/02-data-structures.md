@@ -327,14 +327,14 @@ interface ProductionOpRecord {
 **批次**：`PsiRecord` 采购类行字段为 `batchNo`（API）；持久化与打印上下文与 `ProductionOpRecord.batchNo` 一致，用于按批结存与扣减。
 
 **按重量报工（`GlobalNodeTemplate.enableWeightOnReport`）**：
-- 工序级开关。开启后，对应工序的工单报工 / 外协收货 / 返工报工三个入口会额外录入 `weight`（单位 kg）。
+- 工序级开关。开启后，对应工序的**工单报工 / 外协收货**两个入口会额外录入 `weight`（单位 kg）。返工报工不录入重量。
 - BOM 子项可配置 `excludeFromWeightShare` 排除辅料后，其余子项按 `quantity` 自动派生占比，`weight` 被拆成 `materialBreakdown: { materialProductId, materialName, ratio, actualWeight, theoreticalQty? }[]` 写入 `ProductionOpRecord` + 同步派生的 `MilestoneReport` / `ProductProgressReport`。
-- `StockMaterialPanel` 的"报工耗材"列会在对应工序开启后改用 `actualWeight` 汇总，从而让"结余"列天然体现真实物料损耗/结余。
+- `StockMaterialPanel` / 工单详情「生产物料」的「报工耗材」列：内部按工序分别累加 `MatRow.theoryCost`（未开称重）与 `MatRow.actualCost`（开启称重），展示时合计为一列；"结余" = 净领用 − 报工耗材。
 - 详细业务规则见 [01-business-rules.md §5.4](./01-business-rules.md)。
 
 **扫码称重（`GlobalNodeTemplate.enableScanWeighing`）**：
-- 工序级开关，独立于 `enableWeightOnReport`。开启后（且追溯码插件开启），报工 / 返工 / 外协收货的扫码会话顶部显示电子秤捕获框，并按「单件标准重量 × 数量」与实测重量做理论/实测比对（超容差仅告警，不拦截）。
-- **本身不落库重量**：只负责秤框与比对。若该工序**同时**开启 `enableWeightOnReport`，扫码会话累计实测总重会自动同步到报工 / 返工 / 收货表单的交货重量字段（仍可手改），最终由 `enableWeightOnReport` 链路写入 `weight` + `materialBreakdown`。
+- 工序级开关，独立于 `enableWeightOnReport`。开启后（且追溯码插件开启），**工单报工 / 外协收货**的扫码会话顶部显示电子秤捕获框，并按「单件标准重量 × 数量」与实测重量做理论/实测比对（超容差仅告警，不拦截）。
+- **本身不落库重量**：只负责秤框与比对。若该工序**同时**开启 `enableWeightOnReport`，扫码会话累计实测总重会自动同步到报工 / 收货表单的交货重量字段（仍可手改），最终由 `enableWeightOnReport` 链路写入 `weight` + `materialBreakdown`。（返工报工扫码不使用本开关。）
 - 存量迁移：原 `enableWeightOnReport=true` 的工序回填 `enableScanWeighing=true`，保留上线前行为。
 
 ---

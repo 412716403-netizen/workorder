@@ -211,6 +211,8 @@
 
 仅统计**无下级 BOM** 的叶子物料；数量取**计划用量**。所有缺料物料的计划用量填写完成后，才允许生成采购订单。
 
+点击「创建采购订单」后直接进入**待确认采购订单预览**：物料档案有有效默认合作单位时按合作单位合并；无绑定合作单位的物料各生成一张待指定采购单，在预览卡片**左侧**选择合作单位（可快捷新建）。选择相同合作单位的多张待指定单会自动合并。全部指定完成后方可保存。**不在保存时写回**产品档案的默认合作单位（计划阶段所选供应商仅用于本次采购单）。
+
 ### 3.3 单据编号规则
 
 | 类型 | 格式 | 规则 |
@@ -280,8 +282,8 @@
 | 生产领料(+) | `STOCK_OUT` 累计 |
 | 生产退料(-) | `STOCK_RETURN` 累计 |
 | 净领用 | 领料 − 退料 |
-| 报工耗材(理论) | BOM × 完成量，或称重工序的 `materialBreakdown` 快照 |
-| 当前结余 | 净领用 − 理论消耗 |
+| 报工耗材 | 未开称重工序：件数 × BOM；开启称重工序：`materialBreakdown` 实际重量；同一物料两类来源合计展示 |
+| 当前结余 | 净领用 − 报工耗材 |
 
 - **关联工单模式**：按父工单族（含子工单）聚合；子工单详情与父工单展示同一族数据。
 - **关联产品模式**：按成品 `sourceProductId` 聚合物料，并标注「产品维度聚合（含本产品下多张工单）」。
@@ -401,7 +403,7 @@
 |--------|----------|------|
 | 产品分类管理 | `categories` | 支持 `customFields` 扩展；**名称租户内唯一**（新增/编辑，忽略首尾空白与大小写）；**「启用颜色尺码」开关仅毛衣工厂行业租户可见**（租户 `industryKind = sweater_factory`，由平台在企业管理中指定，经登录/选企业/租户列表接口透传到前端 `tenantCtx.industryKind`）；通用行业租户隐藏该开关，但已开启颜色尺码的分类仍显示开关便于关闭 |
 | 合作单位分类 | `partnerCategories` | 支持 `customFields` 扩展；名称租户内唯一 |
-| 工序节点库 | `globalNodes` | 维护工序名称、功能开关（含「不按顺序生产」`allowOutOfSequence`）、`reportDisplayTemplate`（报工页展示内容）等；`reportTemplate`（报工自定义单据内容）在 **工单中心 → 表单配置 → 字段配置** 按工序维护；工序名称租户内唯一 |
+| 工序节点库 | `globalNodes` | 维护工序名称、功能开关（含「不按顺序生产」`allowOutOfSequence`）、`reportDisplayTemplate`（报工页展示内容）等；`reportTemplate`（报工自定义单据内容）在 **工单中心 → 表单配置 → 字段配置** 按工序维护；工序名称租户内唯一；左侧列表支持拖拽调整 `sortOrder`，商品信息选工序时按该顺序自动排列 |
 
 #### 工序生产顺序（方案 X）
 
@@ -446,16 +448,22 @@
 
 针对毛衣类横机工序、外协收货等“件数同口径但每件克重浮动”的业务场景，`GlobalNodeTemplate.enableWeightOnReport` 提供**工序级开关**：
 
-- 开启后，对应工序的三个入口（工单报工 / 外协收货 / 返工报工）会额外出现“本次交货总重量 (kg)”输入框，并实时预览按 BOM 占比拆分出的各子物料实际消耗。
+- 开启后，对应工序的**工单报工 / 外协收货**两个入口会额外出现“本次交货总重量 (kg)”输入框，并实时预览按 BOM 占比拆分出的各子物料实际消耗。（返工报工**不**录入重量。）
 - BOM 子项 (`BomItem.excludeFromWeightShare`) 可勾选“不参与重量分摊”，用于标签、纽扣、吊牌这类辅料；参与分摊的子项占比 = 子项 `quantity` / Σ 参与分摊子项 `quantity`（无需用户手填比例）。
 - 写入时：
   - `ProductionOpRecord.weight` / `MilestoneReport.weight` / `ProductProgressReport.weight` 固化本次交货总重量；
   - `materialBreakdown` 固化每个子物料的 `ratio / actualWeight / theoreticalQty` 快照，避免后续改 BOM 后历史记录失真。
-- 消耗口径切换：`StockMaterialPanel` 的“报工耗材(理论)”列在对应工序开启后，自动改用 `materialBreakdown.actualWeight` 汇总；“结余”列（净领用 − 报工耗材）即反映真实物料损耗/结余。未开启工序维持原“件数 × BOM 用量”口径，两种模式可在同一产品不同工序并存。
+- 消耗口径：`StockMaterialPanel` / 工单详情「生产物料」的**报工耗材**列按工序逐条判定——未开启称重的工序用「件数 × BOM」（`MatRow.theoryCost`），开启称重的工序用 `materialBreakdown.actualWeight`（`MatRow.actualCost`），展示时两者合计为一列；**结余** = 净领用 − 报工耗材。两种口径可在同一产品不同工序并存。
 
 ### 5.4.1 扫码去重与单据数量上限
 
 **适用入口**：工序报工（含产品池报工）、待入库扫码、返工报工、外协收货等所有「扫单品码 / 扫批次码」的累加入口。
+
+**同工序多产品 / 多款同批报工**（参考外协收货扫码归集）：
+
+- **工序报工**（[`ReportModal`](../views/order-list/ReportModal.tsx) + [`useReportModalState`](../hooks/useReportModalState.ts)）：从某工序节点打开弹窗后，工序模板（`milestone.templateId`）已锁定；批量扫码可扫入**不同产品 / 不同款**的码，系统按 `productId` 归集成多行，共享生产人员 / 设备 / 自定义字段，提交时逐产品、逐规格写入（关联工单模式 → `createReport`；关联产品模式 → `createProductReport`）。扫码须通过计划树兼容校验（关联工单模式：与入口工单 `planOrderId` 父子链兼容；**关联产品模式**：与该产品任一工单的 `planOrderId` 兼容，或处于同一计划树根下的兄弟子计划），且目标产品须包含当前工序模板。
+- **返工报工**（[`ReworkReportSubmitModal`](../views/production-ops/ReworkReportSubmitModal.tsx)）：从某产品/工单工序入口打开时，弹窗**仅展示该入口范围内的待返工路径**（关联产品模式按 `productId`；关联工单模式再限定 `orderId`）；扫码按 `productId + 规格` 在可见路径内累加，提交时 `REWORK_REPORT.productId` 取源 `REWORK` 记录；委外返工收回按产品各生成一条 `OUTSOURCE` 汇总单。
+- **硬约束**：一次报工会话内所有扫码须属于**同一工序模板**；不允许跨工序混扫（外协收货通过首扫锁 `nodeId` 实现；报工 / 返工通过入口工序锁定 + 扫码时校验产品是否含该工序）。
 
 **规则一：已保存去重（持久化判定）**
 
@@ -537,11 +545,11 @@
 
 - **`enableScanWeighing`（扫码称重）**：控制扫码会话是否出现**电子秤捕获框 + 理论/实测比对**。**本身不落库重量**。
 - **`enableWeightOnReport`（报工时记录重量）**：控制报工/收货表单是否有**交货重量字段**，并按 BOM 占比把重量写入 `weight` + `materialBreakdown`。
-- **两者同开**：扫码称到的累计实测总重自动同步到报工/返工/收货表单的交货重量字段（仍可手改）。
+- **两者同开**：扫码称到的累计实测总重自动同步到**工单报工 / 外协收货**表单的交货重量字段（仍可手改）。**同工序多产品**报工时按 `productId` 分别累加（与外协收货按 `baseKey` 分行一致），提交后各产品生成独立报工/收回记录的 `weight`。（返工报工扫码**不**启用称重与重量回填。）
 - **仅开扫码称重**：现场称重比对，但重量不进表单、不落库（适合只想核对、不做物料损耗核算的收货场景）。
 - 存量迁移：原 `enableWeightOnReport=true` 的工序回填 `enableScanWeighing=true`，保留上线前行为。
 
-**适用入口**：工序报工、外协收货扫码、返工报工批量扫码会话（**不含**待入库扫码；待入库扫码亦受追溯码插件总开关控制）。外协收货扫码弹窗在首扫前未锁定工序，按「待收回行涉及的工序中是否有开启扫码称重」决定是否显示秤框。
+**适用入口**：工序报工、外协收货扫码（**不含**返工报工、待入库扫码；待入库扫码亦受追溯码插件总开关控制）。外协收货扫码弹窗在首扫前未锁定工序，按「待收回行涉及的工序中是否有开启扫码称重」决定是否显示秤框。
 
 **标准重量维护**：产品档案 → 编辑产品 → 点击「设置单件标准重量」打开弹窗，按 **规格 × 已开启扫码称重的工序** 录入 kg（若标准路线中无一工序开启扫码称重，则不显示该按钮）；数据存 `product_variants.node_unit_weights`（JSON）。弹窗矩阵输入框右侧「均 X kg」为历史外协收货单件重量均值（Σ交货重÷Σ收货件数，仅统计已落库的 `OUTSOURCE` 已收回且含重量记录）。
 
@@ -554,7 +562,7 @@
 2. 每次扫码成功时快照当前秤读数；期望重量 = `nodeUnitWeights[nodeId] × 扫码数量`（批次码数量取 `PlanVirtualBatch.quantity`，单品码为 1）。
 3. 扫码列表每行**同一行**展示理论重量与实测重量（`理论 X kg · 实测 Y kg`）；未维护理论重量时显示「未设置」。有 `basic:products:edit` 权限时，行内**设置**按钮打开弹窗，维护该产品**全部规格 × 工序**的单件标准重量矩阵（与产品档案编辑页一致，写回 `nodeUnitWeights`）。
 4. 偏差超过容差 → 列表行标红 + toast 告警 + 错误提示音；**不强制拦截**，用户仍可确认应用。
-5. 实测重量**不落库**；若当前工序**同时**开启 `enableWeightOnReport`，报工扫码确认后会把会话累计实测总重自动填入报工表单的「交货总重」字段（用户可改）。仅开 `enableScanWeighing` 时只做现场比对，不写入表单。
+5. 实测重量**不落库**；若当前工序**同时**开启 `enableWeightOnReport`，报工扫码确认后会把各行实测重量**按产品**累加填入对应产品的「交货总重」字段（多产品场景每产品独立；单产品仍填一行总重）。仅开 `enableScanWeighing` 时只做现场比对，不写入表单。
 
 **实现锚点**：[`hooks/useScanSessionKeyboard.ts`](../hooks/useScanSessionKeyboard.ts)、[`utils/scanSessionKeyboardLogic.ts`](../utils/scanSessionKeyboardLogic.ts)、[`components/scan/ScaleWeightInput.tsx`](../components/scan/ScaleWeightInput.tsx)、[`components/scan/ScanBatchSessionModal.tsx`](../components/scan/ScanBatchSessionModal.tsx)、[`components/scan/ScanUnitWeightSettingPopover.tsx`](../components/scan/ScanUnitWeightSettingPopover.tsx)、[`utils/scanWeightCheck.ts`](../utils/scanWeightCheck.ts)。
 

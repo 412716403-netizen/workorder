@@ -14,7 +14,7 @@
  * - 派生 getSeqRemainingForVariant
  * - submitReport (校验 + 调 onReportSubmit/onReportSubmitProduct)
  */
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect, type SetStateAction } from 'react';
 import { toast } from 'sonner';
 import type {
   ProductionOrder,
@@ -30,7 +30,7 @@ import type {
 } from '../types';
 import { itemCodesApi, planVirtualBatchesApi } from '../services/api';
 import { rewriteScanApiErrorForIme, type ScanPayload } from '../utils/scanPayload';
-import { arePlanOrdersScanCompatible } from '../utils/planOrderScanCompat';
+import { isReportScanPlanCompatible } from '../utils/planOrderScanCompat';
 import type { ScanValidatePurpose, ScanValidateScope } from '../types';
 import { SCAN_ITEM_CODE_IDS_KEY } from '../types';
 import type { ScanBatchRowDetail } from '../utils/scanBatchRowDetail';
@@ -42,7 +42,13 @@ import { buildOutOfSequenceTemplateIds, findGatingPredecessorIndex, isProcessSeq
 import { productHasColorSizeMatrix } from '../utils/productColorSize';
 import { dataUrlToBlobUrl } from '../utils/routeReportFileUrls';
 import { generateNextReportNo } from '../utils/reportNoGen';
-import { distributeWeightByQty } from '../utils/reportBatchWeightHelpers';
+import { distributeWeightByQty, roundWeightKg } from '../utils/reportBatchWeightHelpers';
+import { accumulateMeasuredWeightByProduct } from '../utils/scanMeasuredWeightByProduct';
+import {
+  productHasMilestoneTemplate,
+  resolveOrdersForProductAtTemplate,
+  resolveTargetOrderForReport,
+} from '../utils/reportRowDerivations';
 
 export interface ReportModalData {
   order: ProductionOrder;
@@ -56,6 +62,7 @@ export interface ReportModalData {
 
 /** 工单中心报工扫码解析结果（按 token 缓存，确认时复用以避免重复网络请求） */
 type PreparedReportScan = {
+  productId: string;
   vid: string;
   qty: number;
   itemCodeId: string | null;
@@ -103,10 +110,10 @@ interface UseReportModalStateArgs {
   onReportSubmit?: (orderId: string, milestoneId: string, quantity: number, customData: unknown, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number) => void;
   onReportSubmitProduct?: (productId: string, milestoneTemplateId: string, quantity: number, customData: unknown, variantId?: string, workerId?: string, defectiveQty?: number, equipmentId?: string, reportBatchId?: string, reportNo?: string, weight?: number) => void;
   /**
-   * 扫码累加前的本格剩余上限（同 `effectiveRemainingForModal` / 矩阵 `getSeqRemainingForVariant` - 不良 - 外协 口径）。
+   * 扫码累加前的本格剩余上限（按产品 + 规格）。
    * 返回 null/undefined 表示该入口不做上限拦截，仅做持久化去重。
    */
-  getScanMaxQty?: (variantId: string | null) => number | null | undefined;
+  getScanMaxQty?: (productId: string, variantId: string | null) => number | null | undefined;
 }
 
 export function useReportModalState(args: UseReportModalStateArgs) {
@@ -136,48 +143,109 @@ export function useReportModalState(args: UseReportModalStateArgs) {
 
   const outOfSequenceTemplateIds = useMemo(() => buildOutOfSequenceTemplateIds(globalNodes), [globalNodes]);
 
-  const [reportForm, setReportForm] = useState<ReportFormState>(() => {
-    const initialData: Record<string, unknown> = {};
-    const product = products.find(p => p.id === reportModal.order.productId);
-    const defaults = product?.routeReportValues?.[reportModal.milestone.templateId] ?? {};
-    getEffectiveReportTemplate(reportModal.milestone, globalNodes).forEach(f => {
-      const raw = defaults[f.id];
-      if (raw !== undefined && raw !== '') {
-        initialData[f.id] = coerceRouteReportDefaultForField(f, raw);
-      } else {
-        initialData[f.id] = '';
-      }
-    });
-    const category = categories.find(c => c.id === product?.categoryId);
-    const showVariantMatrix = productHasColorSizeMatrix(product, category);
-    const items = reportModal.productItems ?? reportModal.order.items;
-    const singleVariant = items.length === 1 ? (items[0].variantId || '') : '';
-    const variantQuantities: Record<string, number> = {};
-    const variantDefective: Record<string, number> = {};
-    if (showVariantMatrix && product?.variants?.length) {
-      product.variants.forEach(v => {
-        variantQuantities[v.id] = 0;
-        variantDefective[v.id] = 0;
+  const anchorProductId = reportModal.order.productId;
+  const milestoneTemplateId = reportModal.milestone.templateId;
+
+  const buildInitialFormForProduct = useCallback(
+    (productId: string): ReportFormState => {
+      const initialData: Record<string, unknown> = {};
+      const product = products.find(p => p.id === productId);
+      const defaults = product?.routeReportValues?.[milestoneTemplateId] ?? {};
+      getEffectiveReportTemplate(reportModal.milestone, globalNodes).forEach(f => {
+        const raw = defaults[f.id];
+        if (raw !== undefined && raw !== '') {
+          initialData[f.id] = coerceRouteReportDefaultForField(f, raw);
+        } else {
+          initialData[f.id] = '';
+        }
       });
-    }
-    return {
-      quantity: 0,
-      defectiveQuantity: 0,
-      variantId: singleVariant,
-      workerId: '',
-      equipmentId: '',
-      customData: initialData,
-      variantQuantities: showVariantMatrix && product?.variants?.length ? variantQuantities : undefined,
-      variantDefectiveQuantities: showVariantMatrix && product?.variants?.length ? variantDefective : undefined,
-      weight: 0,
-    };
-  });
+      const category = categories.find(c => c.id === product?.categoryId);
+      const showVariantMatrix = productHasColorSizeMatrix(product, category);
+      const productOrders = resolveOrdersForProductAtTemplate(orders, productId, milestoneTemplateId, reportModal.order.id);
+      const refOrder = productOrders[0] ?? (productId === anchorProductId ? reportModal.order : undefined);
+      const items =
+        productId === anchorProductId
+          ? (reportModal.productItems ?? reportModal.order.items)
+          : (refOrder?.items ?? []);
+      const singleVariant = items.length === 1 ? (items[0].variantId || '') : '';
+      const variantQuantities: Record<string, number> = {};
+      const variantDefective: Record<string, number> = {};
+      if (showVariantMatrix && product?.variants?.length) {
+        product.variants.forEach(v => {
+          variantQuantities[v.id] = 0;
+          variantDefective[v.id] = 0;
+        });
+      }
+      return {
+        quantity: 0,
+        defectiveQuantity: 0,
+        variantId: singleVariant,
+        workerId: '',
+        equipmentId: '',
+        customData: initialData,
+        variantQuantities: showVariantMatrix && product?.variants?.length ? variantQuantities : undefined,
+        variantDefectiveQuantities: showVariantMatrix && product?.variants?.length ? variantDefective : undefined,
+        weight: 0,
+      };
+    },
+    [
+      products,
+      categories,
+      globalNodes,
+      reportModal.milestone,
+      reportModal.order,
+      reportModal.productItems,
+      milestoneTemplateId,
+      anchorProductId,
+      orders,
+    ],
+  );
+
+  const [sessionProductIds, setSessionProductIds] = useState<string[]>(() => [anchorProductId]);
+  const [productForms, setProductForms] = useState<Record<string, ReportFormState>>(() => ({
+    [anchorProductId]: buildInitialFormForProduct(anchorProductId),
+  }));
+
+  const reportForm = productForms[anchorProductId] ?? buildInitialFormForProduct(anchorProductId);
+
+  const setReportForm = useCallback(
+    (updater: SetStateAction<ReportFormState>) => {
+      setProductForms(prev => {
+        const cur = prev[anchorProductId] ?? buildInitialFormForProduct(anchorProductId);
+        const next = typeof updater === 'function' ? updater(cur) : updater;
+        return { ...prev, [anchorProductId]: next };
+      });
+    },
+    [anchorProductId, buildInitialFormForProduct],
+  );
+
+  const setProductForm = useCallback((productId: string, updater: SetStateAction<ReportFormState>) => {
+    setProductForms(prev => {
+      const cur = prev[productId] ?? buildInitialFormForProduct(productId);
+      const next = typeof updater === 'function' ? updater(cur) : updater;
+      return { ...prev, [productId]: next };
+    });
+  }, [buildInitialFormForProduct]);
+
+  const ensureProductInSession = useCallback(
+    (productId: string) => {
+      setSessionProductIds(prev => (prev.includes(productId) ? prev : [...prev, productId]));
+      setProductForms(prev => (prev[productId] ? prev : { ...prev, [productId]: buildInitialFormForProduct(productId) }));
+    },
+    [buildInitialFormForProduct],
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    const initial = buildInitialFormForProduct(anchorProductId);
+    setSessionProductIds([anchorProductId]);
+    setProductForms({ [anchorProductId]: initial });
+  }, [open, reportModal.order.id, reportModal.milestone.id, anchorProductId, buildInitialFormForProduct]);
 
   /** 按节点 + 产品定位本工序适用 BOM;优先精确 variant,次选单 SKU */
-  const resolveBomForVariant = useCallback(
-    (variantId?: string): BOM | undefined => {
+  const resolveBomForProductVariant = useCallback(
+    (productId: string, variantId?: string): BOM | undefined => {
       if (!weightReportEnabled || !boms?.length) return undefined;
-      const productId = reportModal.order.productId;
       const nodeId = reportModal.milestone.templateId;
       const forProduct = boms.filter(b => b.parentProductId === productId && b.nodeId === nodeId);
       if (forProduct.length === 0) return undefined;
@@ -187,23 +255,31 @@ export function useReportModalState(args: UseReportModalStateArgs) {
       }
       return forProduct.find(b => !b.variantId) ?? forProduct[0];
     },
-    [weightReportEnabled, boms, reportModal.order.productId, reportModal.milestone.templateId],
+    [weightReportEnabled, boms, reportModal.milestone.templateId],
   );
 
-  const weightPreviewRows = useMemo(() => {
-    if (!weightReportEnabled) return [] as ReturnType<typeof calcUsageByWeight>;
-    const totalQty = reportForm.variantQuantities
-      ? Object.values(reportForm.variantQuantities).reduce<number>((s, q) => s + (q as number), 0)
-      : reportForm.quantity;
-    if (!(reportForm.weight > 0) || !(totalQty > 0)) return [];
-    const variantForBom = reportForm.variantQuantities
-      ? Object.entries(reportForm.variantQuantities).find(([, q]) => (q as number) > 0)?.[0]
-      : reportForm.variantId;
-    const bom = resolveBomForVariant(variantForBom);
-    if (!bom) return [];
-    const productsById = new Map(products.map(p => [p.id, p]));
-    return calcUsageByWeight(bom, totalQty, reportForm.weight, productsById);
-  }, [weightReportEnabled, reportForm.weight, reportForm.quantity, reportForm.variantQuantities, reportForm.variantId, resolveBomForVariant, products]);
+  const getWeightPreviewRowsForProduct = useCallback(
+    (productId: string, form: ReportFormState): ReturnType<typeof calcUsageByWeight> => {
+      if (!weightReportEnabled) return [];
+      const totalQty = form.variantQuantities
+        ? Object.values(form.variantQuantities).reduce<number>((s, q) => s + (q as number), 0)
+        : form.quantity;
+      if (!(form.weight > 0) || !(totalQty > 0)) return [];
+      const variantForBom = form.variantQuantities
+        ? Object.entries(form.variantQuantities).find(([, q]) => (q as number) > 0)?.[0]
+        : form.variantId;
+      const bom = resolveBomForProductVariant(productId, variantForBom);
+      if (!bom) return [];
+      const productsById = new Map(products.map(p => [p.id, p]));
+      return calcUsageByWeight(bom, totalQty, form.weight, productsById);
+    },
+    [weightReportEnabled, resolveBomForProductVariant, products],
+  );
+
+  const weightPreviewRows = useMemo(
+    () => getWeightPreviewRowsForProduct(anchorProductId, reportForm),
+    [getWeightPreviewRowsForProduct, anchorProductId, reportForm],
+  );
 
   /** 工序展示: 图片用弹层大图;PDF 用新标签页打开 */
   const pdfBlobRevokeRef = useRef<(() => void) | undefined>(undefined);
@@ -254,19 +330,19 @@ export function useReportModalState(args: UseReportModalStateArgs) {
     setReportForm(prev => ({ ...prev, customData: { ...prev.customData, [fieldId]: value } }));
   }, []);
 
-  const handleVariantQuantityChange = useCallback((variantId: string, qty: number) => {
-    setReportForm(prev => ({
+  const handleVariantQuantityChange = useCallback((productId: string, variantId: string, qty: number) => {
+    setProductForm(productId, prev => ({
       ...prev,
       variantQuantities: { ...(prev.variantQuantities ?? {}), [variantId]: Math.max(0, qty) },
     }));
-  }, []);
+  }, [setProductForm]);
 
-  const handleVariantDefectiveChange = useCallback((variantId: string, qty: number) => {
-    setReportForm(prev => ({
+  const handleVariantDefectiveChange = useCallback((productId: string, variantId: string, qty: number) => {
+    setProductForm(productId, prev => ({
       ...prev,
       variantDefectiveQuantities: { ...(prev.variantDefectiveQuantities ?? {}), [variantId]: Math.max(0, qty) },
     }));
-  }, []);
+  }, [setProductForm]);
 
   /**
    * 扫码解析缓存：扫码（预览）阶段写入「scan + validate-usage」结果，
@@ -274,24 +350,18 @@ export function useReportModalState(args: UseReportModalStateArgs) {
    * 去重依赖扫码弹窗自身的 keysRef + 此缓存幂等，不再单独维护 token 集合。
    */
   const preparedByTokenRef = useRef<Map<string, PreparedReportScan>>(new Map());
-  const reportScanLinkRef = useRef<{ virtualBatchId: string | null; itemCodeId: string | null }>({
-    virtualBatchId: null,
-    itemCodeId: null,
-  });
-  /**
-   * 单品码模式下按规格累积本次扫入的单品码列表（key = variantId，无规格为 ''）。
-   * 提交时写入对应报工的 `customData.__scanItemCodeIds`，使追溯可逐件精确命中。
-   * `hadBatchScan` 标记本次是否扫过批次码：批次码模式沿用整批链路，不写逐件列表（避免混扫时批次部分漏关联）。
-   */
-  const reportScanItemCodesByVidRef = useRef<Map<string, string[]>>(new Map());
-  const reportHadBatchScanRef = useRef(false);
+  const reportScanLinkByProductRef = useRef<Map<string, { virtualBatchId: string | null; itemCodeId: string | null }>>(new Map());
+  const reportScanItemCodesByKeyRef = useRef<Map<string, string[]>>(new Map());
+  const reportHadBatchScanByProductRef = useRef<Set<string>>(new Set());
+
+  const scanTraceKey = (productId: string, variantId: string) => `${productId}__${variantId || ''}`;
 
   useEffect(() => {
     if (!open) return;
     preparedByTokenRef.current.clear();
-    reportScanLinkRef.current = { virtualBatchId: null, itemCodeId: null };
-    reportScanItemCodesByVidRef.current = new Map();
-    reportHadBatchScanRef.current = false;
+    reportScanLinkByProductRef.current = new Map();
+    reportScanItemCodesByKeyRef.current = new Map();
+    reportHadBatchScanByProductRef.current = new Set();
   }, [open, reportModal.order.id, reportModal.milestone.id]);
 
   /**
@@ -301,27 +371,33 @@ export function useReportModalState(args: UseReportModalStateArgs) {
    */
   const validateScanForReport = useCallback(
     async (params: {
+      productId: string;
       itemCodeId: string | null;
       virtualBatchId: string | null;
       variantId: string | null;
       addQty: number;
     }): Promise<boolean> => {
-      const { itemCodeId, virtualBatchId, variantId, addQty } = params;
+      const { productId, itemCodeId, virtualBatchId, variantId, addQty } = params;
       if (!itemCodeId && !virtualBatchId) return true;
       const purpose: ScanValidatePurpose =
         productionLinkMode === 'product' ? 'PRODUCT_REPORT' : 'MILESTONE_REPORT';
+      const target =
+        productionLinkMode === 'order'
+          ? resolveTargetOrderForReport(orders, productId, milestoneTemplateId, variantId ?? undefined, reportModal.order.id)
+          : null;
       const scope: ScanValidateScope =
         purpose === 'PRODUCT_REPORT'
           ? {
-              productId: reportModal.order.productId,
-              milestoneTemplateId: reportModal.milestone.templateId,
+              productId,
+              milestoneTemplateId,
               variantId: variantId || null,
             }
-          : { milestoneId: reportModal.milestone.id };
-      const maxQty = getScanMaxQty?.(variantId || null);
-      const currentQty = reportForm.variantQuantities
-        ? reportForm.variantQuantities[variantId || ''] ?? 0
-        : reportForm.quantity || 0;
+          : { milestoneId: target?.milestoneId ?? reportModal.milestone.id };
+      const form = productForms[productId];
+      const maxQty = getScanMaxQty?.(productId, variantId || null);
+      const currentQty = form?.variantQuantities
+        ? form.variantQuantities[variantId || ''] ?? 0
+        : form?.quantity || 0;
       try {
         const res = await itemCodesApi.validateUsage({
           purpose,
@@ -347,12 +423,12 @@ export function useReportModalState(args: UseReportModalStateArgs) {
     },
     [
       productionLinkMode,
-      reportModal.order.productId,
-      reportModal.milestone.templateId,
+      milestoneTemplateId,
       reportModal.milestone.id,
-      reportForm.variantQuantities,
-      reportForm.quantity,
+      reportModal.order.id,
+      productForms,
       getScanMaxQty,
+      orders,
     ],
   );
 
@@ -365,13 +441,49 @@ export function useReportModalState(args: UseReportModalStateArgs) {
       if (!payload.token) return null;
       const cached = preparedByTokenRef.current.get(payload.token);
       if (cached) return cached;
-      const currentPlanOrderId = reportModal.order.planOrderId;
-      if (!currentPlanOrderId) {
+      const anchorPlanOrderId = reportModal.order.planOrderId;
+      if (productionLinkMode !== 'product' && !anchorPlanOrderId) {
         toast.error('当前工单未关联计划，无法校验扫码');
         return null;
       }
-      const isPlanCompatible = (codePlanOrderId: string) =>
-        arePlanOrdersScanCompatible(plans, codePlanOrderId, currentPlanOrderId);
+      const collectProductPlanOrderIds = (productId: string): string[] => {
+        const seen = new Set<string>();
+        const ids: string[] = [];
+        const push = (planOrderId?: string | null) => {
+          if (planOrderId && !seen.has(planOrderId)) {
+            seen.add(planOrderId);
+            ids.push(planOrderId);
+          }
+        };
+        for (const o of reportModal.productOrders ?? []) {
+          if (o.productId === productId) push(o.planOrderId);
+        }
+        for (const o of resolveOrdersForProductAtTemplate(orders, productId, milestoneTemplateId, reportModal.order.id)) {
+          push(o.planOrderId);
+        }
+        for (const o of orders) {
+          if (o.productId === productId) push(o.planOrderId);
+        }
+        return ids;
+      };
+      const isPlanCompatible = (codePlanOrderId: string, productId: string) =>
+        isReportScanPlanCompatible(plans, codePlanOrderId, {
+          productionLinkMode,
+          anchorPlanOrderId,
+          productPlanOrderIds: collectProductPlanOrderIds(productId),
+        });
+      const validateProductAtNode = (productId: string, productName?: string | null) => {
+        const product = productMap.get(productId);
+        const ok = productHasMilestoneTemplate(
+          productId,
+          milestoneTemplateId,
+          orders,
+          productionLinkMode,
+          product?.milestoneNodeIds,
+        );
+        if (!ok) toast.error(`「${productName ?? productId}」不包含工序「${reportModal.milestone.name}」`);
+        return ok;
+      };
       try {
         if (payload.kind === 'ITEM') {
           const res = await itemCodesApi.scan(payload.token);
@@ -379,18 +491,23 @@ export function useReportModalState(args: UseReportModalStateArgs) {
             toast.error(res.message || '单品码已作废');
             return null;
           }
-          const codePlanId = res.planOrderId;
-          if (!isPlanCompatible(codePlanId)) {
+          if (res.kind !== 'ITEM_CODE') return null;
+          const productId = res.productId ?? '';
+          if (!productId || !validateProductAtNode(productId, res.productName)) return null;
+          const codePlanId = res.callerContext?.callerPlanOrderId ?? res.planOrderId;
+          if (!codePlanId || !isPlanCompatible(codePlanId, productId)) {
             toast.error('此码不属于当前工单所在计划');
             return null;
           }
-          if (res.kind !== 'ITEM_CODE') return null;
           const vid = res.variantId || '';
-          if (reportForm.variantQuantities && !vid) {
+          const product = productMap.get(productId);
+          const category = product?.categoryId ? categoryMap.get(product.categoryId) : undefined;
+          if (productHasColorSizeMatrix(product, category) && !vid) {
             toast.error('单品码未带规格，无法在按规格模式下累加');
             return null;
           }
           const okValidate = await validateScanForReport({
+            productId,
             itemCodeId: res.itemCodeId ?? null,
             virtualBatchId: res.batchId ?? null,
             variantId: vid || null,
@@ -398,6 +515,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
           });
           if (!okValidate) return null;
           const prepared: PreparedReportScan = {
+            productId,
             vid,
             qty: 1,
             itemCodeId: res.itemCodeId ?? null,
@@ -418,18 +536,23 @@ export function useReportModalState(args: UseReportModalStateArgs) {
             toast.error(res.message || '批次码已作废');
             return null;
           }
-          const codePlanId = res.planOrderId;
-          if (!isPlanCompatible(codePlanId)) {
+          const productId = res.productId ?? '';
+          if (!productId || !validateProductAtNode(productId, res.productName)) return null;
+          const codePlanId = res.callerContext?.callerPlanOrderId ?? res.planOrderId;
+          if (!codePlanId || !isPlanCompatible(codePlanId, productId)) {
             toast.error('此批次码不属于当前工单所在计划');
             return null;
           }
           const qty = res.quantity ?? 0;
           const vid = res.variantId || '';
-          if (reportForm.variantQuantities && !vid) {
+          const product = productMap.get(productId);
+          const category = product?.categoryId ? categoryMap.get(product.categoryId) : undefined;
+          if (productHasColorSizeMatrix(product, category) && !vid) {
             toast.error('批次码未带规格，无法在按规格模式下累加');
             return null;
           }
           const okValidate = await validateScanForReport({
+            productId,
             itemCodeId: null,
             virtualBatchId: res.batchId ?? null,
             variantId: vid || null,
@@ -437,6 +560,7 @@ export function useReportModalState(args: UseReportModalStateArgs) {
           });
           if (!okValidate) return null;
           const prepared: PreparedReportScan = {
+            productId,
             vid,
             qty,
             itemCodeId: null,
@@ -456,7 +580,18 @@ export function useReportModalState(args: UseReportModalStateArgs) {
       }
       return null;
     },
-    [reportModal.order.planOrderId, reportForm.variantQuantities, validateScanForReport, plans],
+    [
+      reportModal.order.planOrderId,
+      reportModal.productOrders,
+      reportModal.milestone.name,
+      validateScanForReport,
+      plans,
+      productMap,
+      categoryMap,
+      orders,
+      productionLinkMode,
+      milestoneTemplateId,
+    ],
   );
 
   const resolveReportScanRowPreview = useCallback(
@@ -469,30 +604,35 @@ export function useReportModalState(args: UseReportModalStateArgs) {
 
   const applyScanPayload = useCallback(
     async (payload: ScanPayload): Promise<boolean> => {
-      // 扫码阶段已通过 resolveReportScanRowPreview 调 prepareReportScan 并缓存，
-      // 此处命中缓存 → 0 网络；缓存未命中（极少数）才回退到网络解析。
       const prepared = await prepareReportScan(payload);
       if (!prepared) return false;
-      const { vid, qty } = prepared;
-      if (prepared.batchId) reportScanLinkRef.current.virtualBatchId = prepared.batchId;
+      const { productId, vid, qty } = prepared;
+      ensureProductInSession(productId);
+      const link = reportScanLinkByProductRef.current.get(productId) ?? { virtualBatchId: null, itemCodeId: null };
+      if (prepared.batchId) link.virtualBatchId = prepared.batchId;
       if (prepared.itemCodeId) {
-        reportScanLinkRef.current.itemCodeId = prepared.itemCodeId;
-        const arr = reportScanItemCodesByVidRef.current.get(vid) ?? [];
+        link.itemCodeId = prepared.itemCodeId;
+        const traceKey = scanTraceKey(productId, vid);
+        const arr = reportScanItemCodesByKeyRef.current.get(traceKey) ?? [];
         if (!arr.includes(prepared.itemCodeId)) arr.push(prepared.itemCodeId);
-        reportScanItemCodesByVidRef.current.set(vid, arr);
+        reportScanItemCodesByKeyRef.current.set(traceKey, arr);
       } else if (prepared.batchId) {
-        reportHadBatchScanRef.current = true;
+        reportHadBatchScanByProductRef.current.add(productId);
       }
-      setReportForm(f => {
+      reportScanLinkByProductRef.current.set(productId, link);
+      setProductForm(productId, f => {
         if (f.variantQuantities) {
           const prev = f.variantQuantities[vid] ?? 0;
           return { ...f, variantQuantities: { ...f.variantQuantities, [vid]: prev + qty } };
         }
         return { ...f, quantity: (f.quantity || 0) + qty, variantId: vid || f.variantId };
       });
+      if (prepared.productName && productId !== anchorProductId) {
+        toast.success(`已累加 ${prepared.productName}${prepared.variantLabel ? ` · ${prepared.variantLabel}` : ''} +${qty}`);
+      }
       return true;
     },
-    [prepareReportScan],
+    [prepareReportScan, ensureProductInSession, setProductForm, anchorProductId],
   );
 
   const handleScanBatchConfirm = useCallback(
@@ -501,19 +641,27 @@ export function useReportModalState(args: UseReportModalStateArgs) {
         const ok = await applyScanPayload(p);
         if (!ok) return false;
       }
-      if (weightReportEnabled && meta && meta.totalMeasuredWeightKg > 0) {
-        setReportForm(f => ({ ...f, weight: meta.totalMeasuredWeightKg }));
+      if (weightReportEnabled && meta && (meta.totalMeasuredWeightKg ?? 0) > 0) {
+        const weightByProduct = await accumulateMeasuredWeightByProduct(
+          payloads,
+          meta,
+          async payload => (await prepareReportScan(payload))?.productId ?? null,
+        );
+        for (const [productId, w] of weightByProduct) {
+          setProductForm(productId, f => ({ ...f, weight: roundWeightKg((f.weight ?? 0) + w) }));
+        }
       }
       return true;
     },
-    [applyScanPayload, weightReportEnabled],
+    [applyScanPayload, weightReportEnabled, prepareReportScan, setProductForm],
   );
 
-  const getSeqRemainingForVariant = useCallback((variantId: string): number => {
-    const productId = reportModal.order.productId;
-    const milestoneTemplateId = reportModal.milestone.templateId;
-    const allOrders = ordersInModal;
-    const items = reportModal.productItems ?? reportModal.order.items;
+  const getSeqRemainingForVariant = useCallback((productId: string, variantId: string): number => {
+    const allOrders = resolveOrdersForProductAtTemplate(orders, productId, milestoneTemplateId, reportModal.order.id);
+    const items =
+      productId === anchorProductId
+        ? (reportModal.productItems ?? reportModal.order.items)
+        : (allOrders[0]?.items ?? []);
     const item = items.find(i => (i.variantId || '') === variantId) ?? (items.length === 1 ? items[0] : undefined);
 
     let tplIndex: number;
@@ -590,10 +738,24 @@ export function useReportModalState(args: UseReportModalStateArgs) {
       }
     });
     return prevQty - curQty;
-  }, [reportModal.order, reportModal.milestone, reportModal.productItems, ordersInModal, productionLinkMode, productMap, productMilestoneProgresses, processSequenceMode, outOfSequenceTemplateIds]);
+  }, [
+    reportModal.order,
+    reportModal.milestone,
+    reportModal.productItems,
+    orders,
+    anchorProductId,
+    milestoneTemplateId,
+    productionLinkMode,
+    productMap,
+    productMilestoneProgresses,
+    processSequenceMode,
+    outOfSequenceTemplateIds,
+  ]);
 
   const submitReport = useCallback(async () => {
     const tmpl = effectiveReportTemplate;
+    const sharedWorkerId = reportForm.workerId;
+    const sharedEquipmentId = reportForm.equipmentId;
     for (const f of tmpl) {
       if (!f.required) continue;
       const v = reportForm.customData[f.id];
@@ -607,138 +769,180 @@ export function useReportModalState(args: UseReportModalStateArgs) {
         return;
       }
     }
-    const productId = reportModal.order.productId;
-    const milestoneTemplateId = reportModal.milestone.templateId;
-    const product = productMap.get(productId);
-    const category = product?.categoryId ? categoryMap.get(product.categoryId) : undefined;
-    const showVariantMatrix = productHasColorSizeMatrix(product, category);
-    void dictionaries;
-
-    const matrixWeightPartsByVariantId = (() => {
-      if (!weightReportEnabled || !(reportForm.weight > 0) || !reportForm.variantQuantities) {
-        return null as Map<string, number> | null;
-      }
-      const entries = (Object.entries(reportForm.variantQuantities) as Array<[string, number]>).filter(
-        ([, q]) => q > 0,
-      );
-      if (entries.length === 0) return null;
-      const parts = distributeWeightByQty(
-        reportForm.weight,
-        entries.map(([, q]) => ({ quantity: q })),
-      );
-      return new Map(entries.map(([vId], idx) => [vId, parts[idx]!]));
-    })();
-    const weightForVariant = (variantId: string) => matrixWeightPartsByVariantId?.get(variantId);
 
     const getNextReportNo = () => generateNextReportNo(orders, productMilestoneProgresses);
-    /**
-     * 单品码模式下取本次扫入的单品码列表：
-     * - `variantId` 传具体规格（矩阵报工每行）→ 仅取该规格扫入的单品码；
-     * - 传 `null`（非矩阵单条报工）→ 合并所有规格的单品码（同一条报工承载全部扫入）。
-     * 扫过批次码（批次码模式）则不写列表，沿用整批 virtual_batch_id 链路。
-     */
-    const collectScanItemCodes = (variantId: string | null): string[] => {
-      if (reportHadBatchScanRef.current) return [];
-      const map = reportScanItemCodesByVidRef.current;
-      if (variantId === null) return [...new Set([...map.values()].flat())];
-      return map.get(variantId) ?? [];
-    };
-    const submitCustomData = (variantId: string | null): Record<string, unknown> => {
-      const scanItemCodeIds = collectScanItemCodes(variantId);
-      return {
-        ...reportForm.customData,
-        ...(reportScanLinkRef.current.virtualBatchId
-          ? { virtualBatchId: reportScanLinkRef.current.virtualBatchId }
-          : {}),
-        ...(reportScanLinkRef.current.itemCodeId ? { itemCodeId: reportScanLinkRef.current.itemCodeId } : {}),
-        ...(scanItemCodeIds.length > 0 ? { [SCAN_ITEM_CODE_IDS_KEY]: scanItemCodeIds } : {}),
-      };
-    };
 
-    if (productionLinkMode === 'product' && onReportSubmitProduct) {
-      if (showVariantMatrix && reportForm.variantQuantities) {
-        const entries = (Object.entries(reportForm.variantQuantities) as Array<[string, number]>).filter(([vId, q]) => {
-          const def = reportForm.variantDefectiveQuantities?.[vId] ?? 0;
+    for (const pid of sessionProductIds) {
+      const form = productForms[pid];
+      if (!form) continue;
+      const product = productMap.get(pid);
+      const category = product?.categoryId ? categoryMap.get(product.categoryId) : undefined;
+      const showVariantMatrix = productHasColorSizeMatrix(product, category);
+      const link = reportScanLinkByProductRef.current.get(pid);
+      const hadBatch = reportHadBatchScanByProductRef.current.has(pid);
+
+      const matrixWeightPartsByVariantId = (() => {
+        if (!weightReportEnabled || !(form.weight > 0) || !form.variantQuantities) return null as Map<string, number> | null;
+        const entries = (Object.entries(form.variantQuantities) as Array<[string, number]>).filter(([, q]) => q > 0);
+        if (entries.length === 0) return null;
+        const parts = distributeWeightByQty(form.weight, entries.map(([, q]) => ({ quantity: q })));
+        return new Map(entries.map(([vId], idx) => [vId, parts[idx]!]));
+      })();
+      const weightForVariant = (variantId: string) => matrixWeightPartsByVariantId?.get(variantId);
+
+      const collectScanItemCodes = (variantId: string | null): string[] => {
+        if (hadBatch) return [];
+        if (variantId === null) {
+          return [
+            ...new Set(
+              [...reportScanItemCodesByKeyRef.current.entries()]
+                .filter(([k]) => k.startsWith(`${pid}__`))
+                .flatMap(([, v]) => v),
+            ),
+          ];
+        }
+        return reportScanItemCodesByKeyRef.current.get(scanTraceKey(pid, variantId)) ?? [];
+      };
+
+      const submitCustomData = (variantId: string | null): Record<string, unknown> => {
+        const scanItemCodeIds = collectScanItemCodes(variantId);
+        return {
+          ...form.customData,
+          ...(link?.virtualBatchId ? { virtualBatchId: link.virtualBatchId } : {}),
+          ...(link?.itemCodeId ? { itemCodeId: link.itemCodeId } : {}),
+          ...(scanItemCodeIds.length > 0 ? { [SCAN_ITEM_CODE_IDS_KEY]: scanItemCodeIds } : {}),
+        };
+      };
+
+      const hasQty = showVariantMatrix && form.variantQuantities
+        ? Object.entries(form.variantQuantities).some(([vId, q]) => (q as number) > 0 || (form.variantDefectiveQuantities?.[vId] ?? 0) > 0)
+        : form.quantity + form.defectiveQuantity > 0;
+      if (!hasQty) continue;
+
+      const batchId = `batch-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const reportNo = getNextReportNo();
+
+      if (productionLinkMode === 'product' && onReportSubmitProduct) {
+        if (showVariantMatrix && form.variantQuantities) {
+          const entries = (Object.entries(form.variantQuantities) as Array<[string, number]>).filter(([vId, q]) => {
+            const def = form.variantDefectiveQuantities?.[vId] ?? 0;
+            return q > 0 || def > 0;
+          });
+          for (const [vId, qty] of entries) {
+            const defQty = form.variantDefectiveQuantities?.[vId] ?? 0;
+            await onReportSubmitProduct(
+              pid,
+              milestoneTemplateId,
+              qty,
+              submitCustomData(vId),
+              vId,
+              sharedWorkerId || undefined,
+              defQty,
+              sharedEquipmentId || undefined,
+              batchId,
+              reportNo,
+              weightForVariant(vId),
+            );
+          }
+        } else {
+          await onReportSubmitProduct(
+            pid,
+            milestoneTemplateId,
+            form.quantity,
+            submitCustomData(null),
+            form.variantId || undefined,
+            sharedWorkerId || undefined,
+            form.defectiveQuantity || 0,
+            sharedEquipmentId || undefined,
+            undefined,
+            reportNo,
+            weightReportEnabled && form.weight > 0 ? form.weight : undefined,
+          );
+        }
+        continue;
+      }
+
+      if (!onReportSubmit) continue;
+      if (showVariantMatrix && form.variantQuantities) {
+        const entries = (Object.entries(form.variantQuantities) as Array<[string, number]>).filter(([vId, q]) => {
+          const def = form.variantDefectiveQuantities?.[vId] ?? 0;
           return q > 0 || def > 0;
         });
-        if (entries.length === 0) return;
-        const batchId = `batch-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-        const reportNo = getNextReportNo();
         for (const [vId, qty] of entries) {
-          const defQty = reportForm.variantDefectiveQuantities?.[vId] ?? 0;
-          await onReportSubmitProduct(
-            productId, milestoneTemplateId, qty, submitCustomData(vId),
-            vId, reportForm.workerId || undefined, defQty,
-            reportForm.equipmentId || undefined, batchId, reportNo,
+          const target = resolveTargetOrderForReport(orders, pid, milestoneTemplateId, vId, reportModal.order.id);
+          if (!target) {
+            toast.error(`未找到产品「${product?.name ?? pid}」的可报工单`);
+            return;
+          }
+          const defQty = form.variantDefectiveQuantities?.[vId] ?? 0;
+          await onReportSubmit(
+            target.order.id,
+            target.milestoneId,
+            qty,
+            submitCustomData(vId),
+            vId,
+            sharedWorkerId || undefined,
+            defQty,
+            sharedEquipmentId || undefined,
+            batchId,
+            reportNo,
             weightForVariant(vId),
           );
         }
       } else {
-        const reportNo = getNextReportNo();
-        await onReportSubmitProduct(
-          productId, milestoneTemplateId, reportForm.quantity, submitCustomData(null),
-          reportForm.variantId || undefined, reportForm.workerId || undefined,
-          reportForm.defectiveQuantity || 0, reportForm.equipmentId || undefined,
-          undefined, reportNo,
-          weightReportEnabled && reportForm.weight > 0 ? reportForm.weight : undefined,
+        const target = resolveTargetOrderForReport(
+          orders,
+          pid,
+          milestoneTemplateId,
+          form.variantId || undefined,
+          reportModal.order.id,
         );
-      }
-      onClose();
-      return;
-    }
-
-    if (!onReportSubmit) return;
-    if (showVariantMatrix && reportForm.variantQuantities) {
-      const entries = (Object.entries(reportForm.variantQuantities) as Array<[string, number]>).filter(([vId, q]) => {
-        const def = reportForm.variantDefectiveQuantities?.[vId] ?? 0;
-        return q > 0 || def > 0;
-      });
-      if (entries.length === 0) return;
-      const batchId = `batch-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      const reportNo = getNextReportNo();
-      for (const [vId, qty] of entries) {
-        let targetOrder = reportModal.order;
-        if (reportModal.productOrders?.length) {
-          const withVariant = reportModal.productOrders.find(o => o.items.some(i => i.variantId === vId));
-          targetOrder = withVariant ?? reportModal.productOrders[0];
+        if (!target) {
+          toast.error(`未找到产品「${product?.name ?? pid}」的可报工单`);
+          return;
         }
-        const ms = targetOrder.milestones.find(m => m.templateId === reportModal.milestone.templateId) ?? reportModal.milestone;
-        const defQty = reportForm.variantDefectiveQuantities?.[vId] ?? 0;
         await onReportSubmit(
-          targetOrder.id, ms.id, qty, submitCustomData(vId),
-          vId, reportForm.workerId || undefined, defQty,
-          reportForm.equipmentId || undefined, batchId, reportNo,
-          weightForVariant(vId),
+          target.order.id,
+          target.milestoneId,
+          form.quantity,
+          submitCustomData(null),
+          form.variantId || undefined,
+          sharedWorkerId || undefined,
+          form.defectiveQuantity || 0,
+          sharedEquipmentId || undefined,
+          undefined,
+          reportNo,
+          weightReportEnabled && form.weight > 0 ? form.weight : undefined,
         );
       }
-    } else {
-      let targetOrder = reportModal.order;
-      if (reportModal.productOrders && reportModal.productOrders.length > 0) {
-        const vId = reportForm.variantId || undefined;
-        const withVariant = reportModal.productOrders.find(o => vId ? o.items.some(i => i.variantId === vId) : true);
-        targetOrder = withVariant ?? reportModal.productOrders[0];
-      }
-      const ms = targetOrder.milestones.find(m => m.templateId === reportModal.milestone.templateId) ?? reportModal.milestone;
-      const reportNo = getNextReportNo();
-      await onReportSubmit(
-        targetOrder.id, ms.id, reportForm.quantity, submitCustomData(null),
-        reportForm.variantId || undefined, reportForm.workerId || undefined,
-        reportForm.defectiveQuantity || 0, reportForm.equipmentId || undefined,
-        undefined, reportNo,
-        weightReportEnabled && reportForm.weight > 0 ? reportForm.weight : undefined,
-      );
     }
     onClose();
   }, [
-    effectiveReportTemplate, reportForm, reportModal, productMap, categoryMap, dictionaries,
-    weightReportEnabled, productionLinkMode, onReportSubmit, onReportSubmitProduct, onClose,
-    orders, productMilestoneProgresses,
+    effectiveReportTemplate,
+    reportForm,
+    sessionProductIds,
+    productForms,
+    productMap,
+    categoryMap,
+    weightReportEnabled,
+    productionLinkMode,
+    onReportSubmit,
+    onReportSubmitProduct,
+    onClose,
+    orders,
+    productMilestoneProgresses,
+    milestoneTemplateId,
+    reportModal.order.id,
   ]);
 
   return {
     reportForm,
     setReportForm,
+    productForms,
+    sessionProductIds,
+    setProductForm,
     weightPreviewRows,
+    getWeightPreviewRowsForProduct,
     displayImagePreview,
     closeDisplayImagePreview,
     openDisplayFilePreview,

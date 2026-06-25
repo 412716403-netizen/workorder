@@ -54,6 +54,10 @@ export const updateNode = asyncHandler(async (req, res) => {
 export const deleteNode = asyncHandler(async (req, res) => {
   res.json(await settingsService.deleteNode(getTenantPrisma(req.tenantId!), str(req.params.id)));
 });
+export const reorderNodes = asyncHandler(async (req, res) => {
+  const orderedIds = req.body.orderedIds as string[];
+  res.json(await settingsService.reorderNodes(getTenantPrisma(req.tenantId!), orderedIds));
+});
 
 // ── 仓库 ──
 export const listWarehouses = asyncHandler(async (req, res) => {

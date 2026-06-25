@@ -13,9 +13,12 @@ import type { ScanPayload } from '../../../utils/scanPayload';
 import type { ReportFormState, ReportModalData } from '../../../hooks/useReportModalState';
 import type { ScanBatchApplyMeta } from '../../../components/scan/ScanBatchSessionModal';
 import type { ScanWeightCheckProps } from './ReportVariantMatrixInput';
+import ReportProductReportSummary from './ReportProductReportSummary';
 import { formStandardLabelClass } from '../../../styles/uiDensity';
 
 interface Props {
+  productId: string;
+  productOrder: import('../../../types').ProductionOrder;
   reportModal: ReportModalData;
   reportForm: ReportFormState;
   setReportForm: React.Dispatch<React.SetStateAction<ReportFormState>>;
@@ -38,6 +41,8 @@ interface Props {
 }
 
 const ReportSingleVariantInput: React.FC<Props> = ({
+  productId,
+  productOrder,
   reportModal,
   reportForm,
   setReportForm,
@@ -58,40 +63,25 @@ const ReportSingleVariantInput: React.FC<Props> = ({
   scanWeightProps,
   scanEnabled = true,
 }) => {
-  const reportProduct = productMap.get(reportModal.order.productId);
+  const reportProduct = productMap.get(productId);
   const detailUnit = (reportProduct?.unitId && dictionaries.units.find(u => u.id === reportProduct.unitId)?.name) || '件';
   const nodeRate = reportProduct?.nodeRates?.[reportModal.milestone.templateId] ?? 0;
   const estAmount = reportForm.quantity > 0 && nodeRate > 0 ? reportForm.quantity * nodeRate : 0;
-  const items = reportModal.productItems ?? reportModal.order.items;
+  const items = productId === reportModal.order.productId
+    ? (reportModal.productItems ?? reportModal.order.items)
+    : productOrder.items;
   const showVariantSelect = items.length > 1;
 
-  const renderHints = () => {
-    if (hintTotalQty <= 0) return <span className="text-slate-500 text-[10px] sm:text-[11px]">工单 {reportModal.order.orderNumber}</span>;
-    return (
-      <span className="block mt-0.5">
-        {hintMaxReportable !== hintTotalQty ? (
-          <>可报 {hintMaxReportable}/{hintTotalQty} {detailUnit} · </>
-        ) : (
-          <>合计 {hintTotalQty} {detailUnit} · </>
-        )}
-        已报 {hintCompletedDisplay} · 剩 {hintRemaining} {detailUnit}
-        {totalOutsourcedAtNode > 0 ? (
-          <span className="text-slate-400" title="本工序已发外协、尚未收回的在制数量（外协剩余）">
-            {' '}· 外协剩余 {totalOutsourcedAtNode} {detailUnit}
-          </span>
-        ) : null}
-        {defectiveQtyForHint > 0 ? (
-          <span className="text-slate-400" title="本工序报不良等需走返工流程的件数">
-            {' '}· 返工 {defectiveQtyForHint} {detailUnit}
-          </span>
-        ) : null}
-        {totalRework > 0 ? (
-          <span className="text-slate-400" title="返工报工已回缴到本工序的完成件数">
-            {' '}·{defectiveQtyForHint > 0 ? ' 返工完成' : ' 返工'} {totalRework}
-          </span>
-        ) : null}
-      </span>
-    );
+  const summaryHints = {
+    detailUnit,
+    hintTotalQty,
+    hintMaxReportable,
+    hintCompletedDisplay,
+    hintRemaining,
+    totalOutsourcedAtNode,
+    defectiveQtyForHint,
+    totalRework,
+    fallbackOrderNumber: productOrder.orderNumber,
   };
 
   return (
@@ -107,7 +97,7 @@ const ReportSingleVariantInput: React.FC<Props> = ({
           >
             <option value="">请选择报工规格...</option>
             {items.map((item, idx) => {
-              const product = productMap.get(reportModal.order.productId);
+              const product = productMap.get(productId);
               const v = product?.variants?.find((x: { id: string }) => x.id === item.variantId);
               const completedInMilestone = reportModal.productItems
                 ? (item.completedQuantity ?? 0)
@@ -124,25 +114,12 @@ const ReportSingleVariantInput: React.FC<Props> = ({
       )}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-3 sm:gap-x-5">
         <div className="flex min-w-0 w-full flex-1 flex-col gap-0.5 sm:w-auto sm:max-w-[min(100%,24rem)]">
-          {productionLinkMode === 'product' ? (
-            <>
-              <span className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{reportModal.order.productName}</span>
-              <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium leading-snug">
-                {renderHints()}
-              </div>
-            </>
-          ) : (
-            <div className="flex min-w-0 w-full flex-1 flex-col gap-0.5">
-              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <span className="text-sm font-bold text-slate-900">{reportModal.order.orderNumber}</span>
-                <span className="text-sm text-slate-400">·</span>
-                <span className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{reportModal.order.productName}</span>
-              </div>
-              {hintTotalQty > 0 ? (
-                <div className="text-[10px] sm:text-[11px] text-slate-500 font-medium leading-snug">{renderHints()}</div>
-              ) : null}
-            </div>
-          )}
+          <ReportProductReportSummary
+            productionLinkMode={productionLinkMode}
+            productName={productionLinkMode === 'product' ? reportModal.order.productName : productOrder.productName}
+            orderNumber={productOrder.orderNumber}
+            hints={summaryHints}
+          />
         </div>
         <div className="flex flex-col shrink-0 sm:pl-1">
           <div className="flex min-w-0 flex-col gap-0.5">

@@ -198,6 +198,8 @@ export interface AppDataContextValue {
   refreshPartnerCategories: () => Promise<void>;
   refreshCategories: () => Promise<void>;
   refreshGlobalNodes: () => Promise<void>;
+  /** 本地同步工序节点库（避免排序后整页 refetch 闪烁） */
+  applyGlobalNodes: (list: GlobalNodeTemplate[]) => void;
   refreshWarehouses: () => Promise<void>;
   refreshFinanceCategories: () => Promise<void>;
   refreshFinanceAccountTypes: () => Promise<void>;
@@ -551,6 +553,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   );
   const refreshGlobalNodes = useCallback(
     async () => setGlobalNodes(normalizeGlobalNodesFromApi(await api.settings.nodes.list() as GlobalNodeTemplate[])),
+    [],
+  );
+  const applyGlobalNodes = useCallback(
+    (list: GlobalNodeTemplate[]) => setGlobalNodes(normalizeGlobalNodesFromApi(list)),
     [],
   );
   const refreshWarehouses = useCallback(async () => setWarehouses(await api.settings.warehouses.list() as Warehouse[]), []);
@@ -1091,7 +1097,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     onAddPSIRecord, onAddPSIRecordBatch, onReplacePSIRecords, onDeletePSIRecords,
     onAddFinanceRecord, onUpdateFinanceRecord, onDeleteFinanceRecord,
     refreshDictionaries, refreshWorkers, refreshEquipment, refreshPartners,
-    refreshPartnerCategories, refreshCategories, refreshGlobalNodes, refreshWarehouses,
+    refreshPartnerCategories, refreshCategories, refreshGlobalNodes, applyGlobalNodes, refreshWarehouses,
     refreshFinanceCategories, refreshFinanceAccountTypes,
     refreshProducts, refreshOrders, refreshPMP,
     refreshPrintTemplates,
@@ -1113,7 +1119,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     onAddPSIRecord, onAddPSIRecordBatch, onReplacePSIRecords, onDeletePSIRecords,
     onAddFinanceRecord, onUpdateFinanceRecord, onDeleteFinanceRecord,
     refreshDictionaries, refreshWorkers, refreshEquipment, refreshPartners,
-    refreshPartnerCategories, refreshCategories, refreshGlobalNodes, refreshWarehouses,
+    refreshPartnerCategories, refreshCategories, refreshGlobalNodes, applyGlobalNodes, refreshWarehouses,
     refreshFinanceCategories, refreshFinanceAccountTypes,
     refreshProducts, refreshOrders, refreshPMP,
     refreshPrintTemplates,

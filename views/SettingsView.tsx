@@ -76,6 +76,7 @@ const SettingsView: React.FC = () => {
   const onRefreshCategories = a.refreshCategories;
   const onRefreshPartnerCategories = a.refreshPartnerCategories;
   const onRefreshGlobalNodes = a.refreshGlobalNodes;
+  const onApplyGlobalNodes = a.applyGlobalNodes;
   const onRefreshWarehouses = a.refreshWarehouses;
   const userPermissions = tenantCtx?.permissions;
   const tenantRole = tenantCtx?.tenantRole;
@@ -205,7 +206,9 @@ const SettingsView: React.FC = () => {
           <NodesTab
             globalNodes={globalNodes}
             onRefreshGlobalNodes={onRefreshGlobalNodes}
+            onApplyGlobalNodes={onApplyGlobalNodes}
             canCreate={canCreate('nodes')}
+            canEdit={canEdit('nodes')}
             canDelete={canDelete('nodes')}
           />
         )}

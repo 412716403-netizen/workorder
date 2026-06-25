@@ -385,6 +385,8 @@ export interface AppDictionaries {
 export interface GlobalNodeTemplate {
   id: string;
   name: string;
+  /** 工序节点库排序，越小越靠前 */
+  sortOrder?: number;
   /** 报工页只读展示项（工艺说明、标准 PDF 等），内容由产品 routeReportDisplayValues 维护 */
   reportDisplayTemplate?: ReportFieldDefinition[];
   reportTemplate: ReportFieldDefinition[];
@@ -416,10 +418,10 @@ export interface GlobalNodeTemplate {
    */
   enableWeightOnReport?: boolean;
   /**
-   * 是否开启「扫码称重」。开启后（且追溯码插件开启）：报工 / 返工 / 外协收货的扫码会话顶部出现电子秤捕获框，
+   * 是否开启「扫码称重」。开启后（且追溯码插件开启）：**工单报工 / 外协收货**的扫码会话顶部出现电子秤捕获框，
    * 每次扫码快照秤读数并与「单件标准重量 × 数量」做理论/实测比对。
    * 仅控制秤框显示与比对，本身不落库重量；若该工序同时开启 `enableWeightOnReport`，
-   * 扫码会话累计实测总重会自动同步到报工 / 收货表单的交货重量字段。
+   * 扫码会话累计实测总重会自动同步到报工 / 收货表单的交货重量字段。（返工报工扫码不使用。）
    */
   enableScanWeighing?: boolean;
 }

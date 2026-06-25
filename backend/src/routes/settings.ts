@@ -14,6 +14,10 @@ const updateNameSchema = z.object({
   name: z.string().min(1, '名称不能为空').optional(),
 }).passthrough();
 
+const reorderNodesSchema = z.object({
+  orderedIds: z.array(z.string().min(1)).min(1),
+});
+
 const updateConfigSchema = z.object({
   value: z.unknown().refine(v => v !== undefined, { message: '配置值不能为空' }),
 });
@@ -33,6 +37,7 @@ router.delete('/partner-categories/:id', requireSubPermission('settings:partner_
 // 工序节点
 router.get('/nodes',      requireSubPermission('settings:nodes:view'),   ctrl.listNodes);
 router.post('/nodes',     requireSubPermission('settings:nodes:create'), validate(nameRequiredSchema), ctrl.createNode);
+router.put('/nodes/reorder', requireSubPermission('settings:nodes:edit'), validate(reorderNodesSchema), ctrl.reorderNodes);
 router.put('/nodes/:id',  requireSubPermission('settings:nodes:edit'),   validate(updateNameSchema), ctrl.updateNode);
 router.delete('/nodes/:id', requireSubPermission('settings:nodes:delete'), ctrl.deleteNode);
 

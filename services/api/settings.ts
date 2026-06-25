@@ -4,7 +4,15 @@ import { request, crud } from './_client';
 export const settings = {
   categories: crud('/settings/categories'),
   partnerCategories: crud('/settings/partner-categories'),
-  nodes: crud('/settings/nodes'),
+  nodes: {
+    ...crud('/settings/nodes'),
+    reorder(orderedIds: string[]) {
+      return request<unknown>('/settings/nodes/reorder', {
+        method: 'PUT',
+        body: JSON.stringify({ orderedIds }),
+      });
+    },
+  },
   warehouses: crud('/settings/warehouses'),
   financeCategories: crud('/settings/finance-categories'),
   financeAccountTypes: crud('/settings/finance-account-types'),

@@ -265,6 +265,26 @@ export async function deleteNode(db: TenantPrismaClient, id: string) {
   return { message: '已删除' };
 }
 
+export async function reorderNodes(db: TenantPrismaClient, orderedIds: string[]) {
+  const existing = await db.globalNodeTemplate.findMany({ select: { id: true } });
+  if (orderedIds.length !== existing.length) {
+    throw new AppError(400, '排序列表与工序数量不一致');
+  }
+  if (new Set(orderedIds).size !== orderedIds.length) {
+    throw new AppError(400, '排序列表包含重复项');
+  }
+  const existingIds = new Set(existing.map((row) => row.id));
+  for (const id of orderedIds) {
+    if (!existingIds.has(id)) throw new AppError(400, '排序列表包含无效工序');
+  }
+  await db.$transaction(
+    orderedIds.map((id, index) =>
+      db.globalNodeTemplate.update({ where: { id }, data: { sortOrder: index } }),
+    ),
+  );
+  return listNodes(db, { all: true });
+}
+
 /** 工单中心表单配置：仅更新工序报工自定义单据字段（reportTemplate） */
 export async function updateNodeReportTemplate(
   db: TenantPrismaClient,

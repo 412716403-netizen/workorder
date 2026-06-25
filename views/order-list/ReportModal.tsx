@@ -31,15 +31,9 @@ import {
 } from '../../types';
 import WorkerSelector from '../../components/WorkerSelector';
 import EquipmentSelector from '../../components/EquipmentSelector';
-import {
-  pmpCompletedAtTemplate,
-  combinedCompletedAtTemplate,
-  productGroupMaxReportableSum,
-  pmpDefectiveTotalAtTemplate,
-} from '../../utils/productReportAggregates';
-import { buildDefectiveReworkByOrderMilestone } from '../../utils/defectiveReworkByOrderMilestone';
 import { reworkMergeBucketOrderId } from '../../utils/reworkMergeBucketOrderId';
-import { buildOutOfSequenceTemplateIds, findGatingPredecessorIndex, isProcessSequential } from '../../shared/processSequence';
+import { buildDefectiveReworkByOrderMilestone } from '../../utils/defectiveReworkByOrderMilestone';
+import { buildOutOfSequenceTemplateIds } from '../../shared/processSequence';
 import { useEquipmentFeaturesEffective } from '../../hooks/useEquipmentFeaturesEffective';
 import { useTraceabilityPlugin } from '../../hooks/useTraceabilityPlugin';
 import { productHasColorSizeMatrix } from '../../utils/productColorSize';
@@ -53,6 +47,8 @@ import ReportWeightBomSection from './report/ReportWeightBomSection';
 import { formStandardLabelClass } from '../../styles/uiDensity';
 import { useConfigData } from '../../contexts/AppDataContext';
 import { getVariantNodeUnitWeightKg } from '../../utils/variantNodeUnitWeight';
+import { computeReportRowDerivations } from '../../utils/reportRowDerivations';
+import { ScanBatchTrigger } from '../../components/scan/ScanBatchTrigger';
 
 export type { ReportModalData };
 
@@ -173,8 +169,11 @@ const ReportModal: React.FC<ReportModalProps> = ({
    * 通过 ref 在 effectiveRemainingForModal/outsourcedByVariantId 计算完成后回填，
    * 由 useReportModalState 在调 scan/validate-usage 时透传，超限 toast 拒绝。
    */
-  const scanMaxQtyRef = useRef<(variantId: string | null) => number | null>(() => null);
-  const getScanMaxQty = useCallback((variantId: string | null) => scanMaxQtyRef.current(variantId), []);
+  const scanMaxQtyRef = useRef<(productId: string, variantId: string | null) => number | null>(() => null);
+  const getScanMaxQty = useCallback(
+    (productId: string, variantId: string | null) => scanMaxQtyRef.current(productId, variantId),
+    [],
+  );
 
   const effectiveReportTemplate = useMemo(
     () => getEffectiveReportTemplate(reportModal.milestone, globalNodes),
@@ -184,7 +183,11 @@ const ReportModal: React.FC<ReportModalProps> = ({
   const {
     reportForm,
     setReportForm,
+    productForms,
+    sessionProductIds,
+    setProductForm,
     weightPreviewRows,
+    getWeightPreviewRowsForProduct,
     displayImagePreview,
     closeDisplayImagePreview,
     openDisplayFilePreview,
@@ -219,120 +222,87 @@ const ReportModal: React.FC<ReportModalProps> = ({
     getScanMaxQty,
   });
 
-  const isMatrixMode = (() => {
-    const product = productMap.get(reportModal.order.productId);
-    const category = product?.categoryId ? categoryMap.get(product.categoryId) : undefined;
-    return productHasColorSizeMatrix(product, category);
-  })();
+  const tid = reportModal.milestone.templateId;
+  const anchorProductId = reportModal.order.productId;
 
-  const matrixTotalQty = reportForm.variantQuantities
-    ? Object.values(reportForm.variantQuantities).reduce<number>((s, q) => s + (q as number), 0)
-    : 0;
-  const matrixTotalDef = reportForm.variantDefectiveQuantities
-    ? Object.values(reportForm.variantDefectiveQuantities).reduce<number>((s, q) => s + (q as number), 0)
-    : 0;
-  const canSubmitMatrix = isMatrixMode
-    ? (matrixTotalQty + matrixTotalDef) > 0
-    : (reportForm.quantity + reportForm.defectiveQuantity) > 0;
+  const productRowDerivations = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof computeReportRowDerivations>>();
+    for (const productId of sessionProductIds) {
+      const isAnchor = productId === anchorProductId;
+      map.set(
+        productId,
+        computeReportRowDerivations({
+          productId,
+          milestoneTemplateId: tid,
+          productionLinkMode,
+          processSequenceMode,
+          outOfSequenceTemplateIds,
+          orders,
+          productMilestoneProgresses,
+          prodRecords,
+          getDefectiveRework,
+          reworkMergeBucketOrderId,
+          productTotalQty: isAnchor ? reportModal.productTotalQty : undefined,
+          productCompletedQty: isAnchor ? reportModal.productCompletedQty : undefined,
+          productMaxReportableQty: isAnchor ? reportModal.productMaxReportableQty : undefined,
+        }),
+      );
+    }
+    return map;
+  }, [
+    sessionProductIds,
+    anchorProductId,
+    tid,
+    productionLinkMode,
+    processSequenceMode,
+    outOfSequenceTemplateIds,
+    orders,
+    productMilestoneProgresses,
+    prodRecords,
+    defectiveAndReworkByOrderMilestone,
+    reportModal.productTotalQty,
+    reportModal.productCompletedQty,
+    reportModal.productMaxReportableQty,
+  ]);
+
+  const canSubmitAnyProduct = sessionProductIds.some(pid => {
+    const form = productForms[pid];
+    if (!form) return false;
+    const product = productMap.get(pid);
+    const category = product?.categoryId ? categoryMap.get(product.categoryId) : undefined;
+    const matrix = productHasColorSizeMatrix(product, category);
+    if (matrix && form.variantQuantities) {
+      const qty = Object.values(form.variantQuantities).reduce<number>((s, q) => s + (q as number), 0);
+      const def = Object.values(form.variantDefectiveQuantities ?? {}).reduce<number>((s, q) => s + (q as number), 0);
+      return qty + def > 0;
+    }
+    return form.quantity + form.defectiveQuantity > 0;
+  });
+
   const needEquipment =
     equipmentFeaturesOn &&
     !!globalNodes.find(n => n.id === reportModal.milestone.templateId)?.enableEquipmentOnReport;
 
   if (!open) return null;
 
-  const tid = reportModal.milestone.templateId;
-  const pid = reportModal.order.productId;
-  const useProductPmp = productionLinkMode === 'product' && productMilestoneProgresses.length > 0;
-  void pmpCompletedAtTemplate;
-  const totalBase = useProductPmp
-    ? productGroupMaxReportableSum(ordersInModal, tid, pid, productMilestoneProgresses, processSequenceMode, (oid, t) => getDefectiveRework(oid, t), undefined, orders, outOfSequenceTemplateIds)
-    : isProcessSequential(processSequenceMode, tid, outOfSequenceTemplateIds)
-      ? ordersInModal.reduce((s, o) => {
-          const idx = o.milestones.findIndex(m => m.templateId === tid);
-          const templateIds = o.milestones.map(m => m.templateId);
-          const gateIdx = findGatingPredecessorIndex(templateIds, idx, outOfSequenceTemplateIds);
-          if (gateIdx < 0) return s + o.items.reduce((a, i) => a + i.quantity, 0);
-          const prev = o.milestones[gateIdx];
-          return s + (prev?.completedQuantity ?? 0);
-        }, 0)
-      : ordersInModal.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0);
-  const totalDefective = ordersInModal.reduce((s, o) => s + getDefectiveRework(o.id, tid).defective, 0);
-  const pmpDefectiveAtNode = useProductPmp ? pmpDefectiveTotalAtTemplate(productMilestoneProgresses, pid, tid) : 0;
-  const defectiveQtyForHint = useProductPmp ? Math.max(pmpDefectiveAtNode, totalDefective) : totalDefective;
-  const totalRework = [...new Set(ordersInModal.map(o => reworkMergeBucketOrderId(o.id, orders)))].reduce<number>(
-    (s, bid) => s + getDefectiveRework(bid as string, tid).rework, 0,
-  );
-  const totalCompleted = useProductPmp
-    ? combinedCompletedAtTemplate(ordersInModal, productMilestoneProgresses, pid, tid)
-    : ordersInModal.reduce((s, o) => s + (o.milestones.find(m => m.templateId === tid)?.completedQuantity ?? 0), 0);
-  const outsourceFilter = useProductPmp
-    ? (r: ProductionOpRecord) => r.type === 'OUTSOURCE' && !r.sourceReworkId && !r.orderId && r.productId === pid && r.nodeId === tid
-    : (r: ProductionOpRecord) => r.type === 'OUTSOURCE' && !r.sourceReworkId && r.nodeId === tid && orderIdsInModal.includes(r.orderId ?? '');
-  const outsourceDispatchedByVariant: Record<string, number> = {};
-  const outsourceReceivedByVariant: Record<string, number> = {};
-  let totalDispatched = 0;
-  let totalReceived = 0;
-  prodRecords.filter(outsourceFilter).forEach(r => {
-    const vid = r.variantId ?? '';
-    if (r.status === '加工中') {
-      totalDispatched += r.quantity ?? 0;
-      outsourceDispatchedByVariant[vid] = (outsourceDispatchedByVariant[vid] ?? 0) + (r.quantity ?? 0);
-    } else if (r.status === '已收回') {
-      totalReceived += r.quantity ?? 0;
-      outsourceReceivedByVariant[vid] = (outsourceReceivedByVariant[vid] ?? 0) + (r.quantity ?? 0);
-    }
-  });
-  const totalOutsourcedAtNode = Math.max(0, totalDispatched - totalReceived);
-  const outsourcedByVariantId: Record<string, number> = {};
-  for (const vid of new Set([...Object.keys(outsourceDispatchedByVariant), ...Object.keys(outsourceReceivedByVariant)])) {
-    const net = (outsourceDispatchedByVariant[vid] ?? 0) - (outsourceReceivedByVariant[vid] ?? 0);
-    if (net > 0) outsourcedByVariantId[vid] = net;
-  }
-  const effectiveRemainingForModal = useProductPmp
-    ? Math.max(0, totalBase - totalCompleted - totalOutsourcedAtNode)
-    : Math.max(0, totalBase - totalDefective + totalRework - totalCompleted - totalOutsourcedAtNode);
+  const productForModal = productMap.get(anchorProductId);
 
-  /**
-   * 把扫码最大可填上限回填给 ref（供 useReportModalState 内部异步校验读取最新值）：
-   * - 矩阵：`getSeqRemainingForVariant(vid)` 已含前序完成，再减不良 / 净外协；
-   * - 单规格：直接 `effectiveRemainingForModal`。
-   */
-  scanMaxQtyRef.current = (variantId: string | null) => {
-    if (isMatrixMode) {
+  scanMaxQtyRef.current = (productId, variantId) => {
+    const row = productRowDerivations.get(productId);
+    if (!row) return null;
+    const product = productMap.get(productId);
+    const category = product?.categoryId ? categoryMap.get(product.categoryId) : undefined;
+    const matrix = productHasColorSizeMatrix(product, category);
+    const form = productForms[productId];
+    if (matrix) {
       if (!variantId) return null;
-      const base = getSeqRemainingForVariant(variantId);
-      const def = reportForm.variantDefectiveQuantities?.[variantId] ?? 0;
-      const out = outsourcedByVariantId[variantId] ?? 0;
+      const base = getSeqRemainingForVariant(productId, variantId);
+      const def = form?.variantDefectiveQuantities?.[variantId] ?? 0;
+      const out = row.outsourcedByVariantId[variantId] ?? 0;
       return Math.max(0, base - def - out);
     }
-    return effectiveRemainingForModal;
+    return row.effectiveRemainingForModal;
   };
-
-  const hintTotalQty =
-    reportModal.productTotalQty ??
-    ordersInModal.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0);
-  const hintMaxReportableRaw =
-    reportModal.productMaxReportableQty ??
-    (useProductPmp
-      ? productGroupMaxReportableSum(ordersInModal, tid, pid, productMilestoneProgresses, processSequenceMode, (oid, t) => getDefectiveRework(oid, t), undefined, orders, outOfSequenceTemplateIds)
-      : ordersInModal.reduce((s, o) => {
-          const idx = o.milestones.findIndex(m => m.templateId === tid);
-          let base = o.items.reduce((a, i) => a + i.quantity, 0);
-          if (isProcessSequential(processSequenceMode, tid, outOfSequenceTemplateIds)) {
-            const templateIds = o.milestones.map(m => m.templateId);
-            const gateIdx = findGatingPredecessorIndex(templateIds, idx, outOfSequenceTemplateIds);
-            if (gateIdx >= 0) {
-              base = o.milestones[gateIdx]?.completedQuantity ?? 0;
-            }
-          }
-          const { defective, rework } = getDefectiveRework(o.id, tid);
-          return s + Math.max(0, base - defective + rework);
-        }, 0));
-  const hintMaxReportable = Math.max(0, Math.round(Number(hintMaxReportableRaw) || 0));
-  const hintCompletedDisplay = reportModal.productCompletedQty ?? totalCompleted;
-  const hintRemaining = Math.max(0, hintMaxReportable - hintCompletedDisplay - totalOutsourcedAtNode);
-
-  const productForModal = productMap.get(pid);
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
@@ -348,55 +318,25 @@ const ReportModal: React.FC<ReportModalProps> = ({
         </div>
         <form className="flex flex-col flex-1 min-h-0" autoComplete="off" onSubmit={e => e.preventDefault()}>
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3 sm:px-4 sm:py-4 space-y-3">
-            {isMatrixMode && (
-              <div className="text-xs text-slate-500 font-medium">
-                <span className="font-bold text-slate-700">{reportModal.order.productName}</span>
-                {hintTotalQty > 0 ? (
-                  <>
-                    <span className="mx-2">·</span>
-                    <span className="ml-2">
-                      {hintMaxReportable !== hintTotalQty ? (
-                        <>可报 {hintMaxReportable}/{hintTotalQty} 件 · </>
-                      ) : (
-                        <>合计 {hintTotalQty} 件 · </>
-                      )}
-                      已报 {hintCompletedDisplay} · 剩 {hintRemaining} 件
-                      {totalOutsourcedAtNode > 0 ? (
-                        <span className="text-slate-400" title="本工序已发外协、尚未收回的在制数量（外协剩余）">
-                          {' '}· 外协剩余 {totalOutsourcedAtNode} 件
-                        </span>
-                      ) : null}
-                      {defectiveQtyForHint > 0 ? (
-                        <span className="text-slate-400" title="本工序报不良等需走返工流程的件数（含关联产品报工 PMP）">
-                          {' '}· 返工 {defectiveQtyForHint} 件
-                        </span>
-                      ) : null}
-                      {totalRework > 0 ? (
-                        <span className="text-slate-400" title="返工报工已回缴到本工序的完成件数">
-                          {' '}·{defectiveQtyForHint > 0 ? ' 返工完成' : ' 返工'} {totalRework}
-                        </span>
-                      ) : null}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className="mx-2">·</span>
-                    <span>{reportModal.order.orderNumber}</span>
-                  </>
-                )}
-                {(() => {
-                  const rate = productForModal?.nodeRates?.[reportModal.milestone.templateId] ?? 0;
-                  if (rate <= 0) return null;
-                  const totalQty = reportForm.variantQuantities ? Object.values(reportForm.variantQuantities).reduce<number>((s, q) => s + (q as number), 0) : 0;
-                  return (
-                    <div className="mt-2 flex items-center gap-4 text-indigo-600">
-                      <span className="font-bold">本工序工价：{rate.toFixed(2)} 元/件</span>
-                      {totalQty > 0 && <span className="font-bold">预计金额：{(totalQty * rate).toFixed(2)} 元</span>}
-                    </div>
-                  );
-                })()}
+            {sessionProductIds.length > 1 ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-100 bg-indigo-50/40 px-3 py-2">
+                <p className="text-xs font-bold text-indigo-800">同工序多产品报工 · 已纳入 {sessionProductIds.length} 款产品</p>
+                {scanEnabled ? (
+                  <ScanBatchTrigger
+                    onApply={handleScanBatchConfirm}
+                    resolveRowPreview={resolveReportScanRowPreview}
+                    hint="扫码录入"
+                    modalTitle="报工 · 批量扫码（多产品）"
+                    modalHint="可扫入不同产品的码，系统将按产品归集；须均为当前工序。"
+                    showScanIntentToggle
+                    enableWeightCheck={scanWeightProps?.enableWeightCheck}
+                    weightNodeId={scanWeightProps?.weightNodeId}
+                    weightTolerancePercent={scanWeightProps?.weightTolerancePercent}
+                    getUnitWeightKg={scanWeightProps?.getUnitWeightKg}
+                  />
+                ) : null}
               </div>
-            )}
+            ) : null}
 
             <ReportRouteDisplaySection
               milestone={reportModal.milestone}
@@ -438,63 +378,104 @@ const ReportModal: React.FC<ReportModalProps> = ({
               </div>
             )}
 
-            {isMatrixMode ? (
-              <ReportVariantMatrixInput
-                reportModal={reportModal}
-                reportForm={reportForm}
-                ordersInModal={ordersInModal}
-                orders={orders}
-                productMap={productMap}
-                categoryMap={categoryMap}
-                productMilestoneProgresses={productMilestoneProgresses}
-                productionLinkMode={productionLinkMode}
-                processSequenceMode={processSequenceMode}
-                outOfSequenceTemplateIds={outOfSequenceTemplateIds}
-                dictionaries={dictionaries}
-                matrixTotalQty={matrixTotalQty}
-                effectiveRemainingForModal={effectiveRemainingForModal}
-                allowExceedMaxReportQty={allowExceedMaxReportQty}
-                outsourcedByVariantId={outsourcedByVariantId}
-                getDefectiveRework={getDefectiveRework}
-                getSeqRemainingForVariant={getSeqRemainingForVariant}
-                onVariantQtyChange={handleVariantQuantityChange}
-                onVariantDefChange={handleVariantDefectiveChange}
-                onScanBatchConfirm={handleScanBatchConfirm}
-                resolveScanRowPreview={resolveReportScanRowPreview}
-                scanWeightProps={scanWeightProps}
-                scanEnabled={scanEnabled}
-              />
-            ) : (
-              <ReportSingleVariantInput
-                reportModal={reportModal}
-                reportForm={reportForm}
-                setReportForm={setReportForm}
-                productMap={productMap}
-                dictionaries={dictionaries}
-                productionLinkMode={productionLinkMode}
-                effectiveRemainingForModal={effectiveRemainingForModal}
-                allowExceedMaxReportQty={allowExceedMaxReportQty}
-                hintTotalQty={hintTotalQty}
-                hintMaxReportable={hintMaxReportable}
-                hintCompletedDisplay={hintCompletedDisplay}
-                hintRemaining={hintRemaining}
-                totalOutsourcedAtNode={totalOutsourcedAtNode}
-                defectiveQtyForHint={defectiveQtyForHint}
-                totalRework={totalRework}
-                onScanBatchConfirm={handleScanBatchConfirm}
-                resolveScanRowPreview={resolveReportScanRowPreview}
-                scanWeightProps={scanWeightProps}
-                scanEnabled={scanEnabled}
-              />
-            )}
+            {sessionProductIds.map(productId => {
+              const form = productForms[productId] ?? reportForm;
+              const row = productRowDerivations.get(productId);
+              if (!row) return null;
+              const product = productMap.get(productId);
+              const category = product?.categoryId ? categoryMap.get(product.categoryId) : undefined;
+              const matrix = productHasColorSizeMatrix(product, category);
+              const productOrders = row.ordersInModal;
+              const displayOrder =
+                productOrders[0] ??
+                (productId === anchorProductId ? reportModal.order : reportModal.order);
+              const matrixTotalQty = form.variantQuantities
+                ? Object.values(form.variantQuantities).reduce<number>((s, q) => s + (q as number), 0)
+                : 0;
+              const showScanOnRow = sessionProductIds.length === 1;
+              return (
+                <div key={productId} className={sessionProductIds.length > 1 ? 'rounded-xl border border-slate-200 p-3 space-y-2' : ''}>
+                  {sessionProductIds.length > 1 && !matrix ? (
+                    <p className="text-sm font-bold text-slate-800">{product?.name ?? productId}</p>
+                  ) : null}
+                  {matrix ? (
+                    <ReportVariantMatrixInput
+                      productId={productId}
+                      reportModal={reportModal}
+                      reportForm={form}
+                      ordersInModal={productOrders}
+                      orders={orders}
+                      productMap={productMap}
+                      categoryMap={categoryMap}
+                      productMilestoneProgresses={productMilestoneProgresses}
+                      productionLinkMode={productionLinkMode}
+                      processSequenceMode={processSequenceMode}
+                      outOfSequenceTemplateIds={outOfSequenceTemplateIds}
+                      dictionaries={dictionaries}
+                      matrixTotalQty={matrixTotalQty}
+                      effectiveRemainingForModal={row.effectiveRemainingForModal}
+                      allowExceedMaxReportQty={allowExceedMaxReportQty}
+                      hintTotalQty={row.hintTotalQty}
+                      hintMaxReportable={row.hintMaxReportable}
+                      hintCompletedDisplay={row.hintCompletedDisplay}
+                      hintRemaining={row.hintRemaining}
+                      totalOutsourcedAtNode={row.totalOutsourcedAtNode}
+                      defectiveQtyForHint={row.defectiveQtyForHint}
+                      totalRework={row.totalRework}
+                      productOrder={displayOrder}
+                      outsourcedByVariantId={row.outsourcedByVariantId}
+                      getDefectiveRework={getDefectiveRework}
+                      getSeqRemainingForVariant={getSeqRemainingForVariant}
+                      onVariantQtyChange={handleVariantQuantityChange}
+                      onVariantDefChange={handleVariantDefectiveChange}
+                      onScanBatchConfirm={handleScanBatchConfirm}
+                      resolveScanRowPreview={resolveReportScanRowPreview}
+                      scanWeightProps={scanWeightProps}
+                      scanEnabled={scanEnabled && showScanOnRow}
+                    />
+                  ) : (
+                    <ReportSingleVariantInput
+                      productId={productId}
+                      productOrder={displayOrder}
+                      reportModal={reportModal}
+                      reportForm={form}
+                      setReportForm={updater => setProductForm(productId, updater)}
+                      productMap={productMap}
+                      dictionaries={dictionaries}
+                      productionLinkMode={productionLinkMode}
+                      effectiveRemainingForModal={row.effectiveRemainingForModal}
+                      allowExceedMaxReportQty={allowExceedMaxReportQty}
+                      hintTotalQty={row.hintTotalQty}
+                      hintMaxReportable={row.hintMaxReportable}
+                      hintCompletedDisplay={row.hintCompletedDisplay}
+                      hintRemaining={row.hintRemaining}
+                      totalOutsourcedAtNode={row.totalOutsourcedAtNode}
+                      defectiveQtyForHint={row.defectiveQtyForHint}
+                      totalRework={row.totalRework}
+                      onScanBatchConfirm={handleScanBatchConfirm}
+                      resolveScanRowPreview={resolveReportScanRowPreview}
+                      scanWeightProps={scanWeightProps}
+                      scanEnabled={scanEnabled && showScanOnRow}
+                    />
+                  )}
+                  {weightReportEnabled && sessionProductIds.length > 1 ? (
+                    <ReportWeightBomSection
+                      weight={form.weight}
+                      onWeightChange={(n) => setProductForm(productId, prev => ({ ...prev, weight: n }))}
+                      weightPreviewRows={getWeightPreviewRowsForProduct(productId, form)}
+                    />
+                  ) : null}
+                </div>
+              );
+            })}
 
-            {weightReportEnabled && (
+            {weightReportEnabled && sessionProductIds.length === 1 ? (
               <ReportWeightBomSection
                 weight={reportForm.weight}
                 onWeightChange={(n) => setReportForm(prev => ({ ...prev, weight: n }))}
                 weightPreviewRows={weightPreviewRows}
               />
-            )}
+            ) : null}
 
             <ReportCustomFieldsEditor
               fields={effectiveReportTemplate}
@@ -512,10 +493,9 @@ const ReportModal: React.FC<ReportModalProps> = ({
             type="button"
             onClick={submitReport}
             disabled={
-              !canSubmitMatrix ||
+              !canSubmitAnyProduct ||
               !reportForm.workerId ||
-              (needEquipment && !reportForm.equipmentId) ||
-              (!isMatrixMode && ((reportModal.productItems ?? reportModal.order.items).length > 1) && !reportForm.variantId)
+              (needEquipment && !reportForm.equipmentId)
             }
             className="px-6 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50"
           >

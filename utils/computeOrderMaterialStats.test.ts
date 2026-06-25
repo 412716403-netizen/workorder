@@ -80,7 +80,87 @@ describe('computeOrderFamilyMaterialStats', () => {
     });
     const row = rows.find(r => r.productId === matA);
     expect(row?.theoryCost).toBe(10);
+    expect(row?.actualCost).toBe(0);
     expect(row?.issue).toBe(0);
+  });
+
+  it('工序开启称重时按 materialBreakdown 实际称重计入 actualCost，不进 theoryCost', () => {
+    const weightOrder = {
+      ...parentOrder,
+      milestones: [
+        {
+          id: 'ms-1',
+          name: '横机',
+          templateId: nodeKnit,
+          completedQuantity: 5,
+          reports: [
+            {
+              id: 'r1',
+              quantity: 5,
+              timestamp: '2026-01-01',
+              operator: 'op',
+              customData: {},
+              weight: 1.4,
+              materialBreakdown: [
+                { materialProductId: matA, materialName: '毛线', ratio: 1, actualWeight: 1.4 },
+              ],
+            },
+          ],
+        },
+      ],
+    } as ProductionOrder;
+    const rows = computeOrderFamilyMaterialStats({
+      rootOrderId: 'order-parent',
+      orders: [weightOrder],
+      productsById,
+      bomsById,
+      bomsByParentProduct,
+      childrenByParentId: new Map(),
+      stockRecords: [],
+      nodeWeightEnabledMap: new Map([[nodeKnit, true]]),
+    });
+    const row = rows.find(r => r.productId === matA)!;
+    expect(row.actualCost).toBeCloseTo(1.4);
+    expect(row.theoryCost).toBe(0);
+  });
+
+  it('工序未开启称重时即便残留 materialBreakdown 也回退按件理论', () => {
+    const staleOrder = {
+      ...parentOrder,
+      milestones: [
+        {
+          id: 'ms-1',
+          name: '横机',
+          templateId: nodeKnit,
+          completedQuantity: 5,
+          reports: [
+            {
+              id: 'r1',
+              quantity: 5,
+              timestamp: '2026-01-01',
+              operator: 'op',
+              customData: {},
+              materialBreakdown: [
+                { materialProductId: matA, materialName: '毛线', ratio: 1, actualWeight: 1.4 },
+              ],
+            },
+          ],
+        },
+      ],
+    } as ProductionOrder;
+    const rows = computeOrderFamilyMaterialStats({
+      rootOrderId: 'order-parent',
+      orders: [staleOrder],
+      productsById,
+      bomsById,
+      bomsByParentProduct,
+      childrenByParentId: new Map(),
+      stockRecords: [],
+      nodeWeightEnabledMap: new Map(),
+    });
+    const row = rows.find(r => r.productId === matA)!;
+    expect(row.theoryCost).toBe(10);
+    expect(row.actualCost).toBe(0);
   });
 
   it('累加领料与退料', () => {

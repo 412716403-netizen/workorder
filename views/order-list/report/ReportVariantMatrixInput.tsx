@@ -27,6 +27,7 @@ import type { ScanBatchRowDetail } from '../../../utils/scanBatchRowDetail';
 import type { ScanPayload } from '../../../utils/scanPayload';
 import type { ReportFormState, ReportModalData } from '../../../hooks/useReportModalState';
 import type { ScanBatchApplyMeta } from '../../../components/scan/ScanBatchSessionModal';
+import ReportProductReportSummary from './ReportProductReportSummary';
 
 export interface ScanWeightCheckProps {
   enableWeightCheck: boolean;
@@ -36,6 +37,7 @@ export interface ScanWeightCheckProps {
 }
 
 interface Props {
+  productId: string;
   reportModal: ReportModalData;
   reportForm: ReportFormState;
   ordersInModal: ProductionOrder[];
@@ -50,11 +52,20 @@ interface Props {
   matrixTotalQty: number;
   effectiveRemainingForModal: number;
   allowExceedMaxReportQty: boolean;
+  hintTotalQty: number;
+  hintMaxReportable: number;
+  hintCompletedDisplay: number;
+  hintRemaining: number;
+  totalOutsourcedAtNode: number;
+  defectiveQtyForHint: number;
+  totalRework: number;
+  productOrder: ProductionOrder;
+  hideProductTitle?: boolean;
   outsourcedByVariantId: Record<string, number>;
   getDefectiveRework: (orderId: string, templateId: string) => { defective: number; rework: number; reworkByVariant: Record<string, number> };
-  getSeqRemainingForVariant: (variantId: string) => number;
-  onVariantQtyChange: (variantId: string, qty: number) => void;
-  onVariantDefChange: (variantId: string, qty: number) => void;
+  getSeqRemainingForVariant: (productId: string, variantId: string) => number;
+  onVariantQtyChange: (productId: string, variantId: string, qty: number) => void;
+  onVariantDefChange: (productId: string, variantId: string, qty: number) => void;
   onScanBatchConfirm: (payloads: ScanPayload[], meta?: ScanBatchApplyMeta) => Promise<boolean>;
   resolveScanRowPreview: (payload: ScanPayload) => Promise<ScanBatchRowDetail | null>;
   scanWeightProps?: ScanWeightCheckProps;
@@ -62,6 +73,7 @@ interface Props {
 }
 
 const ReportVariantMatrixInput: React.FC<Props> = ({
+  productId,
   reportModal,
   reportForm,
   ordersInModal,
@@ -76,6 +88,15 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
   matrixTotalQty,
   effectiveRemainingForModal,
   allowExceedMaxReportQty,
+  hintTotalQty,
+  hintMaxReportable,
+  hintCompletedDisplay,
+  hintRemaining,
+  totalOutsourcedAtNode,
+  defectiveQtyForHint,
+  totalRework,
+  productOrder,
+  hideProductTitle = false,
   outsourcedByVariantId,
   getDefectiveRework,
   getSeqRemainingForVariant,
@@ -87,9 +108,15 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
   scanEnabled = true,
 }) => {
   const tid = reportModal.milestone.templateId;
-  const product = productMap.get(reportModal.order.productId);
+  const product = productMap.get(productId);
   const category = product?.categoryId ? categoryMap.get(product.categoryId) : undefined;
   if (!product || !productHasColorSizeMatrix(product, category) || !dictionaries) return null;
+
+  const detailUnit = (product.unitId && dictionaries.units.find(u => u.id === product.unitId)?.name) || '件';
+  const displayProductName =
+    productionLinkMode === 'product' && productId === reportModal.order.productId
+      ? reportModal.order.productName
+      : (product.name ?? productOrder.productName);
 
   const currentOrder = ordersInModal[0];
   const currentMs = currentOrder?.milestones.find(m => m.templateId === tid);
@@ -109,7 +136,7 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
         variantMaxGoodProductMode(
           variant.id,
           tid,
-          reportModal.order.productId,
+          productId,
           ordersInModal,
           productMilestoneProgresses,
           processSequenceMode,
@@ -125,7 +152,7 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
     const completedInMilestone = (currentMs?.reports || []).filter((r: { variantId?: string }) => (r.variantId || '') === variant.id).reduce((s: number, r: { quantity?: number }) => s + (r.quantity ?? 0), 0);
     const defectiveForThisVariant = (currentMs?.reports || []).filter((r: { variantId?: string; defectiveQuantity?: number }) => (r.variantId || '') === variant.id).reduce((s: number, r: { defectiveQuantity?: number }) => s + (r.defectiveQuantity ?? 0), 0);
     const base = isProcessSequential(processSequenceMode, tid, outOfSequenceTemplateIds)
-      ? Math.max(0, getSeqRemainingForVariant(variant.id) - defectiveForThisVariant)
+      ? Math.max(0, getSeqRemainingForVariant(productId, variant.id) - defectiveForThisVariant)
       : (item ? Math.max(0, (item.quantity ?? 0) - completedInMilestone - defectiveForThisVariant) : 0);
     const reworkForVariant = reworkByVariant[variant.id] ?? 0;
     const outsourcedForVariant = outsourcedByVariantId[variant.id] ?? 0;
@@ -151,7 +178,7 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
             onChange={e => {
               const raw = parseInt(e.target.value) || 0;
               const next = allowExceedMaxReportQty ? raw : Math.min(raw, maxAllowed);
-              onVariantQtyChange(variant.id, next);
+              onVariantQtyChange(productId, variant.id, next);
             }}
             className="h-8 w-[3rem] shrink-0 rounded-md border border-slate-200 bg-white px-1.5 text-left text-sm font-bold text-slate-900 shadow-sm outline-none focus:ring-2 focus:ring-indigo-200 placeholder:text-[9px] placeholder:text-slate-400"
             placeholder="0"
@@ -165,7 +192,7 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
             min={0}
             tabIndex={-1}
             value={(reportForm.variantDefectiveQuantities?.[variant.id] ?? 0) === 0 ? '' : (reportForm.variantDefectiveQuantities?.[variant.id] ?? 0)}
-            onChange={e => onVariantDefChange(variant.id, parseInt(e.target.value) || 0)}
+            onChange={e => onVariantDefChange(productId, variant.id, parseInt(e.target.value) || 0)}
             className="h-8 w-[3rem] shrink-0 rounded-md border border-amber-200/90 bg-amber-50/90 px-1.5 text-left text-sm font-bold text-amber-900 shadow-sm outline-none focus:ring-2 focus:ring-amber-200 placeholder:text-[9px] placeholder:text-amber-400/80"
             placeholder="0"
             title="不良品"
@@ -199,7 +226,25 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
   });
 
   return (
-    <div className="space-y-1.5">
+    <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50/40 px-4 pb-4 pt-4 space-y-3">
+      <ReportProductReportSummary
+        productionLinkMode={productionLinkMode}
+        productName={displayProductName}
+        orderNumber={productOrder.orderNumber}
+        hideProductTitle={hideProductTitle}
+        hints={{
+          detailUnit,
+          hintTotalQty,
+          hintMaxReportable,
+          hintCompletedDisplay,
+          hintRemaining,
+          totalOutsourcedAtNode,
+          defectiveQtyForHint,
+          totalRework,
+          fallbackOrderNumber: productOrder.orderNumber,
+        }}
+      />
+      <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-3">
         <label className="text-[10px] font-bold text-slate-400 uppercase shrink-0">本次完成数量（按规格）</label>
         <div className="flex items-center gap-2 shrink-0">
@@ -223,6 +268,7 @@ const ReportVariantMatrixInput: React.FC<Props> = ({
       </div>
       <div className="rounded-xl bg-slate-50/50 p-2 sm:p-2.5 ring-1 ring-slate-100/80" {...{ [VARIANT_QTY_MATRIX_CONTAINER_ATTR]: '' }}>
         <QtyMatrixTable sizeHeaders={layout.sizeColumns.map(c => c.header)} rows={rows} dense />
+      </div>
       </div>
     </div>
   );

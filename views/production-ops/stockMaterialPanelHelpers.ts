@@ -4,14 +4,26 @@
  */
 import type { Product, BOM, MaterialBreakdownRow } from '../../types';
 
-export type MatRow = { productId: string; issue: number; returnQty: number; theoryCost: number };
+/**
+ * 报工耗材按工序口径在内部拆两类累加，展示层合并为一列「报工耗材」：
+ * - `theoryCost`：未开启「报工时记录重量」的工序 → 报工件数 × BOM 子项用量。
+ * - `actualCost`：开启称重的工序 → `materialBreakdown.actualWeight`。
+ * 同一物料若两类来源都有，两者并存；展示与结余均用 `matRowReportCost` 合计。
+ */
+export type MatRow = { productId: string; issue: number; returnQty: number; theoryCost: number; actualCost: number };
 
-/** 领料、退料、报工理论耗材（与表格同精度）均为 0 时视为无展示价值的占位行 */
+/** 报工耗材展示值 = 理论口径 + 实际口径（与表格同精度） */
+export function matRowReportCost(row: Pick<MatRow, 'theoryCost' | 'actualCost'>): number {
+  return Math.round((Number(row.theoryCost) + Number(row.actualCost)) * 100) / 100;
+}
+
+/** 领料、退料、报工耗材（理论 + 实际，与表格同精度）均为 0 时视为无展示价值的占位行 */
 export function filterMaterialRowsWithActivity(materials: MatRow[]): MatRow[] {
   return materials.filter(m => {
     if (m.issue !== 0 || m.returnQty !== 0) return true;
     const th = Math.round(Number(m.theoryCost) * 100) / 100;
-    return th !== 0;
+    const ac = Math.round(Number(m.actualCost) * 100) / 100;
+    return th !== 0 || ac !== 0;
   });
 }
 

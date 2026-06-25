@@ -1,5 +1,20 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useAsyncSubmitLock } from '../../hooks/useAsyncSubmitLock';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   Database,
   ArrowRight,
@@ -15,6 +30,7 @@ import {
   ToggleRight,
   Trash2,
   BookOpen,
+  GripVertical,
 } from 'lucide-react';
 import { GlobalNodeTemplate, type CustomDocFieldType } from '../../types';
 import { toast } from 'sonner';
@@ -30,14 +46,72 @@ import { isEquipmentAssignmentEnabled, isWorkerAssignmentEnabled } from '../../u
 interface NodesTabProps {
   globalNodes: GlobalNodeTemplate[];
   onRefreshGlobalNodes: () => Promise<void>;
+  onApplyGlobalNodes: (list: GlobalNodeTemplate[]) => void;
   canCreate: boolean;
+  canEdit: boolean;
   canDelete: boolean;
+}
+
+function SortableNodeRow({
+  node,
+  active,
+  canEdit,
+  onSelect,
+}: {
+  node: GlobalNodeTemplate;
+  active: boolean;
+  canEdit: boolean;
+  onSelect: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: node.id,
+    disabled: !canEdit,
+    animateLayoutChanges: () => false,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      onClick={onSelect}
+      className={`flex items-center justify-between p-3.5 rounded-2xl border cursor-pointer group ${
+        active
+          ? 'border-indigo-600 bg-indigo-50/50 shadow-sm'
+          : 'border-slate-50 bg-slate-50 hover:bg-white hover:border-slate-200'
+      } ${isDragging ? 'z-10 shadow-md ring-2 ring-indigo-200 bg-white' : ''}`}
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        {canEdit ? (
+          <button
+            type="button"
+            className="p-1 rounded-lg text-slate-300 hover:text-slate-500 hover:bg-white cursor-grab active:cursor-grabbing shrink-0"
+            aria-label="拖动排序"
+            onClick={(e) => e.stopPropagation()}
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="w-4 h-4" />
+          </button>
+        ) : null}
+        <span className={`text-sm font-bold truncate ${active ? 'text-indigo-900' : 'text-slate-600'}`}>
+          {node.name}
+        </span>
+      </div>
+      <ArrowRight className={`w-4 h-4 transition-all shrink-0 ${active ? 'text-indigo-600 translate-x-1' : 'text-slate-200'}`} />
+    </div>
+  );
 }
 
 const NodesTab: React.FC<NodesTabProps> = ({
   globalNodes,
   onRefreshGlobalNodes,
+  onApplyGlobalNodes,
   canCreate,
+  canEdit,
   canDelete,
 }) => {
   const equipmentFeaturesOn = useEquipmentFeaturesEffective();
@@ -49,7 +123,38 @@ const NodesTab: React.FC<NodesTabProps> = ({
   const [newNodeName, setNewNodeName] = useState('');
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [nodeNameDraft, setNodeNameDraft] = useState('');
+  const reorderingRef = useRef(false);
   const addLock = useAsyncSubmitLock();
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const nodeIds = useMemo(() => globalNodes.map((node) => node.id), [globalNodes]);
+  const editingNode = useMemo(
+    () => (editingNodeId ? globalNodes.find((node) => node.id === editingNodeId) ?? null : null),
+    [editingNodeId, globalNodes],
+  );
+
+  const handleReorder = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!canEdit || reorderingRef.current || !over || active.id === over.id) return;
+    const oldIndex = nodeIds.indexOf(String(active.id));
+    const newIndex = nodeIds.indexOf(String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const nextIds = arrayMove(nodeIds, oldIndex, newIndex);
+    const optimistic = nextIds
+      .map((id) => globalNodes.find((node) => node.id === id))
+      .filter(Boolean) as GlobalNodeTemplate[];
+    const previous = globalNodes;
+    onApplyGlobalNodes(optimistic);
+    reorderingRef.current = true;
+    try {
+      await api.settings.nodes.reorder(nextIds);
+    } catch (err: unknown) {
+      onApplyGlobalNodes(previous);
+      toast.error(err instanceof Error ? err.message : '排序保存失败');
+    } finally {
+      reorderingRef.current = false;
+    }
+  };
 
   const handleQuickAddNode = async () => {
     const name = newNodeName.trim();
@@ -92,31 +197,33 @@ const NodesTab: React.FC<NodesTabProps> = ({
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
       <div className="lg:col-span-4 space-y-4">
          <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm p-6">
-          <h2 className="font-bold text-slate-800 mb-6 flex items-center gap-2 text-sm uppercase tracking-wider">
+          <h2 className="font-bold text-slate-800 mb-2 flex items-center gap-2 text-sm uppercase tracking-wider">
             <Database className="w-4 h-4 text-indigo-600" />
             全局工序库
           </h2>
-          <div className="space-y-3 mb-8">
-            {globalNodes.map(node => (
-              <div 
-                key={node.id} 
-                onClick={() => {
-                  setEditingNodeId(node.id);
-                  setNodeNameDraft(node.name);
-                }}
-                className={`flex items-center justify-between p-3.5 rounded-2xl border cursor-pointer transition-all group ${
-                  editingNodeId === node.id 
-                  ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' 
-                  : 'border-slate-50 bg-slate-50 hover:bg-white hover:border-slate-200'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className={`text-sm font-bold ${editingNodeId === node.id ? 'text-indigo-900' : 'text-slate-600'}`}>{node.name}</span>
-                </div>
-                <ArrowRight className={`w-4 h-4 transition-all ${editingNodeId === node.id ? 'text-indigo-600 translate-x-1' : 'text-slate-200'}`} />
+          {canEdit && globalNodes.length > 1 ? (
+            <p className="text-[10px] text-slate-400 mb-4">拖动左侧手柄调整工序顺序</p>
+          ) : (
+            <div className="mb-4" />
+          )}
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => void handleReorder(event)}>
+            <SortableContext items={nodeIds} strategy={verticalListSortingStrategy}>
+              <div className="space-y-3 mb-8">
+                {globalNodes.map(node => (
+                  <SortableNodeRow
+                    key={node.id}
+                    node={node}
+                    active={editingNodeId === node.id}
+                    canEdit={canEdit}
+                    onSelect={() => {
+                      setEditingNodeId(node.id);
+                      setNodeNameDraft(node.name);
+                    }}
+                  />
+                ))}
               </div>
-            ))}
-          </div>
+            </SortableContext>
+          </DndContext>
           {canCreate && (
           <div className="pt-6 border-t border-slate-50">
             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">快速录入新工序</h3>
@@ -129,10 +236,12 @@ const NodesTab: React.FC<NodesTabProps> = ({
         </div>
       </div>
       <div className="lg:col-span-8">
-         {editingNodeId ? (
-           <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden animate-in slide-in-from-right-4">
-              {globalNodes.filter(n => n.id === editingNodeId).map(node => (
-                 <div key={node.id}>
+         {editingNode ? (
+           (() => {
+             const node = editingNode;
+             return (
+           <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+              <div key={node.id}>
                     <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                       <h2 className="font-black text-slate-800 text-lg">编辑工序：{nodeNameDraft || node.name}</h2>
                       {canDelete && <button onClick={() => removeNode(node.id)} className="text-rose-500 hover:bg-rose-50 p-2 rounded-xl transition-all"><Trash2 className="w-5 h-5" /></button>}
@@ -310,7 +419,7 @@ const NodesTab: React.FC<NodesTabProps> = ({
                                      {node.enableScanWeighing ? <ToggleRight className="w-8 h-8 text-indigo-600" /> : <ToggleLeft className="w-8 h-8 text-slate-300" />}
                                    </button>
                                 </div>
-                                <p className="text-[10px] text-slate-400 font-medium">开启后，本工序在外协收货/报工/返工扫码时显示电子秤捕获框，按「单件标准重量×数量」与实测重量比对（超容差仅告警不拦截）。若同时开启「报工时记录重量」，扫码累计实测总重会自动填入报工/收货的交货重量。</p>
+                                <p className="text-[10px] text-slate-400 font-medium">开启后，本工序在工单报工/外协收货扫码时显示电子秤捕获框，按「单件标准重量×数量」与实测重量比对（超容差仅告警不拦截）。若同时开启「报工时记录重量」，扫码累计实测总重会自动填入报工/收货的交货重量。</p>
                              </div>
                              )}
                           </div>
@@ -334,8 +443,9 @@ const NodesTab: React.FC<NodesTabProps> = ({
 
                     </div>
                  </div>
-              ))}
            </div>
+             );
+           })()
          ) : (
            <div className="h-full flex flex-col items-center justify-center bg-white rounded-[32px] border border-dashed border-slate-200 p-20 text-center opacity-60">
               <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4"><Database className="w-8 h-8 text-slate-300" /></div>

@@ -122,6 +122,14 @@ PostgreSQL
 | 产品进度报工 | 产品关联模式相关入口 | `orders.createProductReport` 等 | `/api/orders/product-progress/report` |
 | 可报量查询 | 报工前校验 | `orders.getReportable` | `/api/orders/:id/reportable` |
 
+**同工序多产品扫码报工数据流**（[`useReportModalState`](../hooks/useReportModalState.ts) + [`utils/reportRowDerivations.ts`](../utils/reportRowDerivations.ts)）：
+
+1. 用户从工单中心点某工序 → `ReportModal` 打开，锚定产品 + 工序模板。
+2. 批量扫码 → `itemCodesApi.scan` / `planVirtualBatchesApi.scan` 解析 `productId`；校验计划树 + 产品是否含该工序模板。
+3. 按 `productId` 写入 `productForms`；`sessionProductIds` 追加新产品行；追溯 ref 按 `productId__variantId` 分桶。
+4. 提交 → 遍历 `sessionProductIds`：order 模式经 `resolveTargetOrderForReport` 定位工单 milestone 后调 `createReport`；product 模式调 `createProductReport`。
+5. 返工同模式见 [`utils/reworkReportGroup.ts`](../utils/reworkReportGroup.ts) + [`ReworkReportSubmitModal`](../views/production-ops/ReworkReportSubmitModal.tsx)：路径按 `productId + pathKey` 分组，数量 key 为 `productId__pathKey__variantId`。
+
 **结构提示**：
 
 - 计划 / 工单是当前前端结构债务最集中的区域之一
@@ -165,6 +173,10 @@ PostgreSQL
 | `groupedRecords` | 按单据号、分组键组织展示 | 前端展示逻辑 |
 | `lineGroupId` 组装 | 按“同次添加”组织明细 | 前端表单与列表逻辑 |
 | 库存口径 | 由 PSI 记录推导库存 | 应逐步以后端库存接口为准 |
+
+> 库存结存口径（`psi.getStock` / `getStockSnapshot` / 前端 `usePsiStockIndex` 三处统一）：
+> `(采购入库 PURCHASE_BILL + 调入 + 生产入库 STOCK_IN/STOCK_RETURN) − (销售出库 SALES_BILL + 调出 + 生产领料 STOCK_OUT) + 盘点差额 STOCKTAKE.diffQuantity`。
+> 计划单「计划生产用料清单（BOM 汇总）」的库存列直接取 `psi.getStock()`，与仓库面板同口径——生产领料出库会扣减、退料会计回。
 
 ---
 

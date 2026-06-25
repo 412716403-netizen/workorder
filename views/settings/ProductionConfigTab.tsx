@@ -88,7 +88,7 @@ const ProductionConfigTab: React.FC<ProductionConfigTabProps> = ({
             <div className="flex-1">
               <p className={OPTION_LABEL}>扫码称重容差（%）</p>
               <p className={OPTION_DESC}>
-                报工/外协/返工扫码时，电子秤实测重量与「单件标准重量 × 数量」偏差超过此百分比将提示告警（默认 ±5%）。
+                报工/外协扫码时，电子秤实测重量与「单件标准重量 × 数量」偏差超过此百分比将提示告警（默认 ±5%）。
               </p>
             </div>
             <div className="ml-4 flex shrink-0 items-center gap-2">

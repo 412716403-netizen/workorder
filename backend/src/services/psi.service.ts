@@ -197,7 +197,7 @@ export async function getStock(
   const productFilter = opts.productId ? { productId: opts.productId } : { productId: { not: null } };
   const warehouseFilter = opts.warehouseId ? { warehouseId: opts.warehouseId } : {};
 
-  const [inboundAgg, outboundAgg, transferIn, transferOut, stocktakeAgg, prodStockIn] = await Promise.all([
+  const [inboundAgg, outboundAgg, transferIn, transferOut, stocktakeAgg, prodAgg] = await Promise.all([
     db.psiRecord.groupBy({
       by: ['productId'],
       where: { type: { in: ['PURCHASE_BILL', 'STOCK_IN'] }, ...productFilter, ...warehouseFilter },
@@ -228,9 +228,18 @@ export async function getStock(
       where: { type: 'STOCKTAKE', ...productFilter, ...warehouseFilter },
       _sum: { diffQuantity: true },
     }),
+    /**
+     * 生产出入库：与仓库面板（getStockSnapshot / usePsiStockIndex）口径对齐——
+     * STOCK_IN / STOCK_RETURN 计入库存，STOCK_OUT（生产领料出库）扣减库存。
+     * 此前仅统计 STOCK_IN，会导致计划单 BOM 汇总库存与仓库不同步（领料后偏高、退料后偏低）。
+     */
     db.productionOpRecord.groupBy({
-      by: ['productId'],
-      where: { type: 'STOCK_IN', ...(opts.productId ? { productId: opts.productId } : {}) },
+      by: ['productId', 'type'],
+      where: {
+        type: { in: ['STOCK_IN', 'STOCK_RETURN', 'STOCK_OUT'] },
+        ...(opts.productId ? { productId: opts.productId } : {}),
+        ...(opts.warehouseId ? { warehouseId: opts.warehouseId } : {}),
+      },
       _sum: { quantity: true },
     }),
   ]);
@@ -256,8 +265,10 @@ export async function getStock(
   for (const r of transferOut) {
     if (r.productId) stockMap[r.productId] = (stockMap[r.productId] || 0) - Number(r._sum?.quantity || 0);
   }
-  for (const r of prodStockIn) {
-    stockMap[r.productId] = (stockMap[r.productId] || 0) + Number(r._sum?.quantity || 0);
+  for (const r of prodAgg) {
+    if (!r.productId) continue;
+    const q = Number(r._sum?.quantity || 0);
+    stockMap[r.productId] = (stockMap[r.productId] || 0) + (r.type === 'STOCK_OUT' ? -q : q);
   }
 
   return Object.entries(stockMap).map(([pid, qty]) => ({

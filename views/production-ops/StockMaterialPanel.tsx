@@ -244,7 +244,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
 
   /** 关联产品模式：按成品聚合物料（多工单同产品合并一行卡片） */
   const productMaterialStatsByProduct = useMemo(() => {
-    if (productionLinkMode !== 'product') return null as Map<string, { productId: string; issue: number; returnQty: number; theoryCost: number }[]> | null;
+    if (productionLinkMode !== 'product') return null as Map<string, { productId: string; issue: number; returnQty: number; theoryCost: number; actualCost: number }[]> | null;
     return computeAllProductMaterialStats({
       orders,
       idx,
@@ -275,7 +275,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
       return cur;
     };
 
-    type MatAcc = { issue: number; returnQty: number; theoryCost: number };
+    type MatAcc = { issue: number; returnQty: number; theoryCost: number; actualCost: number };
     type Buckets = Map<string, Map<string, Map<string, MatAcc>>>;
     const buckets: Buckets = new Map();
     const ensure = (pk: string, sk: string, matId: string): MatAcc => {
@@ -283,16 +283,18 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
       const pMap = buckets.get(pk)!;
       if (!pMap.has(sk)) pMap.set(sk, new Map());
       const sMap = pMap.get(sk)!;
-      if (!sMap.has(matId)) sMap.set(matId, { issue: 0, returnQty: 0, theoryCost: 0 });
+      if (!sMap.has(matId)) sMap.set(matId, { issue: 0, returnQty: 0, theoryCost: 0, actualCost: 0 });
       return sMap.get(matId)!;
     };
 
-    // Step 1: seed internal bucket with total theory from existing aggregation
+    // Step 1: seed internal bucket with total theory/actual from existing aggregation
     const totalSource = productionLinkMode === 'product' ? productMaterialStatsByProduct : parentMaterialStats;
     if (totalSource) {
       for (const [scopeKey, rows] of totalSource.entries()) {
         for (const row of rows) {
-          ensure(INTERNAL_KEY, scopeKey, row.productId).theoryCost = row.theoryCost;
+          const acc = ensure(INTERNAL_KEY, scopeKey, row.productId);
+          acc.theoryCost = row.theoryCost;
+          acc.actualCost = row.actualCost;
         }
       }
     }
@@ -337,19 +339,20 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
       }
       if (!scopeKey || !productForBom) continue;
 
-      const applyPartnerTheory = (pid: string, amt: number) => {
-        ensure(pk, scopeKey!, pid).theoryCost += amt;
+      // kind 决定计入实际称重（actual）还是按件理论（theory），从本厂同口径桶里扣减以守恒。
+      const applyPartnerCost = (pid: string, amt: number, kind: 'theoryCost' | 'actualCost') => {
+        ensure(pk, scopeKey!, pid)[kind] += amt;
         const internal = ensure(INTERNAL_KEY, scopeKey!, pid);
-        internal.theoryCost = Math.max(0, internal.theoryCost - amt);
+        internal[kind] = Math.max(0, internal[kind] - amt);
       };
-      // 外协收回：仅当该工序当前开启称重 + 记录里存有 materialBreakdown 快照时，才按实际重量计入加工厂分桶；
-      // 否则一律走 "本工序 BOM × 件数"。若该工序在本产品上根本没配 BOM（典型如套口/裁剪等只是工序流转），
+      // 外协收回：仅当该工序当前开启称重 + 记录里存有 materialBreakdown 快照时，才按实际重量（actualCost）计入加工厂分桶；
+      // 否则一律走 "本工序 BOM × 件数"（theoryCost）。若该工序在本产品上根本没配 BOM（典型如套口/裁剪等只是工序流转），
       // 既不动本厂理论也不进加工厂桶——避免无关加工厂被错误带出现在物料面板里。
       const nodeWeightOn = !!nodeWeightEnabledMap.get(r.nodeId);
-      if (!applyMaterialBreakdown(r, applyPartnerTheory, nodeWeightOn)) {
+      if (!applyMaterialBreakdown(r, (pid, amt) => applyPartnerCost(pid, amt, 'actualCost'), nodeWeightOn)) {
         const bomItems = resolveBomItems(productsById, bomsById, bomsByParentProduct, productForBom, r.nodeId, r.variantId);
         for (const bi of bomItems) {
-          applyPartnerTheory(bi.productId, Number(bi.quantity) * r.quantity);
+          applyPartnerCost(bi.productId, Number(bi.quantity) * r.quantity, 'theoryCost');
         }
       }
     }
@@ -363,7 +366,7 @@ const StockMaterialPanel: React.FC<StockMaterialPanelProps> = ({
 
     return allKeys.map(pk => {
       const scopeMap = buckets.get(pk)!;
-      const data = new Map<string, { productId: string; issue: number; returnQty: number; theoryCost: number }[]>();
+      const data = new Map<string, { productId: string; issue: number; returnQty: number; theoryCost: number; actualCost: number }[]>();
       for (const [sk, matMap] of scopeMap.entries()) {
         data.set(sk, Array.from(matMap.entries()).map(([pid, v]) => ({ productId: pid, ...v })));
       }

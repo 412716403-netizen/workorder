@@ -17,7 +17,9 @@ import {
 } from '../views/production-ops/stockMaterialPanelHelpers';
 import type { DataIndexes } from '../views/production-ops/useDataIndexes';
 
-type MatAcc = { issue: number; returnQty: number; theoryCost: number };
+type MatAcc = { issue: number; returnQty: number; theoryCost: number; actualCost: number };
+
+const emptyAcc = (): MatAcc => ({ issue: 0, returnQty: 0, theoryCost: 0, actualCost: 0 });
 
 function matMapToRows(prodMap: Map<string, MatAcc>): MatRow[] {
   return Array.from(prodMap.entries()).map(([productId, v]) => ({ productId, ...v }));
@@ -84,12 +86,13 @@ export function computeOrderFamilyMaterialStats(params: {
 
   const addTheory = (bi: { productId: string; quantity: number }, qty: number) => {
     const theory = Number(bi.quantity) * qty;
-    if (!prodMap.has(bi.productId)) prodMap.set(bi.productId, { issue: 0, returnQty: 0, theoryCost: 0 });
+    if (!prodMap.has(bi.productId)) prodMap.set(bi.productId, emptyAcc());
     prodMap.get(bi.productId)!.theoryCost += theory;
   };
-  const addMaterialTheory = (productId: string, amount: number) => {
-    if (!prodMap.has(productId)) prodMap.set(productId, { issue: 0, returnQty: 0, theoryCost: 0 });
-    prodMap.get(productId)!.theoryCost += amount;
+  // 走 applyMaterialBreakdown（开启称重的工序）：按实际称重计入 actualCost
+  const addActual = (productId: string, amount: number) => {
+    if (!prodMap.has(productId)) prodMap.set(productId, emptyAcc());
+    prodMap.get(productId)!.actualCost += amount;
   };
 
   const familyOrders = orders.filter(o => familyIds.has(o.id));
@@ -106,7 +109,7 @@ export function computeOrderFamilyMaterialStats(params: {
     if (bestMs) {
       const bestMsWeightOn = !!nodeWeightEnabledMap.get(bestMs.templateId);
       (bestMs.reports || []).forEach(r => {
-        if (applyMaterialBreakdown(r, addMaterialTheory, bestMsWeightOn)) return;
+        if (applyMaterialBreakdown(r, addActual, bestMsWeightOn)) return;
         const qty = Number(r.quantity);
         totalCompleted += qty;
         const vid = r.variantId ?? '';
@@ -170,7 +173,7 @@ export function computeOrderFamilyMaterialStats(params: {
   for (const r of stockRecords) {
     if (r.type !== 'STOCK_OUT' && r.type !== 'STOCK_RETURN') continue;
     if (!r.orderId || !familyIds.has(r.orderId)) continue;
-    if (!prodMap.has(r.productId)) prodMap.set(r.productId, { issue: 0, returnQty: 0, theoryCost: 0 });
+    if (!prodMap.has(r.productId)) prodMap.set(r.productId, emptyAcc());
     const cur = prodMap.get(r.productId)!;
     if (r.type === 'STOCK_OUT') cur.issue += r.quantity;
     else cur.returnQty += r.quantity;
@@ -243,15 +246,21 @@ export function computeProductMaterialStats(params: {
   const prodMap = new Map<string, MatAcc>();
   const fpProduct = productsById.get(fpId);
 
-  const addMaterialTheory = (materialProductId: string, amount: number) => {
-    if (!prodMap.has(materialProductId)) prodMap.set(materialProductId, { issue: 0, returnQty: 0, theoryCost: 0 });
+  // 开启称重的工序经 applyMaterialBreakdown 走此处，按实际称重计入 actualCost
+  const addActual = (materialProductId: string, amount: number) => {
+    if (!prodMap.has(materialProductId)) prodMap.set(materialProductId, emptyAcc());
+    prodMap.get(materialProductId)!.actualCost += amount;
+  };
+  // 未开启称重的工序按「BOM × 件数」走此处，计入 theoryCost
+  const addTheory = (materialProductId: string, amount: number) => {
+    if (!prodMap.has(materialProductId)) prodMap.set(materialProductId, emptyAcc());
     prodMap.get(materialProductId)!.theoryCost += amount;
   };
   const applyBomForNode = (nodeId: string, variantId: string, qty: number) => {
     if (!fpProduct || qty <= 0 || !nodeId) return false;
     const bomItems = resolveBomItems(productsById, bomsById, bomsByParentProduct, fpId, nodeId, variantId || undefined);
     if (bomItems.length === 0) return false;
-    for (const bi of bomItems) addMaterialTheory(bi.productId, Number(bi.quantity) * qty);
+    for (const bi of bomItems) addTheory(bi.productId, Number(bi.quantity) * qty);
     return true;
   };
 
@@ -263,7 +272,7 @@ export function computeProductMaterialStats(params: {
       const nodeWeightOn = !!nodeWeightEnabledMap.get(nodeId);
       const byVid = new Map<string, number>();
       for (const r of p.reports ?? []) {
-        if (applyMaterialBreakdown(r, addMaterialTheory, nodeWeightOn)) {
+        if (applyMaterialBreakdown(r, addActual, nodeWeightOn)) {
           usedPmp = true;
           continue;
         }
@@ -285,7 +294,7 @@ export function computeProductMaterialStats(params: {
         const msWeightOn = !!nodeWeightEnabledMap.get(ms.templateId);
         const byVid = new Map<string, number>();
         for (const r of ms.reports ?? []) {
-          if (applyMaterialBreakdown(r, addMaterialTheory, msWeightOn)) continue;
+          if (applyMaterialBreakdown(r, addActual, msWeightOn)) continue;
           const qty = Number(r.quantity) || 0;
           if (qty <= 0) continue;
           const vid = r.variantId ?? '';
@@ -311,7 +320,7 @@ export function computeProductMaterialStats(params: {
     const bySource = r.sourceProductId === fpId;
     const byOrder = r.orderId && allFamilyIds.has(r.orderId);
     if (!bySource && !byOrder) continue;
-    if (!prodMap.has(r.productId)) prodMap.set(r.productId, { issue: 0, returnQty: 0, theoryCost: 0 });
+    if (!prodMap.has(r.productId)) prodMap.set(r.productId, emptyAcc());
     const cur = prodMap.get(r.productId)!;
     if (r.type === 'STOCK_OUT') cur.issue += r.quantity;
     else cur.returnQty += r.quantity;

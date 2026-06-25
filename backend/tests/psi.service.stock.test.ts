@@ -7,8 +7,18 @@ function createMockDb(handlers: {
   stocktakeSum?: 'diff' | 'quantity';
   purchaseQty?: number;
   stocktakeDiff?: number;
+  prodStockIn?: number;
+  prodStockReturn?: number;
+  prodStockOut?: number;
 }) {
-  const { stocktakeSum = 'diff', purchaseQty = 100, stocktakeDiff = -20 } = handlers;
+  const {
+    stocktakeSum = 'diff',
+    purchaseQty = 100,
+    stocktakeDiff = -20,
+    prodStockIn = 0,
+    prodStockReturn = 0,
+    prodStockOut = 0,
+  } = handlers;
 
   return {
     psiRecord: {
@@ -34,7 +44,14 @@ function createMockDb(handlers: {
       }),
     },
     productionOpRecord: {
-      groupBy: vi.fn(async () => []),
+      // 生产出入库按 ['productId','type'] 分组：STOCK_IN/STOCK_RETURN 入，STOCK_OUT 出。
+      groupBy: vi.fn(async () => {
+        const rows: { productId: string; type: string; _sum: { quantity: number } }[] = [];
+        if (prodStockIn) rows.push({ productId: 'p1', type: 'STOCK_IN', _sum: { quantity: prodStockIn } });
+        if (prodStockReturn) rows.push({ productId: 'p1', type: 'STOCK_RETURN', _sum: { quantity: prodStockReturn } });
+        if (prodStockOut) rows.push({ productId: 'p1', type: 'STOCK_OUT', _sum: { quantity: prodStockOut } });
+        return rows;
+      }),
     },
   } as unknown as import('../src/lib/prisma.js').TenantPrismaClient;
 }
@@ -53,6 +70,32 @@ describe('getStock STOCKTAKE', () => {
     const p1 = rows.find(r => r.productId === 'p1');
     // 说明：mock 仍返回 quantity 聚合时，getStock 已改为读 diffQuantity，故此处 p1 为 0 或不存在
     expect(p1?.stock ?? 0).not.toBe(180);
+  });
+});
+
+describe('getStock 生产出入库口径（与仓库面板对齐）', () => {
+  it('STOCK_OUT 领料出库应扣减：采购 100 - 领料 30 => 70', async () => {
+    const db = createMockDb({ stocktakeDiff: 0, purchaseQty: 100, prodStockOut: 30 });
+    const rows = await getStock(db, { productId: 'p1' });
+    expect(rows.find(r => r.productId === 'p1')?.stock).toBe(70);
+  });
+
+  it('STOCK_IN/STOCK_RETURN 入库应计入：采购 100 + 完工入库 20 + 退料 5 => 125', async () => {
+    const db = createMockDb({ stocktakeDiff: 0, purchaseQty: 100, prodStockIn: 20, prodStockReturn: 5 });
+    const rows = await getStock(db, { productId: 'p1' });
+    expect(rows.find(r => r.productId === 'p1')?.stock).toBe(125);
+  });
+
+  it('出入库混合：采购 100 + 入库 20 + 退料 5 - 领料 40 => 85', async () => {
+    const db = createMockDb({
+      stocktakeDiff: 0,
+      purchaseQty: 100,
+      prodStockIn: 20,
+      prodStockReturn: 5,
+      prodStockOut: 40,
+    });
+    const rows = await getStock(db, { productId: 'p1' });
+    expect(rows.find(r => r.productId === 'p1')?.stock).toBe(85);
   });
 });
 
