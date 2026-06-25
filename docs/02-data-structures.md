@@ -67,6 +67,7 @@
 | processSequenceMode | `ProcessSequenceMode` | 工序顺序模式（已固定为 `sequential`；历史 `free` 租户迁移为各工序开启 `allowOutOfSequence`） |
 | allowExceedMaxReportQty | `boolean` | 是否允许超额报工 |
 | allowExceedMaxOutsourceReceiveQty | `boolean` | 是否允许超额外协收货（已派 − 已收） |
+| allowExceedMaxStockInQty | `boolean` | 是否允许生产入库超过最大可入库数量（待入库清单入库时放开 pending 上限） |
 | weightTolerancePercent | `number` | 扫码称重容差百分比（默认 5，表示 ±5%） |
 | productMilestoneProgresses | `ProductMilestoneProgress[]` | 关联产品模式进度数据 |
 

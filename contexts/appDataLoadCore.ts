@@ -91,6 +91,7 @@ export interface AppDataLoadCoreSetters {
   setProductionLinkMode: Dispatch<SetStateAction<ProductionLinkMode>>;
   setAllowExceedMaxReportQty: Dispatch<SetStateAction<boolean>>;
   setAllowExceedMaxOutsourceReceiveQty: Dispatch<SetStateAction<boolean>>;
+  setAllowExceedMaxStockInQty: Dispatch<SetStateAction<boolean>>;
   setWeightTolerancePercent: Dispatch<SetStateAction<number>>;
   setPlanFormSettings: Dispatch<SetStateAction<PlanFormSettings>>;
   setOrderFormSettings: Dispatch<SetStateAction<OrderFormSettings>>;
@@ -175,6 +176,7 @@ export async function executeAppDataLoadCore(
   // 工序顺序设置已下线：系统全局恒「按工序顺序生产」，例外由工序级 allowOutOfSequence 控制。
   s.setAllowExceedMaxReportQty(cfg.allowExceedMaxReportQty === true);
   s.setAllowExceedMaxOutsourceReceiveQty(cfg.allowExceedMaxOutsourceReceiveQty === true);
+  s.setAllowExceedMaxStockInQty(cfg.allowExceedMaxStockInQty === true);
   {
     const raw = cfg.weightTolerancePercent;
     const n = typeof raw === 'number' ? raw : Number(raw);

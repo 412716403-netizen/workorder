@@ -125,11 +125,13 @@ export interface AppDataContextValue {
   processSequenceMode: ProcessSequenceMode;
   allowExceedMaxReportQty: boolean;
   allowExceedMaxOutsourceReceiveQty: boolean;
+  allowExceedMaxStockInQty: boolean;
   weightTolerancePercent: number;
   productMilestoneProgresses: ProductMilestoneProgress[];
   // Config handlers
   onUpdateAllowExceedMaxReportQty: (v: boolean) => Promise<void>;
   onUpdateAllowExceedMaxOutsourceReceiveQty: (v: boolean) => Promise<void>;
+  onUpdateAllowExceedMaxStockInQty: (v: boolean) => Promise<void>;
   onUpdateWeightTolerancePercent: (v: number) => Promise<void>;
   onUpdatePlanFormSettings: (v: PlanFormSettings) => Promise<void>;
   onUpdateOrderFormSettings: (v: OrderFormSettings) => Promise<void>;
@@ -219,7 +221,7 @@ export type AppDataState = Pick<AppDataContextValue,
   'financeCategories' | 'financeAccountTypes' |
   'planFormSettings' | 'orderFormSettings' | 'purchaseOrderFormSettings' | 'salesOrderFormSettings' | 'purchaseBillFormSettings' | 'salesBillFormSettings' | 'receiptFormSettings' | 'paymentFormSettings' | 'materialPanelSettings' | 'materialFormSettings' | 'outsourceFormSettings' | 'reworkFormSettings' |
   'printTemplates' |
-  'productionLinkMode' | 'processSequenceMode' | 'allowExceedMaxReportQty' | 'allowExceedMaxOutsourceReceiveQty' | 'weightTolerancePercent' | 'productMilestoneProgresses'
+  'productionLinkMode' | 'processSequenceMode' | 'allowExceedMaxReportQty' | 'allowExceedMaxOutsourceReceiveQty' | 'allowExceedMaxStockInQty' | 'weightTolerancePercent' | 'productMilestoneProgresses'
 >;
 
 export type AppDataActions = Omit<AppDataContextValue, keyof AppDataState>;
@@ -244,6 +246,7 @@ export interface ConfigState {
   processSequenceMode: ProcessSequenceMode;
   allowExceedMaxReportQty: boolean;
   allowExceedMaxOutsourceReceiveQty: boolean;
+  allowExceedMaxStockInQty: boolean;
   weightTolerancePercent: number;
   planFormSettings: PlanFormSettings;
   orderFormSettings: OrderFormSettings;
@@ -430,6 +433,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [processSequenceMode] = useState<ProcessSequenceMode>('sequential');
   const [allowExceedMaxReportQty, setAllowExceedMaxReportQty] = useState<boolean>(false);
   const [allowExceedMaxOutsourceReceiveQty, setAllowExceedMaxOutsourceReceiveQty] = useState<boolean>(false);
+  const [allowExceedMaxStockInQty, setAllowExceedMaxStockInQty] = useState<boolean>(false);
   const [weightTolerancePercent, setWeightTolerancePercent] = useState<number>(5);
   const [productMilestoneProgresses, setProductMilestoneProgresses] = useState<ProductMilestoneProgress[]>([]);
 
@@ -454,6 +458,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           setProductionLinkMode,
           setAllowExceedMaxReportQty,
           setAllowExceedMaxOutsourceReceiveQty,
+          setAllowExceedMaxStockInQty,
           setWeightTolerancePercent,
           setPlanFormSettings,
           setOrderFormSettings,
@@ -594,6 +599,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   // ── Config update handlers ──
   const onUpdateAllowExceedMaxReportQty = useCallback(async (value: boolean) => { await api.settings.updateConfig('allowExceedMaxReportQty', value); setAllowExceedMaxReportQty(value); }, []);
   const onUpdateAllowExceedMaxOutsourceReceiveQty = useCallback(async (value: boolean) => { await api.settings.updateConfig('allowExceedMaxOutsourceReceiveQty', value); setAllowExceedMaxOutsourceReceiveQty(value); }, []);
+  const onUpdateAllowExceedMaxStockInQty = useCallback(async (value: boolean) => { await api.settings.updateConfig('allowExceedMaxStockInQty', value); setAllowExceedMaxStockInQty(value); }, []);
   const onUpdateWeightTolerancePercent = useCallback(async (value: number) => {
     const n = Math.max(0, Math.min(100, Number(value) || 0));
     await api.settings.updateConfig('weightTolerancePercent', n);
@@ -1067,11 +1073,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }), [categories, partnerCategories, dictionaries, globalNodes, partners, workers, equipment, warehouses, products, boms]);
 
   const configValue: ConfigState = useMemo(() => ({
-    productionLinkMode, processSequenceMode, allowExceedMaxReportQty, allowExceedMaxOutsourceReceiveQty, weightTolerancePercent,
+    productionLinkMode, processSequenceMode, allowExceedMaxReportQty, allowExceedMaxOutsourceReceiveQty, allowExceedMaxStockInQty, weightTolerancePercent,
     planFormSettings, orderFormSettings, purchaseOrderFormSettings, salesOrderFormSettings, purchaseBillFormSettings, salesBillFormSettings,
     receiptFormSettings, paymentFormSettings,
     materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates,
-  }), [productionLinkMode, processSequenceMode, allowExceedMaxReportQty, allowExceedMaxOutsourceReceiveQty, weightTolerancePercent, planFormSettings, orderFormSettings, purchaseOrderFormSettings, salesOrderFormSettings, purchaseBillFormSettings, salesBillFormSettings, receiptFormSettings, paymentFormSettings, materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates]);
+  }), [productionLinkMode, processSequenceMode, allowExceedMaxReportQty, allowExceedMaxOutsourceReceiveQty, allowExceedMaxStockInQty, weightTolerancePercent, planFormSettings, orderFormSettings, purchaseOrderFormSettings, salesOrderFormSettings, purchaseBillFormSettings, salesBillFormSettings, receiptFormSettings, paymentFormSettings, materialPanelSettings, materialFormSettings, outsourceFormSettings, reworkFormSettings, printTemplates]);
 
   const ordersValue: OrdersState = useMemo(() => ({
     orders, plans, productMilestoneProgresses,
@@ -1084,7 +1090,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   }), [financeCategories, financeAccountTypes]);
 
   const actionsValue: AppDataActions = useMemo(() => ({
-    onUpdateAllowExceedMaxReportQty, onUpdateAllowExceedMaxOutsourceReceiveQty, onUpdateWeightTolerancePercent,
+    onUpdateAllowExceedMaxReportQty, onUpdateAllowExceedMaxOutsourceReceiveQty, onUpdateAllowExceedMaxStockInQty, onUpdateWeightTolerancePercent,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
     onUpdatePurchaseOrderFormSettings, onUpdateSalesOrderFormSettings,
     onUpdatePurchaseBillFormSettings, onUpdateSalesBillFormSettings,
@@ -1106,7 +1112,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     refreshPrintTemplates,
     ensureDeferredLoaded,
   }), [
-    onUpdateAllowExceedMaxReportQty, onUpdateAllowExceedMaxOutsourceReceiveQty, onUpdateWeightTolerancePercent,
+    onUpdateAllowExceedMaxReportQty, onUpdateAllowExceedMaxOutsourceReceiveQty, onUpdateAllowExceedMaxStockInQty, onUpdateWeightTolerancePercent,
     onUpdatePlanFormSettings, onUpdateOrderFormSettings,
     onUpdatePurchaseOrderFormSettings, onUpdateSalesOrderFormSettings,
     onUpdatePurchaseBillFormSettings, onUpdateSalesBillFormSettings,

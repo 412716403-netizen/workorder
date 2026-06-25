@@ -46,7 +46,7 @@ export const PRODUCTION_SUB_MODULES: { key: string; label: string; actions: stri
   { key: 'plans', label: '生产计划', actions: ['view', 'create', 'edit', 'delete'], group: '生产计划' },
   { key: 'orders_list', label: '主列表', actions: ['allow'], group: '工单中心' },
   { key: 'orders_form_config', label: '表单配置', actions: ['allow'], group: '工单中心' },
-  { key: 'orders_report_records', label: '报工流水', actions: ['view', 'edit', 'delete'], group: '工单中心' },
+  { key: 'orders_report_records', label: '报工流水', actions: ['view', 'create', 'edit', 'delete'], group: '工单中心' },
   { key: 'orders_pending_stock_in', label: '待入库流水', actions: ['view', 'create', 'edit', 'delete'], group: '工单中心' },
   { key: 'orders_detail', label: '工单详情', actions: ['view', 'edit', 'delete'], group: '工单中心' },
   { key: 'orders_material', label: '物料', actions: ['allow'], group: '工单中心' },

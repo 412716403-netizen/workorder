@@ -288,6 +288,9 @@ const ReportModal: React.FC<ReportModalProps> = ({
   const productForModal = productMap.get(anchorProductId);
 
   scanMaxQtyRef.current = (productId, variantId) => {
+    // 开启「允许报工数量超过最大可报数量」时放开扫码上限，与手输/矩阵输入及后端
+    // enforceReportQuantity（受同一 allowExceedMaxReportQty 控制）保持一致。
+    if (allowExceedMaxReportQty) return null;
     const row = productRowDerivations.get(productId);
     if (!row) return null;
     const product = productMap.get(productId);

@@ -57,6 +57,7 @@ const ProductionManagementView: React.FC = () => {
   const processSequenceMode = c.processSequenceMode;
   const allowExceedMaxReportQty = c.allowExceedMaxReportQty;
   const allowExceedMaxOutsourceReceiveQty = c.allowExceedMaxOutsourceReceiveQty;
+  const allowExceedMaxStockInQty = c.allowExceedMaxStockInQty;
   const plans = o.plans;
   const orders = o.orders;
   const products = m.products;
@@ -292,6 +293,7 @@ const ProductionManagementView: React.FC = () => {
             productionLinkMode={productionLinkMode}
             processSequenceMode={processSequenceMode}
             allowExceedMaxReportQty={allowExceedMaxReportQty}
+            allowExceedMaxStockInQty={allowExceedMaxStockInQty}
             orders={orders}
             plans={plans}
             products={products} 

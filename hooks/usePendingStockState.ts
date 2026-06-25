@@ -97,6 +97,8 @@ interface UsePendingStockStateArgs {
   productionLinkMode: 'order' | 'product';
   /** 暂保留 (可能后续在 hook 中做按序校验) */
   processSequenceMode?: ProcessSequenceMode;
+  /** 受 SystemSetting.allowExceedMaxStockInQty 控制：true 时入库数量可超过待入库上限（手输 + 扫码累加） */
+  allowExceedMaxStockInQty?: boolean;
   onAddRecord?: (record: ProductionOpRecord) => void;
   onAddRecordBatch?: (records: ProductionOpRecord[]) => Promise<void>;
 }
@@ -112,6 +114,7 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
     dictionaries,
     productMilestoneProgresses,
     productionLinkMode,
+    allowExceedMaxStockInQty = false,
     onAddRecord,
     onAddRecordBatch,
   } = args;
@@ -488,6 +491,7 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
           pendingByVariant: caps,
           variantId: parsed.variantId,
           addQty: parsed.addQty,
+          allowExceed: allowExceedMaxStockInQty,
         });
         if (tryResult.ok === false) {
           toast.error(tryResult.message ?? '本次扫入数量超过待入库上限');
@@ -535,6 +539,7 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
       productMap,
       categoryMap,
       singlePendingStockInDefaultWh,
+      allowExceedMaxStockInQty,
     ],
   );
 
@@ -582,7 +587,7 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
               variantQuantities: { ...f.variantQuantities, [vid]: (f.variantQuantities[vid] ?? 0) + 1 },
             }));
           } else {
-            const ck = checkExceedMax(stockInForm.singleQuantity || 0, 1, pendingTotal);
+            const ck = checkExceedMax(stockInForm.singleQuantity || 0, 1, allowExceedMaxStockInQty ? undefined : pendingTotal);
             if (ck.exceeds) {
               toast.error(ck.message ?? '本次扫入数量超过该单待入库上限');
               return false;
@@ -635,7 +640,7 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
               variantQuantities: { ...f.variantQuantities, [vid]: (f.variantQuantities[vid] ?? 0) + qty },
             }));
           } else {
-            const ck = checkExceedMax(stockInForm.singleQuantity || 0, qty, pendingTotal);
+            const ck = checkExceedMax(stockInForm.singleQuantity || 0, qty, allowExceedMaxStockInQty ? undefined : pendingTotal);
             if (ck.exceeds) {
               toast.error(ck.message ?? '本次扫入数量超过该单待入库上限');
               return false;
@@ -656,7 +661,7 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
       }
       return false;
     },
-    [stockInForm.variantQuantities, stockInForm.singleQuantity, validatePendingStockScanByOrder],
+    [stockInForm.variantQuantities, stockInForm.singleQuantity, validatePendingStockScanByOrder, allowExceedMaxStockInQty],
   );
 
   const buildResolveStockInScanRowPreview = useCallback(
@@ -878,6 +883,8 @@ export function usePendingStockState(args: UsePendingStockStateArgs) {
   void _collabFromCustomData;
 
   return {
+    /* 配置 */
+    allowExceedMaxStockInQty,
     /* 数据 */
     pendingStockOrders,
     productMap,

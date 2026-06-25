@@ -699,7 +699,8 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
       });
       const byProduct = new Map<string, { partner: string; nodeId: string; nodeName: string; dispatched: number; received: number; pending: number }[]>();
       Object.values(byKey).forEach(v => {
-        const pending = Math.max(0, v.dispatched - v.received);
+        // 剩余 = 已派 − 已收；超收时为负数（参考工单中心剩余口径，不再 clamp 到 0）
+        const pending = v.dispatched - v.received;
         const nodeName = (idx.nodesById.get(v.nodeId)?.name ?? v.nodeId) || '—';
         if (!byProduct.has(v.productId)) byProduct.set(v.productId, []);
         byProduct.get(v.productId)!.push({ partner: v.partner, nodeId: v.nodeId, nodeName, dispatched: v.dispatched, received: v.received, pending });
@@ -740,7 +741,8 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
     });
     const byOrder = new Map<string, { partner: string; nodeId: string; nodeName: string; dispatched: number; received: number; pending: number }[]>();
     Object.values(byKey).forEach(v => {
-      const pending = Math.max(0, v.dispatched - v.received);
+      // 剩余 = 已派 − 已收；超收时为负数（参考工单中心剩余口径，不再 clamp 到 0）
+      const pending = v.dispatched - v.received;
       const order = idx.ordersById.get(v.orderId);
       const ms = order?.milestones?.find(m => m.templateId === v.nodeId);
       const nodeName = (ms?.name ?? idx.nodesById.get(v.nodeId)?.name ?? v.nodeId) || '—';
@@ -1423,7 +1425,7 @@ const OutsourcePanel: React.FC<PanelProps & { psiRecords?: PsiRecord[]; planForm
                           <span className="text-base font-black text-slate-900 leading-none">{received}</span>
                         </div>
                         <div className="flex items-center justify-center gap-1.5 leading-tight">
-                          <span className="text-[10px] font-bold text-slate-500" title="发出 / 剩余">{dispatched} / {pending}</span>
+                          <span className="text-[10px] font-bold text-slate-500" title="发出 / 剩余">{dispatched} / <span className={pending < 0 ? 'text-rose-500' : ''}>{pending}</span></span>
                           <button
                             type="button"
                             onClick={() => {

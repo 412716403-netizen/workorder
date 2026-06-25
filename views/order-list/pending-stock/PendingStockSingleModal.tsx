@@ -81,6 +81,7 @@ const PendingStockSingleModal: React.FC<Props> = ({
   onAddRecordBatch,
 }) => {
   const {
+    allowExceedMaxStockInQty,
     stockInOrder,
     setStockInOrder,
     stockInForm,
@@ -111,7 +112,7 @@ const PendingStockSingleModal: React.FC<Props> = ({
   const totalStockInQty = hasColorSize
     ? (Object.values(stockInForm.variantQuantities) as number[]).reduce((s, q) => s + (q || 0), 0)
     : stockInForm.singleQuantity;
-  const exceedsPending = totalStockInQty > stockInOrder.pendingTotal;
+  const exceedsPending = !allowExceedMaxStockInQty && totalStockInQty > stockInOrder.pendingTotal;
   const canSubmitStockIn =
     !!(onAddRecord || onAddRecordBatch) &&
     totalStockInQty > 0 &&
@@ -234,7 +235,7 @@ const PendingStockSingleModal: React.FC<Props> = ({
                       }
                       getCellExtras={v => {
                         const pending = pendingCapsForSingle[v.id] ?? 0;
-                        return { max: pending, hint: `待入库 ${pending}` };
+                        return { max: allowExceedMaxStockInQty ? undefined : pending, hint: `待入库 ${pending}` };
                       }}
                     />
                     <div
@@ -261,19 +262,19 @@ const PendingStockSingleModal: React.FC<Props> = ({
                     <input
                       type="number"
                       min={0}
-                      max={stockInOrder.pendingTotal}
+                      max={allowExceedMaxStockInQty ? undefined : stockInOrder.pendingTotal}
                       value={stockInForm.singleQuantity || ''}
-                      onChange={e =>
+                      onChange={e => {
+                        const raw = parseInt(e.target.value, 10) || 0;
                         setStockInForm(f => ({
                           ...f,
-                          singleQuantity: Math.max(
-                            0,
-                            Math.min(stockInOrder.pendingTotal, parseInt(e.target.value, 10) || 0),
-                          ),
-                        }))
-                      }
+                          singleQuantity: allowExceedMaxStockInQty
+                            ? Math.max(0, raw)
+                            : Math.max(0, Math.min(stockInOrder.pendingTotal, raw)),
+                        }));
+                      }}
                       className={`${formStandardControlClass} bg-white text-right font-bold tabular-nums text-indigo-600`}
-                      placeholder={`最多 ${stockInOrder.pendingTotal}`}
+                      placeholder={allowExceedMaxStockInQty ? '请输入数量' : `最多 ${stockInOrder.pendingTotal}`}
                     />
                     {exceedsPending && (
                       <p className="text-[10px] font-bold text-rose-500">

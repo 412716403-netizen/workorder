@@ -64,9 +64,14 @@ export function tryAddScanQtyToStockInForm(
     pendingByVariant: Record<string, number>;
     variantId: string;
     addQty: number;
+    /**
+     * 受 SystemSetting.allowExceedMaxStockInQty 控制：true 时跳过待入库上限校验，
+     * 允许扫码累加超过待入库数量（与手输/矩阵放开口径一致）。
+     */
+    allowExceed?: boolean;
   },
 ): TryAddScanQtyResult {
-  const { hasColorSize, pendingTotal, pendingByVariant, variantId, addQty } = opts;
+  const { hasColorSize, pendingTotal, pendingByVariant, variantId, addQty, allowExceed } = opts;
   if (addQty <= 0) return { ok: true, form, appliedQty: 0 };
 
   if (hasColorSize) {
@@ -75,7 +80,7 @@ export function tryAddScanQtyToStockInForm(
     }
     const cur = form.variantQuantities[variantId] ?? 0;
     const cap = pendingByVariant[variantId] ?? 0;
-    const check = checkExceedMax(cur, addQty, cap);
+    const check = checkExceedMax(cur, addQty, allowExceed ? undefined : cap);
     if (check.exceeds) {
       return {
         ok: false,
@@ -97,7 +102,7 @@ export function tryAddScanQtyToStockInForm(
   }
 
   const cur = form.singleQuantity || 0;
-  const check = checkExceedMax(cur, addQty, pendingTotal);
+  const check = checkExceedMax(cur, addQty, allowExceed ? undefined : pendingTotal);
   if (check.exceeds) {
     return {
       ok: false,

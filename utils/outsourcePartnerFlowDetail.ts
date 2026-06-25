@@ -166,13 +166,14 @@ export function computeDispatchReceiveRemaining(filtered: ProductionOpRecord[]):
       if (vid) dispatchByVariant[vid] = (dispatchByVariant[vid] ?? 0) + q;
     }
   }
-  const remainingTotal = Math.max(0, dispatchTotal - receiveTotal);
+  // 剩余 = 发出 − 收回；超收时为负数（参考工单中心剩余口径，不再 clamp 到 0）
+  const remainingTotal = dispatchTotal - receiveTotal;
   const keys = new Set([...Object.keys(dispatchByVariant), ...Object.keys(receiveByVariant)]);
   const remainingByVariant: Record<string, number> = {};
   for (const k of keys) {
     const d = dispatchByVariant[k] ?? 0;
     const rc = receiveByVariant[k] ?? 0;
-    remainingByVariant[k] = Math.max(0, d - rc);
+    remainingByVariant[k] = d - rc;
   }
   return {
     dispatchTotal,

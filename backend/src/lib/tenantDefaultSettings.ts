@@ -7,6 +7,7 @@ export const TENANT_DEFAULT_SETTINGS: Record<string, unknown> = {
   processSequenceMode: 'sequential',
   allowExceedMaxReportQty: false,
   allowExceedMaxOutsourceReceiveQty: false,
+  allowExceedMaxStockInQty: false,
   weightTolerancePercent: 5,
   planFormSettings: {
     standardFields: [

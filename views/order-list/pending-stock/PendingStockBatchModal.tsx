@@ -49,6 +49,7 @@ const PendingStockBatchModal: React.FC<Props> = ({
   onAddRecordBatch,
 }) => {
   const {
+    allowExceedMaxStockInQty,
     batchStockInItems,
     setBatchStockInItems,
     batchStockForm,
@@ -77,15 +78,17 @@ const PendingStockBatchModal: React.FC<Props> = ({
       const capByVid = expandPendingByVariantForMatrix(pit, p ?? undefined, cat ?? undefined);
       const t = Object.values(line.variantQuantities).reduce<number>((s, q) => s + (Number(q) || 0), 0);
       batchTotalPieces += t;
-      if (t > pit.pendingTotal) batchError = true;
+      if (!allowExceedMaxStockInQty && t > pit.pendingTotal) batchError = true;
       if (t > 0) batchHasValidQty = true;
-      Object.entries(line.variantQuantities).forEach(([vid, q]) => {
-        if ((Number(q) || 0) > (capByVid[vid] ?? 0)) batchError = true;
-      });
+      if (!allowExceedMaxStockInQty) {
+        Object.entries(line.variantQuantities).forEach(([vid, q]) => {
+          if ((Number(q) || 0) > (capByVid[vid] ?? 0)) batchError = true;
+        });
+      }
     } else {
       const q = Number(line.singleQuantity) || 0;
       batchTotalPieces += q;
-      if (q > pit.pendingTotal) batchError = true;
+      if (!allowExceedMaxStockInQty && q > pit.pendingTotal) batchError = true;
       if (q > 0) batchHasValidQty = true;
     }
   }
@@ -198,25 +201,29 @@ const PendingStockBatchModal: React.FC<Props> = ({
                       }}
                       getCellExtras={v => {
                         const pending = pendingCaps[v.id] ?? 0;
-                        return { max: pending, hint: `最多 ${pending}`, placeholder: `≤${pending}` };
+                        return {
+                          max: allowExceedMaxStockInQty ? undefined : pending,
+                          hint: `待入库 ${pending}`,
+                          placeholder: allowExceedMaxStockInQty ? undefined : `≤${pending}`,
+                        };
                       }}
                     />
                   ) : (
                     <input
                       type="number"
                       min={0}
-                      max={stockItem.pendingTotal}
+                      max={allowExceedMaxStockInQty ? undefined : stockItem.pendingTotal}
                       value={line.singleQuantity || ''}
-                      onChange={e =>
+                      onChange={e => {
+                        const raw = parseInt(e.target.value, 10) || 0;
                         patchLine({
-                          singleQuantity: Math.max(
-                            0,
-                            Math.min(stockItem.pendingTotal, parseInt(e.target.value, 10) || 0),
-                          ),
-                        })
-                      }
+                          singleQuantity: allowExceedMaxStockInQty
+                            ? Math.max(0, raw)
+                            : Math.max(0, Math.min(stockItem.pendingTotal, raw)),
+                        });
+                      }}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-4 text-lg font-bold text-indigo-600"
-                      placeholder={`最多 ${stockItem.pendingTotal}`}
+                      placeholder={allowExceedMaxStockInQty ? '请输入数量' : `最多 ${stockItem.pendingTotal}`}
                     />
                   )}
                 </div>

@@ -51,6 +51,8 @@ interface PendingStockPanelProps {
   productMilestoneProgresses: ProductMilestoneProgress[];
   productionLinkMode: 'order' | 'product';
   processSequenceMode: ProcessSequenceMode;
+  /** 受 SystemSetting.allowExceedMaxStockInQty 控制：true 时入库数量可超过待入库上限 */
+  allowExceedMaxStockInQty?: boolean;
   orderFormSettings: OrderFormSettings;
   printTemplates: PrintTemplate[];
   onOpenOrderFormPrintTab?: () => void;
@@ -75,6 +77,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
   productMilestoneProgresses,
   productionLinkMode,
   processSequenceMode,
+  allowExceedMaxStockInQty = false,
   orderFormSettings,
   printTemplates,
   onOpenOrderFormPrintTab,
@@ -100,6 +103,7 @@ const PendingStockPanel: React.FC<PendingStockPanelProps> = ({
     productMilestoneProgresses,
     productionLinkMode,
     processSequenceMode,
+    allowExceedMaxStockInQty,
     onAddRecord,
     onAddRecordBatch,
   });

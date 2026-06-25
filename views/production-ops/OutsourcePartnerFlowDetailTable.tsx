@@ -54,21 +54,21 @@ const OutsourcePartnerFlowDetailTable: React.FC<OutsourcePartnerFlowDetailTableP
   const labelColSpan = showDeliveryDateColumn ? 3 : 2;
 
   return (
-    <div className="w-full max-w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+    <div className="w-full max-w-full rounded-2xl border border-slate-200 bg-white">
       <table className="w-full min-w-[280px] border-collapse text-center text-sm">
-        <thead>
+        <thead className="sticky top-0 z-10">
           <tr className="border-b border-slate-200 bg-slate-50">
-            <th className="px-3 py-3 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">日期</th>
-            <th className="px-3 py-3 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">单据类型</th>
+            <th className="sticky top-0 bg-slate-50 px-3 py-3 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">日期</th>
+            <th className="sticky top-0 bg-slate-50 px-3 py-3 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">单据类型</th>
             {showDeliveryDateColumn ? (
-              <th className="px-3 py-3 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">交货日期</th>
+              <th className="sticky top-0 bg-slate-50 px-3 py-3 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">交货日期</th>
             ) : null}
-            <th className="px-3 py-3 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">商品数量</th>
+            <th className="sticky top-0 bg-slate-50 px-3 py-3 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">商品数量</th>
             {showVariantCols &&
               variantColumnIds.map(vid => (
                 <th
                   key={vid}
-                  className="px-2 py-3 text-[10px] font-black uppercase tracking-wider text-slate-500 max-w-[7rem] truncate"
+                  className="sticky top-0 bg-slate-50 px-2 py-3 text-[10px] font-black uppercase tracking-wider text-slate-500 max-w-[7rem] truncate"
                   title={variantLabel(vid)}
                 >
                   {variantLabel(vid)}
@@ -143,13 +143,13 @@ const OutsourcePartnerFlowDetailTable: React.FC<OutsourcePartnerFlowDetailTableP
             <td className="px-3 py-3 font-black text-slate-800 whitespace-nowrap text-left" colSpan={labelColSpan}>
               剩余数量
             </td>
-            <td className="px-3 py-3 font-black text-slate-900 tabular-nums">{remainingTotal} 件</td>
+            <td className={`px-3 py-3 font-black tabular-nums ${remainingTotal < 0 ? 'text-rose-600' : 'text-slate-900'}`}>{remainingTotal} 件</td>
             {showVariantCols &&
               variantColumnIds.map(vid => {
                 const q = remainingByVariant[vid] ?? 0;
                 return (
-                  <td key={vid} className="px-2 py-3 font-black text-slate-900 tabular-nums">
-                    {q > 0 ? `${q} 件` : '—'}
+                  <td key={vid} className={`px-2 py-3 font-black tabular-nums ${q < 0 ? 'text-rose-600' : 'text-slate-900'}`}>
+                    {q !== 0 ? `${q} 件` : '—'}
                   </td>
                 );
               })}

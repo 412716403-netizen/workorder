@@ -473,6 +473,7 @@
 
 **同工序多产品 / 多款同批报工**（参考外协收货扫码归集）：
 
+- **主列表报工权限门控**：工单中心主列表「工序圈圈」点击报工受角色权限「生产管理 → 工单中心 → 报工流水 · 添加」（`production:orders_report_records:create`）控制——未勾选则圈圈不可点击、无法报工；owner、未配置细粒度权限、或持有裸 `production` 模块键者放行（见 `OrderListView.hasProcessReportPerm`）。
 - **工序报工**（[`ReportModal`](../views/order-list/ReportModal.tsx) + [`useReportModalState`](../hooks/useReportModalState.ts)）：从某工序节点打开弹窗后，工序模板（`milestone.templateId`）已锁定；批量扫码可扫入**不同产品 / 不同款**的码，系统按 `productId` 归集成多行，共享生产人员 / 设备 / 自定义字段，提交时逐产品、逐规格写入（关联工单模式 → `createReport`；关联产品模式 → `createProductReport`）。扫码须通过计划树兼容校验（关联工单模式：与入口工单 `planOrderId` 父子链兼容；**关联产品模式**：与该产品任一工单的 `planOrderId` 兼容，或处于同一计划树根下的兄弟子计划），且目标产品须包含当前工序模板。
 - **返工报工**（[`ReworkReportSubmitModal`](../views/production-ops/ReworkReportSubmitModal.tsx)）：从某产品/工单工序入口打开时，弹窗**仅展示该入口范围内的待返工路径**（关联产品模式按 `productId`；关联工单模式再限定 `orderId`）；扫码按 `productId + 规格` 在可见路径内累加，提交时 `REWORK_REPORT.productId` 取源 `REWORK` 记录；委外返工收回按产品各生成一条 `OUTSOURCE` 汇总单。
 - **硬约束**：一次报工会话内所有扫码须属于**同一工序模板**；不允许跨工序混扫（外协收货通过首扫锁 `nodeId` 实现；报工 / 返工通过入口工序锁定 + 扫码时校验产品是否含该工序）。
@@ -492,9 +493,9 @@
 
 - `当前表单数量 + 本次扫码数量 > 该格 / 该单允许的最大数量` → toast 给出最大可填值与超出量，**不写入列表、不累加表单**。
 - 各入口「最大数量」与 UI 上展示的口径一致：
-  - 工序报工矩阵：`getSeqRemainingForVariant(vid) − 不良 − 净外协`
-  - 工序报工单规格：`effectiveRemainingForModal`
-  - 待入库矩阵：`pendingByVariant[variantId]`；单规格：`pendingTotal`
+  - 工序报工矩阵：`getSeqRemainingForVariant(vid) − 不良 − 净外协`；**受 `SystemSetting.allowExceedMaxReportQty` 控制**——开启后扫码上限放开（`ReportModal` 的 `getScanMaxQty` 返回 null，不再向 `validate-usage` 传 `maxQty`），与矩阵/单规格手输放开口径及后端 `enforceReportQuantity` 同步。
+  - 工序报工单规格：`effectiveRemainingForModal`；同样受 `allowExceedMaxReportQty` 控制，开启后扫码不再拦截。
+  - 待入库矩阵：`pendingByVariant[variantId]`；单规格：`pendingTotal`；**受 `SystemSetting.allowExceedMaxStockInQty` 控制**——开启后工单中心「待入库清单」入库时所有 pending clamp（单条/批量弹窗手输、矩阵 cell、清单扫码累加）全部跳过，允许录入超过待入库的数量（后端 STOCK_IN 本就无数量硬校验）。
   - 返工报工：路径行的 `pendingByVariant` / `totalPending`
   - 外协收货：行级 `pending`（已派 − 已收）；**受 `SystemSetting.allowExceedMaxOutsourceReceiveQty` 控制**——开启后所有 pending clamp（手输、矩阵 cell、扫码累加）以及 `OutsourcePanel.handleReceiveFormSubmit` 的提交校验全部跳过，后端 `enforceOutsourceReceiveQuantity` 同步放行。
 - 历史接口 `addScanQtyToStockInForm` 改为「超上限不修改表单」的兜底行为；新代码统一调用 [`tryAddScanQtyToStockInForm`](../utils/pendingStockScanMatch.ts) 与 [`checkExceedMax`](../utils/scanApplyGuards.ts)。
@@ -519,6 +520,8 @@
 - **例外**：外协收货（[`OutsourcePanel.handleReceiveFormSubmit`](../views/production-ops/OutsourcePanel.tsx)）单品码模式采用「逐件单独落一条 qty1 记录、各挂自己的 `item_code_id`」实现同样效果，不走 `__scanItemCodeIds` 列表（见 5.4.2）。
 
 **外协主列表显示**（表单配置 → 外协管理 →「列表显示」）：`outsourceFormSettings.hideZeroPendingPartnerOnList` 为 true 时，主列表隐藏加工厂「剩余」为 0（已全部收回）的小卡；若工单/产品下加工厂均被隐藏则整行也不显示。仅影响主列表展示，不影响外协流水、待收回清单与收货业务。
+
+**剩余数量负数显示**：加工厂小卡「发出 / 剩余」与「加工厂往来数量明细」弹窗（`OutsourcePartnerFlowDetailTable`）的「剩余数量」行口径统一为 `剩余 = 已派 − 已收`，**超收时显示负数并标红**（参考工单中心工序圈圈剩余口径，不再 clamp 到 0；计算见 `computeDispatchReceiveRemaining`）。`hideZeroPendingPartnerOnList` 仍按 `剩余 > 0` 过滤——超收（剩余 ≤ 0）小卡视为已收完，开启隐藏时不展示。
 
 ### 5.4.2 外协收货：清单弹窗扫码 → 自动跳录入弹窗
 

@@ -107,6 +107,38 @@ describe('tryAddScanQtyToStockInForm', () => {
     );
     expect(result.ok).toBe(false);
   });
+
+  it('accepts over-cap add when allowExceed is true (variant)', () => {
+    const result = tryAddScanQtyToStockInForm(
+      { variantQuantities: { v1: 4 }, singleQuantity: 0 },
+      {
+        hasColorSize: true,
+        pendingTotal: 5,
+        pendingByVariant: { v1: 5 },
+        variantId: 'v1',
+        addQty: 3,
+        allowExceed: true,
+      },
+    );
+    if (!result.ok) throw new Error('expected success');
+    expect(result.form.variantQuantities.v1).toBe(7);
+  });
+
+  it('accepts over-cap add when allowExceed is true (single)', () => {
+    const result = tryAddScanQtyToStockInForm(
+      { variantQuantities: {}, singleQuantity: 4 },
+      {
+        hasColorSize: false,
+        pendingTotal: 5,
+        pendingByVariant: {},
+        variantId: '',
+        addQty: 3,
+        allowExceed: true,
+      },
+    );
+    if (!result.ok) throw new Error('expected success');
+    expect(result.form.singleQuantity).toBe(7);
+  });
 });
 
 describe('addScanQtyToStockInForm (legacy)', () => {

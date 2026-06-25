@@ -76,6 +76,7 @@ interface OrderListViewProps {
   productionLinkMode?: 'order' | 'product';
   processSequenceMode?: ProcessSequenceMode;
   allowExceedMaxReportQty?: boolean;
+  allowExceedMaxStockInQty?: boolean;
   orders: ProductionOrder[];
   /** 打印模版管理弹窗预览用；可传空数组 */
   plans?: PlanOrder[];
@@ -147,6 +148,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
   productionLinkMode = 'order',
   processSequenceMode = 'sequential',
   allowExceedMaxReportQty = false,
+  allowExceedMaxStockInQty = false,
   initialDetailOrderId,
   onClearDetailOrderIdFromState,
   orders,
@@ -197,13 +199,16 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
     if (userPermissions.some(p => p.startsWith(`${permKey}:`))) return true;
     return false;
   };
+  /**
+   * 主列表「工序圈圈」点击报工的门控：受角色「报工流水 · 添加」复选框
+   * （`production:orders_report_records:create`）控制。
+   * owner / 无细粒度配置 / 持有裸 `production` 模块键者放行；否则必须勾选该项才允许报工。
+   */
   const hasProcessReportPerm = (): boolean => {
     if (_isOwner) return true;
     if (!userPermissions) return true;
     if (userPermissions.includes('production')) return true;
-    if (userPermissions.includes('process_report')) return true;
-    if (userPermissions.includes('production:orders_list:allow')) return true;
-    return false;
+    return userPermissions.includes('production:orders_report_records:create');
   };
   const confirm = useConfirm();
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
@@ -1612,6 +1617,7 @@ const OrderListView: React.FC<OrderListViewExtendedProps> = ({
         productMilestoneProgresses={productMilestoneProgresses}
         productionLinkMode={productionLinkMode}
         processSequenceMode={processSequenceMode}
+        allowExceedMaxStockInQty={allowExceedMaxStockInQty}
         orderFormSettings={orderFormSettings}
         printTemplates={printTemplates}
         onOpenOrderFormPrintTab={hasOrderPerm('production:orders_form_config:allow') ? openOrderFormPrintTab : undefined}

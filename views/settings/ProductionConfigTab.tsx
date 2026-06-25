@@ -11,6 +11,8 @@ interface ProductionConfigTabProps {
   onUpdateAllowExceedMaxReportQty?: (value: boolean) => void;
   allowExceedMaxOutsourceReceiveQty: boolean;
   onUpdateAllowExceedMaxOutsourceReceiveQty?: (value: boolean) => void;
+  allowExceedMaxStockInQty: boolean;
+  onUpdateAllowExceedMaxStockInQty?: (value: boolean) => void;
   weightTolerancePercent: number;
   onUpdateWeightTolerancePercent?: (value: number) => void;
   canEdit: boolean;
@@ -29,6 +31,8 @@ const ProductionConfigTab: React.FC<ProductionConfigTabProps> = ({
   onUpdateAllowExceedMaxReportQty,
   allowExceedMaxOutsourceReceiveQty,
   onUpdateAllowExceedMaxOutsourceReceiveQty,
+  allowExceedMaxStockInQty,
+  onUpdateAllowExceedMaxStockInQty,
   weightTolerancePercent,
   onUpdateWeightTolerancePercent,
   canEdit,
@@ -77,6 +81,26 @@ const ProductionConfigTab: React.FC<ProductionConfigTabProps> = ({
               className={`ml-4 shrink-0 ${!canEdit ? 'cursor-not-allowed opacity-60' : ''}`}
             >
               {allowExceedMaxOutsourceReceiveQty ? (
+                <ToggleRight className={`h-10 w-10 ${!canEdit ? 'text-slate-400' : 'text-indigo-600'}`} />
+              ) : (
+                <ToggleLeft className="h-10 w-10 text-slate-300" />
+              )}
+            </button>
+          </div>
+          <div className={TOGGLE_ROW}>
+            <div>
+              <p className={OPTION_LABEL}>允许生产入库数量超过最大可入库数量</p>
+              <p className={OPTION_DESC}>
+                关闭后，工单中心「待入库清单」做入库时，入库数量将被限制在每行/每规格的「待入库 N」以内，无法录入更大的数值。
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={!canEdit}
+              onClick={() => onUpdateAllowExceedMaxStockInQty?.(!allowExceedMaxStockInQty)}
+              className={`ml-4 shrink-0 ${!canEdit ? 'cursor-not-allowed opacity-60' : ''}`}
+            >
+              {allowExceedMaxStockInQty ? (
                 <ToggleRight className={`h-10 w-10 ${!canEdit ? 'text-slate-400' : 'text-indigo-600'}`} />
               ) : (
                 <ToggleLeft className="h-10 w-10 text-slate-300" />
