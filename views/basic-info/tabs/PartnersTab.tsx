@@ -5,7 +5,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Building2, Plus, Search, X, Edit2, Trash2, ArrowLeft, Save } from 'lucide-react';
+import { Building2, Plus, Search, X, Edit2, Trash2, ArrowLeft, Save, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Partner, PartnerCategory } from '../../../types';
 import * as api from '../../../services/api';
@@ -14,11 +14,16 @@ import { useAsyncSubmitLock } from '../../../hooks/useAsyncSubmitLock';
 import { filterPartnersByCategoryAndKeyword } from '../../../utils/basicInfoFilters';
 import { findPartnerByName } from '../../../utils/partnerNormalize';
 import ReportCustomFieldsEditor from '../../../components/ReportCustomFieldsEditor';
+import PartnerImportModal from '../../PartnerImportModal';
 import {
   formStandardControlClass,
   formStandardControlIconClass,
   formStandardLabelClass,
 } from '../../../styles/uiDensity';
+import { useClientPagination } from '../../../hooks/useClientPagination';
+import ListPageControls from '../../../components/ListPageControls';
+
+const PARTNER_ARCHIVE_PAGE_SIZE = 20;
 
 interface Props {
   partners: Partner[];
@@ -36,6 +41,7 @@ const PartnersTab: React.FC<Props> = ({ partners, partnerCategories, onRefreshPa
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editPartner, setEditPartner] = useState<Partial<Partner>>({});
   const [showModal, setShowModal] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
   const partnerSubmit = useAsyncSubmitLock();
   const queryClient = useQueryClient();
 
@@ -43,6 +49,16 @@ const PartnersTab: React.FC<Props> = ({ partners, partnerCategories, onRefreshPa
     () => filterPartnersByCategoryAndKeyword(partners, activePartnerCategoryId, debouncedSearchTerm),
     [partners, activePartnerCategoryId, debouncedSearchTerm],
   );
+
+  const partnerListResetKey = `${activePartnerCategoryId}|${debouncedSearchTerm}`;
+  const {
+    page: partnerPage,
+    setPage: setPartnerPage,
+    totalPages: partnerTotalPages,
+    pagedItems: pagedPartners,
+    total: filteredPartnerTotal,
+    pageSize: partnerPageSize,
+  } = useClientPagination(filteredPartners, PARTNER_ARCHIVE_PAGE_SIZE, partnerListResetKey);
 
   const handleOpenPartner = (p?: Partner) => {
     setEditPartner(
@@ -209,6 +225,13 @@ const PartnersTab: React.FC<Props> = ({ partners, partnerCategories, onRefreshPa
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
+              onClick={() => setImportModalOpen(true)}
+              className="bg-white text-indigo-600 border border-indigo-200 px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-indigo-50 hover:border-indigo-300 active:scale-[0.98] transition-all"
+            >
+              <Upload className="w-4 h-4 shrink-0" /> 导入单位
+            </button>
+            <button
+              type="button"
               onClick={() => handleOpenPartner()}
               className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm hover:bg-indigo-700 active:scale-[0.98] transition-all"
             >
@@ -266,6 +289,12 @@ const PartnersTab: React.FC<Props> = ({ partners, partnerCategories, onRefreshPa
           </div>
         </div>
 
+        {filteredPartnerTotal > 0 && partnerTotalPages > 1 && (
+          <p className="text-xs font-bold text-slate-500">
+            共 <span className="text-indigo-600 tabular-nums">{filteredPartnerTotal}</span> 条 · 每页 {partnerPageSize} 条
+          </p>
+        )}
+
         {filteredPartners.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 px-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50">
             <Building2 className="w-10 h-10 text-slate-200 mb-3" />
@@ -292,7 +321,7 @@ const PartnersTab: React.FC<Props> = ({ partners, partnerCategories, onRefreshPa
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredPartners.map(p => {
+                {pagedPartners.map(p => {
                   const category = partnerCategories.find(c => c.id === p.categoryId);
                   const phoneFieldId = category?.customFields.find(f => f.label.includes('电话'))?.id;
                   const phoneNumber = phoneFieldId ? p.customData?.[phoneFieldId] : null;
@@ -375,9 +404,27 @@ const PartnersTab: React.FC<Props> = ({ partners, partnerCategories, onRefreshPa
                 })}
               </tbody>
             </table>
+            <ListPageControls
+              page={partnerPage}
+              totalPages={partnerTotalPages}
+              total={filteredPartnerTotal}
+              pageSize={partnerPageSize}
+              onPageChange={setPartnerPage}
+            />
           </div>
         )}
       </div>
+
+      <PartnerImportModal
+        isOpen={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        partnerCategories={partnerCategories}
+        partners={partners}
+        onImportComplete={async () => {
+          setImportModalOpen(false);
+          await onRefreshPartners();
+        }}
+      />
     </div>
   );
 };

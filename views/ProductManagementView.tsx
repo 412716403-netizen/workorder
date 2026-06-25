@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   Package, 
   Plus, 
@@ -8,6 +8,7 @@ import {
   X,
   Upload,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Product, GlobalNodeTemplate, ProductCategory, PartnerCategory, BOM, AppDictionaries, Partner } from '../types';
 import ProductImportModal from './ProductImportModal';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
@@ -17,7 +18,13 @@ import { bomHasConfiguredItems } from '../utils/bomEffective';
 import { getProductCategoryCustomFieldEntries } from '../utils/reportCustomDocField';
 import { productMatchesSearchQuery } from '../utils/productSearchMatch';
 import { compareProductsArchiveOrder } from '../utils/productSort';
+import { isProductEnabled } from '../utils/productEnabled';
 import { useConfigData, useOrdersData } from '../contexts/AppDataContext';
+import { useClientPagination } from '../hooks/useClientPagination';
+import ListPageControls from '../components/ListPageControls';
+import * as api from '../services/api';
+
+const PRODUCT_ARCHIVE_PAGE_SIZE = 20;
 
 const PRODUCT_ARCHIVE_ALL = '__all__';
 
@@ -71,6 +78,7 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [productArchiveSearch, setProductArchiveSearch] = useState('');
   const debouncedProductSearch = useDebouncedValue(productArchiveSearch);
+  const [togglingEnabledId, setTogglingEnabledId] = useState<string | null>(null);
 
   const categoryCountMap = useMemo(() => {
     const m = new Map<string, number>();
@@ -114,6 +122,26 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     setEditingProduct(JSON.parse(JSON.stringify(p)));
   };
 
+  const handleToggleEnabled = useCallback(async (product: Product, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!permCanEdit || togglingEnabledId) return;
+    const nextEnabled = !isProductEnabled(product);
+    setTogglingEnabledId(product.id);
+    try {
+      await api.products.update(product.id, { enabled: nextEnabled });
+      if (onRefreshProducts) {
+        await onRefreshProducts();
+      } else {
+        await onUpdateProduct({ ...product, enabled: nextEnabled });
+      }
+      toast.success(nextEnabled ? '已启用' : '已禁用');
+    } catch (err) {
+      toast.error((err as Error).message || '操作失败');
+    } finally {
+      setTogglingEnabledId(null);
+    }
+  }, [permCanEdit, togglingEnabledId, onRefreshProducts, onUpdateProduct]);
+
   const handleStartCreateProduct = () => {
     const newId = `p-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setEditingProduct({
@@ -140,7 +168,17 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
             return productMatchesSearchQuery(p, cat, q);
           });
     return [...searched].sort(compareProductsArchiveOrder);
-  }, [products, activeCategoryFilter, debouncedProductSearch]);
+  }, [products, activeCategoryFilter, debouncedProductSearch, categoryMapPM]);
+
+  const productListResetKey = `${activeCategoryFilter}|${debouncedProductSearch}`;
+  const {
+    page: productPage,
+    setPage: setProductPage,
+    totalPages: productTotalPages,
+    pagedItems: pagedProducts,
+    total: filteredProductTotal,
+    pageSize: productPageSize,
+  } = useClientPagination(filteredProducts, PRODUCT_ARCHIVE_PAGE_SIZE, productListResetKey);
 
   const productsInActiveCategoryCount = useMemo(() => {
     if (activeCategoryFilter === PRODUCT_ARCHIVE_ALL) return products.length;
@@ -238,10 +276,18 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
 
           {productArchiveSearch.trim() !== '' && productsInActiveCategoryCount > 0 && (
             <p className="text-xs font-bold text-slate-500">
-              当前分类下找到 <span className="text-indigo-600 tabular-nums">{filteredProducts.length}</span> 条
-              {filteredProducts.length < productsInActiveCategoryCount && (
+              当前分类下找到 <span className="text-indigo-600 tabular-nums">{filteredProductTotal}</span> 条
+              {filteredProductTotal < productsInActiveCategoryCount && (
                 <span className="text-slate-400 font-medium">（共 {productsInActiveCategoryCount} 条）</span>
               )}
+              {productTotalPages > 1 && (
+                <span className="text-slate-400 font-medium"> · 每页 {productPageSize} 条</span>
+              )}
+            </p>
+          )}
+          {productArchiveSearch.trim() === '' && filteredProductTotal > 0 && productTotalPages > 1 && (
+            <p className="text-xs font-bold text-slate-500">
+              共 <span className="text-indigo-600 tabular-nums">{filteredProductTotal}</span> 条 · 每页 {productPageSize} 条
             </p>
           )}
 
@@ -268,11 +314,12 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                     <th className="py-3 px-3 text-center hidden md:table-cell">变体</th>
                     <th className="py-3 px-3 text-center hidden lg:table-cell">BOM</th>
                     <th className="py-3 px-3 text-right hidden sm:table-cell">价格</th>
+                    <th className="py-3 px-3 text-center w-20">状态</th>
                     <th className="py-3 pr-4 pl-2 w-12"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredProducts.map(product => {
+                  {pagedProducts.map(product => {
                     const category = categoryMapPM.get(product.categoryId);
                     const bomCount = bomCountMap.get(product.id) || 0;
                     const sales = product.salesPrice ?? 0;
@@ -280,8 +327,13 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                     const displayPrice = sales > 0 ? sales : purchase;
                     const priceLabel = sales > 0 ? '销售' : '采购';
                     const customTags = getProductCategoryCustomFieldEntries(product, category, { includeFile: false }).slice(0, 2);
+                    const enabled = isProductEnabled(product);
                     return (
-                      <tr key={product.id} className="group hover:bg-indigo-50/40 transition-colors cursor-pointer" onClick={() => permCanEdit && handleStartEditProduct(product)}>
+                      <tr
+                        key={product.id}
+                        className={`group hover:bg-indigo-50/40 transition-colors cursor-pointer ${!enabled ? 'opacity-60' : ''}`}
+                        onClick={() => permCanEdit && handleStartEditProduct(product)}
+                      >
                         <td className="py-3 pl-4 pr-2">
                           <div className="w-9 h-9 bg-slate-50 rounded-xl flex items-center justify-center overflow-hidden text-slate-400 shrink-0">
                             {product.imageUrl ? (
@@ -292,7 +344,14 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                           </div>
                         </td>
                         <td className="py-3 px-3">
-                          <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors truncate max-w-[220px]">{product.name}</p>
+                          <p className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors truncate max-w-[220px]">
+                            {product.name}
+                            {!enabled && (
+                              <span className="ml-1.5 inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-200 text-slate-500 align-middle">
+                                已禁用
+                              </span>
+                            )}
+                          </p>
                           <p className="sm:hidden text-[10px] text-slate-400 font-medium mt-0.5">{product.sku}</p>
                           {customTags.length > 0 && (
                             <div className="mt-1 flex flex-wrap items-center gap-1">
@@ -323,6 +382,31 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                           <span className="text-sm font-bold text-slate-800">¥{displayPrice > 0 ? displayPrice.toLocaleString() : '0'}</span>
                           {displayPrice > 0 && <span className="text-[9px] text-slate-400 ml-1">{priceLabel}</span>}
                         </td>
+                        <td className="py-3 px-3 text-center" onClick={e => e.stopPropagation()}>
+                          {permCanEdit ? (
+                            <button
+                              type="button"
+                              disabled={togglingEnabledId === product.id}
+                              onClick={e => void handleToggleEnabled(product, e)}
+                              title={enabled ? '点击禁用' : '点击启用'}
+                              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 disabled:opacity-50 ${
+                                enabled ? 'bg-indigo-600' : 'bg-slate-300'
+                              }`}
+                              aria-label={enabled ? '禁用产品' : '启用产品'}
+                              aria-pressed={enabled}
+                            >
+                              <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                                  enabled ? 'translate-x-6' : 'translate-x-1'
+                                }`}
+                              />
+                            </button>
+                          ) : (
+                            <span className={`text-[10px] font-bold ${enabled ? 'text-emerald-600' : 'text-slate-400'}`}>
+                              {enabled ? '启用' : '禁用'}
+                            </span>
+                          )}
+                        </td>
                         <td className="py-3 pr-4 pl-2">
                           {permCanEdit && (
                             <button type="button" onClick={(e) => { e.stopPropagation(); handleStartEditProduct(product); }}
@@ -336,6 +420,13 @@ const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                   })}
                 </tbody>
               </table>
+              <ListPageControls
+                page={productPage}
+                totalPages={productTotalPages}
+                total={filteredProductTotal}
+                pageSize={productPageSize}
+                onPageChange={setProductPage}
+              />
             </div>
           )}
       </div>

@@ -531,6 +531,8 @@ export interface Product {
   nodePricingModes?: Record<string, ProcessPricingMode>;
   /** 产品模式下已下达生产工单时，后端计算的运行时只读标志：工序（milestoneNodeIds）不可再改 */
   processLocked?: boolean;
+  /** 是否启用；缺省 true。禁用后不在商品选择组件中出现，档案列表仍可管理 */
+  enabled?: boolean;
 }
 
 export interface Warehouse {

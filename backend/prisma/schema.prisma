@@ -355,6 +355,8 @@ model Product {
   routeReportDisplayValues  Json     @default("{}") @map("route_report_display_values")
   nodeRates          Json     @default("{}") @map("node_rates")
   nodePricingModes   Json     @default("{}") @map("node_pricing_modes")
+  /** 禁用后不在商品选择组件中展示，档案列表仍可查看与重新启用 */
+  enabled            Boolean  @default(true)
   createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt          DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 

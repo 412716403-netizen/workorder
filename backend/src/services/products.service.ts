@@ -445,6 +445,23 @@ export async function updateProduct(
   const existing = await db.product.findUnique({ where: { id: productId } });
   if (!existing) throw new AppError(404, '产品不存在');
 
+  /** 列表开关仅改 enabled，跳过名称/SKU/变体等完整校验 */
+  if (
+    Object.keys(data).length === 1 &&
+    'enabled' in data &&
+    typeof data.enabled === 'boolean'
+  ) {
+    const updated = await db.product.update({
+      where: { id: productId },
+      data: { enabled: data.enabled },
+      include: { category: true, variants: { orderBy: { id: 'asc' as const } } },
+    });
+    const mode = await getProductionLinkMode(tenantId);
+    const activeOrderProductIds =
+      mode === 'product' ? await getProductIdsWithActiveOrders(db) : new Set<string>();
+    return attachProcessLocked(updated, mode, activeOrderProductIds);
+  }
+
   const { name, sku } = normalizeProductNameSku(data, { name: existing.name, sku: existing.sku });
   if (!name) throw new AppError(400, '产品名称不能为空');
   if (!sku) throw new AppError(400, '产品编号不能为空');
@@ -741,6 +758,7 @@ export async function importProducts(
         routeReportValues: {} as Prisma.InputJsonValue,
         routeReportDisplayValues: {} as Prisma.InputJsonValue,
         nodeRates: {} as Prisma.InputJsonValue, nodePricingModes: {} as Prisma.InputJsonValue,
+        enabled: true,
       };
 
       const variants: Array<{ id: string; colorId: string; sizeId: string; skuSuffix: string; nodeBoms: Prisma.InputJsonValue; nodeUnitWeights: Prisma.InputJsonValue }> = [];

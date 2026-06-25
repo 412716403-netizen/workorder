@@ -11,6 +11,7 @@ import {
 } from '../utils/reportCustomDocField';
 import { compareProductsArchiveOrder } from '../utils/productSort';
 import { productMatchesSearchQuery } from '../utils/productSearchMatch';
+import { filterSelectableProducts } from '../utils/productEnabled';
 import { lazyWithReloadOnChunkError } from '../utils/lazyWithReloadOnChunkError';
 
 /** 动态加载，避免与 ProductEditForm 形成静态循环依赖（否则 BOM 内 SearchableProductSelect 会整段挂掉） */
@@ -36,6 +37,7 @@ export function SearchableProductSelect({
   onFilePreview,
   triggerClassName,
   allowQuickCreate = true,
+  includeDisabled = false,
 }: {
   options: Product[];
   value: string;
@@ -54,6 +56,8 @@ export function SearchableProductSelect({
   triggerClassName?: string;
   /** 是否在下拉内显示「新增产品」入口；默认 true（仍需权限判断） */
   allowQuickCreate?: boolean;
+  /** 为 true 时下拉包含已禁用产品；默认 false */
+  includeDisabled?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -77,9 +81,14 @@ export function SearchableProductSelect({
 
   const selectedProduct = options.find(p => p.id === value);
 
+  const selectableOptions = useMemo(
+    () => (includeDisabled ? options : filterSelectableProducts(options, value)),
+    [options, value, includeDisabled],
+  );
+
   const filteredOptions = useMemo(() => {
     const q = search.trim();
-    return options
+    return selectableOptions
       .filter(p => {
         const cat = categories.find(c => c.id === p.categoryId) ?? null;
         const matchesSearch = productMatchesSearchQuery(p, cat, q);
@@ -87,7 +96,7 @@ export function SearchableProductSelect({
         return matchesSearch && matchesCategory;
       })
       .sort(compareProductsArchiveOrder);
-  }, [options, search, activeTab, categories]);
+  }, [selectableOptions, search, activeTab, categories]);
 
   const updatePanelPosition = useCallback(() => {
     const el = triggerRef.current;

@@ -132,6 +132,84 @@ export async function deletePartner(db: TenantPrismaClient, id: string) {
   return { message: '已删除' };
 }
 
+export async function importPartners(
+  db: TenantPrismaClient,
+  body: {
+    categoryId: string;
+    partners: Array<Record<string, unknown>>;
+  },
+) {
+  const { categoryId, partners: rows } = body;
+  if (!categoryId) throw new AppError(400, '必须指定单位分类');
+  if (!Array.isArray(rows) || rows.length === 0) throw new AppError(400, '导入数据不能为空');
+
+  const category = await db.partnerCategory.findUnique({ where: { id: categoryId } });
+  if (!category) throw new AppError(404, '合作单位分类不存在');
+
+  const existingPartners = await db.partner.findMany({ select: { name: true } });
+  const existingNames = new Set(existingPartners.map((p) => p.name.trim().toLowerCase()));
+
+  const results: Array<{ row: number; success: boolean; name?: string; reason?: string }> = [];
+  let successCount = 0;
+  const batchNames = new Set<string>();
+
+  const maxRow = await db.partner.aggregate({ _max: { partnerListNo: true } });
+  let nextListNo = (maxRow._max.partnerListNo ?? 0) + 1;
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowNum = i + 1;
+    try {
+      const name = typeof row.name === 'string' ? row.name.trim() : String(row.name ?? '').trim();
+      if (!name) {
+        results.push({ row: rowNum, success: false, name, reason: '单位名称不能为空' });
+        continue;
+      }
+      const nameKey = name.toLowerCase();
+      if (batchNames.has(nameKey)) {
+        results.push({ row: rowNum, success: false, name, reason: `单位名称 "${name}" 在文件中重复` });
+        continue;
+      }
+      batchNames.add(nameKey);
+      if (existingNames.has(nameKey)) {
+        results.push({ row: rowNum, success: false, name, reason: `单位名称 "${name}" 已存在` });
+        continue;
+      }
+
+      const rawCustom = row.customData;
+      const customData =
+        rawCustom && typeof rawCustom === 'object' && !Array.isArray(rawCustom)
+          ? rawCustom as Record<string, unknown>
+          : {};
+
+      await db.partner.create({
+        data: {
+          id: genId('partner'),
+          name,
+          categoryId,
+          contact: null,
+          customData,
+          partnerListNo: nextListNo++,
+        },
+      });
+
+      existingNames.add(nameKey);
+      successCount++;
+      results.push({ row: rowNum, success: true, name });
+    } catch (e: unknown) {
+      const msg = e instanceof AppError ? e.message : (e instanceof Error ? e.message : '未知错误');
+      results.push({
+        row: rowNum,
+        success: false,
+        name: typeof row.name === 'string' ? row.name : String(row.name ?? ''),
+        reason: msg,
+      });
+    }
+  }
+
+  return { success: successCount, failed: results.filter((r) => !r.success).length, results };
+}
+
 // ── 工人 ──
 
 export async function listWorkers(

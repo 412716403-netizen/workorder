@@ -1,7 +1,11 @@
 import { request, crud } from './_client';
 
 // ── Master Data ──
-export const partners = crud('/master/partners');
+export const partners = {
+  ...crud('/master/partners'),
+  import: (data: { categoryId: string; partners: unknown[] }) =>
+    request('/master/partners/import', { method: 'POST', body: JSON.stringify(data) }),
+};
 export const workers = crud('/master/workers');
 export const equipment = crud('/master/equipment');
 export const dictionaries = {

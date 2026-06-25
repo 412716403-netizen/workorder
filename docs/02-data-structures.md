@@ -242,6 +242,7 @@ interface BOM {
 
 | 字段 | 说明 |
 |------|------|
+| `enabled` | 是否启用，默认 `true`；禁用后不在 `SearchableProductSelect` 等商品选择组件中出现（已选中的禁用产品仍显示名称） |
 | `processLocked` | **运行时只读**（API 计算，不落库）：产品模式且已有非 `PENDING_PROCESS` 工单且 `milestoneNodeIds` 非空时为 `true`，表示工序路线不可再改 |
 
 ### 6.1 产品分类 (ProductCategory)

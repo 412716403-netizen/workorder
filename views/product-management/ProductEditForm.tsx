@@ -52,6 +52,7 @@ import {
 import { toast } from 'sonner';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { isProductProcessLocked, milestoneNodeIdsEqual } from '../../shared/productProcessLock';
+import { isProductEnabled } from '../../utils/productEnabled';
 import * as api from '../../services/api';
 import { SearchableProductSelect } from '../../components/SearchableProductSelect';
 import { SupplierSelect } from '../../components/SupplierSelect';
@@ -300,7 +301,7 @@ const BomBatchAddPanel = ({
   const blockedSet = useMemo(() => new Set(blockedProductIds.filter(Boolean)), [blockedProductIds]);
 
   const pool = useMemo(
-    () => options.filter(p => p.id !== parentProductId),
+    () => options.filter(p => p.id !== parentProductId && isProductEnabled(p)),
     [options, parentProductId],
   );
 

@@ -21,6 +21,9 @@ export const updatePartner = asyncHandler(async (req, res) => {
 export const deletePartner = asyncHandler(async (req, res) => {
   res.json(await masterDataService.deletePartner(getTenantPrisma(req.tenantId!), str(req.params.id)));
 });
+export const importPartners = asyncHandler(async (req, res) => {
+  res.json(await masterDataService.importPartners(getTenantPrisma(req.tenantId!), req.body));
+});
 
 // ── 工人 ──
 export const listWorkers = asyncHandler(async (req, res) => {
