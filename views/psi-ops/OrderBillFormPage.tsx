@@ -23,7 +23,10 @@ import PurchaseBillFormSection from './PurchaseBillFormSection';
 import { localTodayYmd, localCalendarYmdStartToIso, toLocalDateYmd } from '../../utils/localDateTime';
 import { flowRecordsEarliestMs } from '../../utils/flowDocSort';
 import { nextPsiDocNumber } from '../../utils/partnerDocNumber';
-import { buildSalesOrderPrintRenderContext } from '../../utils/buildSalesOrderPrintContext';
+import {
+  buildSalesOrderPrintRenderContext,
+  buildSalesOrderPrintContextFromPsiDoc,
+} from '../../utils/buildSalesOrderPrintContext';
 import { buildPurchaseBillPrintRenderContext } from '../../utils/buildPurchaseBillPrintContext';
 import { maskPrintContextAmounts } from '../../utils/maskPrintContextAmounts';
 import { useAuth } from '../../contexts/AuthContext';
@@ -608,7 +611,21 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
   );
 
   const buildSalesOrderPrintContext = useCallback(
-    (_template: PrintTemplate) => {
+    (template: PrintTemplate) => {
+      // 「一个销售订单（未配货）」：未配货数量依赖服务端记录的已发/已配，按底层记录重算更准确
+      if (template.documentType === 'salesOrderUnshipped' && editingDocNumber) {
+        const docItems = recordsList.filter(
+          r => r.type === 'SALES_ORDER' && r.docNumber === editingDocNumber,
+        );
+        const unshippedCtx = buildSalesOrderPrintContextFromPsiDoc({
+          docNumber: soDocNumberForPrint,
+          docItems,
+          productMap: productMapPSI,
+          dictionaries,
+          onlyUnshipped: true,
+        });
+        return showSoAmount ? unshippedCtx : maskPrintContextAmounts(unshippedCtx);
+      }
       const ctx = buildSalesOrderPrintRenderContext({
         docNumber: soDocNumberForPrint,
         partner: String(form.partner ?? ''),
@@ -626,7 +643,7 @@ const OrderBillFormPage: React.FC<OrderBillFormPageProps> = ({
       });
       return showSoAmount ? ctx : maskPrintContextAmounts(ctx);
     },
-    [soDocNumberForPrint, form.partner, form.customData, salesOrderItems, productMapPSI, dictionaries, docOperator, showSoAmount],
+    [soDocNumberForPrint, form.partner, form.customData, salesOrderItems, productMapPSI, dictionaries, docOperator, showSoAmount, editingDocNumber, recordsList],
   );
 
   const addSalesBillItem = () =>

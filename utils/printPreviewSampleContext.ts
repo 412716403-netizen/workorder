@@ -520,7 +520,7 @@ export function augmentPrintPreviewContext(
       ],
     };
   }
-  if (dt === 'salesOrder' && !next.salesOrderPrint) {
+  if ((dt === 'salesOrder' || dt === 'salesOrderUnshipped') && !next.salesOrderPrint) {
     next = {
       ...next,
       salesOrderPrint: mergeDocCustom(SAMPLE_SALES_ORDER_PRINT, psiCustomSamples?.salesOrder),

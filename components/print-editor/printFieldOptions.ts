@@ -641,6 +641,10 @@ export function filterPrintFieldOptionsForImageFieldPicker(options: PrintFieldOp
 export function printListDataSourceFromTemplate(
   documentType: PrintTemplateDocumentType | undefined,
 ): PrintDynamicListDataSource {
+  // 「一个销售订单（未配货）」与销售订单共用动态列表字段排序语义
+  if (documentType === 'salesOrderUnshipped') {
+    return 'salesOrder';
+  }
   if (
     documentType === 'plan' ||
     documentType === 'order' ||
@@ -723,6 +727,7 @@ const FIELD_GROUPS_BY_DOCUMENT: Record<Exclude<PrintTemplateDocumentType, 'all'>
   ]),
   purchaseOrder: new Set(['系统', '采购订单', '采购订单明细', '产品']),
   salesOrder: new Set(['系统', '销售订单', '销售订单明细', '产品']),
+  salesOrderUnshipped: new Set(['系统', '销售订单', '销售订单明细', '产品']),
   purchaseBill: new Set(['系统', '采购入库', '采购入库明细', '采购单', '采购单明细', '产品']),
   receipt: new Set(['系统', '收款单']),
   payment: new Set(['系统', '付款单']),

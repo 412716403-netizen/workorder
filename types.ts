@@ -1042,6 +1042,10 @@ export interface PrintDynamicListColumn {
   matrixColorHeader?: string;
   /** 矩阵列：表头组标题（颜色尺码列为「尺码数量」；颜色物料列为「工序物料」） */
   matrixSizeGroupTitle?: string;
+  /** 颜色尺码矩阵列：是否在尺码列后追加「小计」列（按颜色行的数量求和）；缺省关闭 */
+  matrixShowRowSubtotal?: boolean;
+  /** 颜色尺码矩阵列：「小计」列表头文案，缺省「小计」 */
+  matrixRowSubtotalHeader?: string;
   /** 数据行字号 pt；未设置则用组件级 fontSizePt */
   fontSizePt?: number;
   /** 数据行字重；未设置则为常规 */
@@ -1376,6 +1380,7 @@ export type PrintTemplateDocumentType =
   | 'purchaseOrder'
   | 'purchaseBill'
   | 'salesOrder'
+  | 'salesOrderUnshipped'
   | 'receipt'
   | 'payment';
 

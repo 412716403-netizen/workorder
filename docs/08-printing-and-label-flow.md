@@ -94,6 +94,8 @@ PrintRenderContext.virtualBatch
 
 会在下列打印上下文的明细行中写入该字段（模板可选用矩阵列）：**销售单**、**计划单列表**、**采购订单 / 采购入库 / 销售订单**（与销售单一致为「货号块」一行，不再按规格拆多行；旧模板若依赖 `行.colorName` / `行.sizeName` 分列需改为矩阵列或 `行.qty` 等）、**外协发出与收回**、**返工报工与处理不良**、**生产退料与外协领料发出/外协生产退料**、**生产入库批次**、**报工批次**、**工单详情打印**。例外：**生产领料**（`materialIssuePrint`）仍为扁平行，**不**写入 `colorSizeMatrixJson`。
 
+**小计列（可选）**：「颜色尺码数量」矩阵列支持在尺码列后追加一列「小计」，按每个颜色行的各尺码数量求和显示。开关在动态列表列属性面板「列类型 = 颜色尺码数量」下的 **「尺码列后显示『小计』列」**（列字段 `matrixShowRowSubtotal`，缺省关闭；表头文案 `matrixRowSubtotalHeader`，缺省「小计」）。开启后矩阵块按「颜色 + N 个尺码 + 小计」均分列宽；逐行求和由纯函数 `colorSizeRowSubtotal`（`utils/colorSizeMatrixPrint.ts`）计算。该选项仅限颜色尺码矩阵，「颜色物料数量」矩阵不支持。
+
 **采购入库关联产品**（与表单配置「关联产品」开关联动）：开启后打印字段选项暴露 `{{采购入库.relatedProduct}}`（各行 `customData.relatedProductId` 去重汇总）、明细 `{{行.relatedProductName}}` / `{{行.relatedProductSku}}`。数据由 `utils/buildPurchaseBillPrintContext.ts` 与 `utils/purchaseBillRelatedProductPrint.ts` 组装；兼容占位符 `{{采购单.relatedProduct}}`。
 
 实现入口：`utils/buildSalesBillPrintContext.ts`（`buildSalesBillPrintListRowsByProductLine`、`buildMatrixJsonAndTotalQtyFromVariantLine`）、`utils/variantMatrixPrintRows.ts` 及各 `utils/build*PrintContext.ts`。
@@ -102,11 +104,25 @@ PrintRenderContext.virtualBatch
 
 列类型为「颜色物料数量」仅在 **计划单**模版编辑器中出现选项；明细行由 `utils/buildPlanPrintListRows.ts`（传入 `globalNodes`、`boms`、`products`）在每条 `printListRows` 上附带 `colorMaterialMatrixJson`。载荷为按 **生产路线顺序** 的 `nodeBlocks[]`：每块含 `nodeName`（工序节点标题行），下列计划中涉及的每种成品颜色两行——物料名称行与配比/用量行。渲染组件：`components/print-editor/DynamicListColorMaterialMatrixTable.tsx`。分页与列表垂直推挤与尺码矩阵共用 `matrixVisualSubRowCountForRow(row, cfg)`，以便模版切换矩阵类型时使用对应 JSON。
 
+### 3.4.2 数据源「一个销售订单（未配货）」
+
+打印模版「数据源（单据类型）」（`PrintTemplate.documentType`，下拉在 `components/print-editor/TemplatePaperSettings.tsx`）除 `salesOrder`（销售订单）外，新增 **`salesOrderUnshipped`（一个销售订单（未配货））**：
+
+- **口径**：按行 / 规格仅打印 **未配货** 数量，`未配货 = max(0, 订货数量 − 已配)`，其中 `已配 = 已发 + 待发 = effectiveAllocatedQuantity(allocatedQuantity, shippedQuantity)`（见 `utils/psiAllocationDisplay.ts`）。已全部配货（未配货=0）的行 / 规格不打印，表头 `销售订单.docTotalQty` / `docTotalAmount` 同步只统计未配货。
+- **实现**：`utils/buildSalesOrderPrintContext.ts` 的 `buildSalesOrderPrintContextFromPsiDoc({ onlyUnshipped })` / `buildSalesOrderLinesFromPsiRecords(docItems, { onlyUnshipped })`——在分组前把每条 `PsiRecord.quantity` 替换为未配货数量并丢弃为 0 的记录，复用既有分组与合计逻辑。
+- **字段分组 / 列表语义**：与 `salesOrder` 完全一致（`FIELD_GROUPS_BY_DOCUMENT.salesOrderUnshipped`、`printListDataSourceFromTemplate` 映射回 `salesOrder`、`printPreviewSampleContext` 复用销售订单样例）；归属同一「销售订单列表」管理入口（`printTemplateManageScope.ts` 的 `salesOrderList: ['salesOrder', 'salesOrderUnshipped']`）。
+- **接线入口**：销售订单列表行打印与详情/编辑弹窗打印按钮共用 `views/PSIOpsView.tsx` 的 `PsiListPrintController.buildContext`（按 `template.documentType` 传 `onlyUnshipped`）；编辑表单内的打印槽走 `views/psi-ops/OrderBillFormPage.tsx`，未配货时按底层服务端记录重算。
+
 ### 3.5 动态列表下方元素的垂直推挤
 
-当列表实际内容高度超过画布上为该组件设定的高度时，**页眉 / 页脚不动**；**body 内**位于该动态列表**下方**（按 `y` 自上而下）的文本、线、图等元素会整体下移，下移量等于「内容所需高度 − 组件框高」，使模板里预留的相对间距在打印时仍成立。列表本身通过 `heightGrowMm` 增高以免裁切。
+当列表实际内容高度超过画布上为该组件设定的高度时，**页眉 / 页脚不动**；**body 内**位于该动态列表**下方**（按 `y` 自上而下）的文本、线、图等元素会整体下移，使模板里预留的相对间距在打印时仍成立。列表本身通过 `heightGrowMm` 增高以免裁切。
 
-估算规则与分页一致：`utils/printListPagination.ts` 导出 `dynamicListHeaderHeightMm`、`DYNAMIC_LIST_DEFAULT_BODY_ROW_MM`；未设置 `bodyRowHeightMm` 时用默认 **6mm/行**（矩阵行按 `matrixVisualSubRowCountForRow` 累计子行数）。实现见 `components/print-editor/printBodyVerticalPush.ts`，由 `PrintPaper.tsx` 在预览/打印时应用。
+每个元素的下移量取两者较大值（`computeBodyVerticalPushByElementId`）：
+
+- **累加溢出**：前序各列表「内容高 − 框高」的累加，保持下方元素与列表的相对间距；
+- **清越内容底**：保证元素 top 不低于列表「实际内容底部」（`el.y + 内容高`）。即便元素原本被放在列表框**内部**（例如「合计数量 / 总金额」文本压在列表区域上，如内置 `builtin-sales-order-v2` 的 footer 文本），列表内容变长后也会被推到内容下方，不再被遮挡。内容未触及该元素时不动。
+
+内容高估算与分页一致：`utils/printListPagination.ts` 导出 `dynamicListHeaderHeightMm`、`DYNAMIC_LIST_DEFAULT_BODY_ROW_MM`；未设置 `bodyRowHeightMm` 时用默认 **6mm/行**（矩阵行按 `matrixVisualSubRowCountForRow` 累计子行数）。实现见 `components/print-editor/printBodyVerticalPush.ts`（`estimateDynamicListContentHeightMm` / `estimateDynamicListOverflowMm`），由 `PrintPaper.tsx` 在预览/打印时应用。
 
 ---
 

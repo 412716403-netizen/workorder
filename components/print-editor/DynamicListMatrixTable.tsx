@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import type { PrintDynamicListColumn, PrintDynamicListElementConfig, PrintListRow, PrintRenderContext } from '../../types';
-import { fmtMatrixCellQtyLocal, parseColorSizeMatrixFromRow } from '../../utils/colorSizeMatrixPrint';
+import { colorSizeRowSubtotal, fmtMatrixCellQtyLocal, parseColorSizeMatrixFromRow } from '../../utils/colorSizeMatrixPrint';
 import { isLikelyPrintImageUrl, resolvePrintPlaceholders } from '../../utils/printResolve';
 import { matrixKForPrintRow, matrixVisualSubRowCountForRow, sizeHeadCellLabel } from '../../utils/dynamicListMatrix';
 import { DYNAMIC_LIST_DEFAULT_BODY_ROW_MM } from '../../utils/printListPagination';
@@ -50,6 +50,8 @@ export function DynamicListMatrixTable({ cfg, ctx, padded, matrixIdx, listRows, 
   const showHeader = cfg.showHeader !== false;
   const showSerial = cfg.showSerial !== false;
   const rowHeightMm = cfg.bodyRowHeightMm != null && cfg.bodyRowHeightMm > 0 ? cfg.bodyRowHeightMm : 6;
+  const showSubtotal = mcol.matrixShowRowSubtotal === true;
+  const subtotalHeader = mcol.matrixRowSubtotalHeader ?? '小计';
 
   const maxK = useMemo(() => {
     if (!listRows.length) return 1;
@@ -67,21 +69,24 @@ export function DynamicListMatrixTable({ cfg, ctx, padded, matrixIdx, listRows, 
       out.push({ key: `l-${padded[i].id}`, wMm: mmAt(cfg, i) });
     }
     const matrixBlockMm = mmAt(cfg, matrixIdx);
+    const matrixColCount = 1 + maxK + (showSubtotal ? 1 : 0);
     if (matrixBlockMm != null && matrixBlockMm > 0) {
-      const each = matrixBlockMm / (1 + maxK);
+      const each = matrixBlockMm / matrixColCount;
       for (let q = 0; q <= maxK; q++) {
         out.push({ key: `m-${q}`, wMm: each });
       }
+      if (showSubtotal) out.push({ key: 'm-sub', wMm: each });
     } else {
       for (let q = 0; q <= maxK; q++) {
         out.push({ key: `m-${q}`, wMm: undefined });
       }
+      if (showSubtotal) out.push({ key: 'm-sub', wMm: undefined });
     }
     for (let i = matrixIdx + 1; i < padded.length; i++) {
       out.push({ key: `r-${padded[i].id}`, wMm: mmAt(cfg, i) });
     }
     return out;
-  }, [cfg, padded, matrixIdx, maxK, showSerial]);
+  }, [cfg, padded, matrixIdx, maxK, showSerial, showSubtotal]);
 
   const headerTrStyle: React.CSSProperties = {};
   if (cfg.headerRowHeightMm != null && cfg.headerRowHeightMm > 0) {
@@ -191,6 +196,7 @@ export function DynamicListMatrixTable({ cfg, ctx, padded, matrixIdx, listRows, 
             <th colSpan={maxK} style={thStyle(mcol)}>
               {mcol.matrixSizeGroupTitle ?? '尺码数量'}
             </th>
+            {showSubtotal ? <th style={thStyle(mcol)}>{subtotalHeader}</th> : null}
             {padded.slice(matrixIdx + 1).map(col => (
               <th key={col.id} style={thStyle(col)}>
                 {col.headerLabel}
@@ -245,6 +251,7 @@ export function DynamicListMatrixTable({ cfg, ctx, padded, matrixIdx, listRows, 
                             {p ? sizeHeadCellLabel(p, qi, K, maxK) : '\u00a0'}
                           </td>
                         ))}
+                        {showSubtotal ? <td style={tdBody(mcol, topExtra)}>{'\u00a0'}</td> : null}
                       </>
                     ) : (
                       <>
@@ -258,6 +265,9 @@ export function DynamicListMatrixTable({ cfg, ctx, padded, matrixIdx, listRows, 
                             </td>
                           );
                         })}
+                        {showSubtotal ? (
+                          <td style={tdBody(mcol)}>{fmtMatrixCellQtyLocal(colorSizeRowSubtotal(cr?.quantities))}</td>
+                        ) : null}
                       </>
                     )}
                     {padded.slice(matrixIdx + 1).map(col => {

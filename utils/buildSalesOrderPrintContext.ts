@@ -1,6 +1,7 @@
 import type { AppDictionaries, PrintRenderContext, Product, PsiRecord, SalesOrderPrintContext } from '../types';
 import { buildPurchaseOrderPrintListRows, type PurchaseOrderLineInput } from './buildPurchaseOrderPrintContext';
 import { sumPsiLineQty, sumPsiLineAmount, groupPsiDocLines } from './psiPrintShared';
+import { effectiveAllocatedQuantity } from './psiAllocationDisplay';
 
 export type SalesOrderLineInput = {
   id: string;
@@ -59,9 +60,29 @@ export function buildSalesOrderPrintRenderContext(params: {
   };
 }
 
+/**
+ * 把每条销售订单记录的 `quantity` 替换为未配货数量并丢弃为 0 的记录。
+ * 未配货 = max(0, 订货数量 − 已配)，已配 = 已发 + 待发（effectiveAllocatedQuantity）。
+ */
+function toUnshippedRecords(docItems: PsiRecord[]): PsiRecord[] {
+  const out: PsiRecord[] = [];
+  for (const r of docItems) {
+    const ordered = Number(r.quantity) || 0;
+    const allocated = effectiveAllocatedQuantity(r.allocatedQuantity, r.shippedQuantity);
+    const unshipped = Math.max(0, ordered - allocated);
+    if (unshipped <= 0) continue;
+    out.push({ ...r, quantity: unshipped });
+  }
+  return out;
+}
+
 /** 从同一销售订单下的 PSI 行记录聚合为打印行输入 */
-export function buildSalesOrderLinesFromPsiRecords(docItems: PsiRecord[]): SalesOrderLineInput[] {
-  return groupPsiDocLines<SalesOrderLineInput>(docItems, (lgId, first, _recs, hasVar, vq, lineQtyNoVar) => ({
+export function buildSalesOrderLinesFromPsiRecords(
+  docItems: PsiRecord[],
+  opts?: { onlyUnshipped?: boolean },
+): SalesOrderLineInput[] {
+  const source = opts?.onlyUnshipped ? toUnshippedRecords(docItems) : docItems;
+  return groupPsiDocLines<SalesOrderLineInput>(source, (lgId, first, _recs, hasVar, vq, lineQtyNoVar) => ({
     id: lgId,
     productId: first.productId,
     quantity: hasVar ? undefined : lineQtyNoVar,
@@ -76,10 +97,12 @@ export function buildSalesOrderPrintContextFromPsiDoc(params: {
   docItems: PsiRecord[];
   productMap: Map<string, Product>;
   dictionaries: AppDictionaries;
+  /** 「一个销售订单（未配货）」数据源：按行/规格仅取未配货数量，丢弃已全部配货的行 */
+  onlyUnshipped?: boolean;
 }): PrintRenderContext {
-  const { docNumber, docItems, productMap, dictionaries } = params;
+  const { docNumber, docItems, productMap, dictionaries, onlyUnshipped } = params;
   const main = docItems[0] ?? {};
-  const lines = buildSalesOrderLinesFromPsiRecords(docItems);
+  const lines = buildSalesOrderLinesFromPsiRecords(docItems, { onlyUnshipped });
   return buildSalesOrderPrintRenderContext({
     docNumber,
     partner: String(main.partner ?? ''),

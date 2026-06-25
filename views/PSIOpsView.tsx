@@ -1952,12 +1952,13 @@ const PSIOpsView: React.FC<PSIOpsViewProps> = ({
           resolveDocItems={docNumber =>
             recordsList.filter((r: any) => r.type === 'SALES_ORDER' && r.docNumber === docNumber)
           }
-          buildContext={(_t, { docNumber, docItems }) => {
+          buildContext={(t, { docNumber, docItems }) => {
             const ctx = buildSalesOrderPrintContextFromPsiDoc({
               docNumber,
               docItems,
               productMap: productMapPSI,
               dictionaries,
+              onlyUnshipped: t.documentType === 'salesOrderUnshipped',
             });
             return showPsiDocAmount('SALES_ORDER') ? ctx : maskPrintContextAmounts(ctx);
           }}

@@ -48,3 +48,9 @@ export function fmtMatrixCellQtyLocal(n: number): string {
   if (!Number.isFinite(n) || n === 0) return '';
   return String(n);
 }
+
+/** 某颜色行的数量小计（按该行各尺码数量求和） */
+export function colorSizeRowSubtotal(quantities: number[] | undefined): number {
+  if (!Array.isArray(quantities)) return 0;
+  return quantities.reduce((s, q) => s + (Number(q) || 0), 0);
+}

@@ -71,6 +71,7 @@ function TemplatePaperSettingsInner({
           <option value="rework">返工管理</option>
           <option value="purchaseOrder">采购订单</option>
           <option value="salesOrder">销售订单</option>
+          <option value="salesOrderUnshipped">销售订单（未配货）</option>
           <option value="purchaseBill">采购入库</option>
           <option value="receipt">收款单</option>
           <option value="payment">付款单</option>

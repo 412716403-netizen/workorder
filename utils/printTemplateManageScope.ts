@@ -21,7 +21,7 @@ const SCOPE_DOCUMENT_TYPES: Record<PlanPrintTemplateManageScope, readonly PrintT
   defectTreatmentFlowDetail: ['rework'],
   reworkReportFlowDetail: ['rework'],
   purchaseOrderList: ['purchaseOrder'],
-  salesOrderList: ['salesOrder'],
+  salesOrderList: ['salesOrder', 'salesOrderUnshipped'],
   purchaseBillList: ['purchaseBill'],
   salesBillList: ['salesBill'],
   receiptList: ['receipt'],

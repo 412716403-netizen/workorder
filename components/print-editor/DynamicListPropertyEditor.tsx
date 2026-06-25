@@ -440,13 +440,21 @@ function DynamicListPropertyEditorInner({
                       cellKind: 'colorMaterialMatrix' as const,
                       matrixColorHeader: col.matrixColorHeader ?? '颜色',
                       matrixSizeGroupTitle: '工序物料',
+                      // 颜色物料矩阵不支持「小计」列
+                      matrixShowRowSubtotal: undefined,
+                      matrixRowSubtotalHeader: undefined,
                       textAlign: 'center' as const,
                     }
                   : clearOtherMatrix(col, i),
               );
               onUpdateElementConfig(el.id, { ...cRef.current, columns: next });
             } else {
-              patchColumn(safeIdx, { cellKind: undefined }, ['matrixColorHeader', 'matrixSizeGroupTitle']);
+              patchColumn(safeIdx, { cellKind: undefined }, [
+                'matrixColorHeader',
+                'matrixSizeGroupTitle',
+                'matrixShowRowSubtotal',
+                'matrixRowSubtotalHeader',
+              ]);
             }
           }}
           className="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs font-bold"
@@ -491,6 +499,28 @@ function DynamicListPropertyEditorInner({
               className="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs font-bold"
             />
           </Labeled>
+          {active.cellKind === 'colorSizeMatrix' ? (
+            <>
+              <label className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={active.matrixShowRowSubtotal === true}
+                  onChange={e => patchColumn(safeIdx, { matrixShowRowSubtotal: e.target.checked })}
+                />
+                尺码列后显示「小计」列（按颜色行求和）
+              </label>
+              {active.matrixShowRowSubtotal ? (
+                <Labeled label="矩阵表头：小计">
+                  <input
+                    type="text"
+                    value={active.matrixRowSubtotalHeader ?? '小计'}
+                    onChange={e => patchColumn(safeIdx, { matrixRowSubtotalHeader: e.target.value })}
+                    className="w-full rounded-lg border border-slate-200 px-2 py-2 text-xs font-bold"
+                  />
+                </Labeled>
+              ) : null}
+            </>
+          ) : null}
         </div>
       ) : null}
       <Labeled label="内容">
